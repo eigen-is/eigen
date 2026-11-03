@@ -751,10 +751,55 @@ describe('Backup routes', () => {
             expect((await listArtifacts(owner.id)).safetyCopies).toEqual([]);
         });
 
-        test('that admin still backs up, downloads and restores any other home, and deletes its safety copy', async () => {
+        test('that admin is refused its archive list, upload, verify, archive delete and jobs', async () => {
+            const owner = ctx.alice.user;
+            const job = await startAndFinishAs(owner, `/admin/backup/home/${owner.id}`);
+            const name = job.artifact;
+            if (!name) throw new Error("the backup of the owner's home produced no artifact");
+            const list = `/admin/backup/artifacts?ownerId=${owner.id}`;
+            expect((await authedRequest(admin.sessionToken, list)).status).toBe(403);
+            expect((await authedRequest(owner.sessionToken, list)).status).toBe(200);
+
+            const jobs = `/admin/backup/jobs?ownerId=${owner.id}`;
+            expect((await authedRequest(admin.sessionToken, jobs)).status).toBe(403);
+            expect((await authedRequest(owner.sessionToken, jobs)).status).toBe(200);
+            expect((await authedRequest(admin.sessionToken, `/admin/backup/jobs/${job.id}`)).status).toBe(403);
+            expect((await authedRequest(owner.sessionToken, `/admin/backup/jobs/${job.id}`)).status).toBe(200);
+            const everyJob = (caller: TestUser) =>
+                authedRequest(caller.sessionToken, '/admin/backup/jobs').then((res) => assertJson<BackupJob[]>(res));
+            expect((await everyJob(admin)).map((entry) => entry.ownerId)).not.toContain(owner.id);
+            expect((await everyJob(owner)).map((entry) => entry.id)).toContain(job.id);
+
+            const artifact = `/admin/backup/artifacts/${name}`;
+            const verify = { method: 'POST' };
+            expect((await authedRequest(admin.sessionToken, `${artifact}/verify`, verify)).status).toBe(403);
+            expect((await startAndFinishAs(owner, `${artifact}/verify`)).state).toBe('done');
+
+            const bytes = new Uint8Array(await (await authedRequest(owner.sessionToken, artifact)).arrayBuffer());
+            expect((await authedRequest(admin.sessionToken, artifact, { method: 'DELETE' })).status).toBe(403);
+            expect((await authedRequest(owner.sessionToken, artifact, { method: 'DELETE' })).status).toBe(200);
+            const upload = (caller: TestUser) =>
+                authedRequest(caller.sessionToken, uploadPath(name), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/zstd', 'Content-Length': String(bytes.byteLength) },
+                    body: new Blob([bytes]),
+                });
+            expect((await upload(admin)).status).toBe(403);
+            expect((await upload(owner)).status).toBe(200);
+        });
+
+        test('that admin still backs up, lists, verifies, downloads and restores any other home', async () => {
             const job = await startAndFinishAs(admin, `/admin/backup/home/${target.id}`);
             expect(job.state).toBe('done');
+            for (const path of [
+                `/admin/backup/artifacts?ownerId=${target.id}`,
+                `/admin/backup/jobs?ownerId=${target.id}`,
+                `/admin/backup/jobs/${job.id}`,
+            ]) {
+                expect((await authedRequest(admin.sessionToken, path)).status).toBe(200);
+            }
             const artifact = `/admin/backup/artifacts/${job.artifact}`;
+            expect((await startAndFinishAs(admin, `${artifact}/verify`)).state).toBe('done');
             expect((await authedRequest(admin.sessionToken, artifact)).status).toBe(200);
             expect((await startAndFinishAs(admin, `${artifact}/restore`, { ownerId: target.id })).state).toBe('done');
             const copy = `/admin/backup/safety/${target.id}/${await preRestoreCopy(target.id)}`;
