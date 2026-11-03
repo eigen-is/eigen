@@ -179,26 +179,22 @@ export class Drive {
     }
 
     private async startMount(config: MountConfig): Promise<void> {
-        if (!this.home.closing) {
-            // The mount gets the text extractor from here, so the document loaders stay out of the mount code.
-            const mount = new Mount(
-                this.owner.id,
-                this.home.homeDir,
-                config,
-                this.home.getLocalDatabase.bind(this.home),
-                extractText,
-            );
-            await mount.init();
-            if (!this.home.closing) {
-                this.mounts.set(config.id, mount);
-                if (config.isDefault) {
-                    this.defaultMountId = config.id;
-                }
-                return;
-            }
+        this.home.refuseIfClosing();
+        // The mount gets the text extractor from here, so the document loaders stay out of the mount code.
+        const mount = new Mount(
+            this.owner.id,
+            this.home.homeDir,
+            config,
+            this.home.getLocalDatabase.bind(this.home),
+            extractText,
+        );
+        await mount.init();
+        if (this.home.closing) {
             await mount.closeAllDatabases();
+            this.home.refuseIfClosing();
         }
-        throw new ApiError(503, 'Home is closing');
+        this.mounts.set(config.id, mount);
+        if (config.isDefault) this.defaultMountId = config.id;
     }
 
     // Applies saved mount settings to the live mount, so a change takes effect without reloading the home.

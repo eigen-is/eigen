@@ -234,7 +234,9 @@ export class Home {
         return open() as Promise<ManagedDatabase<S>>;
     }
 
-    private refuseIfClosing(): void {
+    // The one answer to work that comes too late, such as a hold or a new mount: the client retries
+    // and reaches the next home.
+    public refuseIfClosing(): void {
         if (this._closing) throw new ApiError(503, 'Home is closing');
     }
 
