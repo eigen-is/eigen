@@ -16,22 +16,29 @@ import { paths } from './schema';
 import { markContainerContentDirty } from './search-index';
 import { getShutdownDrainDeadline } from './upload-limits';
 
-// A database with no holder stays open as long as an idle Home does, five minutes. A close takes a
-// version snapshot, and on s3, or on a local mount that works on a temp copy, it is also an upload. So
-// a chat that gets a message now and then must not pay that for each one. The content reindex reads a
-// changed container again two minutes later, and it must not reopen what the idle close just closed.
+// A database with no holder stays open for five minutes. A close takes a version, and on a mount that
+// works on a temp copy, such as s3, it is also an upload. So a chat that gets a message now and then must
+// not pay that for each one. The content reindex reads a changed container every two minutes, and it must
+// not reopen what the idle close just closed.
 export const IDLE_CLOSE_MS = 5 * 60_000;
 // A close waits this long for the holders to let go. Then it closes anyway and logs, so a holder that
 // hangs can't hang a shutdown.
 export const HOLDER_WAIT_MS = 5_000;
 
+// One path's place in Mount.documentDbs. The slot goes once no open or close waits and no database is open.
 export type DocumentDbSlot = {
-    db: ManagedDatabase<SchemaType> | null; // the open database, or null while one is built or closed
-    tail: Promise<void>; // the open or close that runs now, which the next one for this path waits for
-    pending: number; // the opens and closes that wait or run; at 0 with no database the slot goes
-    holders: number; // the callers using db right now, such as a withDatabase reader or an open collab document
-    idleTimer: ReturnType<typeof setTimeout> | null; // the close armed when the last holder let go
-    lastHolderGone: (() => void) | null; // set while a close waits for the holders
+    // The open database, or null while one is built or after it closed.
+    db: ManagedDatabase<SchemaType> | null;
+    // The open or close that runs now. The next one for this path waits for it.
+    tail: Promise<void>;
+    // The opens and closes that wait or run.
+    pending: number;
+    // The callers that use db right now, such as a withDatabase reader or an open collab document.
+    holders: number;
+    // The close armed when the last holder let go.
+    idleTimer: ReturnType<typeof setTimeout> | null;
+    // Set while a close waits for the holders.
+    lastHolderGone: (() => void) | null;
 };
 
 // A database a caller holds open, and the call that lets go of it.
@@ -73,12 +80,10 @@ export async function withDatabase<S extends SchemaType, T>(
     }
 }
 
-// withDatabase for a holder that outlives one call, such as an open collab document, which writes
-// every edit to its data.db. It lets go in its own close, before it closes the database. What closes
-// such a database, such as a trash, closes the document first. So this holder alone may take the
-// container path lock while it holds, as a workbook's version before its compaction does. Only a
-// document that a restore or a create puts in a folder that is being trashed, and that opens before the
-// trash closes the databases, makes a close wait out HOLDER_WAIT_MS.
+// withDatabase for a holder that outlives one call, such as an open collab document. The document lets
+// go in its own close, and whatever closes its database, such as a trash, closes the document first. So
+// this holder may take the container path lock while it holds, as a workbook's version does. A close
+// waits out HOLDER_WAIT_MS only for a document that a restore or a create put in a folder being trashed.
 export async function holdDatabase<S extends SchemaType>(
     mount: Mount,
     config: DatabaseConfig<S>,
@@ -385,33 +390,34 @@ export async function closeCachedDbsUnder(mount: Mount, rootId: string): Promise
     }
 }
 
+// Closes every document database of the mount and stops its queues, when a Home closes or a mount goes
+// away. Nothing on the mount opens again after this.
 export async function closeAllDatabases(mount: Mount): Promise<void> {
-    // First, so neither the reindex drain nor a close below waits on a download. The mount is not
-    // reused after this, so the abort is for good.
+    // The downloads stop first, so neither the reindex drain nor a close below waits for one. The mount
+    // is not used again after this, so the abort is for good.
     mount.downloads.abort();
     // The abort stops the trash purge between items. The one in flight finishes before metadata.db closes.
     await mount.trashPurge;
 
-    // The history prune that init scheduled is cancelled, so a fast teardown doesn't run it against a
+    // The history prune that init scheduled is canceled, so a fast teardown doesn't run it against a
     // metadata.db the Home is about to close.
     if (mount.pruneTimer) {
         clearTimeout(mount.pruneTimer);
         mount.pruneTimer = null;
     }
 
-    // The reindex closes first, and the extract in flight finishes. That extract may hold a document
-    // database, and the sweep below would otherwise wait for it. An open that lands after the gate
-    // below is refused. Only the current extract is drained, so the other dirty rows replay on the
-    // next open. The wait has a deadline, so an extract that hangs can't park the teardown.
+    // The reindex closes before the databases, and the extract in flight finishes. That extract may hold
+    // a document database, and the sweep below would otherwise wait for it. The other dirty rows wait
+    // for the next open. The wait has a deadline, so an extract that hangs can't stop the teardown.
     await mount.reindexQueue?.close();
 
-    // Thumbnail jobs end with getPath/updatePath on metadata.db and hold a sharp worker; each is
-    // bounded by the worker's own timeout (see thumbnails.ts).
+    // A thumbnail job ends with a write to metadata.db, so it finishes first. The sharp worker it holds
+    // has its own timeout, which bounds the wait.
     await Promise.allSettled(mount.thumbnailJobs);
 
     mount.closing = true;
-    // The live map, not a copy, so a slot added mid-sweep is visited; an open that queues behind a
-    // swept close is refused by the gate.
+    // An open that lands after this gate is refused. The sweep walks the live map, not a copy, so it
+    // also visits a slot added while it runs.
     for (const pathId of mount.documentDbs.keys()) {
         try {
             // On s3 the final sync of the close stages the last state and queues its upload.
