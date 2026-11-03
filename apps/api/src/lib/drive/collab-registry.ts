@@ -74,6 +74,8 @@ export class CollabRegistry {
     // count too, because a subfolder created after the trash began has no mark of its own. A move asks
     // this inside the transaction of its row write, so the folders it reads are those the move sees.
     public isTrashing(mount: Mount, pathId: string): boolean {
+        // Most moves run while nothing is trashed, and then the walk up the folders is not needed.
+        if (this.trashing.size === 0) return false;
         return [pathId, ...mount.collectAncestorIds(pathId)].some((id) => this.trashing.has(this.key(mount.id, id)));
     }
 
