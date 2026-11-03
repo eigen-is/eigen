@@ -26,10 +26,11 @@ export type UseDriveItemControllerOptions = {
     onItemClick?: (item: DrivePath) => void;
     onQuickLook?: (item: DrivePath) => void;
     onSelectionChange?: (items: DrivePath[]) => void;
-    // Absent in a picker, whose rows have no actions.
+    // Absent in a picker, whose rows have no actions, and in a listing with rows of its own, such as Trash.
     actions?: DriveActionRunner;
     // Off in a view that mounts no row menu, such as a picker's table. The menu key then neither opens a menu nor
-    // selects the cursor's row, which would replace the rows a multi-select picker holds.
+    // selects the cursor's row, which would replace the rows a multi-select picker holds. Trash passes no actions and
+    // still has a menu, so this is not the same as actions.
     hasMenu?: boolean;
 };
 
