@@ -62,31 +62,26 @@ export class Home {
     }
 
     public get drive(): Drive {
-        this.touch();
         if (!this._drive) throw new ApiError(404, 'Drive not available');
         return this._drive;
     }
 
     public get contacts(): Contacts {
-        this.touch();
         if (!this._contacts) throw new ApiError(404, 'Contacts not available');
         return this._contacts;
     }
 
     public get mail(): Mail {
-        this.touch();
         if (!this._mail) throw new ApiError(404, 'Mail not available');
         return this._mail;
     }
 
     public get calendar(): Calendar {
-        this.touch();
         if (!this._calendar) throw new ApiError(404, 'Calendar not available');
         return this._calendar;
     }
 
     public get notifications(): NotificationCenter {
-        this.touch();
         if (!this._notifications) throw new ApiError(404, 'Notifications not available');
         return this._notifications;
     }
@@ -178,7 +173,8 @@ export class Home {
         this.onClosed?.();
     }
 
-    // Every use restarts the idle timer.
+    // Restarts the idle countdown. Only openHome calls it: a request reaches the Home through getHome, which
+    // restarts the idle, and work that outlasts it holds the Home instead.
     public touch(): this {
         this.startIdleTimer(this.idleMs);
         return this;
@@ -272,7 +268,6 @@ export class Home {
 
     // A team home has no notification center, so a notice to it is dropped.
     public notify(input: NotificationPersistInput): void {
-        this.touch();
         this._notifications?.persist(input);
     }
 
