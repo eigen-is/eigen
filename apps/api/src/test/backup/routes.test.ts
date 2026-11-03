@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, setSystemTime, spyOn, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, setSystemTime, spyOn, test } from 'bun:test';
 import * as fs from 'node:fs';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -7,8 +7,8 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Notification } from '@workspace/lib/types/notification';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { BACKUP_ARTIFACT_EXTENSION, FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
-import { eq } from 'drizzle-orm';
-import { user as userScheme } from '../../../auth-schema';
+import { and, eq } from 'drizzle-orm';
+import { member as memberSchema, user as userScheme } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
 import { landUpload } from '../../lib/backup/artifacts';
@@ -17,6 +17,7 @@ import { buildArtifactName, buildHomeFolderName, buildRestoreStagingDir, getBack
 import { measureFolder } from '../../lib/backup/safety-copy';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import * as verifyModule from '../../lib/backup/verify';
+import { getServerConfig } from '../../lib/config/server-config';
 import { atHome, getHome } from '../../lib/home/get-home';
 import {
     assertJson,
@@ -683,5 +684,83 @@ describe('Backup routes', () => {
         } finally {
             setSystemTime();
         }
+    });
+
+    // The owner's home is the owner's alone, as their password is: its archive holds their password hash and mount
+    // keys, and a restore or a safety-copy delete replaces or destroys their data. An admin keeps every other home.
+    describe("the owner's home", () => {
+        let admin: TestUser;
+
+        function membership(userId: string) {
+            const orgId = getServerConfig()?.orgId ?? '';
+            return and(eq(memberSchema.userId, userId), eq(memberSchema.organizationId, orgId));
+        }
+
+        async function startAndFinishAs(caller: TestUser, path: string, body?: Record<string, unknown>) {
+            const res = await authedRequest(caller.sessionToken, path, {
+                method: 'POST',
+                ...(body && { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+            });
+            const { jobId } = await assertJson<{ jobId: string }>(res);
+            return waitForJob(jobId);
+        }
+
+        async function preRestoreCopy(ownerId: string): Promise<string> {
+            const copy = (await listArtifacts(ownerId)).safetyCopies.find((entry) => entry.kind === 'pre-restore');
+            if (!copy) throw new Error(`no pre-restore copy of ${ownerId}`);
+            return copy.name;
+        }
+
+        beforeAll(async () => {
+            admin = await createUser('backup-routes-admin@test.eigen.is', 'Backup Admin');
+            await getAuthDrizzleDb().update(memberSchema).set({ role: 'admin' }).where(membership(admin.id));
+            await getHome(ctx.alice.user.id);
+        });
+
+        // The auth database is the whole file's.
+        afterAll(async () => {
+            await getAuthDrizzleDb().update(memberSchema).set({ role: 'member' }).where(membership(admin.id));
+        });
+
+        test('an admin who is not the owner is refused its backup, download, restore and safety-copy delete', async () => {
+            const owner = ctx.alice.user;
+            const backup = `/admin/backup/home/${owner.id}`;
+            expect((await authedRequest(admin.sessionToken, backup, { method: 'POST' })).status).toBe(403);
+            const job = await startAndFinishAs(owner, backup);
+            expect(job.state).toBe('done');
+            if (!job.artifact) throw new Error("the backup of the owner's home produced no artifact");
+            const artifact = `/admin/backup/artifacts/${job.artifact}`;
+            expect((await authedRequest(admin.sessionToken, artifact)).status).toBe(403);
+            expect((await authedRequest(owner.sessionToken, artifact)).status).toBe(200);
+
+            const restore = {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ownerId: owner.id }),
+            };
+            expect((await authedRequest(admin.sessionToken, `${artifact}/restore`, restore)).status).toBe(403);
+            expect((await startAndFinishAs(owner, `${artifact}/restore`, { ownerId: owner.id })).state).toBe('done');
+
+            const copy = `/admin/backup/safety/${owner.id}/${await preRestoreCopy(owner.id)}`;
+            expect((await authedRequest(admin.sessionToken, `${copy}/restore`, { method: 'POST' })).status).toBe(403);
+            expect((await authedRequest(admin.sessionToken, copy, { method: 'DELETE' })).status).toBe(403);
+            expect((await startAndFinishAs(owner, `${copy}/restore`)).state).toBe('done');
+            const putBack = `/admin/backup/safety/${owner.id}/${await preRestoreCopy(owner.id)}`;
+            expect((await authedRequest(admin.sessionToken, putBack, { method: 'DELETE' })).status).toBe(403);
+            expect((await authedRequest(owner.sessionToken, putBack, { method: 'DELETE' })).status).toBe(200);
+            expect((await listArtifacts(owner.id)).safetyCopies).toEqual([]);
+        });
+
+        test('that admin still backs up, downloads and restores any other home, and deletes its safety copy', async () => {
+            const job = await startAndFinishAs(admin, `/admin/backup/home/${target.id}`);
+            expect(job.state).toBe('done');
+            const artifact = `/admin/backup/artifacts/${job.artifact}`;
+            expect((await authedRequest(admin.sessionToken, artifact)).status).toBe(200);
+            expect((await startAndFinishAs(admin, `${artifact}/restore`, { ownerId: target.id })).state).toBe('done');
+            const copy = `/admin/backup/safety/${target.id}/${await preRestoreCopy(target.id)}`;
+            expect((await startAndFinishAs(admin, `${copy}/restore`)).state).toBe('done');
+            const putBack = `/admin/backup/safety/${target.id}/${await preRestoreCopy(target.id)}`;
+            expect((await authedRequest(admin.sessionToken, putBack, { method: 'DELETE' })).status).toBe(200);
+        });
     });
 });

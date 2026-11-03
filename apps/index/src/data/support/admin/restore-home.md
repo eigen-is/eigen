@@ -6,10 +6,10 @@ category: Backups
 tags: [admin, backup, restore, server]
 related: [admin/back-up-home, admin/backup-contents]
 order: 91
-updated: 2026-11-02
+updated: 2026-11-03
 ---
 
-You can put a single user's or team's account back to the state held in a backup archive. Eigen checks the archive first, replaces the account from it, and keeps the current state beside it as a safety copy, so nothing is thrown away. Only an admin can do this.
+You can put a single user's or team's account back to the state held in a backup archive. Eigen checks the archive first, replaces the account from it, and keeps the current state beside it as a safety copy, so nothing is thrown away. Only an admin can do this, and only the owner can restore the owner's account.
 
 ## Before you start
 
