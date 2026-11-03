@@ -1,6 +1,6 @@
 # Quotas
 
-> **TLDR:** Every user has two kinds of budget: one for their home data, and one per Drive mount. `apps/api/src/lib/config/quota.ts` resolves the limits and `enforcement.ts` holds every check, without cache or reservation. Not obvious from the code: a team override only raises a limit, and only the owner's teams count, never those of the user writing. A user's default mount cap is stamped the first time their home opens, usually at first sign-in, so changing the server default after that moves no existing user. A full home-data budget still lets its owner shrink, delete and make small edits. A 507 means a full budget, but a streamed upload that outgrows what is left is cut with a 413.
+> **TLDR:** Every user has two kinds of budget: one for their home data, and one per Drive mount. `apps/api/src/lib/config/quota.ts` resolves the limits and `enforcement.ts` holds every check, without cache or reservation. Not obvious from the code: a team override only raises a limit, and only the owner's teams count, never those of the user writing. A user's default mount cap is stamped the first time their home opens, usually at first sign-in, and the server default joins the max beside it, so a raised default reaches every user and a lowered one shrinks no one. A full home-data budget still lets its owner shrink, delete and make small edits. A 507 means a full budget, but a streamed upload that outgrows what is left is cut with a 413.
 
 Quotas keep one user from filling the server's disk or bucket. The owner sets the server defaults and the per-file cap in the Admin app ([SERVER-SETTINGS.md](SERVER-SETTINGS.md)), an org admin can raise them for a team's members on the team's page, and the app sidebars show each user their usage.
 
@@ -19,7 +19,7 @@ An email-heavy user is not blocked from uploading files, and a file-heavy user c
 
 ```
 homeDataMax = max(server default, ...team overrides that are set)
-mountMax    = max(mount's maxSizeMB ?? server default, ...team overrides that are set)
+mountMax    = max(mount's maxSizeMB ?? server default, server default if a user owns the mount, ...team overrides that are set)
 ```
 
 A team sets `TeamSettings.memberOverrides` (`packages/lib/src/types/settings.ts`), and an unset field means inherit, so it adds no candidate. A user in no team gets the server default. `resolveUserQuotas` returns both limits in bytes. Its data half, `resolveHomeDataMax`, also stands alone, because a team Home has no `default` mount yet meters its calendar. A team is in no teams, so its calendar meters against the server default.
@@ -32,7 +32,7 @@ Nothing is cached, so every upload resolves again. The overrides come through `p
 
 ## A mount keeps what it was stamped with
 
-A user's `default` mount is written into their settings by `UserHome.loadSettings`, the first time the home opens, with the server's current storage type and `maxSizeMB` set to `defaultMountMaxSizeMB`. That is usually the first sign-in, and at signup only when shares are waiting for the new user (`reconcileSharesForNewUser` opens the home to deliver them). So a change to the defaults before the home first opens reaches that user. A change after it does not: the stamped `maxSizeMB` wins over the server default in the `mountMax` formula ([Teams can only raise a limit](#teams-can-only-raise-a-limit)), and no route edits a user's mount. A team mount is stamped when an admin adds it, from the same `newMountSettings` unless the admin picks a type or a size, and its `maxSizeMB` stays editable per mount (`TeamHome.updateMount`, which pushes the change onto the live mount).
+A user's `default` mount is written into their settings by `UserHome.loadSettings`, the first time the home opens, with the server's current storage type and `maxSizeMB` set to `defaultMountMaxSizeMB`. That is usually the first sign-in, and at signup only when shares are waiting for the new user (`reconcileSharesForNewUser` opens the home to deliver them). No route edits a user's mount after that, so the stamp is only the default as it was then. That is why a user's mount takes the larger of its stamp and the current default in the `mountMax` formula ([Teams can only raise a limit](#teams-can-only-raise-a-limit)): an admin who raises the default reaches every user, and one who lowers it shrinks no one's drive under what they already had. `getMountQuotaState` tells a user's mount from a team's by the owner id. A team mount is stamped when an admin adds it, from the same `newMountSettings` unless the admin picks a type or a size, and its `maxSizeMB` stays editable per mount (`TeamHome.updateMount`, which pushes the change onto the live mount).
 
 A mount's `storageType` never changes after it is made, since its bytes live in that backend: `updateMount` does not accept it. A mount is enabled or disabled, never deleted, so its data is kept.
 

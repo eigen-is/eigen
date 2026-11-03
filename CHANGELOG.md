@@ -4,6 +4,14 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ## [Unreleased]
 
+### Changed
+
+- **Default drive size reaches existing users** — raising **Default mount (MB)** in Admin's server settings now gives every user's drive the new size at once, not only users who sign in for the first time. Lowering it shrinks no one's drive
+
+### Fixed
+
+- **Pictures cropped in Google Slides** — a picture that Google Slides cropped to fit its box, such as a logo, no longer comes in squashed when you convert or import the deck
+
 ## [0.4.2] - 2026-11-03
 
 Sheets scrolls and looks things up faster, copies and pastes validation rules and hidden rows as Excel does, and its dialogs read and behave like the rest of Eigen. Docs gets styled tables of contents, and emoji, Chinese and Korean text and equations draw the same in the apps and in downloads. Every update now makes a Full backup, `./eigen rollback` keeps today's data, and an update can warn open tabs before Eigen restarts. Three changes break old data: Vector and Slides text boxes saved by an earlier version disappear, Sheets validation rules need setting up again, and Light backups can no longer be restored. After you update, reload any tab you have open.

@@ -313,6 +313,7 @@ export async function userHomeSize(
     const quotas = await resolveUserQuotas(
         mountSettings ? createMountConfig(DEFAULT_MOUNT_ID, mountSettings) : createDefaultMountConfig(),
         teamIds,
+        'user',
     );
     return homeSize(dataUsed, driveUsed, quotas);
 }

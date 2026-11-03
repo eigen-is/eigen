@@ -46,7 +46,7 @@ On a server without mailboxes that sends through a relay, a **Relay sends as use
 
 ## Storage quotas
 
-These four limits apply by default to every user. A changed **Default mount (MB)** reaches drives created after the change: a user's existing drive keeps the limit it was created with. You can also set quota overrides per team from the Teams panel in Admin; when a user belongs to multiple teams, the most permissive limit wins.
+These four limits apply by default to every user. A raised **Default mount (MB)** reaches every user's drive right away. A lowered one shrinks no one: a user's drive keeps at least the limit it was created with. You can also set quota overrides per team from the Teams panel in Admin; when a user belongs to multiple teams, the most permissive limit wins.
 
 | Field | What it controls | Default |
 |---|---|---|

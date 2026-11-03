@@ -1,3 +1,4 @@
+import { parseOwnerId } from '@workspace/lib/types/owner';
 import { ApiError } from '../core';
 import { getHome } from '../home';
 import { getMemberships } from '../user';
@@ -8,7 +9,8 @@ import { getMaxUploadSize } from './server-settings';
 export async function getMountQuotaState(ownerId: string, mountId: string): Promise<{ used: number; max: number }> {
     const home = await getHome(ownerId); // ownerId-routed: called from drive upload routes
     const { teamIds } = await getMemberships(ownerId);
-    const quotas = await resolveUserQuotas(home.drive.getMountConfig(mountId), teamIds);
+    const owner = parseOwnerId(ownerId).type === 'team' ? 'team' : 'user';
+    const quotas = await resolveUserQuotas(home.drive.getMountConfig(mountId), teamIds, owner);
     return { used: await home.drive.size(mountId), max: quotas.mountMax };
 }
 

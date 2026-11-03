@@ -31,9 +31,18 @@ export async function resolveHomeDataMax(teamIds: string[]): Promise<number> {
     return homeDataMaxOf(await pullOverrides(teamIds));
 }
 
-export async function resolveUserQuotas(mountConfig: MountConfig, teamIds: string[]): Promise<ResolvedQuotas> {
+// A user's drive takes the largest of its own cap, the server default and its owner's team overrides: its own cap is
+// the default stamped at the first sign-in, which nothing edits after, so a raised default reaches every user. A team's
+// drive keeps the cap an admin set on it, below the default too.
+export async function resolveUserQuotas(
+    mountConfig: MountConfig,
+    teamIds: string[],
+    owner: 'user' | 'team',
+): Promise<ResolvedQuotas> {
     const overrides = await pullOverrides(teamIds);
-    const mountCandidates = [mountConfig.maxSizeMB ?? getServerSettings().quotas.defaultMountMaxSizeMB];
+    const serverDefault = getServerSettings().quotas.defaultMountMaxSizeMB;
+    const mountCandidates = [mountConfig.maxSizeMB ?? serverDefault];
+    if (owner === 'user') mountCandidates.push(serverDefault);
 
     for (const override of overrides) {
         if (override.defaultMountMaxSizeMB != null) {
