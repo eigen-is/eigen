@@ -59,7 +59,7 @@ ${LINES.map((line) => `<p style="font-family: '${line.family}'${line.bold ? '; f
 </body></html>`;
 
 // The render script run in place, with every md5 it computes counted and the count printed on stderr. WeasyPrint is
-// imported first, so its own md5 calls are not counted.
+// imported first, so its own md5 calls are not counted. Run as a module, the script leaves the exit to this wrapper.
 const COUNT_DIGESTS = `
 import hashlib, runpy, sys
 import weasyprint
@@ -70,7 +70,7 @@ def counted(*args, **kwargs):
     return md5(*args, **kwargs)
 hashlib.md5 = counted
 sys.argv = sys.argv[1:]
-runpy.run_path(sys.argv[0], run_name='__main__')
+runpy.run_path(sys.argv[0])
 print(f'digests={digests}', file=sys.stderr)
 `;
 
