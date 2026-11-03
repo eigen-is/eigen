@@ -407,6 +407,20 @@ export class Mount {
         return false;
     }
 
+    // The folders above pathId, nearest first. It reads synchronously, so a caller inside a transaction
+    // sees the tree as that transaction does.
+    public collectAncestorIds(pathId: string): string[] {
+        const ids: string[] = [];
+        let current = pathId;
+        for (;;) {
+            const row = this.db.select({ parentId: paths.parentId }).from(paths).where(eq(paths.id, current)).get();
+            if (!row?.parentId) return ids;
+            if (ids.includes(row.parentId)) throw treeCycleError(row.parentId);
+            ids.push(row.parentId);
+            current = row.parentId;
+        }
+    }
+
     public collectDescendantIds(parentId: string): string[] {
         const ids: string[] = [];
         const collect = (pid: string) => {
@@ -715,7 +729,8 @@ export class Mount {
     // ---- Renaming, moving and deleting ----
 
     // A move asks isTargetTrashing whether its target folder is on its way to the trash, which only the
-    // caller knows. It asks in the transaction that writes the row, so no trash begins in between.
+    // caller knows. It asks in the transaction that writes the row, so no trash begins in between. On
+    // `local` it also asks before the disk rename, so a refused move leaves the bytes where they are.
     public async updatePath(
         pathId: string,
         updates: Partial<Omit<DrivePath, 'id' | 'ownerId' | 'createdAt'>>,

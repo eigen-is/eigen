@@ -70,15 +70,17 @@ export class CollabRegistry {
         }
     }
 
-    // Whether the path is on its way to the trash, on its own or with a folder above it.
+    // Whether the path is on its way to the trash, on its own or with a folder above it. The folders above
+    // count too, because a subfolder created after the trash began has no mark of its own. A move asks
+    // this inside the transaction of its row write, so the folders it reads are those the move sees.
     public isTrashing(mount: Mount, pathId: string): boolean {
-        return this.trashing.has(this.key(mount.id, pathId));
+        return [pathId, ...mount.collectAncestorIds(pathId)].some((id) => this.trashing.has(this.key(mount.id, id)));
     }
 
     // Runs a trash of the path and refuses every open at or below it until the trash is done. The
     // refused socket tries again, and by then the path is in the trash, so it gets a 404. A move into
-    // one of these folders is refused too. A document that a restore or a create puts in after the keys
-    // are read isn't refused, so the trash closes it itself.
+    // any folder below the path is refused too (isTrashing). A document that a restore or a create puts
+    // in after the keys are read isn't refused, so the trash closes it itself.
     public async whileTrashing(mount: Mount, pathId: string, trash: () => Promise<void>): Promise<void> {
         const keys = [pathId, ...mount.collectDescendantIds(pathId)].map((id) => this.key(mount.id, id));
         for (const key of keys) this.trashing.set(key, (this.trashing.get(key) ?? 0) + 1);
