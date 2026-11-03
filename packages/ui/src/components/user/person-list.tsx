@@ -76,11 +76,7 @@ export function PersonList<T>({
     });
     const longPress = useLongPress(openAt);
 
-    const {
-        selectedIndex,
-        handleKeyDown,
-        handleContextMenu: handleListContextMenu,
-    } = useKeyboardListNavigation({
+    const { selectedIndex, handleKeyDown } = useKeyboardListNavigation({
         items: visible,
         activeId,
         getId,
@@ -109,13 +105,7 @@ export function PersonList<T>({
         : [];
 
     return (
-        <div
-            className="flex-1 overflow-y-auto outline-none"
-            tabIndex={0}
-            ref={listRef}
-            onKeyDown={handleKeyDown}
-            onContextMenu={handleListContextMenu}
-        >
+        <div className="flex-1 overflow-y-auto outline-none" tabIndex={0} ref={listRef} onKeyDown={handleKeyDown}>
             {visible.length === 0 ? (
                 emptyState
             ) : (

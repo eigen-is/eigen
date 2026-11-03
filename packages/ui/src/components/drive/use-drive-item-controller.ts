@@ -80,11 +80,7 @@ export function useDriveItemController({
         openFromButton: openContextMenuFromButton,
     } = useSelectableContextMenu({ selection, getId: (item) => item.id });
 
-    const {
-        selectedIndex,
-        handleKeyDown,
-        handleContextMenu: handleListContextMenu,
-    } = useKeyboardListNavigation<DrivePath>({
+    const { selectedIndex, handleKeyDown } = useKeyboardListNavigation<DrivePath>({
         items,
         activeId: activeItemId,
         getId: (item) => item.id,
@@ -158,7 +154,6 @@ export function useDriveItemController({
         selection,
         selectedIndex,
         handleKeyDown,
-        handleListContextMenu,
         drag,
         contextMenu,
         handleContextMenu,

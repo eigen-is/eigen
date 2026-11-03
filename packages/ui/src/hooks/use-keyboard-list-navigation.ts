@@ -1,11 +1,12 @@
 // The keyboard model of a list or grid of rows, such as Drive's listing, mail's message list or a contact list: the
 // arrows move a cursor, Enter opens the row, Space quick-looks it, Delete removes it, the menu key opens its menu and
-// ⌘A selects every row. The list spreads the returned handleKeyDown and handleContextMenu on its focusable container.
+// ⌘A selects every row. The list spreads the returned handleKeyDown on its focusable container.
 // The hook keeps the focus on that container while nothing else holds it, and takes it back from a row's own button
 // when a key moves the cursor.
 
-import type { KeyboardEvent, MouseEvent, RefObject } from 'react';
+import type { KeyboardEvent, RefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
+import { isKeyboardContextMenu } from '../components/context-menu/use-context-menu';
 import type { UseListSelectionReturn } from './use-list-selection';
 
 // A control inside a row with its own Enter and Space, such as the row's ⋮ button. A row's name link is not one: it
@@ -114,34 +115,6 @@ export function useKeyboardListNavigation<T>({
         };
     }, [containerRef, reclaimFocus]);
 
-    // On Windows and Linux the menu key also makes the browser send a contextmenu event to the focused element, after
-    // the keydown, and on Windows only once the key comes up. By then the row's menu that the keydown opened holds the
-    // focus. Left alone, that event would open the browser's own menu over ours, or, on the list, the menu of the page
-    // behind it, such as Drive's New menu. So after the key opened a menu, the next contextmenu anywhere is swallowed.
-    // A pointer presses down before its contextmenu, and macOS sends none, so a pointerdown or the next key ends it.
-    const menuKeyOpened = useRef(false);
-    const hasMenu = onMenu !== undefined;
-    useEffect(() => {
-        if (!hasMenu) return;
-        const swallow = (e: Event) => {
-            if (!menuKeyOpened.current) return;
-            menuKeyOpened.current = false;
-            e.preventDefault();
-            e.stopPropagation();
-        };
-        const disarm = () => {
-            menuKeyOpened.current = false;
-        };
-        window.addEventListener('contextmenu', swallow, true);
-        window.addEventListener('pointerdown', disarm, true);
-        window.addEventListener('keydown', disarm, true);
-        return () => {
-            window.removeEventListener('contextmenu', swallow, true);
-            window.removeEventListener('pointerdown', disarm, true);
-            window.removeEventListener('keydown', disarm, true);
-        };
-    }, [hasMenu]);
-
     const scrollToRow = (index: number) => {
         if (scrollToIndex) {
             scrollToIndex(index);
@@ -181,7 +154,7 @@ export function useKeyboardListNavigation<T>({
             : items.findIndex((item) => selection?.isSelected(getSelectionId(item)));
 
     // With no row to act on, the key does nothing here, and the page behind the list may open its own menu.
-    const openMenu = (e: KeyboardEvent<HTMLElement> | MouseEvent<HTMLElement>) => {
+    const openMenu = (e: KeyboardEvent<HTMLElement> | MouseEvent) => {
         const index = targetIndex();
         if (!onMenu || index < 0) return false;
         e.preventDefault();
@@ -284,7 +257,7 @@ export function useKeyboardListNavigation<T>({
             // The menu key is the ContextMenu key or Shift+F10. F10 alone belongs to the browser.
             case 'ContextMenu':
             case 'F10':
-                if ((e.key === 'ContextMenu' || e.shiftKey) && openMenu(e)) menuKeyOpened.current = true;
+                if (e.key === 'ContextMenu' || e.shiftKey) openMenu(e);
                 break;
 
             // Backspace deletes too, the way Finder, Apple Mail and Contacts do on macOS.
@@ -308,14 +281,23 @@ export function useKeyboardListNavigation<T>({
         }
     };
 
-    // A contextmenu event no keydown came before, such as one a screen reader sends, still opens the row's menu. A
-    // key's event targets the focused list itself and has no pointer type, while a right-click below the rows, which
-    // targets the list too, has the mouse's.
-    const handleContextMenu = (e: MouseEvent<HTMLElement>) => {
-        if (e.target !== e.currentTarget) return;
-        if (!(e.nativeEvent instanceof PointerEvent) || e.nativeEvent.pointerType !== '') return;
-        if (openMenu(e)) e.stopPropagation();
-    };
+    // On Windows and Linux the menu key also makes the browser send a contextmenu event to the focused element, after
+    // the keydown, and on Windows only once the key comes up. A keydown's preventDefault doesn't stop it. When the
+    // row's menu holds the focus by then, ContextMenuAnchor cancels it. When the list or a row's button still does, it
+    // lands here and opens the same row's menu, so neither the browser's menu nor the menu of the page behind the list,
+    // such as Drive's New menu, opens. A screen reader's contextmenu with no key before it opens the row's menu here
+    // too. The listener sits on the list itself, so it stops the event before React's handlers on the rows and around
+    // the list see it, and a pointer's contextmenu passes on to them. It is bound again on every render, so it reads
+    // this render's cursor, and finds a list that mounts late, such as mail's after its loading state.
+    useEffect(() => {
+        const list = containerRef.current;
+        if (!list || !onMenu) return;
+        const onContextMenu = (e: MouseEvent) => {
+            if (isKeyboardContextMenu(e) && openMenu(e)) e.stopPropagation();
+        };
+        list.addEventListener('contextmenu', onContextMenu);
+        return () => list.removeEventListener('contextmenu', onContextMenu);
+    });
 
-    return { selectedIndex, handleKeyDown, handleContextMenu };
+    return { selectedIndex, handleKeyDown };
 }

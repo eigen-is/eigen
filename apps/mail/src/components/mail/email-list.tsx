@@ -174,7 +174,7 @@ export function EmailList({
     // takes it back from <body>, which keeps the shortcuts alive after a click on something that takes no focus. It
     // stands down while composing, so a reply keeps its keystrokes. There is no onDelete: Delete and Backspace live in
     // useMailShortcuts, which also covers an open conversation, and the list only swallows the key.
-    const { handleKeyDown, handleContextMenu: handleListContextMenu } = useKeyboardListNavigation({
+    const { handleKeyDown } = useKeyboardListNavigation({
         items: orderedEmails,
         getId: (e) => e.id,
         onSelect: onRowClick,
@@ -211,13 +211,7 @@ export function EmailList({
 
     return (
         <div className="w-full h-full flex flex-col overflow-hidden bg-background">
-            <div
-                className="flex-1 overflow-y-auto outline-none"
-                tabIndex={0}
-                onKeyDown={handleKeyDown}
-                onContextMenu={handleListContextMenu}
-                ref={tableRef}
-            >
+            <div className="flex-1 overflow-y-auto outline-none" tabIndex={0} onKeyDown={handleKeyDown} ref={tableRef}>
                 {orderedEmails.length > 0 ? (
                     <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
                         {virtualItems.map((vi) => {

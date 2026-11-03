@@ -1,7 +1,7 @@
 // The state of one context menu: the item it acts on, where it opens, and the element that had the focus when it
 // opened. A host such as a Drive list, a chat message list or a canvas calls this hook, opens the menu from a
 // right-click, a long press or a ⋮ button, and passes the result to ContextMenuAnchor, which draws the menu and calls
-// restoreFocus as the menu closes.
+// restoreFocus as the menu closes. isKeyboardContextMenu tells a contextmenu event that a key sent from a pointer's.
 
 import { useCallback, useRef, useState } from 'react';
 import { returnFocusTo } from '../../hooks/use-focus-return';
@@ -43,4 +43,15 @@ export function useContextMenu<T>() {
     const close = useCallback(() => setItem(null), []);
 
     return { item, position, isOpen: !!item, handleContextMenu, openAt, close, restoreFocus };
+}
+
+// Whether a contextmenu event came from a key, such as the menu key or Shift+F10, rather than from a pointer. A key's
+// event reports no button, which reads as 0, and a right-click reports 2. Chrome and Firefox agree on that, also where
+// the event is a plain MouseEvent, as in Firefox before 129. pointerType alone can't tell, because Chrome gives a key's
+// event the mouse's. A Mac's Ctrl+click and a long press report 0 too, so the Ctrl key and a touch or pen pointerType
+// keep those the pointer's. Safari sends a key's contextmenu as a right-click on the element under the focus, so it
+// reads as a pointer's and opens the menu of what it lands on.
+export function isKeyboardContextMenu(event: MouseEvent): boolean {
+    if (event.button !== 0 || event.ctrlKey) return false;
+    return !(event instanceof PointerEvent) || event.pointerType === '' || event.pointerType === 'mouse';
 }

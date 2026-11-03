@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { contextMenuEvent, KEY_SOURCES, POINTER_SOURCES } from '../../context-menu-event';
 import { installHappyDom } from '../../happy-dom';
 
 installHappyDom();
@@ -45,6 +46,28 @@ test('the menu draws the rows the host passed', async () => {
     const labels = [...document.querySelectorAll('[role="menuitem"]')].map((row) => row.textContent?.trim());
     expect(labels).toEqual(['Quick preview']);
     await cleanup();
+});
+
+// On Windows the menu key's contextmenu comes as the key comes up, when the menu it opened holds the focus. A
+// right-click inside the menu keeps the browser's own menu, as before.
+test('a key’s contextmenu inside the menu opens no browser menu over it, and a pointer’s stays the browser’s', async () => {
+    const { cleanup } = await mountInTransformedHost();
+    const row = document.querySelector('[role="menuitem"]');
+    if (!row) throw new Error('no menu row');
+    const sent = [...KEY_SOURCES, ...POINTER_SOURCES].map((source) => {
+        const event = contextMenuEvent(source);
+        row.dispatchEvent(event);
+        return [source, event.defaultPrevented];
+    });
+    await cleanup();
+    expect(sent).toEqual([
+        ['chrome-key', true],
+        ['firefox-key', true],
+        ['old-firefox-key', true],
+        ['right-click', false],
+        ['ctrl-click', false],
+        ['long-press', false],
+    ]);
 });
 
 test('Escape from the menu gives the focus back to the list it opened from', async () => {
