@@ -746,7 +746,16 @@ export class Drive {
             const item = await mount.getActivePath(pathId);
             if (item.parentId === null) throw new ApiError(400, 'Cannot trash root folder');
             await this.documents.whileTrashing(mount, item.id, () => deletePath(this, mount, item, user));
+            await this.releaseLocksUnder(mountId, item.id);
         });
+    }
+
+    // A path that leaves its place, such as by a trash or a WebDAV MOVE, takes its WebDAV locks with it,
+    // and those of everything under it. The client can't refresh or unlock them at the old URL, so each
+    // would hold the home until it expires.
+    public async releaseLocksUnder(mountId: string, pathId: string): Promise<void> {
+        const mount = this.getMount(mountId);
+        this.lockManager.releaseAllForPaths([pathId, ...mount.collectDescendantIds(pathId)]);
     }
 
     public async restorePath(mountId: string, pathId: string, user?: User): Promise<void> {

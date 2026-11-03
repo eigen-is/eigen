@@ -101,13 +101,13 @@ export class LockManager {
         return true;
     }
 
-    // DELETE, MOVE and COPY call this when they remove or replace a path. Its locks would otherwise
-    // keep the Home held until they expire.
-    public releaseAllForPath(pathId: string): void {
-        const tokens = this.byPath.get(pathId);
-        if (!tokens) return;
-        for (const token of tokens) this.locks.delete(token);
-        this.byPath.delete(pathId);
+    // The Drive calls this when paths leave their place, such as by a trash or a WebDAV MOVE, with every
+    // path under them. Their locks would otherwise keep the Home held until they expire.
+    public releaseAllForPaths(pathIds: readonly string[]): void {
+        for (const pathId of pathIds) {
+            for (const token of this.byPath.get(pathId) ?? []) this.locks.delete(token);
+            this.byPath.delete(pathId);
+        }
         this.settle();
     }
 

@@ -28,10 +28,7 @@ export async function handleMove(args: {
         verb: 'MOVE',
     });
 
-    if (destExisting) {
-        await drive.deletePath(args.mountId, destExisting.id, args.user);
-        drive.lockManager.releaseAllForPath(destExisting.id);
-    }
+    if (destExisting) await drive.deletePath(args.mountId, destExisting.id, args.user);
 
     if (src.parentId !== destParent.id) {
         await drive.movePath(args.mountId, src.id, destParent.id, args.user);
@@ -39,6 +36,9 @@ export async function handleMove(args: {
     if (src.name !== newName) {
         await drive.renamePath(args.mountId, src.id, newName, args.user);
     }
+    // RFC 4918 §7.7: a lock does not move with its resource. Left in place, it would hold the Home
+    // until it expires, because the client can't refresh it at the old URL.
+    await drive.releaseLocksUnder(args.mountId, src.id);
     return new Response(null, { status: destExisting ? 204 : 201 });
 }
 
@@ -59,10 +59,7 @@ export async function handleCopy(args: {
     });
 
     return await drive.withHomeHeld(async () => {
-        if (destExisting) {
-            await drive.deletePath(args.mountId, destExisting.id, args.user);
-            drive.lockManager.releaseAllForPath(destExisting.id);
-        }
+        if (destExisting) await drive.deletePath(args.mountId, destExisting.id, args.user);
 
         // RFC 4918 §9.8.3: Depth: 0 on a folder copies the folder without its members. A file has none.
         if (args.depth === '0' && src.type !== DRIVE_TYPE_FILE) {
