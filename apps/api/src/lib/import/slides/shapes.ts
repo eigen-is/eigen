@@ -119,6 +119,9 @@ const GRAPHIC_KINDS = new Map<string, Dropped>([
 // The title's text, one line, for the frame's name.
 const MAX_TITLE_CHARS = 100;
 
+// A tenth of a percent of the picture, a few pixels at most: crop sides closer than this read as equal.
+const CROP_SLACK = 0.001;
+
 export type SlideShapes = { elements: NewVectorElement[]; title: string };
 
 type Walk = {
@@ -411,13 +414,21 @@ function readPicture(
 // The pptx export fits a picture with a crop centered on one axis. A negative crop reaches past the picture to
 // contain it, and a positive one cuts into it to cover it. The reader never decodes a picture, so it can't check the
 // crop against the picture's aspect, and it reads any such crop as that fit. A side that doesn't read counts as
-// uncropped. Any other crop draws the picture uncropped and is counted.
+// uncropped. Two sides within CROP_SLACK of each other count as equal, because Google Slides writes a centered crop
+// with a rounding leftover on one side (a logo's `l="0" r="10"`, a hundredth of a percent). Any other crop draws the
+// picture uncropped and is counted.
 function objectFitOf(blipFill: XmlElement | undefined, lost: Lost): ObjectFit {
     const rect = blipFill && childOf(blipFill, A_NS, 'srcRect');
     if (!rect) return 'fill';
     const [l, t, r, b] = ['l', 't', 'r', 'b'].map((side) => percent(xmlAttr(rect, '', side)) ?? 0);
-    if (l === 0 && t === 0 && r === 0 && b === 0) return 'fill';
-    const inset = t === 0 && b === 0 && l === r ? l : l === 0 && r === 0 && t === b ? t : undefined;
+    const near = (a: number, z: number) => Math.abs(a - z) < CROP_SLACK;
+    if (near(l, 0) && near(t, 0) && near(r, 0) && near(b, 0)) return 'fill';
+    const inset =
+        near(t, 0) && near(b, 0) && near(l, r)
+            ? (l + r) / 2
+            : near(l, 0) && near(r, 0) && near(t, b)
+              ? (t + b) / 2
+              : undefined;
     if (inset !== undefined && inset < 0) return 'contain';
     if (inset !== undefined && inset < 0.5) return 'cover';
     lost('crops-dropped');

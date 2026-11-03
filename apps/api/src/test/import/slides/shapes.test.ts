@@ -1163,6 +1163,10 @@ describe('pictures', () => {
         expect(fitOf(' l="25000" r="25000"')).toEqual(['cover', '']);
         expect(fitOf(' t="12.5%" b="12.5%" l="0" r="0"')).toEqual(['cover', '']);
         expect(fitOf(' t="49999" b="49999"')).toEqual(['cover', '']);
+        // Google Slides' centered crop with a rounding leftover on one side, as a logo on a real deck has it.
+        expect(fitOf(' b="30338" l="0" r="10" t="30338"')).toEqual(['cover', '']);
+        expect(fitOf(' l="24369" r="24400"')).toEqual(['cover', '']);
+        expect(fitOf(' l="0" r="10" t="0" b="0"')).toEqual(['fill', '']);
         // No crop, PowerPoint's empty one, and sides that don't read, which count as uncropped.
         expect(fitOf('')).toEqual(['fill', '']);
         expect(fitOf(' l="0" t="0" r="0" b="0"')).toEqual(['fill', '']);
