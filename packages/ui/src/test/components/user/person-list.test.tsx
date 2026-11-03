@@ -2,7 +2,7 @@
 // Tab reaches and shows it, since the list's arrow keys have no way to open the menu.
 import { expect, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
-import { HOVER_REVEALED, revealStates } from '../../keyboard-reach';
+import { expectKeyboardReveal } from '../../hover-reveal';
 import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
@@ -32,5 +32,5 @@ test('each row has a ⋮ button a mouse user sees on hover only, and Tab reaches
     );
     const buttons = document.querySelectorAll('button[aria-label="More actions"]');
     expect(buttons).toHaveLength(2);
-    for (const button of buttons) expect(revealStates(button)).toEqual(HOVER_REVEALED);
+    for (const button of buttons) expectKeyboardReveal(button);
 });

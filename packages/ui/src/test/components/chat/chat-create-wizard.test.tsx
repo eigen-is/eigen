@@ -43,7 +43,7 @@ const { act, createElement } = await import('react');
 const { ChatCreateWizard } = await import('../../../components/chat/chat-create-wizard');
 const { clickRow } = await import('../../menu-rows');
 const { pressKey } = await import('../../press-key');
-const { HOVER_REVEALED, revealStates } = await import('../../keyboard-reach');
+const { expectKeyboardReveal } = await import('../../hover-reveal');
 
 async function openWizard(teams: (typeof DESIGN_TEAM)[] = []) {
     myTeams = teams;
@@ -92,7 +92,7 @@ test("a picked person's × shows on hover only for a mouse, and Tab reaches and 
     await pick('ada@example.com');
     const removeAda = buttonNamed('Remove ada@example.com');
     if (!removeAda) throw new Error('the wizard drew no remove button');
-    expect(revealStates(removeAda)).toEqual(HOVER_REVEALED);
+    expectKeyboardReveal(removeAda);
 });
 
 test('a picked team has a remove button named after the team, and it goes back to picking people', async () => {

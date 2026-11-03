@@ -3,7 +3,7 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import type { ChatMessage } from '@workspace/lib/types/chat';
 import { installHappyDom } from '../../happy-dom';
-import { HOVER_REVEALED, revealStates } from '../../keyboard-reach';
+import { expectKeyboardReveal } from '../../hover-reveal';
 import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
@@ -64,5 +64,5 @@ test("a message's Edit and Delete show on hover only for a mouse, and Tab reache
     );
     const actions = ['Edit', 'Delete'].map((name) => document.querySelector(`button[aria-label="${name}"]`));
     expect(actions.every(Boolean)).toBe(true);
-    for (const button of actions) if (button) expect(revealStates(button)).toEqual(HOVER_REVEALED);
+    for (const button of actions) if (button) expectKeyboardReveal(button);
 });
