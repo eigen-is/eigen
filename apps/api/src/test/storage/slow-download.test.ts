@@ -252,7 +252,7 @@ describe('S3 reads that fail', () => {
         const fileId = await mount.createFile(rootId, 'c.bin', 'application/octet-stream', bytes.length, bytes);
         const before = readdirSync(mount.tmpDir);
         fake.faults.set(await mount.getStorageKey(fileId), 'cut');
-        await expect(mount.copyPath(fileId, rootId, 'c copy.bin')).rejects.toThrow();
+        await expect(mount.copyPath(await mount.listCopy(fileId), rootId, 'c copy.bin')).rejects.toThrow();
         expect(readdirSync(mount.tmpDir)).toEqual(before);
     });
 });

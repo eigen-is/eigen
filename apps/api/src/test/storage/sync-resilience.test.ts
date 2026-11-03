@@ -464,7 +464,7 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
         expect(rangedBytes.equals(stagedBytes)).toBe(true);
 
         // Copy the whole container: the recursion into data.db must copy the staged {1,2}, not "S3" {1}.
-        const copy = await mount.copyPath(containerId, rootId, 'doc-copy');
+        const copy = await mount.copyPath(await mount.listCopy(containerId), rootId, 'doc-copy');
         const copiedDataDb = (await mount.getChildByName(copy.id, 'data.db'))!;
         expect(await countBackingRows(mount, copiedDataDb.id, TEST_DIR)).toBe(2);
 

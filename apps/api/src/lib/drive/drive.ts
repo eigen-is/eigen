@@ -42,6 +42,7 @@ import { validateACLEntries, validateEmailAddress } from '@workspace/lib/validat
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { assertCommentChatExists, ChatRoom, withCommentIndex } from '../chat';
 import { CollabDocument } from '../collab/collab-document';
+import { enforceMountQuota, getUploadMaxSize } from '../config/enforcement';
 import { getServerSettings } from '../config/server-settings';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
 import { ApiError, computeEtag } from '../core';
@@ -51,6 +52,7 @@ import { composeCollaboratorsEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
 import type { DatabaseHold } from '../mount';
 import { createMountConfig, DEFAULT_MOUNT_ID, Mount } from '../mount';
+import { copySize } from '../mount/copy';
 import { validateName } from '../mount/names';
 import { extractText } from '../search/extract-text';
 import { getEntriesForTarget } from '../share';
@@ -81,6 +83,8 @@ import {
     resolveACLToEmails,
 } from './acl-propagation';
 import { CollabRegistry } from './collab-registry';
+import type { CopyTarget } from './copy-across';
+import { copyPathAcross } from './copy-across';
 import { LockManager } from './lock-manager';
 import { getSharedDatabase } from './shared';
 import {
@@ -667,21 +671,43 @@ export class Drive {
         await this.pushSharing(mountId, pathId, 'live', null);
     }
 
+    // Copies a path into a folder of this mount, or with `to` into a folder of another mount or another
+    // owner's drive. The checks live here and not in a route, because WebDAV COPY calls Drive directly.
     public async copyPath(
         mountId: string,
         srcPathId: string,
         destParentId: string,
         name: string,
         user?: User,
+        to?: CopyTarget,
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
-        // A folder copied into itself would copy its own copies forever. The check lives here and not
-        // in the route, because WebDAV COPY calls Drive directly. RFC 4918 asks for a 409.
-        if (await mount.isSelfOrDescendant(srcPathId, destParentId)) {
-            throw new ApiError(409, 'Cannot copy a folder into itself or its own descendant');
+        if (to) {
+            // Checked before the source is listed, so a user who may not write there never flushes the
+            // source's documents or reads the target's limits. The target checks each write again.
+            if (!user || !(await to.drive.canWrite(to.mountId, destParentId, user))) {
+                throw new ApiError(403, 'No write permission on target folder');
+            }
+        } else {
+            // RFC 4918 asks for a 409 for a folder copied into itself.
+            if (await mount.isSelfOrDescendant(srcPathId, destParentId)) {
+                throw new ApiError(409, 'Cannot copy a folder into itself or its own descendant');
+            }
+            await this.getTargetFolder(mount, destParentId);
         }
-        await this.getTargetFolder(mount, destParentId);
-        const copied = await mount.copyPath(srcPathId, destParentId, name, user);
+
+        // The copy writes exactly what this lists, so it never copies its own output. The per-file upload
+        // cap bounds a single file. A folder or a document only has to fit in the free space.
+        const tree = await mount.listCopy(srcPathId);
+        const limits = to ?? { ownerId: this.owner.id, mountId };
+        if (isContainerType(tree.path.type)) {
+            await enforceMountQuota(limits.ownerId, limits.mountId, copySize(tree));
+        } else if (tree.path.size > (await getUploadMaxSize(limits.ownerId, limits.mountId))) {
+            throw new ApiError(413, 'Source file too large');
+        }
+
+        if (to) return copyPathAcross(this, tree, to, destParentId, name, user);
+        const copied = await mount.copyPath(tree, destParentId, name, user);
         this.emit(
             isContainerType(copied.type) ? SSEventType.DRIVE_FOLDER_CREATED : SSEventType.DRIVE_FILE_CREATED,
             copied,
