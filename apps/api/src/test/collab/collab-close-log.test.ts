@@ -4,7 +4,7 @@ import * as decoding from 'lib0/decoding';
 import { evictHome } from '../../lib/home/get-home';
 import { waitFor } from '../fault-storage-helpers';
 import type { TestUser } from '../setup';
-import { createTestUser, driveGet, drivePost, getTestContext } from '../setup';
+import { createTestUser, driveDelete, driveGet, drivePost, getTestContext } from '../setup';
 
 // A socket the Home's teardown closes reaches the route's close handler after the document has dropped
 // every connection. Needs a real listening server.
@@ -12,6 +12,8 @@ import { createTestUser, driveGet, drivePost, getTestContext } from '../setup';
 let ctx: Awaited<ReturnType<typeof getTestContext>>;
 let user: TestUser;
 let url: string;
+let socketBase: string;
+let rootId: string;
 
 beforeAll(async () => {
     ctx = await getTestContext();
@@ -21,8 +23,10 @@ beforeAll(async () => {
     const doc = await drivePost<DrivePath>(user.sessionToken, user.id, mountId, `folder/${root.id}/create/doc`, {
         fileName: 'Close log probe',
     });
+    rootId = root.id;
     const port = ctx.app.listen(0).server?.port;
-    url = `ws://localhost:${port}/ws/collab/${user.id}/${mountId}/${doc.id}`;
+    socketBase = `ws://localhost:${port}/ws/collab/${user.id}/${mountId}`;
+    url = `${socketBase}/${doc.id}`;
 });
 
 afterAll(() => {
@@ -56,6 +60,33 @@ describe('collab close log', () => {
                 .filter((l) => l.startsWith('[collab] close '));
             expect(closeLines.some((l) => l.includes('connections=-1'))).toBe(false);
         } finally {
+            logs.mockRestore();
+        }
+    });
+
+    // y-websocket reconnects to a trashed document again and again, and each refusal is expected.
+    test('an expected refusal logs one line with its status, and no stack', async () => {
+        const doc = await drivePost<DrivePath>(user.sessionToken, user.id, 'default', `folder/${rootId}/create/doc`, {
+            fileName: 'Trashed log probe',
+        });
+        await driveDelete(user.sessionToken, user.id, 'default', `path/${doc.id}`);
+
+        const errors = spyOn(console, 'error');
+        const logs = spyOn(console, 'log');
+        try {
+            const ws = new WebSocket(`${socketBase}/${doc.id}`, {
+                headers: { cookie: `better-auth.session_token=${user.sessionToken}` },
+            } as unknown as string[]);
+            await new Promise<void>((resolve) => {
+                ws.onclose = () => resolve();
+            });
+            const refusals = logs.mock.calls.map(([line]) => String(line)).filter((l) => l.includes('refused'));
+            expect(refusals).toEqual([`[collab] open refused path=${doc.id} status=404: File is in trash`]);
+            expect(errors.mock.calls.some(([line]) => String(line).startsWith('Error opening collab session'))).toBe(
+                false,
+            );
+        } finally {
+            errors.mockRestore();
             logs.mockRestore();
         }
     });

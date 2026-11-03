@@ -232,11 +232,16 @@ export const collabRouter = new Elysia({
                 session.collabDocument = document;
                 session.pingInterval = keepWebSocketAlive(user, rawWs, () => cleanupSession(session, rawWs));
             } catch (err) {
-                console.error('Error opening collab session:', err);
+                const status = err instanceof ApiError ? err.status : 500;
+                // A refusal, such as a document in the trash, is expected on every reconnect, so it gets one line.
+                if (err instanceof ApiError && status < 500) {
+                    console.log(`[collab] open refused path=${ws.data.params.pathId} status=${status}: ${err.message}`);
+                } else {
+                    console.error('Error opening collab session:', err);
+                }
                 // A failure HTTP would answer with a 5xx makes the client retry. That includes a home a restore
                 // is replacing. If the restore finishes, the reconnect names a stale epoch and the tab reloads.
                 // If it fails, the epoch stays, and the tab syncs the edits it holds.
-                const status = err instanceof ApiError ? err.status : 500;
                 if (status >= 500) {
                     ws.close(COLLAB_STORAGE_UNAVAILABLE_CLOSE, COLLAB_STORAGE_UNAVAILABLE_REASON);
                 } else if (status === 410) {
