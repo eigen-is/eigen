@@ -13,14 +13,14 @@ import {
 } from '@workspace/lib/sheets';
 import type { Context } from '../../../state/context';
 import {
-    applyDataVerification,
+    applyDataValidation,
     cellTextBox,
     checkboxAlign,
     checkboxChange,
     checkboxRect,
     DROPDOWN_CHEVRON_HIT_WIDTH,
     dropdownChevronRect,
-    getCellDataVerification,
+    getCellDataValidation,
     getDropdownList,
     getValidationHint,
     insertCheckbox,
@@ -31,7 +31,7 @@ import {
     validateCellData,
     validationRange,
     validationValueProblem,
-} from '../../../state/modules/data-verification';
+} from '../../../state/modules/data-validation';
 import {
     addValidation,
     clearValidations,
@@ -39,7 +39,7 @@ import {
     validationAt,
     validationLookup,
 } from '../../../state/modules/validation-rules';
-import type { Cell, DataRegulationProps, DataVerificationRule } from '../../../state/types';
+import type { Cell, DataRegulationProps, DataValidationRule } from '../../../state/types';
 import { contextFactory } from '../factories/context';
 import { cellsWithRules, validationsByCell } from '../factories/validations';
 
@@ -65,7 +65,7 @@ describe('getDropdownList', () => {
 describe('validateCellData', () => {
     test('parses the importer date operand format (YYYY-MM-DD)', () => {
         const ctx = contextFactory() as Context;
-        const rule: DataVerificationRule = {
+        const rule: DataValidationRule = {
             type: 'date',
             type2: 'between',
             value1: '2024-01-01',
@@ -80,7 +80,7 @@ describe('validateCellData', () => {
 // whether it is. These pin the four defects the feature shipped with: applying
 // a rule wiped the range, the box ignored the cell value, any click in the cell
 // toggled, and a formula cell was silently replaced with a literal.
-const TICK_BOX: DataVerificationRule = { type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' };
+const TICK_BOX: DataValidationRule = { type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' };
 
 function tickBoxContext(data: Context['sheets'][number]['data']) {
     const ctx = contextFactory() as Context;
@@ -102,7 +102,7 @@ describe('isCheckboxChecked', () => {
     });
 
     test('honours a rule with custom selected/not-selected values', () => {
-        const rule: DataVerificationRule = { type: 'checkbox', type2: '', value1: 'Yes', value2: 'No' };
+        const rule: DataValidationRule = { type: 'checkbox', type2: '', value1: 'Yes', value2: 'No' };
         expect(isCheckboxChecked(rule, 'Yes')).toBe(true);
         expect(isCheckboxChecked(rule, 'No')).toBe(false);
     });
@@ -133,7 +133,7 @@ describe('showsCheckboxLabel', () => {
     });
 
     test('a custom rule always keeps its label — it is the only way to tell Yes from No', () => {
-        const rule: DataVerificationRule = { type: 'checkbox', type2: '', value1: 'Yes', value2: 'No' };
+        const rule: DataValidationRule = { type: 'checkbox', type2: '', value1: 'Yes', value2: 'No' };
         expect(showsCheckboxLabel(rule, 'Yes')).toBe(true);
         expect(showsCheckboxLabel(rule, 'No')).toBe(true);
         expect(showsCheckboxLabel(rule, 'Maybe')).toBe(true);
@@ -191,7 +191,7 @@ describe('checkboxChange', () => {
     });
 });
 
-describe('applyDataVerification', () => {
+describe('applyDataValidation', () => {
     test('seeds only empty cells, keeping existing TRUE/FALSE values', () => {
         const ctx = contextFactory() as Context;
         ctx.sheets[0].data = [
@@ -200,7 +200,7 @@ describe('applyDataVerification', () => {
             [null, null, null, null],
             [null, null, null, null],
         ];
-        applyDataVerification(ctx, { row: [0, 2], column: [0, 0] }, TICK_BOX);
+        applyDataValidation(ctx, { row: [0, 2], column: [0, 0] }, TICK_BOX);
 
         expect(ctx.sheets[0].data[0][0]).toEqual({ v: true, m: 'TRUE', ct: { fa: 'General', t: 'b' } });
         expect(ctx.sheets[0].data[1][0]).toEqual({ v: false, m: 'FALSE', ct: { fa: 'General', t: 'b' } });
@@ -210,8 +210,8 @@ describe('applyDataVerification', () => {
 
     test('never seeds cells for a non-checkbox rule', () => {
         const ctx = contextFactory() as Context;
-        const rule: DataVerificationRule = { type: 'dropdown', type2: '', value1: 'Red,Green', value2: '' };
-        applyDataVerification(ctx, { row: [0, 1], column: [0, 0] }, rule);
+        const rule: DataValidationRule = { type: 'dropdown', type2: '', value1: 'Red,Green', value2: '' };
+        applyDataValidation(ctx, { row: [0, 1], column: [0, 0] }, rule);
         expect(ctx.sheets[0].data![0][0]).toBeNull();
         expect(Object.values(ctx.sheets[0].dataValidations ?? {})).toEqual([
             { ranges: [{ row: [0, 1], column: [0, 0] }], rule },
@@ -220,7 +220,7 @@ describe('applyDataVerification', () => {
 
     test('stores the rule once over its range, whatever its size', () => {
         const ctx = contextFactory() as Context;
-        applyDataVerification(ctx, { row: [0, REFERENCE_ROW_COUNT - 1], column: [1, 1] }, LIST_RULE);
+        applyDataValidation(ctx, { row: [0, REFERENCE_ROW_COUNT - 1], column: [1, 1] }, LIST_RULE);
         expect(Object.values(ctx.sheets[0].dataValidations ?? {})).toEqual([
             { ranges: [{ row: [0, REFERENCE_ROW_COUNT - 1], column: [1, 1] }], rule: LIST_RULE },
         ]);
@@ -232,7 +232,7 @@ describe('applyDataVerification', () => {
             wide: { ranges: [{ row: [0, 3], column: [0, 1] }], rule: TICK_BOX },
             inside: { ranges: [{ row: [1, 1], column: [0, 0] }], rule: TICK_BOX },
         };
-        applyDataVerification(ctx, { row: [1, 2], column: [0, 0] }, LIST_RULE);
+        applyDataValidation(ctx, { row: [1, 2], column: [0, 0] }, LIST_RULE);
         const { wide, inside, ...added } = ctx.sheets[0].dataValidations;
         expect(inside).toBeUndefined();
         expect(wide.ranges).toEqual([
@@ -241,14 +241,14 @@ describe('applyDataVerification', () => {
             { row: [3, 3], column: [0, 1] },
         ]);
         expect(Object.values(added)).toEqual([{ ranges: [{ row: [1, 2], column: [0, 0] }], rule: LIST_RULE }]);
-        expect(getCellDataVerification(ctx, 2, 0)).toEqual(LIST_RULE);
-        expect(getCellDataVerification(ctx, 2, 1)).toEqual(TICK_BOX);
+        expect(getCellDataValidation(ctx, 2, 0)).toEqual(LIST_RULE);
+        expect(getCellDataValidation(ctx, 2, 1)).toEqual(TICK_BOX);
     });
 
     test('a whole-column tick box seeds only the rows the sheet has', () => {
         const ctx = contextFactory() as Context;
         ctx.sheets[0].data = [[null], [{ v: 'x', m: 'x' }], [null]];
-        applyDataVerification(ctx, { row: [0, REFERENCE_ROW_COUNT - 1], column: [0, 0] }, TICK_BOX);
+        applyDataValidation(ctx, { row: [0, REFERENCE_ROW_COUNT - 1], column: [0, 0] }, TICK_BOX);
         expect(ctx.sheets[0].data.map((row) => row[0]?.v ?? null)).toEqual([false, 'x', false]);
     });
 });
@@ -260,8 +260,8 @@ describe('the rule over a cell', () => {
         ctx.sheets[0].dataValidations = {
             v: { ranges: [{ row: [0, REFERENCE_ROW_COUNT - 1], column: [1, 1] }], rule: LIST_RULE },
         };
-        expect(getCellDataVerification(ctx, 4999, 1)).toEqual(LIST_RULE);
-        expect(getCellDataVerification(ctx, 4999, 0)).toBeUndefined();
+        expect(getCellDataValidation(ctx, 4999, 1)).toEqual(LIST_RULE);
+        expect(getCellDataValidation(ctx, 4999, 0)).toBeUndefined();
     });
 
     test('where two rules overlap, the highest id wins on every tab, whatever order the map holds them in', () => {
@@ -435,7 +435,7 @@ describe('isCheckboxClick', () => {
 
     // As Google centres it: ticked, unticked and empty boxes sit in one place. A box with a label beside it sits left,
     // so the label keeps the cell's width; the cell's own alignment places either.
-    const YES_NO: DataVerificationRule = { type: 'checkbox', type2: '', value1: 'Yes', value2: 'No' };
+    const YES_NO: DataValidationRule = { type: 'checkbox', type2: '', value1: 'Yes', value2: 'No' };
     const ticked = { v: true, m: 'TRUE', ct: { fa: 'General', t: 'b' } };
     test('a tick box drawn alone is centred, one with a label left, unless its cell is aligned', () => {
         const alone = [
@@ -519,7 +519,7 @@ describe('isCheckboxClick', () => {
 // The always-on list chevron. The painter and the mousedown hit-test share one
 // geometry (dropdownChevronRect), the same split the tick box and the filter
 // button use — these pin them together, threshold included.
-const LIST_RULE: DataVerificationRule = { type: 'dropdown', type2: '', value1: 'Red,Green,Blue', value2: '' };
+const LIST_RULE: DataValidationRule = { type: 'dropdown', type2: '', value1: 'Red,Green,Blue', value2: '' };
 
 function listContext() {
     const ctx = contextFactory() as Context;
@@ -628,7 +628,7 @@ describe('validationValueProblem', () => {
 // with innerHTML on mousedown: the model is derived from the focus cell on every
 // render instead, so it cannot strand over the wrong cell, an arrow-key user
 // gets it, and rule text is content rather than markup.
-function hintContext(rule: DataVerificationRule, value?: Cell) {
+function hintContext(rule: DataValidationRule, value?: Cell) {
     const ctx = contextFactory() as Context;
     ctx.sheets[0].data = [
         [null, null, null, null],
@@ -642,7 +642,7 @@ function hintContext(rule: DataVerificationRule, value?: Cell) {
 
 describe('getValidationHint', () => {
     test('explains a rejected value in place of the old "Failure:" translationese', () => {
-        const rule: DataVerificationRule = { type: 'number', type2: 'between', value1: '1', value2: '10' };
+        const rule: DataValidationRule = { type: 'number', type2: 'between', value1: '1', value2: '10' };
         const hint = getValidationHint(hintContext(rule, { v: 42, m: '42' }), 1, 1);
         expect(hint).toEqual({
             kind: 'invalid',
@@ -653,7 +653,7 @@ describe('getValidationHint', () => {
     });
 
     test('says what a list cell wants, the way Google does', () => {
-        const rule: DataVerificationRule = { type: 'dropdown', type2: '', value1: 'Red,Green', value2: '' };
+        const rule: DataValidationRule = { type: 'dropdown', type2: '', value1: 'Red,Green', value2: '' };
         expect(getValidationHint(hintContext(rule, { v: 'Purple', m: 'Purple' }), 1, 1)?.text).toBe(
             'Input must be an item on the specified list.',
         );
@@ -666,7 +666,7 @@ describe('getValidationHint', () => {
     });
 
     test('phrases each remaining rule type as a sentence', () => {
-        const cases: [DataVerificationRule, Cell, string][] = [
+        const cases: [DataValidationRule, Cell, string][] = [
             [
                 { type: 'text_content', type2: 'include', value1: 'ACME', value2: '' },
                 { v: 'Globex', m: 'Globex' },
@@ -704,7 +704,7 @@ describe('getValidationHint', () => {
     });
 
     test('shows the author prompt verbatim, markup and all — React renders it as text', () => {
-        const rule: DataVerificationRule = {
+        const rule: DataValidationRule = {
             type: 'dropdown',
             type2: '',
             value1: 'Red',
@@ -721,7 +721,7 @@ describe('getValidationHint', () => {
     });
 
     test('a rejection outranks the prompt, and a valid value shows the prompt alone', () => {
-        const rule: DataVerificationRule = {
+        const rule: DataValidationRule = {
             type: 'number',
             type2: 'between',
             value1: '1',
@@ -734,7 +734,7 @@ describe('getValidationHint', () => {
     });
 
     test('stays silent where there is nothing to say', () => {
-        const rule: DataVerificationRule = { type: 'number', type2: 'between', value1: '1', value2: '10' };
+        const rule: DataValidationRule = { type: 'number', type2: 'between', value1: '1', value2: '10' };
         // Valid value, empty cell, a cell with no rule, and a tick box — which
         // can never be invalid and needs no prompt.
         expect(getValidationHint(hintContext(rule, { v: 4, m: '4' }), 1, 1)).toBeUndefined();

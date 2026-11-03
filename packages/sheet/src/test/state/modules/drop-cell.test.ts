@@ -15,7 +15,7 @@ import { setCellValue } from '../../../state/modules/cell';
 import { fillFromEdge, onDropCellSelectEnd } from '../../../state/modules/drop-cell';
 import { execFunctionGroup, groupValuesRefresh, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import { validationAt } from '../../../state/modules/validation-rules';
-import type { Cell, DataVerificationRule, SingleRange } from '../../../state/types';
+import type { Cell, DataValidationRule, SingleRange } from '../../../state/types';
 import { filterPatch } from '../../../state/utils/patch';
 import { contextFactory } from '../factories/context';
 
@@ -169,7 +169,7 @@ describe('drag-fill carries the source cell borders', () => {
 // starts the apply range one row/column past the copy block), so writing the live map
 // while reading it cannot re-read a just-filled entry.
 describe('drag-fill carries the source cell data validation', () => {
-    const rule: DataVerificationRule = {
+    const rule: DataValidationRule = {
         type: 'dropdown',
         type2: '',
         value1: 'yes,no',
@@ -233,7 +233,7 @@ describe('drag-fill carries the source cell data validation', () => {
     });
 
     it('a filled cell takes the rule of the cell it repeats, and one whose source has none keeps its own', () => {
-        const other: DataVerificationRule = { ...rule, value1: 'a,b' };
+        const other: DataValidationRule = { ...rule, value1: 'a,b' };
         const ctx = makeCtx(() => {}, { row: [0, 1], column: [0, 1] });
         ctx.sheets[0].dataValidations = {
             v: { ranges: [{ row: [0, 0], column: [0, 1] }], rule },

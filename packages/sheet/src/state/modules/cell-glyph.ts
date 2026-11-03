@@ -7,14 +7,14 @@ import { CELL_INDICATOR_SIZE } from '@workspace/lib/constants/comment-indicator'
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import { getRealCellValue, isForcedStringNumber, mergeBorder } from './cell';
-import type { CellGlyphRect } from './data-verification';
+import type { CellGlyphRect } from './data-validation';
 import {
     cellTextBox,
-    getCellDataVerification,
+    getCellDataValidation,
     isCheckboxClick,
     isDropdownChevronClick,
     validateCellData,
-} from './data-verification';
+} from './data-validation';
 import { colLocation, rowLocation } from './location';
 
 export type CellGlyph = 'dropdown' | 'checkbox' | 'comment' | 'invalid' | 'forced-string';
@@ -58,7 +58,7 @@ export function cellGlyphAt(ctx: Context, x: number, y: number): CellGlyph | und
     // the hit test claims a corner exactly when a triangle is painted in it.
     const value = cell ? getRealCellValue(r, c, d) : null;
     if (value != null && value.toString().length > 0 && inGlyph(cellIndicatorRect('left', colPre, rowPre, col), x, y)) {
-        const rule = getCellDataVerification(ctx, r, c);
+        const rule = getCellDataValidation(ctx, r, c);
         if (rule && !validateCellData(ctx, rule, value)) return 'invalid';
         if (isForcedStringNumber(cell)) return 'forced-string';
     }

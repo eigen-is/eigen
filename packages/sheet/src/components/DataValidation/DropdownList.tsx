@@ -11,7 +11,7 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { useContext, useMemo } from 'react';
 import { WorkbookContext } from '../../context';
-import { getCellDataVerification, getCellValue, getDropdownList, getFlowdata, setDropdownValue } from '../../state';
+import { getCellDataValidation, getCellValue, getDropdownList, getFlowdata, setDropdownValue } from '../../state';
 
 export function DropDownList() {
     const { context, setContext } = useContext(WorkbookContext);
@@ -23,7 +23,7 @@ export function DropDownList() {
         if (!last) return null;
         const { row_focus: r, column_focus: c } = last;
         if (r == null || c == null) return null;
-        const dv = getCellDataVerification(context, r, c);
+        const dv = getCellDataValidation(context, r, c);
         if (!dv) return null;
         const list = getDropdownList(context, dv.value1);
         const isMul = dv.type2 === 'true';

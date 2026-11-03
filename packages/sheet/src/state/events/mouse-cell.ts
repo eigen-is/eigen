@@ -15,7 +15,7 @@ import {
     createRangeHightlight,
     deselectFloatingObject,
     functionHTMLGenerate,
-    getCellDataVerification,
+    getCellDataValidation,
     isCheckboxClick,
     isDropdownChevronClick,
     israngeseleciton,
@@ -540,7 +540,7 @@ export function handleCellAreaDoubleClick(
     let col_index = col_location[2];
 
     // Cancel double-click for checkbox cells -- do not allow editing
-    if (getCellDataVerification(ctx, row_index, col_index)?.type === 'checkbox') return;
+    if (getCellDataValidation(ctx, row_index, col_index)?.type === 'checkbox') return;
 
     const margeset = mergeBorder(ctx, flowdata, row_index, col_index);
     if (margeset) {

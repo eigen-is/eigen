@@ -18,7 +18,7 @@ import { useDialog, useDialogProps } from '../../hooks/useDialog';
 import type { Context, DataRegulationProps, RangeOrWholeAxis } from '../../state';
 import {
     api,
-    applyDataVerification,
+    applyDataValidation,
     CHECKBOX_CHECKED_VALUE,
     CHECKBOX_UNCHECKED_VALUE,
     clearValidations,
@@ -151,7 +151,7 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataRegulatio
         }
         setContext((ctx) => {
             const value1 = draft.type === 'dropdown' ? getDropdownList(ctx, draft.value1).join(',') : draft.value1;
-            applyDataVerification(ctx, target, { ...draft, value1 });
+            applyDataValidation(ctx, target, { ...draft, value1 });
         });
     };
 

@@ -7,7 +7,7 @@ import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/shee
 import { booleanDisplay, cellDisplay, cellValue } from '../../engine/format';
 import { iscelldata, matrixWidth } from '../../engine/formula-utils';
 import type { Cell } from '../../engine/types';
-import type { CellMatrix, Context, DataVerificationRule, SingleRange } from '..';
+import type { CellMatrix, Context, DataValidationRule, SingleRange } from '..';
 import {
     diff,
     getCellValue,
@@ -100,7 +100,7 @@ export function getDropdownList(ctx: Context, txt: string) {
     return list;
 }
 
-export function validateCellData(ctx: Context, item: DataVerificationRule, cellValue: CellValueForValidation) {
+export function validateCellData(ctx: Context, item: DataValidationRule, cellValue: CellValueForValidation) {
     const { type, type2, value1, value2 } = item;
     if (type === 'dropdown') {
         const list = getDropdownList(ctx, value1);
@@ -298,14 +298,14 @@ export function cellTextBox(left: number, top: number, right: number, bottom: nu
 // a custom rule, where it is the only way to tell "Yes" from "No", and any value
 // the rule does not name — applying a tick box over a column of prose must not
 // paint the prose out of existence.
-export function showsCheckboxLabel(item: DataVerificationRule, cellValue: CellValueForValidation) {
+export function showsCheckboxLabel(item: DataValidationRule, cellValue: CellValueForValidation) {
     if (item.value1 !== CHECKBOX_CHECKED_VALUE || item.value2 !== CHECKBOX_UNCHECKED_VALUE) return true;
     if (isRealNull(cellValue)) return false;
     const value = String(cellValue).toUpperCase();
     return value !== item.value1.toUpperCase() && value !== item.value2.toUpperCase();
 }
 
-export function isCheckboxChecked(item: DataVerificationRule, cellValue: CellValueForValidation) {
+export function isCheckboxChecked(item: DataValidationRule, cellValue: CellValueForValidation) {
     if (isRealNull(cellValue)) return false;
     return String(cellValue).toUpperCase() === item.value1.toUpperCase();
 }
@@ -315,7 +315,7 @@ export function isCheckboxChecked(item: DataVerificationRule, cellValue: CellVal
 // the cell's width.
 export function checkboxAlign(
     cell: Cell | null | undefined,
-    rule: DataVerificationRule,
+    rule: DataValidationRule,
     value: CellValueForValidation,
 ): number {
     if (cell?.ht != null) return Number(normalizedCellAttr(cell, 'ht'));
@@ -344,7 +344,7 @@ export function checkboxRect(box: Rect, horizonAlign: number, verticalAlign: num
 }
 
 // The rule that governs one cell on the current sheet, as getCellHyperlink finds a cell's link.
-export function getCellDataVerification(ctx: Context, r: number, c: number) {
+export function getCellDataValidation(ctx: Context, r: number, c: number) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null || index < 0) return undefined;
     return validationAt(ctx.sheets[index].dataValidations, r, c);
@@ -354,7 +354,7 @@ export function getCellDataVerification(ctx: Context, r: number, c: number) {
 // any other, so a tick box can be copied, extended through and read in the fx
 // bar without flipping.
 export function isCheckboxClick(ctx: Context, r: number, c: number, box: Rect, x: number, y: number) {
-    const rule = getCellDataVerification(ctx, r, c);
+    const rule = getCellDataValidation(ctx, r, c);
     if (rule?.type !== 'checkbox') return false;
     const d = getFlowdata(ctx);
     if (!d) return false;
@@ -367,7 +367,7 @@ export function isCheckboxClick(ctx: Context, r: number, c: number, box: Rect, x
 // can fall through to their normal handling when it did not.
 export function checkboxChange(ctx: Context, r: number, c: number) {
     if (!isAllowEdit(ctx)) return false;
-    const item = getCellDataVerification(ctx, r, c);
+    const item = getCellDataValidation(ctx, r, c);
     if (item?.type !== 'checkbox') return false;
     const d = getFlowdata(ctx);
     if (!d) return false;
@@ -375,7 +375,7 @@ export function checkboxChange(ctx: Context, r: number, c: number) {
     if (d[r]?.[c]?.f != null) return false;
     const checked = isCheckboxChecked(item, getRealCellValue(r, c, d));
     setCellValue(ctx, r, c, d, checked ? item.value2 : item.value1);
-    // Same tail as the dropdown's selectDataVerificationValue: the write has to
+    // Same tail as the dropdown's setDropdownValue: the write has to
     // kick dependent formulas, and the mousedown path has not moved the
     // selection here yet, so name the toggled cell explicitly.
     jfrefreshgrid(ctx, d, [{ row: [r, r], column: [c, c] }]);
@@ -414,7 +414,7 @@ export function dropdownChevronRect(box: Rect): CellGlyphRect | undefined {
 // Clicking the chevron opens the list, like the canvas filter button opens its
 // menu; a click anywhere else in the cell just selects it.
 export function isDropdownChevronClick(ctx: Context, r: number, c: number, box: Rect, x: number, y: number) {
-    if (getCellDataVerification(ctx, r, c)?.type !== 'dropdown') return false;
+    if (getCellDataValidation(ctx, r, c)?.type !== 'dropdown') return false;
     const rect = dropdownChevronRect(box);
     if (!rect) return false;
     const right = rect.x + rect.size;
@@ -425,7 +425,7 @@ export function isDropdownChevronClick(ctx: Context, r: number, c: number, box: 
 // cells only: pointing a tick box at a column of existing TRUE/FALSE must keep the data, and isCheckboxChecked reads
 // whatever was already there. The seeding stops where the sheet's cells stop, so a whole-column tick box writes no
 // million cells.
-export function applyDataVerification(ctx: Context, range: SingleRange, item: DataVerificationRule) {
+export function applyDataValidation(ctx: Context, range: SingleRange, item: DataValidationRule) {
     if (!isAllowEdit(ctx)) return;
     const d = getFlowdata(ctx);
     if (!d) return;
@@ -467,7 +467,7 @@ export function validationRange(ctx: Context, txt: string): SingleRange | undefi
 export function insertCheckbox(ctx: Context) {
     const selection = ctx.selections?.[ctx.selections.length - 1];
     if (!selection) return;
-    applyDataVerification(ctx, clipToUsedExtent(ctx, [selection])[0], {
+    applyDataValidation(ctx, clipToUsedExtent(ctx, [selection])[0], {
         type: 'checkbox',
         type2: '',
         value1: CHECKBOX_CHECKED_VALUE,
@@ -490,7 +490,7 @@ export type ValidationHint = {
 };
 
 // "between 1 and 10", "greater than 5", "earlier than 2024-01-01".
-function conditionPhrase(item: DataVerificationRule) {
+function conditionPhrase(item: DataValidationRule) {
     const { type2, value1, value2 } = item;
     const label = OPTION_LABEL[type2];
     if (!label) return '';
@@ -531,7 +531,7 @@ const HINT_FRAMES = {
 
 // Also the copy for the `prohibitInput` warn dialog (modules/cell.ts), so the
 // two ways a rejected value is reported say the same thing.
-export function describeValidationRule(item: DataVerificationRule, kind: ValidationHint['kind']) {
+export function describeValidationRule(item: DataValidationRule, kind: ValidationHint['kind']) {
     const invalid = kind === 'invalid';
     const { type, type2 } = item;
 
@@ -586,7 +586,7 @@ function cellRectAt(ctx: Context, d: CellMatrix, r: number, c: number) {
 // cell when you arrowed away, never appeared for a keyboard user, and put any
 // collaborator's rule text into markup.
 export function getValidationHint(ctx: Context, r: number, c: number): ValidationHint | undefined {
-    const item = getCellDataVerification(ctx, r, c);
+    const item = getCellDataValidation(ctx, r, c);
     if (!item) return undefined;
     const d = getFlowdata(ctx);
     if (!d) return undefined;
@@ -618,7 +618,7 @@ export function cellFocus(ctx: Context, r: number, c: number) {
     const dropDownBtn = document.getElementById('sheet-validation-list-anchor');
     if (!dropDownBtn) return;
     dropDownBtn.style.display = 'none';
-    if (getCellDataVerification(ctx, r, c)?.type !== 'dropdown') return;
+    if (getCellDataValidation(ctx, r, c)?.type !== 'dropdown') return;
     const d = getFlowdata(ctx);
     if (!d) return;
 
@@ -641,7 +641,7 @@ export function setDropdownValue(ctx: Context, value: string, arr: string[]) {
     const rowIndex = last.row_focus;
     const colIndex = last.column_focus;
     if (rowIndex == null || colIndex == null) return;
-    const item = getCellDataVerification(ctx, rowIndex, colIndex);
+    const item = getCellDataValidation(ctx, rowIndex, colIndex);
     if (!item) return;
     let nextValue = value;
     if (item.type2 === 'true') {

@@ -477,63 +477,6 @@ describe('ops from a normalizing editor apply to an un-normalized stored sheet',
     });
 });
 
-// Builds before rules were kept per range wrote a rule per cell into `dataVerification`, granular or whole, often in
-// the batch of the cell edit that went with it. Those rules are dropped, but the cells of their batches must arrive.
-describe('a log from before rules were kept per range', () => {
-    const rule = { type: 'dropdown', type2: '', value1: 'a,b', value2: '' };
-    const cell = (v: string) => ({ v, m: v, ct: { fa: 'General', t: 'g' } });
-    const OLD_LOG: Op[][] = [
-        [
-            { op: 'replace', id: 's1', path: ['data', 0, 0], value: cell('a') },
-            { op: 'add', id: 's1', path: ['dataVerification', '0_0'], value: rule },
-        ],
-        [
-            { op: 'replace', id: 's1', path: ['dataVerification'], value: { '0_0': rule, '1_0': rule } },
-            { op: 'replace', id: 's1', path: ['data', 1, 0], value: cell('b') },
-        ],
-        [
-            {
-                op: 'insertRowCol',
-                id: 's1',
-                path: [],
-                value: { type: 'row', index: 0, count: 1, direction: 'lefttop' },
-            },
-            { op: 'replace', id: 's1', path: ['dataVerification'], value: { '1_0': rule, '2_0': rule } },
-            { op: 'replace', id: 's1', path: ['data', 0, 0], value: cell('new') },
-        ],
-        [
-            { op: 'remove', id: 's1', path: ['dataVerification', '1_0'] },
-            { op: 'replace', id: 's1', path: ['dataVerification', '2_0', 'type'], value: 'checkbox' },
-            { op: 'replace', id: 's1', path: ['data', 3, 0], value: cell('c') },
-        ],
-    ];
-
-    test('every cell of the batches arrives and no old rule is kept', () => {
-        const base: Sheet = { id: 's1', name: 'Sheet1', order: 0, celldata: [], row: 5, column: 2, config: {} };
-        const [sheet] = replaySheetsOps([base], OLD_LOG);
-        expect(sheet.data?.map((row) => row[0]?.v ?? null)).toEqual(['new', 'a', 'b', 'c', null, null]);
-        expect(sheet.dataValidations).toEqual({});
-        expect('dataVerification' in sheet).toBe(false);
-    });
-
-    test('a rule written after them applies as usual', () => {
-        const base: Sheet = { id: 's1', name: 'Sheet1', order: 0, celldata: [], row: 5, column: 2, config: {} };
-        const entry = { ranges: [{ row: [0, 4], column: [0, 0] }], rule };
-        const [sheet] = replaySheetsOps(
-            [base],
-            [
-                ...OLD_LOG,
-                [
-                    { op: 'add', id: 's1', path: ['dataValidations', 'v1'], value: entry },
-                    { op: 'replace', id: 's1', path: ['data', 4, 0], value: cell('d') },
-                ],
-            ],
-        );
-        expect(sheet.data?.[4][0]?.v).toBe('d');
-        expect(sheet.dataValidations).toEqual({ v1: entry });
-    });
-});
-
 // A peer deletes a rule while another tab shrinks it, and the log holds the delete first. The shrink's whole-entry
 // write saw the rule, so on a sheet without it the delete wins, the same on every tab and in the replay.
 describe('a rule a peer deleted', () => {

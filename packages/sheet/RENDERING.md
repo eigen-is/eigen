@@ -26,7 +26,7 @@ The fork's class and id prefix is `sheet-`. One engine-private class keeps a bar
           <InputBox>                            SheetOverlay/InputBox.tsx   (ContentEditable over canvas)
           <FloatingObjects>                     FloatingObjects/index.tsx
           <LinkEditCard>                        LinkEditCard/index.tsx
-          <DropDownList>                        DataVerification/DropdownList.tsx
+          <DropDownList>                        DataValidation/DropdownList.tsx
           cell right-click menu anchor          ContextMenu/useSheetContextMenu.tsx (shared ContextMenuAnchor; column/row anchors live in the headers)
       <SheetTab>                                SheetTab/index.tsx         (React)
         <SheetItem> per sheet                   SheetTab/SheetItem.tsx     (shadcn ContextMenu + DropdownMenu)
@@ -158,9 +158,9 @@ Three modes:
 
 Modes 2 and 3 are portaled shared dialogs, not positioned cards, so there is no class for the grid to query. The card's state lives in `ctx.linkCard` and is driven from `state/modules/hyperlink.ts`.
 
-### 10. Data Verification Dropdown (Canvas glyph + React DOM menu)
+### 10. Data Validation Dropdown (Canvas glyph + React DOM menu)
 
-**Files**: `state/render/cells.ts` (`renderDropdownChevron`), `DataVerification/DropdownList.tsx`
+**Files**: `state/render/cells.ts` (`renderDropdownChevron`), `DataValidation/DropdownList.tsx`
 
 The chevron is canvas paint; where it is drawn and why is in [SHEETS.md § A list chevron is painted on every cell its rule covers](../../docs/SHEETS.md#a-list-chevron-is-painted-on-every-cell-its-rule-covers). The menu is a portaled shadcn `DropdownMenu` (checkbox items for a multi-select rule, plain items otherwise) on shadcn's default `z-index: 50`, not a bespoke high z-index. Its trigger div is a pure anchor: invisible, `pointer-events: none`, positioned on the focus cell by `cellFocus`. The canvas hit test in `state/events/mouse-cell.ts` opens the menu.
 
@@ -222,7 +222,7 @@ Scrolling is the browser's own. `cellArea` (`overflow: auto`, holding a full-siz
 | 19 | Cell editor (InputBox) | SheetOverlay/InputBox |
 | 19 | Images and charts (not selected) | FloatingObjects |
 | 20 | Selected image or chart (with the transform ring) | FloatingObjects |
-| 50 | Data verification dropdown (portaled shadcn) | DataVerification/DropdownList |
+| 50 | Data validation dropdown (portaled shadcn) | DataValidation/DropdownList |
 
 The SheetOverlay, InputBox and FloatingObjects values live inside `.sheet-cell-overlay-layer` (`z-index: 1`), in per-pane region viewports whose translated content divs are each a stacking context ([§ Scrolling](#scrolling)). So they order those elements only among themselves within a pane, and across panes the region clip rects do not overlap. The layer as a whole sits above the canvas and the cell-flow spacer. The header values (10 and 11 for the highlights, 12 for the resize handle, 20 for the freeze handle) are likewise scoped to each header region wrapper. Across wrappers, DOM order decides: the passive regions, then the hover region, then the freeze-handle wrapper on top.
 

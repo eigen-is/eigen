@@ -619,7 +619,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ConditionalFormatConditionName` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `ConditionalFormatRule` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `DataBarRule` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
-| `DataVerificationRule` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
+| `DataValidationRule` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `DefaultConditionalFormatRule` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `InlineStringSegment` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `MergeCell` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |

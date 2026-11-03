@@ -11,7 +11,7 @@ import {
     rangesOverlap,
 } from '@workspace/lib/sheets';
 import { cfSplitRange } from '../../engine/conditional-format';
-import type { DataVerificationRule, Sheet, SheetValidation, SingleRange } from '../types';
+import type { DataValidationRule, Sheet, SheetValidation, SingleRange } from '../types';
 
 // The rule over one cell, with its id. Two peers putting rules on one cell at once can leave the cell in two rules,
 // and an xlsx file can hold overlapping ones. The highest id then wins on every tab (compareValidationIds).
@@ -39,11 +39,11 @@ export function validationAt(validations: Readonly<Sheet['dataValidations']>, r:
 export function validationLookup(
     validations: Readonly<Sheet['dataValidations']>,
     window: SingleRange,
-): (r: number, c: number) => DataVerificationRule | undefined {
+): (r: number, c: number) => DataValidationRule | undefined {
     const [top, bottom] = window.row;
     const [left, right] = window.column;
     const width = right - left + 1;
-    const inView: (DataVerificationRule | undefined)[] = [];
+    const inView: (DataValidationRule | undefined)[] = [];
     const entries = Object.entries(validations ?? {}).sort(([a], [b]) => compareValidationIds(a, b));
     for (const [, { ranges, rule }] of entries) {
         for (const { row, column } of ranges) {
@@ -55,7 +55,7 @@ export function validationLookup(
             }
         }
     }
-    const outside = new Map<string, DataVerificationRule | undefined>();
+    const outside = new Map<string, DataValidationRule | undefined>();
     return (r, c) => {
         if (covers(window, r, c)) return inView[(r - top) * width + c - left];
         const key = `${r}_${c}`;
@@ -90,7 +90,7 @@ export function clearValidations(sheet: Sheet, area: SingleRange) {
 
 // Puts a rule on ranges of the sheet under an id. The ranges join the ones the id already has, and its rule stays.
 // They are coalesced on the way in, so a paste or a fill that lands one range per cell leaves the rule a few ranges.
-export function addValidation(sheet: Sheet, id: string, rule: DataVerificationRule, ranges: readonly SingleRange[]) {
+export function addValidation(sheet: Sheet, id: string, rule: DataValidationRule, ranges: readonly SingleRange[]) {
     const landed = coalescedRanges(ranges);
     for (const range of landed) clearValidations(sheet, range);
     const validations = (sheet.dataValidations ??= {});

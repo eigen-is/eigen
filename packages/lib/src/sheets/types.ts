@@ -147,14 +147,14 @@ export type SheetChart = SheetFloatingObject & Partial<ChartLook> & SheetChartSp
 // stores no checked flag: the cell's value says whether it is checked (isCheckboxChecked). `hintShow` and `hintValue`
 // make the prompt a selected cell shows, and `prohibitInput` refuses a value that fails the check (updateCell).
 //
-// `type` and `type2` are `string` rather than a narrow union: the `DataVerification` dialog assigns them from Radix
+// `type` and `type2` are `string` rather than a narrow union: the `DataValidation` dialog assigns them from Radix
 // Select's `onValueChange(value: string)`, and a union would need narrowing at every callback. Known values:
 // type  ∈ dropdown | checkbox | number | number_integer | number_decimal |
 //         text_content | text_length | date
 // type2 ∈ between | notBetween | equal | notEqualTo | moreThanThe | lessThan |
 //         greaterOrEqualTo | lessThanOrEqualTo | include | exclude |
 //         earlierThan | noEarlierThan | laterThan | noLaterThan | true | ''
-export type DataVerificationRule = {
+export type DataValidationRule = {
     type: string;
     type2: string;
     value1: string;
@@ -171,7 +171,7 @@ export type DataVerificationRule = {
 
 // One rule over its ranges, stored under an id in `Sheet.dataValidations`, as a conditional format keeps its
 // `cellrange`. A cell has at most one rule, so applying a rule takes its cells out of every other entry.
-export type SheetValidation = { ranges: SingleRange[]; rule: DataVerificationRule };
+export type SheetValidation = { ranges: SingleRange[]; rule: DataValidationRule };
 
 export type SheetConfig = {
     merge?: Record<string, MergeCell>;
