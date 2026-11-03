@@ -19,50 +19,6 @@ const DAV = DAV_NAMESPACES.D;
 // could keep a lock, and the Home the lock holds open, for years (Second-2147483647 is 68 years).
 const LOCK_MAX_TTL_MS = 24 * 60 * 60 * 1000;
 
-function parseTimeoutHeader(header: string | null): number {
-    if (!header) return LOCK_DEFAULT_TTL_MS;
-    const match = header.match(/Second-(\d+)/i);
-    if (!match) return LOCK_DEFAULT_TTL_MS;
-    return Math.min(Number(match[1]) * 1000, LOCK_MAX_TTL_MS);
-}
-
-// RFC 4918 §6.2: a depth-infinity lock on a folder covers everything below it, so a write must also
-// pass the locks of its ancestors. The breadcrumb runs from the root to the path itself.
-export function assertWritable(
-    lockManager: LockManager,
-    breadcrumb: DrivePath[],
-    ifHeader: string | null,
-    userId: string,
-): void {
-    const pathId = breadcrumb[breadcrumb.length - 1].id;
-    const ancestorIds = breadcrumb.slice(0, -1).map((p) => p.id);
-    if (!lockManager.isWriteAllowed(pathId, ifHeader, userId, ancestorIds)) {
-        throw new ApiError(423, 'Locked');
-    }
-}
-
-// RFC 4918 §14.17: the owner is the client's own XML, and every lockdiscovery sends it back as XML.
-// Each child declares the namespaces it uses, so an owner can grow past the size of its body. The lock
-// keeps it for its whole life, so it gets the same cap as a body.
-function readLockOwner(lockinfo: XmlElement): string | undefined {
-    const element = xmlChild(lockinfo, DAV, 'owner');
-    const owner = element && serializeXmlChildren(element).trim();
-    if (owner && Buffer.byteLength(owner) > MAX_XML_BODY_BYTES) throw new ApiError(400, 'Lock owner too large');
-    return owner || undefined;
-}
-
-function buildLockResponse(lock: Lock): Response {
-    const body = `${XML_DECLARATION}
-<D:prop xmlns:D="DAV:">${lockdiscoveryProp([lock])}</D:prop>`;
-    return new Response(body, {
-        status: 200,
-        headers: {
-            'Content-Type': XML_CONTENT_TYPE,
-            'Lock-Token': `<${lock.token}>`,
-        },
-    });
-}
-
 export async function handleLock(args: {
     user: User;
     ownerId: string;
@@ -134,4 +90,48 @@ export async function handleUnlock(args: {
 
     drive.lockManager.release(token);
     return new Response(null, { status: 204 });
+}
+
+// RFC 4918 §6.2: a depth-infinity lock on a folder covers everything below it, so a write must also
+// pass the locks of its ancestors. The breadcrumb runs from the root to the path itself.
+export function assertWritable(
+    lockManager: LockManager,
+    breadcrumb: DrivePath[],
+    ifHeader: string | null,
+    userId: string,
+): void {
+    const pathId = breadcrumb[breadcrumb.length - 1].id;
+    const ancestorIds = breadcrumb.slice(0, -1).map((p) => p.id);
+    if (!lockManager.isWriteAllowed(pathId, ifHeader, userId, ancestorIds)) {
+        throw new ApiError(423, 'Locked');
+    }
+}
+
+function parseTimeoutHeader(header: string | null): number {
+    if (!header) return LOCK_DEFAULT_TTL_MS;
+    const match = header.match(/Second-(\d+)/i);
+    if (!match) return LOCK_DEFAULT_TTL_MS;
+    return Math.min(Number(match[1]) * 1000, LOCK_MAX_TTL_MS);
+}
+
+// RFC 4918 §14.17: the owner is the client's own XML, and every lockdiscovery sends it back as XML.
+// Each child declares the namespaces it uses, so an owner can grow past the size of its body. The lock
+// keeps it for its whole life, so it gets the same cap as a body.
+function readLockOwner(lockinfo: XmlElement): string | undefined {
+    const element = xmlChild(lockinfo, DAV, 'owner');
+    const owner = element && serializeXmlChildren(element).trim();
+    if (owner && Buffer.byteLength(owner) > MAX_XML_BODY_BYTES) throw new ApiError(400, 'Lock owner too large');
+    return owner || undefined;
+}
+
+function buildLockResponse(lock: Lock): Response {
+    const body = `${XML_DECLARATION}
+<D:prop xmlns:D="DAV:">${lockdiscoveryProp([lock])}</D:prop>`;
+    return new Response(body, {
+        status: 200,
+        headers: {
+            'Content-Type': XML_CONTENT_TYPE,
+            'Lock-Token': `<${lock.token}>`,
+        },
+    });
 }
