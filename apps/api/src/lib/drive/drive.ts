@@ -699,7 +699,13 @@ export class Drive {
         }
         await this.getTargetFolder(mount, destParentId);
         const tree = await this.listCopyWithinLimits(mount, srcPathId, { ownerId: this.owner.id, mountId });
-        const copied = await mount.copyPath(tree, destParentId, name, user);
+        const copied = await mount.copyPath(
+            tree,
+            destParentId,
+            name,
+            (pathId, createdIds) => this.deleteFailedCopy(mountId, pathId, createdIds, user),
+            user,
+        );
         this.emit(
             isContainerType(copied.type) ? SSEventType.DRIVE_FOLDER_CREATED : SSEventType.DRIVE_FILE_CREATED,
             copied,
@@ -775,8 +781,7 @@ export class Drive {
         return this.removePath(mountId, pathId, (mount, item) => deletePath(this, mount, item, user));
     }
 
-    // Removes the top folder of a copy from another mount or drive that failed part way. createdIds holds
-    // every path that copy made.
+    // Removes the top folder of a copy that failed part way. createdIds holds every path that copy made.
     public async deleteFailedCopy(
         mountId: string,
         pathId: string,

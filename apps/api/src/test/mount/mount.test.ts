@@ -2216,7 +2216,9 @@ describe('Folder sizes', () => {
         expect((await mount.getPath(srcFolder))!.size).toBe(7);
         expect((await mount.getPath(dstFolder))!.size).toBe(0);
 
-        await mount.copyPath(await mount.listCopy(fileId), dstFolder, 'copied.txt');
+        await mount.copyPath(await mount.listCopy(fileId), dstFolder, 'copied.txt', (pathId) =>
+            mount.deletePath(pathId),
+        );
 
         expect((await mount.getPath(srcFolder))!.size).toBe(7);
         expect((await mount.getPath(dstFolder))!.size).toBe(7);

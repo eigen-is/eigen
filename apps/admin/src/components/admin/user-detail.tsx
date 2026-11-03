@@ -23,7 +23,6 @@ import { BackupSection } from './backup-section';
 import { ResetPasswordDialog } from './reset-password-dialog';
 import { UserTeamsSection } from './user-teams-section';
 
-// The owner's password and backups are the owner's alone, so no other admin reaches them.
 function canManagePasswordAndBackups(user: AdminUserRow, myId: string | undefined): boolean {
     return user.role !== 'owner' || user.id === myId;
 }

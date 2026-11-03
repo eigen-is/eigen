@@ -1,7 +1,7 @@
 // The drive side of the trash: moving a path to the trash, back out of it, and deleting it for good,
-// from the trash or, for a copy that failed, without it. Drive methods such as deletePath check the
-// path and then call these. They close open documents, take away sharing, tell open tabs and write the
-// history.
+// from the trash or, for a failed copy that holds only what it wrote, without it. Drive methods such as
+// deletePath check the path and then call these. They close open documents, take away sharing, tell
+// open tabs and write the history.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isContainerType } from '@workspace/lib/types/drive';
@@ -107,8 +107,8 @@ export async function permanentlyDelete(drive: Drive, mount: Mount, item: DriveP
     return true;
 }
 
-// A copy from another mount or drive that failed part way is deleted for good. In the trash its bytes
-// would still count against the owner's space, and a writer from another drive can't empty that trash.
+// A copy that failed part way is deleted for good. In the trash its bytes would still count against the
+// owner's space, and a writer from another drive can't empty that trash.
 // Someone can still have put their own path in the half-built folder, or shared a part of it. Then it
 // goes to the trash like any other path, so nothing of theirs is lost.
 export async function deleteFailedCopy(

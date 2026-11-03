@@ -16,14 +16,16 @@ import { markContentDirty } from './search-index';
 // A source path with the paths below it that a copy writes, as they were when the copy began.
 export type CopyTree = { readonly path: DrivePath; readonly children: readonly CopyTree[] };
 
+// Removes the top folder of a copy that failed part way. createdIds holds every path the copy made.
+export type DiscardCopy = (pathId: string, createdIds: ReadonlySet<string>) => Promise<void>;
+
 // How a copy writes into its target. Each create returns the path it made.
 type CopyWriter = {
     createFolder: (parentId: string, name: string, type: DriveContainerType, src: DrivePath) => Promise<DrivePath>;
     copyFile: (parentId: string, name: string, src: DrivePath) => Promise<DrivePath>;
     // Runs once everything inside a copied folder or document has landed.
     folderCopied?: (copy: DrivePath, src: DrivePath) => void;
-    // Removes the top folder of a copy that failed part way. createdIds holds every path the copy made.
-    discard: (pathId: string, createdIds: ReadonlySet<string>) => Promise<void>;
+    discard: DiscardCopy;
 };
 
 // A copied Eigen document keeps its type but leaves its version history behind, so its versions/ is
@@ -71,12 +73,14 @@ export async function writeCopy(
 }
 
 // The copy inside one mount. A file is saved again from a fresh temp copy, and gets its own search entry
-// and thumbnail. Each copied path records where it came from.
+// and thumbnail. Each copied path records where it came from. The caller passes the cleanup of a copy that
+// fails, because whether it may delete for good or must trash is a drive's decision.
 export async function copyPath(
     mount: Mount,
     tree: CopyTree,
     destParentId: string,
     name: string,
+    discard: DiscardCopy,
     actor?: { id: string; email: string },
 ): Promise<DrivePath> {
     const recordCopied = (pathId: string, src: DrivePath): void => {
@@ -94,7 +98,10 @@ export async function copyPath(
             recordCopied(newId, src);
             return mount.getActivePath(newId);
         },
-        copyFile: async (parentId, fileName, src) => {
+        copyFile: async (parentId, fileName, listed) => {
+            // The row is read again, as the listing can be a while ago. A thumbnail made since then comes
+            // along, and a source trashed since then stops the copy.
+            const src = await mount.getActivePath(listed.id);
             // readFile reads the freshest copy, such as the staged bytes of an upload the bucket has not
             // acknowledged yet. For a document's data.db, the flush of its container put the latest edits there.
             const tempId = crypto.randomUUID();
@@ -133,8 +140,7 @@ export async function copyPath(
             markContentDirty(mount, copy.id);
             mount.reindexQueue?.markDirty(copy.id);
         },
-        // No trash and no SSE: Drive.copyPath announces a copy in one mount only once it is done.
-        discard: (pathId) => mount.deletePath(pathId),
+        discard,
     });
     // Read again, so the top folder's size counts what landed in it.
     return mount.getActivePath(copied.id);
