@@ -122,7 +122,9 @@ Sheets scrolls and looks things up faster, copies and pastes validation rules an
 - **Copying large folders in Drive** — copying a folder or document larger than the upload size limit works, as long as it fits in the free space
 - **Copying items with the same name** — copying any number of items with the same name into one folder lands every one of them at once, each under its own name
 - **Several screenshots in one message** — a message with any number of pasted screenshots of the same name posts with all of them, each under its own name, in Chat and in the comments of Docs, Sheets, Slides, Stickies and Vector
-- **A copy that fails in Drive** — a folder or document copy that fails part way leaves no half-copied folder in the target. A copy to another drive moves the unfinished folder to that drive's Trash. When only some items copy, the message says why the others failed
+- **A copy that fails in Drive** — a folder or document copy that fails part way leaves no half-copied folder in the target or in its Trash. If someone added their own files to that folder meanwhile, it goes to the Trash, so they can be restored. When only some items copy, the message says why the others failed
+- **A copy that never ends in Drive** — a folder copy takes only what the folder held when it began. Moving the target into the folder meanwhile, or two copies between drives in opposite directions, no longer copy on until the drive is full
+- **Copying over WebDAV** — a WebDAV copy meets the drive's free space and the upload size limit, as a copy in Drive does, and writes nothing past them
 - **Read-only views in Drive** — the **Share** submenu stays in Watched and in folders shared for viewing only, with **Copy link** and **Mail to…**
 - **Quick preview of folders** — **Space** and the preview in the details column no longer open on a folder, and **Space** works in **Shared with me** and **Shared by me** in Docs, Sheets, Slides, Stickies and Vector
 - **Dragging in Drive** — folders no longer light up as drop targets in views where you can't move items
@@ -137,6 +139,7 @@ Sheets scrolls and looks things up faster, copies and pastes validation rules an
 - **Crafted backups** — a backup someone uploaded can no longer make an interrupted restore of one account move another account aside
 - **Uploads after a restore** — a whole-server restore of an older backup keeps the files it had not yet sent to an S3 bucket, also after a restore of one account in between
 - **The trash after a restore in Admin** — a file trashed before the backup stays in the trash for the full retention period, instead of being deleted for good seconds after the restore
+- **The owner's backups in Admin** — only the owner can back up, download or restore the owner's account, or delete its safety copies. Other admins no longer see its **Backup** section
 - **Slow transfers in Drive and WebDAV** — a slow WebDAV or Drive upload, copy, convert, export or import no longer fails when it runs past five idle minutes
 - **WebDAV locks** — a lock on a file no longer ends when your home goes idle. It lasts until it expires or the client releases it
 - **Chats during a restore** — an open chat no longer fails when its version is restored at the same moment

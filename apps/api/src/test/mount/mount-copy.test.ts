@@ -35,6 +35,8 @@ afterAll(() => {
 describe('Mount.copyPath', () => {
     let mount: Mount;
     let rootId: string;
+    // Drive.copyPath passes deleteFailedCopy. These copies hold only their own paths, so they go for good.
+    const discard = (pathId: string): Promise<void> => mount.deletePath(pathId);
 
     beforeAll(async () => {
         const config = createTestMountConfig('test-copy', 'local-key');
@@ -47,7 +49,7 @@ describe('Mount.copyPath', () => {
     test('copies a file with a new name', async () => {
         const data = Buffer.from('hello copy');
         const fileId = await mount.createFile(rootId, 'orig.txt', 'text/plain', data.length, data);
-        const copied = await mount.copyPath(fileId, rootId, 'orig-copy.txt');
+        const copied = await mount.copyPath(await mount.listCopy(fileId), rootId, 'orig-copy.txt', discard);
         expect(copied.id).not.toBe(fileId);
         expect(copied.name).toBe('orig-copy.txt');
         expect(copied.size).toBe(data.length);
@@ -59,7 +61,7 @@ describe('Mount.copyPath', () => {
     test('copies a folder with children', async () => {
         const folderId = await mount.createFolder(rootId, 'src-folder');
         const childId = await mount.createFile(folderId, 'a.txt', 'text/plain', 3, Buffer.from('abc'));
-        const copied = await mount.copyPath(folderId, rootId, 'dst-folder');
+        const copied = await mount.copyPath(await mount.listCopy(folderId), rootId, 'dst-folder', discard);
         const children = await mount.listFolder(copied.id);
         expect(children).toHaveLength(1);
         expect(children[0]!.name).toBe('a.txt');
@@ -74,7 +76,7 @@ describe('Mount.copyPath', () => {
         await Bun.write(join(mount.thumbsDir, `${fileId}.webp`), 'thumb-bytes');
         await mount.updatePath(fileId, { thumbnail: `${fileId}.webp`, details: { width: 12, height: 8 } });
 
-        const copied = await mount.copyPath(fileId, rootId, 'photo-copy.png');
+        const copied = await mount.copyPath(await mount.listCopy(fileId), rootId, 'photo-copy.png', discard);
         expect(copied.thumbnail).toBe(`${copied.id}.webp`);
         expect(await Bun.file(join(mount.thumbsDir, `${copied.id}.webp`)).text()).toBe('thumb-bytes');
         expect(copied.details?.width).toBe(12);
@@ -86,7 +88,7 @@ describe('Mount.copyPath', () => {
         const fileId = await mount.createFile(rootId, 'stale.png', 'image/png', data.length, data);
         await mount.updatePath(fileId, { thumbnail: `${fileId}.webp`, details: { width: 4, height: 2 } });
 
-        const copied = await mount.copyPath(fileId, rootId, 'stale-copy.png');
+        const copied = await mount.copyPath(await mount.listCopy(fileId), rootId, 'stale-copy.png', discard);
         expect(copied.thumbnail).toBeNull();
         expect(existsSync(join(mount.thumbsDir, `${copied.id}.webp`))).toBe(false);
         expect(copied.details?.width).toBe(4);
@@ -98,7 +100,7 @@ describe('Mount.copyPath', () => {
         const fileId = await mount.createFile(rootId, 'song.mp3', 'audio/mpeg', data.length, data);
         await mount.updatePath(fileId, { details: { duration: 42 } });
 
-        const copied = await mount.copyPath(fileId, rootId, 'song-copy.mp3');
+        const copied = await mount.copyPath(await mount.listCopy(fileId), rootId, 'song-copy.mp3', discard);
         expect(copied.details?.duration).toBe(42);
     });
 
@@ -107,9 +109,34 @@ describe('Mount.copyPath', () => {
         const fileId = await mount.createFile(rootId, 'upload.png', 'image/png', data.length, data);
         await mount.updatePath(fileId, { details: { originalName: 'holiday.png', width: 3 } });
 
-        const copied = await mount.copyPath(fileId, rootId, 'upload-copy.png');
+        const copied = await mount.copyPath(await mount.listCopy(fileId), rootId, 'upload-copy.png', discard);
         expect(copied.details?.width).toBe(3);
         expect(copied.details?.originalName).toBeUndefined();
+    });
+
+    // The listing can be a while ago. The copy reads the source row again, so a thumbnail made since comes along.
+    test('copies the thumbnail and details the source got after the listing', async () => {
+        const data = Buffer.from('png-bytes');
+        const fileId = await mount.createFile(rootId, 'late.png', 'image/png', data.length, data);
+        const tree = await mount.listCopy(fileId);
+        await Bun.write(join(mount.thumbsDir, `${fileId}.webp`), 'late-thumb');
+        await mount.updatePath(fileId, { thumbnail: `${fileId}.webp`, details: { width: 5, height: 6 } });
+
+        const copied = await mount.copyPath(tree, rootId, 'late-copy.png', discard);
+        expect(copied.thumbnail).toBe(`${copied.id}.webp`);
+        expect(await Bun.file(join(mount.thumbsDir, `${copied.id}.webp`)).text()).toBe('late-thumb');
+        expect(copied.details?.width).toBe(5);
+        expect(copied.details?.height).toBe(6);
+    });
+
+    test('stops at a source trashed after the listing', async () => {
+        const data = Buffer.from('gone-soon');
+        const fileId = await mount.createFile(rootId, 'trashed.txt', 'text/plain', data.length, data);
+        const tree = await mount.listCopy(fileId);
+        await mount.trashPath(fileId);
+
+        await expect(mount.copyPath(tree, rootId, 'trashed-copy.txt', discard)).rejects.toMatchObject({ status: 404 });
+        expect(await mount.getChildByName(rootId, 'trashed-copy.txt')).toBeNull();
     });
 
     test('copies a folder with a thumbnailed child', async () => {
@@ -119,7 +146,7 @@ describe('Mount.copyPath', () => {
         await Bun.write(join(mount.thumbsDir, `${childId}.webp`), 'child-thumb');
         await mount.updatePath(childId, { thumbnail: `${childId}.webp` });
 
-        const copied = await mount.copyPath(folderId, rootId, 'album-copy');
+        const copied = await mount.copyPath(await mount.listCopy(folderId), rootId, 'album-copy', discard);
         const child = (await mount.listFolder(copied.id))[0]!;
         expect(child.thumbnail).toBe(`${child.id}.webp`);
         expect(await Bun.file(join(mount.thumbsDir, `${child.id}.webp`)).text()).toBe('child-thumb');
@@ -145,7 +172,7 @@ describe('Mount.copyPath', () => {
         const versionsId = await mount.createFolder(docId, VERSIONS_FOLDER_NAME);
         await mount.createFile(versionsId, '2020.db', 'application/octet-stream', 3, Buffer.from('old'));
 
-        const copied = await mount.copyPath(docId, rootId, 'My Doc copy.eigendoc');
+        const copied = await mount.copyPath(await mount.listCopy(docId), rootId, 'My Doc copy.eigendoc', discard);
         expect(copied.type).toBe('doc');
         const children = await mount.listFolder(copied.id);
         const names = children.map((c) => c.name).sort();

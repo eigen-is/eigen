@@ -1,7 +1,7 @@
 // The detail of one account on the Admin app's users and guests pages: its role and activity, then its
 // teams, storage and backups as sections like a team's detail, and a danger zone that deletes it. The
-// toolbar above it resets a password. The users page shows it beside the list when the URL names an
-// account.
+// toolbar above it resets a password. The owner's backups and password are the owner's alone, and the
+// owner's account has no delete. The users page shows it beside the list when the URL names an account.
 
 import { useNavigate } from '@tanstack/react-router';
 import { useDeleteUser, useUpdateMemberRole } from '@workspace/lib/admin';
@@ -23,6 +23,10 @@ import { BackupSection } from './backup-section';
 import { ResetPasswordDialog } from './reset-password-dialog';
 import { UserTeamsSection } from './user-teams-section';
 
+function canManagePasswordAndBackups(user: AdminUserRow, myId: string | undefined): boolean {
+    return user.role !== 'owner' || user.id === myId;
+}
+
 type UserDetailToolbarProps = {
     user: AdminUserRow;
     // A guest signs in with an emailed code, so there is no password to reset.
@@ -35,7 +39,7 @@ export function UserDetailToolbar({ user, guest }: UserDetailToolbarProps) {
 
     return (
         <div className="flex items-center gap-1 ml-auto">
-            {!guest && (user.role !== 'owner' || user.id === me?.id) && (
+            {!guest && canManagePasswordAndBackups(user, me?.id) && (
                 <>
                     <TooltipButton
                         icon={KeyRound}
@@ -63,6 +67,7 @@ type UserDetailProps = {
 };
 
 export function UserDetail({ user, usage, organizationId, guest }: UserDetailProps) {
+    const { user: me } = useAuth();
     const [draftRole, setDraftRole] = useState(user.role);
     const updateRole = useUpdateMemberRole(organizationId);
     const deleteUser = useDeleteUser(organizationId);
@@ -156,8 +161,12 @@ export function UserDetail({ user, usage, organizationId, guest }: UserDetailPro
                         {usage ? <StorageUsageBars data={usage} /> : <p className="text-sm text-muted-foreground">—</p>}
                     </div>
 
-                    <Separator />
-                    <BackupSection ownerId={user.id} />
+                    {canManagePasswordAndBackups(user, me?.id) && (
+                        <>
+                            <Separator />
+                            <BackupSection ownerId={user.id} />
+                        </>
+                    )}
                 </>
             )}
 

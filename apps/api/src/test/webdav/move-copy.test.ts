@@ -1,5 +1,8 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { getTestContext } from '../setup';
+import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
+import { getHome } from '../../lib/home';
+import type { TestUser } from '../setup';
+import { createTestUser, getTestContext, setMaxUploadSizeMB } from '../setup';
 import { getDefaultMountId, webdavRequest } from './setup';
 
 describe('WebDAV MOVE/COPY', () => {
@@ -132,5 +135,72 @@ describe('WebDAV MOVE/COPY', () => {
             headers: { Destination: `http://localhost${baseHref}/bad%E0.txt` },
         });
         expect(res.status).toBe(400);
+    });
+
+    // A COPY writes what a PUT would, so it meets the same limits, before it writes anything.
+    describe('the limits of a COPY', () => {
+        let user: TestUser;
+        let href: string;
+        const MB = 1024 * 1024;
+
+        // A new home takes the server's default drive size, so this user's drive holds 100 MB.
+        beforeAll(async () => {
+            const before = getServerSettings().quotas.defaultMountMaxSizeMB;
+            await updateServerSettings({ quotas: { defaultMountMaxSizeMB: 100 } });
+            try {
+                user = await createTestUser(`dav-copy-${crypto.randomUUID()}@test.eigen.is`, 'testpassword123', 'D');
+                await getHome(user.id);
+            } finally {
+                await updateServerSettings({ quotas: { defaultMountMaxSizeMB: before } });
+            }
+            href = `/webdav/${user.id}/${await getDefaultMountId(user.sessionToken, user.id)}`;
+            await webdavRequest(user.email, 'MKCOL', `${href}/big/`);
+            for (const name of ['a.bin', 'b.bin']) {
+                const put = await webdavRequest(user.email, 'PUT', `${href}/big/${name}`, {
+                    body: new Uint8Array(20 * MB),
+                });
+                expect(put.status).toBe(201);
+            }
+        });
+
+        function copyTo(source: string, destination: string): Promise<Response> {
+            return webdavRequest(user.email, 'COPY', `${href}/${source}`, {
+                headers: { Destination: `http://localhost${href}/${destination}` },
+            });
+        }
+
+        async function used(): Promise<number> {
+            const drive = (await getHome(user.id)).drive;
+            return drive.size(await getDefaultMountId(user.sessionToken, user.id));
+        }
+
+        test('a file past the per-file limit is a 413, as a PUT is, and writes nothing', async () => {
+            const put = await webdavRequest(user.email, 'PUT', `${href}/two-mb.bin`, { body: new Uint8Array(2 * MB) });
+            expect(put.status).toBe(201);
+            const before = getServerSettings().quotas.maxUploadSizeMB;
+            await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 1);
+            try {
+                expect((await copyTo('two-mb.bin', 'two-mb-copy.bin')).status).toBe(413);
+            } finally {
+                await setMaxUploadSizeMB(ctx.alice.user.sessionToken, before);
+            }
+            expect((await webdavRequest(user.email, 'GET', `${href}/two-mb-copy.bin`)).status).toBe(404);
+        });
+
+        test('a folder past the free space is a 507, as a PUT is, and writes nothing', async () => {
+            expect((await copyTo('big', 'big-1')).status).toBe(201);
+            // The folder, its first copy and the 2 MB file use 82 MB, so 18 MB is free.
+            expect((await copyTo('big', 'big-2')).status).toBe(507);
+            expect(await used()).toBe(82 * MB);
+            const second = await webdavRequest(user.email, 'PROPFIND', `${href}/big-2`, { headers: { Depth: '0' } });
+            expect(second.status).toBe(404);
+        });
+
+        test('a file past the free space but under the per-file limit is a 507, as a PUT is', async () => {
+            // 18 MB is free, and the 20 MB file is under the 35 MB per-file limit.
+            expect((await copyTo('big/a.bin', 'a-copy.bin')).status).toBe(507);
+            expect(await used()).toBe(82 * MB);
+            expect((await webdavRequest(user.email, 'GET', `${href}/a-copy.bin`)).status).toBe(404);
+        });
     });
 });

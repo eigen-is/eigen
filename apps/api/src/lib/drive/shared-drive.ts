@@ -29,6 +29,7 @@ import type { Memberships, User } from '../user';
 import { getMemberships } from '../user';
 import { canonicalACLId, canReadFromAncestors } from './acl';
 import type { ACLPropagationOptions } from './acl-propagation';
+import type { CopyTarget } from './copy-across';
 import type { ContentWriteOptions, ContentWriteResult, Drive } from './drive';
 import type { LockManager } from './lock-manager';
 
@@ -267,17 +268,19 @@ export class SharedDrive {
         return this.drive.renamePath(mountId, pathId, newName, this.user);
     }
 
+    // A copy to another mount or drive writes through that drive, and Drive.copyPath checks its write access.
     public async copyPath(
         mountId: string,
         srcPathId: string,
         destParentId: string,
         name: string,
         _user?: User,
+        to?: CopyTarget,
     ): Promise<DrivePath> {
         const memberships = await getMemberships(this.user.id);
         await this.requireRead(mountId, srcPathId, memberships, 'No read permission on source');
-        await this.requireWrite(mountId, destParentId, memberships, 'No write permission on target folder');
-        return this.drive.copyPath(mountId, srcPathId, destParentId, name, this.user);
+        if (!to) await this.requireWrite(mountId, destParentId, memberships, 'No write permission on target folder');
+        return this.drive.copyPath(mountId, srcPathId, destParentId, name, this.user, to);
     }
 
     public async flushContainerDb(mountId: string, containerId: string): Promise<void> {
@@ -303,6 +306,17 @@ export class SharedDrive {
         }
         await this.requireWrite(mountId, pathId);
         return this.drive.deletePath(mountId, pathId, this.user);
+    }
+
+    // Removing a failed copy needs write access, the same as a trash.
+    public async deleteFailedCopy(
+        mountId: string,
+        pathId: string,
+        createdIds: ReadonlySet<string>,
+        _user?: User,
+    ): Promise<void> {
+        await this.requireWrite(mountId, pathId);
+        return this.drive.deleteFailedCopy(mountId, pathId, createdIds, this.user);
     }
 
     public async restorePath(mountId: string, pathId: string, _user?: User): Promise<void> {

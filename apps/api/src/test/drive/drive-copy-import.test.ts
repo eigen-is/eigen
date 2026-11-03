@@ -1,9 +1,10 @@
 import { afterEach, beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types';
+import { DRIVE_TYPE_FOLDER } from '@workspace/lib/types/drive';
 import * as enforcement from '../../lib/config/enforcement';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
-import { copyPathAcross, copySize } from '../../lib/drive/copy-across';
 import { getHome } from '../../lib/home';
+import { copySize } from '../../lib/mount/copy';
 import { getUserById } from '../../lib/user';
 import { VERSIONS_FOLDER_NAME } from '../../lib/versioning/versions-folder';
 import type { TestUser } from '../setup';
@@ -135,7 +136,7 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
             expect(res.status).toBe(404);
         });
 
-        test('returns 413 when the source file exceeds the target quota', async () => {
+        test('returns 413 when the source file exceeds the per-file upload cap', async () => {
             const content = 'x'.repeat(2 * 1024 * 1024);
             const file = new File([content], 'big-source.txt', { type: 'text/plain' });
             const source = await driveUpload<DrivePath>(
@@ -157,6 +158,29 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
             } finally {
                 await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 35);
             }
+        });
+
+        // A file under the per-file cap that doesn't fit the free space is a full drive, as an upload is.
+        test('returns 507 when the source file is under the upload cap but past the free space', async () => {
+            const before = getServerSettings().quotas.defaultMountMaxSizeMB;
+            await updateServerSettings({ quotas: { defaultMountMaxSizeMB: 30 } });
+            let user: TestUser;
+            try {
+                user = await createTestUser(`copy-full-${crypto.randomUUID()}@test.eigen.is`, 'pw-12345678', 'F');
+                await getHome(user.id);
+            } finally {
+                await updateServerSettings({ quotas: { defaultMountMaxSizeMB: before } });
+            }
+            const rootId = (await driveGet(user.sessionToken, user.id, mountId, 'root')).id;
+            const twenty = new File([new Uint8Array(20 * 1024 * 1024)], 'twenty.bin');
+            const source = await driveUpload<DrivePath>(user.sessionToken, user.id, mountId, rootId, twenty);
+
+            const res = await copyFile(user.sessionToken, user.id, mountId, source.id, {
+                targetOwnerId: user.id,
+                targetMountId: mountId,
+                targetParentId: rootId,
+            });
+            expect(res.status).toBe(507);
         });
 
         describe('a folder whose child has lost its bytes', () => {
@@ -197,6 +221,8 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
 
             test('a copy in one drive fails and leaves no folder in the target', async () => {
                 const target = await emptyFolder();
+                const { drive } = await getHome(ctx.alice.user.id);
+                const trashBefore = await drive.listTrash(mountId);
                 const res = await copyFile(ctx.alice.user.sessionToken, folder.ownerId, folder.mountId, folder.id, {
                     targetOwnerId: ctx.alice.user.id,
                     targetMountId: mountId,
@@ -204,6 +230,8 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
                 });
                 expect(res.status).toBe(410);
                 expect(await contents(target)).toEqual([]);
+                // The half-built folder held only the copy's own files, so it went for good, not to the trash.
+                expect(await drive.listTrash(mountId)).toEqual(trashBefore);
             });
 
             test('a copy to another drive fails and leaves no folder in the target', async () => {
@@ -211,7 +239,11 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
                 const home = await getHome(ctx.alice.user.id);
                 const user = await getUserById(ctx.alice.user.id);
                 if (!user) throw new Error('alice has no user row');
-                const copy = copyPathAcross(home.drive, folder, home.drive, mountId, target.id, folder.name, user);
+                const copy = home.drive.copyPath(mountId, folder.id, target.id, folder.name, user, {
+                    drive: home.drive,
+                    ownerId: user.id,
+                    mountId,
+                });
                 expect(copy).rejects.toThrow();
                 await copy.catch(() => {});
                 expect(await contents(target)).toEqual([]);
@@ -291,12 +323,319 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
                 );
                 expect(versions.size).toBeGreaterThan(0);
                 const sized = await driveGet(user.sessionToken, user.id, mountId, `file/${doc.id}`);
-                expect(await copySize(drive, sized)).toBe(sized.size - versions.size);
+                const { mount } = await drive.resolveFile(mountId, sized.id);
+                expect(copySize(await mount.listCopy(sized.id))).toBe(sized.size - versions.size);
             });
         });
 
-        // The cross-mount bridge walks a container's children itself, so its versions/ skip is
-        // separate from the same-mount copy's (pinned in mount-copy.test.ts).
+        // A writer, and an owner who shares a folder with them for writing.
+        async function writerAndInbox(): Promise<{ writer: TestUser; owner: TestUser; inbox: DrivePath }> {
+            const id = crypto.randomUUID();
+            const writer = await createTestUser(`copy-writer-${id}@test.eigen.is`, 'pw-12345678', 'W');
+            const owner = await createTestUser(`copy-owner-${id}@test.eigen.is`, 'pw-12345678', 'O');
+            const ownerRoot = await driveGet(owner.sessionToken, owner.id, mountId, 'root');
+            const inbox = await drivePost<DrivePath>(owner.sessionToken, owner.id, mountId, `folder/${ownerRoot.id}`, {
+                folderName: 'inbox',
+            });
+            await drivePut(owner.sessionToken, owner.id, mountId, `path/${inbox.id}/acl`, {
+                add: [{ id: writer.email, read: true, write: true }],
+            });
+            return { writer, owner, inbox };
+        }
+
+        // A folder `half` in the user's root: a-kept.bin copies, and z-gone.bin has lost its bytes, so a
+        // copy of the folder fails after its first file. putBackBytes makes it copyable again.
+        async function folderWithLostFile(
+            user: TestUser,
+        ): Promise<{ half: DrivePath; putBackBytes: () => Promise<unknown> }> {
+            const root = await driveGet(user.sessionToken, user.id, mountId, 'root');
+            const half = await drivePost<DrivePath>(user.sessionToken, user.id, mountId, `folder/${root.id}`, {
+                folderName: 'half',
+            });
+            const kept = new Uint8Array(1024 * 1024);
+            await driveUpload(user.sessionToken, user.id, mountId, half.id, new File([kept], 'a-kept.bin'));
+            const gone = await driveUpload(
+                user.sessionToken,
+                user.id,
+                mountId,
+                half.id,
+                new File(['gone'], 'z-gone.bin'),
+            );
+            const { mount } = await (await getHome(user.id)).drive.resolveFile(mountId, gone.id);
+            const key = await mount.getStorageKey(gone.id);
+            expect(await mount.storage.delete(key)).toBe(true);
+            return { half, putBackBytes: () => mount.storage.write(key, Buffer.from('gone')) };
+        }
+
+        // F holds S1 with one.txt in it, and an empty S2.
+        async function sourceTree(user: TestUser, name: string): Promise<{ top: DrivePath; s2: DrivePath }> {
+            const root = await driveGet(user.sessionToken, user.id, mountId, 'root');
+            const top = await drivePost<DrivePath>(user.sessionToken, user.id, mountId, `folder/${root.id}`, {
+                folderName: name,
+            });
+            const s1 = await drivePost<DrivePath>(user.sessionToken, user.id, mountId, `folder/${top.id}`, {
+                folderName: 'S1',
+            });
+            await driveUpload(user.sessionToken, user.id, mountId, s1.id, new File(['one'], 'one.txt'));
+            const s2 = await drivePost<DrivePath>(user.sessionToken, user.id, mountId, `folder/${top.id}`, {
+                folderName: 'S2',
+            });
+            return { top, s2 };
+        }
+
+        // Every path under the folder, as names relative to it.
+        async function treeOf(ownerId: string, folderId: string, prefix = ''): Promise<string[]> {
+            const drive = (await getHome(ownerId)).drive;
+            const names: string[] = [];
+            for (const child of await drive.getFolderContents(mountId, folderId)) {
+                names.push(`${prefix}${child.name}`);
+                if (child.type === DRIVE_TYPE_FOLDER)
+                    names.push(...(await treeOf(ownerId, child.id, `${prefix}${child.name}/`)));
+            }
+            return names.toSorted();
+        }
+
+        // The copy lists the source before it writes. Whatever lands in the source while it runs, its own
+        // output included, is not part of it, so a copy can't keep copying what it just wrote.
+        describe('a copy whose own output lands in its source', () => {
+            test('in one drive, a target moved into the source meanwhile gets the source as it was', async () => {
+                const user = await createTestUser(
+                    `copy-chase-${crypto.randomUUID()}@test.eigen.is`,
+                    'pw-12345678',
+                    'C',
+                );
+                const { top, s2 } = await sourceTree(user, 'F');
+                const root = await driveGet(user.sessionToken, user.id, mountId, 'root');
+                const target = await drivePost<DrivePath>(user.sessionToken, user.id, mountId, `folder/${root.id}`, {
+                    folderName: 'G',
+                });
+
+                const { mount } = await (await getHome(user.id)).drive.resolveFile(mountId, top.id);
+                const createFileFromTemp = mount.createFileFromTemp.bind(mount);
+                let moved = 0;
+                const moveTarget = spyOn(mount, 'createFileFromTemp').mockImplementationOnce(async (...args) => {
+                    const created = await createFileFromTemp(...args);
+                    const move = await authedRequest(
+                        user.sessionToken,
+                        `/drive/${user.id}/${mountId}/path/${target.id}/move`,
+                        {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ targetParentId: s2.id }),
+                        },
+                    );
+                    moved = move.status;
+                    return created;
+                });
+                // A walk that follows its own output never ends, so the listings are bounded here.
+                const listFolder = mount.listFolder.bind(mount);
+                let listings = 0;
+                const bound = spyOn(mount, 'listFolder').mockImplementation(async (parentId) => {
+                    listings++;
+                    if (listings > 50) throw new Error('the copy follows its own output');
+                    return listFolder(parentId);
+                });
+                let res: Response;
+                try {
+                    res = await copyFile(user.sessionToken, user.id, mountId, top.id, {
+                        targetOwnerId: user.id,
+                        targetMountId: mountId,
+                        targetParentId: target.id,
+                    });
+                } finally {
+                    moveTarget.mockRestore();
+                    bound.mockRestore();
+                }
+
+                expect(moved).toBe(200);
+                const copied = await assertJson<DrivePath>(res);
+                expect(await treeOf(user.id, copied.id)).toEqual(['S1', 'S1/one.txt', 'S2']);
+            });
+
+            test('across drives, an opposite copy landing in the source meanwhile is not copied', async () => {
+                const { writer, owner, inbox } = await writerAndInbox();
+                const { top, s2 } = await sourceTree(writer, 'X');
+
+                // The opposite copy runs once this one wrote its first file into the inbox, so it copies that
+                // partial output back into the source.
+                const ownerDrive = (await getHome(owner.id)).drive;
+                const createFileFromData = ownerDrive.createFileFromData.bind(ownerDrive);
+                let opposite = 0;
+                const copyBack = spyOn(ownerDrive, 'createFileFromData').mockImplementationOnce(async (...args) => {
+                    const created = await createFileFromData(...args);
+                    const back = await copyFile(writer.sessionToken, owner.id, mountId, inbox.id, {
+                        targetOwnerId: writer.id,
+                        targetMountId: mountId,
+                        targetParentId: s2.id,
+                    });
+                    opposite = back.status;
+                    return created;
+                });
+                let res: Response;
+                try {
+                    res = await copyFile(writer.sessionToken, writer.id, mountId, top.id, {
+                        targetOwnerId: owner.id,
+                        targetMountId: mountId,
+                        targetParentId: inbox.id,
+                    });
+                } finally {
+                    copyBack.mockRestore();
+                }
+
+                expect(opposite).toBe(200);
+                const copied = await assertJson<DrivePath>(res);
+                expect(await treeOf(owner.id, copied.id)).toEqual(['S1', 'S1/one.txt', 'S2']);
+            });
+        });
+
+        // The writer can't empty another owner's trash, so a copy that fails there leaves nothing behind
+        // that would count against that owner's space.
+        test("a failed copy into another owner's folder leaves their trash and their space as they were", async () => {
+            const { writer, owner, inbox } = await writerAndInbox();
+            const { half, putBackBytes } = await folderWithLostFile(writer);
+
+            const ownerDrive = (await getHome(owner.id)).drive;
+            const used = await ownerDrive.size(mountId);
+            const copyHalf = () =>
+                copyFile(writer.sessionToken, writer.id, mountId, half.id, {
+                    targetOwnerId: owner.id,
+                    targetMountId: mountId,
+                    targetParentId: inbox.id,
+                });
+            const statuses: number[] = [];
+            for (let attempt = 0; attempt < 3; attempt++) statuses.push((await copyHalf()).status);
+
+            expect(statuses).toEqual([410, 410, 410]);
+            expect(await ownerDrive.listTrash(mountId)).toEqual([]);
+            expect(await ownerDrive.size(mountId)).toBe(used);
+            expect(await ownerDrive.getFolderContents(mountId, inbox.id)).toEqual([]);
+
+            // Once the bytes are back, the retry lands under the name it asked for.
+            await putBackBytes();
+            const copied = await assertJson<DrivePath>(await copyHalf());
+            expect(copied.name).toBe('half');
+            expect(await treeOf(owner.id, copied.id)).toEqual(['a-kept.bin', 'z-gone.bin']);
+        });
+
+        // A failed copy deletes for good only what it wrote. A file the owner moved into the half-built
+        // folder meanwhile goes to the trash with the folder, so the owner can still restore it.
+        test("a failed copy into another owner's folder keeps a file the owner moved into it", async () => {
+            const { writer, owner, inbox } = await writerAndInbox();
+            const { half } = await folderWithLostFile(writer);
+
+            const ownerRoot = await driveGet(owner.sessionToken, owner.id, mountId, 'root');
+            const mine = await driveUpload<DrivePath>(
+                owner.sessionToken,
+                owner.id,
+                mountId,
+                ownerRoot.id,
+                new File(['mine'], 'mine.txt'),
+            );
+            const ownerUser = await getUserById(owner.id);
+            if (!ownerUser) throw new Error('the owner has no user row');
+            const ownerDrive = (await getHome(owner.id)).drive;
+            const createFileFromData = ownerDrive.createFileFromData.bind(ownerDrive);
+            const moveIn = spyOn(ownerDrive, 'createFileFromData').mockImplementationOnce(async (...args) => {
+                const created = await createFileFromData(...args);
+                if (!created.parentId) throw new Error('the copied file has no folder');
+                await ownerDrive.movePath(mountId, mine.id, created.parentId, ownerUser);
+                return created;
+            });
+            let res: Response;
+            try {
+                res = await copyFile(writer.sessionToken, writer.id, mountId, half.id, {
+                    targetOwnerId: owner.id,
+                    targetMountId: mountId,
+                    targetParentId: inbox.id,
+                });
+            } finally {
+                moveIn.mockRestore();
+            }
+
+            expect(res.status).toBe(410);
+            const trashed = await ownerDrive.listTrash(mountId);
+            expect(trashed.map((path) => path.name)).toEqual(['half']);
+            await ownerDrive.restorePath(mountId, trashed[0].id, ownerUser);
+            expect(await treeOf(owner.id, inbox.id)).toEqual(['half', 'half/a-kept.bin', 'half/mine.txt']);
+        });
+
+        // The owner copies `half` into the inbox they share with the writer. Once the copy's first file has
+        // landed, meanwhile runs with the half-built folder.
+        async function copyIntoInbox(
+            owner: TestUser,
+            half: DrivePath,
+            inbox: DrivePath,
+            meanwhile: (folderId: string) => Promise<unknown>,
+        ): Promise<Response> {
+            const { mount } = await (await getHome(owner.id)).drive.resolveFile(mountId, half.id);
+            const createFileFromTemp = mount.createFileFromTemp.bind(mount);
+            const spy = spyOn(mount, 'createFileFromTemp').mockImplementationOnce(async (parentId, ...rest) => {
+                const created = await createFileFromTemp(parentId, ...rest);
+                await meanwhile(parentId);
+                return created;
+            });
+            try {
+                return await copyFile(owner.sessionToken, owner.id, mountId, half.id, {
+                    targetOwnerId: owner.id,
+                    targetMountId: mountId,
+                    targetParentId: inbox.id,
+                });
+            } finally {
+                spy.mockRestore();
+            }
+        }
+
+        // A copy in one drive cleans up as a copy to another drive does. A file the writer moved into the
+        // half-built folder goes to the trash with it, so it can still be restored.
+        test('a failed copy in one drive keeps a file someone else moved into it', async () => {
+            const { writer, owner, inbox } = await writerAndInbox();
+            const { half } = await folderWithLostFile(owner);
+            const mine = await driveUpload<DrivePath>(
+                writer.sessionToken,
+                owner.id,
+                mountId,
+                inbox.id,
+                new File(['mine'], 'mine.txt'),
+            );
+            const writerUser = await getUserById(writer.id);
+            const ownerUser = await getUserById(owner.id);
+            if (!writerUser || !ownerUser) throw new Error('a test user has no user row');
+            const ownerDrive = (await getHome(owner.id)).drive;
+
+            const res = await copyIntoInbox(owner, half, inbox, (folderId) =>
+                ownerDrive.movePath(mountId, mine.id, folderId, writerUser),
+            );
+
+            expect(res.status).toBe(410);
+            const trashed = await ownerDrive.listTrash(mountId);
+            expect(trashed.map((path) => path.name)).toEqual(['half']);
+            await ownerDrive.restorePath(mountId, trashed[0].id, ownerUser);
+            expect(await treeOf(owner.id, inbox.id)).toEqual(['half', 'half/a-kept.bin', 'half/mine.txt']);
+        });
+
+        // A part of the copy that got its own sharing meanwhile is no longer only the copy's.
+        test('a failed copy whose half-built folder was shared meanwhile goes to the trash', async () => {
+            const { owner, inbox } = await writerAndInbox();
+            const { half } = await folderWithLostFile(owner);
+            const ownerUser = await getUserById(owner.id);
+            if (!ownerUser) throw new Error('the owner has no user row');
+            const ownerDrive = (await getHome(owner.id)).drive;
+
+            const res = await copyIntoInbox(owner, half, inbox, (folderId) =>
+                drivePut(owner.sessionToken, owner.id, mountId, `path/${folderId}/acl`, {
+                    add: [{ id: ctx.bob.user.email, read: true, write: false }],
+                }),
+            );
+
+            expect(res.status).toBe(410);
+            const trashed = await ownerDrive.listTrash(mountId);
+            expect(trashed.map((path) => path.name)).toEqual(['half']);
+            await ownerDrive.restorePath(mountId, trashed[0].id, ownerUser);
+            expect(await treeOf(owner.id, inbox.id)).toEqual(['half', 'half/a-kept.bin']);
+        });
+
+        // A copy to another drive writes the same listing as a copy in one mount, so it leaves versions/
+        // behind too. mount-copy.test.ts pins the copy in one mount.
         test('copying a container across drives starts the copy without the source versions/', async () => {
             const token = ctx.alice.user.sessionToken;
             const ownerId = ctx.alice.user.id;
@@ -311,15 +650,11 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
             const home = await getHome(ownerId);
             const user = await getUserById(ownerId);
             if (!user) throw new Error('alice has no user row');
-            const copied = await copyPathAcross(
-                home.drive,
-                doc,
-                home.drive,
+            const copied = await home.drive.copyPath(mountId, doc.id, aliceRootId, 'copy-across-versions-copy', user, {
+                drive: home.drive,
+                ownerId,
                 mountId,
-                aliceRootId,
-                'copy-across-versions-copy',
-                user,
-            );
+            });
 
             const sourceNames = (await home.drive.getFolderContents(mountId, doc.id)).map((c) => c.name);
             expect(sourceNames).toContain('versions');
@@ -341,7 +676,7 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
                 callerRoot.id,
                 new File(['mine'], 'mine.txt', { type: 'text/plain' }),
             );
-            const readLimit = spyOn(enforcement, 'getUploadMaxSize');
+            const readLimit = spyOn(enforcement, 'enforceMountQuota');
             try {
                 const res = await copyFile(caller.sessionToken, caller.id, mountId, source.id, {
                     targetOwnerId: owner.id,

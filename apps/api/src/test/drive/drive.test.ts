@@ -10,7 +10,6 @@ import {
 import { COMMENT_INDEX_DB_CONFIG } from '../../lib/chat/comment-db-config';
 import { comments } from '../../lib/chat/comment-schema';
 import { getServerConfig } from '../../lib/config/server-config';
-import { copyPathAcross } from '../../lib/drive/copy-across';
 import { getSharedDrive } from '../../lib/drive/get-drive';
 import { getHome } from '../../lib/home/get-home';
 import { getUserById } from '../../lib/user';
@@ -3451,7 +3450,7 @@ describe('Drive', () => {
         });
     });
 
-    describe('copyPathAcross (cross-mount/owner bridge)', () => {
+    describe('copyPath to another owner (cross-mount/owner bridge)', () => {
         let teamOwner: string;
         let teamMountId: string;
         let teamRootId: string;
@@ -3509,15 +3508,11 @@ describe('Drive', () => {
             const source = await getSharedDrive(ctx.alice.user.id, actor!);
             const target = await getSharedDrive(teamOwner, actor!);
 
-            const copied = await copyPathAcross(
-                source,
-                uploaded,
-                target,
-                teamMountId,
-                teamRootId,
-                'bridge-file.txt',
-                actor!,
-            );
+            const copied = await source.copyPath(aliceMountId, uploaded.id, teamRootId, 'bridge-file.txt', actor!, {
+                drive: target,
+                ownerId: teamOwner,
+                mountId: teamMountId,
+            });
 
             expect(copied.ownerId).toBe(teamOwner);
             expect(copied.name).toBe('bridge-file.txt');
@@ -3544,7 +3539,11 @@ describe('Drive', () => {
             const source = await getSharedDrive(ctx.alice.user.id, actor!);
             const target = await getSharedDrive(teamOwner, actor!);
 
-            const copied = await copyPathAcross(source, doc, target, teamMountId, teamRootId, doc.name, actor!);
+            const copied = await source.copyPath(aliceMountId, doc.id, teamRootId, doc.name, actor!, {
+                drive: target,
+                ownerId: teamOwner,
+                mountId: teamMountId,
+            });
 
             expect(copied.ownerId).toBe(teamOwner);
             expect(copied.type).toBe(DRIVE_TYPE_DOC);

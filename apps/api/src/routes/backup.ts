@@ -1,6 +1,7 @@
 // The admin routes for the backups of single homes: list the backup files and the safety copies that restores leave,
-// start a backup or a restore as a background job, and follow its progress. Every route is for admins only. The
-// jobs are kept in memory, and the backups folder on disk is the lasting record.
+// start a backup or a restore as a background job, and follow its progress. Every route is for admins only, and a
+// backup, download, restore or safety-copy delete of the owner's home is for the owner alone. The jobs are kept in
+// memory, and the backups folder on disk is the lasting record.
 
 import * as fs from 'node:fs';
 import { BACKUP_UPLOAD_MAX_BYTES, BACKUP_UPLOAD_MAX_LABEL } from '@workspace/lib/constants/backup';
@@ -30,9 +31,9 @@ import { getTeam } from '../lib/team/team';
 import { getOrgRole, getUserById } from '../lib/user';
 import { betterAuth } from './auth';
 
-// The ownerId ends up naming a home folder, so its shape is checked here, against the one class the
-// shared artifact-name grammar allows, before anything is resolved; which kinds of home a backup can
-// be of is requireBackableHome's answer.
+// The ownerId ends up naming a home folder, so its shape is checked before anything is resolved. The
+// shape is the one the shared artifact-name grammar allows. Which kinds of home a backup can be of is
+// requireBackableHome's answer.
 async function requireRestorableHome(ownerId: string): Promise<BackableOwner> {
     if (!BACKUP_OWNER_ID.test(ownerId)) throw new ApiError(400, 'Invalid ownerId');
     return requireBackableHome(ownerId);
@@ -47,6 +48,14 @@ async function requireExistingHome(ownerId: string): Promise<void> {
         return;
     }
     if (!(await getUserById(owner.id))) throw new ApiError(404, 'User not found');
+}
+
+// The owner's home is the owner's alone, as their password is. Its archive holds their password hash and mount keys,
+// and a restore or a safety-copy delete replaces their data. A team's id has no role in the org, so it passes.
+async function requireOwnerForOwnersHome(userId: string, ownerId: string): Promise<void> {
+    if (ownerId !== userId && (await getOrgRole(ownerId)) === 'owner') {
+        throw new ApiError(403, "Only the owner can back up or restore the owner's home");
+    }
 }
 
 // A server backup's job is the owner's alone, as its routes are, because it names the archive and the
@@ -86,6 +95,7 @@ export const backupRouter = new Elysia({ name: 'backup' })
         async ({ params, user }): Promise<{ jobId: string }> => {
             await requireAdmin(user.id);
             await requireExistingHome(params.ownerId);
+            await requireOwnerForOwnersHome(user.id, params.ownerId);
             const job = startBackupJob('backup', params.ownerId, user.id, (started, onProgress) =>
                 runHomeBackup(params.ownerId, started, onProgress),
             );
@@ -155,7 +165,8 @@ export const backupRouter = new Elysia({ name: 'backup' })
         '/admin/backup/artifacts/:name',
         async ({ params, user }): Promise<Response> => {
             await requireAdmin(user.id);
-            const { artifactPath } = resolveArtifact(params.name);
+            const { artifactPath, ownerId } = resolveArtifact(params.name);
+            await requireOwnerForOwnersHome(user.id, ownerId);
             const file = Bun.file(artifactPath);
             if (!(await file.exists())) throw new ApiError(404, 'Artifact not found');
             return new Response(file.stream(), {
@@ -200,9 +211,10 @@ export const backupRouter = new Elysia({ name: 'backup' })
         async ({ params, body, user }): Promise<{ jobId: string }> => {
             await requireAdmin(user.id);
             const { artifactPath, ownerId } = resolveArtifact(params.name);
-            // The name's ownerId is a cheap pre-flight for the typed confirmation in the body; the
-            // restore itself judges the manifest inside the archive, which is the canonical answer.
+            // The name's ownerId is a cheap first check of the typed confirmation in the body. The restore
+            // itself judges the manifest inside the archive, which is the real answer.
             if (ownerId !== body.ownerId) throw new ApiError(400, 'That artifact is a backup of another home');
+            await requireOwnerForOwnersHome(user.id, ownerId);
             if (!fs.existsSync(artifactPath)) throw new ApiError(404, 'Artifact not found');
             await requireRestorableHome(body.ownerId);
             return startRestoreJob(body.ownerId, user.id, params.name, (jobId, onProgress) =>
@@ -217,6 +229,7 @@ export const backupRouter = new Elysia({ name: 'backup' })
         async ({ params, user }): Promise<{ success: boolean }> => {
             await requireAdmin(user.id);
             await requireRestorableHome(params.ownerId);
+            await requireOwnerForOwnersHome(user.id, params.ownerId);
             const { folder, homeDir } = await resolveSafetyCopy(params.ownerId, params.name);
             if (!fs.existsSync(folder)) throw new ApiError(404, 'Safety copy not found');
             await withHomeSlot(params.ownerId, () => deleteSafetyCopy(folder, homeDir));
@@ -232,6 +245,7 @@ export const backupRouter = new Elysia({ name: 'backup' })
             // A copy of a home whose owner is gone cannot be restored, only deleted: putting the
             // folder back would leave a home nobody can sign in to.
             await requireExistingHome(params.ownerId);
+            await requireOwnerForOwnersHome(user.id, params.ownerId);
             // The kind is judged before the folder is looked for: a `.failed-restore-` copy is not a
             // home this can put back, whether or not one by that name is there.
             const { folder, kind } = await resolveSafetyCopy(params.ownerId, params.name);
