@@ -143,6 +143,8 @@ export function DriveTable({
         overscan: 12,
         // The list's offset in the scroller, measured on the list itself rather than the sticky header.
         scrollMargin: listRef.current?.offsetTop ?? 0,
+        // That offset is the sticky header over the view's top, so a row scrolled into view stops below it.
+        scrollPaddingStart: listRef.current?.offsetTop ?? 0,
     });
 
     const controller = useDriveItemController({
