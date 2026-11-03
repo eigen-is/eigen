@@ -6,146 +6,60 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ## [0.4.2] - 2026-11-03
 
-Sheets scrolls and looks things up faster, copies and pastes validation rules and hidden rows as Excel does, and its dialogs read and behave like the rest of Eigen. Drive, Mail and Contacts open a row's menu from the keyboard. Docs gets styled tables of contents, and emoji, Chinese and Korean text and equations draw the same in the apps and in downloads. Every update now makes a Full backup, `./eigen rollback` keeps today's data, and an update can warn open tabs before Eigen restarts. Three changes break old data: Vector and Slides text boxes saved by an earlier version disappear, Sheets validation rules need setting up again, and Light backups can no longer be restored. After you update, reload any tab you have open.
+Sheets scrolls and looks things up faster, copies and pastes validation rules and hidden rows as Excel does, and its dialogs read and behave like the rest of Eigen. Docs gets styled tables of contents, and emoji, Chinese and Korean text and equations draw the same in the apps and in downloads. Every update now makes a Full backup, `./eigen rollback` keeps today's data, and an update can warn open tabs before Eigen restarts. Three changes break old data: Vector and Slides text boxes saved by an earlier version disappear, Sheets validation rules need setting up again, and Light backups can no longer be restored. After you update, reload any tab you have open.
 
 ### Added
 
-- **Demo reset warning** — a demo now warns five minutes before its hourly reset, with a countdown at the bottom of the page
-- **Table of contents options in Docs** — on a computer or a tablet, select or right-click a table of contents to pick Plain text, Dotted or Links, how many heading levels it lists, and each level's font, size, bold and italic. PDFs and Word files show them, and a Word file's table of contents comes back with its page numbers, dots and fonts. A document without pages offers Links only
-- **Duplicate in Drive lists** — **Duplicate** is also in the menu when you browse by file type or in a document app's list, but not on a drive's top-level folder
-- **Mail several items from Drive** — with more than one item selected, the menu offers **Mail 3 items to…**
-- **Shortcuts in the Drive menu** — on a computer, the menu shows ␣ next to **Quick preview** and ⌫ next to **Move to trash** and **Remove shared item**. On a touch screen no menu shows shortcuts
-- **Row menus from the keyboard** — in the lists of Drive, Mail and Contacts, Shift+F10 (fn+Shift+F10 on most Mac keyboards) or the Menu key opens the menu of the row under the cursor. Tab no longer stops on each row's ⋮ and Share buttons
-- **Unread comments on cards** — in Stickies and in the comment panel of Docs, Sheets, Slides and Vector, a red dot marks each card with a new reply, mention or assignment for you. Opening the card clears it
-- **A warning before a restart** — `./eigen update`, `./eigen rollback` and `./eigen restore` take `--in 10m "Back at three"`, up to an hour. Every open tab counts down in a banner, then says Eigen is updating, or going back to an earlier version, while it is down. Ctrl+C or a lost SSH session cancels
+- **Demo reset warning** — a demo warns five minutes before its hourly reset, with a countdown at the bottom of the page
+- **Table of contents options in Docs** — select or right-click a table of contents to pick Plain text, Dotted or Links, how many heading levels it lists and each level's font, shown in PDFs and Word files. A click selects it: ⌘-click a line (Ctrl-click on Windows and Linux) to jump to its heading
+- **Row menus from the keyboard** — in the lists of Drive, Mail and Contacts, Shift+F10 (fn+Shift+F10 on most Mac keyboards) or the Menu key opens the menu of the row under the cursor
+- **Unread comments on cards** — in Stickies and in the comment panel of Docs, Sheets, Slides and Vector, a red dot marks each card with a new reply, mention or assignment for you
+- **A warning before a restart** — `./eigen update`, `./eigen rollback` and `./eigen restore` take `--in 10m "Back at three"`, up to an hour, and every open tab counts down in a banner. Ctrl+C or a lost SSH session cancels
 
 ### Changed
 
 - **Text boxes in Vector and Slides (breaking)** — a text box saved by an earlier version disappears when its drawing or deck opens. Text inside shapes stays
-- **Open tabs after an update** — every open Eigen tab reloads by itself once the updated server is back, so no tab keeps running the old version. Anything a tab had not saved yet is lost, such as text typed while the server was down or a half-written comment
-- **The sidebar and the top bar** — both sit on the page's own background, with no line between them and the page. The open sidebar item, and the one under the pointer, end in a point, as the eigen logo does
-- **Jumping from a table of contents in Docs** — a click selects it. ⌘-click a line (Ctrl-click on Windows and Linux) to jump to its heading, or on a touch screen tap once, then tap a line
-- **A shorter style list in Docs** — the style picker lists Normal text and the headings. **Title** and **Subtitle** move to **Format › Paragraph styles**, below **Heading 6**, and Word files keep them
-- **Scrolling in Sheets** — the grid keeps up with a wheel or trackpad scroll on a 120 Hz screen, frozen rows and columns included, also on large sheets. Dragging the scrollbar still redraws the whole grid
+- **Open tabs after an update** — every open Eigen tab reloads by itself once the updated server is back. Anything a tab had not saved yet is lost, such as text typed while the server was down
+- **Dialogs and the keyboard** — dialogs across Sheets, Docs, Drive, Calendar and Admin close, save and return focus as in the rest of Eigen, and a save that fails keeps what you typed. Enter in a link field on a card or an email adds the link without also saving the card or sending the email
+- **Scrolling in Sheets** — the grid keeps up with a wheel or trackpad scroll on a 120 Hz screen, frozen rows and columns and large sheets included
 - **Validation rules in Sheets (breaking)** — an existing spreadsheet opens without its dropdowns, tick boxes and other validation rules, and every cell keeps its value. Set the rules up again, or import the Excel file again
-- **Whole-column rules in Sheets** — a validation rule on a whole column, picked by its header or from an Excel file, covers every row, below the data too. Only rows inserted inside a rule get it
-- **Pasting over rules and links in Sheets** — cells you copy or cut in the same tab replace the validation rules and links where you paste them, as in Excel. A paste, fill or move that would break a rule into too many pieces is refused, with a notice
-- **Copying hidden rows and columns in Sheets** — a copy, cut or drag move takes them along, as in Excel, where a cut used to lose them. A copy leaves out the rows a filter hides
-- **The Sheets bar** — its format buttons fold into the **Format** menu a group at a time as the bar narrows, alignment first, as in Docs, and an open side panel counts. The menus no longer scroll sideways
-- **Sheet names** — a tab name may hold a fullwidth ： or ？, as in Excel. A refused name says why: at most 31 characters, none of `\ / ? * [ ] :`, and no `'` at either end
+- **Copy and paste in Sheets** — as in Excel, cells you copy or cut in the same tab replace the validation rules and links where you paste them, and a copy, cut or move takes hidden rows and columns along. A rule on a whole column covers every row, below the data too
 - **Whole-column lookups in Sheets** — a sheet with 20,000 lookups into whole columns of 64,000 rows, such as INDEX and MATCH over `B:B`, opens about three seconds faster
-- **Dialogs in Sheets** — Custom sort, Split text, row height and column width, the custom number, date and currency formats, Insert function, a conditional formatting rule, Data validation and the link editor have a close button in the corner, close on a click outside and apply on Enter
-- **Refused rules in Sheets** — a conditional format or Data validation rule Sheets can't take keeps its dialog open with the reason under the field, and what you typed stays
-- **Insert function in Sheets** — the search finds a function by its description, a name typed in full comes first, Up and Down move through the list, and Cancel leaves what you were typing in the cell
-- **Menu names in Sheets** — **Data verification** is called **Data validation**, with types such as Whole number and Text length. **Management rules** is **Manage rules**, **Delete sheet rule** is **Delete sheet rules**, and **Insert › Auto SUM › Learn more...** is **More functions…**
-- **Cell references in conditional formatting** — a value that starts with `=`, such as `=B1`, follows that cell as it changes, as in Excel and Google Sheets. Without the `=`, `B1` and `FY2024` are text
-- **Colors in conditional formatting** — new color scales and data bars use Eigen's palette, and each scale's name lists its colors in the order its swatch draws them. Rules you already have keep their colors
-- **Words in Sheets dialogs** — Split text heads its choices **Separators**. Data validation reads **Whole number**, **Greater than** and **Drop-down list**, where it read "Number-integer", "More than the" and "drop-down list"
-- **Sort range in Sheets** — **Data › Sort range** works on one selected range and stays grayed out until exactly one is selected. Custom sort offers only the columns that hold data
-- **Emoji** — emoji draw in one monochrome emoji font, in the color of the text, in the apps and in PDF, web page and SVG downloads, so they look the same on nearly every computer. Safari still draws keycap emoji such as 1️⃣ and some joined emoji in parts
-- **Chinese and Korean text** — draws in Noto Sans SC and Noto Sans KR in the apps and in PDF, web page and SVG downloads, where a PDF printed Korean as boxes. Japanese kanji draw in their Chinese forms
+- **Cell references in conditional formatting** — a value that starts with `=`, such as `=B1`, follows that cell as it changes, as in Excel. Without the `=`, `B1` is text
+- **Emoji, Chinese and Korean** — emoji draw in one monochrome font in the color of the text, and Chinese and Korean in Noto Sans SC and KR, in the apps and in PDF, web page and SVG downloads, where a PDF printed Korean as boxes. Japanese kanji draw in their Chinese forms
 - **Equations in Docs** — equations draw in New Computer Modern Math, so they look different, and the PDF and the web page show them in the editor's font
 - **Web page downloads** — a download carries only the parts of each font its text uses: a short document is about 380 KB instead of 1.2 MB, a sheet or deck about 310 KB instead of 1 MB
+- **PowerPoint files** — a picture set to Fit or Fill downloads as one picture and comes back looking the same, and a picture cropped evenly on two sides comes in as Fit or Fill. A text box aligned to the top downloads set to fit its text, and comes back as a text box
+- **Uploading several files in Drive** — a file that fails no longer stops the files after it
 - **The server image** — the API image installs no recommended packages, and no libvips or ImageMagick from Debian, which nothing used. SVG thumbnails draw Chinese and Korean text
 - **Light backups (breaking)** — every `./eigen update` makes a Full backup, and `./eigen backup --light`, `./eigen update --full` and Light in **Back up now** are gone. Eigen no longer recognises the Light backups of 0.4.1 and before: it can't restore one, `./eigen status` doesn't list them and a start leaves their files as they are. Delete them by hand with `sudo rm backups/server-*-light-*`
-- **Rolling back** — `./eigen rollback` keeps today's data when the version before opens it. It puts the update's backup back only when that version can't, or is too old to check, and a check that fails otherwise stops it with Eigen running as it was
-- **Restoring a user or team in Admin** — the account keeps working while its backup is unpacked and checked, so a refused restore costs nobody their open pages. It goes offline only for the swap at the end, and needs room on the data disk
-- **Private backups** — the files inside a backup and their records are for Eigen's own user alone. `backups/` takes the install folder's group with mode 2750, or stays as it is, with a warning, when other users share that group
-- **Stopping during a backup** — before it stops Eigen, `./eigen` asks the server whether a backup or its upload runs, and waits for it. A server that doesn't answer gets a warning after a few tries, and the stop goes on
-- **Copies a restore kept aside** — `./eigen status` lists the `data.pre-restore-*` and `.env.production.pre-restore-*` copies a restore leaves in the install folder, with the command to delete them. Each can be a full copy of `data/`
-- **Uploading several files in Drive** — a file that fails no longer stops the files after it, and the files of one upload finish together
-- **Copying in Drive** — **Copy to…** and **Save to Drive…** say "1 item copied" (or "3 items copied") with an **Open folder** button. **Duplicate** stays quiet
-- **The command palette in Drive** — with items selected it offers what their right-click menu offers, in the same order and with the item's name beside each row. **Duplicate**, **Move to…**, **Copy to…**, **Watch**, convert and import are new there, and the Trash offers **Restore** and **Delete permanently**
-- **Text files in Drive** — the editor for text, code and Markdown files no longer shows the properties column
-- **The File menu of a document** — a document shared with you offers **Remove shared item**, and **Share** is hidden when you can't share it
-- **Text boxes in PowerPoint files** — a text box aligned to the top downloads set to resize the shape to fit its text, and a rectangle set that way in a PowerPoint file comes in as a text box
-- **Saving in dialogs** — Enter saves in New folder, Rename, Import to Calendar, a team's mounts and the bucket safety window. While a save runs, Cancel and Escape wait, and a failure keeps the dialog open with what you typed. Email collaborators and the Word, Excel and PowerPoint import choice wait the same way, and Email collaborators sends only on **Send**
-- **Share** — **Save** stays grayed out until you change something, and the **Done** button is gone. **General access** reads Restricted or Unrestricted, and the lock on a shared item says "Anyone signed in with the link"
-- **Importing events you already have** — Calendar says how many events were already in your calendars, or in the team's, instead of calling them duplicates
+- **Rolling back** — `./eigen rollback` keeps today's data when the version before opens it, and puts the update's backup back only when that version can't. A check that fails otherwise stops it with Eigen running as it was
+- **Restoring a user or team in Admin** — the account keeps working while its backup is unpacked and checked, and goes offline only for the swap at the end. It needs room on the data disk
+- **Private backups** — the files inside a backup are for Eigen's own user alone. `backups/` takes the install folder's group with mode 2750, or stays as it is, with a warning, when other users share that group
+- **Stopping during a backup** — before it stops Eigen, `./eigen` waits for a running backup or its upload
+- **Copies a restore kept aside** — `./eigen status` lists the `data.pre-restore-*` and `.env.production.pre-restore-*` copies a restore leaves, each possibly a full copy of `data/`, with the command to delete them
 
 ### Fixed
 
-- **Odd font names in Sheets** — a font name with a semicolon, an opening parenthesis, a quote, a backslash or a control character draws and exports as Inter, so a name like O'Neill falls back
-- **Function suggestions in Sheets** — the list of functions under a formula closes when you click another cell to finish the edit, instead of staying on screen
 - **Printing** — printing a document, an email or a contact waits for its fonts, and a few seconds at most for its pictures, so they show on the page
-- **Moving equations in Docs** — drag an equation to move it, as you drag an image. One that had a line to itself leaves no empty line behind
-- **Equation drafts in Docs** — what you type in the **Equation** panel stays when someone else types above the equation, instead of jumping back to the saved equation
+- **Moving and editing equations in Docs** — drag an equation to move it, as you drag an image, and what you type in the **Equation** panel stays when someone else types above the equation
 - **Restoring a version in Docs** — charts, images and equations keep their data, size and display when you restore a version while the document is open
-- **Dialogs in Docs** — **Add link** stays off until you type a URL, and a URL you cancel is gone the next time it opens. Page setup, Headers and footers, Word count and the spacing, indent and numbering dialogs have a close button in the corner
-- **Pictures and text boxes from Word files** — stay on the paper and line up by the size Word draws them at, in a resized drawing group too. Older Word text boxes keep their theme-colored fills and outlines and their wrap side, but can still run past the paper
-- **The Format menu in Docs** — **Format › Text** shows the shortcuts for **Bold**, **Italic** and **Underline**, and **Format › Align and indent** marks the current alignment, as the toolbar does
-- **Dialogs in Calendar** — Enter in an event's title saves it, **Edit event** stays open while it saves, a calendar's name can't be left blank, and **+** beside the sharing field in **Edit calendar** adds the person without saving and closing the dialog
-- **Filters in the sidebar** — **All docs**, **All stickies**, **All slides**, **All sheets** and **All vectors** stay selected in their own app when you click an item in the list
-- **Rename field in Drive** — the field reads **File name** or **Folder name**, not **Rename name**
-- **The name in Rename** — **Rename** opens with the name selected without its extension, so typing replaces it, also from the command palette and a document's **File** menu
-- **Cancel in Share** — Cancel stays after a save fails, so you can still close the dialog
-- **Email collaborators from Share in Drive** — the envelope in **Share** opens **Email collaborators** again, and the message starts with your signature even when the dialog opens before your settings have loaded
-- **Links on cards and in emails** — Enter in the link field of the text toolbar adds the link and no longer also saves the card or sends the email. Escape closes only the link field, and opening it no longer shifts the dialog sideways
-- **Keys in a dialog opened from Drive** — Enter, Space and the arrow keys in a dialog opened from a file's menu stay in the dialog, so Enter in **Import to Calendar** imports instead of opening the file
-- **Lists and dialogs over a file preview** — menus, lists, tooltips and the command palette show above an open preview, such as the right-click menu in **Save to Drive**, and a dialog over it closes on Escape or a click outside, that dialog alone, such as **New folder** in **Save to Drive**
-- **Retrying an import into a new calendar** — a new calendar whose import fails is removed, so trying again uses the name and calendar you pick then
-- **Groups in a contacts file** — a group card in an imported vCard file is no longer reported as a skipped duplicate
-- **Share for someone who may only view** — in Chat, a member who may not edit gets the list of who has access with **Close**, instead of a list whose **Save** fails
-- **Share on another item** — going back or forward to another document with **Share** open shows that item's people, not the ones you were editing
-- **The keyboard in Share** — Tab reaches the lock under **General access** when you can change access, and a long list of people who have access, and Enter or Space works them. The same goes for an event's guest list, the people shown on a shared item in Drive and Chat, and **Location** in **Copy to**, **Save to Drive** and **New chat**
-- **Previews opened from a card in Stickies** — the preview takes the keyboard, so Space closes it and Tab stays in it, a long preview scrolls, and a click beside it closes only the preview
-- **Hover buttons from the keyboard** — Tab and screen readers reach the buttons a row shows under the pointer: the × on a person in **New chat**, **Edit** and **Delete** on your chat messages, a server backup's buttons in Admin, the pencil on a label in the Contacts sidebar and a guest's **Remove** in Calendar. In Drive's and Contacts' lists the menu key reaches a row's ⋮ instead
-- **Keys on a row's menu button** — in Drive, Mail and contact lists, Enter and Space on a row's ⋮ button open its menu, and an arrow key after the menu closes moves on from that row
-- **The keyboard cursor in Drive and Contacts** — in Drive's list view and in contact lists, the row under the keyboard cursor shows only its colored edge, as in Mail, unless that row is open or selected
-- **Editing a chat message on a touch screen** — **Edit** in a message's long-press menu keeps the edit box open with the cursor in it, where the box could close at once while the message field had the keyboard
-- **Focus after a menu** — **File › Rename** and then Escape in Docs and Sheets puts the focus back on **File**. A menu or dialog you opened with the mouse gives the focus back without a focus ring, so a hover button such as a calendar's ⋮ hides again once the pointer leaves
-- **Rows under the column header in Drive** — a row the arrow keys scroll into view stops below the list's column header instead of behind it
-- **The copy button on a code block** — it takes no click while it is hidden, so a click on the code no longer copies it
-- **PDF downloads** — a PDF renders once, where now and then it rendered a second time, which could make a long export fail
-- **Creating users and teams in Admin** — **Create** stays grayed out until the form is filled in: a name, a username and a password of at least 8 characters for a user, a name for a team
-- **Labels in Contacts** — **Save** stays off until the label has a name, and the delete confirmation opens on top of **Edit label**, so a cancel keeps your changes
-- **Permanently deleting emails in Mail** — when some emails can't be deleted, the dialog stays open on the ones worth another try and drops those the server refused, such as one already gone
+- **Pictures and text boxes from Word files** — stay on the paper and line up by the size Word draws them at. Older Word text boxes keep their theme-colored fills and outlines and their wrap side
 - **Editing together in Sheets** — every tab ends with the same cells, the later of two edits to a cell winning, edits made offline too. A row someone inserts or deletes moves your selection
-- **The grid in Sheets** — grid lines cross without a darker dot, the numbers in a row sit on one line, and underlines are level
-- **Frozen rows and columns in Sheets** — their text and merged cells stop at the freeze line instead of drawing over the cells that scroll past
+- **Formulas in Sheets** — formulas with spaces such as `=A1 + 1`, INDEX, whole columns on another sheet, and whole columns after a row insert or a paste below the data recalculate when their cells change. A formula finds a sheet whatever the case of its name, as in Excel
 - **Filters and hidden rows in Sheets** — applying, changing or clearing a filter leaves the rows you hid by hand hidden
-- **Typing after a menu in Sheets** — after a command from the Edit, View, Insert, Format or Data menu, such as inserting a row, typing and Delete work on the grid without a click first, as in Google Sheets
-- **Sheet names in formulas** — a formula finds a sheet even when its name's case differs, as in Excel, so `=data!A1` reads the tab Data. A tab can't take another tab's name in another case
-- **Formulas that didn't update in Sheets** — formulas with spaces such as `=A1 + 1`, INDEX, whole columns on another sheet, and whole columns after a row insert or a paste below the data recalculate when their cells change
-- **Conditional format values in Sheets** — a rule refuses text where it needs a number and a Between rule with one value
-- **Hiding the last sheet** — Sheets says a workbook always shows at least one sheet, instead of talking about deleting it
-- **Message details in Mail** — the details under a sender read From, Reply-to, To, Cc, Bcc, Date and Subject, in the reader and the .eml preview
-- **Opening an email from a notification** — an email you open from the bell shows as read in the Mail list after you move on to another one, without a reload
 - **Custom sort in Sheets** — with **Data has a header row** ticked, the header row stays where it is
-- **Picking a range in Sheets** — choosing cells on the grid in Data validation or the link editor keeps the rest of what you typed, and opening another dialog meanwhile no longer leaves the cell editor hidden. **Delete validation** with no range says why
-- **Formats from the keyboard in Sheets** — in the custom number, date and currency formats, Tab moves to a preset or a currency and Enter picks it
-- **Typing after a dialog in Sheets** — when a dialog closes, the link editor included, typing and the arrow keys work on the grid without a click first, and **Insert function** leaves you typing after the bracket
-- **Deleting a rule on a protected sheet** — **Manage rules** refuses the delete, as **Delete sheet rules** already did
-- **Links with a space in Sheets** — the link editor keeps OK grayed out for an address with a space in its host name, such as `not a url`, which it used to save as a link
-- **Pasting from WPS Office** — a table pasted from WPS keeps its cell styles, such as bold and colors
-- **Filter buttons on narrow columns** — a column narrower than its filter button keeps the button inside it, so a click opens that column's filter
-- **Retrying a copy in Drive** — after **Copy to…** or **Save to Drive…** fails for some items, the retry copies only those items, so nothing lands twice
-- **Copying large folders in Drive** — copying a folder or document larger than the upload size limit works, as long as it fits in the free space
-- **Copying items with the same name** — copying any number of items with the same name into one folder lands every one of them at once, each under its own name
-- **Several screenshots in one message** — a message with any number of pasted screenshots of the same name posts with all of them, each under its own name, in Chat and in the comments of Docs, Sheets, Slides, Stickies and Vector
-- **A copy that fails in Drive** — a folder or document copy that fails part way leaves no half-copied folder in the target or in its Trash. If someone added their own files to that folder meanwhile, it goes to the Trash, so they can be restored. When only some items copy, the message says why the others failed
+- **Copying in Drive** — a copy larger than the upload size limit works if it fits in the free space, items with the same name all land under their own names, and a retry copies only the items that failed. A copy that fails part way leaves no half-copied folder behind
 - **A copy that never ends in Drive** — a folder copy takes only what the folder held when it began. Moving the target into the folder meanwhile, or two copies between drives in opposite directions, no longer copy on until the drive is full
-- **Copying over WebDAV** — a WebDAV copy meets the drive's free space and the upload size limit, as a copy in Drive does, and writes nothing past them
-- **Read-only views in Drive** — the **Share** submenu stays in Watched and in folders shared for viewing only, with **Copy link** and **Mail to…**
-- **Quick preview of folders** — **Space** and the preview in the details column no longer open on a folder, and **Space** works in **Shared with me** and **Shared by me** in Docs, Sheets, Slides, Stickies and Vector
-- **Dragging in Drive** — folders no longer light up as drop targets in views where you can't move items
-- **Duplicate on shared files** — Drive no longer offers **Duplicate** on a file someone shared with you, or on a selection with one in it, which then failed
-- **The command palette after a rename** — the palette shows an item's new name, and its **Watch** row shows when you already watch it
-- **Keys after a dialog** — closing a dialog, the command palette or a preview puts the focus back where you were, so the arrow keys work without a click
-- **Pictures in PowerPoint files** — a picture set to Fit or Fill downloads as one picture and comes back looking the same. An imported picture cropped evenly on two sides comes in as Fit or Fill, and the import message counts any other crop
-- **Pasting text boxes in Vector and Slides** — a pasted text box in Chinese, emoji or bold text fits its text, and one undo removes the paste instead of first shrinking the box
-- **Arrow labels in Vector and Slides** — a label's gap in its arrow fits the label after undo, redo and a late-loading font
-- **Calendar notices** — an invitation or a shared calendar from someone with no name or address shows a plain title, such as "New invitation" or "Calendar shared with you", instead of "undefined shared a calendar"
+- **Several screenshots in one message** — a message with pasted screenshots of the same name posts with all of them, in Chat and in the comments of Docs, Sheets, Slides, Stickies and Vector
+- **WebDAV** — a WebDAV copy meets the drive's free space and the upload size limit, and a lock on a file lasts until it expires or the client releases it, instead of ending when your home goes idle
+- **Slow transfers in Drive and WebDAV** — a slow upload, copy, convert, export or import no longer fails when it runs past five idle minutes
+- **Live updates and open editors** — both stay connected while the tab is open, and reconnect after a restore
 - **One data folder, one server** — a second Eigen server on another machine or VM, such as one that reaches `data/` through a Docker Desktop folder or WSL2, refuses to start while the first one runs
 - **Crafted backups** — a backup someone uploaded can no longer make an interrupted restore of one account move another account aside
-- **Uploads after a restore** — a whole-server restore of an older backup keeps the files it had not yet sent to an S3 bucket, also after a restore of one account in between
+- **Uploads after a restore** — a whole-server restore of an older backup keeps the files it had not yet sent to an S3 bucket
 - **The trash after a restore in Admin** — a file trashed before the backup stays in the trash for the full retention period, instead of being deleted for good seconds after the restore
 - **The owner's backups in Admin** — only the owner can back up, restore, upload, verify, download or delete backups of the owner's account. Other admins no longer see its **Backup** section
-- **Slow transfers in Drive and WebDAV** — a slow WebDAV or Drive upload, copy, convert, export or import no longer fails when it runs past five idle minutes
-- **WebDAV locks** — a lock on a file no longer ends when your home goes idle. It lasts until it expires or the client releases it
-- **Chats during a restore** — an open chat no longer fails when its version is restored at the same moment
-- **Open files on the server** — a document, board or chat that was read for search or export no longer stays open until its home closes, so the server keeps fewer files open
-- **Live updates and open editors** — a tab's live updates and an open editor stay connected while the tab is open, and reconnect after a restore
 - **S3 uploads when a home closes** — an upload to S3 that a closing home cuts short can no longer overwrite newer edits
 
 ## [0.4.1] - 2026-10-28
