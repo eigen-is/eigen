@@ -140,7 +140,7 @@ Sheets scrolls and looks things up faster, copies and pastes validation rules an
 - **Crafted backups** — a backup someone uploaded can no longer make an interrupted restore of one account move another account aside
 - **Uploads after a restore** — a whole-server restore of an older backup keeps the files it had not yet sent to an S3 bucket, also after a restore of one account in between
 - **The trash after a restore in Admin** — a file trashed before the backup stays in the trash for the full retention period, instead of being deleted for good seconds after the restore
-- **The owner's backups in Admin** — only the owner can back up, download or restore the owner's account, or delete its safety copies. Other admins no longer see its **Backup** section
+- **The owner's backups in Admin** — only the owner can back up, restore, upload, verify, download or delete backups of the owner's account. Other admins no longer see its **Backup** section
 - **Slow transfers in Drive and WebDAV** — a slow WebDAV or Drive upload, copy, convert, export or import no longer fails when it runs past five idle minutes
 - **WebDAV locks** — a lock on a file no longer ends when your home goes idle. It lasts until it expires or the client releases it
 - **Chats during a restore** — an open chat no longer fails when its version is restored at the same moment

@@ -1,7 +1,7 @@
 // The admin routes for the backups of single homes: list the backup files and the safety copies that restores leave,
-// start a backup or a restore as a background job, and follow its progress. Every route is for admins only, and a
-// backup, download, restore or safety-copy delete of the owner's home is for the owner alone. The jobs are kept in
-// memory, and the backups folder on disk is the lasting record.
+// start a backup or a restore as a background job, and follow its progress. Every route is for admins only, and
+// every route on the owner's home is for the owner alone. The jobs are kept in memory, and the backups folder on
+// disk is the lasting record.
 
 import * as fs from 'node:fs';
 import { BACKUP_UPLOAD_MAX_BYTES, BACKUP_UPLOAD_MAX_LABEL } from '@workspace/lib/constants/backup';
@@ -28,7 +28,7 @@ import { ApiError } from '../lib/core';
 import { contentDisposition } from '../lib/core/http';
 import { getHome } from '../lib/home';
 import { getTeam } from '../lib/team/team';
-import { getOrgRole, getUserById } from '../lib/user';
+import { getOrgOwner, getOrgRole, getUserById } from '../lib/user';
 import { betterAuth } from './auth';
 
 // The ownerId ends up naming a home folder, so its shape is checked before anything is resolved. The
@@ -51,7 +51,7 @@ async function requireExistingHome(ownerId: string): Promise<void> {
 }
 
 // The owner's home is the owner's alone, as their password is. Its archive holds their password hash and mount keys,
-// and a restore or a safety-copy delete replaces their data. A team's id has no role in the org, so it passes.
+// and a restore or a delete replaces or removes their data. A team's id has no role in the org, so it passes.
 async function requireOwnerForOwnersHome(userId: string, ownerId: string): Promise<void> {
     if (ownerId !== userId && (await getOrgRole(ownerId)) === 'owner') {
         throw new ApiError(403, "Only the owner can back up or restore the owner's home");
@@ -59,10 +59,10 @@ async function requireOwnerForOwnersHome(userId: string, ownerId: string): Promi
 }
 
 // A server backup's job is the owner's alone, as its routes are, because it names the archive and the
-// homes that failed.
+// homes that failed. So is a job on the owner's home.
 async function jobsVisibleTo(userId: string): Promise<(job: BackupJob) => boolean> {
-    const owner = (await getOrgRole(userId)) === 'owner';
-    return (job) => owner || !isServerJob(job.kind);
+    const ownerId = (await getOrgOwner())?.id;
+    return (job) => userId === ownerId || (!isServerJob(job.kind) && job.ownerId !== ownerId);
 }
 
 // A restored home is opened at once, so a remote mount's upload queue drains its staged files even when nobody
@@ -108,6 +108,7 @@ export const backupRouter = new Elysia({ name: 'backup' })
         '/admin/backup/jobs',
         async ({ query, user }): Promise<BackupJob[]> => {
             await requireAdmin(user.id);
+            if (query.ownerId) await requireOwnerForOwnersHome(user.id, query.ownerId);
             return listBackupJobs(query.ownerId).filter(await jobsVisibleTo(user.id));
         },
         { auth: true, query: t.Object({ ownerId: t.Optional(t.String()) }) },
@@ -118,7 +119,9 @@ export const backupRouter = new Elysia({ name: 'backup' })
         async ({ params, user }): Promise<BackupJob> => {
             await requireAdmin(user.id);
             const job = getBackupJob(params.id);
-            if (!job || !(await jobsVisibleTo(user.id))(job)) throw new ApiError(404, 'Job not found');
+            if (!job) throw new ApiError(404, 'Job not found');
+            await requireOwnerForOwnersHome(user.id, job.ownerId);
+            if (!(await jobsVisibleTo(user.id))(job)) throw new ApiError(404, 'Job not found');
             return job;
         },
         { auth: true },
@@ -129,6 +132,7 @@ export const backupRouter = new Elysia({ name: 'backup' })
         async ({ query, user }): Promise<{ artifacts: BackupArtifact[]; safetyCopies: BackupSafetyCopy[] }> => {
             await requireAdmin(user.id);
             await requireRestorableHome(query.ownerId);
+            await requireOwnerForOwnersHome(user.id, query.ownerId);
             return {
                 artifacts: await listArtifacts(query.ownerId),
                 safetyCopies: await listSafetyCopies(query.ownerId),
@@ -144,9 +148,9 @@ export const backupRouter = new Elysia({ name: 'backup' })
             // The name travels in the query, not a header, as getBackupUploadUrl builds it. It has to be a
             // name this server writes: the artifact list groups by the ownerId in it, and the bytes land
             // under it.
-            if (!parseBackupArtifactName(query.name)) {
-                throw new ApiError(400, 'The name parameter must be a backup artifact name');
-            }
+            const parsed = parseBackupArtifactName(query.name);
+            if (!parsed) throw new ApiError(400, 'The name parameter must be a backup artifact name');
+            await requireOwnerForOwnersHome(user.id, parsed.ownerId);
             const declared = Number(request.headers.get('content-length'));
             if (!Number.isSafeInteger(declared) || declared <= 0 || declared > BACKUP_UPLOAD_MAX_BYTES) {
                 throw new ApiError(
@@ -186,6 +190,7 @@ export const backupRouter = new Elysia({ name: 'backup' })
         async ({ params, user }): Promise<{ success: boolean }> => {
             await requireAdmin(user.id);
             const { artifactPath, ownerId } = requireArtifact(params.name);
+            await requireOwnerForOwnersHome(user.id, ownerId);
             requireHomeSlotFree(ownerId);
             deleteArtifact(artifactPath);
             return { success: true };
@@ -198,6 +203,7 @@ export const backupRouter = new Elysia({ name: 'backup' })
         async ({ params, user }): Promise<{ jobId: string }> => {
             await requireAdmin(user.id);
             const { ownerId } = requireArtifact(params.name);
+            await requireOwnerForOwnersHome(user.id, ownerId);
             const job = startBackupJob('verify', ownerId, user.id, (started, onProgress) =>
                 runArtifactVerify(params.name, started, onProgress),
             );
