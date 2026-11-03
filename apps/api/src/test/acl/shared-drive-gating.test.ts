@@ -253,6 +253,11 @@ describe('SharedDrive gating enumeration', () => {
             call: (sd) => sd.updateACLDelta(mountId, fileId, { add: [{ id: charlie.email, read: true, write: true }] }),
         },
         deletePath: { gate: 'denies', reason: 'write-gated', call: (sd) => sd.deletePath(mountId, fileId) },
+        deleteFailedCopy: {
+            gate: 'denies',
+            reason: 'write-gated: it deletes for good, without the trash',
+            call: (sd) => sd.deleteFailedCopy(mountId, folderId),
+        },
         releaseLocksUnder: {
             gate: 'denies',
             reason: 'write-gated: it drops the locks of other users',

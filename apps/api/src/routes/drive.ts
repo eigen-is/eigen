@@ -13,7 +13,7 @@ import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import type { ElysiaCustomStatusResponse } from 'elysia';
 import { Elysia, t } from 'elysia';
 import { requireNonGuest, requireSelf } from '../lib/auth/access';
-import { enforceMountQuota, getUploadMaxSize } from '../lib/config/enforcement';
+import { getUploadMaxSize } from '../lib/config/enforcement';
 import { ApiError } from '../lib/core';
 import {
     answerPreview,
@@ -25,7 +25,6 @@ import {
 import { getDrive, getSharedDrive, readImportSourceBytes } from '../lib/drive';
 import { propagateAccessRequest } from '../lib/drive/access-request-propagation';
 import { aggregateMimeContents, aggregateWatches } from '../lib/drive/aggregate';
-import { copyPathAcross, copySize } from '../lib/drive/copy-across';
 import { folderIn, withFreeName } from '../lib/drive/naming';
 import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
@@ -200,41 +199,20 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 const target = await targetDrive.resolveFile(body.targetMountId, body.targetParentId);
                 if (!isContainerType(target.path.type)) throw new ApiError(404, 'Folder not found');
                 return await targetDrive.withHomeHeld(async () => {
-                    // The per-file upload cap bounds a single file. A folder or a document only has to fit in the
-                    // free space.
-                    if (isContainerType(source.type)) {
-                        await enforceMountQuota(
-                            body.targetOwnerId,
-                            body.targetMountId,
-                            await copySize(sourceDrive, source),
-                        );
-                    } else if (source.size > (await getUploadMaxSize(body.targetOwnerId, body.targetMountId))) {
-                        throw new ApiError(413, 'Source file too large');
-                    }
-
                     // NFC first: the store keeps names NFC, so the compare below has to see the same form.
                     const desired = (body.name ?? source.name).replace(/[/\\]/g, '_').normalize('NFC');
-                    const copyAcross = (name: string): Promise<DrivePath> =>
-                        copyPathAcross(
-                            sourceDrive,
-                            source,
-                            targetDrive,
-                            body.targetMountId,
-                            body.targetParentId,
-                            name,
-                            user,
-                        );
+                    const to = sameMount
+                        ? undefined
+                        : { drive: targetDrive, ownerId: body.targetOwnerId, mountId: body.targetMountId };
+                    const copy = (name: string): Promise<DrivePath> =>
+                        sourceDrive.copyPath(params.mountId, params.pathId, body.targetParentId, name, user, to);
                     // A file copied to another mount is uploaded there, and the upload picks its free name.
-                    if (!sameMount && !isContainerType(source.type)) return await copyAcross(desired);
+                    if (!sameMount && !isContainerType(source.type)) return await copy(desired);
 
                     // Any other copy gets a free name in the target folder here and not in Drive.copyPath, because a
-                    // WebDAV COPY overwrites or answers 409 instead. Drive.copyPath refuses a copy into its own
-                    // subtree, for WebDAV too. A copy to another mount can never land in its own subtree.
-                    return await withFreeName(folderIn(target.mount, body.targetParentId), desired, (name) =>
-                        sameMount
-                            ? sourceDrive.copyPath(params.mountId, params.pathId, body.targetParentId, name, user)
-                            : copyAcross(name),
-                    );
+                    // WebDAV COPY overwrites or answers 409 instead. Drive.copyPath checks the target's limits and
+                    // refuses a copy into its own subtree, for WebDAV too.
+                    return await withFreeName(folderIn(target.mount, body.targetParentId), desired, copy);
                 });
             });
         },

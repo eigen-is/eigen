@@ -29,6 +29,7 @@ import type { RetentionPolicy } from '../versioning/retention';
 import * as snapshot from '../versioning/snapshot';
 import type { ContentExtractor } from './content-reindex-queue';
 import { ContentReindexQueue } from './content-reindex-queue';
+import type { CopyTree } from './copy';
 import * as copy from './copy';
 import { MOUNT_DB_CONFIG } from './db-config';
 import type { DatabaseHold, DocumentDbSlot } from './document-db';
@@ -398,8 +399,8 @@ export class Mount {
         return current;
     }
 
-    // Only a copy needs this check, because copyPath would recurse forever. A move checks inside the
-    // transaction of its row write (assertMovableInTx).
+    // A copy into its own subtree is refused with this check. A move checks inside the transaction of
+    // its row write (assertMovableInTx).
     public async isSelfOrDescendant(ancestorId: string, candidateId: string): Promise<boolean> {
         if (ancestorId === candidateId) return true;
         const seen = new Set<string>();
@@ -1019,13 +1020,17 @@ export class Mount {
 
     // ---- Copy ----
 
+    public async listCopy(srcPathId: string): Promise<CopyTree> {
+        return copy.listCopy(this, await this.getActivePath(srcPathId));
+    }
+
     public async copyPath(
-        srcPathId: string,
+        tree: CopyTree,
         destParentId: string,
         name: string,
         actor?: { id: string; email: string },
     ): Promise<DrivePath> {
-        return copy.copyPath(this, srcPathId, destParentId, name, actor);
+        return copy.copyPath(this, tree, destParentId, name, actor);
     }
 
     // ---- Storage keys ----
