@@ -31,6 +31,7 @@ function Row() {
         item,
         index: 0,
         isActive: false,
+        isCursor: false,
         isSelected: false,
         disabled: false,
         gridCols: '',

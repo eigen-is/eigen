@@ -85,6 +85,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Previews opened from a card in Stickies** — the preview takes the keyboard, so Space closes it and Tab stays in it, a long preview scrolls, and a click beside it closes only the preview
 - **Hover buttons from the keyboard** — Tab and screen readers reach the buttons a row shows under the pointer: the × on a person in **New chat**, a contact's ⋮, **Edit** and **Delete** on your chat messages, a server backup's buttons in Admin, the ⋮ on a Drive tile and the pencil on a label in the Contacts sidebar, a guest's **Remove** in Calendar
 - **Keys on a row's menu button** — in Drive, Mail and contact lists, Enter and Space on a row's ⋮ button open its menu, and an arrow key after the menu closes moves on from that row
+- **The keyboard cursor in Drive and Contacts** — in Drive's list view and in contact lists, the row under the keyboard cursor shows only its colored edge, as in Mail, unless that row is open or selected
 - **Editing a chat message on a touch screen** — **Edit** in a message's long-press menu keeps the edit box open with the cursor in it, where the box could close at once while the message field had the keyboard
 - **Creating users and teams in Admin** — **Create** stays grayed out until the form is filled in: a name, a username and a password of at least 8 characters for a user, a name for a team
 - **Labels in Contacts** — **Save** stays off until the label has a name, and the delete confirmation opens on top of **Edit label**, so a cancel keeps your changes
