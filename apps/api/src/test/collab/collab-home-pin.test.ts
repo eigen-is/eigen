@@ -18,6 +18,7 @@ let user: TestUser;
 let url: string;
 let socketBase: string;
 let rootId: string;
+let docId: string;
 
 beforeAll(async () => {
     ctx = await getTestContext();
@@ -28,9 +29,10 @@ beforeAll(async () => {
     const doc = await drivePost<DrivePath>(user.sessionToken, user.id, mountId, `folder/${root.id}/create/doc`, {
         fileName: 'Home hold probe',
     });
+    docId = doc.id;
     const port = ctx.app.listen(0).server?.port;
     socketBase = `ws://localhost:${port}/ws/collab/${user.id}/${mountId}`;
-    url = `${socketBase}/${doc.id}`;
+    url = `${socketBase}/${docId}`;
 });
 
 afterEach(() => {
@@ -80,7 +82,8 @@ describe('a collab socket holds its Home', () => {
         });
     });
 
-    test('a socket that leaves lets its Home go idle again', async () => {
+    // The document lingers after the last socket leaves, and it holds the Home until the linger ends.
+    test('a socket that leaves lets its Home go idle once its document closes', async () => {
         const socket = openSocket();
         await waitFor(socket.synced, 10_000);
         const home = await getHome(user.id);
@@ -94,6 +97,14 @@ describe('a collab socket holds its Home', () => {
             logs.mockRestore();
         }
 
+        jest.useFakeTimers();
+        home.touch();
+        jest.advanceTimersByTime(USER_IDLE_MS + 60_000);
+        expect(home.closing).toBe(false);
+        jest.useRealTimers();
+
+        // The end of the linger, without the wait.
+        await home.drive.closeCollabDocument('default', docId);
         jest.useFakeTimers();
         home.touch();
         jest.advanceTimersByTime(USER_IDLE_MS + 60_000);

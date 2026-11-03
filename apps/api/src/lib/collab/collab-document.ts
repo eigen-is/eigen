@@ -2,7 +2,8 @@
 // its data.db, saves every edit back to it, and relays edits and cursors between the sockets that have it open.
 // Server-side writers, such as an import or a version restore, edit the same Y.Doc, so every editor sees them. Drive
 // opens each document once, however many sockets connect, and closes it a while after the last socket leaves or after
-// an open that no socket joins. Before that close, a workbook saves a version and folds its op log into its snapshot.
+// an open that no socket joins. It holds its Home while it waits. Before that close, a workbook saves a version and
+// folds its op log into its snapshot.
 
 import { restoreYjsDoc } from '@workspace/lib/collab/yjs-utils';
 import { isRecord } from '@workspace/lib/guards';
@@ -64,6 +65,9 @@ export class CollabDocument {
     private readonly clientIdOwners = new Map<number, ServerWebSocket<unknown>>();
     private closed = false;
     private closeTimer: ReturnType<typeof setTimeout> | undefined;
+    // The hold on the Home while the document lingers. Edits over a socket are no requests, so the Home's idle time
+    // may be long past when the last socket leaves, and without the hold the Home would close under the linger.
+    private releaseHome: (() => void) | null = null;
     private lastTouchedAt = 0;
     // The time of an update the touch throttle skipped. The close stamps it, so a document that was only
     // read keeps its Modified time, and the linger never shows as the time of the last edit.
@@ -164,6 +168,7 @@ export class CollabDocument {
         if (this.closed) return;
         this.closed = true;
         clearTimeout(this.closeTimer);
+        this.releaseLingerHold();
         this.compaction?.abort();
         if (this.untouchedUpdateAt !== null) {
             this.drive
@@ -185,6 +190,7 @@ export class CollabDocument {
         // gets a 503 and connects again, to a new document.
         if (this.closed) throw new ApiError(503, 'Document is closing');
         clearTimeout(this.closeTimer);
+        this.releaseLingerHold();
         this.connections.set(conn, user);
         this.sendSyncStep1(conn);
     }
@@ -307,13 +313,26 @@ export class CollabDocument {
 
     private scheduleClose(): void {
         clearTimeout(this.closeTimer);
+        if (!this.releaseHome) {
+            try {
+                this.releaseHome = this.drive.holdHome();
+            } catch {
+                // A closing Home refuses the hold. Its close destructs this document anyway.
+            }
+        }
         this.closeTimer = setTimeout(() => {
             // A compaction in flight closes the document itself when it ends, or lingers it again.
             if (this.closed || this.connections.size > 0 || this.compaction) return;
-            this.closeAfterLinger().catch(() => {});
+            // A close that failed leaves the document open, and then the Home's own close ends it.
+            this.closeAfterLinger().catch(() => this.releaseLingerHold());
         }, CLOSE_LINGER_MS);
         // A lingering document must never keep the process alive at shutdown.
         this.closeTimer.unref();
+    }
+
+    private releaseLingerHold(): void {
+        this.releaseHome?.();
+        this.releaseHome = null;
     }
 
     // A workbook folds its op log into its snapshot first. The registry still holds the document meanwhile, so a

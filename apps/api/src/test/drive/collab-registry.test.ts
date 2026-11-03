@@ -24,6 +24,8 @@ async function homeWithDoc(): Promise<{ home: TeamHome; mountId: string; docId: 
     const home = new TeamHome(getSyntheticTeamUser(owner, 'Teardown Team'));
     homeDirs.push(home.homeDir);
     await home.init();
+    // A Home built here has had no request, so a release, such as the end of a document's linger, would close it.
+    home.touch();
     const { id: mountId } = await home.addMount({ name: 'Teardown' });
     const root = await home.drive.getRootFolder(mountId);
     const doc = await home.drive.create(mountId, root!.id, 'teardown', 'doc');
