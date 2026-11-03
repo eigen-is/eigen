@@ -7,13 +7,7 @@ import type { parseArgs } from 'node:util';
 import { BACKUP_LEVEL_NAMES } from '@workspace/lib/constants/backup';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
-import {
-    LIGHT_SERVER_ARCHIVE,
-    PRE_RESTORE_SUFFIX,
-    parseServerArchiveNames,
-    SERVER_ARCHIVE_EXTENSION,
-    SERVER_ARCHIVE_PREFIX,
-} from '@workspace/lib/validation';
+import { PRE_RESTORE_SUFFIX, parseServerArchiveNames } from '@workspace/lib/validation';
 import { getBuildCommit } from '../lib/config/env';
 import type { ControlStatus } from '../lib/config/server-status';
 import { callControl } from './control-socket';
@@ -34,7 +28,7 @@ const RUNNING_TIMEOUT_MS = 10_000;
 //   and left out on a local build.
 // - --files is the build the launcher and Compose files were last written from. The launcher passes it only when it
 //   differs from the build .env.production pins, which means an update stopped halfway.
-// - --backups lists the backups folder, for the Backup row while the API does not run, and the Light backups row.
+// - --backups lists the backups folder, for the Backup row while the API does not run.
 // - --kept-aside names what restores set aside in the install folder, one a line. The CLI may not see that folder.
 // - --running prints no report, only what runs of a server backup, which the launcher waits for before a stop.
 export const STATUS_OPTIONS = {
@@ -149,7 +143,7 @@ function printReport(flags: StatusFlags, services: Service[], api: ControlStatus
     );
 
     const listing = (flags.backups ?? '').split('\n');
-    const data: Row[] = api ? [] : [listedBackupRow(listing), ...lightBackupRows(listing), ...keptAsideRows(flags)];
+    const data: Row[] = api ? [] : [listedBackupRow(listing), ...keptAsideRows(flags)];
     if (api) {
         data.push(
             {
@@ -158,7 +152,6 @@ function printReport(flags: StatusFlags, services: Service[], api: ControlStatus
                 value: `${formatFileSize(api.diskFree, 1)} free of ${formatFileSize(api.diskTotal, 1)}`,
             },
             backupRow(api.backup),
-            ...lightBackupRows(listing),
             ...keptAsideRows(flags),
             ...api.setupCopies.map(
                 ({ name, createdAt }): Row => ({
@@ -236,18 +229,8 @@ function listedBackupRow(listing: string[]): Row {
     return { level: 'ok', label: 'Backup', value };
 }
 
-// The Light backups of Eigen 0.4.1 and before, which this version cannot restore, with the command that deletes them
-// and their records. backups/ belongs to the API's user, so the command takes sudo, as the setup copy's does.
-function lightBackupRows(listing: string[]): Row[] {
-    const light = listing.filter((name) => LIGHT_SERVER_ARCHIVE.test(name) && name.endsWith(SERVER_ARCHIVE_EXTENSION));
-    if (!light.length) return [];
-    const value = `${light.join(', ')}: this version of Eigen cannot restore them; sudo rm backups/${SERVER_ARCHIVE_PREFIX}*-light-* deletes them and their records`;
-    return [{ level: 'warn', label: 'Light backups', value }];
-}
-
 // What restores set aside in the install folder: the data/ and .env.production each one replaced. Nothing deletes
-// them, and each copy of data/ is as large as data/ was. data/ is the API's user's, so the command takes sudo, as the
-// Light backups' does.
+// them, and each copy of data/ is as large as data/ was. data/ is the API's user's, so the command takes sudo.
 function keptAsideRows(flags: StatusFlags): Row[] {
     const kept = (flags['kept-aside'] ?? '').split('\n').filter(Boolean);
     if (!kept.length) return [];

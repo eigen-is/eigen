@@ -5,7 +5,6 @@
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
-import { LIGHT_SERVER_ARCHIVE } from '@workspace/lib/validation';
 import { copyArchiveMember } from '../lib/backup/archive';
 import { describeError } from '../lib/backup/errors';
 import { backupsDirPath, roomShortfall, SERVER_ARCHIVE_ENV_MEMBER } from '../lib/backup/paths';
@@ -33,12 +32,6 @@ export async function stage(archive: string | undefined, flags: RestoreFlags): P
         return ui.fail(`${archive} is not a file.`, 'Name a server archive in backups/, or its path.');
     }
     const name = basename(archivePath);
-    if (LIGHT_SERVER_ARCHIVE.test(name)) {
-        return ui.fail(
-            `${name} is a Light backup, which this version of Eigen no longer restores.`,
-            'Restore a Full one.',
-        );
-    }
     const dataRoot = getDataRoot();
     const restoring = join(dataRoot, RESTORING_DIR);
     mkdirSync(restoring, { recursive: true, mode: 0o700 });

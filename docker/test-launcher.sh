@@ -24,7 +24,7 @@
 #   - the group and mode every start gives .env.production and backups/ first, except on Docker Desktop, the line it
 #     prints when other users share the install folder's group, and the mode of a step's log;
 #   - what status passes the CLI about backups/, what restores kept aside, the files of an unfinished update, the
-#     newest build of main, and its folder, and the Light backups in backups/ it names;
+#     newest build of main, and its folder;
 #   - the installer script apps/index/public/install on this host, as a file and on stdin, for setup and restore.
 #
 # Usage:  ./docker/test-launcher.sh
@@ -467,7 +467,7 @@ for SHELL_NAME in dash busybox host; do
     launch bare frobnicate
     expect_error 2 'Unknown command "frobnicate"' "an unknown command is refused with the usage on stderr"
     failed=''
-    for args in 'status extra' 'backup extra' 'backup --light' 'restore a b' 'restore a --bogus' 'restart extra' \
+    for args in 'status extra' 'backup extra' 'restore a b' 'restore a --bogus' 'restart extra' \
         'stop extra' 'logs a b' 'update --bogus' 'update --full' 'update 1 2' 'rollback --nope'; do
         # shellcheck disable=SC2086
         launch local $args
@@ -1489,21 +1489,18 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
         fail "$SHELL_NAME: rollback without its archive: exit $CODE, steps '$(steps)', '$ERR'"
     fi
     # The backups earlier updates made, which retention keeps, are the way back further: ./eigen restore takes one. They
-    # list newest first by the stamp in the name, whatever their level, a name with a space whole. A Light one, which no
-    # restore takes, is left out.
+    # list newest first by the stamp in the name, whatever their level, a name with a space whole.
     older="$FIX/release/backups/server-pre-update-full-s3-20251201-000000.tar"
     newer="$FIX/release/backups/server-pre-update-full-20251202-000000.tar"
     spaced="$FIX/release/backups/server-pre-update-full copy-20251203-000000.tar"
-    light="$FIX/release/backups/server-pre-update-light-20251204-000000.tar"
     : >"$older"
     : >"$newer"
     : >"$spaced"
-    : >"$light"
     STUB_CHECKED=$checked launch release rollback --yes
     refused=$(printf '%s\n' "$ERR" | sed -n 's/^[│└]  *//p' | tr '\n' '|')
     refused_code=$CODE
     launch release rollback --help
-    rm "$older" "$newer" "$spaced" "$light"
+    rm "$older" "$newer" "$spaced"
     if [ "$refused_code" = 1 ] &&
         [ "$refused" = "The backups earlier updates made:|$(basename "$spaced")|$(basename "$newer")|$(basename "$older")|./eigen restore <file> puts one of them back.|" ] &&
         [ "$CODE" = 0 ] && [ "$(printf '%s\n' "$OUT" | sed -n '/Kept:$/,/^$/p' | tr '\n' '|')" = "To go back further, ./eigen restore <file> puts back a backup an earlier update made. Kept:|  $(basename "$spaced")|  $(basename "$newer")|  $(basename "$older")||" ]; then
@@ -1728,19 +1725,7 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     fi
     rm -f "$FIX/release/.eigen/bundle"
     reset_release
-    # A Light backup, which only a launcher of 0.4.1 or before made, with no pins after it, brings nothing back: the
-    # rollback refuses and names it before it takes the lock.
-    light=server-pre-update-light-20260101-000000.tar
-    : >"$FIX/release/backups/$light"
-    echo "$light" >"$FIX/release/.eigen/last-update"
-    launch release rollback --yes
-    if [ "$CODE" = 1 ] && [ -z "$(steps)" ] && [ -e "$FIX/release/.eigen/last-update" ] &&
-        printf '%s\n' "$ERR" | grep -q "■  The last update made a Light backup, backups/$light, which this version of Eigen cannot put back.$"; then
-        ok "$SHELL_NAME: rollback after a Light backup refuses and names it"
-    else
-        fail "$SHELL_NAME: rollback after a Light backup: exit $CODE, steps '$(steps)', '$ERR'"
-    fi
-    rm -f "$FIX/release/backups/$light" "$FIX/release/backups/$full" "$FIX/release/.eigen/last-update"
+    rm -f "$FIX/release/backups/$full" "$FIX/release/.eigen/last-update"
     reset_release
 
     # A backup runs on the running API and stops nothing.

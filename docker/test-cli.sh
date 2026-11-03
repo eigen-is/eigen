@@ -317,12 +317,6 @@ elif as_user "$OPERATOR" ls "$INSTALL/backups/$ARCHIVE.json" >/dev/null 2>&1 &&
 else
     fail "the record of $ARCHIVE: $(owner_mode "$INSTALL/backups/$ARCHIVE.json"), the operator cannot list it or someone reads it"
 fi
-eigen backup --light
-if [ "$CODE" = 2 ] && says 'Unknown argument "--light".'; then
-    ok "backup --light, a level that is gone, is refused with its usage (exit 2)"
-else
-    fail "backup --light: exit $CODE"
-fi
 eigen status
 if says "Backup  *$ARCHIVE, "; then
     ok "status names the newest backup"
@@ -481,23 +475,6 @@ else
     fail "after the interrupted restore: $listing"
 fi
 scratch_run sh -c 'rm "$1"*' sh "$INSTALL/backups/$BIG"
-
-##############################################################################
-header "./eigen restore refuses a Light backup"
-##############################################################################
-# A launcher of 0.4.1 or before could make one. It is refused by its name, before anything is read or stopped.
-LIGHT=server-manual-light-20260101-000000.tar
-scratch_run cp -p "$INSTALL/backups/$ARCHIVE" "$INSTALL/backups/$LIGHT"
-aside=$(aside_count)
-eigen restore "$LIGHT" --yes
-show
-if [ "$CODE" = 1 ] && says "$LIGHT is a Light backup, which this version of Eigen no longer restores." && stack_up &&
-    [ "$(aside_count)" = "$aside" ]; then
-    ok "./eigen restore refuses a Light backup by its name, and Eigen runs on with nothing kept aside"
-else
-    fail "./eigen restore of a Light backup: exit $CODE, kept aside $(aside_count), was $aside"
-fi
-scratch_run rm "$INSTALL/backups/$LIGHT"
 
 ##############################################################################
 header "./eigen stop, and with Eigen stopped"

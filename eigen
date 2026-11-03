@@ -1505,12 +1505,6 @@ rollback() {
         no_rollback "There is no update to roll back." "./eigen rollback goes back after an ./eigen update."
     fi
     archive=$(sed -n 1p .eigen/last-update)
-    # Only a launcher of 0.4.1 or before made a Light backup, and it recorded no build to switch back to.
-    case $archive in server-pre-update-light-*)
-        no_rollback "The last update made a Light backup, backups/$archive, which this version of Eigen cannot put back." \
-            "./eigen restore <archive> puts back a Full backup instead."
-        ;;
-    esac
     if [ ! -f "backups/$archive" ]; then
         no_rollback "The backup the last update made, backups/$archive, is gone." \
             "./eigen rollback has nothing to go back to. To put back another backup: ./eigen restore <archive>"
@@ -1541,10 +1535,8 @@ no_rollback() {
 }
 
 # pre_update_archives: the backups updates made that retention kept in backups/, newest first by the stamp in the name.
-# A Light one, which no restore takes, is left out.
 pre_update_archives() {
     for archive in backups/server-pre-update-*.tar; do
-        case $archive in backups/server-pre-update-light-*) continue ;; esac
         if [ -f "$archive" ]; then printf '%s\n' "${archive#backups/}"; fi
     done | awk -F- '{ print $(NF - 1) $NF, $0 }' | sort -r | cut -d' ' -f2-
 }

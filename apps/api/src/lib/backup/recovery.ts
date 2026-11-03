@@ -8,12 +8,7 @@ import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { parseOwnerId } from '@workspace/lib/types/owner';
-import {
-    BACKUP_OWNER_ID,
-    LIGHT_SERVER_ARCHIVE,
-    parseBackupArtifactName,
-    parseServerArchiveName,
-} from '@workspace/lib/validation';
+import { BACKUP_OWNER_ID, parseBackupArtifactName, parseServerArchiveName } from '@workspace/lib/validation';
 import { getDataRoot, homeDirUnder, TEAM_HOMES_DIR, USER_HOMES_DIR } from '../config/paths';
 import { markHomeRestoring } from '../home/get-home';
 import { ARCHIVE_MODE } from './archive';
@@ -139,9 +134,8 @@ function homeInDataRoot(marker: RestoringMarker): string | null {
 
 // A build before 0.4.1 wrote a home archive and its sidecar with the umask's mode, so other users of the host read
 // password hashes and keys out of them. A build of 0.4.1 or before wrote a server archive's sidecar that way too.
-// Each gets the mode every archive and record is written with now. A Light archive's name no longer parses, but its
-// sidecar names every home all the same, so the Light names are closed by their start. A file the API's user does
-// not own, such as one an operator copied in as root, is named and left as it is, since the server must still start.
+// Each gets the mode every archive and record is written with now. A file the API's user does not own, such as one an
+// operator copied in as root, is named and left as it is, since the server must still start.
 function closeArchives(): void {
     const dir = backupsDirPath();
     if (!fs.existsSync(dir)) return;
@@ -150,11 +144,7 @@ function closeArchives(): void {
         const serverArchive = name.endsWith(SERVER_SIDECAR_SUFFIX)
             ? name.slice(0, -SERVER_SIDECAR_SUFFIX.length)
             : name;
-        const isArchive =
-            parseBackupArtifactName(homeArchive) ||
-            parseServerArchiveName(serverArchive) ||
-            LIGHT_SERVER_ARCHIVE.test(name);
-        if (!isArchive) continue;
+        if (!parseBackupArtifactName(homeArchive) && !parseServerArchiveName(serverArchive)) continue;
         const file = path.join(dir, name);
         try {
             // A chmod follows a symlink to wherever it points, so only a regular file is closed.
