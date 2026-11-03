@@ -1,6 +1,5 @@
-// A person list with a menu gives each row a ⋮ button that opens it. A mouse user sees the button on hover only, and
-// Tab reaches and shows it. The list's menu key, Shift+F10 or the ContextMenu key, opens the menu of the row under the
-// cursor.
+// A person list with a menu gives each row a ⋮ button that opens it. A mouse user sees the button on hover only. Tab
+// skips it, since the list's menu key, Shift+F10 or the ContextMenu key, opens the menu of the row under the cursor.
 import { expect, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
 import { expectKeyboardReveal } from '../../hover-reveal';
@@ -39,11 +38,18 @@ async function renderList(activeId?: string) {
     return container;
 }
 
-test('each row has a ⋮ button a mouse user sees on hover only, and Tab reaches and shows it', async () => {
+test('each row’s ⋮ shows on hover only, Tab skips it, and a click opens that row’s menu', async () => {
     await renderList();
-    const buttons = document.querySelectorAll('button[aria-label="More actions"]');
+    const buttons = [...document.querySelectorAll('button[aria-label="More actions"]')];
     expect(buttons).toHaveLength(2);
-    for (const button of buttons) expectKeyboardReveal(button);
+    for (const button of buttons) {
+        expectKeyboardReveal(button);
+        expect(button instanceof HTMLElement && button.tabIndex).toBe(-1);
+    }
+    await act(async () => {
+        if (buttons[1] instanceof HTMLElement) buttons[1].click();
+    });
+    expect(menuRows()).toEqual(['Menu of Grace']);
 });
 
 test('the menu key opens the menu of the row under the cursor, at that row', async () => {
