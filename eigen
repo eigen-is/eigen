@@ -66,7 +66,7 @@ command_usage() {
 Usage: ./eigen status
 
 Reports on the version, a pending update, the services, disk space, the newest backup,
-the certificate and the mail queue.
+what restores kept aside, the certificate and the mail queue.
 EOF
             ;;
         backup)
