@@ -1,5 +1,6 @@
 // A person list with a menu gives each row a ⋮ button that opens it. A mouse user sees the button on hover only. Tab
 // skips it, since the list's menu key, Shift+F10 or the ContextMenu key, opens the menu of the row under the cursor.
+// The open row has the stripe and the wash, and the cursor on another row the stripe only, as in Mail.
 import { expect, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
 import { expectKeyboardReveal } from '../../hover-reveal';
@@ -66,4 +67,19 @@ test('the menu key opens the menu of the row under the cursor, at that row', asy
     expect(menuRows()).toEqual(['Menu of Grace']);
     const anchor = document.querySelector('[data-slot="dropdown-menu-trigger"]');
     expect(anchor instanceof HTMLElement && [anchor.style.left, anchor.style.top]).toEqual(['320px', '88px']);
+});
+
+test('the cursor on another row than the open one has the stripe only', async () => {
+    const container = await renderList('ada');
+    const list = container.querySelector('[tabindex="0"]');
+    if (!list) throw new Error('no list');
+    // Shift moves the cursor without opening the row.
+    await act(async () => {
+        list.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'ArrowDown', shiftKey: true, bubbles: true, cancelable: true }),
+        );
+    });
+    const rows = [...container.querySelectorAll('.eigen-list-item')];
+    expect(rows.map((row) => row.classList.contains('eigen-list-item-active'))).toEqual([true, false]);
+    expect(rows.map((row) => row.classList.contains('eigen-list-item-cursor'))).toEqual([false, true]);
 });

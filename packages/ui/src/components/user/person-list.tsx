@@ -116,7 +116,10 @@ export function PersonList<T>({
                             className={cn(
                                 'flex items-center gap-3 app-gutter-x py-3 eigen-list-item',
                                 renderMenuItems && 'group',
-                                (activeId === getId(item) || selectedIndex === flatIndex) && 'eigen-list-item-active',
+                                // As in Mail: the open row gets the stripe and the wash, the cursor on another row the
+                                // stripe only.
+                                activeId === getId(item) && 'eigen-list-item-active',
+                                activeId !== getId(item) && selectedIndex === flatIndex && 'eigen-list-item-cursor',
                                 selectable && selection.isSelected(getSelectionId(item)) && 'eigen-list-item-selected',
                             )}
                             onClick={(e) => {
