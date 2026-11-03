@@ -1,12 +1,14 @@
 // The shared modal dialog, built on Radix: the overlay, the content box with its corner X, and the header, title,
 // description and footer parts that dialogs across the apps put inside it. Radix stacks the open layers, so Escape
-// and a click outside close only the top one.
+// and a click outside close only the top one. A closing dialog gives the focus back to what had it as it opened.
 
 import { Button } from '@workspace/ui/components/button';
+import { useFocusReturn } from '@workspace/ui/hooks/use-focus-return';
 import { cn } from '@workspace/ui/lib/utils';
 import { XIcon } from 'lucide-react';
 import { Dialog as DialogPrimitive } from 'radix-ui';
 import type * as React from 'react';
+import { useCallback, useRef } from 'react';
 
 function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
     return <DialogPrimitive.Root data-slot="dialog" {...props} />;
@@ -43,49 +45,73 @@ const dialogSizeMap: Record<DialogSize, string> = {
 // to leave the key alone. cmdk's input says expanded always, because its list is the dialog.
 const OWNS_ESCAPE = '[role="combobox"][aria-expanded="true"]:not([cmdk-input]), [data-owns-escape]';
 
-function DialogContent({
+type DialogContentProps = React.ComponentProps<typeof DialogPrimitive.Content> & {
+    showCloseButton?: boolean;
+    size?: DialogSize;
+};
+
+function DialogContent(props: DialogContentProps) {
+    return (
+        <DialogPortal>
+            <DialogOverlay />
+            <OpenDialogContent {...props} />
+        </DialogPortal>
+    );
+}
+
+// The portal renders this only while the dialog is open, so useFocusReturn sees what had the focus as it opens.
+function OpenDialogContent({
     className,
     children,
     showCloseButton = true,
     size,
     onEscapeKeyDown,
+    onCloseAutoFocus,
+    ref,
     ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content> & {
-    showCloseButton?: boolean;
-    size?: DialogSize;
-}) {
+}: DialogContentProps) {
+    const contentRef = useRef<HTMLDivElement>(null);
+    const returnFocus = useFocusReturn(contentRef, onCloseAutoFocus);
+    // The caller's ref, such as a measure for the sheet's range picker, gets the content element as well.
+    const composedRef = useCallback(
+        (node: HTMLDivElement | null) => {
+            contentRef.current = node;
+            if (typeof ref === 'function') ref(node);
+            else if (ref) ref.current = node;
+        },
+        [ref],
+    );
     return (
-        <DialogPortal>
-            <DialogOverlay />
-            <DialogPrimitive.Content
-                data-slot="dialog-content"
-                className={cn(
-                    // A form taller than the screen scrolls inside the dialog, so its footer stays on screen. A
-                    // caller that sets its own height overrides max-h and overflow. The single column may shrink
-                    // below its content: an auto column would grow to fit a very long title and push the footer's
-                    // buttons out of the dialog.
-                    'fixed top-[50%] left-[50%] z-50 grid grid-cols-1 w-full max-w-[calc(100%-2rem)] max-h-[calc(100vh-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
-                    size ? dialogSizeMap[size] : 'sm:max-w-xl',
-                    className,
-                )}
-                onEscapeKeyDown={(e) => {
-                    if (e.target instanceof Element && e.target.matches(OWNS_ESCAPE)) e.preventDefault();
-                    onEscapeKeyDown?.(e);
-                }}
-                {...props}
-            >
-                {children}
-                {showCloseButton && (
-                    <DialogPrimitive.Close
-                        data-slot="dialog-close"
-                        className="absolute top-4 right-4 rounded-xs opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
-                    >
-                        <XIcon />
-                        <span className="sr-only">Close</span>
-                    </DialogPrimitive.Close>
-                )}
-            </DialogPrimitive.Content>
-        </DialogPortal>
+        <DialogPrimitive.Content
+            ref={composedRef}
+            data-slot="dialog-content"
+            className={cn(
+                // A form taller than the screen scrolls inside the dialog, so its footer stays on screen. A
+                // caller that sets its own height overrides max-h and overflow. The single column may shrink
+                // below its content: an auto column would grow to fit a very long title and push the footer's
+                // buttons out of the dialog.
+                'fixed top-[50%] left-[50%] z-50 grid grid-cols-1 w-full max-w-[calc(100%-2rem)] max-h-[calc(100vh-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
+                size ? dialogSizeMap[size] : 'sm:max-w-xl',
+                className,
+            )}
+            onEscapeKeyDown={(e) => {
+                if (e.target instanceof Element && e.target.matches(OWNS_ESCAPE)) e.preventDefault();
+                onEscapeKeyDown?.(e);
+            }}
+            onCloseAutoFocus={returnFocus}
+            {...props}
+        >
+            {children}
+            {showCloseButton && (
+                <DialogPrimitive.Close
+                    data-slot="dialog-close"
+                    className="absolute top-4 right-4 rounded-xs opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+                >
+                    <XIcon />
+                    <span className="sr-only">Close</span>
+                </DialogPrimitive.Close>
+            )}
+        </DialogPrimitive.Content>
     );
 }
 

@@ -1,5 +1,5 @@
-// The palette has no Radix trigger, since Mod+K or the search pill opens it. So it gives the focus back itself when
-// it closes, to whatever had it when it opened, such as a Drive listing, whose keys then work without a click.
+// The palette has no Radix trigger, since Mod+K or the search pill opens it. Like every dialog, it gives the focus back
+// when it closes, to whatever had it when it opened, such as a Drive listing, whose keys then work without a click.
 import { afterAll, expect, mock, test } from 'bun:test';
 import type { CommandContext } from '@workspace/lib/types/command-palette';
 import { drivePath } from '../../../../drive-path';
@@ -93,6 +93,86 @@ test('running a row closes the palette and gives the focus back to the list it o
     await settle();
     expect(ran.count).toBe(1);
     expect(document.querySelector('[cmdk-input]')).toBeNull();
+    expect(document.activeElement?.hasAttribute('data-list')).toBe(true);
+    await unmount();
+});
+
+// A row that opens a dialog, such as Rename, hands the focus to that dialog. The palette must not pull it to the list
+// as it closes: the dialog's focus trap would take it back and select all of the field's text.
+test('a row that opens a dialog leaves the focus in it, and the list gets it back when that dialog closes', async () => {
+    const { Dialog, DialogContent, DialogTitle } = await import('../../../../../components/dialog');
+    const { useState } = await import('react');
+    const controls = { setOpen: (_open: boolean) => {} };
+    const listFocus = { count: 0 };
+    function Host() {
+        controls.setOpen = useCommandPalette().setOpen;
+        const [renameOpen, setRenameOpen] = useState(false);
+        const ctx: CommandContext = {
+            ownerId: 'owner-1',
+            mailEnabled: false,
+            selection: { items: [item] },
+            selectionActions: [
+                {
+                    action: { id: 'rename', label: 'Rename', icon: Pencil, group: 'organize' },
+                    run: () => setRenameOpen(true),
+                },
+            ],
+            docSearch: null,
+            docSearchSession: null,
+            docCommentSearch: null,
+            navigate: () => {},
+            openDriveCreate: () => {},
+            openMailComposeWith: () => {},
+            openPreview: () => {},
+            toggleTheme: () => {},
+        };
+        return createElement(
+            Fragment,
+            null,
+            createElement('div', { tabIndex: 0, 'data-list': '', onFocus: () => listFocus.count++ }, 'notes.txt'),
+            createElement(CommandPalette, { ctx }),
+            createElement(
+                Dialog,
+                { open: renameOpen, onOpenChange: setRenameOpen },
+                createElement(
+                    DialogContent,
+                    { 'aria-describedby': undefined },
+                    createElement(DialogTitle, null, 'Rename'),
+                    // The caret goes to the end of the name, so a trap that took the focus back would show as a
+                    // selection of the whole name.
+                    createElement('input', {
+                        defaultValue: 'notes.txt',
+                        autoFocus: true,
+                        ref: (input: HTMLInputElement | null) => input?.setSelectionRange(9, 9),
+                    }),
+                ),
+            ),
+        );
+    }
+    const { unmount } = await renderInDocument(createElement(CommandPaletteProvider, null, createElement(Host)));
+    const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
+    document.querySelector<HTMLElement>('[data-list]')?.focus();
+    listFocus.count = 0;
+    await act(async () => controls.setOpen(true));
+    await settle();
+    const row = [...document.querySelectorAll<HTMLElement>('[cmdk-item]')].find((r) =>
+        r.textContent?.includes('Rename'),
+    );
+    await act(async () => row?.click());
+    await settle();
+    expect(document.querySelector('[cmdk-input]')).toBeNull();
+    const input = document.querySelector('input');
+    expect(document.activeElement === input).toBe(true);
+    expect(listFocus.count).toBe(0);
+    expect([input?.selectionStart, input?.selectionEnd]).toEqual([9, 9]);
+
+    await act(async () => {
+        input?.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }),
+        );
+    });
+    await settle();
+    expect(document.querySelector('[data-slot="dialog-content"]')).toBeNull();
     expect(document.activeElement?.hasAttribute('data-list')).toBe(true);
     await unmount();
 });
