@@ -100,7 +100,7 @@ export function pointInFrame(p: Point, frame: VectorFrame): boolean {
 }
 
 // The elements homed to one frame. '' selects the infinite canvas's own elements.
-export function elementsInFrame<T extends { frameId: string }>(elements: T[], frameId: string): T[] {
+export function elementsInFrame<T extends { frameId: string }>(elements: readonly T[], frameId: string): T[] {
     return elements.filter((el) => el.frameId === frameId);
 }
 

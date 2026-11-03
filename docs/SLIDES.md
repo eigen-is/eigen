@@ -45,7 +45,7 @@ The reader reads only `elements`, `frames` and `meta`. A deck with no frames is 
 
 ## A reorder rewrites one key
 
-The rail (`slide-panel.tsx`) is a dnd-kit sortable list of `FrameThumbnail`s. A drop calls `moveFrame(id, afterId)`, which rewrites the moved frame's fractional `index` and nothing else, so a peer's concurrent rename of either slide survives. The rail and the phone strip group the scene's elements by frame once per render and hand each thumbnail its own list, so a long deck doesn't filter the scene once per thumbnail.
+The rail (`slide-panel.tsx`) is a dnd-kit sortable list of `FrameThumbnail`s. A drop calls `moveFrame(id, afterId)`, which rewrites the moved frame's fractional `index` and nothing else, so a peer's concurrent rename of either slide survives. The rail and the phone strip group the scene's elements by frame once per render and hand each thumbnail its own list, so a long deck doesn't filter the scene once per thumbnail. A tile draws each picture from its still thumbnail (`resolveMediaThumbnailUrl`), not its preview, so a deck full of GIFs doesn't play them all at once in the rail, and opening it loads a few hundred KB for the rail instead of every animated preview. The slide itself and present mode draw the previews, which play.
 
 ## The active slide survives its own deletion
 

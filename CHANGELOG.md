@@ -6,6 +6,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Changed
 
+- **GIFs stand still in lists** — in Drive's grid, on Stickies card covers and in the slide list of Slides, an animated GIF or WebP shows its first frame. It still plays in a file's details in Drive, in Quick preview, on the slide itself and in present mode. A deck full of GIFs opens faster, because the slide list loads small stills instead of every animation. Pictures uploaded before this keep playing in lists until the file changes
 - **Default drive size reaches existing users** — raising **Default mount (MB)** in Admin's server settings now gives every user's drive the new size at once, not only users who sign in for the first time. Lowering it shrinks no one's drive
 
 ### Fixed

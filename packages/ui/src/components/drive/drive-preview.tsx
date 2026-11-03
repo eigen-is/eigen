@@ -1,4 +1,8 @@
-import { getDriveItemThumbnail } from '@workspace/lib/api';
+// The picture at the top of a file's details in Drive: the image or video itself, a document's first page, or the
+// cards, message or events a contact, mail or calendar file holds. Any other file gets its type's icon. Clicking
+// it opens the file when the host passes a handler.
+
+import { getDriveItemThumbnail, getDrivePreviewUrl } from '@workspace/lib/api';
 import { formatEventWhen, viewerTimeZone } from '@workspace/lib/calendar';
 import type { TextPreviewMode } from '@workspace/lib/constants';
 import { CANVAS_PREVIEW_HEIGHT, CANVAS_PREVIEW_WIDTH, getTextPreviewMode } from '@workspace/lib/constants';
@@ -34,7 +38,10 @@ type DrivePreviewProps = {
     className?: string;
 };
 
-// Fixed 16:9 aspect keeps the panel height stable as the user clicks through files.
+// The image types that may be animated. Their thumbnail is a still, so the hero shows their preview, which plays.
+const ANIMATABLE_MIME_TYPES = new Set(['image/gif', 'image/webp']);
+
+// The fixed 16:9 box keeps the panel's height steady as the user clicks through files.
 export function DrivePreview({ path, onActivate, className }: DrivePreviewProps) {
     const presentation = getFilePresentation(path.mimeType, path.type, path.name);
     const hasTextPreview = getTextPreviewMode(path.mimeType, path.name) !== null;
@@ -43,6 +50,9 @@ export function DrivePreview({ path, onActivate, className }: DrivePreviewProps)
     const hasEmlPreview = isEmlFile(path.mimeType, path.name) && path.size <= EML_MAX_BYTES;
     const hasIcsPreview = isIcsFile(path.mimeType, path.name) && path.size <= ICS_MAX_BYTES;
     const { showThumbnail, thumbnailUrl } = getDriveItemThumbnail(path);
+    const heroUrl = ANIMATABLE_MIME_TYPES.has(path.mimeType)
+        ? getDrivePreviewUrl(path.ownerId, path.mountId, path.id, path.updatedAt)
+        : thumbnailUrl;
 
     const interactive = !!onActivate;
     const Wrapper = interactive ? 'button' : 'div';
@@ -78,7 +88,7 @@ export function DrivePreview({ path, onActivate, className }: DrivePreviewProps)
                         aria-hidden
                         className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-70"
                     />
-                    <img src={thumbnailUrl} alt={path.name} className="absolute inset-0 w-full h-full object-contain" />
+                    <img src={heroUrl} alt={path.name} className="absolute inset-0 w-full h-full object-contain" />
                 </>
             ) : hasVCardPreview ? (
                 <VCardHero path={path} icon={presentation.icon} color={presentation.colorVar} />
@@ -116,8 +126,8 @@ function HeroBody({ children }: { children: ReactNode }) {
     );
 }
 
-// The quick look reads a column of full cards; the hero shows the first three as compact rows, off the
-// same query — which is why a .vcf never asks for its text preview here.
+// The quick look shows a column of full cards, and the hero the first three as compact rows. Both read the same
+// query, which is why a .vcf never asks for its text preview here.
 function VCardHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; color: string }) {
     const { data, isLoading } = useVCardPreview(path.ownerId, path.mountId, path.id, path.updatedAt, path.size);
     const contacts = data?.cards.slice(0, HERO_CARD_LIMIT) ?? [];
@@ -126,7 +136,7 @@ function VCardHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; c
     if (isLoading) return null;
     if (!data || contacts.length === 0) return <IconFallback icon={icon} color={color} />;
 
-    // The cards the file holds that this hero shows no row for — the unreadable ones get their own line.
+    // The cards the file holds that the hero shows no row for. The unreadable ones get a line of their own.
     const remaining = data.total - data.dropped - contacts.length;
 
     return (
@@ -139,7 +149,7 @@ function VCardHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; c
     );
 }
 
-// The quick look reads the whole message; the hero shows what a mail list row shows, off the same query.
+// The quick look shows the whole message, and the hero what a row of the mail list shows, from the same query.
 function EmlHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; color: string }) {
     const { data, isLoading } = useEmlPreview(path.ownerId, path.mountId, path.id, path.updatedAt, path.size);
 
@@ -165,8 +175,8 @@ function EmlHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; col
     );
 }
 
-// The quick look reads every event as a card; the hero shows the first three as one line each — the
-// title and when it happens — off the same query.
+// The quick look shows every event as a card, and the hero the first three from the same query, each as its title
+// and when it happens.
 function IcsHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; color: string }) {
     const { data, isLoading } = useIcsPreview(path.ownerId, path.mountId, path.id, path.updatedAt, path.size);
     const events = data?.events.slice(0, HERO_CARD_LIMIT) ?? [];
@@ -175,7 +185,7 @@ function IcsHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; col
     if (isLoading) return null;
     if (!data || events.length === 0) return <IconFallback icon={icon} color={color} />;
 
-    // The masters the file holds that this hero shows no line for — the unreadable ones get their own line.
+    // The events the file holds that the hero shows no line for. The unreadable ones get a line of their own.
     const remaining = data.total - data.dropped - events.length;
 
     return (
@@ -221,13 +231,13 @@ function docPage(setup: PageSetup): IntrinsicPage {
     return { widthPx: pagePx(setup).width, padding: pageBoxStyle(setup).padding };
 }
 
-// Text modes render onto the docs page, its margins included, so a text thumbnail is a miniature of the printed page:
-// a doc on the page it stores, the rest on the default one.
+// A text mode renders onto a docs page, margins included, so its hero is a small copy of the printed page. A doc uses
+// the page it stores, and the other text modes the default page.
 const DOC_PAGE = docPage(DEFAULT_PAGE_SETUP);
 const CANVAS_PAGE: IntrinsicPage = { widthPx: CANVAS_PREVIEW_WIDTH };
 
-// The page a mode composes on, so the hero scales by containerW / its width: a deck and a drawing both
-// compose at CANVAS_PREVIEW_WIDTH. Sheets vary with their content — null falls back to measuring the rendered body.
+// The page each mode composes on, whose width the hero scales to its own. A deck and a drawing both compose at
+// CANVAS_PREVIEW_WIDTH. A sheet's width depends on its content, so null measures the rendered body instead.
 const INTRINSIC_PAGE: Record<TextPreviewMode, IntrinsicPage | null> = {
     eigendoc: DOC_PAGE,
     eigenslides: CANVAS_PAGE,
@@ -238,9 +248,9 @@ const INTRINSIC_PAGE: Record<TextPreviewMode, IntrinsicPage | null> = {
     code: DOC_PAGE,
 };
 
-// eigen-prose for rendered prose, drive-preview-code for raw <pre><code> blocks — eigen-prose's
-// <pre> rule paints a dark code-block background that is wrong for a whole-file code thumbnail.
-// A deck and a drawing need none: a compositor page carries its own box and its own paint.
+// Rendered prose takes eigen-prose. A code file takes drive-preview-code, because eigen-prose paints a <pre> as a
+// dark code block, which is wrong for a whole file. A deck and a drawing take none: their page carries its own box
+// and paint.
 const WRAPPER_CLASS: Record<TextPreviewMode, string> = {
     eigendoc: `eigen-prose tiptap ${DOC_PROSE_CLASS}`,
     eigenslides: '',
@@ -251,7 +261,7 @@ const WRAPPER_CLASS: Record<TextPreviewMode, string> = {
     code: 'drive-preview-code',
 };
 
-// Scale a server-rendered HTML preview down to fit the thumbnail panel.
+// The server's HTML preview of a document, scaled down to fit the box.
 function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }) {
     const { data } = useTextPreview(path.ownerId, path.mountId, path.id, path.updatedAt, true);
     const contentRef = useRef<HTMLDivElement>(null);

@@ -24,7 +24,7 @@ The sections run from the server to the screen: what each kind of file previews 
 | Video, audio, PDF | A redirect to the original bytes, served inline | `/preview` → `/embed` |
 | Text, code, markdown, an Eigen document | JSON `{ body, mode }`, an HTML body the client renders, and a doc's `page` and `style` | `/text-preview` |
 | A `.vcf`, `.eml`, `.ics` | JSON of the cards, the message or the events | `/{vcard,eml,ics}-preview` |
-| An image or a video, in a list | A 512 px WebP thumbnail, made on upload | `/thumb/:fileName` |
+| An image or a video, in a list | A 512 px WebP still of its first frame, made on upload | `/thumb/:fileName` |
 
 The server renders every body, so the frontend stays a plain container and every surface draws the same result. The types the routes serve live in `packages/lib/src/types/preview.ts`. The modes and the text gate live in `packages/lib/src/constants/preview.ts`.
 
@@ -85,7 +85,7 @@ An SVG is served as its own bytes under the sandbox CSP, not rasterised. An `eig
 
 ## Images convert through sharp first
 
-`generateImagePreview` (`apps/api/src/lib/shared/thumbnails.ts`) runs in a Worker and makes both the 512 px thumbnail and the 2560 px screen preview. It tries sharp, then `heic-convert` for HEIC, then the JPEG exiftool finds embedded in a RAW, PSD or AI file. `isExiftoolCandidate` gates it. The main thread terminates the Worker at `THUMBNAIL_TIMEOUT_SECONDS` (30 s), and `terminate()` stops the Worker's timers but not a child process, so exiftool's calls share one deadline 5 s before that (`EXIFTOOL_SPARE_MS`): each is killed when the time left runs out, and none starts after it. A hostile file therefore leaves no exiftool running past the Worker.
+`generateImagePreview` (`apps/api/src/lib/shared/thumbnails.ts`) runs in a Worker and makes both the 512 px thumbnail and the 2560 px screen preview. The thumbnail is a still (`saveThumbnail` asks for one), so a Drive grid, a card cover or a Slides rail tile never plays a GIF; the screen preview keeps the animation, and the Drive hero shows it for a GIF or a WebP. A thumbnail made before this stays animated until its file changes. It tries sharp, then `heic-convert` for HEIC, then the JPEG exiftool finds embedded in a RAW, PSD or AI file. `isExiftoolCandidate` gates it. The main thread terminates the Worker at `THUMBNAIL_TIMEOUT_SECONDS` (30 s), and `terminate()` stops the Worker's timers but not a child process, so exiftool's calls share one deadline 5 s before that (`EXIFTOOL_SPARE_MS`): each is killed when the time left runs out, and none starts after it. A hostile file therefore leaves no exiftool running past the Worker.
 
 The Worker gets 30 s per image (`THUMBNAIL_TIMEOUT_SECONDS`). `Worker.terminate()` does not stop libvips, so every sharp pipeline in the Worker carries the same value as its own `timeout`, and an SVG librsvg grinds through stops instead of holding a core after its slot is freed.
 

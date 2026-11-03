@@ -1,6 +1,6 @@
-// The thumbnail Worker's resize: one image in, resized and encoded to the format asked for, with the source's size and
-// whether it shows through or holds frames. It is its own module so the transform Worker re-encodes a docx's data: figure through
-// it without the thumbnail Worker's message handler.
+// The thumbnail Worker's resize: one image in, resized and encoded to the format asked for, as a still or with every
+// frame, plus the source's size and whether it shows through or holds frames. It is a module of its own, so the
+// transform Worker can re-encode a docx's data: figure through it without the thumbnail Worker's message handler.
 
 import type { Sharp } from 'sharp';
 import sharp from 'sharp';
@@ -12,9 +12,9 @@ export async function sharpResize(
     options: WorkerInput['options'],
 ): Promise<ImageResult | null> {
     try {
-        // Only webp and gif hold animation — every other target decodes the first frame only, so reading all
-        // pages of an animated source (which would stack them into one tall filmstrip) is confined to those two.
-        const animated = options.format === 'webp' || options.format === 'gif';
+        // Only webp and gif hold animation, so only they read every frame of an animated source. Any other target, or
+        // a still, reads the first frame only: all frames would stack into one tall filmstrip.
+        const animated = !options.still && (options.format === 'webp' || options.format === 'gif');
         const image = sharp(source, { animated });
         const metadata = await image.metadata();
 
@@ -31,7 +31,7 @@ export async function sharpResize(
             position: 'center',
             withoutEnlargement: options.fit === 'inside',
         });
-        // png/gif take no quality — they encode at sharp's defaults; webp is the default target.
+        // A PNG or a GIF takes no quality setting and encodes at sharp's defaults. WebP is the default target.
         let encoded: Sharp;
         let hasAlpha = metadata.hasAlpha ?? false;
         switch (options.format) {
@@ -54,8 +54,8 @@ export async function sharpResize(
         }
         const data = await encoded.timeout({ seconds: THUMBNAIL_TIMEOUT_SECONDS }).toBuffer();
 
-        // hasAlpha/frameCount describe the source, so the avatar-staging caller can pick the embed format
-        // (opaque still → JPEG, alpha → PNG, animated → GIF) from one decode.
+        // hasAlpha and frameCount describe the source, even for a still. So an avatar picks its embed format from one
+        // decode: a JPEG for an opaque picture, a PNG for one that shows through and a GIF for an animated one.
         return { data, width, height, hasAlpha, frameCount: metadata.pages ?? 1 };
     } catch {
         return null;

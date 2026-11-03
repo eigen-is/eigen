@@ -6,6 +6,7 @@ import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants/preview';
 import { DRIVE_MIME_SLIDES, EML_MIME, ICS_MIME } from '@workspace/lib/types/drive';
+import sharp from 'sharp';
 import type { DatabaseConfig, SchemaType } from '../../lib/core';
 import { ManagedDatabase } from '../../lib/core';
 import { documentTransformRunner } from '../../lib/document/transform/runner';
@@ -357,6 +358,28 @@ describe('saveThumbnail (video)', () => {
         expect(bytes[1]).toBe(0x49); // I
         expect(bytes[2]).toBe(0x46); // F
         expect(bytes[3]).toBe(0x46); // F
+    });
+});
+
+// A Drive grid and a Slides rail draw the thumbnail, so an animated GIF must not play there; its preview still does.
+describe('saveThumbnail (animated GIF)', () => {
+    const thumbsDir = mkdtempSync('/tmp/eigen-gif-thumbs-test-');
+
+    test('writes a still of the first frame', async () => {
+        const frame = (red: number) =>
+            sharp({ create: { width: 8, height: 8, channels: 3, background: { r: red, g: 0, b: 0 } } })
+                .png()
+                .toBuffer();
+        const gif = await sharp([await frame(255), await frame(0)], { join: { animated: true } })
+            .gif()
+            .toBuffer();
+
+        const result = await saveThumbnail(thumbsDir, 'gif-test-pathid', gif, 'image/gif', 'party.gif');
+
+        expect(result?.fileName).toBe('gif-test-pathid.webp');
+        const thumb = await sharp(join(thumbsDir, 'gif-test-pathid.webp')).metadata();
+        expect(thumb.format).toBe('webp');
+        expect(thumb.pages).toBeUndefined();
     });
 });
 

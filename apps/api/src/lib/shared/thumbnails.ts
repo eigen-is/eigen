@@ -1,3 +1,7 @@
+// Resized copies of an image or a video, made off the event loop. generateImagePreview runs one thumbnail Worker per
+// picture, for callers such as the screen preview, an avatar or an export. saveThumbnail makes the small still a Drive
+// file keeps in its mount's thumbnails folder after an upload or an overwrite, and the rest copy, read and delete it.
+
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BunFile } from 'bun';
@@ -9,15 +13,11 @@ import { readStorageFile } from '../storage';
 import { THUMBNAIL_TIMEOUT_SECONDS } from './thumbnail-timeout';
 import type { ImageResult, WorkerInput, WorkerOutput } from './thumbnail-worker';
 
-// Each generateImagePreview spawns a Worker that loads sharp; export/media.ts fans out
-// Promise.all over every media file. Cap concurrent workers so a large export can't spawn N
-// sharp-loading workers at once and exhaust memory.
+// Every Worker loads its own sharp, and an export asks for all of its media at once. The cap keeps a large export
+// from starting a Worker per picture and running out of memory.
 const imageWorkerSemaphore = new Semaphore(4);
 
 type ImageSource = StorageFile | Buffer | string;
-
-// The worker owns the options shape; callers pass any subset over the defaults.
-type ThumbnailOptions = Partial<WorkerInput['options']>;
 
 const DEFAULT_OPTIONS: WorkerInput['options'] = {
     maxSize: 512,
@@ -32,25 +32,21 @@ export async function generateImagePreview(
     fileName: string,
     tmpDir: string,
     pathId: string,
-    options?: ThumbnailOptions,
+    options?: Partial<WorkerInput['options']>,
 ): Promise<ImageResult | null> {
     if (!isExiftoolCandidate(mimeType, fileName) && !isVideoCandidate(mimeType)) return null;
 
-    const opts = { ...DEFAULT_OPTIONS, ...options };
-
-    // Resolve source for transfer to the worker:
-    // - String paths and BunFile paths are passed as-is — worker/sharp reads from disk (zero-copy)
-    // - S3File/Buffer → arrayBuffer for zero-copy transfer via postMessage
+    // A file on local disk goes to the Worker as its path, so sharp reads it there. Bytes in memory, and an S3 object
+    // read into memory, go as an ArrayBuffer that postMessage hands over rather than copies. A Buffer is copied into
+    // one of its own first, because it may share its memory with other Buffers.
     let resolvedSource: string | ArrayBuffer;
     if (typeof source === 'string') {
         resolvedSource = source;
     } else if (Buffer.isBuffer(source)) {
-        resolvedSource = source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength) as ArrayBuffer;
+        resolvedSource = new Uint8Array(source).buffer;
     } else if (!('bucket' in source) && source.name) {
-        // BunFile — pass its local file path so the worker/sharp can read directly from disk
         resolvedSource = source.name;
     } else {
-        // S3File — download to buffer, transfer zero-copy to worker
         resolvedSource = await readStorageFile(source);
     }
 
@@ -102,7 +98,7 @@ export async function generateImagePreview(
                     fileName,
                     tmpDir,
                     pathId,
-                    options: opts,
+                    options: { ...DEFAULT_OPTIONS, ...options },
                 };
 
                 if (resolvedSource instanceof ArrayBuffer) {
@@ -114,30 +110,18 @@ export async function generateImagePreview(
     );
 }
 
-function thumbnailFileName(pathId: string): string {
-    return `${pathId}.webp`;
-}
-
-function getThumbnailPath(thumbsDir: string, pathId: string): string {
-    return path.join(thumbsDir, thumbnailFileName(pathId));
-}
-
 export async function saveThumbnail(
     thumbsDir: string,
     pathId: string,
     source: ImageSource,
     mimeType: string,
     fileName: string,
-    options?: ThumbnailOptions,
 ): Promise<(ImageResult & { fileName: string }) | null> {
-    const opts = { ...DEFAULT_OPTIONS, ...options };
-
-    const result = await generateImagePreview(source, mimeType, fileName, thumbsDir, pathId, opts);
+    // A Drive thumbnail is a still, so a grid of GIFs doesn't play. The screen preview keeps the animation.
+    const result = await generateImagePreview(source, mimeType, fileName, thumbsDir, pathId, { still: true });
     if (!result) return null;
 
-    const thumbPath = getThumbnailPath(thumbsDir, pathId);
-    await Bun.write(thumbPath, result.data);
-
+    await Bun.write(thumbnailPath(thumbsDir, pathId), result.data);
     return { ...result, fileName: thumbnailFileName(pathId) };
 }
 
@@ -145,24 +129,24 @@ export async function saveThumbnail(
 export async function copyThumbnail(thumbsDir: string, sourceFileName: string, pathId: string): Promise<string | null> {
     const source = Bun.file(path.join(thumbsDir, sourceFileName));
     if (!(await source.exists())) return null;
-    await Bun.write(getThumbnailPath(thumbsDir, pathId), source);
+    await Bun.write(thumbnailPath(thumbsDir, pathId), source);
     return thumbnailFileName(pathId);
 }
 
+// Part of deleting a file, so a thumbnail that can't be removed must not fail the delete.
 export async function deleteThumbnail(thumbsDir: string, pathId: string): Promise<void> {
-    try {
-        const file = Bun.file(getThumbnailPath(thumbsDir, pathId));
-        if (await file.exists()) {
-            await file.delete();
-        }
-    } catch {}
+    await fs.promises.rm(thumbnailPath(thumbsDir, pathId), { force: true }).catch(() => {});
 }
 
 export async function getThumbnail(thumbsDir: string, pathId: string): Promise<BunFile | null> {
-    try {
-        const file = Bun.file(getThumbnailPath(thumbsDir, pathId));
-        if (await file.exists()) return file;
-    } catch {}
+    const file = Bun.file(thumbnailPath(thumbsDir, pathId));
+    return (await file.exists()) ? file : null;
+}
 
-    return null;
+function thumbnailFileName(pathId: string): string {
+    return `${pathId}.webp`;
+}
+
+function thumbnailPath(thumbsDir: string, pathId: string): string {
+    return path.join(thumbsDir, thumbnailFileName(pathId));
 }

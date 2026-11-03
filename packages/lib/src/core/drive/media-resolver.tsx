@@ -1,28 +1,34 @@
+// Turns the media names a document stores into URLs. A document keeps its pictures and attachments in a media folder
+// of its own and stores only their names, so a renderer such as a canvas image or a chat embed asks this provider for
+// the URL. It also shows a picture this tab is still uploading from a local blob URL until the upload lands.
+
 import type { ReactNode } from 'react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from 'react';
 import type { DrivePath } from '../../types/drive';
-import { getDrivePreviewUrl } from '../api';
+import { getDrivePreviewUrl, getDriveThumbnailUrl } from '../api';
 import { useFolderLookup } from './hooks/reads';
 import { useUploadFile } from './hooks/writes';
 
-// The optimistic-insert sentinel: a media name that exists only in this tab until its upload lands.
-// Exported because every host that adds an image optimistically writes one (vector's paste paths).
+// The start of a media name that exists only in this tab until its upload lands. Every host that shows an image
+// before its upload finishes, such as a paste onto the canvas, writes one.
 export const PENDING_PREFIX = 'pending:';
 
 export function isPendingMediaName(name: string): boolean {
     return name.startsWith(PENDING_PREFIX);
 }
 
-// URL for a file we already hold the DrivePath of — a fresh copy/upload result. By-NAME resolution
-// goes through the media-folder listing, which still predates that write, so it would miss and hand
-// back null; the path is authoritative right now. Use this whenever a mutation just returned the
-// path, and keep the by-name resolver for render (a name is all Yjs stores, and it self-heals).
+// The URL of a file whose DrivePath a copy or an upload just returned. A lookup by name reads the media folder's
+// listing, which doesn't hold that file yet, so it would find nothing. Render still resolves by name, because a name
+// is all a document stores, and the listing catches up.
 function resolveMediaUrlByPath(path: DrivePath): string {
     return getDrivePreviewUrl(path.ownerId, path.mountId, path.id, path.updatedAt);
 }
 
 type MediaResolverValue = {
     resolveMediaUrl: (name: string) => string | null;
+    // The still thumbnail, for a small copy of a picture such as a tile in the Slides rail. A picture without one yet
+    // gets its preview.
+    resolveMediaThumbnailUrl: (name: string) => string | null;
     resolveMediaUrlByPath: (path: DrivePath) => string;
     resolveMediaPath: (name: string) => DrivePath | undefined;
     // True once a name is known not to resolve, so a renderer swaps its loader for a missing look.
@@ -34,6 +40,7 @@ type MediaResolverValue = {
 
 const MediaResolverContext = createContext<MediaResolverValue>({
     resolveMediaUrl: () => null,
+    resolveMediaThumbnailUrl: () => null,
     resolveMediaUrlByPath,
     resolveMediaPath: () => undefined,
     isMediaMissing: () => false,
@@ -44,7 +51,7 @@ const MediaResolverContext = createContext<MediaResolverValue>({
     },
 });
 
-export function useMediaResolver() {
+export function useMediaResolver(): MediaResolverValue {
     return useContext(MediaResolverContext);
 }
 
@@ -63,12 +70,12 @@ export function MediaResolverProvider({
 }) {
     const media = useFolderLookup(ownerId, mountId, mediaFolderId);
     const chat = useFolderLookup(ownerId, mountId, chatFolderId);
-    // mutateAsync is referentially stable; depending on the whole mutation object would
-    // rebuild startUpload (and thus the context value) on every render.
+    // mutateAsync keeps its identity across renders. The whole mutation object doesn't, and depending on it would
+    // rebuild startUpload, and with it the context value, on every render.
     const { mutateAsync: uploadMutateAsync } = useUploadFile(ownerId, mountId);
-    // Pending uploads live in a ref, not state: consumers only need the latest URL
-    // when they re-render for their own reasons (mediaName changes in Yjs). Keeping
-    // the context value stable avoids re-rendering every image renderer on each upload.
+    // Pending uploads live in a ref, not in state. A renderer needs the latest URL only when it renders for its own
+    // reason, such as its media name changing in Yjs. So the context value stays the same, and an upload doesn't
+    // render every image again.
     const pendingRef = useRef(new Map<string, string>());
 
     useEffect(() => {
@@ -96,9 +103,8 @@ export function MediaResolverProvider({
 
             const promise = uploadMutateAsync({ parentId: mediaFolderId, file })
                 .then(async (result) => {
-                    // Preload so the renderer's <img src=serverUrl> swap is instant.
-                    // Defer settle to a macrotask so the caller's mediaName rewrite
-                    // renders before the blob URL gets revoked.
+                    // The server's copy loads before the swap, so the image doesn't flash. The blob URL is revoked a
+                    // task later, after the caller's new media name has rendered.
                     const probe = new Image();
                     probe.src = getDrivePreviewUrl(ownerId, mountId, result.id, result.updatedAt);
                     await probe.decode().catch(() => {});
@@ -117,18 +123,27 @@ export function MediaResolverProvider({
 
     const resolveMediaUrl = useCallback(
         (name: string): string | null => {
-            if (name.startsWith(PENDING_PREFIX)) {
-                return pendingRef.current.get(name) ?? null;
-            }
+            if (isPendingMediaName(name)) return pendingRef.current.get(name) ?? null;
             const file = media.findByName(name);
             return file ? getDrivePreviewUrl(ownerId, mountId, file.id, file.updatedAt) : null;
         },
         [media, ownerId, mountId],
     );
 
+    const resolveMediaThumbnailUrl = useCallback(
+        (name: string): string | null => {
+            const file = isPendingMediaName(name) ? undefined : media.findByName(name);
+            return file?.thumbnail
+                ? getDriveThumbnailUrl(ownerId, mountId, file.thumbnail, file.updatedAt)
+                : resolveMediaUrl(name);
+        },
+        [media, ownerId, mountId, resolveMediaUrl],
+    );
+
     const value = useMemo<MediaResolverValue>(
         () => ({
             resolveMediaUrl,
+            resolveMediaThumbnailUrl,
             resolveMediaUrlByPath,
             resolveMediaPath: (name: string) => media.findByName(name),
             // The editor routes mount this only after the document's listing loaded, so a null
@@ -138,7 +153,7 @@ export function MediaResolverProvider({
             mediaFolderId,
             startUpload,
         }),
-        [resolveMediaUrl, media, chat, mediaFolderId, startUpload],
+        [resolveMediaUrl, resolveMediaThumbnailUrl, media, chat, mediaFolderId, startUpload],
     );
 
     return <MediaResolverContext value={value}>{children}</MediaResolverContext>;

@@ -21,7 +21,8 @@ export type WorkerInput = {
     fileName: string;
     tmpDir: string;
     pathId: string;
-    options: { maxSize: number; quality: number; fit: 'inside' | 'cover'; format: ThumbnailFormat };
+    // A still keeps only the first frame, even in a format that can hold animation.
+    options: { maxSize: number; quality: number; fit: 'inside' | 'cover'; format: ThumbnailFormat; still?: boolean };
 };
 
 export type WorkerOutput =
@@ -36,11 +37,6 @@ export type WorkerOutput =
       }
     | { ok: false };
 
-// The main thread terminates this Worker at THUMBNAIL_TIMEOUT_SECONDS. That stops the Worker's timers, but not an
-// exiftool process it started, which would then run on. So exiftool gets a deadline this much earlier, which leaves
-// time for the Worker to start and to resize the preview exiftool found.
-const EXIFTOOL_SPARE_MS = 5_000;
-
 export type ImageResult = ImageDimensions & {
     data: Buffer;
     hasAlpha: boolean;
@@ -48,20 +44,52 @@ export type ImageResult = ImageDimensions & {
     duration?: number;
 };
 
-async function heicToJpeg(source: Buffer | string): Promise<Buffer | null> {
+// The main thread terminates this Worker at THUMBNAIL_TIMEOUT_SECONDS. That stops the Worker's timers, but not an
+// exiftool process it started, which would then run on. So exiftool gets a deadline this much earlier, which leaves
+// time for the Worker to start and to resize the preview exiftool found.
+const EXIFTOOL_SPARE_MS = 5_000;
+
+declare var self: Worker;
+
+self.onmessage = async (event: MessageEvent<WorkerInput>) => {
+    const exiftoolDeadline = Date.now() + THUMBNAIL_TIMEOUT_SECONDS * 1000 - EXIFTOOL_SPARE_MS;
     try {
-        // @ts-expect-error -- no type declarations available for heic-convert
-        const convert = (await import('heic-convert')).default as (opts: {
-            buffer: Buffer;
-            format: string;
-            quality: number;
-        }) => Promise<ArrayBuffer>;
-        const buffer = typeof source === 'string' ? Buffer.from(await Bun.file(source).arrayBuffer()) : source;
-        const output = await convert({ buffer, format: 'JPEG', quality: 0.8 });
-        return Buffer.from(output);
-    } catch {
-        return null;
+        const result = event.data.mimeType.startsWith('video/')
+            ? await processVideo(event.data)
+            : await processImage(event.data, exiftoolDeadline);
+        if (result) {
+            const data = new Uint8Array(result.data).buffer;
+            const payload: WorkerOutput = {
+                ok: true,
+                data,
+                width: result.width,
+                height: result.height,
+                hasAlpha: result.hasAlpha,
+                frameCount: result.frameCount,
+                ...(result.duration !== undefined && { duration: result.duration }),
+            };
+            postMessage(payload, [data]);
+        } else {
+            postMessage({ ok: false } satisfies WorkerOutput);
+        }
+    } catch (e) {
+        console.error(`[thumbnail-worker] Failed for ${event.data.pathId}:`, e);
+        postMessage({ ok: false } satisfies WorkerOutput);
     }
+};
+
+// ffmpeg reads a video from a path, so a video arriving as bytes gets no thumbnail. An upload always hands over the
+// path of its temp file.
+async function processVideo(input: WorkerInput): Promise<ImageResult | null> {
+    if (typeof input.source !== 'string') return null;
+
+    const frame = await extractVideoFrame(input.source, input.tmpDir, input.pathId);
+    if (!frame) return null;
+
+    const resized = await sharpResize(frame.data, input.options);
+    if (!resized) return null;
+
+    return { ...resized, duration: frame.duration };
 }
 
 async function processImage(input: WorkerInput, deadline: number): Promise<ImageResult | null> {
@@ -78,9 +106,8 @@ async function processImage(input: WorkerInput, deadline: number): Promise<Image
         }
     }
 
-    // Exiftool fallback — needs a file on disk. Avatar conversions pass no tmpDir, and their scratch names
-    // are derived from a fixed pathId: without a private dir they collide in the process CWD, so concurrent
-    // conversions would read each other's bytes.
+    // exiftool reads a file on disk. A call without a tmpDir, such as an avatar's, names its scratch files after a
+    // fixed pathId, so it gets a private folder: in a shared one, two conversions at once would read each other's bytes.
     const scratchDir = input.tmpDir || fs.mkdtempSync(path.join(os.tmpdir(), 'eigen-thumb-'));
     let tempFile: string | null = null;
 
@@ -108,49 +135,18 @@ async function processImage(input: WorkerInput, deadline: number): Promise<Image
     }
 }
 
-async function processVideo(input: WorkerInput): Promise<ImageResult | null> {
-    // v1: video thumbnails only generated when the source is a local file path.
-    // Upload-time always satisfies this (mount.getTempPath). S3-stored regeneration
-    // would require streaming to a temp file first; out of scope for v1.
-    if (typeof input.source !== 'string') return null;
-
-    const frame = await extractVideoFrame(input.source, input.tmpDir, input.pathId);
-    if (!frame) return null;
-
-    const resized = await sharpResize(frame.data, input.options);
-    if (!resized) return null;
-
-    return { ...resized, duration: frame.duration };
-}
-
-declare var self: Worker;
-
-self.onmessage = async (event: MessageEvent<WorkerInput>) => {
-    const exiftoolDeadline = Date.now() + THUMBNAIL_TIMEOUT_SECONDS * 1000 - EXIFTOOL_SPARE_MS;
+async function heicToJpeg(source: Buffer | string): Promise<Buffer | null> {
     try {
-        const result = event.data.mimeType.startsWith('video/')
-            ? await processVideo(event.data)
-            : await processImage(event.data, exiftoolDeadline);
-        if (result) {
-            const ab = result.data.buffer.slice(
-                result.data.byteOffset,
-                result.data.byteOffset + result.data.byteLength,
-            ) as ArrayBuffer;
-            const payload: WorkerOutput = {
-                ok: true,
-                data: ab,
-                width: result.width,
-                height: result.height,
-                hasAlpha: result.hasAlpha,
-                frameCount: result.frameCount,
-                ...(result.duration !== undefined && { duration: result.duration }),
-            };
-            postMessage(payload, [ab]);
-        } else {
-            postMessage({ ok: false } satisfies WorkerOutput);
-        }
-    } catch (e) {
-        console.error(`[thumbnail-worker] Failed for ${event.data.pathId}:`, e);
-        postMessage({ ok: false } satisfies WorkerOutput);
+        // @ts-expect-error -- no type declarations available for heic-convert
+        const convert = (await import('heic-convert')).default as (opts: {
+            buffer: Buffer;
+            format: string;
+            quality: number;
+        }) => Promise<ArrayBuffer>;
+        const buffer = typeof source === 'string' ? Buffer.from(await Bun.file(source).arrayBuffer()) : source;
+        const output = await convert({ buffer, format: 'JPEG', quality: 0.8 });
+        return Buffer.from(output);
+    } catch {
+        return null;
     }
-};
+}

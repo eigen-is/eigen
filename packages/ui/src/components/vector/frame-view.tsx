@@ -1,9 +1,7 @@
-// One frame as a read-only page: its own background and its own elements, laid out at the frame's
-// own scale (1920 wide) and shrunk as a whole to whatever box the host gives it. The rail thumbnail and
-// present mode both render this, so a slide cannot look different in the two places — and both draw
-// through ElementLayer, the same component the live canvas uses, so neither can drift from the editor.
-// Scaling the page rather than re-unitising its contents is the server compositor's model too
-// (export/canvas/render.ts): a layer body is authored in scene pixels by packages/lib.
+// One frame as a read-only page: its background and its elements, laid out at the frame's own 1920 px width and
+// shrunk as a whole to the box the host gives it, as the server's compositor does. Hosts such as present mode and the
+// Slides rail draw a slide through it, so a slide looks the same in each. It draws through ElementLayer, the component
+// the live canvas uses, so it can't drift from the editor either. FrameThumbnail is the rail's tile.
 
 import { getBackgroundStyle } from '@workspace/lib/background';
 import { useMediaResolver } from '@workspace/lib/drive';
@@ -17,21 +15,21 @@ import { CANVAS_PAPER_CLASS } from './paper';
 
 type FrameViewProps = {
     frame: VectorFrame;
-    // Either the whole scene's elements (present mode passes those, so an elbow arrow still routes
-    // against a shape bound outside its frame) or just this frame's slice (the rail passes that, so a
-    // thumbnail's memo has something stable to compare). The view scopes to the frame either way.
-    elements: VectorElement[];
+    // The whole scene's elements, or only this frame's. Present mode passes the whole scene, so an elbow arrow still
+    // routes around a shape bound outside its frame. The rail passes the frame's own, so a tile's memo has a stable
+    // list to compare. The view keeps to its frame either way.
+    elements: readonly VectorElement[];
     resolveMedia?: MediaResolver;
-    // Let pointer events reach the layers — present mode wants working links; a thumbnail does not.
+    // Lets pointer events reach the layers, for working links in present mode. A tile in the rail takes none.
     interactive?: boolean;
     className?: string;
 };
 
 export function FrameView({ frame, elements, resolveMedia, interactive, className }: FrameViewProps) {
     const [setContainer, { width }] = useElementSize<HTMLDivElement>();
-    // 0 until measured: the page is drawn at frame scale and shrunk, so there is nothing to draw yet.
-    // Only a 0x0 reading is dropped for us, so a 0-wide one (a rail column collapsed behind a closed
-    // panel) still arrives; keep the last real scale instead of blanking the page.
+    // The scale is 0 until the box is measured, and nothing is drawn before that. A box of 0 by 0 is never reported,
+    // but one 0 wide is, such as a rail column collapsed behind a closed panel. Then the last real scale stays, so the
+    // page doesn't go blank.
     const lastScale = useRef(0);
     if (width > 0) lastScale.current = width / frame.width;
     const scale = lastScale.current;
@@ -44,9 +42,8 @@ export function FrameView({ frame, elements, resolveMedia, interactive, classNam
     return (
         <div
             ref={setContainer}
-            // The page is the canvas' PAPER here too (FramePage carries the same pin on the live
-            // canvas): a thumbnail and present mode render user content on a light page, so what is
-            // inside must resolve against the light palette even in dark mode.
+            // The page is light, as on the live canvas, so the colors of what is on it resolve against the light
+            // palette, in dark mode too.
             className={cn(
                 CANVAS_PAPER_CLASS,
                 'relative overflow-hidden',
@@ -73,20 +70,19 @@ export function FrameView({ frame, elements, resolveMedia, interactive, classNam
 
 type FrameThumbnailProps = {
     frame: VectorFrame;
-    elements: VectorElement[];
+    elements: readonly VectorElement[];
     index: number;
     active: boolean;
     matched?: boolean;
-    // Takes the frame's id rather than closing over it, so the rail can hand every row ONE handler and
-    // the memo below is not defeated by a fresh closure per render.
+    // It takes the frame's id rather than closing over it. So the rail hands every tile the same handler, and a new
+    // closure on each render doesn't defeat the memo.
     onSelect: (frameId: string) => void;
 };
 
-// The rail row. The memo compares the frame's OWN elements (the host passes the slice, so a 60-slide
-// deck does not re-filter the whole scene per thumbnail per render) plus the frame's stored fields:
-// a pan, a hover, a selection change or an edit on another slide re-renders nothing here. A Yjs tick
-// re-materialises the elements, so identity is the honest signal that this slide may have changed;
-// the per-element work is then skipped again by ElementLayer's own field compare.
+// The memo of a tile in the rail. It compares the frame's stored fields and its own elements, which the host hands
+// over as a slice, so a long deck doesn't filter the whole scene for every tile. A pan, a hover, a selection or an edit
+// on another slide then renders no tile again. A Yjs update builds new element objects, so a new object means this
+// slide may have changed. ElementLayer then compares the fields of each element and skips the ones that didn't.
 export function sameThumbnail(prev: FrameThumbnailProps, next: FrameThumbnailProps): boolean {
     if (prev.index !== next.index || prev.active !== next.active || prev.matched !== next.matched) return false;
     if (prev.onSelect !== next.onSelect) return false;
@@ -103,10 +99,11 @@ export const FrameThumbnail = memo(function FrameThumbnail({
     matched,
     onSelect,
 }: FrameThumbnailProps) {
-    const { resolveMediaUrl } = useMediaResolver();
+    // A tile draws each picture from its still thumbnail, so the rail doesn't play every GIF in the deck at once.
+    const { resolveMediaThumbnailUrl } = useMediaResolver();
 
     return (
-        // select-none + callout suppression keep a long press off iOS's loupe (as .eigen-list-item does).
+        // No text selection and no callout, so a long press doesn't open the iOS loupe, as on .eigen-list-item.
         <button
             type="button"
             aria-current={active || undefined}
@@ -121,7 +118,7 @@ export const FrameThumbnail = memo(function FrameThumbnail({
             <FrameView
                 frame={frame}
                 elements={elements}
-                resolveMedia={resolveMediaUrl}
+                resolveMedia={resolveMediaThumbnailUrl}
                 className={cn(
                     'min-w-0 flex-1 rounded border',
                     active ? 'border-selection-handle shadow-sm' : 'border-border',

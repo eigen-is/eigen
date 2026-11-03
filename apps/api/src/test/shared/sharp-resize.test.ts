@@ -135,3 +135,33 @@ describe('sharpResize of a large source', () => {
         expect(resized).toBeLessThan(resize * 1.6);
     }, 30_000);
 });
+
+// A Drive thumbnail is a still, so a grid of GIFs doesn't play; every other WebP, such as the screen preview or an
+// avatar, keeps the animation.
+describe('sharpResize of an animated source', () => {
+    const AS_WEBP: WorkerInput['options'] = { maxSize: 512, quality: 80, fit: 'inside', format: 'webp' };
+
+    async function twoFrameGif(): Promise<Buffer> {
+        const frame = (red: number) =>
+            sharp({ create: { width: 8, height: 8, channels: 3, background: { r: red, g: 0, b: 0 } } })
+                .png()
+                .toBuffer();
+        return sharp([await frame(255), await frame(0)], { join: { animated: true } })
+            .gif()
+            .toBuffer();
+    }
+
+    async function framesOf(options: WorkerInput['options']): Promise<number | undefined> {
+        const result = await sharpResize(await twoFrameGif(), options);
+        if (!result) throw new Error('sharpResize gave no picture');
+        return (await sharp(result.data).metadata()).pages;
+    }
+
+    test('keeps every frame in a WebP', async () => {
+        expect(await framesOf(AS_WEBP)).toBe(2);
+    });
+
+    test('keeps the first frame only when asked for a still', async () => {
+        expect(await framesOf({ ...AS_WEBP, still: true })).toBeUndefined();
+    });
+});
