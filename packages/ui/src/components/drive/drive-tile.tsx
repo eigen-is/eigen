@@ -4,9 +4,9 @@
 import { getDriveItemThumbnail } from '@workspace/lib/api';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { cn, HOVER_REVEAL_CLASS } from '@workspace/ui/lib/utils';
-import { MoreVertical } from 'lucide-react';
 import { useState } from 'react';
 import type { useLongPress } from '../../hooks/use-long-press';
+import { ContextMenuButton } from '../context-menu';
 import { UnreadDot } from '../unread-dot';
 import { DriveItemNameLink } from './drive-item-name-link';
 import { getFileIcon, getFilePresentation } from './file-presentation';
@@ -96,20 +96,10 @@ export function DriveTile({
                     {unreadPathIds?.has(item.id) && <UnreadDot />}
                 </span>
                 <DriveItemNameLink name={item.name} href={getItemHref?.(item)} className="text-xs" />
-                <button
-                    type="button"
-                    aria-label="More actions"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        openContextMenuFromButton(e.currentTarget, item);
-                    }}
-                    className={cn(
-                        HOVER_REVEAL_CLASS,
-                        'ml-auto flex-shrink-0 h-6 w-6 rounded hover:bg-accent flex items-center justify-center text-muted-foreground',
-                    )}
-                >
-                    <MoreVertical className="h-4 w-4" />
-                </button>
+                <ContextMenuButton
+                    onOpen={(button) => openContextMenuFromButton(button, item)}
+                    className={cn(HOVER_REVEAL_CLASS, 'ml-auto flex-shrink-0 h-6 w-6')}
+                />
             </div>
         </div>
     );

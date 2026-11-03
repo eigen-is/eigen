@@ -6,8 +6,8 @@ import { formatDateTime } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
 import type { DrivePath } from '@workspace/lib/types';
 import { cn } from '@workspace/ui/lib/utils';
-import { MoreVertical } from 'lucide-react';
 import type { useLongPress } from '../../hooks/use-long-press';
+import { ContextMenuButton } from '../context-menu';
 import { UnreadDot } from '../unread-dot';
 import { UserAvatar } from '../user/user-avatar';
 import { DriveItemNameLink } from './drive-item-name-link';
@@ -151,17 +151,10 @@ export function DriveRow({
                             : 'hidden @[800px]:flex items-center justify-center py-1.5'
                     }
                 >
-                    <button
-                        type="button"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            openContextMenuFromButton(e.currentTarget, item);
-                        }}
-                        className="h-7 w-7 rounded hover:bg-accent flex items-center justify-center text-muted-foreground"
-                        aria-label="More actions"
-                    >
-                        <MoreVertical className="h-4 w-4" />
-                    </button>
+                    <ContextMenuButton
+                        onOpen={(button) => openContextMenuFromButton(button, item)}
+                        className="h-7 w-7"
+                    />
                 </div>
             )}
         </div>

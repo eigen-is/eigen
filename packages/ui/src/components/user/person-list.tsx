@@ -8,10 +8,9 @@ import { useListSelection } from '@workspace/ui/hooks/use-list-selection';
 import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { useSelectableContextMenu } from '@workspace/ui/hooks/use-selectable-context-menu';
 import { cn, HOVER_REVEAL_CLASS } from '@workspace/ui/lib/utils';
-import { MoreVertical } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo, useRef } from 'react';
-import { ContextMenuAnchor } from '../context-menu';
+import { ContextMenuAnchor, ContextMenuButton } from '../context-menu';
 import { AlphabeticalList, alphaGroupKey } from './alphabetical-list';
 
 type PersonListProps<T> = {
@@ -127,20 +126,10 @@ export function PersonList<T>({
                         >
                             {renderPerson(item)}
                             {renderMenuItems && (
-                                <button
-                                    type="button"
-                                    aria-label="More actions"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        openFromButton(e.currentTarget, item);
-                                    }}
-                                    className={cn(
-                                        HOVER_REVEAL_CLASS,
-                                        'flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent',
-                                    )}
-                                >
-                                    <MoreVertical className="h-4 w-4" />
-                                </button>
+                                <ContextMenuButton
+                                    onOpen={(button) => openFromButton(button, item)}
+                                    className={cn(HOVER_REVEAL_CLASS, 'h-7 w-7 shrink-0')}
+                                />
                             )}
                         </div>
                     )}
