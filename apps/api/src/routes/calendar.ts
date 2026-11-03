@@ -37,8 +37,8 @@ import { getMemberships } from '../lib/user';
 import { betterAuth } from './auth';
 import { importFromDriveSchema } from './shared-schemas';
 
-// Field bounds in front of the event ceiling. TEXT is for the ids and keys Eigen mints; everything a CalDAV
-// PUT may store caps at the resource ceiling itself, or the event a device wrote would be uneditable here.
+// Field bounds in front of the event ceiling. TEXT is for the ids and keys Eigen mints. Anything a CalDAV PUT
+// may store is capped at the ceiling itself, or an event a device wrote could not be edited here.
 const TEXT = { maxLength: 512 };
 const FREE_TEXT = { maxLength: EVENT_MAX_BYTES };
 // An attendee or a reminder is one line of the file, and a file holds no more lines than it holds bytes.

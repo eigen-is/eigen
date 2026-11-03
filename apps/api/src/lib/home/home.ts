@@ -2,7 +2,7 @@
 // or the smaller set a team has. Every request reaches that data through getHome(ownerId), which
 // builds the Home on first use. It stays loaded while it is used or held, such as by an open tab,
 // and closes itself, databases included, after a few idle minutes. This base class owns that
-// lifecycle; each kind of home decides which parts it has.
+// lifecycle. Each kind of home decides which parts it has.
 
 import * as path from 'node:path';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';

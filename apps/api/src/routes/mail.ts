@@ -96,8 +96,8 @@ export const mailRouter = new Elysia({ name: 'mail' })
     .use(betterAuth)
     // A server without hosted mail has no Maildir open behind any of these routes.
     .onBeforeHandle(() => requireMailEnabled())
-    // Local delivery endpoint — called by Postfix (or compatible MTA) to deliver incoming mail.
-    // No auth: Postfix connects from localhost and is trusted.
+    // Postfix, or another local mail server, delivers incoming mail here. It has no auth, because Postfix
+    // connects from localhost and is trusted.
     .post(
         '/mail/deliver/:to',
         async ({ params, body, request, server }): Promise<string> => {
@@ -335,9 +335,9 @@ export const mailRouter = new Elysia({ name: 'mail' })
         },
         { auth: true, params: AttachmentParamsSchema },
     )
-    // Previews run the renderers Drive's preview routes end in, on the part's bytes; same shapes, same
-    // components. Two segments after the index, like /embed/:fileName: a sender names the part, and a
-    // one-segment preview route would be shadowed by a part called after it.
+    // A preview runs the same renderers as Drive's preview routes on the part's bytes, so it answers the same
+    // shapes. It takes two segments after the index, like /embed/:fileName, because the sender names the part,
+    // and a part named like a one-segment preview route would shadow it.
     .get(
         '/mail/:ownerId/message/:id/attachment/:index/preview/text',
         async ({ params, request, user, set }): Promise<TextPreviewResult | ElysiaCustomStatusResponse<304>> => {

@@ -111,8 +111,8 @@ export class Mail {
                 this.readNotificationOnceInboxRead();
             },
         });
-        // Every user Home carries a Mail; with mail off it seeds and cleans nothing. Its folder watchers start
-        // only when somebody has the home open in a tab: see watchFolders.
+        // Every user Home has a Mail, and with mail off it seeds and cleans nothing. Its folder watchers start
+        // only when somebody has the home open in a tab (watchFolders).
         if (!isMailAppEnabled()) return;
         if (isNew) {
             const welcome = await welcomeMail(this.home.user.name, this.home.user.email);
@@ -172,7 +172,7 @@ export class Mail {
         } catch {
             throw new ApiError(400, NOT_AN_EMAIL_FILE);
         }
-        // Any bytes parse as a body; only an envelope header makes them a message.
+        // Any bytes parse as a body. Only an envelope header makes them a message.
         if (!headers.from && !headers.date && headers.subject === undefined && !headers.messageId) {
             throw new ApiError(400, NOT_AN_EMAIL_FILE);
         }
@@ -415,7 +415,7 @@ export class Mail {
     ): Promise<EmailDraft> {
         const user = this.home.user;
 
-        // Caller-supplied refs win; otherwise carry forward whatever was last persisted.
+        // The caller's references win. Without them, the draft keeps the ones it saved last.
         let driveReferences = email.driveReferences;
 
         // to/cc/bcc stay request-verbatim: the FE sends `undefined` for "cleared", so a `?? meta.X` would resurrect a recipient.
@@ -466,7 +466,8 @@ export class Mail {
 
         const newId = existingId ?? createUniqueMessageId();
         const cleanHtml = email.html || '';
-        // Baked into the EML so the Sent copy and the SMTP message carry the links; the sidecar keeps the clean html for compose.
+        // The links go into the EML, so the Sent copy and the sent message carry them. The sidecar keeps the clean
+        // html for compose.
         const bakedHtml = driveReferences?.length ? appendReferenceLinks(cleanHtml, driveReferences) : cleanHtml;
         const emlContent = await createEmlContent({
             id: newId,
@@ -485,7 +486,7 @@ export class Mail {
 
         // Persist under the id baked into the EML header: a minted id leaves the wire Message-ID out of sync with the Sent EML.
         const saved = await this.store.saveDraft(emlContent, newId);
-        // saveDraft always writes the D flag; the guard is what carries that invariant into the type.
+        // saveDraft always writes the D flag. The guard carries that rule into the type.
         if (!isEmailDraft(saved)) throw new Error(`Draft '${saved.id}' was saved without the draft flag`);
 
         for (const tempId of options.tempAttachmentIds ?? []) {
@@ -587,7 +588,7 @@ export class Mail {
         const baseHtml = message.html || '';
         const baseText = message.text;
 
-        // Also bounded at the route schema; re-checked because `refs` can come from the draft sidecar.
+        // The route schema bounds this too. It is checked again because `refs` can come from the draft sidecar.
         if (refs.length > MAX_SEND_REFERENCES) {
             throw new ApiError(400, `A message can have at most ${MAX_SEND_REFERENCES} attachment links`);
         }
@@ -605,7 +606,8 @@ export class Mail {
             );
         }
 
-        // Between the demo guard and delivery, so a grant failure aborts the send; only To/Cc addresses are ever granted.
+        // After the demo guard and before delivery, so a failed grant stops the send. Only To and Cc addresses get
+        // access.
         if (options?.grantAccessRefIds?.length) {
             await grantAccessForReferences(
                 this.home.user,

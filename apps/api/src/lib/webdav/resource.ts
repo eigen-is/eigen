@@ -65,7 +65,7 @@ export async function handleGet(args: {
         full: async () => {
             const file = await drive.downloadFile(mountId, path.id);
             if (!file) throw new ApiError(404, 'Not found');
-            // S3File can't be used as a Response body directly — stream it. BunFile works either way.
+            // An S3File can't be a Response body as it is, so it goes in as a stream. A BunFile works either way.
             return 'bucket' in file ? file.stream() : file;
         },
     });

@@ -261,7 +261,7 @@ export const collabRouter = new Elysia({
                 return;
             }
 
-            // Bun delivers a binary frame as a Buffer, itself a Uint8Array; anything else is not an update.
+            // Bun delivers a binary frame as a Buffer, which is a Uint8Array. Anything else is not an update.
             if (!(message instanceof Uint8Array)) return;
 
             const session = sessions.get(ws.raw);

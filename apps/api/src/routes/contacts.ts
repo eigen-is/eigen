@@ -19,8 +19,8 @@ import { parseVCardLines, unescapeText } from '../lib/vcard';
 import { betterAuth } from './auth';
 import { importFromDriveSchema } from './shared-schemas';
 
-// Field bounds in front of the card ceiling. TEXT is for the ids and keys Eigen mints; everything a CardDAV
-// PUT may store caps at the resource ceiling itself, or the card a device wrote would be uneditable here.
+// Field bounds in front of the card ceiling. TEXT is for the ids and keys Eigen mints. Anything a CardDAV PUT
+// may store is capped at the ceiling itself, or a card a device wrote could not be edited here.
 const TEXT = { maxLength: 512 };
 const FREE_TEXT = { maxLength: CARD_MAX_BYTES };
 // An address, an email, a phone or a category is one line of the file. A file holds no more lines than it holds
@@ -61,8 +61,8 @@ const UpdateContactSchema = t.Object({
     etag: t.String({ ...TEXT, minLength: 1 }),
 });
 
-// A label is minted from a card's CATEGORIES, which the file spells however long, so only a typed name is capped
-// (labels.ts); the color is Eigen's own.
+// A label is made from a card's CATEGORIES, which a file may spell at any length, so only a name typed in
+// Eigen is capped. The color is Eigen's own.
 const LabelSchema = t.Object({
     id: t.Optional(t.String(TEXT)),
     name: t.String(FREE_TEXT),
