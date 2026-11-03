@@ -1,5 +1,9 @@
-// peek(): the built instance or null — never triggers the factory. get-home.ts reads through it
-// so a keepalive touches a loaded home without resurrecting an evicted one.
+// An async value built once, on first use, and shared by every caller: callers that ask while the build runs
+// wait for the same promise, and a failed build lets the next caller try again. getHome keeps one per owner,
+// and the collab registry one per document.
+
+// peek() gives the built value, or null while there is none, without starting a build. getHome's readers use it
+// to reach a Home that is loaded without opening one that is not.
 export type AsyncSingleton<T> = (() => Promise<T>) & { peek: () => T | null };
 
 export function createAsyncSingleton<T>(factoryFn: () => Promise<T>): AsyncSingleton<T> {
