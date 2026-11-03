@@ -527,7 +527,7 @@ export function cancelFunctionrangeSelected(ctx: Context) {
     }
 }
 
-// Ends the open edit, committed or not: updateCell runs it after the write. The formula popups close with the edit.
+// Ends the open edit, committed or not, and closes the formula popups. updateCell runs it after the write.
 export function cancelNormalSelected(ctx: Context) {
     cancelFunctionrangeSelected(ctx);
 
@@ -541,7 +541,6 @@ export function cancelNormalSelected(ctx: Context) {
     ctx.formulaCache.rangedrag_row_start = false;
 }
 
-// formula.updatecell
 export function updateCell(
     ctx: Context,
     r: number,
