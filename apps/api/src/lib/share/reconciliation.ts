@@ -18,73 +18,76 @@ export async function reconcileSharesForNewUser(user: User): Promise<void> {
     // The newcomer's own home, so no relay is needed.
     const targetHome = await getHome(user.id);
 
-    for (const fromUserId of fromUserIds) {
-        try {
-            // A team source, such as a mail grant on a team drive path, has no user row. A team shares
-            // drive paths only, so they arrive attributed to the team and nothing else is pulled.
-            const parsed = parseOwnerId(fromUserId);
-            if (parsed.type === 'team') {
-                const team = await getTeam(parsed.id);
-                if (!team) continue;
-                const teamPaths = await pullSharedPaths(fromUserId, user);
-                for (const path of teamPaths) {
-                    await targetHome.drive.receiveSharedPathChange(path, path.acl, undefined, team.name);
+    // The pulls below wait on other homes for a while, and nothing else keeps this one open meanwhile.
+    await targetHome.withHomeHeld(async () => {
+        for (const fromUserId of fromUserIds) {
+            try {
+                // A team source, such as a mail grant on a team drive path, has no user row. A team shares
+                // drive paths only, so they arrive attributed to the team and nothing else is pulled.
+                const parsed = parseOwnerId(fromUserId);
+                if (parsed.type === 'team') {
+                    const team = await getTeam(parsed.id);
+                    if (!team) continue;
+                    const teamPaths = await pullSharedPaths(fromUserId, user);
+                    for (const path of teamPaths) {
+                        await targetHome.drive.receiveSharedPathChange(path, path.acl, undefined, team.name);
+                    }
+                    continue;
                 }
-                continue;
-            }
 
-            const owner = await getUserById(fromUserId);
-            if (!owner) continue;
+                const owner = await getUserById(fromUserId);
+                if (!owner) continue;
 
-            if (targetHome.hasCalendar) {
-                const calShares = await pullCalendarShares(fromUserId, user.email, []);
-                for (const result of calShares) {
-                    await targetHome.calendar.receiveShare(
-                        fromUserId,
-                        result.calendarId,
-                        result.name,
-                        result.permission,
-                        owner.email,
-                        owner.name,
-                    );
+                if (targetHome.hasCalendar) {
+                    const calShares = await pullCalendarShares(fromUserId, user.email, []);
+                    for (const result of calShares) {
+                        await targetHome.calendar.receiveShare(
+                            fromUserId,
+                            result.calendarId,
+                            result.name,
+                            result.permission,
+                            owner.email,
+                            owner.name,
+                        );
+                    }
                 }
-            }
 
-            const sharedPaths = await pullSharedPaths(fromUserId, user);
-            for (const path of sharedPaths) {
-                await targetHome.drive.receiveSharedPathChange(path, path.acl, owner.email, owner.name);
-            }
+                const sharedPaths = await pullSharedPaths(fromUserId, user);
+                for (const path of sharedPaths) {
+                    await targetHome.drive.receiveSharedPathChange(path, path.acl, owner.email, owner.name);
+                }
 
-            if (targetHome.hasCalendar) {
-                const invitations = await pullPendingInvitations(fromUserId, user.email);
-                for (const event of invitations) {
-                    await targetHome.calendar.receiveInvitation({
-                        uid: event.uid,
-                        title: event.title,
-                        description: event.description,
-                        location: event.location,
-                        startTime: event.startTime,
-                        endTime: event.endTime,
-                        allDay: event.allDay,
-                        rrule: event.rrule,
-                        timezone: event.timezone,
-                        status: event.status,
-                        sequence: event.sequence,
-                        data: {
-                            organizer: { userId: fromUserId, email: owner.email, name: owner.name },
+                if (targetHome.hasCalendar) {
+                    const invitations = await pullPendingInvitations(fromUserId, user.email);
+                    for (const event of invitations) {
+                        await targetHome.calendar.receiveInvitation({
+                            uid: event.uid,
+                            title: event.title,
+                            description: event.description,
+                            location: event.location,
+                            startTime: event.startTime,
+                            endTime: event.endTime,
+                            allDay: event.allDay,
+                            rrule: event.rrule,
+                            timezone: event.timezone,
+                            status: event.status,
+                            sequence: event.sequence,
+                            data: {
+                                organizer: { userId: fromUserId, email: owner.email, name: owner.name },
+                                organizerEventId: event.id,
+                                attendees: event.data?.attendees,
+                            },
+                            createByUserId: fromUserId,
                             organizerEventId: event.id,
-                            attendees: event.data?.attendees,
-                        },
-                        createByUserId: fromUserId,
-                        organizerEventId: event.id,
-                        organizerUserId: fromUserId,
-                    });
+                            organizerUserId: fromUserId,
+                        });
+                    }
                 }
+            } catch (error) {
+                console.error(`Failed to reconcile shares from ${fromUserId} for new user ${user.id}:`, error);
             }
-        } catch (error) {
-            console.error(`Failed to reconcile shares from ${fromUserId} for new user ${user.id}:`, error);
         }
-    }
+    });
 }
 
 export async function reconcileSharesForNewTeamMember(userId: string, teamId: string): Promise<void> {
