@@ -66,7 +66,7 @@ command_usage() {
 Usage: ./eigen status
 
 Reports on the version, a pending update, the services, disk space, the newest backup,
-the certificate and the mail queue.
+what restores kept aside, the certificate and the mail queue.
 EOF
             ;;
         backup)
@@ -451,10 +451,10 @@ cli_help() {
 # image_label <image> <version or revision>: that label of a local image.
 image_label() { docker image inspect --format "{{index .Config.Labels \"org.opencontainers.image.$2\"}}" "$1"; }
 
-# release_labels <tag>: the org.opencontainers.image annotations of the registry's api:<tag>, such as version and
-# revision, as key=value lines for answer; without a pull, and none without annotations.
+# release_labels <image>: its org.opencontainers.image annotations in the registry, such as version and revision, as
+# key=value lines for answer; without a pull, and none without annotations.
 release_labels() {
-    docker manifest inspect -v "$REGISTRY/api:$1" 2>/dev/null |
+    docker manifest inspect -v "$1" 2>/dev/null |
         sed -n 's/.*"org\.opencontainers\.image\.\([a-z]*\)": *"\([^"]*\)".*/\1=\2/p'
 }
 
@@ -809,7 +809,10 @@ stage_archive() {
     esac
 }
 
-# pull_pinned <restore --staged lines>: the images the staged archive pins, got while Eigen runs on.
+# pull_pinned <restore --staged lines>: the images the staged archive pins, got while Eigen runs on. They are named
+# by the build the api image is, since EIGEN_VERSION may be a channel, such as main: by its labels when it is here
+# already (a rollback pulled it), else by the registry's annotations, so an offline host asks no one. Without either
+# they are named by EIGEN_VERSION.
 pull_pinned() {
     refs=''
     for name in $IMAGES; do
@@ -819,8 +822,16 @@ pull_pinned() {
         fi
         refs="$refs $ref"
     done
-    version=$(answer EIGEN_VERSION "$1")
-    step "Getting Eigen $version" "Eigen $version is here" "Could not get Eigen $version; Eigen runs on as it was" \
+    api=$(answer EIGEN_API_IMAGE "$1")
+    build=$(image_label "$api" version 2>/dev/null) || build=''
+    if [ -n "$build" ]; then
+        build="$build ($(image_label "$api" revision))"
+    else
+        labels=$(release_labels "$api")
+        build=$(answer version "$labels")
+        if [ -n "$build" ]; then build="$build ($(answer revision "$labels"))"; else build=$(answer EIGEN_VERSION "$1"); fi
+    fi
+    step "Getting Eigen $build" "Eigen $build is here" "Could not get Eigen $build; Eigen runs on as it was" \
         pull_refs $refs
 }
 
@@ -1027,9 +1038,9 @@ status() {
     newer=''
     if [ "$MODE" = release ]; then
         if [ "$(env_value EIGEN_VERSION)" = main ]; then
-            newer="--latest=$(answer revision "$(release_labels main)")"
+            newer="--latest=$(answer revision "$(release_labels "$REGISTRY/api:main")")"
         else
-            newer="--latest=$(answer version "$(release_labels latest)")"
+            newer="--latest=$(answer version "$(release_labels "$REGISTRY/api:latest")")"
         fi
     fi
     tab=$(printf '\t')
@@ -1057,6 +1068,12 @@ status() {
     if [ -n "$bundle" ]; then
         files=$(describe "$bundle")
         set -- "$@" --files="$files"
+    else
+        # Passed only when the runner is this build's CLI: after an update that stopped halfway it is the build
+        # .env.production pins, which may not know the flag and would refuse. Their size is left out: du would read
+        # all of a copy of data/, which is uid 1000's.
+        kept=$(kept_aside)
+        set -- "$@" ${kept:+"--kept-aside=$kept"}
     fi
     "$runner" status "$@"
 }
@@ -1335,7 +1352,7 @@ update_get() {
     old_version=$(image_label "$(image api)" version)
     tag=${target:-latest}
     if [ -z "$target" ] && [ "$follows" = main ]; then tag=main; fi
-    labels=$(release_labels "$tag")
+    labels=$(release_labels "$REGISTRY/api:$tag")
     version=$(answer version "$labels") revision=$(answer revision "$labels")
     if [ -z "$version" ]; then
         # Without the annotations, the image's labels name the build.
@@ -1488,12 +1505,6 @@ rollback() {
         no_rollback "There is no update to roll back." "./eigen rollback goes back after an ./eigen update."
     fi
     archive=$(sed -n 1p .eigen/last-update)
-    # Only a launcher of 0.4.1 or before made a Light backup, and it recorded no build to switch back to.
-    case $archive in server-pre-update-light-*)
-        no_rollback "The last update made a Light backup, backups/$archive, which this version of Eigen cannot put back." \
-            "./eigen restore <archive> puts back a Full backup instead."
-        ;;
-    esac
     if [ ! -f "backups/$archive" ]; then
         no_rollback "The backup the last update made, backups/$archive, is gone." \
             "./eigen rollback has nothing to go back to. To put back another backup: ./eigen restore <archive>"
@@ -1524,10 +1535,8 @@ no_rollback() {
 }
 
 # pre_update_archives: the backups updates made that retention kept in backups/, newest first by the stamp in the name.
-# A Light one, which no restore takes, is left out.
 pre_update_archives() {
     for archive in backups/server-pre-update-*.tar; do
-        case $archive in backups/server-pre-update-light-*) continue ;; esac
         if [ -f "$archive" ]; then printf '%s\n' "${archive#backups/}"; fi
     done | awk -F- '{ print $(NF - 1) $NF, $0 }' | sort -r | cut -d' ' -f2-
 }
@@ -1554,20 +1563,24 @@ switch_back() {
     NEXT=''
     old=$(describe "$old_image")
     say "$ACCENT" '◆' "Back from Eigen $current to Eigen $old, on the data as it is"
+    # A build older than restore --check-data would refuse it with its whole usage, which reads like a failure, so its
+    # usage is read first. The refusal itself cannot be hidden: on a terminal, Docker joins stderr to the output.
+    usage=$(with_image "$old_image" cli restore --help </dev/null) ||
+        die "Could not run Eigen $old; Eigen $current runs on as it was." "Fix what it says, then run ./eigen rollback again."
+    case $usage in *--check-data*) ;; *)
+        say "$YELLOW" '▲' "Eigen $old is too old to check the data here."
+        return
+        ;;
+    esac
     # In ms, as check_again passes it. The margin covers a clock that differs between this host and Docker's VM.
     since=$((($(date +%s) - 300) * 1000))
     checked=0
     with_image "$old_image" cli_as 1000:1000 restore --check-data $yes || checked=$?
-    # A build older than restore --check-data refuses it as an unknown argument, with exit code 2. 130 is a Ctrl+C at
-    # its question, which the operator saw.
+    # 130 is a Ctrl+C at its question, which the operator saw.
     case $checked in
         0) ;;
         "$CANNOT_OPEN")
             say "$YELLOW" '▲' "Eigen $old cannot open the data here."
-            return
-            ;;
-        2)
-            say "$YELLOW" '▲' "Eigen $old is too old to check the data here."
             return
             ;;
         "$DECLINED") exit 0 ;;

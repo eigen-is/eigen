@@ -6,6 +6,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Added
 
+- **Demo reset warning** — a demo now warns five minutes before its hourly reset, with a countdown at the bottom of the page
 - **Table of contents options in Docs** — on a computer or a tablet, select or right-click a table of contents to pick Plain text, Dotted or Links, how many heading levels it lists, and each level's font, size, bold and italic. PDFs and Word files show them, and a Word file's table of contents comes back with its page numbers, dots and fonts
 - **Duplicate in Drive lists** — **Duplicate** is also in the menu when you browse by file type or in a document app's list, but not on a drive's top-level folder
 - **Mail several items from Drive** — with more than one item selected, the menu offers **Mail 3 items to…**
@@ -40,7 +41,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Equations in Docs** — equations draw in New Computer Modern Math, so they look different, and the PDF and the web page show them in the editor's font
 - **Web page downloads** — a download carries only the parts of each font its text uses: a short document is about 380 KB instead of 1.2 MB, a sheet or deck about 310 KB instead of 1 MB
 - **The server image** — the API image installs no recommended packages, and no libvips or ImageMagick from Debian, which nothing used. SVG thumbnails draw Chinese and Korean text
-- **Light backups (breaking)** — every `./eigen update` makes a Full backup, and `./eigen backup --light`, `./eigen update --full` and Light in **Back up now** are gone. This version can't restore a Light backup, and `./eigen status` lists the ones left with the command that deletes them
+- **Light backups (breaking)** — every `./eigen update` makes a Full backup, and `./eigen backup --light`, `./eigen update --full` and Light in **Back up now** are gone. Eigen no longer recognises the Light backups of 0.4.1 and before: it can't restore one, `./eigen status` doesn't list them and a start leaves their files as they are. Delete them by hand with `sudo rm backups/server-*-light-*`
 - **Rolling back** — `./eigen rollback` keeps today's data when the version before opens it. It puts the update's backup back only when that version can't, or is too old to check, and a check that fails otherwise stops it with Eigen running as it was
 - **Restoring a user or team in Admin** — the account keeps working while its backup is unpacked and checked, so a refused restore costs nobody their open pages. It goes offline only for the swap at the end, and needs room on the data disk
 - **Private backups** — the files inside a backup, their records and a restored account are for Eigen's own user alone. `backups/` takes the install folder's group with mode 2750, or stays as it is, with a warning, when other users share that group

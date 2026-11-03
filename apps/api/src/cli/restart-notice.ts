@@ -1,7 +1,7 @@
-// ./eigen update, rollback and restore run this before they stop Eigen: it tells every open tab, through the running
-// API's control socket, that Eigen restarts in so many seconds, with the operator's own line if there is one, and
-// prints when. --clear takes the notice back, when the operator cancels the wait or the command fails. Its flags are
-// what one version's launcher asks of another version's CLI, so they stay as they are.
+// ./eigen update, rollback and restore, and a demo box's hourly reset, run this before they stop Eigen: it tells every
+// open tab, through the running API's control socket, that Eigen restarts in so many seconds, with the operator's own
+// line if there is one, and prints when. --clear takes the notice back, when the operator cancels the wait or the
+// command fails. Its flags are what one version's launcher asks of another version's CLI, so they stay as they are.
 
 import type { parseArgs } from 'node:util';
 import { RESTART_REASONS } from '@workspace/lib/types/sse';
@@ -25,7 +25,7 @@ export const RESTART_NOTICE_OPTIONS = {
     message: { type: 'string' },
     clear: { type: 'boolean' },
 } as const;
-export const RESTART_NOTICE_USAGE = `Usage: restart-notice --in <seconds> --reason update|rollback [--message <text>]
+export const RESTART_NOTICE_USAGE = `Usage: restart-notice --in <seconds> --reason update|rollback|demo-reset [--message <text>]
        restart-notice --clear
 
 Tells every open tab that Eigen restarts in <seconds>, and prints at=<time> it comes. A new
@@ -33,7 +33,7 @@ notice replaces the one there is. The tabs drop one whose restart has not come $
 after its time.
 
   --in       Seconds until the restart, 0 to ${MAX_RESTART_WAIT_SECONDS}
-  --reason   update or rollback, which the tabs say
+  --reason   update, rollback or demo-reset, which the tabs say
   --message  A line of up to ${MAX_RESTART_MESSAGE_LENGTH} characters the tabs show with it
   --clear    Take the notice back: Eigen does not restart`;
 
@@ -57,7 +57,7 @@ export async function restartNotice(flags: RestartNoticeFlags): Promise<void> {
     const message = flags.message?.replace(/\p{Cc}/gu, ' ').trim() || undefined;
     if (!/^\d+$/.test(flags.in ?? '') || inSeconds > MAX_RESTART_WAIT_SECONDS)
         return refuseUsage(`--in takes whole seconds up to ${MAX_RESTART_WAIT_SECONDS}.`, RESTART_NOTICE_USAGE);
-    if (!reason) return refuseUsage(`--reason takes ${RESTART_REASONS.join(' or ')}.`, RESTART_NOTICE_USAGE);
+    if (!reason) return refuseUsage(`--reason takes ${RESTART_REASONS.join(', ')}.`, RESTART_NOTICE_USAGE);
     if (message && message.length > MAX_RESTART_MESSAGE_LENGTH)
         return refuseUsage(`The message is over ${MAX_RESTART_MESSAGE_LENGTH} characters.`, RESTART_NOTICE_USAGE);
 
