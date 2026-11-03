@@ -70,7 +70,7 @@ export function PersonList<T>({
     });
     const drag = useListDrag({ selection, getId: getSelectionId, dragType: dragType ?? 'person' });
 
-    const { contextMenu, handleContextMenu, openAt, openFromButton } = useSelectableContextMenu({
+    const { contextMenu, handleContextMenu, openAt, openBelow } = useSelectableContextMenu({
         selection,
         getId: getSelectionId,
     });
@@ -93,7 +93,7 @@ export function PersonList<T>({
         onMenu: renderMenuItems
             ? (item, index) => {
                   const row = listRef.current?.querySelectorAll('.eigen-list-item')[index];
-                  if (row instanceof HTMLElement) openFromButton(row, item);
+                  if (row instanceof HTMLElement) openBelow(row, item);
               }
             : undefined,
     });
@@ -135,7 +135,7 @@ export function PersonList<T>({
                             {renderPerson(item)}
                             {renderMenuItems && (
                                 <ContextMenuButton
-                                    onOpen={(button) => openFromButton(button, item)}
+                                    onOpen={(button) => openBelow(button, item)}
                                     className={cn(HOVER_REVEAL_CLASS, 'h-7 w-7 shrink-0')}
                                 />
                             )}

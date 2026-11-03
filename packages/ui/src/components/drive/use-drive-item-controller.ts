@@ -81,7 +81,7 @@ export function useDriveItemController({
         contextMenu,
         handleContextMenu,
         openAt: openContextMenuAt,
-        openFromButton: openContextMenuFromButton,
+        openBelow: openContextMenuBelow,
     } = useSelectableContextMenu({ selection, getId: (item) => item.id });
 
     const { selectedIndex, handleKeyDown } = useKeyboardListNavigation<DrivePath>({
@@ -112,7 +112,7 @@ export function useDriveItemController({
                       index % columns
                   ];
                   const anchor = row instanceof HTMLElement ? row : list;
-                  if (anchor) openContextMenuFromButton(anchor, item);
+                  if (anchor) openContextMenuBelow(anchor, item);
               }
             : undefined,
         selection,
@@ -166,7 +166,7 @@ export function useDriveItemController({
         drag,
         contextMenu,
         handleContextMenu,
-        openContextMenuFromButton,
+        openContextMenuBelow,
         openContextMenuAt,
         isValidFolderDrop,
         dragOverItemId,

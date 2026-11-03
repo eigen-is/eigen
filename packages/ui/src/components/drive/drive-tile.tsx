@@ -40,7 +40,7 @@ export function DriveTile({
         selection,
         drag,
         handleContextMenu,
-        openContextMenuFromButton,
+        openContextMenuBelow,
         isValidFolderDrop,
         getDropProps,
         dragOverItemId,
@@ -97,7 +97,7 @@ export function DriveTile({
                 </span>
                 <DriveItemNameLink name={item.name} href={getItemHref?.(item)} className="text-xs" />
                 <ContextMenuButton
-                    onOpen={(button) => openContextMenuFromButton(button, item)}
+                    onOpen={(button) => openContextMenuBelow(button, item)}
                     className={cn(HOVER_REVEAL_CLASS, 'ml-auto flex-shrink-0 h-6 w-6')}
                 />
             </div>

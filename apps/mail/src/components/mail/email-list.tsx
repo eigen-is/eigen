@@ -163,7 +163,7 @@ export function EmailList({
     // A right-click, a touch long-press and the menu key select the row, then open the one menu. The rows are drawn
     // inline, with no row component to call a hook in, so one useLongPress for the list carries the pressed row
     // through bind(email).
-    const { contextMenu, handleContextMenu, openAt, openFromButton } = useSelectableContextMenu({
+    const { contextMenu, handleContextMenu, openAt, openBelow } = useSelectableContextMenu({
         selection,
         getId: (e) => e.id,
     });
@@ -190,7 +190,7 @@ export function EmailList({
             const list = tableRef.current;
             const row = list?.querySelector(`[data-index="${index}"]`);
             const anchor = row instanceof HTMLElement ? row : list;
-            if (anchor) openFromButton(anchor, email);
+            if (anchor) openBelow(anchor, email);
         },
     });
 

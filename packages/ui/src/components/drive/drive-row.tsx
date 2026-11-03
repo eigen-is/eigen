@@ -65,7 +65,7 @@ export function DriveRow({
         selection,
         drag,
         handleContextMenu,
-        openContextMenuFromButton,
+        openContextMenuBelow,
         isValidFolderDrop,
         getDropProps,
         dragOverItemId,
@@ -152,10 +152,7 @@ export function DriveRow({
                             : 'hidden @[800px]:flex items-center justify-center py-1.5'
                     }
                 >
-                    <ContextMenuButton
-                        onOpen={(button) => openContextMenuFromButton(button, item)}
-                        className="h-7 w-7"
-                    />
+                    <ContextMenuButton onOpen={(button) => openContextMenuBelow(button, item)} className="h-7 w-7" />
                 </div>
             )}
         </div>
