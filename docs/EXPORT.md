@@ -21,10 +21,12 @@ The one-shot transform process ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)
 | Outcome | Status |
 |---|---|
 | WeasyPrint not installed, older than 68 or its import past 5 s (PDF only) | 501 naming the minimum and how to install it |
-| WeasyPrint past its 60 s timeout, or exits non-zero | 504, or a bare 500 with its traceback in the log. A SIGSEGV, which WeasyPrint 68 hits now and then in a glib thread, renders once more in what is left of the 60 s, unless the first took over half |
+| WeasyPrint past its 60 s timeout, or exits non-zero | 504, or a bare 500 with its traceback in the log. A SIGSEGV during the render renders once more in what is left of the 60 s, unless the first took over half |
 | The prepared media past 200 MB in all, the named SVGs' declared sizes, or one Office source | 413 |
 | Transform runner saturated, or four PDF renders already waiting | 503, never a main-thread fallback |
 | Empty deck or empty drawing | 400 |
+
+WeasyPrint's Python died of a SIGSEGV now and then as it exited, after it had written all its output: 5 of 1,010 runs of a test's WeasyPrint script on a loaded Mac, each in a glib thread that ran code from a library the exit had already unloaded. `htmlToPdf` read that as a failed render and rendered again, which doubled the export, and failed it with a 500 when the first render took over 30 s. So `weasyprint-render.py` flushes the PDF and leaves with `os._exit`, before Python's exit. That skips WeasyPrint's finalizer, which removes the folder it writes a document's `@font-face` fonts into, so the script points every temporary file at a folder of its own and removes it after the PDF is written. A SIGSEGV that still comes is one during the render, which renders once more.
 
 ## A transform route exempts itself from the idle timeout
 
