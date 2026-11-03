@@ -11,11 +11,13 @@ import { renderInDocument } from '@workspace/ui/test/render-in-document';
 installHappyDom();
 
 // happy-dom lays nothing out, and the virtualizer draws no row in a scroller 0 px tall.
-// The prototype is held here, as the window's globals are gone by the time afterAll runs.
+// The prototype is held here, as the window's globals are gone by the time afterAll runs. Every window shares
+// one HTMLElement class, which owns clientHeight itself, so afterAll puts its getter back rather than deleting the stub.
 const elementPrototype = HTMLElement.prototype;
+const clientHeight = Object.getOwnPropertyDescriptor(elementPrototype, 'clientHeight');
 Object.defineProperty(elementPrototype, 'clientHeight', { configurable: true, get: () => 600 });
 afterAll(() => {
-    Reflect.deleteProperty(elementPrototype, 'clientHeight');
+    if (clientHeight) Object.defineProperty(elementPrototype, 'clientHeight', clientHeight);
 });
 
 const { act, createElement } = await import('react');
