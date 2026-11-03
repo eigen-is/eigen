@@ -3,7 +3,7 @@
 // goes through getSharedDrive, so the Drive ACL decides access. They answer the HTTP preconditions
 // (If-Match, If-None-Match) and the WebDAV locks as the RFCs ask.
 
-import { isContainerType } from '@workspace/lib/types/drive';
+import { DRIVE_TYPE_FILE, isContainerType } from '@workspace/lib/types/drive';
 import { enforceMaxUploadSize, getMountRoom } from '../config/enforcement';
 import { ApiError } from '../core/errors';
 import { computeEtag, matchesIfMatch, matchesIfNoneMatch, rangeResponse, scriptableInlineHeaders } from '../core/http';
@@ -27,7 +27,7 @@ export async function handleGet(args: {
     const drive = await getSharedDrive(ownerId, user);
     const path = await drive.resolvePath(mountId, pathStr);
     if (!path) throw new ApiError(404, 'Not found');
-    if (path.type !== 'file') throw new ApiError(405, 'Not a file');
+    if (path.type !== DRIVE_TYPE_FILE) throw new ApiError(405, 'Not a file');
 
     const etag = computeEtag(path);
 
