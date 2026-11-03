@@ -5,6 +5,7 @@
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_FILE } from '@workspace/lib/types/drive';
+import { getApiBasePath } from '../config/env';
 import { ApiError } from '../core/errors';
 import type { DriveLike } from '../drive/get-drive';
 import { getSharedDrive } from '../drive/get-drive';
@@ -146,7 +147,12 @@ function parseDestination(destHeader: string, requestUrl: string): DestParts {
     } catch {
         throw new ApiError(400, 'Invalid Destination header');
     }
-    const segments = decodeHref(url.pathname.replace(/^\/+webdav\/+/, '')).split('/');
+    // A client sends back the full URL it was given, which carries the API's base path that the proxy stripped
+    // from the request line. Only that one prefix is dropped, so a Destination on any other path stays a 400.
+    const basePath = getApiBasePath();
+    const pathname =
+        basePath && url.pathname.startsWith(`${basePath}/`) ? url.pathname.slice(basePath.length) : url.pathname;
+    const segments = decodeHref(pathname.replace(/^\/+webdav\/+/, '')).split('/');
     const [ownerId, mountId, ...rest] = segments;
     if (!ownerId || !mountId) throw new ApiError(400, 'Destination not under /webdav');
     const pathStr = `/${rest.join('/').replace(/\/+$/, '')}`;

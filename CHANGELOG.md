@@ -52,7 +52,7 @@ Sheets scrolls and looks things up faster, copies and pastes validation rules an
 - **Copying in Drive** — a copy larger than the upload size limit works if it fits in the free space, items with the same name all land under their own names, and a retry copies only the items that failed. A copy that fails part way leaves no half-copied folder behind
 - **A copy that never ends in Drive** — a folder copy takes only what the folder held when it began. Moving the target into the folder meanwhile, or two copies between drives in opposite directions, no longer copy on until the drive is full
 - **Several screenshots in one message** — a message with pasted screenshots of the same name posts with all of them, in Chat and in the comments of Docs, Sheets, Slides, Stickies and Vector
-- **WebDAV** — a WebDAV copy meets the drive's free space and the upload size limit, and a lock on a file lasts until it expires or the client releases it, instead of ending when your home goes idle
+- **WebDAV** — moving and copying in Finder or rclone no longer fails. A copy meets the drive's free space and the upload size limit, and a lock lasts until it expires or the client releases it, not until your home goes idle
 - **Slow transfers in Drive and WebDAV** — a slow upload, copy, convert, export or import no longer fails when it runs past five idle minutes
 - **Live updates and open editors** — both stay connected while the tab is open, and reconnect after a restore
 - **One data folder, one server** — a second Eigen server on another machine or VM, such as one that reaches `data/` through a Docker Desktop folder or WSL2, refuses to start while the first one runs

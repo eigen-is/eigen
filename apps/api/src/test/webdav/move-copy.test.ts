@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { getHome } from '../../lib/home';
 import type { TestUser } from '../setup';
@@ -135,6 +135,60 @@ describe('WebDAV MOVE/COPY', () => {
             headers: { Destination: `http://localhost${baseHref}/bad%E0.txt` },
         });
         expect(res.status).toBe(400);
+    });
+
+    // Behind the bundled Caddy the API lives under /eigen. Caddy strips it from the request path but not from the
+    // Destination header, so a client that sends back the full URL it was given names /eigen/webdav/...
+    describe('a Destination under the API base path', () => {
+        const before = process.env['VITE_API_HOST'];
+        beforeAll(() => {
+            process.env['VITE_API_HOST'] = '/eigen';
+        });
+        afterAll(() => {
+            if (before === undefined) delete process.env['VITE_API_HOST'];
+            else process.env['VITE_API_HOST'] = before;
+        });
+
+        test('MOVE to https://host/eigen/webdav/... lands in the mount', async () => {
+            await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/base-move.txt`, { body: 'm' });
+            const res = await webdavRequest(ctx.alice.user.email, 'MOVE', `${baseHref}/base-move.txt`, {
+                headers: { Destination: `https://demo.example/eigen${baseHref}/base-moved.txt` },
+            });
+            expect(res.status).toBe(201);
+            const moved = await webdavRequest(ctx.alice.user.email, 'GET', `${baseHref}/base-moved.txt`);
+            expect(await moved.text()).toBe('m');
+        });
+
+        test('COPY to /eigen/webdav/... lands in the mount', async () => {
+            await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/base-copy.txt`, { body: 'c' });
+            const res = await webdavRequest(ctx.alice.user.email, 'COPY', `${baseHref}/base-copy.txt`, {
+                headers: { Destination: `/eigen${baseHref}/base-copied.txt` },
+            });
+            expect(res.status).toBe(201);
+            const copied = await webdavRequest(ctx.alice.user.email, 'GET', `${baseHref}/base-copied.txt`);
+            expect(await copied.text()).toBe('c');
+        });
+
+        test('a plain /webdav/... Destination still works', async () => {
+            await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/base-plain.txt`, { body: 'p' });
+            const res = await webdavRequest(ctx.alice.user.email, 'COPY', `${baseHref}/base-plain.txt`, {
+                headers: { Destination: `http://localhost${baseHref}/base-plain-copy.txt` },
+            });
+            expect(res.status).toBe(201);
+        });
+
+        test('a Destination outside /eigen/webdav, or under another prefix, → 400', async () => {
+            await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/base-elsewhere.txt`, { body: 'x' });
+            for (const destination of [
+                `https://demo.example/eigen/other${baseHref}/x.txt`,
+                `https://demo.example/other${baseHref}/x.txt`,
+            ]) {
+                const res = await webdavRequest(ctx.alice.user.email, 'MOVE', `${baseHref}/base-elsewhere.txt`, {
+                    headers: { Destination: destination },
+                });
+                expect(res.status).toBe(400);
+            }
+        });
     });
 
     // A COPY writes what a PUT would, so it meets the same limits, before it writes anything.
