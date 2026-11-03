@@ -71,7 +71,7 @@ function appendReferenceLinks(html: string, refs: AttachmentReference[], recipie
 
 export class Mail {
     public constructor(
-        private home: Home,
+        public readonly home: Home,
         private store: MailStore,
     ) {}
 

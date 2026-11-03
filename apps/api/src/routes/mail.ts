@@ -22,7 +22,6 @@ import { Elysia, t } from 'elysia';
 import { requireLocalhost, requireMailEnabled, requireNonGuest, requireSelf } from '../lib/auth/access';
 import { ApiError, contentDisposition, NOT_AN_EMAIL_FILE, readBoundedBodyBytes, setCacheHeaders } from '../lib/core';
 import { readImportSourceBytes } from '../lib/drive';
-import { getHome } from '../lib/home';
 import {
     attachFromDrive,
     getMailClient,
@@ -435,17 +434,13 @@ export const mailRouter = new Elysia({ name: 'mail' })
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             // The whole message uploads, parses and indexes before this answers. At EML_MAX_BYTES that
-            // outlasts any server-wide idleTimeout, so exempt this request. It can outlast the home's idle
-            // timeout too, so the import holds the home until it ends.
+            // outlasts any server-wide idleTimeout, so exempt this request.
             server?.timeout(request, 0);
-            const home = await getHome(user.id);
-            const release = home.hold();
-            try {
+            const mail = await getMailClient(user);
+            return await mail.home.withHomeHeld(async () => {
                 const bytes = await readBoundedBodyBytes(request, EML_MAX_BYTES);
-                return await home.mail.messageImport(Buffer.from(bytes));
-            } finally {
-                release();
-            }
+                return await mail.messageImport(Buffer.from(bytes));
+            });
         },
         { auth: true, parse: 'none' },
     )
@@ -454,21 +449,17 @@ export const mailRouter = new Elysia({ name: 'mail' })
         async ({ params, body, request, user, server }): Promise<ImportMailResult> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            // Same idle-timeout exemption and home hold as the raw import route: silent until the message is
-            // indexed.
+            // The same idle-timeout exemption as the raw import route: silent until the message is indexed.
             server?.timeout(request, 0);
-            const home = await getHome(user.id);
-            const release = home.hold();
-            try {
+            const mail = await getMailClient(user);
+            return await mail.home.withHomeHeld(async () => {
                 const bytes = await readImportSourceBytes(user, body, {
                     accepts: isEmlFile,
                     rejection: NOT_AN_EMAIL_FILE,
                     maxBytes: EML_MAX_BYTES,
                 });
-                return await home.mail.messageImport(Buffer.from(bytes));
-            } finally {
-                release();
-            }
+                return await mail.messageImport(Buffer.from(bytes));
+            });
         },
         {
             body: importFromDriveSchema,
