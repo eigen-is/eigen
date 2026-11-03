@@ -810,8 +810,9 @@ stage_archive() {
 }
 
 # pull_pinned <restore --staged lines>: the images the staged archive pins, got while Eigen runs on. They are named
-# by the build the registry says the api image is, since EIGEN_VERSION may be a channel, such as main. Without those
-# annotations they are named by EIGEN_VERSION.
+# by the build the api image is, since EIGEN_VERSION may be a channel, such as main: by its labels when it is here
+# already (a rollback pulled it), else by the registry's annotations, so an offline host asks no one. Without either
+# they are named by EIGEN_VERSION.
 pull_pinned() {
     refs=''
     for name in $IMAGES; do
@@ -821,9 +822,15 @@ pull_pinned() {
         fi
         refs="$refs $ref"
     done
-    labels=$(release_labels "$(answer EIGEN_API_IMAGE "$1")")
-    build=$(answer version "$labels")
-    if [ -n "$build" ]; then build="$build ($(answer revision "$labels"))"; else build=$(answer EIGEN_VERSION "$1"); fi
+    api=$(answer EIGEN_API_IMAGE "$1")
+    build=$(image_label "$api" version 2>/dev/null) || build=''
+    if [ -n "$build" ]; then
+        build="$build ($(image_label "$api" revision))"
+    else
+        labels=$(release_labels "$api")
+        build=$(answer version "$labels")
+        if [ -n "$build" ]; then build="$build ($(answer revision "$labels"))"; else build=$(answer EIGEN_VERSION "$1"); fi
+    fi
     step "Getting Eigen $build" "Eigen $build is here" "Could not get Eigen $build; Eigen runs on as it was" \
         pull_refs $refs
 }

@@ -1378,6 +1378,17 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
         fail "$SHELL_NAME: a release restore that cannot write its files: $outcome"
     fi
     rm "$FIX/release/.eigen/bundle"
+    # An api image that is here already, as after a rollback's pull, names the build by its labels: the registry is not
+    # asked, so an offline host does not wait on it.
+    reset_release
+    STUB_CHECKED=$checked STUB_LATEST=0.2.98 STUB_REVISION=bbb1234 launch release restore "$ARCHIVE" --yes
+    if [ "$CODE" = 0 ] && ! printf '%s\n' "$CALLS" | grep -q '^manifest inspect' &&
+        printf '%s\n' "$OUT" | grep -q '◇  Eigen 0.2.99 (abc1234) is here$'; then
+        ok "$SHELL_NAME: a release restore names a pinned api image that is here by its labels, without asking the registry"
+    else
+        fail "$SHELL_NAME: a release restore to an api image that is here: exit $CODE, '$OUT', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    rm -f "$FIX/release/.eigen/bundle"
     reset_release
     STUB_CHECKED=EIGEN_API_IMAGE=ghcr.io/eigen-is/eigen/api@sha256:bbb launch release restore "$ARCHIVE" --yes
     expect_error 1 '■  The archive pins no frontend image.' "a release restore of an archive that pins some images"
