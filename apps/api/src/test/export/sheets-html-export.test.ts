@@ -2087,9 +2087,12 @@ describe('Sheets HTML export — the cell cap', () => {
         expect(out.html).toBe('');
     }, 30_000);
 
+    // Rows taller than half a page spend the cap in its 2,000 pages, as in the test below, so the walk renders 2,000 rows
+    // where rows of the default height would take 250,000.
     test("a border key past Excel's grid sizes the PDF page from the kept window, quickly", () => {
         const sheet: Sheet = {
             ...makeSheet([{ r: 0, c: 0, v: { v: 'top left' } }]),
+            defaultRowHeight: 10_000,
             config: { borderInfo: { '10000000000_0': { b: { style: 1, color: '#000' } } } },
         };
         const cpuMs = cpuClock();
@@ -2102,16 +2105,16 @@ describe('Sheets HTML export — the cell cap', () => {
             mode: 'pdf',
             lost: (code) => lost.push(code),
         });
-        // It renders the cap's 250,000 rows, about 14 s on a loaded CI runner; the span walk it guards took 119 s.
-        expect(cpuMs()).toBeLessThan(60_000);
+        // The span walk it guards took 119 s.
+        expect(cpuMs()).toBeLessThan(10_000);
         expect(lost).toEqual(['sheets-cut']);
-        expect(trs(html)).toBe(MAX_EXPORT_CELLS);
+        expect(trs(html)).toBe(2000);
         const lone = { ...sheet, config: { borderInfo: { '10000000000_0': { b: { style: 1, color: '#000' } } } } };
         expect(renderSheetsHtml([{ ...lone, celldata: [], data: [] }], NO_MEDIA, 'screen', NO_PIXELS)).toMatchObject({
             cut: [],
             size: { width: 0, height: 0 },
         });
-    }, 90_000);
+    }, 30_000);
 
     test('the cap is spent across the sheets in tab order, and a sheet with too little left is left out', async () => {
         const forged = (id: string): Sheet => ({
