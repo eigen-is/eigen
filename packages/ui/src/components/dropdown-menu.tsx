@@ -221,10 +221,11 @@ function DropdownMenuContent({
             <DropdownMenuPrimitive.Content
                 data-slot="dropdown-menu-content"
                 sideOffset={sideOffset}
-                // The same outside presses after which Radix focuses no trigger.
+                // The same outside presses after which Radix focuses no trigger. Radix skips a press the caller
+                // prevented, such as one that keeps the menu open, and so does this.
                 onInteractOutside={(event) => {
                     onInteractOutside?.(event);
-                    if (!triggerFocus) return;
+                    if (event.defaultPrevented || !triggerFocus) return;
                     const press = event.detail.originalEvent;
                     const rightClick =
                         press instanceof MouseEvent && (press.button === 2 || (press.button === 0 && press.ctrlKey));
