@@ -16,7 +16,8 @@ import type { TextPreviewResult } from '@workspace/lib/types/preview';
 import { cn, IMAGE_CHECKERBOARD_STYLE } from '@workspace/ui/lib/utils';
 import { ArrowRight, ChevronLeft, ChevronRight, FolderDown, X } from 'lucide-react';
 import { Dialog as DialogPrimitive } from 'radix-ui';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
+import { useFocusReturn } from '../../hooks/use-focus-return';
 import { EigenLoader } from '../braket/eigen-loader';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
 import { EmlPreviewContent, MailEmlPreviewContent } from './eml-preview-content';
@@ -78,21 +79,7 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
     useHotkey('ArrowRight', goNext);
     useHotkey('ArrowDown', goNext);
 
-    // The preview has no Radix trigger to give the focus back to. A row's menu or the command palette that opened it
-    // is gone by the time it closes. As that layer closed, it gave the focus back to the list it came from, and the
-    // preview's focus trap took it back. So the preview remembers the last element outside it that took the focus, and
-    // returns the focus there. Without one, it goes back to whatever had it at open, such as a chip in a Stickies card.
-    const [opener] = useState(() => document.activeElement);
-    const returnTo = useRef<HTMLElement | null>(null);
-    useEffect(() => {
-        const remember = (event: FocusEvent) => {
-            if (event.target instanceof HTMLElement && !contentRef.current?.contains(event.target)) {
-                returnTo.current = event.target;
-            }
-        };
-        document.addEventListener('focusin', remember);
-        return () => document.removeEventListener('focusin', remember);
-    }, []);
+    const returnFocus = useFocusReturn(contentRef);
 
     const openUrl = drive ? getDriveItemUrl(drive) : undefined;
     const downloadableSiblings = siblings.filter((sibling) => !!subjectInfo(sibling).downloadUrl);
@@ -111,12 +98,7 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
                         e.preventDefault();
                         contentRef.current?.focus();
                     }}
-                    onCloseAutoFocus={(e) => {
-                        const target = returnTo.current?.isConnected ? returnTo.current : opener;
-                        if (!(target instanceof HTMLElement) || !target.isConnected) return;
-                        e.preventDefault();
-                        target.focus();
-                    }}
+                    onCloseAutoFocus={returnFocus}
                     // React passes a click in a dialog the preview opened, such as Save to Drive, up to here too.
                     onClick={(e) => {
                         if (e.target === e.currentTarget) onClose();

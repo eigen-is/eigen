@@ -17,7 +17,7 @@ afterAll(() => {
     mock.module('@workspace/lib/auth', () => realAuth);
 });
 
-const { act, createElement, Fragment, useRef } = await import('react');
+const { act, createElement, Fragment, useRef, useState } = await import('react');
 const { Eye } = await import('lucide-react');
 const { useCommandPalette } = await import('@workspace/lib/command-palette');
 const { CommandPaletteProvider } = await import(
@@ -26,6 +26,7 @@ const { CommandPaletteProvider } = await import(
 const { CommandPalette } = await import('../../../components/layout/app/command-palette/command-palette');
 const { ContextMenuAnchor, useContextMenu } = await import('../../../components/context-menu');
 const { DropdownMenuItem } = await import('../../../components/dropdown-menu');
+const { FormDialog, FormDialogForm } = await import('../../../components/form-dialog');
 const { PreviewProvider, usePreview } = await import('../../../components/preview-provider');
 const { useKeyboardListNavigation } = await import('../../../hooks/use-keyboard-list-navigation');
 
@@ -39,14 +40,17 @@ const rows = ['ledger.bin', 'journal.bin'];
 const item = drivePath({ id: 'ledger-1', name: 'ledger.bin', mimeType: 'application/octet-stream' });
 
 // A listing with the list's own keys, a row menu with Quick preview, and the palette offering Quick preview for the
-// selected row.
+// selected row. Save to Drive has the shape of the preview's picker: it opens over the preview, portaled outside it,
+// with the focus in its field.
 async function mountListing() {
-    const controls = { openMenu: () => {}, openPalette: () => {} };
+    const controls = { openMenu: () => {}, openPalette: () => {}, openSave: () => {} };
     function Listing() {
         const { openPreview } = usePreview();
         const { setOpen } = useCommandPalette();
         const containerRef = useRef<HTMLDivElement>(null);
         const menu = useContextMenu<string>();
+        const [saveOpen, setSaveOpen] = useState(false);
+        controls.openSave = () => setSaveOpen(true);
         const { selectedIndex, handleKeyDown } = useKeyboardListNavigation({
             items: rows,
             getId: (row) => row,
@@ -97,6 +101,16 @@ async function mountListing() {
                 ),
             }),
             createElement(CommandPalette, { ctx }),
+            createElement(FormDialog, {
+                open: saveOpen,
+                onOpenChange: setSaveOpen,
+                title: 'Save to Drive',
+                children: createElement(FormDialogForm, {
+                    onSubmit: () => {},
+                    submitLabel: 'Save here',
+                    children: createElement('input', { autoFocus: true, 'aria-label': 'Folder' }),
+                }),
+            }),
         );
     }
     const { unmount } = await renderInDocument(
@@ -149,6 +163,26 @@ test('a preview opened from the command palette gives the focus back to the list
     expect(document.querySelector('[cmdk-input]')).toBeNull();
     expect(preview()).not.toBeNull();
 
+    await press('Escape');
+    await settle();
+    expect(preview()).toBeNull();
+    expect(listHasFocus()).toBe(true);
+    await press('ArrowDown');
+    expect(cursor()).toBe('ledger.bin');
+    await unmount();
+});
+
+test('a preview opened from a row’s menu, then Save to Drive in it, gives the focus back to the list once both close', async () => {
+    const { controls, run, press, clickRow, preview, cursor, listHasFocus, settle, unmount } = await mountListing();
+    await run(controls.openMenu);
+    await clickRow('[role="menuitem"]', 'Quick preview');
+    // The focus is on the preview's Save to Drive button as it opens the picker.
+    document.querySelector<HTMLElement>('[data-slot="file-preview"] button')?.focus();
+    await run(controls.openSave);
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Folder');
+
+    await clickRow('button', 'Cancel');
+    expect(document.activeElement?.closest('[data-slot="file-preview"]')).not.toBeNull();
     await press('Escape');
     await settle();
     expect(preview()).toBeNull();

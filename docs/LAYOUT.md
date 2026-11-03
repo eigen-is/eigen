@@ -49,6 +49,12 @@ A sidebar row is selected by its path alone: `SidebarItem` matches with `include
 
 `DialogContent` caps its own width and height and scrolls inside, and its grid track is `minmax(0, 1fr)`, so a long word can't widen the box. Text a user owns (a title, a location, a description) still needs `min-w-0 break-words` where it sits in a flex row, or that row overflows the dialog.
 
+## A closing dialog gives the focus back
+
+No Eigen dialog has a Radix `DialogTrigger`, and Radix's modal content gives the focus back to its trigger alone. Without help the focus falls to `<body>` as a dialog closes, and a list's keys do nothing until a click. `useFocusReturn` gives it back. `DialogContent` and `FilePreview` call it, and a Radix dialog built outside `DialogContent` calls it too. It reads what had the focus as the dialog renders open, before a field's `autoFocus` moves it. A dialog opened from a menu row reads a row that is gone a moment later. Then the first element outside the dialog that takes the focus becomes the target: the list the closing menu gives the focus back to. A target still on the page is never replaced, so the fields of a dialog opened over this one, such as Save to Drive over a preview, can't overwrite it.
+
+On close, a caller's `onCloseAutoFocus` runs first, and one that calls `preventDefault`, such as the sheet's grid refocus or the Docs editor's, decides where the focus goes. Otherwise the dialog focuses its target if that is still on the page and nothing else has the focus. Something that took the focus as the dialog closed keeps it, such as the Rename dialog a palette row opened: pulling the focus to the list would make Rename's focus trap take it back and select all of its text. That dialog takes over the closing one's target, so its own close returns to the list.
+
 ## The command palette is the one shell surface with its own engine
 
 The engine, parsers, providers and commands live in `packages/lib/src/core/command-palette/`, the dialog and rows in `packages/ui/src/components/layout/app/command-palette/`. Its New commands come from the shared `apps` registry and the EigenDocType registries (`EIGEN_DOC_TYPE_INFO`, `EIGEN_DOC_ICONS`), so a new EigenDocType appears in the palette with no palette change. A page publishes what is selected and the menu rows bound to it through `usePaletteSelection`. How it merges, scopes, ranks and takes a published selection: [COMMAND-PALETTE.md](COMMAND-PALETTE.md).

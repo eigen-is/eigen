@@ -57,11 +57,6 @@ export function CommandPalette({ ctx }: Props) {
     // Typing the `doc:` prefix reaches that scope even with no document open, so the empty list says what to do.
     const docScopeNoDoc = (parseQuery(input).scope ?? scope) === 'doc' && !ctx.docSearch;
 
-    // Mod+K or the search pill opens the palette, so Radix has no trigger to give the focus back to. The palette
-    // remembers what had the focus as it opened, such as a Drive listing, so that list's keys work again after it.
-    // Radix asks for the open focus before it moves the focus into the dialog.
-    const openedFrom = useRef<Element | null>(null);
-
     const firstId = useMemo(() => firstResultId(sections), [sections]);
     const [selectedValue, setSelectedValue] = useState<string | undefined>(firstId);
     const listRef = useRef<HTMLDivElement>(null);
@@ -131,18 +126,7 @@ export function CommandPalette({ ctx }: Props) {
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
-            <DialogContent
-                className="overflow-hidden p-0 max-w-xl"
-                onOpenAutoFocus={() => {
-                    openedFrom.current = document.activeElement;
-                }}
-                onCloseAutoFocus={(e) => {
-                    e.preventDefault();
-                    if (openedFrom.current instanceof HTMLElement && openedFrom.current.isConnected) {
-                        openedFrom.current.focus();
-                    }
-                }}
-            >
+            <DialogContent className="overflow-hidden p-0 max-w-xl">
                 {/* Radix requires a title for the dialog to be accessible; both are visually hidden. */}
                 <DialogTitle className="sr-only">Command palette</DialogTitle>
                 <DialogDescription className="sr-only">Search and jump to anything across your apps.</DialogDescription>
