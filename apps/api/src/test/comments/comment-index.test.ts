@@ -4,8 +4,8 @@ import type { ChatMessage, CommentEntry, DrivePath } from '@workspace/lib/types'
 import type { DocCommentMatch } from '@workspace/lib/types/doc-search';
 import type { FileEvent } from '@workspace/lib/types/file-history';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
+import { CommentIndex } from '../../lib/chat';
 import { COMMENT_INDEX_DB_CONFIG } from '../../lib/chat/comment-db-config';
-import { CommentIndex } from '../../lib/chat/comment-index';
 import * as commentSchema from '../../lib/chat/comment-schema';
 import {
     assertJson,

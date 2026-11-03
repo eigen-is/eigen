@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { FileEvent } from '@workspace/lib/types/file-history';
-import { withCommentIndex } from '../../lib/chat/comment-index';
+import { withCommentIndex } from '../../lib/chat';
 import { getHome } from '../../lib/home';
 import {
     assertJson,
