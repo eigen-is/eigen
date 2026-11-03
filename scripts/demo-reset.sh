@@ -32,10 +32,20 @@ if ! mkdir .eigen/lock 2>/dev/null; then
 fi
 echo $$ >.eigen/lock/pid
 
+# The CLI in the running API container, the way the launcher's api_cli reaches the control socket. No terminal: a timer
+# has none.
+api_cli() { dc exec -T eigen-api /app/docker/api/entrypoint.sh "$@" </dev/null; }
+
+# Set while a notice is on the API that this run has not yet followed with the stop.
+announced=0
+
 # Bring the API back on exit, but never onto an un-setup data root: a failed seed would otherwise
 # leave strangers at the setup screen. Left stopped, the next hourly run (or an operator) retries.
 finish() {
     code=$?
+    # An exit before the stop takes the warning back, since nothing is about to reset. After the stop the restart
+    # drops it.
+    if [ "$announced" = 1 ]; then api_cli restart-notice --clear >/dev/null 2>&1 || :; fi
     if [ -f data/server/.demo-seeded ]; then
         dc start eigen-api || code=$?
     else
@@ -46,6 +56,22 @@ finish() {
     exit "$code"
 }
 trap finish EXIT
+# A signal ends the run through finish, even in the middle of the wait below.
+trap 'exit 143' HUP INT TERM
+
+# Warn the open tabs five minutes ahead, with the lock held so no ./eigen command slips in. With no API running or one
+# that cannot take the notice, nobody is there to warn and the wait is skipped.
+if dc ps --status running --services 2>/dev/null | grep -qx eigen-api &&
+    api_cli restart-notice --in 300 --reason demo-reset >/dev/null 2>&1; then
+    announced=1
+    echo "[demo-reset] Told the open tabs; waiting 5 minutes before the reset..."
+    # Waited on, so a signal's trap runs at once.
+    sleep 300 &
+    wait $!
+else
+    echo "[demo-reset] No running eigen-api took the notice; nobody to warn, resetting now." >&2
+fi
+announced=0
 
 echo "[demo-reset] Stopping eigen-api..."
 dc stop eigen-api

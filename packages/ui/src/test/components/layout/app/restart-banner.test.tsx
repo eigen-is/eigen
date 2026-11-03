@@ -68,6 +68,21 @@ test('an update ten minutes away reads as a broadcast with the time it came', as
     );
 });
 
+test('a demo reset counts down in minutes and seconds and says what is wiped', async () => {
+    const notice: RestartNoticeState['notice'] = {
+        reason: 'demo-reset',
+        message: null,
+        deadline: NOW + 299_000,
+        heardAt: NOW,
+    };
+    expect(await show({ notice, streamDown: false })).toContain(
+        'This demo resets in 4:59 at 14:26. Everything made here will be wiped.',
+    );
+    expect(spoken()).toContain('This demo resets at 14:26. Everything made here will be wiped.');
+    await act(async () => void jest.advanceTimersByTime(1000));
+    expect(container.textContent).toContain('This demo resets in 4:58');
+});
+
 test('in the last minute a rollback counts in seconds', async () => {
     const text = await show({
         notice: { reason: 'rollback', message: null, deadline: NOW + 45_000, heardAt: NOW },

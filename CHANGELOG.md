@@ -6,6 +6,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Added
 
+- **Demo reset warning** — a demo now warns five minutes before its hourly reset, with a countdown at the bottom of the page
 - **Table of contents options in Docs** — on a computer or a tablet, select or right-click a table of contents to pick Plain text, Dotted or Links, how many heading levels it lists, and each level's font, size, bold and italic. PDFs and Word files show them, and a Word file's table of contents comes back with its page numbers, dots and fonts
 - **Duplicate in Drive lists** — **Duplicate** is also in the menu when you browse by file type or in a document app's list, but not on a drive's top-level folder
 - **Mail several items from Drive** — with more than one item selected, the menu offers **Mail 3 items to…**
