@@ -3,6 +3,7 @@
 
 import { useAddLabel, useDeleteLabel, useUpdateLabel } from '@workspace/lib/contacts';
 import type { Label } from '@workspace/lib/types/label';
+import { cn, HOVER_REVEAL_CLASS } from '@workspace/ui/lib/utils';
 import { Pencil, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { SidebarItem } from '../layout/sidebar';
@@ -12,6 +13,13 @@ import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import type { LabelFormValues } from './label-dialog';
 import { LabelDialog } from './label-dialog';
 import type { LabelManagerProps } from './types';
+
+// HOVER_REVEAL_CLASS with the pencil's softer look: 80% on the row's hover and for the keyboard, 100% under the pointer.
+// cn lets these opacities replace the 100% ones in HOVER_REVEAL_CLASS.
+const PENCIL_REVEAL_CLASS = cn(
+    HOVER_REVEAL_CLASS,
+    'group-hover:opacity-80 group-has-focus-visible:opacity-80 pointer-coarse:opacity-80 hover:opacity-100',
+);
 
 export function LabelManager({
     labels,
@@ -57,7 +65,7 @@ export function LabelManager({
             >
                 {labels.map((label) => {
                     const editButton = !condensed && (
-                        <div className="editButton absolute right-2 opacity-0 group-hover:opacity-80 hover:opacity-100 pointer-coarse:opacity-80">
+                        <div className={cn('editButton absolute right-2', PENCIL_REVEAL_CLASS)}>
                             <TooltipButton
                                 icon={Pencil}
                                 tooltipText="Edit label"

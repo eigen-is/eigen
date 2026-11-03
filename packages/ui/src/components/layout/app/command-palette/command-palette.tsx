@@ -28,9 +28,8 @@ const SCOPE_CHIPS: Record<PaletteScope, string> = {
     help: 'Help',
 };
 
-// Tab cycles through scopes. The lookup makes the order obvious at a glance and is easier to
-// maintain than a chained ternary. `doc` is offered first (most contextual) but only when a
-// document is open — the Tab handler skips it otherwise (see handleKeyDown).
+// The order Tab cycles through the scopes. `doc` comes first because it is the most specific, but it exists only
+// while a document is open, so Tab skips it otherwise.
 const NEXT_SCOPE: Record<PaletteScope | 'none', PaletteScope | undefined> = {
     none: 'doc',
     doc: 'file',
@@ -41,9 +40,8 @@ const NEXT_SCOPE: Record<PaletteScope | 'none', PaletteScope | undefined> = {
     help: undefined,
 };
 
-// First item the engine produced — the Top Hit if there is one, else the first
-// item of the first group. cmdk doesn't re-select on its own when items change, so
-// we drive the highlight from here.
+// The row to highlight: the Top hit if there is one, else the first row of the first group. cmdk keeps its old
+// highlight when the rows change, so the palette sets it itself.
 function firstResultId(sections: Sections): string | undefined {
     if (sections.topHit) return sections.topHit.id;
     for (const g of sections.groups) {
@@ -56,25 +54,22 @@ export function CommandPalette({ ctx }: Props) {
     const { open, setOpen, input, setInput, scope, setScope } = useCommandPalette();
     const sections = useCommandResults(ctx, input, scope);
 
-    // The `doc:` scope is reachable by typing the prefix even with no document open (the Tab
-    // stop is gated, the prefix isn't). Guide the user instead of a bare "No results.".
+    // Typing the `doc:` prefix reaches that scope even with no document open, so the empty list says what to do.
     const docScopeNoDoc = (parseQuery(input).scope ?? scope) === 'doc' && !ctx.docSearch;
 
     const firstId = useMemo(() => firstResultId(sections), [sections]);
     const [selectedValue, setSelectedValue] = useState<string | undefined>(firstId);
     const listRef = useRef<HTMLDivElement>(null);
 
-    // Reset the highlight to the engine's first item whenever results change. Without
-    // this cmdk preserves the previous selection — which after typing means the user's
-    // first keystroke leaves the highlight on an unrelated row instead of the Top Hit.
-    // Snap the list back to the top so the freshly-selected first item is visible.
+    // Typing changes the rows, and the highlight goes back to the first one, scrolled into view. Otherwise the first
+    // key typed would leave it on an unrelated row instead of the Top hit.
     useEffect(() => {
         setSelectedValue(firstId);
         if (listRef.current) listRef.current.scrollTop = 0;
     }, [firstId]);
 
     const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Backspace' && scope && (e.target as HTMLInputElement).selectionStart === 0) {
+        if (e.key === 'Backspace' && scope && e.currentTarget.selectionStart === 0) {
             e.preventDefault();
             setScope(undefined);
             return;
@@ -83,18 +78,13 @@ export function CommandPalette({ ctx }: Props) {
             e.preventDefault();
             setScope((prev) => {
                 const next = NEXT_SCOPE[prev ?? 'none'];
-                // `doc` only exists while a document is open (a controller is published). With
-                // none, skip past it so Tab never lands on an empty scope.
                 return next === 'doc' && !ctx.docSearch ? NEXT_SCOPE.doc : next;
             });
         }
     };
 
-    // Reset the input/scope when the palette OPENS, not when it closes. Resetting on
-    // close means the dialog re-renders with empty input during its close animation —
-    // for an Enter-driven action that navigates (window.location.href), the user sees
-    // the "Suggested" empty-input flash before the page swaps. Clearing on open keeps
-    // the typed query visible until the dialog actually unmounts.
+    // The input and scope reset when the palette opens, not when it closes. A row that navigates to another app
+    // keeps its query on screen until the page changes, instead of flashing the Suggested list as the dialog closes.
     const wasOpenRef = useRef(false);
     useEffect(() => {
         if (open && !wasOpenRef.current) {
@@ -127,11 +117,9 @@ export function CommandPalette({ ctx }: Props) {
             case 'help':
                 return <CommandRowHelp key={r.id} result={r} onSelect={onSelect} />;
             default: {
-                // Exhaustiveness guard: if a new PaletteResult kind is added without a row
-                // component, TypeScript refuses to compile this assignment AND we fail loud
-                // at runtime instead of silently rendering nothing.
-                const _exhaustive: never = r;
-                throw new Error(`Unhandled PaletteResult kind: ${(_exhaustive as PaletteResult).kind}`);
+                // A new kind of result without a row fails to compile here, and fails loudly if it gets through.
+                const unhandled: never = r;
+                throw new Error(`Unhandled palette result: ${JSON.stringify(unhandled)}`);
             }
         }
     };

@@ -41,11 +41,19 @@ Below 769px (`useIsMobile`, [MOBILE.md](MOBILE.md)) a `ColumnLayout` with a `mob
 
 `AppShell`'s `sidebar` prop is a node or a function of `SidebarProps`, whose only field is `condensed`. It is true on a tablet, where the sidebar is a `w-16` rail, its 40px icons inside the sidebar's 12px gutter on each side ([MOBILE.md § Width picks the layout](MOBILE.md#width-picks-the-layout-the-pointer-picks-the-affordances)). On a phone the sidebar replaces `<main>` as the one visible column, and `<main>` is hidden with CSS rather than unmounted, so an editor keeps its collab state and a list keeps its scroll.
 
+A sidebar row is selected by its path alone: `SidebarItem` matches with `includeSearch: false`, because a click on an item in a list adds the item to the URL's search (`?pid=…`), and an exact match that compared the search unselected a filter such as **All stickies** the moment a board was picked.
+
 `useLayout()` exposes the layout state (`sidebarColumnShown`, `isMobile`, `isTablet` and the setters) and `setDocumentTitle` for the browser tab. A fullscreen view with only the topbar (`RequestAccessView`, the admin access-denied screen) calls `setSidebarHidden(true)` and restores it on unmount.
 
 ## A dialog never grows to fit what a user typed
 
 `DialogContent` caps its own width and height and scrolls inside, and its grid track is `minmax(0, 1fr)`, so a long word can't widen the box. Text a user owns (a title, a location, a description) still needs `min-w-0 break-words` where it sits in a flex row, or that row overflows the dialog.
+
+## A closing dialog gives the focus back
+
+No Eigen dialog has a Radix `DialogTrigger`, and Radix's modal content gives the focus back to its trigger alone. Without help the focus falls to `<body>` as a dialog closes, and a list's keys do nothing until a click. `useFocusReturn` gives it back. `DialogContent` and `FilePreview` call it, and a Radix dialog built outside `DialogContent` calls it too. It reads what had the focus as the dialog renders open, before a field's `autoFocus` moves it. A dialog opened from a menu row reads a row that is gone a moment later. Then the first element outside the dialog that takes the focus becomes the target: the list the closing menu gives the focus back to. A target still on the page is never replaced, and an element inside any open dialog never becomes one, so the fields of a dialog opened over this one, such as Save to Drive over a preview, can't take its place.
+
+On close, a caller's `onCloseAutoFocus` runs first, and one that calls `preventDefault`, such as the sheet's grid refocus or the Docs editor's, decides where the focus goes. Otherwise the dialog focuses its target if that is still on the page and nothing else has the focus. Something that took the focus as the dialog closed keeps it, such as the Rename dialog a palette row opened: pulling the focus to the list would make Rename's focus trap take it back and select all of its text. That dialog takes over the closing one's target, so its own close returns to the list.
 
 ## The command palette is the one shell surface with its own engine
 
@@ -176,10 +184,12 @@ Reordering in place (a stickies column, the slides rail) uses `@dnd-kit`. Draggi
 
 ## Hover-revealed affordances rest visible on touch
 
-An action icon shown on row hover uses `group` with `invisible group-hover:visible`, and always adds the matching `pointer-coarse:` variant, set to what the mouse user sees on hover. A touch device has no hover, so without it the action is unreachable. `pointer-fine:group-hover:` is the opt-out for a hover that really is desktop-only. `scripts/check-standards.ts` gates it.
+An action shown on row hover, such as a row's remove button, sits in a `group` row and takes `HOVER_REVEAL_CLASS` from `@workspace/ui/lib/utils`, on the button or its wrapper. With a mouse it shows only while the pointer is over the row, and until then `pointer-events-none` lets a click through to what lies under it, as a hidden element would. It stays in the tab order and the accessibility tree, and `group-has-focus-visible:` shows it when Tab reaches it or another control in its row. Never hide it with `invisible` or `hidden`, which take it away from the keyboard and screen readers. Never reveal it on `focus-within:` or `group-focus-within:` either: a mouse click leaves the focus in the row, and the button would stay shown after the pointer left.
+
+A touch device has no hover, so a hover reveal always adds the matching `pointer-coarse:` variant, set to what the mouse user sees on hover, and the constant carries it. `pointer-fine:group-hover:` is the opt-out for a hover that really is desktop-only, such as the message actions in `ChatMessageList`, which a long press opens as a menu. `scripts/check-standards.ts` gates the touch variant.
 
 ```tsx
-<div className="invisible group-hover:visible pointer-coarse:visible ml-auto">
+<div className={cn(HOVER_REVEAL_CLASS, 'ml-auto')}>
     <TooltipButton icon={Edit} tooltipText="Edit" onClick={…} />
 </div>
 ```

@@ -68,6 +68,8 @@ Two checkboxes at the bottom of the dialog apply to every validation type:
 - **Prohibit input when input data is invalid**: blocks the entry and shows a failure notice if someone types a value that fails the rule.
 - **Show prompt when the cell is selected**: displays a hint message when the cell receives focus. When this is ticked, a text field appears where you can write the hint.
 
+Without **Prohibit input when input data is invalid**, a value that fails the rule is kept, and its cell shows a red triangle in the top-left corner. This goes for values already in the cells when you add the rule, too. Select the cell to see a card that starts with "Invalid:" and says what the rule expects.
+
 ## Remove a rule
 
 1. Select the cells whose rule you want to remove.
