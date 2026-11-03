@@ -207,6 +207,5 @@ export async function handleDelete(args: {
     }
     assertWritable(drive.lockManager, breadcrumb, ifHeader, user.id);
     await drive.deletePath(mountId, path.id, user);
-    drive.lockManager.releaseAllForPath(path.id);
     return new Response(null, { status: 204 });
 }

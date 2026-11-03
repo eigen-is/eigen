@@ -184,6 +184,28 @@ describe('trash closes open collab documents', () => {
         await moveIntoLateSubfolder(ctx.alice.user, 'trash-late-sub');
     });
 
+    // A trash marks only the folder and what is under it, so a move next to it goes on while it runs.
+    test('a move into a sibling of a folder while the folder is trashed succeeds', async () => {
+        const folder = await home.drive.createFolder(mountId, rootId, 'trash-sibling');
+        const sibling = await home.drive.createFolder(mountId, rootId, 'trash-sibling-target');
+        const doc = await createDoc('trash-sibling-doc');
+        const { mount } = await home.drive.resolveFile(mountId, doc.id);
+        const trashPath = mount.trashPath.bind(mount);
+        let moved: unknown = null;
+        const trashSpy = spyOn(mount, 'trashPath').mockImplementationOnce(async (pathId) => {
+            moved = await home.drive.movePath(mountId, doc.id, sibling.id).catch((e: unknown) => e);
+            return trashPath(pathId);
+        });
+        try {
+            await home.drive.deletePath(mountId, folder.id);
+        } finally {
+            trashSpy.mockRestore();
+        }
+
+        expect(moved).not.toBeInstanceOf(Error);
+        expect((await mount.getPath(doc.id))?.parentId).toBe(sibling.id);
+    });
+
     // On `local` a move renames the bytes before it writes the row, and a refusal must leave them with the row.
     test('on local the same move is refused, and the document keeps its bytes', async () => {
         const user = await createTestUserOnStorage('local-fullnames', 'Trash Local');

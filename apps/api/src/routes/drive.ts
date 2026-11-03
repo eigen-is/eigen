@@ -155,10 +155,10 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/file/:pathId',
         async ({ params, request, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            // Checked before the hold, so a user who may not write never holds another owner's home. The
-            // resolve answers a missing folder with a 404 first.
-            await drive.resolveFile(params.mountId, params.pathId);
+            // Checked before the hold, so a user who may not write never holds another owner's home. A
+            // refusal resolves the folder first, so a missing one answers 404 to its owner and 403 to others.
             if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
+                await drive.resolveFile(params.mountId, params.pathId);
                 throw new ApiError(403, 'No write permission');
             }
             return await drive.withHomeHeld(async () => {

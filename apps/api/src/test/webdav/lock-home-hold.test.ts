@@ -2,7 +2,7 @@ import { afterEach, beforeAll, describe, expect, jest, test } from 'bun:test';
 import { getHome } from '../../lib/home';
 import { DAV_PASSWORD } from '../dav-test-helpers';
 import type { TestUser } from '../setup';
-import { createTestUser, getTestContext } from '../setup';
+import { authedRequest, createTestUser, getTestContext } from '../setup';
 import { getDefaultMountId, webdavRequest } from './setup';
 
 const USER_IDLE_MS = 5 * 60_000;
@@ -17,9 +17,13 @@ describe('a WebDAV lock holds its Home', () => {
 
     afterEach(() => jest.useRealTimers());
 
-    async function lockedFile(user: TestUser, timeout: string): Promise<{ url: string; token: string }> {
+    async function lockedFile(
+        user: TestUser,
+        timeout: string,
+        name = 'locked.txt',
+    ): Promise<{ url: string; token: string }> {
         const mountId = await getDefaultMountId(user.sessionToken, user.id);
-        const url = `/webdav/${user.id}/${mountId}/locked.txt`;
+        const url = `/webdav/${user.id}/${mountId}/${name}`;
         expect((await webdavRequest(user.email, 'PUT', url, { body: 'v1' })).status).toBe(201);
         const lock = await webdavRequest(user.email, 'LOCK', url, {
             body: `<?xml version="1.0" encoding="utf-8" ?>
@@ -69,6 +73,61 @@ describe('a WebDAV lock holds its Home', () => {
         jest.useRealTimers();
         await home.close();
     });
+
+    // A lock on a file in a folder that goes away, by a WebDAV DELETE or MOVE or by the trash in the web
+    // app, can never be refreshed or unlocked at its URL again. It must not hold the Home.
+    async function lockedFileInFolder(user: TestUser): Promise<{ folderUrl: string; folderName: string }> {
+        const mountId = await getDefaultMountId(user.sessionToken, user.id);
+        const folderName = `folder-${crypto.randomUUID()}`;
+        const folderUrl = `/webdav/${user.id}/${mountId}/${folderName}`;
+        expect((await webdavRequest(user.email, 'MKCOL', folderUrl)).status).toBe(201);
+        await lockedFile(user, 'Second-3600', `${folderName}/locked.txt`);
+        return { folderUrl, folderName };
+    }
+
+    const removals: [string, (user: TestUser, folder: { folderUrl: string; folderName: string }) => Promise<void>][] = [
+        [
+            'a WebDAV DELETE of the folder',
+            async (user, { folderUrl }) => {
+                expect((await webdavRequest(user.email, 'DELETE', folderUrl)).status).toBe(204);
+            },
+        ],
+        [
+            'a WebDAV MOVE of the folder',
+            async (user, { folderUrl }) => {
+                const moved = await webdavRequest(user.email, 'MOVE', folderUrl, {
+                    headers: { Destination: `${folderUrl}-moved` },
+                });
+                expect(moved.status).toBe(201);
+            },
+        ],
+        [
+            'a trash of the folder in the web app',
+            async (user, { folderName }) => {
+                const mountId = await getDefaultMountId(user.sessionToken, user.id);
+                const folder = await (await getHome(user.id)).drive.resolvePath(mountId, `/${folderName}`);
+                if (!folder) throw new Error('folder not found');
+                const res = await authedRequest(user.sessionToken, `/drive/${user.id}/${mountId}/path/${folder.id}`, {
+                    method: 'DELETE',
+                });
+                expect(res.status).toBe(200);
+            },
+        ],
+    ];
+    for (const [removal, remove] of removals) {
+        test(`${removal} releases the lock on a file inside it, and the Home idles`, async () => {
+            const user = await createTestUser(`dav-lock-gone-${crypto.randomUUID()}@test.eigen.is`, DAV_PASSWORD, 'G');
+            const home = await getHome(user.id);
+            jest.useFakeTimers();
+            const folder = await lockedFileInFolder(user);
+            await remove(user, folder);
+
+            jest.advanceTimersByTime(USER_IDLE_MS + 60_000);
+            expect(home.closing).toBe(true);
+            jest.useRealTimers();
+            await home.close();
+        });
+    }
 
     test('a LOCK on a closing Home is refused with its 503', async () => {
         const user = await createTestUser(`dav-lock-closing-${crypto.randomUUID()}@test.eigen.is`, DAV_PASSWORD, 'C');

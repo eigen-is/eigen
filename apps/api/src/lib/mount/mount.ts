@@ -113,6 +113,9 @@ export class Mount {
     private readonly baseDir: string;
     private readonly getLocalDatabase: LocalDatabaseGetter;
     private readonly extractContent?: ContentExtractor;
+    // Holds the Home open while the upload queue has a PUT on the wire. A mount that no Home serves,
+    // such as a backup's read of a disabled mount, has none.
+    private readonly holdHome?: () => () => void;
     // One map holds three kinds of lock key: a path id, a folder id with a folded name for a create, and
     // the one key that permanent deletes share. Ids are UUIDs, so the kinds never collide.
     private readonly pathLocks: Map<string, Promise<void>>;
@@ -124,6 +127,7 @@ export class Mount {
         config: MountConfig,
         getLocalDatabase: LocalDatabaseGetter,
         extractContent?: ContentExtractor,
+        holdHome?: () => () => void,
     ) {
         this.ownerId = ownerId;
         this.id = config.id;
@@ -132,6 +136,7 @@ export class Mount {
         ({ paths: this.pathLocks, tree: this.treeLock } = locksFor(this.baseDir));
         this.getLocalDatabase = getLocalDatabase;
         this.extractContent = extractContent;
+        this.holdHome = holdHome;
 
         this.storage = createMountStorage(config, this.baseDir);
     }
@@ -214,6 +219,7 @@ export class Mount {
                 stagingDir: this.stagingDir,
                 destinationKey,
                 label: this.id,
+                hold: this.holdHome,
             });
         }
 
