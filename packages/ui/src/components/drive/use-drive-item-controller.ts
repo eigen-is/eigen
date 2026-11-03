@@ -28,6 +28,9 @@ export type UseDriveItemControllerOptions = {
     onSelectionChange?: (items: DrivePath[]) => void;
     // Absent in a picker, whose rows have no actions.
     actions?: DriveActionRunner;
+    // Off in a view that mounts no row menu, such as a picker's table. The menu key then neither opens a menu nor
+    // selects the cursor's row, which would replace the rows a multi-select picker holds.
+    hasMenu?: boolean;
 };
 
 export function useDriveItemController({
@@ -41,6 +44,7 @@ export function useDriveItemController({
     onQuickLook,
     onSelectionChange,
     actions,
+    hasMenu = true,
 }: UseDriveItemControllerOptions) {
     const handleItemSelect = useCallback(
         (id: string) => {
@@ -100,12 +104,16 @@ export function useDriveItemController({
         // The menu key opens the menu at the row or tile, as its ⋮ does. Each virtual row of the table and the grid
         // carries the virtualizer's data-index and holds its rows or tiles as children, so a grid's tile is found by
         // its row and column. A row scrolled out of the window is not drawn, and its menu opens at the list instead.
-        onMenu: (item, index) => {
-            const list = containerRef.current;
-            const row = list?.querySelector(`[data-index="${Math.floor(index / columns)}"]`)?.children[index % columns];
-            const anchor = row instanceof HTMLElement ? row : list;
-            if (anchor) openContextMenuFromButton(anchor, item);
-        },
+        onMenu: hasMenu
+            ? (item, index) => {
+                  const list = containerRef.current;
+                  const row = list?.querySelector(`[data-index="${Math.floor(index / columns)}"]`)?.children[
+                      index % columns
+                  ];
+                  const anchor = row instanceof HTMLElement ? row : list;
+                  if (anchor) openContextMenuFromButton(anchor, item);
+              }
+            : undefined,
         selection,
         columns,
         scrollToIndex,

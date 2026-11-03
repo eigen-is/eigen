@@ -155,6 +155,7 @@ export function DriveTable({
         onQuickLook,
         onSelectionChange,
         actions,
+        hasMenu: !hideActions,
     });
 
     // One long-press for the whole list: each row binds it to its item, and a disabled row doesn't.
