@@ -37,4 +37,9 @@ test('the pencil shows on hover only, and Tab reaches and shows it', async () =>
     const wrapper = button?.closest('.editButton');
     if (!button || !wrapper) throw new Error('the label has no pencil');
     expect(revealStates(wrapper, button)).toEqual(HOVER_REVEALED);
+    const classes = wrapper.className.split(' ');
+    expect(classes).toContain('group-hover:opacity-80');
+    expect(classes).toContain('pointer-coarse:opacity-80');
+    expect(classes).not.toContain('group-hover:opacity-100');
+    expect(classes).not.toContain('pointer-coarse:opacity-100');
 });

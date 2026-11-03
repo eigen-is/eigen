@@ -1,7 +1,7 @@
 // The share summary in a Drive row and the chat toolbar shows who has access. Where a click opens Share, it is a button
 // the keyboard reaches, and its click stays off the row. Elsewhere it is no control at all. On an item nobody else
-// has, its add-person icon shows to a mouse user on hover only, and when Tab reaches the button. The lock on a shared link
-// says who the link lets in, in the Share dialog's words.
+// has, its add-person icon shows to a mouse user on hover only, and when Tab reaches the button. The lock on a shared
+// link says who the link lets in, in the Share dialog's words.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import type { DirectAccessItem } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';

@@ -67,8 +67,8 @@ export const HOVER_REVEALED = {
     keyboardFocused: { shown: true, takesPointer: true },
 };
 
-// Which of the utilities `isUtility` accepts node's classes set in this focus state: the bare class, overridden by a focus variant
-// that matches. Hover, pointer and other variants never match here.
+// Which of the utilities `isUtility` accepts the classes of node set in this focus state: the bare class, unless a
+// focus variant that matches overrides it. Hover, pointer and other variants never match here.
 function classValue(node: Element, isUtility: (utility: string) => boolean, focus?: Focus): string | undefined {
     let value: string | undefined;
     for (const token of node.classList) {
@@ -84,7 +84,11 @@ function classValue(node: Element, isUtility: (utility: string) => boolean, focu
 
 function variantMatches(variant: string, node: Element, { on, by }: Focus): boolean {
     const keyboard = by === 'keyboard';
-    const groupHoldsFocus = node.parentElement?.closest('.group')?.contains(on) ?? false;
+    // `.group:focus-within &` and `.group:has(*:focus-visible) &` match any `.group` above node, not only the nearest.
+    // Focus-within counts the group's own focus, `:has(*:focus-visible)` only what it holds.
+    const groups = ancestors(node).filter((ancestor) => ancestor.classList.contains('group'));
+    const groupWithinFocus = groups.some((group) => group.contains(on));
+    const groupHoldsFocus = groups.some((group) => group !== on && group.contains(on));
     switch (variant) {
         case 'focus:':
             return node === on;
@@ -95,10 +99,16 @@ function variantMatches(variant: string, node: Element, { on, by }: Focus): bool
         case 'has-focus-visible:':
             return keyboard && node !== on && node.contains(on);
         case 'group-focus-within:':
-            return groupHoldsFocus;
+            return groupWithinFocus;
         case 'group-has-focus-visible:':
             return keyboard && groupHoldsFocus;
         default:
             return false;
     }
+}
+
+function ancestors(node: Element): Element[] {
+    const found: Element[] = [];
+    for (let parent = node.parentElement; parent; parent = parent.parentElement) found.push(parent);
+    return found;
 }

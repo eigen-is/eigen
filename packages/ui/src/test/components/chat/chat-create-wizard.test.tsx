@@ -1,6 +1,7 @@
 // The New chat wizard lists each picked person with an × that removes them, and with a team picked it shows the team
 // with an × of its own. A screen reader hears each × by what it removes, never a row of bare "Remove"s, and a click
-// removes only that one. A mouse user sees each × on hover only, and Tab reaches and shows it. The Location bar of the second step is a button that opens the folder browser.
+// removes only that one. A mouse user sees each × on hover only, and Tab reaches and shows it. The Location bar of the
+// second step is a button that opens the folder browser.
 import { afterAll, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';

@@ -8,6 +8,7 @@ import { Badge } from '@workspace/ui/components/badge';
 import { ATTENDEE_STATUS_ICON, ATTENDEE_STATUS_LABEL } from '@workspace/ui/components/calendar';
 import { ContactAddRow, useContactInput } from '@workspace/ui/components/contacts';
 import { UserItem } from '@workspace/ui/components/user';
+import { cn, HOVER_REVEAL_CLASS } from '@workspace/ui/lib/utils';
 import { X as XIcon } from 'lucide-react';
 import { useCallback } from 'react';
 import { toast } from 'sonner';
@@ -65,7 +66,7 @@ export function AttendeeEditor({ attendees, onChange, currentUserEmail }: Attend
                                         icon={XIcon}
                                         tooltipText={`Remove ${attendee.email}`}
                                         type="button"
-                                        className="h-6 w-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
+                                        className={cn('h-6 w-6', HOVER_REVEAL_CLASS)}
                                         onClick={() => removeAttendee(attendee.email)}
                                     />
                                 </div>
