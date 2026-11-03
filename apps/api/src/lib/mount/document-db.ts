@@ -94,7 +94,7 @@ export async function holdDatabase<S extends SchemaType>(
         const release = () => {
             if (released) return;
             released = true;
-            releaseHold(mount, pathId, slot);
+            releaseHold(mount, pathId, slot, db);
         };
         return { db, release };
     });
@@ -149,9 +149,10 @@ async function openInSlot<S extends SchemaType>(
     return db;
 }
 
-// The last holder to let go wakes a close that waits for it, or else arms the idle close.
-function releaseHold(mount: Mount, pathId: string, slot: DocumentDbSlot): void {
-    if (--slot.holders > 0) return;
+// The last holder to let go wakes a close that waits for it, or else arms the idle close. A hold on a
+// database that a close took away lets go of nothing, because the slot may hold a new one by now.
+function releaseHold(mount: Mount, pathId: string, slot: DocumentDbSlot, db: ManagedDatabase<SchemaType>): void {
+    if (slot.db !== db || --slot.holders > 0) return;
     if (slot.lastHolderGone) {
         slot.lastHolderGone();
         return;
@@ -359,6 +360,7 @@ export async function closeInSlot(
         const released = await settlesWithin(promise, HOLDER_WAIT_MS);
         slot.lastHolderGone = null;
         if (!released) console.warn(`[Mount] closing ${pathId} while ${slot.holders} holder(s) still use it`);
+        slot.holders = 0;
     }
     if (slot.idleTimer) clearTimeout(slot.idleTimer);
     slot.idleTimer = null;
