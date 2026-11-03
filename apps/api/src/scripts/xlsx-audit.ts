@@ -22,7 +22,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import type { Cell, DataVerificationRule, Sheet, SingleRange } from '@workspace/lib/sheets';
+import type { Cell, DataValidationRule, Sheet, SingleRange } from '@workspace/lib/sheets';
 import {
     cellFontName,
     coalescedRanges,
@@ -1034,7 +1034,7 @@ export function diffWorkbooks(a: Sheet[], b: Sheet[], media: RoundtripContext['m
 function validationDifferences(
     a: Sheet['dataValidations'],
     b: Sheet['dataValidations'],
-): { at: string; a?: DataVerificationRule; b?: DataVerificationRule }[] {
+): { at: string; a?: DataValidationRule; b?: DataValidationRule }[] {
     // Each side's ranges, each with its rule's place in id order, so the highest place wins a cell.
     const [rankedA, rankedB] = [a ?? {}, b ?? {}].map((rules) =>
         Object.keys(rules)
@@ -1048,7 +1048,7 @@ function validationDifferences(
         around.row = [Math.min(around.row[0], range.row[0]), Math.max(around.row[1], range.row[1])];
         around.column = [Math.min(around.column[0], range.column[0]), Math.max(around.column[1], range.column[1])];
     }
-    const pairs = new Map<string, { a?: DataVerificationRule; b?: DataVerificationRule; blocks: SingleRange[] }>();
+    const pairs = new Map<string, { a?: DataValidationRule; b?: DataValidationRule; blocks: SingleRange[] }>();
     const walk = (block: SingleRange, inA: readonly RankedRange[], inB: readonly RankedRange[]) => {
         const pair = { a: blockRule(block, inA), b: blockRule(block, inB) };
         if (pair.a && pair.b) {
@@ -1073,12 +1073,12 @@ function validationDifferences(
     }));
 }
 
-type RankedRange = { range: SingleRange; rank: number; rule: DataVerificationRule };
+type RankedRange = { range: SingleRange; rank: number; rule: DataValidationRule };
 
 // The rule one side gives every cell of a block, with no rule when no range meets it, or undefined when its cells get
 // different rules. Every range given meets the block. The highest place wins a cell, so the block is one rule's when a
 // range of the highest place covers it whole.
-function blockRule(block: SingleRange, ranked: readonly RankedRange[]): { rule?: DataVerificationRule } | undefined {
+function blockRule(block: SingleRange, ranked: readonly RankedRange[]): { rule?: DataValidationRule } | undefined {
     if (ranked.length === 0) return {};
     let top = 0;
     for (const { rank } of ranked) top = Math.max(top, rank);

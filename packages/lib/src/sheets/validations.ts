@@ -5,7 +5,7 @@
 
 import { isRecord } from '../core/guards';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from './defaults';
-import type { DataVerificationRule, SheetValidation, SingleRange } from './types';
+import type { DataValidationRule, SheetValidation, SingleRange } from './types';
 
 // The most ranges one rule holds. Excel applies a rule to a selection, which holds at most 2,048 ranges, and the
 // largest rule in our xlsx corpus has 1,024. The editor's cuts split a range into up to four, so the cap leaves room
@@ -18,7 +18,7 @@ export const MAX_VALIDATIONS = 1024;
 
 // The type each field of a rule holds. Typed against the rule, so a field added to it fails the build until it is
 // checked here too.
-const RULE_FIELDS: Record<keyof DataVerificationRule, 'string' | 'boolean'> = {
+const RULE_FIELDS: Record<keyof DataValidationRule, 'string' | 'boolean'> = {
     type: 'string',
     type2: 'string',
     value1: 'string',
@@ -30,7 +30,7 @@ const RULE_FIELDS: Record<keyof DataVerificationRule, 'string' | 'boolean'> = {
     validity: 'string',
     remote: 'boolean',
 };
-const REQUIRED_RULE_FIELDS: ReadonlySet<string> = new Set<keyof DataVerificationRule>([
+const REQUIRED_RULE_FIELDS: ReadonlySet<string> = new Set<keyof DataValidationRule>([
     'type',
     'type2',
     'value1',

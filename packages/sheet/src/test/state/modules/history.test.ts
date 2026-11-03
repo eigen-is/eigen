@@ -14,14 +14,14 @@ import type { Cell } from '../../../engine/types';
 import { setColumnWidth } from '../../../state/api/rowcol';
 import { copySheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
-import { applyDataVerification } from '../../../state/modules/data-verification';
+import { applyDataValidation } from '../../../state/modules/data-validation';
 import { shiftEntries } from '../../../state/modules/history-shift';
 import { saveHyperlink } from '../../../state/modules/hyperlink';
 import { mergeCells } from '../../../state/modules/merge';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import { addSheet, changeSheet, deleteSheet } from '../../../state/modules/sheet';
 import { clearValidations, validationAt } from '../../../state/modules/validation-rules';
-import type { DataVerificationRule, History, Op, Sheet } from '../../../state/types';
+import type { DataValidationRule, History, Op, Sheet } from '../../../state/types';
 import type { Tab } from '../factories/collab';
 import { author, join, tab, tabEdit, tabReceive, tabRedo, tabUndo } from '../factories/collab';
 import { workbookContextFactory } from '../factories/context';
@@ -1178,11 +1178,11 @@ describe('shiftEntries', () => {
 // Each validation rule is written under its own id, so two peers editing different rules keep both edits, and a peer's
 // row op moves an undo's rules with the cells they cover. Columns A and B each hold a list rule over rows 1 to 10.
 describe('validation rules on two tabs and a joiner', () => {
-    const LIST: DataVerificationRule = { type: 'dropdown', type2: '', value1: 'a,b', value2: '' };
-    const TICKS: DataVerificationRule = { type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' };
+    const LIST: DataValidationRule = { type: 'dropdown', type2: '', value1: 'a,b', value2: '' };
+    const TICKS: DataValidationRule = { type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' };
     const rules = (t: Tab) => t.ctx.sheets[0].dataValidations;
-    const apply = (row: number[], column: number[], rule: DataVerificationRule) => (ctx: Context) =>
-        applyDataVerification(ctx, { row, column }, rule);
+    const apply = (row: number[], column: number[], rule: DataValidationRule) => (ctx: Context) =>
+        applyDataValidation(ctx, { row, column }, rule);
     const column = (t: Tab, c: number, rows: number) =>
         Array.from({ length: rows }, (_, r) => validationAt(rules(t), r, c)?.type ?? null);
     const repeat = (type: string | null, n: number) => Array<string | null>(n).fill(type);

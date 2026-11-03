@@ -1,6 +1,6 @@
-// A mousedown on a cell carrying a data-verification affordance, driven through
+// A mousedown on a cell carrying a data-validation affordance, driven through
 // handleCellAreaMouseDown itself — the gate under test lives at the callsite, not
-// in the predicates the sibling data-verification.test.ts covers.
+// in the predicates the sibling data-validation.test.ts covers.
 //
 // While a cell edit is open the click belongs to the edit: clicking a tick box to
 // put its reference into an `=IF(` being composed used to ALSO toggle the box,
@@ -13,8 +13,8 @@ import { describe, expect, test } from 'bun:test';
 import { Window } from 'happy-dom';
 import type { Context } from '../../../state/context';
 import { cellGlyphAtPointer, handleCellAreaMouseDown } from '../../../state/events/mouse-cell';
-import { cellTextBox, checkboxAlign, checkboxRect } from '../../../state/modules/data-verification';
-import type { DataVerificationRule, GlobalCache } from '../../../state/types';
+import { cellTextBox, checkboxAlign, checkboxRect } from '../../../state/modules/data-validation';
+import type { DataValidationRule, GlobalCache } from '../../../state/types';
 import { contextFactory } from '../factories/context';
 import { validationsByCell } from '../factories/validations';
 
@@ -26,7 +26,7 @@ g.document = win.document;
 g.HTMLElement = win.HTMLElement;
 g.DOMParser = win.DOMParser;
 
-const TICK_BOX: DataVerificationRule = { type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' };
+const TICK_BOX: DataValidationRule = { type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' };
 
 // A2 carries a tick box holding FALSE; A1 is the cell a formula is composed in.
 function tickBoxContext(): Context {
@@ -175,7 +175,7 @@ describe('handleCellAreaMouseDown — a press that closes a menu', () => {
 // mousedown then does the glyph's job. A1 is selected, so its bottom-right 8px
 // are the fill handle's grab and the 2px inside every edge the move band's.
 describe('cell glyphs over the selection drag handles', () => {
-    const LIST_RULE: DataVerificationRule = { type: 'dropdown', type2: '', value1: 'Red,Green,Blue', value2: '' };
+    const LIST_RULE: DataValidationRule = { type: 'dropdown', type2: '', value1: 'Red,Green,Blue', value2: '' };
     const GLOBAL_CACHE = quietCache();
 
     function selectedA1(): Context {

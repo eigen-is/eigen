@@ -8,7 +8,7 @@
 // lands at G7, and row 9 of the destination was hidden beforehand.
 
 import { describe, expect, test } from 'bun:test';
-import type { DataVerificationRule } from '@workspace/lib/sheets';
+import type { DataValidationRule } from '@workspace/lib/sheets';
 import { Window } from 'happy-dom';
 import type { Context } from '../../state/context';
 import { handleCopy, handleCut } from '../../state/events/copy';
@@ -39,7 +39,7 @@ const MARKED = [
     [2, 2],
 ] as const;
 
-function rule(r: number, c: number): DataVerificationRule {
+function rule(r: number, c: number): DataValidationRule {
     return {
         type: 'dropdown',
         type2: '',

@@ -10,7 +10,7 @@ export * from './color';
 export * from './condition-format';
 export * from './currencies';
 export * from './cursor';
-export * from './data-verification';
+export * from './data-validation';
 export * from './drop-cell';
 export * from './filter';
 export * from './floating';

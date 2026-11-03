@@ -5,8 +5,8 @@ import { describe, expect, test } from 'bun:test';
 import { REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { Canvas } from '../../../state/canvas';
 import type { Context } from '../../../state/context';
-import { CHECKBOX_SIZE, checkboxChange } from '../../../state/modules/data-verification';
-import type { Cell, DataVerificationRule } from '../../../state/types';
+import { CHECKBOX_SIZE, checkboxChange } from '../../../state/modules/data-validation';
+import type { Cell, DataValidationRule } from '../../../state/types';
 import { contextFactory } from '../factories/context';
 
 // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
@@ -20,7 +20,7 @@ g.Path2D ??= class {
 
 const ROWS = 6000;
 const ROW_HEIGHT = 20;
-const TICK_BOX: DataVerificationRule = { type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' };
+const TICK_BOX: DataValidationRule = { type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' };
 
 // A 2D context that records every call, and a canvas element that hands it out.
 function recordingCanvas() {

@@ -4,7 +4,7 @@
 
 import type {
     ConditionalFormatRule,
-    DataVerificationRule,
+    DataValidationRule,
     Sheet as LibSheet,
     SheetConfig as LibSheetConfig,
     MergeCell,
@@ -40,7 +40,7 @@ export type {
     CellMatrix,
     CellWithRowAndCol,
     ConditionalFormatRule,
-    DataVerificationRule,
+    DataValidationRule,
     FilterCondition,
     FilterConditionName,
     FilterEntry,
@@ -180,7 +180,7 @@ export type LinkCardProps = {
 };
 
 // The rule the data-validation dialog edits, every field set, with '' or false where the rule has none. OK spreads it
-// into the stored DataVerificationRule. `rangeTxt` is the range the user typed or picked for the rule.
+// into the stored DataValidationRule. `rangeTxt` is the range the user typed or picked for the rule.
 export type DataRegulationProps = {
     type: string;
     type2: string;
