@@ -183,6 +183,7 @@ export function DriveTable({
             ref={containerRef}
             tabIndex={0}
             onKeyDown={controller.handleKeyDown}
+            onContextMenu={controller.handleListContextMenu}
             role="grid"
             aria-rowcount={items.length}
             className="@container flex-1 overflow-auto relative w-full text-sm focus:outline-none"

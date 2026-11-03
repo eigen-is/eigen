@@ -10,6 +10,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Duplicate in Drive lists** — **Duplicate** is also in the menu when you browse by file type or in a document app's list, but not on a drive's top-level folder
 - **Mail several items from Drive** — with more than one item selected, the menu offers **Mail 3 items to…**
 - **Shortcuts in the Drive menu** — on a computer, the menu shows ␣ next to **Quick preview** and ⌫ next to **Move to trash** and **Remove shared item**. On a touch screen no menu shows shortcuts
+- **Row menus from the keyboard** — in the lists of Drive, Mail and Contacts, Shift+F10 (fn+Shift+F10 on most Mac keyboards) or the Menu key opens the menu of the row under the cursor. Tab no longer stops on each row's ⋮ and Share buttons
 - **Unread comments on cards** — in Stickies and in the comment panel of Docs, Sheets, Slides and Vector, a red dot marks each card with a new reply, mention or assignment for you. Opening the card clears it
 - **A warning before a restart** — `./eigen update`, `./eigen rollback` and `./eigen restore` take `--in 10m "Back at three"`, up to an hour. Every open tab counts down in a banner, then says Eigen is updating while it is down. Ctrl+C or a lost SSH session cancels
 

@@ -1,5 +1,6 @@
 // The share summary in a Drive row and the chat toolbar shows who has access. Where a click opens Share, it is a button
-// the keyboard reaches, and its click stays off the row. Elsewhere it is no control at all. On an item nobody else
+// the keyboard reaches, and its click stays off the row. In a Drive row Tab skips it, since the row's menu key reaches
+// Share. Elsewhere it is no control at all. On an item nobody else
 // has, its add-person icon shows to a mouse user on hover only, and when Tab reaches the button. The lock on a shared
 // link says who the link lets in, in the Share dialog's words.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
@@ -58,6 +59,7 @@ async function renderSummary(props: {
     onClick?: () => void;
     showIconOnHover?: boolean;
     visibility?: 'private' | 'public-read';
+    inKeyboardList?: boolean;
 }) {
     const onRowClick = mock(() => {});
     const path = { ...notes, visibility: props.visibility ?? 'private' };
@@ -65,7 +67,12 @@ async function renderSummary(props: {
         createElement(
             'div',
             { className: 'group', onClick: onRowClick },
-            createElement(DriveShareSummary, { path, onClick: props.onClick, showIconOnHover: props.showIconOnHover }),
+            createElement(DriveShareSummary, {
+                path,
+                onClick: props.onClick,
+                showIconOnHover: props.showIconOnHover,
+                inKeyboardList: props.inKeyboardList,
+            }),
         ),
     );
     unmount = rendered.unmount;
@@ -78,10 +85,21 @@ test('a summary that opens Share is a button the keyboard reaches, and its click
     const button = container.querySelector('button');
     expect(button?.type).toBe('button');
     expect(button?.getAttribute('aria-label')).toBe('Share');
+    expect(button?.tabIndex).toBe(0);
     if (!button) return;
     await act(async () => pressKey(button, 'Enter'));
     await act(async () => pressKey(button, ' '));
     expect(onClick).toHaveBeenCalledTimes(2);
+    expect(onRowClick).not.toHaveBeenCalled();
+});
+
+test('in a row of a list with keyboard navigation, Tab skips the button, and a click still opens Share', async () => {
+    const onClick = mock(() => {});
+    const { container, onRowClick } = await renderSummary({ onClick, inKeyboardList: true });
+    const button = container.querySelector('button');
+    expect(button?.tabIndex).toBe(-1);
+    await act(async () => button?.click());
+    expect(onClick).toHaveBeenCalledTimes(1);
     expect(onRowClick).not.toHaveBeenCalled();
 });
 

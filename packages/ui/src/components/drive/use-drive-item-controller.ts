@@ -17,7 +17,7 @@ export type UseDriveItemControllerOptions = {
     // Already sorted by the caller: the controller selects and navigates over them as they are.
     items: DrivePath[];
     activeItemId?: string;
-    // Grid width for keyboard navigation; DriveTable keeps the default single column.
+    // The grid's column count, for the arrow keys. DriveTable keeps the default of one column.
     columns?: number;
     scrollToIndex?: (index: number, opts?: { align?: 'center' }) => void;
     containerRef: RefObject<HTMLElement | null>;
@@ -44,7 +44,7 @@ export function useDriveItemController({
 }: UseDriveItemControllerOptions) {
     const handleItemSelect = useCallback(
         (id: string) => {
-            const item = items.find((i) => i.id === id);
+            const item = items.find((item) => item.id === id);
             if (item) onItemClick?.(item);
         },
         [items, onItemClick],
@@ -53,7 +53,7 @@ export function useDriveItemController({
     const handleQuickLook = useCallback(
         (id: string) => {
             if (!onQuickLook) return;
-            const item = items.find((i) => i.id === id);
+            const item = items.find((item) => item.id === id);
             if (item) onQuickLook(item);
         },
         [items, onQuickLook],
@@ -72,7 +72,19 @@ export function useDriveItemController({
         onSelectionChange?.(selection.selectedItems);
     }, [selection.selectedItems, onSelectionChange]);
 
-    const { selectedIndex, handleKeyDown } = useKeyboardListNavigation<DrivePath>({
+    // A right-click, a touch long-press, the ⋮ button and the menu key all select the row, then open its menu.
+    const {
+        contextMenu,
+        handleContextMenu,
+        openAt: openContextMenuAt,
+        openFromButton: openContextMenuFromButton,
+    } = useSelectableContextMenu({ selection, getId: (item) => item.id });
+
+    const {
+        selectedIndex,
+        handleKeyDown,
+        handleContextMenu: handleListContextMenu,
+    } = useKeyboardListNavigation<DrivePath>({
         items,
         activeId: activeItemId,
         getId: (item) => item.id,
@@ -89,19 +101,28 @@ export function useDriveItemController({
                   if (remove) actions.run(remove.id, items);
               }
             : undefined,
+        // The menu key opens the menu at the row or tile, as its ⋮ does. Each virtual row of the table and the grid
+        // carries the virtualizer's data-index and holds its rows or tiles as children, so a grid's tile is found by
+        // its row and column. A row scrolled out of the window is not drawn, and its menu opens at the list instead.
+        onMenu: (item, index) => {
+            const list = containerRef.current;
+            const row = list?.querySelector(`[data-index="${Math.floor(index / columns)}"]`)?.children[index % columns];
+            const anchor = row instanceof HTMLElement ? row : list;
+            if (anchor) openContextMenuFromButton(anchor, item);
+        },
         selection,
         columns,
         scrollToIndex,
     });
 
-    // Scroll a deep-linked active item into view once on mount; later selects don't recenter.
+    // A deep-linked active item scrolls into view once, on mount. A later select doesn't center it again.
     const initialActiveId = useRef(activeItemId);
     const didInitialScroll = useRef(false);
     useEffect(() => {
         if (didInitialScroll.current || !initialActiveId.current || !scrollToIndex) return;
-        const idx = items.findIndex((i) => i.id === initialActiveId.current);
-        if (idx >= 0) {
-            scrollToIndex(idx, { align: 'center' });
+        const index = items.findIndex((item) => item.id === initialActiveId.current);
+        if (index >= 0) {
+            scrollToIndex(index, { align: 'center' });
             didInitialScroll.current = true;
         }
     }, [items, scrollToIndex]);
@@ -109,17 +130,11 @@ export function useDriveItemController({
     const drag = useListDrag({ selection, getId: (item) => item.id, dragType: 'drive-item' });
     const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
 
-    // Right-click, the long-press (touch) opener, and the kebab button all select-then-open.
-    const {
-        contextMenu,
-        handleContextMenu,
-        openAt: openContextMenuAt,
-        openFromButton: openContextMenuFromButton,
-    } = useSelectableContextMenu({ selection, getId: (item) => item.id });
-
     // A view that can't move items, such as a read-only share or a picker, has no onMove and so no drop targets.
     const isValidFolderDrop = (targetItem: DrivePath) =>
-        !!actions?.onMove && targetItem.type === 'folder' && !drag.draggedItems.some((d) => d.id === targetItem.id);
+        !!actions?.onMove &&
+        targetItem.type === 'folder' &&
+        !drag.draggedItems.some((dragged) => dragged.id === targetItem.id);
 
     // The drop handlers a folder row or tile spreads on its root, next to getDragProps.
     const getDropProps = (item: DrivePath) => ({
@@ -134,7 +149,7 @@ export function useDriveItemController({
             e.preventDefault();
             setDragOverItemId(null);
             if (isValidFolderDrop(item)) {
-                for (const d of drag.draggedItems) actions?.onMove?.(d, item.id);
+                for (const dragged of drag.draggedItems) actions?.onMove?.(dragged, item.id);
             }
         },
     });
@@ -143,6 +158,7 @@ export function useDriveItemController({
         selection,
         selectedIndex,
         handleKeyDown,
+        handleListContextMenu,
         drag,
         contextMenu,
         handleContextMenu,

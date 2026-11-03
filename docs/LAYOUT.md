@@ -156,7 +156,7 @@ Only `apps/drive` mounts `DriveLayout` directly. Docs, Stickies, Slides and Shee
 Each list owns its rendering and composes the hooks in `packages/ui/src/hooks/`:
 
 - `useListSelection`: click, modifier click, select all
-- `useKeyboardListNavigation`: Space, Enter and Delete act on the cursor row, or on the topmost selected row when a select-all left no cursor
+- `useKeyboardListNavigation`: Space, Enter, Delete and the menu key (Shift+F10 or the ContextMenu key) act on the cursor row, or on the topmost selected row when a select-all left no cursor
 - `useListDrag`: the multi-drag badge
 - `useListDropTarget`: a drop on a sidebar item, through `DroppableSidebarItem`
 - `useContextMenu`, from `components/context-menu/`
@@ -176,6 +176,8 @@ A row's state is a class in `packages/ui/src/styles/globals.css`, painted in the
 
 One context menu serves the whole list, so a list never draws a `DropdownMenu` per row. A row's button opens it with `openAt(item, rect.right, rect.bottom)` from the button's own bounding rect, because a click made with the keyboard's Enter has clientX and clientY 0,0.
 
+The menu key opens the same menu from the row's own rect: the list passes `onMenu` and finds the row element itself, a virtualized list by the `data-index` its virtualizer already puts on each virtual row (a grid tile by that row and its column). The list also spreads the hook's `handleContextMenu` next to `handleKeyDown`. On Windows and Linux the browser follows the key with a native `contextmenu` event at whatever has the focus, on Windows at keyup, when the row's menu already holds the focus. A keydown `preventDefault` doesn't stop it, and left alone it opens the browser's menu over ours, or Drive's New menu behind the list. So once its key opened a menu, the hook swallows the next `contextmenu` in a window capture listener, and a `pointerdown` or the next key ends that, so a right-click is never swallowed. A keyboard `contextmenu` no keydown came before, which targets the focused container and has an empty `pointerType`, opens the row's menu through `handleContextMenu`; a right-click below the rows targets the container too but has the mouse's `pointerType`, and still reaches the background menu. macOS sends no `contextmenu` for either key.
+
 A menu row's 16 px between icon and label lives in the item primitives in `dropdown-menu.tsx` (`gap-4`), which the Sheets right-click menu uses too. Put the bare icon in the row; never add `mr-*` or a `gap-*` override to a menu icon.
 
 ## Reordering uses dnd-kit, moving between lists uses native drag
@@ -184,7 +186,7 @@ Reordering in place (a stickies column, the slides rail) uses `@dnd-kit`. Draggi
 
 ## Hover-revealed affordances rest visible on touch
 
-An action shown on row hover, such as a row's remove button, sits in a `group` row and takes `HOVER_REVEAL_CLASS` from `@workspace/ui/lib/utils`, on the button or its wrapper. With a mouse it shows only while the pointer is over the row, and until then `pointer-events-none` lets a click through to what lies under it, as a hidden element would. It stays in the tab order and the accessibility tree, and `group-has-focus-visible:` shows it when Tab reaches it or another control in its row. Never hide it with `invisible` or `hidden`, which take it away from the keyboard and screen readers. Never reveal it on `focus-within:` or `group-focus-within:` either: a mouse click leaves the focus in the row, and the button would stay shown after the pointer left.
+An action shown on row hover, such as a row's remove button, sits in a `group` row and takes `HOVER_REVEAL_CLASS` from `@workspace/ui/lib/utils`, on the button or its wrapper. With a mouse it shows only while the pointer is over the row, and until then `pointer-events-none` lets a click through to what lies under it, as a hidden element would. It stays in the accessibility tree, and `group-has-focus-visible:` shows it when Tab reaches it or another control in its row. It stays in the tab order too, except in a list with keyboard navigation: there a row's buttons, such as `ContextMenuButton` and a Drive row's `DriveShareSummary`, take `tabIndex={-1}`, because the menu key reaches the same actions and Tab would otherwise stop on every row. Never hide it with `invisible` or `hidden`, which take it away from the keyboard and screen readers. Never reveal it on `focus-within:` or `group-focus-within:` either: a mouse click leaves the focus in the row, and the button would stay shown after the pointer left.
 
 A touch device has no hover, so a hover reveal always adds the matching `pointer-coarse:` variant, set to what the mouse user sees on hover, and the constant carries it. `pointer-fine:group-hover:` is the opt-out for a hover that really is desktop-only, such as the message actions in `ChatMessageList`, which a long press opens as a menu. `scripts/check-standards.ts` gates the touch variant.
 

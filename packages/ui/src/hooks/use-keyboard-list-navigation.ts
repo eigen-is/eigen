@@ -1,9 +1,10 @@
 // The keyboard model of a list or grid of rows, such as Drive's listing, mail's message list or a contact list: the
-// arrows move a cursor, Enter opens the row, Space quick-looks it, Delete removes it and ⌘A selects every row. The
-// list spreads the returned handleKeyDown on its focusable container. The hook keeps the focus on that container while
-// nothing else holds it, and takes it back from a row's own button when a key moves the cursor.
+// arrows move a cursor, Enter opens the row, Space quick-looks it, Delete removes it, the menu key opens its menu and
+// ⌘A selects every row. The list spreads the returned handleKeyDown and handleContextMenu on its focusable container.
+// The hook keeps the focus on that container while nothing else holds it, and takes it back from a row's own button
+// when a key moves the cursor.
 
-import type { KeyboardEvent, RefObject } from 'react';
+import type { KeyboardEvent, MouseEvent, RefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import type { UseListSelectionReturn } from './use-list-selection';
 
@@ -31,6 +32,9 @@ type UseKeyboardListNavigationOptions<T> = {
     containerRef: RefObject<HTMLElement | null>;
     itemSelector?: string;
     onDelete?: (item: T) => void;
+    // Shift+F10 and the ContextMenu key call this for the row Enter would open. The list opens that row's menu at the
+    // row, as its ⋮ button would.
+    onMenu?: (item: T, index: number) => void;
     shouldNotify?: (item: T, index: number) => boolean;
     selection?: UseListSelectionReturn<T>;
     columns?: number;
@@ -50,6 +54,7 @@ export function useKeyboardListNavigation<T>({
     containerRef,
     itemSelector = '.eigen-list-item',
     onDelete,
+    onMenu,
     shouldNotify,
     selection,
     onQuickLook,
@@ -109,6 +114,34 @@ export function useKeyboardListNavigation<T>({
         };
     }, [containerRef, reclaimFocus]);
 
+    // On Windows and Linux the menu key also makes the browser send a contextmenu event to the focused element, after
+    // the keydown, and on Windows only once the key comes up. By then the row's menu that the keydown opened holds the
+    // focus. Left alone, that event would open the browser's own menu over ours, or, on the list, the menu of the page
+    // behind it, such as Drive's New menu. So after the key opened a menu, the next contextmenu anywhere is swallowed.
+    // A pointer presses down before its contextmenu, and macOS sends none, so a pointerdown or the next key ends it.
+    const menuKeyOpened = useRef(false);
+    const hasMenu = onMenu !== undefined;
+    useEffect(() => {
+        if (!hasMenu) return;
+        const swallow = (e: Event) => {
+            if (!menuKeyOpened.current) return;
+            menuKeyOpened.current = false;
+            e.preventDefault();
+            e.stopPropagation();
+        };
+        const disarm = () => {
+            menuKeyOpened.current = false;
+        };
+        window.addEventListener('contextmenu', swallow, true);
+        window.addEventListener('pointerdown', disarm, true);
+        window.addEventListener('keydown', disarm, true);
+        return () => {
+            window.removeEventListener('contextmenu', swallow, true);
+            window.removeEventListener('pointerdown', disarm, true);
+            window.removeEventListener('keydown', disarm, true);
+        };
+    }, [hasMenu]);
+
     const scrollToRow = (index: number) => {
         if (scrollToIndex) {
             scrollToIndex(index);
@@ -138,6 +171,23 @@ export function useKeyboardListNavigation<T>({
         const id = getSelectionId(item);
         if (e.shiftKey) selection.selectRange(id);
         else selection.select(id);
+    };
+
+    // ⌘A on a list nobody clicked yet selects every row while the cursor is still at -1. Space, Enter, Delete and the
+    // menu key then act on the topmost selected row, and a list's onDelete may widen that to the whole selection.
+    const targetIndex = () =>
+        selectedIndex >= 0 && selectedIndex < items.length
+            ? selectedIndex
+            : items.findIndex((item) => selection?.isSelected(getSelectionId(item)));
+
+    // With no row to act on, the key does nothing here, and the page behind the list may open its own menu.
+    const openMenu = (e: KeyboardEvent<HTMLElement> | MouseEvent<HTMLElement>) => {
+        const index = targetIndex();
+        if (!onMenu || index < 0) return false;
+        e.preventDefault();
+        scrollToRow(index);
+        onMenu(items[index], index);
+        return true;
     };
 
     const handleKeyDown = (e: KeyboardEvent<HTMLElement>) => {
@@ -187,13 +237,6 @@ export function useKeyboardListNavigation<T>({
             scrollToRow(index);
         };
 
-        // ⌘A on a list nobody clicked yet selects every row while the cursor is still at -1. Space, Enter and Delete
-        // then act on the topmost selected row, and a list's onDelete may widen that to the whole selection.
-        const targetIndex = () =>
-            selectedIndex >= 0 && selectedIndex < items.length
-                ? selectedIndex
-                : items.findIndex((item) => selection?.isSelected(getSelectionId(item)));
-
         switch (e.key) {
             case 'ArrowDown':
                 // With no row under the cursor, Down starts at the first row, also in a grid.
@@ -214,9 +257,9 @@ export function useKeyboardListNavigation<T>({
 
             case ' ': {
                 e.preventDefault();
-                // React renders the quick-look overlay before this native event finishes bubbling,
-                // so without this the overlay's own Space-to-close hotkey (on document) would shut
-                // it again on the very press that opened it.
+                // React renders the quick-look overlay before this native event finishes bubbling. The overlay
+                // closes on Space through a hotkey on the document, so without this it would close again on the
+                // same press that opened it.
                 e.stopPropagation();
                 const index = targetIndex();
                 if (index >= 0) {
@@ -237,6 +280,12 @@ export function useKeyboardListNavigation<T>({
                 }
                 break;
             }
+
+            // The menu key is the ContextMenu key or Shift+F10. F10 alone belongs to the browser.
+            case 'ContextMenu':
+            case 'F10':
+                if ((e.key === 'ContextMenu' || e.shiftKey) && openMenu(e)) menuKeyOpened.current = true;
+                break;
 
             // Backspace deletes too, the way Finder, Apple Mail and Contacts do on macOS.
             case 'Delete':
@@ -259,5 +308,14 @@ export function useKeyboardListNavigation<T>({
         }
     };
 
-    return { selectedIndex, handleKeyDown };
+    // A contextmenu event no keydown came before, such as one a screen reader sends, still opens the row's menu. A
+    // key's event targets the focused list itself and has no pointer type, while a right-click below the rows, which
+    // targets the list too, has the mouse's.
+    const handleContextMenu = (e: MouseEvent<HTMLElement>) => {
+        if (e.target !== e.currentTarget) return;
+        if (!(e.nativeEvent instanceof PointerEvent) || e.nativeEvent.pointerType !== '') return;
+        if (openMenu(e)) e.stopPropagation();
+    };
+
+    return { selectedIndex, handleKeyDown, handleContextMenu };
 }

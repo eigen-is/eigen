@@ -29,8 +29,8 @@ type PersonListProps<T> = {
     emptyState: ReactNode;
     selectable?: boolean;
     dragType?: string;
-    // With menu items, a right-click, a long press or a row's ⋮ button opens one shared menu. The pressed row joins the
-    // selection first, and the menu acts on the whole selection.
+    // With menu items, a right-click, a long press, a row's ⋮ button or the menu key opens one shared menu. The pressed
+    // row joins the selection first, and the menu acts on the whole selection.
     renderMenuItems?: (items: T[], close: () => void) => ReactNode;
     // The Delete and Backspace keys call this, as the menu's delete entry does.
     onDelete?: (items: T[]) => void;
@@ -76,7 +76,11 @@ export function PersonList<T>({
     });
     const longPress = useLongPress(openAt);
 
-    const { selectedIndex, handleKeyDown } = useKeyboardListNavigation({
+    const {
+        selectedIndex,
+        handleKeyDown,
+        handleContextMenu: handleListContextMenu,
+    } = useKeyboardListNavigation({
         items: visible,
         activeId,
         getId,
@@ -88,6 +92,14 @@ export function PersonList<T>({
         onDelete: onDelete
             ? (item) => onDelete(selection.selectedCount > 1 ? selection.selectedItems : [item])
             : undefined,
+        // The menu key opens the menu at the row, as its ⋮ does. The list is not virtualized, so every row is drawn,
+        // and the cursor's index is the row's place among them.
+        onMenu: renderMenuItems
+            ? (item, index) => {
+                  const row = listRef.current?.querySelectorAll('.eigen-list-item')[index];
+                  if (row instanceof HTMLElement) openFromButton(row, item);
+              }
+            : undefined,
     });
 
     const menuItems = contextMenu.item
@@ -97,7 +109,13 @@ export function PersonList<T>({
         : [];
 
     return (
-        <div className="flex-1 overflow-y-auto outline-none" tabIndex={0} ref={listRef} onKeyDown={handleKeyDown}>
+        <div
+            className="flex-1 overflow-y-auto outline-none"
+            tabIndex={0}
+            ref={listRef}
+            onKeyDown={handleKeyDown}
+            onContextMenu={handleListContextMenu}
+        >
             {visible.length === 0 ? (
                 emptyState
             ) : (

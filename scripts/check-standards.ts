@@ -92,12 +92,12 @@ const TRANSPORT_PREFIX = /^\/ws(?=\/)/;
 
 // docs/LAYOUT.md § Hover-revealed affordances rest visible on touch: an affordance hidden until hover must rest visible
 // on touch, which has no hover. Only a hidden element is at risk, since a decorative `group-hover:scale-105` reveals
-// nothing, so a hit is a hiding utility plus a revealing `group-hover:` in the same class string.
-// `pointer-fine:group-hover:` makes the hover desktop-only on purpose and is not a gap.
+// nothing, so a hit is a hiding utility plus a revealing `group-hover:` in the same class string. A named group's
+// `group-hover/item:` counts too. `pointer-fine:group-hover:` makes the hover desktop-only on purpose and is not a gap.
 const STRING_LITERAL = /'[^'\n]*'|"[^"\n]*"|`[^`]*`/g;
 const HIDDEN_BASE = /(?<![\w-])(?:invisible|hidden|opacity-0)(?![\w-])/;
 const HOVER_REVEAL =
-    /(?<!pointer-fine:)\bgroup-hover:(visible|flex|grid|block|inline-flex|inline-block|opacity-\d+)(?![\w-])/g;
+    /(?<!pointer-fine:)\bgroup-hover(?:\/[\w-]+)?:(visible|flex|grid|block|inline-flex|inline-block|opacity-\d+)(?![\w-])/g;
 
 // The same section keeps these controls in reach of the keyboard. Tab skips a control under `invisible` or `hidden`,
 // so a hover reveal hides with `opacity-0`. A reveal on `focus-within:` keeps a control shown after a mouse click,

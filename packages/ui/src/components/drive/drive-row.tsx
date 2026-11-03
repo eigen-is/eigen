@@ -132,6 +132,7 @@ export function DriveRow({
                         onClick={hideShareClick ? undefined : () => onShareClick?.(item)}
                         showIconOnHover={!hideShareClick}
                         ancestorBreadcrumb={ancestorBreadcrumb}
+                        inKeyboardList
                     />
                 </div>
             )}
