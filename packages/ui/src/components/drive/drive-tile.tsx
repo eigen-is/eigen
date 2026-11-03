@@ -18,7 +18,7 @@ type DriveTileProps = {
     isSelected: boolean;
     disabled: boolean;
     controller: ReturnType<typeof useDriveItemController>;
-    // The grid's one useLongPress: bind(item) gives this tile its touch handlers.
+    // The grid shares one useLongPress, and bind(item) gives this tile its touch handlers.
     longPressBind: ReturnType<typeof useLongPress<DrivePath>>['bind'];
     getItemHref?: (item: DrivePath) => string | undefined;
     onItemClick?: (item: DrivePath) => void;

@@ -24,7 +24,7 @@ type DriveRowProps = {
     gridCols: string;
     coarse: boolean;
     controller: ReturnType<typeof useDriveItemController>;
-    // The table's one useLongPress: bind(item) gives this row its touch handlers.
+    // The table shares one useLongPress, and bind(item) gives this row its touch handlers.
     longPressBind: ReturnType<typeof useLongPress<DrivePath>>['bind'];
     getItemHref?: (item: DrivePath) => string | undefined;
     onItemClick?: (item: DrivePath) => void;
@@ -83,8 +83,8 @@ export function DriveRow({
                 isActive && 'eigen-list-item-active',
                 isSelected && 'eigen-list-item-selected',
                 dragOverItemId === item.id && isValidFolderDrop(item) && 'bg-accent',
-                // No pointer-events-none: a disabled row must still be the contextmenu hit target so the
-                // interceptor below can suppress the background menu (its handlers below stay inert).
+                // A disabled row keeps its pointer events, so a right-click on it lands here and never opens the
+                // background menu. Its other handlers below do nothing while it is disabled.
                 disabled && 'opacity-40',
             )}
             onClick={(e) => {
@@ -97,8 +97,8 @@ export function DriveRow({
             onContextMenu={
                 hideActions
                     ? (e) => {
-                          // Picker rows have no actions, but the event must not bubble to DriveBrowser's
-                          // background New-folder menu (which would offer to create a sibling of this row).
+                          // A picker row has no actions. The right-click still must not reach DriveBrowser's
+                          // background menu, which would offer a new folder beside this row.
                           e.preventDefault();
                           e.stopPropagation();
                       }
