@@ -25,7 +25,7 @@ Sheets scrolls and looks things up faster, copies and pastes validation rules an
 - **The sidebar and the top bar** — both sit on the page's own background, with no line between them and the page. The open sidebar item, and the one under the pointer, end in a point, as the eigen logo does
 - **Jumping from a table of contents in Docs** — a click selects it. ⌘-click a line (Ctrl-click on Windows and Linux) to jump to its heading, or on a touch screen tap once, then tap a line
 - **A shorter style list in Docs** — the style picker lists Normal text and the headings. **Title** and **Subtitle** move to **Format › Paragraph styles**, below **Heading 6**, and Word files keep them
-- **Scrolling in Sheets** — the grid keeps up with the scroll on a 120 Hz screen, frozen rows and columns included, also on large sheets
+- **Scrolling in Sheets** — the grid keeps up with a wheel or trackpad scroll on a 120 Hz screen, frozen rows and columns included, also on large sheets. Dragging the scrollbar still redraws the whole grid
 - **Validation rules in Sheets (breaking)** — an existing spreadsheet opens without its dropdowns, tick boxes and other validation rules, and every cell keeps its value. Set the rules up again, or import the Excel file again
 - **Whole-column rules in Sheets** — a validation rule on a whole column, picked by its header or from an Excel file, covers every row, below the data too. Only rows inserted inside a rule get it
 - **Pasting over rules and links in Sheets** — cells you copy or cut in the same tab replace the validation rules and links where you paste them, as in Excel. A paste, fill or move that would break a rule into too many pieces is refused, with a notice
@@ -49,7 +49,7 @@ Sheets scrolls and looks things up faster, copies and pastes validation rules an
 - **Light backups (breaking)** — every `./eigen update` makes a Full backup, and `./eigen backup --light`, `./eigen update --full` and Light in **Back up now** are gone. Eigen no longer recognises the Light backups of 0.4.1 and before: it can't restore one, `./eigen status` doesn't list them and a start leaves their files as they are. Delete them by hand with `sudo rm backups/server-*-light-*`
 - **Rolling back** — `./eigen rollback` keeps today's data when the version before opens it. It puts the update's backup back only when that version can't, or is too old to check, and a check that fails otherwise stops it with Eigen running as it was
 - **Restoring a user or team in Admin** — the account keeps working while its backup is unpacked and checked, so a refused restore costs nobody their open pages. It goes offline only for the swap at the end, and needs room on the data disk
-- **Private backups** — the files inside a backup, their records and a restored account are for Eigen's own user alone. `backups/` takes the install folder's group with mode 2750, or stays as it is, with a warning, when other users share that group
+- **Private backups** — the files inside a backup and their records are for Eigen's own user alone. `backups/` takes the install folder's group with mode 2750, or stays as it is, with a warning, when other users share that group
 - **Stopping during a backup** — before it stops Eigen, `./eigen` asks the server whether a backup or its upload runs, and waits for it. A server that doesn't answer gets a warning after a few tries, and the stop goes on
 - **Copies a restore kept aside** — `./eigen status` lists the `data.pre-restore-*` and `.env.production.pre-restore-*` copies a restore leaves in the install folder, with the command to delete them. Each can be a full copy of `data/`
 - **Uploading several files in Drive** — a file that fails no longer stops the files after it, and the files of one upload finish together
@@ -64,7 +64,7 @@ Sheets scrolls and looks things up faster, copies and pastes validation rules an
 
 ### Fixed
 
-- **Odd font names in Sheets** — a font name with a semicolon, a bracket, a quote, a backslash or a control character draws and exports as Inter, so a name like O'Neill falls back
+- **Odd font names in Sheets** — a font name with a semicolon, an opening parenthesis, a quote, a backslash or a control character draws and exports as Inter, so a name like O'Neill falls back
 - **Function suggestions in Sheets** — the list of functions under a formula closes when you click another cell to finish the edit, instead of staying on screen
 - **Printing** — printing a document, an email or a contact waits for its fonts, and a few seconds at most for its pictures, so they show on the page
 - **Moving equations in Docs** — drag an equation to move it, as you drag an image. One that had a line to itself leaves no empty line behind
@@ -124,10 +124,10 @@ Sheets scrolls and looks things up faster, copies and pastes validation rules an
 - **Pictures in PowerPoint files** — a picture set to Fit or Fill downloads as one picture and comes back looking the same. An imported picture cropped evenly on two sides comes in as Fit or Fill, and the import message counts any other crop
 - **Pasting text boxes in Vector and Slides** — a pasted text box in Chinese, emoji or bold text fits its text, and one undo removes the paste instead of first shrinking the box
 - **Arrow labels in Vector and Slides** — a label's gap in its arrow fits the label after undo, redo and a late-loading font
-- **Calendar notices** — an invitation or a shared calendar from someone without a name shows a plain title, such as "New invitation" or "Calendar shared with you", instead of "undefined shared a calendar"
+- **Calendar notices** — an invitation or a shared calendar from someone with no name or address shows a plain title, such as "New invitation" or "Calendar shared with you", instead of "undefined shared a calendar"
 - **One data folder, one server** — a second Eigen server on another machine or VM, such as one that reaches `data/` through a Docker Desktop folder or WSL2, refuses to start while the first one runs
 - **Crafted backups** — a backup someone uploaded can no longer make an interrupted restore of one account move another account aside
-- **Uploads after a restore** — a whole-server restore of an older backup keeps the files a restore of one account had not yet sent to an S3 bucket
+- **Uploads after a restore** — a whole-server restore of an older backup keeps the files it had not yet sent to an S3 bucket, also after a restore of one account in between
 - **The trash after a restore in Admin** — a file trashed before the backup stays in the trash for the full retention period, instead of being deleted for good seconds after the restore
 - **Slow transfers in Drive and WebDAV** — a slow WebDAV or Drive upload, copy, convert, export or import no longer fails when it runs past five idle minutes
 - **WebDAV locks** — a lock on a file no longer ends when your home goes idle. It lasts until it expires or the client releases it
