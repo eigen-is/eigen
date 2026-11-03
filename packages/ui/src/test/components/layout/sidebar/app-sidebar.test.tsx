@@ -44,7 +44,7 @@ let unmount = async () => {};
 afterEach(() => unmount());
 
 // The sidebar as an app draws it, `appName` '' being Drive, over the routes its rows link to.
-async function activeRows(appName: string, url: string): Promise<string[]> {
+async function renderSidebar(appName: string, url: string): Promise<void> {
     function Sidebar() {
         const layout = useLayout();
         return createElement(LayoutContext.Provider, { value: { ...layout, appName } }, createElement(AppSidebar));
@@ -57,6 +57,10 @@ async function activeRows(appName: string, url: string): Promise<string[]> {
     });
     await router.load();
     ({ unmount } = await renderInDocument(createElement(RouterProvider, { router })));
+}
+
+async function activeRows(appName: string, url: string): Promise<string[]> {
+    await renderSidebar(appName, url);
     return [...document.querySelectorAll('a[data-status="active"]')].map((row) => row.textContent ?? '');
 }
 
@@ -85,3 +89,16 @@ for (const { app, path, row } of CASES) {
         expect(await activeRows(app, `${path}${SELECTED}`)).toEqual([row]);
     });
 }
+
+// The router joins a link's classes without merging them, so an idle text color left on the selected row would fight
+// its selected one, and the CSS order would pick the winner.
+test('the selected row carries only the selected text color, and the others only the idle one', async () => {
+    await renderSidebar('', '/trash');
+    const selected = document.querySelector('a[data-status="active"]');
+    const idle = [...document.querySelectorAll('a')].find((row) => row.textContent === 'Watched');
+    if (!selected || !idle) throw new Error('the sidebar has no Trash or Watched row');
+    expect([...selected.classList]).toContain('text-primary');
+    expect([...selected.classList]).not.toContain('text-muted-foreground');
+    expect([...idle.classList]).toContain('text-muted-foreground');
+    expect([...idle.classList]).not.toContain('text-primary');
+});
