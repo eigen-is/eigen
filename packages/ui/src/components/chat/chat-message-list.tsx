@@ -78,9 +78,9 @@ export function ChatMessageList({
     const isInitialLoadRef = useRef(true);
     const { subjectOf, subjectsOf } = useAttachmentSubjects(ownerId ?? '', mountId ?? '', mediaFolderId ?? '');
 
-    // Message actions (Save attachments / Edit / Delete) and a chip's file actions reach the
-    // singleton context menu via right-click and touch long-press, through the wiring the card
-    // dialog and the mail reader share.
+    // A right-click or a long press opens one shared menu. It holds the message's own actions, such as Edit and
+    // Delete, and the file actions of the attachment chip under the pointer. The card dialog and the mail reader wire
+    // their menus the same way.
     const toMenuTarget = useCallback(
         (chipKey: string | null, message: ChatMessage): ChatMenuTarget => ({ message, attachment: subjectOf(chipKey) }),
         [subjectOf],
@@ -92,7 +92,7 @@ export function ChatMessageList({
     // The chip's siblings are its own message's attachments, so a quick look from here keeps Save all.
     const runner = useFileActionRunner(menuTarget?.attachment ?? null, menuSubjects);
 
-    // One gating source shared by the hover bar and the context menu so the two action sets never drift.
+    // The hover bar and the menu both ask this for a message's actions, so they always offer the same ones.
     const getMessageActions = useCallback(
         (message: ChatMessage) => {
             const isOwn = message.authorEmail === currentUserEmail;
@@ -120,9 +120,9 @@ export function ChatMessageList({
         }
     }, [messages.length, scrollToBottom]);
 
-    // Auto-scroll when a new message appears at the end. Near-bottom is tracked from scroll
-    // events (wasNearBottomRef): measuring here would include the just-rendered message, so a
-    // tall message would push the distance past the threshold and never scroll.
+    // A new message at the end scrolls the list down when the user sent it or was near the bottom. The scroll handler
+    // records whether the user was near the bottom. Measuring here would include the message just drawn, and a tall
+    // one would push the distance past the limit, so the list would never scroll.
     const wasNearBottomRef = useRef(true);
     useEffect(() => {
         const lastMessage = messages[messages.length - 1];
