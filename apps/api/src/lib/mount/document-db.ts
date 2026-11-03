@@ -420,7 +420,8 @@ export async function closeAllDatabases(mount: Mount): Promise<void> {
     // also visits a slot added while it runs.
     for (const pathId of mount.documentDbs.keys()) {
         try {
-            // On s3 the final sync of the close stages the last state and queues its upload.
+            // On s3 the final sync of the close stages the last state and queues its upload. A closing
+            // Home refuses the hold a PUT takes, so the row waits for the next open, or the flush below.
             await closeDatabase(mount, pathId);
         } catch (err) {
             console.error(`[Mount] closeAllDatabases close failed for ${pathId}:`, err);
@@ -430,7 +431,10 @@ export async function closeAllDatabases(mount: Mount): Promise<void> {
     if (mount.uploadQueue) {
         // At shutdown the queue flushes after the final close-time enqueues, so healthy uploads finish
         // before metadata.db closes. The flush and the wait in close() both end at the shutdown deadline,
-        // even with a PUT or a semaphore slot stalled. An idle close has no deadline and skips the flush.
+        // even with a PUT or a semaphore slot stalled. Any other close has no deadline and skips the flush.
+        // Its wait in close() is instant for an idle close, because a PUT on the wire holds the Home. An
+        // eviction, such as for a restore, closes a held Home, and its wait keeps an old PUT from landing
+        // over what comes next.
         const deadline = getShutdownDrainDeadline();
         if (deadline !== null) {
             await settlesWithin(

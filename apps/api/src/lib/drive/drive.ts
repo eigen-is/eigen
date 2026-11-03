@@ -184,12 +184,14 @@ export class Drive {
     private async startMount(config: MountConfig): Promise<void> {
         this.home.refuseIfClosing();
         // The mount gets the text extractor from here, so the document loaders stay out of the mount code.
+        // Its upload queue holds the home while a PUT is on the wire.
         const mount = new Mount(
             this.owner.id,
             this.home.homeDir,
             config,
             this.home.getLocalDatabase.bind(this.home),
             extractText,
+            () => this.home.hold(),
         );
         await mount.init();
         if (this.home.closing) {
