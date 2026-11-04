@@ -9,8 +9,9 @@ import { useMemo } from 'react';
 
 // The controller keeps no state of its own. Every id names its cell, and replace is handed the query, because the
 // command palette runs its own searches on this controller between the find bar's calls. `doc` is only compared by
-// identity: the editor passes its live cells, so the controller is made again after each change and the find bar's
-// count stays current. Each call reads workbookRef.current at the time, since a new snapshot mounts a new Workbook.
+// identity: the editor passes the sheets of each change, so the controller is made again after each change and the
+// find bar's count stays current. Each call reads workbookRef.current at the time, since a new snapshot mounts a new
+// Workbook.
 export function useSheetSearchController(
     workbookRef: RefObject<WorkbookInstance | null>,
     doc: unknown,
@@ -57,11 +58,7 @@ export function useSheetSearchController(
 }
 
 function toDocMatch(m: SearchResult): DocSearchMatch {
-    return { id: idOf(m), label: m.value, context: `${m.sheetName} · ${m.cellPosition}` };
-}
-
-function idOf(m: SearchResult): string {
-    return `${m.sheetId}:${m.r}:${m.c}`;
+    return { id: `${m.sheetId}:${m.r}:${m.c}`, label: m.value, context: `${m.sheetName} · ${m.cellPosition}` };
 }
 
 // The cell an id names. It parses from the right, because a sheet id may itself hold a ':'. A malformed id gives null,

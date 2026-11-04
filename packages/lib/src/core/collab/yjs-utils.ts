@@ -1,25 +1,22 @@
-// Helpers over a collaborative app's Y.Doc: a version restore that rebuilds the live doc's roots from a snapshot in one
-// transaction, so connected peers converge through the normal update stream, typed reads of the item maps and id
-// arrays that apps such as Slides and Stickies keep, and the cards a stickies board shows. The server's collab document
-// restores through it, and the server reads a board's cards through it.
+// Helpers over a collaborative app's Y.Doc. A version restore rebuilds the live doc's roots from a snapshot in one
+// transaction, so connected peers converge through the normal update stream. Typed reads cover the item maps and id
+// arrays that apps such as Slides and Stickies keep, and the cards a Stickies board shows. Callers include the
+// server's collab document, which restores through it, and the Stickies board in the browser and on the server.
 
 import type { YjsRootKind } from '@workspace/lib/types/drive';
 import * as Y from 'yjs';
 
-// Replaces a Y.Doc's declared root types with the contents of a snapshot
-// update, inside a single transaction. The transaction's update fires through
-// the doc's normal 'update' event so connected clients converge through the
-// existing Yjs broadcast — no reconnect, no merge fight, no per-app handler.
+// Replaces a Y.Doc's declared roots with the contents of a snapshot update, in one transaction. Its update goes out
+// through the doc's normal 'update' event, so connected clients converge through the usual Yjs broadcast. No client
+// reconnects, and no app needs a handler of its own.
 //
-// Works for every Y subtype an Eigen container actually uses: Y.Map, Y.Array,
-// Y.Text, Y.XmlFragment (Tiptap), with arbitrary nesting. The walker rebuilds
-// Y instances on the live doc rather than transplanting — Y items have
-// identity tied to their source doc and can't be moved between docs.
+// It handles every Y type an Eigen container uses, nested to any depth: Y.Map, Y.Array, Y.Text and Tiptap's
+// Y.XmlFragment. It rebuilds each value on the live doc rather than moving it, because a Y item belongs to the doc it
+// was made in.
 //
-// `roots` is the schema: which top-level names exist and what kind they are.
-// Lives in EIGEN_DOC_TYPE_INFO. Used to force-type both docs' shared entries
-// before the walk — Y.applyUpdate hydrates roots as AbstractType, so
-// `instanceof` checks would otherwise misclassify them.
+// `roots` names each top-level root and its kind, as EIGEN_DOC_TYPE_INFO declares them. Both docs' roots get their
+// kind before the walk, because Y.applyUpdate gives a root no concrete type and an `instanceof` check would get it
+// wrong.
 export function restoreYjsDoc(yjsDoc: Y.Doc, state: Uint8Array, roots: Record<string, YjsRootKind>): void {
     const tempDoc = new Y.Doc();
     Y.applyUpdate(tempDoc, state);
@@ -61,20 +58,16 @@ function forceTypeRoot(doc: Y.Doc, name: string, kind: YjsRootKind): void {
     }
 }
 
-// Yjs's AbstractType<TEvent> is invariant in TEvent (it appears in both
-// covariant and contravariant positions through internal EventHandler<TEvent>),
-// so `Y.AbstractType<unknown>` won't accept `Y.Map<T>` / `Y.XmlFragment` / etc.
-// We discriminate at runtime via `instanceof` regardless — the static T param
-// is uninteresting here. Hence `<any>` at the walker boundary.
+// Yjs types AbstractType<TEvent> so that `Y.AbstractType<unknown>` accepts no Y.Map<T> or Y.XmlFragment. The walker
+// tells the types apart with `instanceof` at runtime, so the type parameter tells it nothing, and it takes `any`.
 // biome-ignore lint/suspicious/noExplicitAny: see comment above
 type AnyYType = Y.AbstractType<any>;
 
 // What y-tiptap writes as a node's attribute: a JSON value, which Yjs keeps as it is.
 type XmlAttributes = Record<string, object | string | number | boolean | null>;
 
-// In-place replace: clear `live`'s contents and rebuild from `source` by deep
-// cloning. Live and source must be the same concrete subtype — guaranteed by
-// forceTypeRoot pairing them at the call site.
+// Clears `live` and fills it again with a deep clone of `source`. Both are of the same Y type, because forceTypeRoot
+// gave both roots their kind first.
 function replaceYType(live: AnyYType, source: AnyYType): void {
     if (live instanceof Y.XmlFragment && source instanceof Y.XmlFragment) {
         if (live.length) live.delete(0, live.length);
@@ -105,10 +98,8 @@ function replaceYType(live: AnyYType, source: AnyYType): void {
     );
 }
 
-// Build a fresh Y instance owned by no doc yet — caller inserts it into a live
-// container, at which point Yjs integrates it. Order matters: Y.XmlText
-// extends Y.Text in yjs, and Y.XmlElement extends Y.XmlFragment, so the more
-// specific subclass must be checked first.
+// A fresh copy that belongs to no doc yet. Yjs takes it into the doc once the caller inserts it into a live value.
+// Y.XmlText extends Y.Text and Y.XmlElement extends Y.XmlFragment, so each subclass is checked before its parent.
 function cloneYType(source: AnyYType): AnyYType {
     if (source instanceof Y.XmlElement) {
         const c = new Y.XmlElement<XmlAttributes>(source.nodeName);
@@ -151,9 +142,8 @@ function cloneYType(source: AnyYType): AnyYType {
     throw new Error(`restoreYjsDoc: cannot clone ${source.constructor.name}`);
 }
 
-// XmlFragment.insert() / XmlElement.insert() only accept (XmlElement | XmlText)
-// — so children are cloned through a typed helper rather than the generic
-// cloneYType (which returns AnyYType). Y.XmlHook is unused in Eigen apps.
+// An XML fragment or element only takes XML elements and XML text as children, and cloneYType returns any Y type,
+// so this checks each cloned child. No Eigen app uses Y.XmlHook.
 function cloneXmlChildren(source: Y.XmlFragment | Y.XmlElement): (Y.XmlElement | Y.XmlText)[] {
     return source.toArray().map((child) => {
         const clone = cloneYType(child);
@@ -162,8 +152,8 @@ function cloneXmlChildren(source: Y.XmlFragment | Y.XmlElement): (Y.XmlElement |
     });
 }
 
-// No runtime guard on roots: doc.get upgrades an AbstractType root (post-applyUpdate) in place. Entries
-// stay unknown: a peer can write a scalar where a map belongs, so every reader checks for a Y.Map.
+// The root needs no check: doc.getMap gives a root that Y.applyUpdate left untyped its kind in place. Its entries
+// stay unknown, because a peer can write a scalar where a map belongs, so every reader checks for a Y.Map.
 export function getItemMapRoot(doc: Y.Doc, name: string): Y.Map<unknown> {
     return doc.getMap<unknown>(name);
 }

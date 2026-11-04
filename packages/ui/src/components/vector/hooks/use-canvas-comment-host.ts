@@ -1,7 +1,7 @@
-// The comment/activity host both canvas apps mount: the cards read, the panel state, the lifecycle,
-// and the anchor bookkeeping that ties a card to the element it was raised on. The two apps differ in
-// one step only — how a reveal moves the view (select it vs. go to its slide first) — which rides in
-// as `onReveal`. CanvasDocumentShell renders what this returns.
+// The comments and activity host that both canvas apps mount: the card read, the panel state, the lifecycle, and
+// the bookkeeping that ties a card to the element it was raised on. The apps differ only in how a reveal moves the
+// view: one selects the element, the other goes to its slide first. That step comes in as `onReveal`.
+// CanvasDocumentShell renders what this returns.
 
 import { useAuth } from '@workspace/lib/auth';
 import { useCommentCards, useCommentFilter, useCommentLifecycle, useDocumentPanels } from '@workspace/lib/comments';
@@ -41,8 +41,8 @@ export const useCanvasCommentHost = ({
 }: CanvasCommentHostArgs) => {
     const { user } = useAuth();
 
-    // Read the cards here so the active set is derived independently of the lifecycle's own card read.
-    // A card anchored to an element takes that element's text as its panel row.
+    // The cards are read here, so the active set doesn't depend on the lifecycle's own read of them. A card
+    // anchored to an element takes that element's text as its panel row.
     const cards = useCommentCards(doc.yjsDoc, 'comments');
     const activeComments = useCanvasComments(doc.elements, cards);
 
@@ -69,13 +69,13 @@ export const useCanvasCommentHost = ({
         setOpenCardId,
     } = lifecycle;
 
-    // Host-owned so the filter survives panel close/reopen.
+    // The host owns the filter, so it survives closing and opening the panel.
     const commentFilter = useCommentFilter();
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
 
     const [addOpen, setAddOpen] = useState(false);
-    // The element the pending "New comment" anchors to — set by the canvas menu's Comment row, null for
-    // a card raised from the panel (which stays document-level).
+    // The element the pending new comment anchors to. The canvas menu's Comment row sets it. It is null for a card
+    // raised from the panel, which stays document-level.
     const [commentAnchorId, setCommentAnchorId] = useState<string | null>(null);
 
     const addCommentTo = useCallback((elementId: string) => {
@@ -88,7 +88,7 @@ export const useCanvasCommentHost = ({
         if (!open) setCommentAnchorId(null);
     }, []);
 
-    // Opening a card reveals its anchor element; mobile hides the canvas, so there it just opens.
+    // Opening a card first reveals the element it is anchored to.
     const openCard = useCallback(
         (cardId: string) => {
             const el = elementForCommentCard(doc.elements, cardId);
@@ -105,12 +105,12 @@ export const useCanvasCommentHost = ({
             const card = await createCard({ ...patch, attachments });
             if (card && anchorId) {
                 const el = doc.elements.find((e) => e.id === anchorId);
-                // Idempotent: a double submit must not list the same card twice on the element.
+                // A double submit must not list the same card twice on the element.
                 const ids = el ? parseIdList(el.commentCardIds) : [];
                 if (el && !ids.includes(card.id)) {
-                    // Untracked, as the delete is: the card itself lives in the `comments` map, outside the
-                    // UndoManager's scope, so a ⌘Z that reverted the anchor alone would turn the new comment
-                    // into a document-level one.
+                    // The write is untracked, as the delete is. The card lives in the `comments` map, outside the
+                    // UndoManager's scope, so a ⌘Z that reverted only the anchor would turn the new comment into a
+                    // document-level one.
                     doc.updateElementUntracked(anchorId, { commentCardIds: serializeIdList([...ids, card.id]) });
                 }
             }

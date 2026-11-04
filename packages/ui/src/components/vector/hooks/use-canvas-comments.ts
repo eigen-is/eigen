@@ -9,7 +9,10 @@ import { elementLabel } from '../kinds';
 
 // An element with no text of its own gives its card its label, such as Rectangle or Text, so a panel row is never
 // blank.
-export function useCanvasComments(elements: VectorElement[], cards: Record<string, CommentCard>): ActiveComments {
+export function useCanvasComments(
+    elements: readonly VectorElement[],
+    cards: Readonly<Record<string, CommentCard>>,
+): ActiveComments {
     return useMemo(
         () => ({
             ids: activeCommentCardIds(elements, cards),

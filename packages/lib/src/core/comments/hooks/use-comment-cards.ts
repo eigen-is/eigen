@@ -24,15 +24,15 @@ export function readCards(map: Y.Map<unknown>): Record<string, CommentCard> {
         out[id] = {
             id,
             title: typeof title === 'string' ? title : '',
-            // The one read seam every consumer of a card's description passes through, so it is where
-            // a hostile peer's Y.Doc write is sanitized before any dangerouslySetInnerHTML render.
+            // Every reader of a card's description goes through here, so this is where a hostile peer's write is
+            // sanitized, before anything renders it as HTML.
             description: typeof description === 'string' ? sanitizeCommentCardHtml(description) : '',
             color: typeof color === 'string' ? color : undefined,
             chatName: typeof chatName === 'string' ? chatName : undefined,
             creator: typeof creator === 'string' ? creator : undefined,
             createdAt: typeof createdAt === 'number' ? createdAt : undefined,
-            // A buggy peer can write a null or a number into the list, which would crash
-            // sameAttachments and the chip renderers.
+            // A buggy peer can write a null or a number into the list, which would crash sameAttachments and the
+            // chip renderers.
             attachments: Array.isArray(attachments)
                 ? attachments.filter(
                       (a): a is ChatAttachment => typeof a === 'string' || (typeof a === 'object' && a !== null),
@@ -44,7 +44,7 @@ export function readCards(map: Y.Map<unknown>): Record<string, CommentCard> {
     return out;
 }
 
-function sameAttachments(a?: ChatAttachment[], b?: ChatAttachment[]): boolean {
+function sameAttachments(a?: readonly ChatAttachment[], b?: readonly ChatAttachment[]): boolean {
     if (a === b) return true;
     if (!a || !b || a.length !== b.length) return false;
     return a.every((x, i) => {
@@ -71,8 +71,8 @@ export function useCommentCards(
     doc: Y.Doc | null,
     mapName: 'comments' | 'tasks' = 'comments',
 ): Record<string, CommentCard> {
-    // Read synchronously on first render — a host that mounts after Yjs sync (docs) must see its
-    // cards immediately, or the ?chat= deep-link effect runs once against {} and gives up.
+    // The first render reads the cards at once. A host that mounts after the Yjs sync, such as docs, must see its
+    // cards right away, or the ?chat= deep-link effect runs once against no cards and gives up.
     const [cards, setCards] = useState<Record<string, CommentCard>>(() =>
         doc ? readCards(getItemMapRoot(doc, mapName)) : {},
     );
@@ -83,8 +83,8 @@ export function useCommentCards(
             return;
         }
         const map = getItemMapRoot(doc, mapName);
-        // Reuse the previous card object when its fields are unchanged, so memoized
-        // card components skip re-rendering when an edit elsewhere rebuilds the map.
+        // A card whose fields are unchanged keeps its previous object, so a memoized card component skips the
+        // render when an edit elsewhere rebuilds the map.
         const refresh = () =>
             setCards((prev) => {
                 const next = readCards(map);

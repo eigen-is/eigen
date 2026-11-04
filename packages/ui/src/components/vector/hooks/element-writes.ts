@@ -30,13 +30,14 @@ function indexAbove(elementsMap: Y.Map<unknown>, index: string): string | null {
     return above;
 }
 
-// One element replaced by new ones in ONE transact, in its z slot and in the given order (Convert to
-// shapes), each with a fresh id and the caller's seed. Arrows bound to it keep their endpoints and lose the
-// binding, as on delete. A malformed index (read-vector healed it somewhere) puts them on top, like an add.
+// Replaces one element with new ones in one transaction, as Convert to shapes does. They take its place in the z
+// order, in the given order, each with a fresh id and the caller's seed. An arrow bound to the element keeps its
+// endpoints and loses the binding, as on a delete. An element whose stored index is malformed puts them on top, as an
+// add does.
 export function replaceElementInDoc(
     doc: Y.Doc,
     id: string,
-    partials: NewVectorElement[],
+    partials: readonly NewVectorElement[],
     style: StyleDefaults,
 ): string[] {
     const elementsMap = doc.getMap('elements');
@@ -60,17 +61,17 @@ export function replaceElementInDoc(
     return ids;
 }
 
-// A stored fractional index, or '' when the entry has none — the duplicate pass only needs the relative
-// order, and zOrderKeys repairs a malformed one.
+// A stored fractional index, or '' when the entry has none. The callers only need the relative order, and
+// zOrderKeys repairs a malformed index.
 function indexOf(element: Y.Map<unknown>): string {
     const index = element.get('index');
     return typeof index === 'string' ? index : '';
 }
 
-// A z-order move over the STORED keys of `ids` (the canvas' scope: one frame's elements in frame mode), in
-// ONE transact. The scene's keys are healed in memory only, so a move computed from them would skip the
-// repair of a stored tie, and the next read would heal the tie around the moved element and undo the move.
-export function reorderElementsInDoc(doc: Y.Doc, ids: string[], selectedIds: string[], op: ZOp): void {
+// A z-order move over the stored keys of `ids`, in one transaction. `ids` is the canvas' scope, such as one frame's
+// elements in frame mode. The scene heals its keys in memory only. A move computed from them would skip the repair of
+// a stored tie, and the next read would heal the tie around the moved element and undo the move.
+export function reorderElementsInDoc(doc: Y.Doc, ids: readonly string[], selectedIds: string[], op: ZOp): void {
     const elementsMap = doc.getMap('elements');
     const stored = ids.flatMap((id) => {
         const element = elementsMap.get(id);
@@ -88,9 +89,9 @@ function compareIndex(a: string, b: string): number {
     return a < b ? -1 : a > b ? 1 : 0;
 }
 
-// Clone elements offset by (dx, dy) in ONE transact, stacked on top preserving their relative z-order,
-// each with a fresh id + seed. Returns the new ids so the caller reselects the clones.
-export function duplicateElementsInDoc(doc: Y.Doc, ids: string[], dx: number, dy: number): string[] {
+// Clones elements, moved by (dx, dy), in one transaction. The clones go on top in the same relative z order, each with
+// a fresh id and seed. It returns the new ids, so the caller can select the clones.
+export function duplicateElementsInDoc(doc: Y.Doc, ids: readonly string[], dx: number, dy: number): string[] {
     const newIds: string[] = [];
     doc.transact(() => {
         const elementsMap = doc.getMap('elements');
@@ -100,8 +101,8 @@ export function duplicateElementsInDoc(doc: Y.Doc, ids: string[], dx: number, dy
             .sort((a, b) => compareIndex(indexOf(a), indexOf(b)));
         if (sources.length === 0) return;
         const keys = generateNKeysBetween(topmostIndex(elementsMap), null, sources.length);
-        // Allocate every clone id FIRST, then remap bindings across the set: an arrow bound to a shape
-        // that was duplicated too points at its clone; a bound shape outside the set clears.
+        // Every clone id comes first, so the bindings can be remapped across the set. An arrow bound to a shape that
+        // was duplicated too points at its clone. A binding to a shape outside the set clears.
         const idMap = new Map<string, string>();
         for (const src of sources) {
             const oldId = src.get('id');
@@ -116,7 +117,7 @@ export function duplicateElementsInDoc(doc: Y.Doc, ids: string[], dx: number, dy
             clone.set('id', id);
             clone.set('seed', randomSeed());
             clone.set('index', keys[i]);
-            // A copy starts with no comments; the cards belong to the element that was commented on.
+            // A copy starts with no comments. The cards belong to the element that was commented on.
             clone.set('commentCardIds', '');
             if (src.get('type') === 'arrow') {
                 const sb = src.get('startBinding');
@@ -124,7 +125,7 @@ export function duplicateElementsInDoc(doc: Y.Doc, ids: string[], dx: number, dy
                 clone.set('startBinding', remapBinding(typeof sb === 'string' ? sb : '', idMap));
                 clone.set('endBinding', remapBinding(typeof eb === 'string' ? eb : '', idMap));
             }
-            // Read x/y from the source map — the clone is not integrated into the doc yet
+            // The position comes from the source, because the clone is not in the doc yet.
             const x = src.get('x');
             const y = src.get('y');
             if (typeof x === 'number') clone.set('x', x + dx);
@@ -135,9 +136,9 @@ export function duplicateElementsInDoc(doc: Y.Doc, ids: string[], dx: number, dy
     return newIds;
 }
 
-// A card's delete, in ONE transact under the caller's origin, which the canvas makes one the UndoManager ignores. The
-// card stays in the `comments` map, marked deleted, and its id leaves every element that holds it. The map is outside
-// the undo scope, so an undo that put the ids back would show a card that was deleted.
+// Deletes a comment card in one transaction under the caller's origin. The canvas passes an origin the UndoManager
+// ignores. The card stays in the `comments` map, marked deleted, and its id leaves every element that holds it. The
+// map is outside the undo scope, so an undo that put the ids back would show a card that was deleted.
 export function deleteCommentCardInDoc(doc: Y.Doc, cardId: string, origin: unknown): void {
     doc.transact(() => {
         const card = doc.getMap('comments').get(cardId);
