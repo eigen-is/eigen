@@ -15,8 +15,8 @@ export type DriveACL = {
     write: boolean;
 };
 
-// Wire shape of the ACL route: callers send what changed, the server merges onto the
-// current ACL. Full-array replace is not accepted — it loses concurrent sharers' entries.
+// What a client sends the ACL route: only what changed, which the server merges into the current ACL. The route takes
+// no full list, because replacing the whole list would drop the entries another sharer added at the same time.
 export type DriveACLDelta = {
     add?: DriveACL[];
     remove?: string[];
@@ -100,14 +100,12 @@ export const EXPORT_SUMMARY_HEADER = 'Eigen-Export-Summary';
 export type ImportMode = 'insert' | 'replace';
 export type DocumentImportOptions = { mode: ImportMode; afterFrameId?: string };
 
-// `mime` is the real mime (`application/eigendoc`); `urlSlug` is the route-safe
-// form (`application-eigendoc`) used by `/drive/.../mime/:slug` — the server
-// route reverses dash→slash at handler time.
+// `mime` is the MIME type a path stores, such as `application/eigendoc`. `urlSlug` is the same type in a form that
+// fits in a URL, such as `application-eigendoc`, and the server turns it back into the MIME type.
 //
-// `yjsRoots` declares the Y.Doc root-type schema for collab containers. Used by
-// the version-restore walker to force-type both the live doc and the snapshot
-// doc before pair-walking them — needed because Y.applyUpdate hydrates as
-// AbstractType, so `instanceof` checks would otherwise fail. Omitted for chat.
+// `yjsRoots` names each top-level root of a collab document's Y.Doc and its kind. A version restore gives both the
+// live doc and the snapshot these root types first, because Y.applyUpdate gives a root no concrete type. A chat keeps
+// no Y.Doc, so it has none.
 type EigenDocTypeInfo = {
     type: EigenDocType;
     mime: string;
@@ -115,14 +113,14 @@ type EigenDocTypeInfo = {
     extension: string;
     label: string;
     labelPlural: string;
-    // Share-notification noun when label.toLowerCase() reads wrong (stickies → "shared a board").
+    // The noun a share notification uses when the lowercase label reads wrong, such as "shared a board" for stickies.
     noun?: string;
     colorVar: string;
     softColorVar: string;
     appName: string;
     yjsRoots?: Record<string, YjsRootKind>;
-    // The download formats offered for this type, in menu order — the ONE list the export route gates
-    // on and every Download menu is built from. Omitted where there is nothing to export.
+    // The download formats this type offers, in menu order. The export route accepts only these, and every Download
+    // menu is built from them. Omitted where there is nothing to export.
     exportFormats?: readonly ExportFormat[];
 };
 
@@ -210,15 +208,6 @@ export const EIGEN_DOC_TYPE_INFO = {
     },
 } as const satisfies Record<EigenDocType, EigenDocTypeInfo>;
 
-const DRIVE_EXTENSIONS = {
-    doc: EIGEN_DOC_TYPE_INFO.doc.extension,
-    stickies: EIGEN_DOC_TYPE_INFO.stickies.extension,
-    slides: EIGEN_DOC_TYPE_INFO.slides.extension,
-    sheets: EIGEN_DOC_TYPE_INFO.sheets.extension,
-    chat: EIGEN_DOC_TYPE_INFO.chat.extension,
-    vector: EIGEN_DOC_TYPE_INFO.vector.extension,
-} as const satisfies Record<EigenDocType, string>;
-
 // The Download rows a type offers: read by every menu that draws them and by the export route that
 // gates on them, so a menu can never offer a format the route answers 400 to. Empty for a plain file,
 // a folder, and the two types with nothing to export.
@@ -247,14 +236,14 @@ export function getEigenDocInfoByMime(mimeOrSlug: string): EigenDocTypeInfo | un
     return undefined;
 }
 
-// The on-disk name of an eigen document: every create path (FE hooks, Drive.create, the chat route's
-// dedupe) builds it here so the stored name and the name a client reconciles against can't drift.
+// The stored name of an Eigen document. Every place that creates one, such as Drive.create or a create hook in the
+// browser, builds the name here, so the stored name and the name a client reconciles against can't drift apart.
 export function withEigenExtension(name: string, type: EigenDocType): string {
-    return `${name}${DRIVE_EXTENSIONS[type]}`;
+    return `${name}${EIGEN_DOC_TYPE_INFO[type].extension}`;
 }
 
 export function stripEigenExtension(name: string): string {
-    for (const ext of Object.values(DRIVE_EXTENSIONS)) {
+    for (const { extension: ext } of Object.values(EIGEN_DOC_TYPE_INFO)) {
         if (name.endsWith(ext)) return name.slice(0, -ext.length);
     }
     return name;
@@ -315,8 +304,7 @@ const INLINE_EDITABLE_MIMES = new Set([
     'application/toml',
 ]);
 
-// Single source for "this extension is a code file" — shared by isInlineEditable
-// (below) and the 'code' preview mode (constants/preview.ts).
+// The extensions that mark a code file. isInlineEditable reads them, and so does the 'code' preview mode.
 export const CODE_EXTENSIONS = new Set([
     '.json',
     '.yaml',
@@ -414,8 +402,8 @@ export function isVCardFile(mimeType: string, name: string): boolean {
     return name.toLowerCase().endsWith('.vcf') || VCARD_MIMES.some((m) => m === mimeType);
 }
 
-// The media type one whole message is carried under, everywhere: the download route, an attached message
-// part (mail-parser/split.ts), and a stored .eml file.
+// The media type of one whole mail message wherever it travels, such as the download route, a message attached to
+// another message and a stored .eml file.
 export const EML_MIME = 'message/rfc822';
 
 // Mail clients that write a saved message to disk disagree on the MIME the way vCard exporters do
@@ -434,10 +422,9 @@ export const ICS_ACCEPT = `.ics,${ICS_MIME}`;
 // The media type an iCalendar byte stream is served under (CalDAV GET, PROPFIND getcontenttype, export).
 export const ICS_CONTENT_TYPE = `${ICS_MIME}; charset=utf-8`;
 
-// The media type with its own parameters, because a calendar body names its purpose in them
-// (`text/calendar; method=REQUEST; charset=utf-8`) — but a type that merely starts with those letters
-// is another media type. The one rule for "these bytes are iCalendar", so a stored file and a mail part
-// (isCalendarPart) can never disagree.
+// Whether a media type is iCalendar, with or without parameters. A calendar body names its purpose in them, such as
+// `text/calendar; method=REQUEST; charset=utf-8`, but a type that only starts with the same letters is another type.
+// A stored file and a mail part (isCalendarPart) both ask this, so they can never disagree.
 export function isIcsMime(mimeType: string): boolean {
     return mimeType === ICS_MIME || mimeType.startsWith(`${ICS_MIME};`);
 }
@@ -461,9 +448,8 @@ export type DrivePathDetails =
           originalName?: string;
           duration?: number;
           pageCount?: number;
-          // RFC 4918 §3 dead properties — opaque key/value XML attached by clients
-          // (Finder color tags, Office Win32* timestamps). Live properties (etag,
-          // displayname, etc.) are derived; PROPPATCH on those returns 403.
+          // The WebDAV dead properties (RFC 4918 §3) a client attached, such as Finder's color tags or Office's
+          // Win32 timestamps, kept as opaque XML. Live properties, such as the etag, are derived and can't be set.
           webdavProps?: WebdavDeadProp[];
           [key: string]: unknown;
       } & Partial<ImageDimensions>)
@@ -492,7 +478,7 @@ export type DrivePath = {
 // The server cuts another owner's chain at the first folder the viewer can't read, so a chain that
 // doesn't start at a mount root starts where the viewer came in, through a share or a public link.
 // This is that first path, or undefined for a chain that starts at a root.
-export function sharedChainHead(chain: DrivePath[]): DrivePath | undefined {
+export function sharedChainHead(chain: readonly DrivePath[]): DrivePath | undefined {
     const head = chain.at(0);
     return head && head.parentId !== null ? head : undefined;
 }

@@ -4,6 +4,9 @@
 
 import type { CommentCard } from '../../types/comments';
 
-export function findCardIdByChatName(cards: Record<string, CommentCard>, chatName: string): string | undefined {
+export function findCardIdByChatName(
+    cards: Readonly<Record<string, CommentCard>>,
+    chatName: string,
+): string | undefined {
     return Object.keys(cards).find((cardId) => cards[cardId].chatName === chatName);
 }

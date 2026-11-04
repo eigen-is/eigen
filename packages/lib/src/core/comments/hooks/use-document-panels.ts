@@ -1,8 +1,10 @@
+// Which side panel a document shows, comments or activity. The two can't be open at once, so one slot holds that
+// rule instead of two booleans every host keeps in sync. The host owns it, as it owns useCommentFilter, and its
+// toolbar, side panel and pane read it.
+
 import { useCallback, useState } from 'react';
 import type { DocumentPanel } from '../../../types/comments';
 
-// Comments and activity are mutually exclusive, so one slot holds that invariant instead of a boolean
-// pair every host syncs by hand. Host-owned like useCommentFilter: toolbar, side panel and pane read it.
 export function useDocumentPanels(isMobile: boolean): {
     panel: DocumentPanel | null;
     commentPanelOpen: boolean;
@@ -21,7 +23,8 @@ export function useDocumentPanels(isMobile: boolean): {
     const openComments = useCallback(() => setPanel('comments'), []);
     const closePanels = useCallback(() => setPanel(null), []);
 
-    // The find bar rides with the editor, which the pane hides — reveal it, the pane is one tap away.
+    // The find bar sits in the editor, which the pane covers on mobile. Opening search closes the pane, which is one
+    // tap away again.
     const onSearchOpenChange = useCallback(
         (open: boolean) => {
             if (open && isMobile) setPanel(null);

@@ -58,8 +58,8 @@ function forceTypeRoot(doc: Y.Doc, name: string, kind: YjsRootKind): void {
     }
 }
 
-// Yjs types AbstractType<TEvent> so that `Y.AbstractType<unknown>` accepts no Y.Map<T> or Y.XmlFragment. The walker
-// tells the types apart with `instanceof` at runtime, so the type parameter tells it nothing, and it takes `any`.
+// Yjs makes AbstractType generic over its event type, so `Y.AbstractType<unknown>` accepts neither a Y.Map<T> nor a
+// Y.XmlFragment. The walker tells the types apart with `instanceof` at runtime, so it takes `any` here.
 // biome-ignore lint/suspicious/noExplicitAny: see comment above
 type AnyYType = Y.AbstractType<any>;
 

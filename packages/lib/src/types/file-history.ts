@@ -49,8 +49,8 @@ export const CARD_TITLE_MAX_LENGTH = 200;
 
 type ClientFileEventType = (typeof CLIENT_FILE_EVENT_TYPES)[number];
 
-export function isClientFileEventType(t: string): t is ClientFileEventType {
-    return CLIENT_FILE_EVENT_TYPES.some((x) => x === t);
+export function isClientFileEventType(type: string): type is ClientFileEventType {
+    return CLIENT_FILE_EVENT_TYPES.some((clientType) => clientType === type);
 }
 
 // What a writer records: details are required exactly when the event type has them.
@@ -168,7 +168,7 @@ export function describeFileEvent(
             const d = details && 'added' in details ? details : null;
             let secondary: string | undefined;
             if (d) {
-                // An email reads fine as-is; an opaque `team_<id>` doesn't, so only teams get named.
+                // An email reads fine as it is, but a team's id doesn't, so only a team is shown by its name.
                 const label = (id: string) =>
                     isTeamPrincipal(id) ? (opts?.resolveName?.(id) ?? UNRESOLVED_TEAM_LABEL) : id;
                 const added = d.added.map(label).join(', ');

@@ -29,8 +29,8 @@ export function commentMapName(type: DriveCollabType): CommentMapName {
 // What a card form emits on Save: only the fields the user actually changed.
 export type CardFormPatch = Partial<Pick<CommentCard, 'title' | 'description' | 'color'>>;
 
-// What the card form stages before Save: settled entries (edit mode), drive picks, device files.
-// Resolved to ChatAttachment[] by useResolveCardAttachments at save time.
+// An attachment a card form holds before Save: one the card already has, a file picked from Drive, or a file from the
+// device. useResolveCardAttachments turns each into a ChatAttachment when the card is saved.
 export type CardAttachmentDraft = ChatAttachment | DrivePath | File;
 
 export type ActiveComments = {

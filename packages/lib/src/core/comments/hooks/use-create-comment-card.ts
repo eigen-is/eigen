@@ -43,7 +43,10 @@ export function useCreateCommentCard(
     mediaFolderId: string | null,
     doc: Y.Doc | null,
     mapName: CommentMapName = 'comments',
-) {
+): (
+    input?: CreateCommentCardInput,
+    anchorInTransact?: (card: CommentCard) => void,
+) => Promise<CommentCard | undefined> {
     const queryClient = useQueryClient();
     const createChat = useCreateDriveItem('chat');
     const createChatRef = useRef(createChat);

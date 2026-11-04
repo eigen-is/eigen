@@ -10,8 +10,9 @@ import { onMutationError } from '../../api-error';
 import { invalidateVersions } from '../../versioning/hooks/keys';
 import { invalidatePath } from './keys';
 
-// The import route answers with what the file held that did not come over (a pptx's tables, say) or, for a deck with
-// no slides, that nothing did: the open document shows neither. A plain fetch has no Eden type, so the shape is checked.
+// The import route answers with what the file held that did not come over, such as the tables of a pptx. For a deck
+// with no slides it says that nothing came over. The open document shows neither. A plain fetch has no Eden type, so
+// the shape is checked here.
 async function importResultOf(response: Response): Promise<ImportResult> {
     if (!response.ok) throw new Error(await response.text());
     const body: unknown = await response.json();

@@ -1,10 +1,7 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// Vendored fractional-indexing core.
-// Source: https://www.npmjs.com/package/fractional-indexing (via Excalidraw's fork,
-//         packages/fractional-indexing/src/index.ts). License: CC0 (no rights reserved).
-// Based on https://observablehq.com/@dgreensp/implementing-fractional-indexing
-// Vendored verbatim to pin z-order behavior; the Eigen repair layer follows below.
-// ─────────────────────────────────────────────────────────────────────────────
+// Order keys for anything stacked by a string key, such as canvas elements. A new key sorts between two others, so a
+// reorder writes only the items that move. The key core is the CC0 fractional-indexing package, vendored as
+// Excalidraw's fork has it, to pin the keys it makes. The repair and z-order functions after it follow Excalidraw's
+// wrapper. Source: https://www.npmjs.com/package/fractional-indexing
 
 const BASE_62_DIGITS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 
@@ -244,11 +241,8 @@ export function generateNKeysBetween(
     return [...generateNKeysBetween(a, c, mid, digits), c, ...generateNKeysBetween(c, b, n - mid - 1, digits)];
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Eigen repair layer — the reusable core of Excalidraw's fractionalIndex.ts wrapper,
-// trimmed of the bound-text / mutateElement / versioning machinery. Elements here are
-// plain materialized objects, so repair mutates `index` in place.
-// ─────────────────────────────────────────────────────────────────────────────
+// The repair layer, the core of Excalidraw's fractional-index wrapper without its bound-text and versioning parts.
+// Elements here are plain objects, so a repair writes `index` in place.
 
 type IndexedElement = { id: string; index: string };
 
@@ -279,7 +273,7 @@ export function isValidFractionalIndex(
 }
 
 // Order elements by fractional index, tie-breaking on id (deterministic across peers).
-export function orderByFractionalIndex<T extends IndexedElement>(elements: T[]): T[] {
+export function orderByFractionalIndex<T extends IndexedElement>(elements: readonly T[]): T[] {
     return [...elements].sort((a, b) => {
         if (a.index < b.index) return -1;
         if (a.index > b.index) return 1;
@@ -350,10 +344,9 @@ function getInvalidIndicesGroups(elements: readonly IndexedElement[]): number[][
     return indicesGroups;
 }
 
-// Repair all invalid fractional indices to match the array's order, mutating `index` in
-// place. Use on load/restore when the moved set is unknown. WARN (from Excalidraw): in
-// edge cases it can rewrite untouched elements, since the moved set can't be recovered
-// from the array alone.
+// Repairs every invalid index so the keys follow the array's order, writing `index` in place. Use it on load or
+// restore, when nobody knows which elements moved. Excalidraw warns that it can then rewrite an element that did not
+// move, because the array alone can't tell which ones did.
 export function syncInvalidIndices<T extends IndexedElement>(elements: T[]): T[] {
     for (const indices of getInvalidIndicesGroups(elements)) {
         const lowerBoundIndex = indices.shift();
@@ -390,7 +383,11 @@ export type ZOp = 'backward' | 'forward' | 'toBack' | 'toFront';
 // index, then id, and the block goes after its anchor through keysAfter. A tied or malformed key is repaired
 // first and the repair rides along in the writes, so a block moved below a tied element lands below it, not
 // above the tie.
-export function zOrderKeys(elements: IndexedElement[], selectedIds: readonly string[], op: ZOp): IndexedElement[] {
+export function zOrderKeys(
+    elements: readonly IndexedElement[],
+    selectedIds: readonly string[],
+    op: ZOp,
+): IndexedElement[] {
     const stored = new Map(elements.map((e) => [e.id, e.index]));
     const ordered = syncInvalidIndices(orderByFractionalIndex(elements).map(({ id, index }) => ({ id, index })));
     const sel = ordered.filter((e) => selectedIds.includes(e.id));
@@ -418,8 +415,6 @@ export function zOrderKeys(elements: IndexedElement[], selectedIds: readonly str
         afterId = nonSel[nonSel.indexOf(below) - 1]?.id ?? null;
     }
     const keys = keysAfter(nonSel, afterId, sel.length);
-    sel.forEach((e, i) => {
-        e.index = keys[i];
-    });
+    for (const [i, e] of sel.entries()) e.index = keys[i];
     return ordered.filter((e) => e.index !== stored.get(e.id));
 }

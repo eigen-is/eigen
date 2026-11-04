@@ -4,16 +4,11 @@
 
 import { useCallback } from 'react';
 import * as Y from 'yjs';
-import type { ChatAttachment } from '../../../types/chat';
-import type { CommentMapName } from '../../../types/comments';
+import type { CardFormPatch, CommentCard, CommentMapName } from '../../../types/comments';
 import { getItemMapRoot } from '../../collab/yjs-utils';
 
-export type CommentCardPatch = {
-    title?: string;
-    description?: string;
-    color?: string;
-    attachments?: ChatAttachment[];
-};
+// A card form's patch with its attachments, which the dialog resolves before it saves them.
+export type CommentCardPatch = CardFormPatch & Pick<CommentCard, 'attachments'>;
 
 export function applyCardPatch(doc: Y.Doc, mapName: CommentMapName, cardId: string, patch: CommentCardPatch): void {
     const card = getItemMapRoot(doc, mapName).get(cardId);
@@ -29,7 +24,10 @@ export function applyCardPatch(doc: Y.Doc, mapName: CommentMapName, cardId: stri
     });
 }
 
-export function useUpdateCommentCard(doc: Y.Doc | null, mapName: CommentMapName = 'comments') {
+export function useUpdateCommentCard(
+    doc: Y.Doc | null,
+    mapName: CommentMapName = 'comments',
+): (cardId: string, patch: CommentCardPatch) => void {
     return useCallback(
         (cardId: string, patch: CommentCardPatch): void => {
             if (!doc) return;

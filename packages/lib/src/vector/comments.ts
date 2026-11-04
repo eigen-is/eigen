@@ -1,6 +1,6 @@
-// Comment anchoring on the canvas. An element's `commentCardIds` is a JSON id list (the scalar-only
-// stored-field rule), and these are the questions every canvas host asks of it, such as which cards
-// are in use, what text describes an anchored card and which element a card opens on. They are pure
+// Comment anchoring on the canvas. An element keeps the cards it anchors in `commentCardIds`, a JSON list of ids,
+// because every stored field is a scalar or a string. These are the questions every canvas host asks of it, such as
+// which cards are in use, what text describes an anchored card and which element a card opens on. They are pure
 // reads of the scene and the cards, so the server can ask them too.
 
 import type { CommentCard } from '../types/comments';

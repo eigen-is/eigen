@@ -1,8 +1,8 @@
 // The comment bundle every editor that shows comments shares, such as docs and stickies: the cards in the Y.Doc, the
 // server's index rows, create, update, resolve and assign, the open card, the ?chat= and ?card= landings, and the rule
 // that says a comment is deleted. Each editor keeps only what its anchor decides: where a card anchors on create and
-// delete, and which cards it uses (its active set). It composes the side effects of opening a card, such as slides
-// selecting the element's slide, around the `setOpenCardId` this returns.
+// delete, and which cards it uses (its active set). The editor wraps the side effects of opening a card, such as
+// Slides selecting the element's slide, around the `setOpenCardId` this returns.
 
 import { useAuth } from '@workspace/lib/auth';
 import { useCallback, useState } from 'react';
