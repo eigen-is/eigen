@@ -167,9 +167,11 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
             // and its assignee. A thread in the trash keeps its row too, so a restore brings it back as it was. A row
             // whose thread went is harmless, and the next sweep that deletes a thread drops it.
             if (chat && threads.length > 0) {
-                await withCommentIndex(drive, mount.id, container.id, async (index) => {
-                    return index.deleteRowsWithoutThread(new Set(mount.childNamesWithTrash(chat.id).map(foldName)));
-                });
+                // The names are read in the same step as the delete, so a thread made meanwhile is either among them
+                // or has no row yet.
+                await withCommentIndex(drive, mount.id, container.id, async (index) =>
+                    index.deleteRowsWithoutThread(new Set(mount.childNamesWithTrash(chat.id).map(foldName))),
+                );
             }
             return { files, threads };
         });

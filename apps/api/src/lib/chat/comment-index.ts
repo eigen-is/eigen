@@ -98,8 +98,8 @@ export class CommentIndex {
 
     // Drops the rows and the mentions of every thread not in threads, the folded names of the threads that are left,
     // in one transaction, and returns how many threads that was. The mentions have no foreign key, so they go by name.
-    // The search table follows the rows through its delete trigger. It runs without an await, so a thread made
-    // meanwhile is either in threads or has no row.
+    // The search table follows the rows through its delete trigger. It runs without an await, so a caller that reads
+    // threads right before the call, with no await in between, never drops the row of a thread made meanwhile.
     public deleteRowsWithoutThread(threads: ReadonlySet<string>): number {
         const { comments, commentMentions } = commentSchema;
         return this.db.transaction((tx) => {
