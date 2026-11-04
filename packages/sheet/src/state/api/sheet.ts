@@ -50,6 +50,8 @@ export function copySheet(ctx: Context, sheetId: string) {
     sheetData.celldata = dataToCelldata(sheetData.data);
     // A copy starts without comments, as a duplicated canvas element does: a card stays on the cells it was put on.
     for (const { v } of sheetData.celldata) delete v?.commentCardIds;
+    // The formula map is built from every sheet's recalc list, which must name the copy, not the sheet copied.
+    sheetData.calcChain = sheetData.calcChain?.map((entry) => ({ ...entry, id: copyId }));
     // A copy's images and charts take fresh ids, and its charts read the copy where they read the sheet copied, as
     // in Excel and Google.
     const toCopy = (ref: CellRangeRef) => (ref.sheetId === sheetId ? { ...ref, sheetId: copyId } : ref);

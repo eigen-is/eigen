@@ -4,10 +4,11 @@ import type { Sheet as LibSheet } from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartSpec } from '@workspace/lib/types/chart';
 import { produce } from 'immer';
 import { celldataToData, dataToCelldata } from '../../../engine/celldata';
-import { getCellValue } from '../../../state/api/cell';
-import { calculateFormula, copySheet, getAllSheets } from '../../../state/api/sheet';
+import { getCellValue, setCellValue } from '../../../state/api/cell';
+import { calculateFormula, copySheet, getAllSheets, seedCalcChain } from '../../../state/api/sheet';
 import { addSheet } from '../../../state/api/workbook';
 import type { Context } from '../../../state/context';
+import { execFunctionGroup, groupValuesRefresh } from '../../../state/modules/formula-exec';
 import { deleteSheet } from '../../../state/modules/sheet';
 import type { Sheet } from '../../../state/types';
 import { author, join, receive } from '../factories/collab';
@@ -184,6 +185,40 @@ describe('sheet/core/api/sheet', () => {
         expect(added?.celldata).toEqual([{ r: 0, c: 0, v: { v: 'a', m: 'a' } }]);
         expect(next.sheets[1].data?.[0]?.[0]).toEqual({ v: 'a', m: 'a' });
         expect(receive(base, ops).sheets[1].data?.[0]?.[0]).toEqual({ v: 'a', m: 'a' });
+    });
+
+    // The formula map is built from every sheet's recalc list, so a copy's list names the copy.
+    test("a copy's formula follows an edit of the copy's cells", () => {
+        const base = workbookContextFactory({
+            currentSheetId: 'id_1',
+            sheets: [
+                {
+                    name: 'S',
+                    id: 'id_1',
+                    order: 0,
+                    row: 1,
+                    column: 2,
+                    data: [
+                        [
+                            { v: 1, m: '1' },
+                            { v: 1, m: '1', f: '=A1' },
+                        ],
+                    ],
+                },
+            ],
+        });
+        const copied = produce(base, (draft: Context) => {
+            seedCalcChain(draft);
+            copySheet(draft, 'id_1');
+        });
+        const copyId = copied.sheets[1].id ?? '';
+        const edited = produce(copied, (draft: Context) => {
+            setCellValue(draft, 0, 0, 5, null, { id: copyId });
+            execFunctionGroup(draft, 0, 0, null, copyId, draft.sheets[1].data);
+            groupValuesRefresh(draft);
+        });
+        expect(getCellValue(edited, 0, 1, { id: copyId })).toBe(5);
+        expect(getCellValue(edited, 0, 1, { id: 'id_1' })).toBe(1);
     });
 
     // A copy is a sheet like any other on the tab that made it, as on a peer's, so a read of every sheet's cells, such
