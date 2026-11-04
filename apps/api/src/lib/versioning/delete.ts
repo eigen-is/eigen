@@ -11,6 +11,7 @@ import { isVersionsFolder, VERSIONS_FOLDER_NAME } from './versions-folder';
 export async function deleteVersions(mount: Mount, containerId: string): Promise<void> {
     const chat = await mount.getChildByName(containerId, CONTAINER_CHAT_FOLDER);
     const threads = chat ? (await mount.listFolder(chat.id)).filter((child) => child.type === DRIVE_TYPE_CHAT) : [];
+    // One container at a time, so a document with many threads never holds many locks and S3 deletes at once.
     for (const id of [containerId, ...threads.map((thread) => thread.id)]) {
         await mount.withPathLock(id, async () => {
             const versions = await mount.getChildByName(id, VERSIONS_FOLDER_NAME);
