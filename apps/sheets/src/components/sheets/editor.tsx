@@ -156,8 +156,9 @@ function SheetEditorInner({
         doc: docRef.current,
         activeCardIds: activeComments.ids,
         initialChatName,
-        // The workbook names its sheets once it loaded, and it always holds one, so the active set counts from then.
-        ready: sheets.length > 0,
+        // The workbook names its sheets once it loaded, and it always holds one, so the active set counts from then. A
+        // failed load shows default cells that anchor nothing, so every comment would read as deleted.
+        ready: sheets.length > 0 && !loadFailed,
     });
     const { allComments, cards, createCard, assignComment, members, assignedCount, setOpenCardId, isCardDeleted } =
         lifecycle;
