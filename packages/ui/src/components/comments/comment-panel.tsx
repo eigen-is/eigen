@@ -54,8 +54,8 @@ function PanelCard({
 }
 
 type CommentPanelProps = {
-    cards: Record<string, CommentCard>;
-    entries: CommentEntry[];
+    cards: Readonly<Record<string, CommentCard>>;
+    entries: readonly CommentEntry[];
     activeCardIds: ReadonlySet<string>;
     anchorTexts: ReadonlyMap<string, string>;
     isCardDeleted: (card: CommentCard) => boolean;

@@ -188,7 +188,7 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         [],
     );
 
-    const reorderElements = useCallback((ids: string[], selectedIds: string[], op: ZOp) => {
+    const reorderElements = useCallback((ids: readonly string[], selectedIds: readonly string[], op: ZOp) => {
         if (docRef.current) reorderElementsInDoc(docRef.current, ids, selectedIds, op);
     }, []);
 

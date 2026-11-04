@@ -390,7 +390,7 @@ export type ZOp = 'backward' | 'forward' | 'toBack' | 'toFront';
 // index, then id, and the block goes after its anchor through keysAfter. A tied or malformed key is repaired
 // first and the repair rides along in the writes, so a block moved below a tied element lands below it, not
 // above the tie.
-export function zOrderKeys(elements: IndexedElement[], selectedIds: string[], op: ZOp): IndexedElement[] {
+export function zOrderKeys(elements: IndexedElement[], selectedIds: readonly string[], op: ZOp): IndexedElement[] {
     const stored = new Map(elements.map((e) => [e.id, e.index]));
     const ordered = syncInvalidIndices(orderByFractionalIndex(elements).map(({ id, index }) => ({ id, index })));
     const sel = ordered.filter((e) => selectedIds.includes(e.id));

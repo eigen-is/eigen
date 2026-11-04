@@ -71,7 +71,12 @@ function indexOf(element: Y.Map<unknown>): string {
 // A z-order move over the stored keys of `ids`, in one transaction. `ids` is the canvas' scope, such as one frame's
 // elements in frame mode. The scene heals its keys in memory only. A move computed from them would skip the repair of
 // a stored tie, and the next read would heal the tie around the moved element and undo the move.
-export function reorderElementsInDoc(doc: Y.Doc, ids: readonly string[], selectedIds: string[], op: ZOp): void {
+export function reorderElementsInDoc(
+    doc: Y.Doc,
+    ids: readonly string[],
+    selectedIds: readonly string[],
+    op: ZOp,
+): void {
     const elementsMap = doc.getMap('elements');
     const stored = ids.flatMap((id) => {
         const element = elementsMap.get(id);
