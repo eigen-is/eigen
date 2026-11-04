@@ -103,6 +103,23 @@ describe('stripCommentCard', () => {
         expect(idsAt(workbook, 's2', 2, 2)).toEqual(['c1']);
     });
 
+    test('a strip that throws leaves the next edits their own undo steps', async () => {
+        const workbook = await mountWorkbook();
+        const failing: WorkbookInstance = {
+            ...workbook,
+            setCellFormat: () => {
+                throw new Error('write failed');
+            },
+        };
+        expect(() => stripCommentCard(failing, 'c1')).toThrow('write failed');
+
+        await act(async () => workbook.setCellFormat(4, 4, 'commentCardIds', ['c4'], { id: 's1' }));
+        await act(async () => workbook.setCellFormat(3, 3, 'commentCardIds', ['c5'], { id: 's1' }));
+        await act(async () => workbook.undo());
+        expect(idsAt(workbook, 's1', 3, 3)).toBeUndefined();
+        expect(idsAt(workbook, 's1', 4, 4)).toEqual(['c4']);
+    });
+
     test('leaves no anchor anywhere after a tab was duplicated', async () => {
         const workbook = await mountWorkbook();
         const tab = [...document.querySelectorAll('[role="button"]')].find((el) => el.textContent?.includes('One'));

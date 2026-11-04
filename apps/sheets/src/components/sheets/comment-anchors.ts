@@ -20,15 +20,21 @@ export function anchoredComments(sheets: readonly Sheet[], currentSheetId: strin
         if (!sheet.data) continue;
         let cardCells = cardCellsByGrid.get(sheet.data);
         if (!cardCells) {
+            // A large sheet has many cells and few comments, so the walk skips a cell with none before anything else.
             const found = new Map<string, string>();
-            for (const [r, row] of sheet.data.entries()) {
-                for (const [c, cell] of (row ?? []).entries()) {
-                    for (const cardId of cell?.commentCardIds ?? []) {
+            const grid = sheet.data;
+            for (let r = 0; r < grid.length; r++) {
+                const row = grid[r];
+                if (!row) continue;
+                for (let c = 0; c < row.length; c++) {
+                    const cellCardIds = row[c]?.commentCardIds;
+                    if (!cellCardIds?.length) continue;
+                    for (const cardId of cellCardIds) {
                         if (!found.has(cardId)) found.set(cardId, `${columnIndexToLabel(c)}${r + 1}`);
                     }
                 }
             }
-            cardCellsByGrid.set(sheet.data, found);
+            cardCellsByGrid.set(grid, found);
             cardCells = found;
         }
         const tab = sheet.id === currentSheetId ? 'Cell ' : `${sheet.name} · `;
@@ -40,18 +46,22 @@ export function anchoredComments(sheets: readonly Sheet[], currentSheetId: strin
     return { ids, anchorTexts };
 }
 
-// The delete is one undo step, so one ⌘Z puts the card back on every cell it was on.
+// The delete is one undo step, so one ⌘Z puts the card back on every cell it was on. A write that throws still ends
+// the step, or every later edit would join it.
 export function stripCommentCard(workbook: WorkbookInstance, cardId: string): void {
     const release = workbook.beginGesture();
-    for (const sheet of workbook.getAllSheets()) {
-        for (const [r, row] of (sheet.data ?? []).entries()) {
-            for (const [c, cell] of (row ?? []).entries()) {
-                const ids = cell?.commentCardIds;
-                if (!ids?.includes(cardId)) continue;
-                const kept = ids.filter((id) => id !== cardId);
-                workbook.setCellFormat(r, c, 'commentCardIds', kept, { id: sheet.id });
+    try {
+        for (const sheet of workbook.getAllSheets()) {
+            for (const [r, row] of (sheet.data ?? []).entries()) {
+                for (const [c, cell] of (row ?? []).entries()) {
+                    const ids = cell?.commentCardIds;
+                    if (!ids?.includes(cardId)) continue;
+                    const kept = ids.filter((id) => id !== cardId);
+                    workbook.setCellFormat(r, c, 'commentCardIds', kept, { id: sheet.id });
+                }
             }
         }
+    } finally {
+        release();
     }
-    release();
 }
