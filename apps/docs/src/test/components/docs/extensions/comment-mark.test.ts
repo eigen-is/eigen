@@ -2,7 +2,8 @@ import { expect, test } from 'bun:test';
 import { Editor, getSchema } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
-import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
+import { prosemirrorJSONToYDoc, yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
+import { commentCardIdsIn, getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import { readLatex, writeMathml } from '@workspace/math';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { AtomMarks } from '../../../../components/docs/extensions/atom-marks';
@@ -145,4 +146,50 @@ test('a comment anchors on text or a node holding a card attribute, never on a p
     expect(anchorable((doc) => TextSelection.create(doc, 4, 5))).toBe(false);
     expect(anchorable((doc) => TextSelection.create(doc, 2))).toBe(false);
     editor.destroy();
+});
+
+// The server reads the stored Yjs as JSON, with no editor, to keep the threads a doc still uses. A card the editor finds
+// that the server's read missed would lose its thread.
+test("the server's read of a stored doc finds every card the editor finds", () => {
+    const json = {
+        type: 'doc',
+        content: [
+            {
+                type: 'paragraph',
+                content: [
+                    text('Marked', { type: 'comment', attrs: { cardId: 'card-text' } }),
+                    equation('x', 'card-equation'),
+                    { type: 'figure', attrs: { mediaName: 'a.png', commentCardId: 'card-figure' } },
+                    { type: 'chart', attrs: { commentCardId: 'card-chart' } },
+                ],
+            },
+            {
+                type: 'paragraph',
+                content: [
+                    {
+                        type: 'textBox',
+                        attrs: { commentCardId: 'card-box' },
+                        content: [
+                            {
+                                type: 'paragraph',
+                                content: [text('Boxed', { type: 'comment', attrs: { cardId: 'card-in-box' } })],
+                            },
+                        ],
+                    },
+                ],
+            },
+        ],
+    };
+    const stored = prosemirrorJSONToYDoc(schema, json, 'default');
+    const read = yXmlFragmentToProsemirrorJSON(stored.getXmlFragment('default'));
+
+    const editorIds = new Set<string>();
+    schema.nodeFromJSON(read).descendants((node) => {
+        const cardId = nodeCommentCardId(node);
+        if (cardId) editorIds.add(cardId);
+    });
+    expect(editorIds.size).toBe(6);
+    const serverIds = commentCardIdsIn(read);
+    expect([...editorIds].filter((id) => !serverIds.has(id))).toEqual([]);
+    stored.destroy();
 });

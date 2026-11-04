@@ -8,6 +8,7 @@ export {
     FIRST_PAGE_BAND,
     PAGE_BAND_CLASS,
 } from './bands';
+export { commentCardIdsIn } from './comment-anchors';
 export { getDocExtensions } from './extensions';
 export { ITALIC_HEADING_LEVELS, ITALIC_HEADING_SELECTOR, MAX_HEADING_LEVEL } from './heading';
 export type { Border, BorderStyle } from './nodes/border';

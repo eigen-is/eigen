@@ -42,6 +42,9 @@ export const TRANSFORM_LIMITS: Record<
     // A workbook's log folded at its close: a decode, a replay and an encode, less than an export does. It runs in the
     // background and holds the one child, so it gets a preview's cost and room for a large workbook.
     compact: { deadlineMs: 60_000, admissionCostMs: 15_000 },
+    // A read of what a document's states name, such as its current state and its versions before a sweep, or every
+    // document of a copy. Each read is a materialize and a walk, so it gets a compaction's limits.
+    references: { deadlineMs: 60_000, admissionCostMs: 15_000 },
 };
 
 const MAX_ACTIVE_CHILDREN = 1;
@@ -202,8 +205,9 @@ function isValidResponse(response: unknown, request: DocumentTransformRequest): 
     return false;
 }
 
-// An import has no source document type — log the type it produces.
+// An import has no source document type — log the type it produces. A references job logs each type it reads.
 function requestType(request: DocumentTransformRequest): string {
+    if (request.kind === 'references') return [...new Set(request.documents.map((d) => d.documentType))].join(',');
     return request.kind === 'import' ? request.targetType : request.documentType;
 }
 

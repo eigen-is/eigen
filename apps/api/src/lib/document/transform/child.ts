@@ -175,7 +175,7 @@ async function renderCollabRequest(
 }
 
 async function handleRequest(jobId: number, request: DocumentTransformRequest): Promise<DocumentTransformResponse> {
-    // Bytes-sourced jobs carry their own input — no document to materialize.
+    // A bytes-sourced job carries its own input, so it has no document to materialize.
     if ('data' in request) return runBytesRequest(request);
     // So does a compaction, which the main thread read from the live document.
     if (request.kind === 'compact') {
@@ -184,8 +184,20 @@ async function handleRequest(jobId: number, request: DocumentTransformRequest): 
         return { ok: true, result: { snapshot: toTransferableText(snapshot), dropped }, warnings: [] };
     }
 
-    // Preview and export both read the persisted document, so materialization is shared.
+    // Every other kind reads stored documents, so materialization is shared.
     const { materializeYjsState } = await import('../../collab/yjs-loader');
+    // A references job reads several. A blob it can't read may hold a name, and a missed name would let a sweep delete
+    // a part in use, so such a blob fails the job instead of being skipped.
+    if (request.kind === 'references') {
+        const { documentReferences } = await import('../references');
+        const references = request.documents.map(({ documentType, source }) => {
+            const { doc, blobsSkipped } = materializeYjsState(source, undefined, 'transform-process');
+            if (blobsSkipped > 0) throw new Error(`${documentType}: ${blobsSkipped} unreadable Yjs blobs`);
+            return documentReferences(documentType, doc);
+        });
+        return { ok: true, result: { references }, warnings: [] };
+    }
+
     const { doc, blobsSkipped } = materializeYjsState(request.source, undefined, 'transform-process');
 
     const { result, warnings } = await renderCollabRequest(request, doc, mediaLoader(jobId));

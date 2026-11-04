@@ -1,6 +1,7 @@
 // Helpers over a collaborative app's Y.Doc: a version restore that rebuilds the live doc's roots from a snapshot in one
-// transaction, so connected peers converge through the normal update stream, and typed reads of the item maps and id
-// arrays that apps such as Slides keep. The server's collab document restores through it.
+// transaction, so connected peers converge through the normal update stream, typed reads of the item maps and id
+// arrays that apps such as Slides and Stickies keep, and the cards a stickies board shows. The server's collab document
+// restores through it, and the server reads a board's cards through it.
 
 import type { YjsRootKind } from '@workspace/lib/types/drive';
 import * as Y from 'yjs';
@@ -175,4 +176,17 @@ export function getIdArray(map: unknown, field: string): Y.Array<string> | undef
     if (!(map instanceof Y.Map)) return undefined;
     const value = map.get(field);
     return value instanceof Y.Array ? value : undefined;
+}
+
+// The cards a stickies board shows: an id a column lists that the tasks map holds as a card. A card on no column is off
+// the board, so its comment thread is no longer in use.
+export function boardCardIds(doc: Y.Doc): Set<string> {
+    const tasks = getItemMapRoot(doc, 'tasks');
+    const ids = new Set<string>();
+    for (const column of getItemMapRoot(doc, 'columns').values()) {
+        for (const id of getIdArray(column, 'taskIds')?.toArray() ?? []) {
+            if (tasks.get(id) instanceof Y.Map) ids.add(id);
+        }
+    }
+    return ids;
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { boardCardIds } from '@workspace/lib/collab';
 import * as Y from 'yjs';
 import { readBoard } from '../../../../components/stickies/hooks/use-board';
 
@@ -50,5 +51,28 @@ describe('readBoard', () => {
         const board = readBoard(doc);
         expect(board.columnOrder).toEqual(['c1']);
         expect(board.columns.c1.taskIds).toEqual(['t1']);
+    });
+
+    // The server keeps the threads of the cards boardCardIds finds. A card the board shows that it missed would lose its
+    // thread, so it finds every card a column of the board lists, as the board's comment pane counts them.
+    it("the server's read of the board finds every card the board shows", () => {
+        const doc = new Y.Doc();
+        doc.transact(() => {
+            const tasks = doc.getMap<unknown>('tasks');
+            for (const id of ['t1', 't2', 't3']) tasks.set(id, new Y.Map());
+            const columns = doc.getMap<unknown>('columns');
+            const first = new Y.Map<unknown>();
+            first.set('taskIds', Y.Array.from(['t1', 'gone']));
+            columns.set('c1', first);
+            const unordered = new Y.Map<unknown>();
+            unordered.set('taskIds', Y.Array.from(['t2']));
+            columns.set('c2', unordered);
+            doc.getArray<string>('columnOrder').push(['c1']);
+        });
+
+        const shown = Object.values(readBoard(doc).columns).flatMap((column) => column.taskIds);
+        const kept = boardCardIds(doc);
+        expect(shown.length).toBe(2);
+        expect(shown.filter((id) => !kept.has(id))).toEqual([]);
     });
 });

@@ -11,6 +11,8 @@ import type { YjsStatePayload } from '../../collab/yjs-loader';
 import { ApiError } from '../../core/errors';
 import { IMPORT_MESSAGES } from '../../import/messages';
 import type { Mount } from '../../mount';
+import { MAX_DECOMPRESSED_BYTES } from '../../ooxml/zip';
+import type { DocumentReferences } from '../references';
 import { captureCollabSource } from './collab-source';
 import type {
     BytesPreviewJob,
@@ -21,6 +23,7 @@ import type {
     ExportTransformJob,
     ExtractTextJob,
     PreviewResult,
+    ReferencesJob,
     SheetsImportJob,
     SheetsWeight,
     SlidesImportJob,
@@ -30,6 +33,7 @@ import type {
     TransformResultFor,
     TransformWarning,
 } from './protocol';
+import { inputBytesOf } from './protocol';
 import type { RunOptions, TransformPriority } from './runner';
 import { documentTransformRunner, TRANSFORM_LIMITS } from './runner';
 
@@ -82,8 +86,10 @@ async function runTransformRequest<R extends DocumentTransformRequest>(
         if (repeatsForSameInput(response.error.code) && request.kind === 'extract-text') {
             throw new ApiError(413, TOO_LARGE_TO_INDEX);
         }
-        const what =
-            request.kind === 'import' ? `${request.sourceFormat} import` : `${request.documentType} ${request.kind}`;
+        // A references job reads documents of several types, so it names only its kind.
+        let what: string = request.kind;
+        if (request.kind === 'import') what = `${request.sourceFormat} import`;
+        else if ('documentType' in request) what = `${request.documentType} ${request.kind}`;
         throw new TransformFailedError(
             response.error.code,
             `${what} transform failed (${response.error.code}): ${response.error.message}`,
@@ -245,4 +251,16 @@ export async function runSheetsCompaction(
         { priority: 'background', signal },
     );
     return { snapshot: new TextDecoder().decode(result.snapshot), dropped: result.dropped };
+}
+
+// The parts each document names, such as a document's current state and each of its versions, or every document of a
+// copy, read in one job. The states cross to the child as a copy, so together they are held to what an import may send.
+export async function runDocumentReferences(
+    documents: ReferencesJob['documents'],
+    opts: TransformOptions,
+): Promise<DocumentReferences[]> {
+    const request: ReferencesJob = { kind: 'references', documents };
+    if (inputBytesOf(request) > MAX_DECOMPRESSED_BYTES) throw new ApiError(413, 'Too large to read its references');
+    const { result } = await runTransformRequest(request, opts);
+    return result.references;
 }

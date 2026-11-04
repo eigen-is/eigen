@@ -9,6 +9,7 @@ import type { TextPreviewResult } from '@workspace/lib/types/preview';
 import type { SlidePage } from '@workspace/lib/vector';
 import type { YjsStatePayload } from '../../collab/yjs-loader';
 import { ApiError, isOutOfMemory } from '../../core/errors';
+import type { DocumentReferences, ReferencedDocumentType } from '../references';
 
 // `pdf-html` is the HTML stage of the PDF export. WeasyPrint stays a subprocess of the main thread, so the
 // transform returns the document it renders from.
@@ -139,10 +140,17 @@ export type SheetsCompactionJob = {
     batches: string;
 };
 
+// The parts each of a list of documents names, such as a document's current state and its versions, in one job.
+export type ReferencesJob = {
+    kind: 'references';
+    documents: { documentType: ReferencedDocumentType; source: YjsStatePayload }[];
+};
+
 export type DocumentTransformRequest =
     | (CollabTransformJob & { source: YjsStatePayload })
     | (BytesTransformJob & { data: ArrayBuffer })
-    | SheetsCompactionJob;
+    | SheetsCompactionJob
+    | ReferencesJob;
 
 // The warnings that count what a read skipped, an import left out or an export cut.
 export const COUNTED_WARNING_CODES = [
@@ -263,6 +271,8 @@ export type DocImportResult = DocImportTransformResult & { warnings: TransformWa
 export type SlidesImportTransformResult = { update: ArrayBuffer; images: TransformMedia[] };
 // The compacted snapshot's JSON as UTF-8 bytes, and how many op batches the replay dropped because they failed to apply.
 export type SheetsCompactionResult = { snapshot: ArrayBuffer; dropped: number };
+// The references of each document of the job, in the job's order.
+export type ReferencesResult = { references: DocumentReferences[] };
 
 export type TransformResult =
     | PreviewResult
@@ -271,29 +281,31 @@ export type TransformResult =
     | SheetsImportTransformResult
     | DocImportTransformResult
     | SlidesImportTransformResult
-    | SheetsCompactionResult;
+    | SheetsCompactionResult
+    | ReferencesResult;
 
 // Which result a job kind produces. The runner proves the pairing at runtime with
 // resultMatchesRequest; runTransformRequest narrows to this once so no caller re-checks.
 // Keyed off the job discriminants, so a captured request (job + source) resolves the
 // same. A future arm resolves to `never` and fails to compile at its callsite.
-export type TransformResultFor<R extends CollabTransformJob | BytesTransformJob | SheetsCompactionJob> = R extends {
-    kind: 'preview';
-}
-    ? PreviewResult
-    : R extends { kind: 'extract-text' }
-      ? ExtractTextResult
-      : R extends { kind: 'export' }
-        ? ExportTransformResult
-        : R extends { kind: 'compact' }
-          ? SheetsCompactionResult
-          : R extends { targetType: 'eigensheets' }
-            ? SheetsImportTransformResult
-            : R extends { targetType: 'eigendoc' }
-              ? DocImportTransformResult
-              : R extends { targetType: 'eigenslides' }
-                ? SlidesImportTransformResult
-                : never;
+export type TransformResultFor<R extends CollabTransformJob | BytesTransformJob | SheetsCompactionJob | ReferencesJob> =
+    R extends { kind: 'preview' }
+        ? PreviewResult
+        : R extends { kind: 'extract-text' }
+          ? ExtractTextResult
+          : R extends { kind: 'export' }
+            ? ExportTransformResult
+            : R extends { kind: 'compact' }
+              ? SheetsCompactionResult
+              : R extends { kind: 'references' }
+                ? ReferencesResult
+                : R extends { targetType: 'eigensheets' }
+                  ? SheetsImportTransformResult
+                  : R extends { targetType: 'eigendoc' }
+                    ? DocImportTransformResult
+                    : R extends { targetType: 'eigenslides' }
+                      ? SlidesImportTransformResult
+                      : never;
 
 export type DocumentTransformResponse =
     | { ok: true; result: TransformResult; warnings: TransformWarning[] }
@@ -318,8 +330,15 @@ export function inputBytesOf(request: DocumentTransformRequest): number {
     if ('data' in request) return request.data.byteLength;
     if (request.kind === 'compact')
         return Buffer.byteLength(request.snapshot ?? '') + Buffer.byteLength(request.batches);
-    let bytes = request.source.snapshot?.data.byteLength ?? 0;
-    for (const update of request.source.updates) bytes += update.data.byteLength;
+    if (request.kind === 'references') {
+        return request.documents.reduce((bytes, { source }) => bytes + sourceBytes(source), 0);
+    }
+    return sourceBytes(request.source);
+}
+
+function sourceBytes(source: YjsStatePayload): number {
+    let bytes = source.snapshot?.data.byteLength ?? 0;
+    for (const update of source.updates) bytes += update.data.byteLength;
     return bytes;
 }
 
@@ -330,6 +349,21 @@ function isTransformMedia(value: unknown): boolean {
     const media = value as Partial<TransformMedia> | undefined;
     return (
         typeof media?.name === 'string' && typeof media.contentType === 'string' && media.data instanceof ArrayBuffer
+    );
+}
+
+function isStringList(value: unknown): boolean {
+    return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+function isDocumentReferences(value: unknown): boolean {
+    return (
+        typeof value === 'object' &&
+        value !== null &&
+        'media' in value &&
+        'chat' in value &&
+        isStringList(value.media) &&
+        isStringList(value.chat)
     );
 }
 
@@ -363,6 +397,7 @@ export function resultMatchesRequest(request: DocumentTransformRequest, result: 
               images?: unknown;
               snapshot?: unknown;
               dropped?: unknown;
+              references?: unknown;
           }
         | undefined;
     switch (request.kind) {
@@ -372,6 +407,12 @@ export function resultMatchesRequest(request: DocumentTransformRequest, result: 
             return typeof r?.text === 'string';
         case 'compact':
             return r?.snapshot instanceof ArrayBuffer && typeof r.dropped === 'number';
+        case 'references':
+            return (
+                Array.isArray(r?.references) &&
+                r.references.length === request.documents.length &&
+                r.references.every(isDocumentReferences)
+            );
         case 'export':
             return (
                 r?.data instanceof ArrayBuffer &&
@@ -409,6 +450,7 @@ export function resultBytes(result: TransformResult): number {
     if ('text' in result) return Buffer.byteLength(result.text);
     if ('data' in result) return result.data.byteLength;
     if ('snapshot' in result) return result.snapshot.byteLength;
+    if ('references' in result) return Buffer.byteLength(JSON.stringify(result.references));
     const main = 'snapshotJson' in result ? result.snapshotJson : result.update;
     return result.images.reduce((sum, image) => sum + image.data.byteLength, main.byteLength);
 }

@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
-import { getIdArray, getIdArrayRoot, getItemMapRoot, restoreYjsDoc } from '../../../core/collab/yjs-utils';
+import {
+    boardCardIds,
+    getIdArray,
+    getIdArrayRoot,
+    getItemMapRoot,
+    restoreYjsDoc,
+} from '../../../core/collab/yjs-utils';
 
 describe('restoreYjsDoc', () => {
     test('restores Y.Map content into a doc that already registered the type via getMap', () => {
@@ -235,5 +241,29 @@ describe('getItemMapRoot / getIdArrayRoot / getIdArray', () => {
         const doc = new Y.Doc();
         getItemMapRoot(doc, 'slides');
         expect(() => getIdArrayRoot(doc, 'slides')).toThrow();
+    });
+});
+
+describe('boardCardIds', () => {
+    // A card stays in use while some column lists it, even a column no tab shows, and an id with no card is no card.
+    test('lists the ids a column holds that the tasks map holds as a card', () => {
+        const doc = new Y.Doc();
+        doc.transact(() => {
+            const tasks = getItemMapRoot(doc, 'tasks');
+            for (const id of ['on-board', 'unordered-column', 'off-board']) tasks.set(id, new Y.Map());
+            tasks.set('not-a-card', 'scalar');
+
+            const columns = getItemMapRoot(doc, 'columns');
+            const listed = new Y.Map<unknown>();
+            listed.set('taskIds', Y.Array.from(['on-board', 'not-a-card', 'gone']));
+            columns.set('c1', listed);
+            const unordered = new Y.Map<unknown>();
+            unordered.set('taskIds', Y.Array.from(['unordered-column']));
+            columns.set('c2', unordered);
+            columns.set('c3', 'not-a-column');
+            getIdArrayRoot(doc, 'columnOrder').push(['c1']);
+        });
+
+        expect([...boardCardIds(doc)].sort()).toEqual(['on-board', 'unordered-column']);
     });
 });
