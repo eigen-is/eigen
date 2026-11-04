@@ -84,18 +84,19 @@ export function CardDialog({
         onOpenChange(next);
     };
 
-    if (!card) return null;
-
+    // A comment whose card is gone has only its index row, which keeps the title.
     if (deleted) {
         return (
             <Dialog open={open} onOpenChange={handleOpenChange}>
                 <DialogContent size="sm" aria-describedby={undefined}>
                     <DialogTitle className="sr-only">Deleted comment</DialogTitle>
-                    <DeletedComment title={card.title || 'Comment'} className="pr-8" />
+                    <DeletedComment title={(card ? card.title : entry?.title) || 'Comment'} className="pr-8" />
                 </DialogContent>
             </Dialog>
         );
     }
+
+    if (!card) return null;
 
     // A thread without an index row reads as open and unassigned, as the comment filter reads it. Its first message or
     // assignment creates the row on the server.

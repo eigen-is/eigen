@@ -1,6 +1,6 @@
 // One rule opens a comment wherever it is reached, in every host. A landing, a search hit or an activity row that names
-// a thread whose card is gone from the map, such as a sticky deleted from its board, opens the comment as deleted, with
-// the title its index row keeps. A name that neither a card nor a row knows is reported, so the host can drop it.
+// a thread whose card is gone from the map, such as a sticky deleted from its board, opens the comment as deleted: no
+// card, only the index row and the title it keeps. A name that neither a card nor a row knows is reported, so the host can drop it.
 import { afterAll, afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import * as Y from 'yjs';
@@ -102,8 +102,8 @@ async function mountBoard(options: { initialChatName?: string; initialCardId?: s
 
 test('a landing on a comment whose card is gone opens it as deleted, with the title of its row', async () => {
     const { lifecycle, onChatNotFound } = await mountBoard({ initialChatName: 'removed.eigenchat', rows });
-    expect(lifecycle().openCard?.title).toBe('Ship it');
-    expect(lifecycle().openEntry?.chatName).toBe('removed.eigenchat');
+    expect(lifecycle().openCard).toBeNull();
+    expect(lifecycle().openEntry?.title).toBe('Ship it');
     expect(lifecycle().openCardDeleted).toBe(true);
     expect(onChatNotFound).not.toHaveBeenCalled();
 });
@@ -135,13 +135,14 @@ test('a search hit or an activity row opens a live card live, and one whose card
     await act(async () => {
         expect(lifecycle().openChat('removed.eigenchat')).toBe(true);
     });
-    expect(lifecycle().openCard?.title).toBe('Ship it');
+    expect(lifecycle().openCard).toBeNull();
+    expect(lifecycle().openEntry?.title).toBe('Ship it');
     expect(lifecycle().openCardDeleted).toBe(true);
 
     await act(async () => {
         expect(lifecycle().openChat('unknown.eigenchat')).toBe(false);
     });
-    expect(lifecycle().openCard?.title).toBe('Ship it');
+    expect(lifecycle().openEntry?.title).toBe('Ship it');
 });
 
 test('a live card opened by its chat name closes when it is deleted, as one opened by its id does', async () => {

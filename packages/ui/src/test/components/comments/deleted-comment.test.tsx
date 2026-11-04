@@ -75,7 +75,7 @@ const text = () => document.body.textContent ?? '';
 const buttons = () =>
     [...document.querySelectorAll('button')].map((b) => b.textContent?.trim() || b.getAttribute('aria-label'));
 
-function renderDialog(deleted: boolean, shown: CommentCard = card) {
+function renderDialog(deleted: boolean, shown: CommentCard | null = card) {
     return renderInDocument(
         createElement(
             PreviewProvider,
@@ -115,6 +115,12 @@ test('the dialog of a deleted comment shows its title and the line, and nothing 
 test('the dialog of a deleted comment without a title calls it a comment, as the pane does', async () => {
     ({ unmount } = await renderDialog(true, { ...card, title: '' }));
     expect(document.querySelector('[role="dialog"] p')?.textContent).toBe('Comment');
+});
+
+test('the dialog of a comment whose card is gone takes its title from the index row', async () => {
+    ({ unmount } = await renderDialog(true, null));
+    expect(document.querySelector('[role="dialog"] p')?.textContent).toBe('Check this');
+    expect(text()).toContain('This comment was deleted');
 });
 
 test('the dialog of a live comment keeps its actions', async () => {

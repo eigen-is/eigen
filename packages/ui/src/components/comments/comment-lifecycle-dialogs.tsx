@@ -6,6 +6,7 @@ import { getDriveItemUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import type { useCommentLifecycle } from '@workspace/lib/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { useEffect, useRef } from 'react';
 import { CardDialog } from '../cards/card-dialog';
 import type { useContextMenu } from '../context-menu';
 import { CommentContextMenu } from './comment-context-menu';
@@ -33,17 +34,24 @@ export function CommentLifecycleDialogs({
     const { updateCard, members, openCard, openEntry, openCardDeleted, setOpenCardId, resolveComment, assignComment } =
         lifecycle;
     const { user } = useAuth();
+    const shown = !!openCard || !!openEntry;
+
+    // A peer's delete can take the open comment away, which hides the dialog without a close. So every close runs
+    // here, once the dialog is gone, and the open state clears too: an undo that brings the card back stays closed.
+    const wasShown = useRef(false);
+    useEffect(() => {
+        if (wasShown.current && !shown) {
+            setOpenCardId(null);
+            onCardDialogClose?.();
+        }
+        wasShown.current = shown;
+    }, [shown, setOpenCardId, onCardDialogClose]);
 
     return (
         <>
             <CardDialog
-                open={!!openCard}
-                onOpenChange={(o) => {
-                    if (!o) {
-                        setOpenCardId(null);
-                        onCardDialogClose?.();
-                    }
-                }}
+                open={shown}
+                onOpenChange={(o) => !o && setOpenCardId(null)}
                 card={openCard}
                 entry={openEntry}
                 ownerId={path.ownerId}

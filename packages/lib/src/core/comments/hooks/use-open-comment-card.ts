@@ -1,6 +1,6 @@
 // The comment the card dialog shows, named by its card id or by its chat name, with its index row. A chat name no card
-// holds, such as that of a sticky deleted from its board, still names a comment while its row stays. Such a comment
-// is gone: it reads as a card holding only the row's title, and the dialog shows it deleted.
+// holds, such as that of a sticky deleted from its board, still names a comment while its row stays. Such a comment is
+// gone: it has no card, only the row, and the dialog shows it deleted.
 
 import { useMemo } from 'react';
 import type { CommentEntry } from '../../../types/chat';
@@ -23,8 +23,6 @@ export function useOpenCommentCard(
             return { card, entry, gone: false };
         }
         const entry = open && 'chatName' in open ? entries.find((e) => e.chatName === open.chatName) : undefined;
-        if (!entry) return { card: null, entry: undefined, gone: false };
-        const goneCard = { id: '', title: entry.title ?? '', description: '', chatName: entry.chatName };
-        return { card: goneCard, entry, gone: true };
+        return { card: null, entry, gone: !!entry };
     }, [cards, entries, open]);
 }
