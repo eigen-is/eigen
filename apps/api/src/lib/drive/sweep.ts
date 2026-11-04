@@ -4,25 +4,20 @@
 // it, once a day per document or sooner after a Delete history. A change while it reads waits for the next close, and
 // a failure for the next day, so a sweep can keep a part too long but never deletes one in use.
 
-import { Database as BunDatabase } from 'bun:sqlite';
 import { SWEEP_GRACE_MS } from '@workspace/lib/constants/sweep';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_CHAT, DRIVE_TYPE_FILE, isCollabType } from '@workspace/lib/types/drive';
 import type { Snapshot } from '@workspace/lib/types/versioning';
-import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { withCommentIndex } from '../chat';
-import * as chatSchema from '../chat/schema';
-import { readYjsStatePayloadFromFile } from '../collab/yjs-loader';
 import { REFERENCE_READER_VERSION } from '../document/references';
-import { runDocumentReferences } from '../document/transform/run-transform';
 import type { Mount } from '../mount';
 import { CONTAINER_CHAT_FOLDER, CONTAINER_DATA_DB } from '../mount/container-dbs';
 import { foldName } from '../mount/names';
 import { getVersionReferences, putVersionReferences } from '../mount/version-references';
-import { withSvgSiblings } from '../preview/svg-media-inline';
 import { listVersions } from '../versioning/list';
 import { DAY_MS } from '../versioning/retention';
 import type { Drive } from './drive';
+import { mediaKeptBy, storedReferences, threadAttachmentNames } from './named-parts';
 
 // When each document's last sweep ended, by owner, mount and path. It lives in memory, so a restart forgets it, which
 // costs one extra sweep.
@@ -30,11 +25,6 @@ const sweptAt = new Map<string, number>();
 // The documents a sweep is reading or deleting now. A reopen and a second close during a long read find the document
 // still due, and that second sweep leaves it to the first.
 const sweeping = new Set<string>();
-// The files each kept thread's messages name, by owner, mount and data.db, with the data.db row as it was read. A
-// thread that names an old file would otherwise be read at every sweep, and on a bucket that read is a whole
-// download. So it is read again only once a sync changed its row. A document is swept at most once a day, so an entry
-// lives for a week from its last use, and the old ones go whenever one is read.
-const attachmentNames = new Map<string, { row: string; names: ReadonlySet<string>; usedAt: number }>();
 
 export function isSweepDue(path: DrivePath): boolean {
     const at = sweptAt.get(pathKey(path));
@@ -90,11 +80,9 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
         const read = await readFence(mount, container.id);
         if (!read.dataDb) throw new Error(`${container.id}: data.db missing`);
 
-        // Each read is a job of its own, and a version is read again only when the reader changed. A version's row is
-        // written as soon as its job returns. So memory and the child's time stay bounded to one state, and a failure
-        // keeps the work done.
-        const current = await readStoredCopy(mount, read.dataDb.id, readYjsStatePayloadFromFile);
-        const named = [await runDocumentReferences({ documentType, source: current }, { priority: 'background' })];
+        // A version is read again only when the reader changed. A version's row is written as soon as its read
+        // returns, so a failure keeps the work done.
+        const named = [await storedReferences(mount, documentType, read.dataDb.id, 'background')];
         const rows = getVersionReferences(
             mount,
             read.versions.map((version) => version.id),
@@ -103,24 +91,21 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
         const known = new Set(rows.map((row) => row.versionPathId));
         for (const version of read.versions) {
             if (known.has(version.id)) continue;
-            const source = await readStoredCopy(mount, version.id, readYjsStatePayloadFromFile);
-            const names = await runDocumentReferences({ documentType, source }, { priority: 'background' });
+            const names = await storedReferences(mount, documentType, version.id, 'background');
             named.push(names);
             putVersionReferences(mount, [
                 { versionPathId: version.id, readerVersion: REFERENCE_READER_VERSION, names },
             ]);
         }
 
-        // A name matches its file as getChildByName finds it, whatever its case or Unicode form.
         const media = await mount.getChildByName(container.id, 'media');
-        const kept = media
-            ? await withSvgSiblings(
+        const keptNames = media
+            ? await mediaKeptBy(
                   mount,
                   media.id,
                   named.flatMap((names) => names.media),
               )
-            : [];
-        const keptNames = new Set([...kept].map(foldName));
+            : new Set<string>();
 
         // A thread goes when no state names it and nobody wrote in it for three days. The media of a thread that
         // stays go when no message names them, a deleted message included. On a bucket a thread's data.db is read as
@@ -238,49 +223,4 @@ async function isActive(mount: Mount, thread: DrivePath, cutoff: number): Promis
     const dataDb = await mount.getChildByName(thread.id, CONTAINER_DATA_DB);
     if (dataDb && mount.documentDbs.has(dataDb.id)) return true;
     return Math.max(thread.createdAt.getTime(), dataDb?.updatedAt.getTime() ?? 0) > cutoff;
-}
-
-// A database nobody serves, such as the document's own data.db after its close, a version or a thread's data.db, is
-// read from a temp copy of its own. On a bucket the copy is the staged one while its upload is pending, so it is the
-// newest. The copy is never opened through the mount, so the read stamps no row.
-async function readStoredCopy<T>(mount: Mount, pathId: string, read: (localPath: string) => T): Promise<T> {
-    const tempId = crypto.randomUUID();
-    try {
-        return read(await mount.downloadToTemp(pathId, tempId));
-    } finally {
-        await mount.cleanupTemp(tempId);
-    }
-}
-
-async function threadAttachmentNames(mount: Mount, dataDb: DrivePath): Promise<ReadonlySet<string>> {
-    const key = pathKey(dataDb);
-    const row = `${dataDb.size}.${dataDb.updatedAt.getTime()}`;
-    const known = attachmentNames.get(key);
-    if (known?.row === row) {
-        known.usedAt = Date.now();
-        return known.names;
-    }
-    const names = await readStoredCopy(mount, dataDb.id, readAttachmentNames);
-    const now = Date.now();
-    for (const [old, entry] of attachmentNames) if (now - entry.usedAt >= 7 * DAY_MS) attachmentNames.delete(old);
-    attachmentNames.set(key, { row, names, usedAt: now });
-    return names;
-}
-
-// The files a thread's messages name, folded the way a name finds its file. A message's attachment is a file in the
-// thread's media folder when it is a string, and a Drive reference otherwise.
-function readAttachmentNames(localPath: string): Set<string> {
-    const rawDb = new BunDatabase(localPath);
-    try {
-        const rows = drizzle(rawDb, { schema: chatSchema })
-            .select({ attachments: chatSchema.messages.attachments })
-            .from(chatSchema.messages)
-            .all();
-        const names = rows
-            .flatMap((row) => row.attachments ?? [])
-            .filter((attachment) => typeof attachment === 'string');
-        return new Set(names.map(foldName));
-    } finally {
-        rawDb.close();
-    }
 }
