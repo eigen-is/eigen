@@ -7,6 +7,11 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { eigenMediaHref } from '@workspace/lib/vector';
 import { eq } from 'drizzle-orm';
 import * as Y from 'yjs';
+import { withCommentIndex } from '../../lib/chat';
+import { COMMENT_INDEX_DB_CONFIG } from '../../lib/chat/comment-db-config';
+import * as commentSchema from '../../lib/chat/comment-schema';
+import { CHAT_ROOM_DB_CONFIG } from '../../lib/chat/db-config';
+import * as chatSchema from '../../lib/chat/schema';
 import { CLOSE_LINGER_MS } from '../../lib/collab/collab-document';
 import { ApiError } from '../../lib/core/errors';
 import { REFERENCE_READER_VERSION } from '../../lib/document/references';
@@ -20,7 +25,7 @@ import { getVersionReferences, putVersionReferences } from '../../lib/mount/vers
 import { DAY_MS, HOUR_MS } from '../../lib/versioning/retention';
 import type { FakeS3Mount } from '../fault-storage-helpers';
 import { createFakeS3Mount, removeFakeS3Mount, waitFor } from '../fault-storage-helpers';
-import { seedEigendoc } from '../fixtures/golden-documents';
+import { buildGoldenDeckScene, seedEigendoc, seedVectorDoc } from '../fixtures/golden-documents';
 import { createTestUserOnStorage } from '../setup';
 
 const M = 'default';
@@ -100,6 +105,53 @@ async function close(mountId: string, path: DrivePath): Promise<void> {
 async function versionIds(sweepMount: Mount, containerId: string): Promise<string[]> {
     const versions = await sweepMount.getChildByName(containerId, 'versions');
     return versions ? (await sweepMount.listFolder(versions.id)).map((file) => file.id) : [];
+}
+
+type Message = { content: string; attachments?: string[] };
+
+// A comment thread in the document's chat folder, its messages posted, last active `ageHours` ago.
+async function addThread(
+    sweepMount: Mount,
+    mountId: string,
+    containerId: string,
+    opts: { ageHours?: number; messages?: Message[] } = {},
+): Promise<DrivePath> {
+    const chat = await sweepMount.getChildByName(containerId, 'chat');
+    if (!chat) throw new Error('no chat folder');
+    const thread = await drive.create(mountId, chat.id, `thread-${crypto.randomUUID()}`, 'chat', home.user);
+    const room = await drive.getChat(mountId, thread.id);
+    for (const { content, attachments } of opts.messages ?? []) {
+        await room.postMessage(home.user, content, 'message', undefined, undefined, attachments);
+    }
+    await closeThreadDb(sweepMount, thread.id);
+    const at = new Date(Date.now() - (opts.ageHours ?? OLD_HOURS) * HOUR_MS);
+    const dataDb = await threadDataDb(sweepMount, thread.id);
+    sweepMount.db.update(paths).set({ createdAt: at }).where(eq(paths.id, thread.id)).run();
+    sweepMount.db.update(paths).set({ updatedAt: at }).where(eq(paths.id, dataDb.id)).run();
+    return thread;
+}
+
+async function threadDataDb(sweepMount: Mount, threadId: string): Promise<DrivePath> {
+    const dataDb = await sweepMount.getChildByName(threadId, 'data.db');
+    if (!dataDb) throw new Error('no data.db');
+    return dataDb;
+}
+
+// A write reaches the data.db row when the database syncs, which its close does at once.
+async function closeThreadDb(sweepMount: Mount, threadId: string): Promise<void> {
+    await sweepMount.closeDatabase((await threadDataDb(sweepMount, threadId)).id, { skipFinalSnapshot: true });
+}
+
+async function threadNames(sweepMount: Mount, containerId: string): Promise<string[]> {
+    const chat = await sweepMount.getChildByName(containerId, 'chat');
+    if (!chat) throw new Error('no chat folder');
+    return (await sweepMount.listFolder(chat.id)).map((thread) => thread.name).sort();
+}
+
+async function commentRows(mountId: string, containerId: string): Promise<string[]> {
+    return withCommentIndex(drive, mountId, containerId, async (index) =>
+        (await index.list()).map((entry) => entry.chatName).sort(),
+    );
 }
 
 describe('the media sweep', () => {
@@ -494,6 +546,154 @@ describe('the media sweep', () => {
     });
 });
 
+describe('the thread sweep', () => {
+    async function commentsDbId(containerId: string): Promise<string> {
+        const commentsDb = await mount.getChildByName(containerId, 'comments.db');
+        if (!commentsDb) throw new Error('no comments.db');
+        return commentsDb.id;
+    }
+
+    test('a thread no state names goes with its row, its mentions and its search hit', async () => {
+        const { path, collab } = await openDoc(mount, M, 'ThreadGone', [paragraph(marked('c-kept'))]);
+        const kept = await addThread(mount, M, path.id, { messages: [{ content: 'needle kept' }] });
+        const gone = await addThread(mount, M, path.id, {
+            messages: [{ content: `needle gone, ask ${home.user.email}` }],
+        });
+        addCard(collab.doc, 'c-kept', { chatName: kept.name });
+        addCard(collab.doc, 'c-gone', { chatName: gone.name });
+
+        await close(M, path);
+        await sweepDocument(drive, path);
+        expect(await threadNames(mount, path.id)).toEqual([kept.name]);
+        expect(await commentRows(M, path.id)).toEqual([kept.name]);
+        const hits = await withCommentIndex(drive, M, path.id, (index) => index.searchComments('needle'));
+        expect(hits.map((hit) => hit.id)).toEqual([kept.name]);
+        const mentions = await drive.withDatabase(M, COMMENT_INDEX_DB_CONFIG, await commentsDbId(path.id), async (db) =>
+            db.db.select().from(commentSchema.commentMentions).all(),
+        );
+        expect(mentions.map((mention) => mention.chatName)).not.toContain(gone.name);
+    });
+
+    test('a thread a retained version anchors stays until that version is deleted', async () => {
+        const { path, collab } = await openDoc(mount, M, 'ThreadVersioned', [paragraph(marked('c1')), paragraph()]);
+        const thread = await addThread(mount, M, path.id);
+        addCard(collab.doc, 'c1', { chatName: thread.name });
+        await drive.saveVersion(M, path.id);
+        collab.doc.getXmlFragment('default').delete(0, 1);
+        await close(M, path);
+
+        await sweepDocument(drive, path);
+        expect(await threadNames(mount, path.id)).toEqual([thread.name]);
+
+        for (const id of await versionIds(mount, path.id)) await mount.deletePath(id);
+        await sweepDocument(drive, path);
+        expect(await threadNames(mount, path.id)).toEqual([]);
+        expect(await commentRows(M, path.id)).toEqual([]);
+    });
+
+    test('a thread under three days old stays, and so does an old one with a recent reply', async () => {
+        const { path } = await openDoc(mount, M, 'ThreadYoung', [paragraph()]);
+        const young = await addThread(mount, M, path.id, { ageHours: 71 });
+        const replied = await addThread(mount, M, path.id);
+        await addThread(mount, M, path.id);
+        // A reply through a notification, while the document is closed.
+        await (await drive.getChat(M, replied.id)).postMessage(home.user, 'still here');
+        await closeThreadDb(mount, replied.id);
+
+        await close(M, path);
+        await sweepDocument(drive, path);
+        expect(await threadNames(mount, path.id)).toEqual([replied.name, young.name].sort());
+    });
+
+    test('a canvas keeps the thread of a document-level card and drops that of a deleted one', async () => {
+        const created = await drive.create(M, rootId, `ThreadCanvas-${crypto.randomUUID()}`, 'vector');
+        const { path } = await drive.resolveFile(M, created.id);
+        const collab = await drive.getCollabDocument(M, path.id);
+        seedVectorDoc(collab.doc, buildGoldenDeckScene());
+        const documentLevel = await addThread(mount, M, path.id);
+        const deleted = await addThread(mount, M, path.id);
+        addCard(collab.doc, 'c-document', { chatName: documentLevel.name });
+        addCard(collab.doc, 'c-deleted', { chatName: deleted.name, deletedAt: Date.now() });
+
+        await close(M, path);
+        await sweepDocument(drive, path);
+        expect(await threadNames(mount, path.id)).toEqual([documentLevel.name]);
+    });
+
+    test('comments.db is not opened when no thread goes', async () => {
+        const { path, collab } = await openDoc(mount, M, 'ThreadNone', [paragraph(marked('c1'))]);
+        const thread = await addThread(mount, M, path.id);
+        addCard(collab.doc, 'c1', { chatName: thread.name });
+        await close(M, path);
+        const commentsDb = await commentsDbId(path.id);
+        await mount.closeDatabase(commentsDb);
+        const opens = spyOn(mount, 'withDatabase');
+        try {
+            await sweepDocument(drive, path);
+            expect(opens.mock.calls.filter(([, pathId]) => pathId === commentsDb)).toEqual([]);
+        } finally {
+            opens.mockRestore();
+        }
+        expect(await threadNames(mount, path.id)).toEqual([thread.name]);
+    });
+
+    test('a row whose thread went before is dropped with the next swept thread', async () => {
+        const { path } = await openDoc(mount, M, 'ThreadOrphan', [paragraph()]);
+        await withCommentIndex(drive, M, path.id, async (index) => {
+            await index.ensureComment('ghost.eigenchat');
+            await index.addMention('ghost.eigenchat', home.user.email);
+        });
+        await addThread(mount, M, path.id);
+
+        await close(M, path);
+        await sweepDocument(drive, path);
+        expect(await commentRows(M, path.id)).toEqual([]);
+    });
+
+    test("a thread's media nobody names goes, and a file a message names stays, a deleted message too", async () => {
+        const { path, collab } = await openDoc(mount, M, 'ThreadMedia', [paragraph(marked('c1'))]);
+        const thread = await addThread(mount, M, path.id, {
+            messages: [
+                { content: 'named', attachments: ['named.png'] },
+                { content: 'deleted', attachments: ['deleted.png'] },
+            ],
+        });
+        addCard(collab.doc, 'c1', { chatName: thread.name });
+        // The row as a delete leaves it. The delete itself trashes the file, so only an older delete leaves it live.
+        await drive.withDatabase(M, CHAT_ROOM_DB_CONFIG, (await threadDataDb(mount, thread.id)).id, async (db) => {
+            db.db
+                .update(chatSchema.messages)
+                .set({ deletedAt: new Date(), content: '' })
+                .where(eq(chatSchema.messages.content, 'deleted'))
+                .run();
+        });
+        await closeThreadDb(mount, thread.id);
+        for (const name of ['named.png', 'deleted.png', 'loose.png']) await addMedia(mount, thread.id, name);
+        await addMedia(mount, thread.id, 'young.png', { ageHours: 71 });
+
+        await close(M, path);
+        await sweepDocument(drive, path);
+        expect(await mediaNames(mount, thread.id)).toEqual(['deleted.png', 'named.png', 'young.png']);
+    });
+
+    test('a thread with no old media is never opened', async () => {
+        const { path, collab } = await openDoc(mount, M, 'ThreadUnopened', [paragraph(marked('c1'))]);
+        const thread = await addThread(mount, M, path.id);
+        addCard(collab.doc, 'c1', { chatName: thread.name });
+        await addMedia(mount, thread.id, 'young.png', { ageHours: 71 });
+        const dataDb = await threadDataDb(mount, thread.id);
+        await close(M, path);
+        const downloads = spyOn(mount, 'downloadToTemp');
+        try {
+            await sweepDocument(drive, path);
+            expect(downloads.mock.calls.filter(([id]) => id === dataDb.id)).toEqual([]);
+        } finally {
+            downloads.mockRestore();
+        }
+        expect(await mediaNames(mount, thread.id)).toEqual(['young.png']);
+    });
+});
+
 describe('the sweep after a linger close', () => {
     // The open arms the linger on fake timers, and the clock moves past it. A sweep takes a hold on the Home before the
     // close starts, so the holds taken once the linger ran out count the sweeps, and the last release ends one.
@@ -637,5 +837,20 @@ describe('the media sweep on s3', () => {
             held.mockRestore();
             await uploadQueue.drain({ flushNow: true });
         }
+    });
+    test('deletes a thread nothing names, with its row', async () => {
+        const { path, collab } = await openDoc(s3.mount, S3_MOUNT, 'BucketThread', [paragraph(marked('c1'))]);
+        const kept = await addThread(s3.mount, S3_MOUNT, path.id, {
+            messages: [{ content: 'kept', attachments: ['named.png'] }],
+        });
+        await addThread(s3.mount, S3_MOUNT, path.id, { messages: [{ content: 'gone' }] });
+        addCard(collab.doc, 'c1', { chatName: kept.name });
+        for (const name of ['named.png', 'loose.png']) await addMedia(s3.mount, kept.id, name);
+
+        await close(S3_MOUNT, path);
+        await sweepDocument(drive, path);
+        expect(await threadNames(s3.mount, path.id)).toEqual([kept.name]);
+        expect(await mediaNames(s3.mount, kept.id)).toEqual(['named.png']);
+        expect(await commentRows(S3_MOUNT, path.id)).toEqual([kept.name]);
     });
 });
