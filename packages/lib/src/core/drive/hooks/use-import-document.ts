@@ -1,10 +1,14 @@
+// Imports a file into an open document, such as a .docx into a doc or an .xlsx into a sheet, from the user's
+// computer or from Drive. The server writes it into the document, which saves a version first, so a success
+// refreshes the document's row and its version list.
+
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getDriveImportFromDriveUrl, getDriveImportUrl } from '@workspace/lib/api';
 import type { DocumentImportOptions, ImportResult } from '@workspace/lib/types/drive';
 import { toast } from 'sonner';
 import { onMutationError } from '../../api-error';
 import { invalidateVersions } from '../../versioning/hooks/keys';
-import { driveKeys } from './keys';
+import { invalidatePath } from './keys';
 
 // The import route answers with what the file held that did not come over (a pptx's tables, say) or, for a deck with
 // no slides, that nothing did: the open document shows neither. A plain fetch has no Eden type, so the shape is checked.
@@ -36,7 +40,7 @@ export function useImportDocument(ownerId: string, mountId: string) {
             return importResultOf(await fetch(url, { method: 'POST', body: file, credentials: 'include' }));
         },
         onSuccess: (data, variables) => {
-            queryClient.invalidateQueries({ queryKey: driveKeys.path(ownerId, mountId, variables.pathId) });
+            invalidatePath(queryClient, ownerId, mountId, variables.pathId);
             invalidateVersions(queryClient, ownerId, mountId, variables.pathId);
             toastSummary(data);
         },
@@ -70,7 +74,7 @@ export function useImportFromDrive(ownerId: string, mountId: string) {
             return importResultOf(response);
         },
         onSuccess: (data, variables) => {
-            queryClient.invalidateQueries({ queryKey: driveKeys.path(ownerId, mountId, variables.pathId) });
+            invalidatePath(queryClient, ownerId, mountId, variables.pathId);
             invalidateVersions(queryClient, ownerId, mountId, variables.pathId);
             toastSummary(data);
         },

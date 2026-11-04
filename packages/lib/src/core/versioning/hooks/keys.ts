@@ -1,3 +1,6 @@
+// The query keys of a document's version list, and the one invalidation every change to the list calls, such as a
+// save, a restore, an import or Delete history.
+
 import type { QueryClient } from '@tanstack/react-query';
 
 export const versionsKeys = {
