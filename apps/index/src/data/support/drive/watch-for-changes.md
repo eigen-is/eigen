@@ -6,7 +6,7 @@ category: Sharing
 tags: [drive, notifications, watch, activity, collaboration]
 related: [drive/file-activity, drive/share-a-file]
 order: 140
-updated: 2026-09-18
+updated: 2026-11-04
 ---
 
 When you work on something with other people, you can ask Eigen to tell you when it changes. Watching a file or a folder sends you a notification whenever someone else does something to it.
@@ -35,7 +35,7 @@ Notifications arrive in the bell menu at the top of the screen, alongside your o
 - edits a document, spreadsheet, presentation, board, or drawing.
 - renames, moves, trashes, or deletes an item.
 - changes who the item is shared with.
-- restores an earlier version.
+- restores an earlier version, or deletes the version history.
 - writes a comment, or adds or moves a card on a board.
 
 You are never notified about your own changes. Repeated changes to the same file collapse into one notification rather than a new one each time.
