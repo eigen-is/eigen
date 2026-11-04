@@ -20,7 +20,7 @@ type DragState =
 
 type UseDragAndDropProps = {
     board: BoardData;
-    cards: Record<string, CommentCard>;
+    cards: Readonly<Record<string, CommentCard>>;
     yjsDoc: Y.Doc | null;
     // Seals the drag-end commit as its own undo step.
     undoManager: Y.UndoManager | null;
@@ -153,8 +153,8 @@ export const useDragAndDrop = ({
         }
 
         undoManager?.stopCapturing();
-        const movedColumns = yjsDoc.transact(() => {
-            let moved: { oldColumn: string; newColumn: string } | null = null;
+        const movedToColumnId = yjsDoc.transact(() => {
+            let movedTo: string | null = null;
             if (dragState.activeType === 'column') {
                 if (activeId !== overId) {
                     const currentOrder = columnOrderArray.toArray();
@@ -172,7 +172,7 @@ export const useDragAndDrop = ({
                 const overIsColumn = overId in board.columns;
                 const sourceColumnId = findColumnOfTask(activeId);
                 const destColumnId = overIsColumn ? overId : findColumnOfTask(overId);
-                // Dropping on a column appends; dropping back onto the own column header is a no-op.
+                // A drop on a column appends the card. A drop on the card's own column does nothing.
                 if (sourceColumnId && destColumnId && !(overIsColumn && destColumnId === sourceColumnId)) {
                     const sourceColumn = columnsMap.get(sourceColumnId);
                     const sourceTaskIds = getIdArray(sourceColumn, 'taskIds');
@@ -184,23 +184,21 @@ export const useDragAndDrop = ({
                         if (sourceIndex !== -1 && destIndex !== -1) {
                             sourceTaskIds.delete(sourceIndex, 1);
                             destTaskIds.insert(destIndex, [activeId]);
-                            if (sourceColumnId !== destColumnId) {
-                                moved = { oldColumn: sourceColumnId, newColumn: destColumnId };
-                            }
+                            if (sourceColumnId !== destColumnId) movedTo = destColumnId;
                         }
                     }
                 }
             }
             normalizeBoard(yjsDoc);
-            return moved;
+            return movedTo;
         });
         undoManager?.stopCapturing();
-        if (movedColumns) {
+        if (movedToColumnId) {
             onRecordEvent?.({
                 eventType: 'sticky-moved',
                 details: {
                     card: cards[activeId]?.title ?? '',
-                    toColumn: board.columns[movedColumns.newColumn]?.title ?? '',
+                    toColumn: board.columns[movedToColumnId]?.title ?? '',
                     cardId: activeId,
                 },
             });

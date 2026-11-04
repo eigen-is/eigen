@@ -128,11 +128,11 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
                 const elementsMap = doc.getMap('elements');
                 const patchedIds = new Set<string>();
                 for (const { id, fields } of patches) {
-                    const elMap = elementsMap.get(id);
-                    if (!(elMap instanceof Y.Map)) continue;
-                    for (const [k, v] of Object.entries(fields)) {
-                        if (k === 'id' || k === 'type' || v === undefined) continue;
-                        if (ELEMENT_FIELDS.includes(k)) elMap.set(k, v);
+                    const element = elementsMap.get(id);
+                    if (!(element instanceof Y.Map)) continue;
+                    for (const [field, value] of Object.entries(fields)) {
+                        if (field === 'id' || field === 'type' || value === undefined) continue;
+                        if (ELEMENT_FIELDS.includes(field)) element.set(field, value);
                     }
                     patchedIds.add(id);
                 }
@@ -177,13 +177,13 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
     );
 
     const duplicateElements = useCallback(
-        (ids: string[], dx: number, dy: number): string[] =>
+        (ids: readonly string[], dx: number, dy: number): string[] =>
             docRef.current ? duplicateElementsInDoc(docRef.current, ids, dx, dy) : [],
         [],
     );
 
     const replaceElement = useCallback(
-        (id: string, partials: NewVectorElement[]): string[] =>
+        (id: string, partials: readonly NewVectorElement[]): string[] =>
             docRef.current ? replaceElementInDoc(docRef.current, id, partials, defaultsRef.current) : [],
         [],
     );

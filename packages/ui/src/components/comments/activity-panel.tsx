@@ -22,7 +22,7 @@ export function ActivityPanel({ path, onOpenCard, onOpenChat, className }: Activ
 
     return (
         <PropertiesPanel className={className}>
-            {/* isPending guard: no "No activity yet" flash while the first fetch is in flight. */}
+            {/* Nothing shows while the first fetch runs, so "No activity yet" never flashes. */}
             {isPending ? null : events.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
                     <Activity className="h-8 w-8 mb-2 opacity-40" />

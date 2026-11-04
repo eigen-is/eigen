@@ -1,6 +1,6 @@
-// The comments and activity host that both canvas apps mount: the card read, the panel state, the lifecycle, and
-// the bookkeeping that ties a card to the element it was raised on. The apps differ only in how a reveal moves the
-// view: one selects the element, the other goes to its slide first. That step comes in as `onReveal`.
+// The comments and activity host a canvas app mounts, such as Vector or Slides: the card read, the panel state, the
+// lifecycle, and the bookkeeping that ties a card to the element it was raised on. Apps differ in how a reveal moves
+// the view, for example by going to the element's slide first, so that step comes in as `onReveal`. A shell such as
 // CanvasDocumentShell renders what this returns.
 
 import { useAuth } from '@workspace/lib/auth';
@@ -136,7 +136,7 @@ export function useCanvasCommentHost({
         [lifecycleCards, openCard, openLifecycleChat],
     );
 
-    // A comment raised from an element anchors to it; one raised from the panel stays document-level.
+    // A comment raised from an element anchors to it. One raised from the panel stays document-level.
     const handleSaveNew = useCallback(
         async (patch: CardFormPatch, attachments?: CardAttachmentDraft[], assignee?: string | null) => {
             const anchorId = commentAnchorId;

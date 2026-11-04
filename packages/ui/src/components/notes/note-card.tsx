@@ -55,9 +55,8 @@ export function NoteCard({
             className={cn(
                 'p-0 w-full shadow-md select-none rounded-none',
                 frameColor
-                    ? // Inset shadow, not a border: the color bar must not shift the text.
-                      // Dark mode mirrors the mail list row: 2px inset stripe in the saturated
-                      // color + a 14% color-mix wash over --background (see --note-soft below).
+                    ? // An inset shadow, not a border, so the color bar doesn't shift the text. In dark mode the
+                      // card looks like a mail list row: a 2px stripe in the full color over a faint wash of it.
                       'border-0 bg-(--note-bg) text-(--note-fg) dark:bg-(--note-soft) dark:text-card-foreground dark:shadow-[inset_2px_0_0_0_var(--note-indicator)]'
                     : 'border',
                 onClick ? 'cursor-pointer' : '',

@@ -158,11 +158,7 @@ export function StickiesBoard({
         onRecordEvent: recordHistory.mutate,
     });
 
-    const entryByChatName = useMemo(() => {
-        const map = new Map<string, CommentEntry>();
-        for (const c of allComments) map.set(c.chatName, c);
-        return map;
-    }, [allComments]);
+    const entryByChatName = useMemo(() => new Map(allComments.map((entry) => [entry.chatName, entry])), [allComments]);
     const unreadChatNames = useUnreadCommentChatNames(user?.id ?? '', path.id);
 
     // The card this user works on: the card open in the dialog, else the card being dragged. Peers see it outlined
@@ -172,7 +168,7 @@ export function StickiesBoard({
     useStickiesPresence(provider, user, presenceCardIds);
     const cardPresence = useCardPresence(provider);
 
-    // Off while a dialog (the card editor, a confirm) is up: ⌘Z on its button would undo the board.
+    // The undo keys are off while a dialog is open, such as the card editor, so ⌘Z there never undoes the board.
     const dialogOpen = useDialogOpen();
     useYjsUndoHotkeys(undoManager, canWrite && !dialogOpen);
 
@@ -258,7 +254,7 @@ export function StickiesBoard({
         },
         [handleContextMenu, entryByChatName],
     );
-    // Long-press opens the same card menu on touch (`touch-none` cards get no native contextmenu).
+    // A long-press opens the same card menu on touch, because a `touch-none` card gets no native context menu.
     const handleCardLongPress = useCallback(
         (card: CommentCard, x: number, y: number) => {
             openCardContextMenuAt(
@@ -425,9 +421,9 @@ export function StickiesBoard({
 
                                     <CardFormDialog
                                         open={addOpen}
-                                        onOpenChange={(o) => {
-                                            setAddOpen(o);
-                                            if (!o) setAddTargetColumn(null);
+                                        onOpenChange={(open) => {
+                                            setAddOpen(open);
+                                            if (!open) setAddTargetColumn(null);
                                         }}
                                         onSave={onSaveNew}
                                         allowAttachments={!!mediaFolderId}

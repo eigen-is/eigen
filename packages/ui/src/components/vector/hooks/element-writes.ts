@@ -1,6 +1,6 @@
-// The editor's multi-element passes over a vector Y.Doc, such as replace, duplicate, reorder and a comment
-// card's delete, over the shared element writer. Plain functions over the doc, the way the tools modules
-// are plain functions over the scene, so the hook stays the thin React surface.
+// The canvas writes that change many elements of a vector Y.Doc at once, such as replace, duplicate, reorder and a
+// comment card's delete. Each runs in one transaction. They are plain functions over the doc, the way the tools
+// modules are plain functions over the scene, so useCanvasDoc stays a thin React wrapper around them.
 
 import type { NewVectorElement, StyleDefaults, ZOp } from '@workspace/lib/vector';
 import {
@@ -125,10 +125,10 @@ export function duplicateElementsInDoc(doc: Y.Doc, ids: readonly string[], dx: n
             // A copy starts with no comments. The cards belong to the element that was commented on.
             clone.set('commentCardIds', '');
             if (src.get('type') === 'arrow') {
-                const sb = src.get('startBinding');
-                const eb = src.get('endBinding');
-                clone.set('startBinding', remapBinding(typeof sb === 'string' ? sb : '', idMap));
-                clone.set('endBinding', remapBinding(typeof eb === 'string' ? eb : '', idMap));
+                const startBinding = src.get('startBinding');
+                const endBinding = src.get('endBinding');
+                clone.set('startBinding', remapBinding(typeof startBinding === 'string' ? startBinding : '', idMap));
+                clone.set('endBinding', remapBinding(typeof endBinding === 'string' ? endBinding : '', idMap));
             }
             // The position comes from the source, because the clone is not in the doc yet.
             const x = src.get('x');

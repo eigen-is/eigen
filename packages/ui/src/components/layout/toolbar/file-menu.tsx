@@ -85,7 +85,7 @@ export function FileMenu({
     const [renameOpen, setRenameOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [emailOpen, setEmailOpen] = useState(false);
-    // Lifted out of VersionHistoryMenu so the dialogs survive the menu's unmount-on-close.
+    // The version dialogs' state lives here, because the menu unmounts VersionHistoryMenu when it closes.
     const [pendingSnapshot, setPendingSnapshot] = useState<Snapshot | null>(null);
     const [deleteHistorySize, setDeleteHistorySize] = useState<number | null>(null);
     const openConfig = OPEN_LABELS[createType];

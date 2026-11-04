@@ -18,7 +18,7 @@ type CardOpenRef = { cardId?: string; chatName?: string };
 
 type ActivityEventListProps = {
     path: DrivePath;
-    events: FileEvent[];
+    events: readonly FileEvent[];
     // Set in an editor: a row that names a card or a comment opens it in the document, and every other row does
     // nothing. In Drive it is not set, and each row links to what it names.
     onOpenCard?: (ref: CardOpenRef) => void;

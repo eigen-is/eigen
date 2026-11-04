@@ -28,8 +28,8 @@ type PanelColumnProps = {
     activePanel: DocumentPanel;
     onClose: () => void;
     path: DrivePath;
-    cards: Record<string, CommentCard>;
-    entries: CommentEntry[];
+    cards: Readonly<Record<string, CommentCard>>;
+    entries: readonly CommentEntry[];
     members: EffectiveMember[];
     currentUserEmail: string;
     filter: ReturnType<typeof useCommentFilter>;
@@ -39,8 +39,8 @@ type PanelColumnProps = {
     onOpenCard: (cardId: string) => void;
     // Opens an activity row's comment by its chat name, live or as deleted, such as the lifecycle's openChat.
     onOpenChat: (chatName: string) => void;
-    // The canvas (slides, vector) creates document-level comments from the panel, anchored to no
-    // element. Absent for docs/sheets/stickies, which add against their own anchor.
+    // A canvas host, such as slides, adds a document-level comment from the panel, anchored to no element. A host
+    // that anchors each comment to its own content, such as docs, leaves it out.
     onAddComment?: () => void;
 };
 

@@ -126,8 +126,8 @@ export function RestoreVersionDialog({
     );
 }
 
-// Open while the menu's pick holds a size, that of the versions the list showed. The versions of the comment threads
-// go too, uncounted.
+// Open while `size` holds the total size of the versions the menu listed. The comment threads' versions are deleted
+// too, but their size is not counted.
 export function DeleteHistoryDialog({
     path,
     size,

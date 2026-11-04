@@ -101,7 +101,7 @@ export function SlideEditor({
         () => doc.elements.filter((el) => selectedIds.includes(el.id)),
         [doc.elements, selectedIds],
     );
-    // Aspect lock, lifted so the panel checkbox and the canvas' ObjectTransform share one setting.
+    // The aspect lock lives here, so the panel's checkbox and the canvas' resize handles share one setting.
     const allImageSelected = selectedElements.length > 0 && selectedElements.every((el) => el.type === 'image');
     const [aspectLocked, setAspectLocked] = useAspectLock(selectedIds, allImageSelected);
 
@@ -109,9 +109,9 @@ export function SlideEditor({
     // so either can land on an element the canvas is not showing.
     const revealElement = useCallback(
         (el: VectorElement) => {
-            // An element homed on no live slide (a peer deleted it, or the record never carried one) is
-            // still searchable and still carries comments; going to its frame would empty the canvas, so
-            // it is selected where we are instead.
+            // An element may sit on no live slide, such as when a peer deleted its slide. It still shows in
+            // search and still carries comments. Going to its frame would empty the canvas, so it is
+            // selected on the current slide instead.
             if (doc.frames.some((f) => f.id === el.frameId)) setFrameId(el.frameId);
             setSelectedIds([el.id]);
         },
@@ -214,7 +214,8 @@ export function SlideEditor({
         // exit. They are dropped on the way in.
         docSearchController.highlightAll([]);
         setIsPresenting(true);
-        // No API (iOS Safari) or a rejected request still presents: the overlay is fixed inset-0.
+        // Present still works without fullscreen, such as on iOS Safari or after a refused request,
+        // because its overlay covers the whole viewport on its own.
         document.documentElement.requestFullscreen?.().catch(() => {});
     }, [doc.frames.length, setSelectedIds, docSearchController]);
 
@@ -259,7 +260,7 @@ export function SlideEditor({
         return () => document.removeEventListener('keydown', onKeyDown, true);
     }, [exitPresent]);
 
-    // Toolbar "Add image": the picker lives here, placement goes through the canvas handle.
+    // The toolbar's Add image opens the picker here, and the canvas handle places what was picked.
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
     const [importPickerOpen, setImportPickerOpen] = useState(false);
     const insertImage = canEdit && mediaFolderId ? () => setImagePickerOpen(true) : undefined;
@@ -402,7 +403,7 @@ export function SlideEditor({
                 />
             }
         >
-            {/* The rail is desktop-only: a 52-wide column would take half a phone, so a phone gets
+            {/* The rail is desktop-only, because its column would take half a phone's width. A phone gets
                 the strip under the deck instead. */}
             {!isMobile && (
                 <SlidePanel
@@ -446,7 +447,7 @@ export function SlideEditor({
                             searchActiveId={searchActiveId}
                             onInsertImage={insertImage}
                             backgroundMenu={slideMenuSections(frameId)}
-                            // A view-only deck pages on a one-finger swipe; an editable one keeps
+                            // A view-only deck pages on a one-finger swipe. An editable one keeps
                             // that finger for the canvas.
                             onSwipeFrame={canEdit ? undefined : stepFrame}
                         />

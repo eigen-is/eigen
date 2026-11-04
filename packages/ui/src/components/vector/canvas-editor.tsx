@@ -171,8 +171,8 @@ type CanvasEditorProps = {
     // the element that lands.
     styleDefaults: StyleDefaults;
     tool: VectorTool;
-    setTool: (t: VectorTool) => void;
-    // The tool lock, Q or the padlock, keeps the tool after a placement. It is passed in like `tool`; Q toggles it.
+    setTool: (tool: VectorTool) => void;
+    // The tool lock keeps the tool after a placement. The host owns it, like `tool`, and Q or the padlock toggles it.
     toolLocked: boolean;
     setToolLocked: (locked: boolean) => void;
     canEdit: boolean;
@@ -196,7 +196,7 @@ type CanvasEditorProps = {
     // which the host reveals. Without onOpenCard there are no marks, and without onAddComment no menu row.
     onOpenCard?: (cardId: string) => void;
     // The document's cards, for the mark's color, which is the card's own, as on a commented sheet cell.
-    commentCards?: Record<string, CommentCard>;
+    commentCards?: Readonly<Record<string, CommentCard>>;
     onAddComment?: (elementId: string) => void;
     // ⌘F: every match rings, and the one stepped to rings brighter and flashes. Both come from the host's
     // useCanvasDocSearch, and the canvas only paints them.
@@ -422,9 +422,8 @@ export function CanvasEditor({
         return m;
     }, [ordered, committedById]);
 
-    // The freehand, line and eraser gestures and a line's point handles live in a sibling hook, so this file only
-    // dispatches to them and does not grow. `busy` hides the point handles while any canvas gesture or overlay owns
-    // the surface.
+    // The freehand, line and eraser gestures and a line's point handles live in useDrawingTools, and the canvas only
+    // dispatches to them. `busy` hides the point handles while any canvas gesture or overlay owns the surface.
     const drawing = useDrawingTools({
         tool,
         setTool,
