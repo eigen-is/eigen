@@ -113,7 +113,7 @@ test('the dialog names the size the menu passed and deletes on its button', asyn
     expect(deleteVersions).toHaveBeenCalledTimes(1);
 });
 
-test('Delete history is greyed out while there are no versions, and live with one', async () => {
+test('Delete history is grayed out while there are no versions, and live with one', async () => {
     isEffectiveOwner = true;
     listed = [];
     const empty = await openVersionHistory();

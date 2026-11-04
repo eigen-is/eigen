@@ -1,9 +1,9 @@
 // A document's versions in its File menu: Save version now, and a Version history submenu whose pick asks to restore
-// that version, ending with Delete history for an owner of the drive, greyed out until there is a version. Their
+// that version, ending with Delete history for an owner of the drive, grayed out until there is a version. Their
 // dialogs live outside the menu, and the same versions show as buttons on the screen a document opens to when its
 // storage is gone.
 
-import { SWEEP_GRACE_MS } from '@workspace/lib/constants/sweep';
+import { SWEEP_GRACE_DAYS } from '@workspace/lib/constants/sweep';
 import { formatDateTime } from '@workspace/lib/date';
 import { useIsEffectiveOwner } from '@workspace/lib/drive';
 import { formatFileSize } from '@workspace/lib/format';
@@ -14,6 +14,7 @@ import { History, Save, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../../button';
 import { ConfirmDialog } from '../../confirm-dialog';
+import { DeleteDialog } from '../../delete/delete-dialog';
 import {
     DropdownMenuItem,
     DropdownMenuSeparator,
@@ -21,8 +22,6 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '../../dropdown-menu';
-
-const GRACE_DAYS = SWEEP_GRACE_MS / (24 * 60 * 60 * 1000);
 
 // VersionHistoryMenu renders only the menu rows. Pair it with RestoreVersionDialog and DeleteHistoryDialog
 // rendered outside the menu's content: inside it, Radix unmounts the dialog the moment the menu closes, and
@@ -141,7 +140,7 @@ export function DeleteHistoryDialog({
     const deleteVersions = useDeleteVersions(path.ownerId, path.mountId, path.id);
 
     return (
-        <ConfirmDialog
+        <DeleteDialog
             open={size !== null}
             onOpenChange={(next) => !next && onClose()}
             title="Delete version history?"
@@ -150,11 +149,10 @@ export function DeleteHistoryDialog({
                     ? ''
                     : `Frees ${formatFileSize(size)}. Earlier versions of this document and its comments can't be ` +
                       `restored after this. Images and comments you deleted are removed once everyone has closed it, ` +
-                      `except those added or replied to in the last ${GRACE_DAYS} days.`
+                      `except those added or replied to in the last ${SWEEP_GRACE_DAYS} days.`
             }
-            confirmText="Delete history"
-            destructive
-            onConfirm={() => deleteVersions.mutateAsync()}
+            deleteText="Delete history"
+            onDelete={() => deleteVersions.mutateAsync()}
         />
     );
 }
