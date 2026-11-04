@@ -11,7 +11,8 @@ import { isRecord } from '@workspace/lib/guards';
 import type { Cell } from '@workspace/lib/sheets';
 import { decodeSheetsSnapshot, readSheetsSnapshotJson, sheetsOpLog } from '@workspace/lib/sheets';
 import type { ChatAttachment } from '@workspace/lib/types/chat';
-import type { CommentCard } from '@workspace/lib/types/comments';
+import type { CommentCard, CommentMapName } from '@workspace/lib/types/comments';
+import { commentMapName } from '@workspace/lib/types/comments';
 import type { DriveCollabType } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_FILE, DRIVE_TYPE_FOLDER, EIGEN_DOC_TYPE_INFO, EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
 import { activeCommentCardIds, readVectorFromDoc } from '@workspace/lib/vector';
@@ -39,7 +40,7 @@ export function documentReferences(
     doc: Y.Doc,
     versionCards: readonly string[] = [],
 ): DocumentReferences {
-    const cards = readCards(doc, type === 'stickies' ? 'tasks' : 'comments');
+    const cards = readCards(doc, commentMapName(type));
     let media: Set<string>;
     let inUse: Set<string>;
     switch (type) {
@@ -98,7 +99,7 @@ export function documentReferences(
 // in a shape the editor never writes throws, rather than silently drop a part it may name. The title and the
 // description name nothing, so they are read as leniently as readCards reads them. So is the deleted mark: one that
 // is no number reads as not deleted, which only keeps more.
-function readCards(doc: Y.Doc, mapName: 'comments' | 'tasks'): Record<string, CommentCard> {
+function readCards(doc: Y.Doc, mapName: CommentMapName): Record<string, CommentCard> {
     const entries = [...getItemMapRoot(doc, mapName)].map(([id, card]): [string, CommentCard] => {
         if (!(card instanceof Y.Map)) throw new Error(`Unreadable comment card ${id}`);
         const title: unknown = card.get('title');
