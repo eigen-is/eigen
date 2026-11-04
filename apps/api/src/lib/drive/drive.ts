@@ -552,6 +552,7 @@ export class Drive {
         if (path.type !== DRIVE_TYPE_FILE) {
             throw new ApiError(404, 'File not found');
         }
+        await this.refuseDocumentPart(mount, path);
 
         // The thumbnail job starts as soon as the bytes land, so no error after that leaves its temp
         // file behind. A content write never changes the name or the type of the file.
@@ -612,10 +613,10 @@ export class Drive {
     }
 
     // A document's databases and its versions/ folder, with each version in it, change only with the whole
-    // document. Renamed, moved or trashed on its own, a database breaks the document and a version leaves
-    // a gap in its history. A file put into versions/ would list and restore as a version. So a user write
-    // refuses such a path, both as the item it changes and as the folder it writes into. The server's own
-    // writers, such as a snapshot or the media sweep, write through Mount and never meet this check.
+    // document. Renamed, moved, trashed or overwritten on its own, a database breaks the document and a
+    // version leaves a gap in its history. A file put into versions/ would list and restore as a version. So
+    // a user write refuses such a path, both as the item it changes and as the folder it writes into. The
+    // server's own writers, such as a snapshot or the media sweep, write through Mount and never meet this check.
     private async refuseDocumentPart(mount: Mount, path: DrivePath): Promise<void> {
         let parent: DrivePath | undefined;
         for (const crumb of await mount.getBreadcrumb(path.id)) {

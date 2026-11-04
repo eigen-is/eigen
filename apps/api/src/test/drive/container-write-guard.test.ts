@@ -255,6 +255,27 @@ describe('Container write guard', () => {
             await expectPartsUnchanged();
         });
 
+        // The routes refuse such a write before they reach the drive, and the drive refuses it again for any
+        // caller that comes later.
+        test('the drive refuses new bytes for a database or a version', async () => {
+            const drive = (await getHome(aliceId())).drive;
+            const files = parts.filter((part) => part.type === 'file');
+            for (const part of files) {
+                await expect(drive.writeFileContent(mountId, part.id, Buffer.from('overwrite'))).rejects.toThrow(
+                    "Cannot change a document's databases or versions",
+                );
+            }
+            for (const part of files) {
+                const after = await driveGet<DrivePath>(
+                    ctx.alice.user.sessionToken,
+                    aliceId(),
+                    mountId,
+                    `path/${part.id}`,
+                );
+                expect(after.size).toBe(part.size);
+            }
+        });
+
         test('a writer cannot move, upload, create or copy anything into versions/', async () => {
             const formData = new FormData();
             formData.append('file', new File(['fake'], 'fake.db', { type: 'application/x-sqlite3' }));
