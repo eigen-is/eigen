@@ -699,3 +699,36 @@ describe('CommentIndex.assign', () => {
         expect(entry).toMatchObject({ assignee: null });
     });
 });
+
+// The sweep drops the rows of the threads it deleted, and of any thread gone before it.
+describe('CommentIndex.deleteRowsWithoutThread', () => {
+    function makeIndex(): { index: CommentIndex; raw: Database } {
+        const raw = new Database(':memory:');
+        for (const m of COMMENT_INDEX_DB_CONFIG.migrations) m.up(raw);
+        return { index: new CommentIndex(drizzle(raw, { schema: commentSchema })), raw };
+    }
+
+    test('drops the row, the mentions and the search hit of every thread that is gone', async () => {
+        const { index, raw } = makeIndex();
+        for (const name of ['kept.eigenchat', 'gone.eigenchat']) {
+            await index.ensureComment(name);
+            await index.setRecentText(name, `needle in ${name}`);
+            await index.addMention(name, BOB_EMAIL);
+        }
+        // A mention whose row never existed is gone too.
+        await index.addMention('mention-only.eigenchat', BOB_EMAIL);
+
+        expect(index.deleteRowsWithoutThread((chatName) => chatName === 'kept.eigenchat')).toBe(2);
+
+        expect((await index.list()).map((entry) => entry.chatName)).toEqual(['kept.eigenchat']);
+        expect(raw.query('SELECT chatName FROM comment_mentions').all()).toEqual([{ chatName: 'kept.eigenchat' }]);
+        expect((await index.searchComments('needle')).map((match) => match.id)).toEqual(['kept.eigenchat']);
+    });
+
+    test('drops nothing while every thread is there', async () => {
+        const { index } = makeIndex();
+        await index.ensureComment('kept.eigenchat');
+        expect(index.deleteRowsWithoutThread(() => true)).toBe(0);
+        expect(await index.list()).toHaveLength(1);
+    });
+});

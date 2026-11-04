@@ -94,6 +94,26 @@ export class CommentIndex {
             .where(eq(commentSchema.comments.chatName, chatName));
     }
 
+    // Drops the rows and the mentions of every thread hasThread no longer finds, in one transaction, and returns how
+    // many threads that was. The mentions have no foreign key, so they go by name. The search table follows the rows
+    // through its delete trigger. It runs without an await, so a thread made meanwhile is either found or has no row.
+    public deleteRowsWithoutThread(hasThread: (chatName: string) => boolean): number {
+        const { comments, commentMentions } = commentSchema;
+        return this.db.transaction((tx) => {
+            const names = new Set(
+                [
+                    ...tx.select({ chatName: comments.chatName }).from(comments).all(),
+                    ...tx.select({ chatName: commentMentions.chatName }).from(commentMentions).all(),
+                ].map((row) => row.chatName),
+            );
+            const gone = [...names].filter((chatName) => !hasThread(chatName));
+            if (gone.length === 0) return 0;
+            tx.delete(comments).where(inArray(comments.chatName, gone)).run();
+            tx.delete(commentMentions).where(inArray(commentMentions.chatName, gone)).run();
+            return gone.length;
+        });
+    }
+
     public async get(chatName: string): Promise<typeof commentSchema.comments.$inferSelect | undefined> {
         return this.db.select().from(commentSchema.comments).where(eq(commentSchema.comments.chatName, chatName)).get();
     }
