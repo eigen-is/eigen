@@ -129,7 +129,7 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
         const threadMedia = new Map<string, ReadonlySet<string>>();
         for (const thread of chat ? await mount.listFolder(chat.id) : []) {
             if (thread.type !== DRIVE_TYPE_CHAT) continue;
-            if (!keptThreads.has(foldName(thread.name)) && (await lastActivity(mount, thread)) <= cutoff) {
+            if (!keptThreads.has(foldName(thread.name)) && !(await isActive(mount, thread, cutoff))) {
                 idleThreads.push(thread);
                 continue;
             }
@@ -148,9 +148,14 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
                 (await mount.listFolder(folderId)).filter((file) => isOld(file) && !names.has(foldName(file.name)));
             const files = media ? await unnamedIn(media.id, keptNames) : [];
             for (const [folderId, names] of threadMedia) files.push(...(await unnamedIn(folderId, names)));
-            // A reply since the read keeps its thread.
+            // A thread is read again, because since the read someone may have replied in it, or moved or trashed it.
             const threads: DrivePath[] = [];
-            for (const thread of idleThreads) if ((await lastActivity(mount, thread)) <= cutoff) threads.push(thread);
+            for (const idle of idleThreads) {
+                const thread = await mount.getPath(idle.id);
+                if (!thread || thread.trashedAt || thread.parentId !== chat?.id) continue;
+                if (drive.isTrashing(mount.id, thread.id) || (await isActive(mount, thread, cutoff))) continue;
+                threads.push(thread);
+            }
 
             // Every delete ends before the lock is let go, so a failed one doesn't leave the others running outside it.
             const results = await Promise.allSettled([...files, ...threads].map((path) => mount.deletePath(path.id)));
@@ -215,10 +220,13 @@ async function readFence(
     return { dataDb, versions, fence };
 }
 
-// When someone last wrote in a thread: its creation, or the last sync of its data.db, which stamps the row.
-async function lastActivity(mount: Mount, thread: DrivePath): Promise<number> {
+// Whether someone wrote in a thread since the cutoff: its creation, or the last sync of its data.db, which stamps the
+// row. A write reaches the row only when the database syncs, so a data.db open on the server counts as a write, such
+// as a reply through the Chat app while the document is closed.
+async function isActive(mount: Mount, thread: DrivePath, cutoff: number): Promise<boolean> {
     const dataDb = await mount.getChildByName(thread.id, CONTAINER_DATA_DB);
-    return Math.max(thread.createdAt.getTime(), dataDb?.updatedAt.getTime() ?? 0);
+    if (dataDb && mount.documentDbs.has(dataDb.id)) return true;
+    return Math.max(thread.createdAt.getTime(), dataDb?.updatedAt.getTime() ?? 0) > cutoff;
 }
 
 // A database nobody serves, such as the document's own data.db after its close, a version or a thread's data.db, is

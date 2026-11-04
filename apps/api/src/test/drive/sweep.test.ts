@@ -26,6 +26,7 @@ import { DAY_MS, HOUR_MS } from '../../lib/versioning/retention';
 import type { FakeS3Mount } from '../fault-storage-helpers';
 import { createFakeS3Mount, removeFakeS3Mount, waitFor } from '../fault-storage-helpers';
 import { buildGoldenDeckScene, seedEigendoc, seedVectorDoc } from '../fixtures/golden-documents';
+import { flushContentReindex } from '../mount-test-helpers';
 import { createTestUserOnStorage } from '../setup';
 
 const M = 'default';
@@ -123,6 +124,10 @@ async function addThread(
     for (const { content, attachments } of opts.messages ?? []) {
         await room.postMessage(home.user, content, 'message', undefined, undefined, attachments);
     }
+    // The close syncs the messages, which sends the thread to the content index, and that read opens it again. An
+    // open data.db counts as activity, so it is closed once more after the index read it.
+    await closeThreadDb(sweepMount, thread.id);
+    await flushContentReindex(drive);
     await closeThreadDb(sweepMount, thread.id);
     const at = new Date(Date.now() - (opts.ageHours ?? OLD_HOURS) * HOUR_MS);
     const dataDb = await threadDataDb(sweepMount, thread.id);
@@ -152,6 +157,21 @@ async function commentRows(mountId: string, containerId: string): Promise<string
     return withCommentIndex(drive, mountId, containerId, async (index) =>
         (await index.list()).map((entry) => entry.chatName).sort(),
     );
+}
+
+// The delete phase takes the container's lock, so a change that lands right before it stands in for one made
+// while the sweep read. The change may take the lock itself, so it runs on the first take only.
+async function changeBeforeDelete(containerId: string, change: () => Promise<void>): Promise<() => void> {
+    const original = mount.withPathLock.bind(mount);
+    let pending = true;
+    const spy = spyOn(mount, 'withPathLock').mockImplementation(async (pathId, fn) => {
+        if (pending && pathId === containerId) {
+            pending = false;
+            await change();
+        }
+        return original(pathId, fn);
+    });
+    return () => spy.mockRestore();
 }
 
 describe('the media sweep', () => {
@@ -255,21 +275,6 @@ describe('the media sweep', () => {
         expect(await mediaNames(mount, path.id)).toEqual(['loose.png']);
         await drive.closeCollabDocument(M, path.id, { skipFinalSnapshot: true });
     });
-
-    // The delete phase takes the container's lock, so a change that lands right before it stands in for one made
-    // while the sweep read. The change may take the lock itself, so it runs on the first take only.
-    async function changeBeforeDelete(containerId: string, change: () => Promise<void>): Promise<() => void> {
-        const original = mount.withPathLock.bind(mount);
-        let pending = true;
-        const spy = spyOn(mount, 'withPathLock').mockImplementation(async (pathId, fn) => {
-            if (pending && pathId === containerId) {
-                pending = false;
-                await change();
-            }
-            return original(pathId, fn);
-        });
-        return () => spy.mockRestore();
-    }
 
     test('a reopen between the read and the delete aborts the delete', async () => {
         const { path } = await openDoc(mount, M, 'Reopened', [paragraph()]);
@@ -708,6 +713,71 @@ describe('the thread sweep', () => {
         await close(M, path);
         await sweepDocument(drive, path);
         expect(await mediaNames(mount, thread.id)).toEqual(['deleted.png', 'named.png', 'young.png']);
+    });
+
+    test('a thread whose data.db is open on the server stays, such as for a reply through the Chat app', async () => {
+        const { path } = await openDoc(mount, M, 'ThreadOpen', [paragraph()]);
+        const thread = await addThread(mount, M, path.id);
+        await close(M, path);
+        // The reply reaches the data.db row only when the database syncs, so the row still reads as idle.
+        const restore = await changeBeforeDelete(path.id, async () => {
+            await (await drive.getChat(M, thread.id)).postMessage(home.user, 'a reply');
+        });
+        try {
+            await sweepDocument(drive, path);
+        } finally {
+            restore();
+            await closeThreadDb(mount, thread.id);
+        }
+        expect(await threadNames(mount, path.id)).toEqual([thread.name]);
+    });
+
+    test('a thread trashed or moved while the sweep read stays where it went', async () => {
+        const { path } = await openDoc(mount, M, 'ThreadLeft', [paragraph()]);
+        const trashed = await addThread(mount, M, path.id);
+        const moved = await addThread(mount, M, path.id);
+        const folder = await drive.createFolder(M, rootId, `ThreadLeft-${crypto.randomUUID()}`);
+        await close(M, path);
+        const restore = await changeBeforeDelete(path.id, async () => {
+            await drive.deletePath(M, trashed.id);
+            await drive.movePath(M, moved.id, folder.id);
+        });
+        try {
+            await sweepDocument(drive, path);
+        } finally {
+            restore();
+        }
+        expect((await mount.getPath(trashed.id))?.trashedAt).not.toBeNull();
+        expect((await mount.getPath(moved.id))?.parentId).toBe(folder.id);
+    });
+
+    test('a thread on its way to the trash when the delete starts stays for the trash', async () => {
+        const { path } = await openDoc(mount, M, 'ThreadTrashing', [paragraph()]);
+        const thread = await addThread(mount, M, path.id);
+        await close(M, path);
+        // The trash waits before it marks the rows, until the sweep is done.
+        const started = Promise.withResolvers<void>();
+        const swept = Promise.withResolvers<void>();
+        const original = mount.trashPath.bind(mount);
+        const trashPath = spyOn(mount, 'trashPath').mockImplementation(async (pathId) => {
+            started.resolve();
+            await swept.promise;
+            return original(pathId);
+        });
+        let trashing: Promise<void> | null = null;
+        const restore = await changeBeforeDelete(path.id, async () => {
+            trashing = drive.deletePath(M, thread.id);
+            await started.promise;
+        });
+        try {
+            await sweepDocument(drive, path);
+        } finally {
+            swept.resolve();
+            restore();
+            await trashing;
+            trashPath.mockRestore();
+        }
+        expect((await mount.getPath(thread.id))?.trashedAt).not.toBeNull();
     });
 
     test('a thread with no old media is never opened', async () => {

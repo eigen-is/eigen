@@ -72,7 +72,9 @@ The thread goes first, through `Mount.deletePath`, and only then its row in `com
 
 The card stays in the document's card map as dead bytes, because the sweep reads the closed document and never writes it. The activity rows that name the thread keep their entries ([FILE-HISTORY.md](FILE-HISTORY.md)).
 
-A thread's last activity is the newer of its own `createdAt` and the `updatedAt` of its `data.db` row. A write stamps that row when the database syncs, within 30 s, so a reply through a notification while the document is closed keeps the thread for another 72 hours. On a disk mount a close stamps the row too, a close after a read included, so a thread someone opened counts as active. The sweep reads a thread's `data.db` from a temp copy, which stamps nothing.
+A thread's last activity is the newer of its own `createdAt` and the `updatedAt` of its `data.db` row. A write stamps that row when the database syncs, within 30 s, so a reply through a notification while the document is closed keeps the thread for another 72 hours. Until that sync the row still reads as idle, so a thread whose `data.db` is open on the server (`Mount.documentDbs`) counts as active too. A database stays open for five idle minutes after any use, a read included, so a thread someone just read is kept for a later sweep. On a disk mount a close stamps the row too, a close after a read included, so a thread someone opened counts as active. The sweep reads a thread's `data.db` from a temp copy, which stamps nothing and opens nothing.
+
+The thread list is read before the lock, so under the lock each idle thread is read again. A thread that went to the trash or is on its way there, that someone moved out of `chat/`, or that became active since the read, stays.
 
 ## A thread's own media go when no message names them
 
