@@ -5,7 +5,7 @@ import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@
 import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortable';
 import { useAuth } from '@workspace/lib/auth';
 import { useUnreadCommentChatNames } from '@workspace/lib/chat';
-import { getIdArray, getItemMapRoot, useYjsUndoHotkeys } from '@workspace/lib/collab';
+import { boardCardIds, getIdArray, getItemMapRoot, useYjsUndoHotkeys } from '@workspace/lib/collab';
 import { matchesCommentFilter, useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
 import { MediaResolverProvider, useRecordHistory } from '@workspace/lib/drive';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
@@ -41,7 +41,6 @@ import { useDragAndDrop } from './hooks/use-drag-and-drop';
 import { useStickiesDocSearch } from './hooks/use-stickies-doc-search';
 import { useCardPresence, useStickiesPresence } from './hooks/use-stickies-presence';
 import { Toolbar } from './toolbar';
-import type { ColumnItem } from './types';
 
 // The card a drag carries. It renders inside the DragOverlay, below the MediaResolverProvider that StickiesBoard
 // renders, because useAttachmentMeta reads that provider.
@@ -72,6 +71,8 @@ function OverlayNoteCard({
         />
     );
 }
+
+const NO_CARDS: ReadonlySet<string> = new Set();
 
 type StickiesBoardProps = {
     ownerId: string;
@@ -134,11 +135,9 @@ function StickiesBoardInner({
     } = useBoard(ownerId, path.mountId, path.id, chatFolderId);
     const { user } = useAuth();
 
-    // A card is in use while a column lists it. The board lists the cards boardCardIds finds, the rule the server reads.
-    const activeCardIds = useMemo(
-        () => new Set(Object.values(board.columns).flatMap((column) => column.taskIds)),
-        [board.columns],
-    );
+    // A card is in use while a column lists it, the rule the server's sweep reads too. The board's columns change
+    // whenever a column or the card map does, so they say when to read the doc again.
+    const activeCardIds = useMemo(() => (yjsDoc ? boardCardIds(yjsDoc) : NO_CARDS), [yjsDoc, board.columns]);
 
     const lifecycle = useCommentLifecycle({
         ownerId,
@@ -310,17 +309,15 @@ function StickiesBoardInner({
     );
 
     const getActiveComponent = () => {
-        if (!dragState.activeId || !dragState.activeType || !dragState.activeItem) return null;
-
         if (dragState.activeType === 'task') {
-            const card = dragState.activeItem as CommentCard;
+            const card = dragState.activeItem;
             const entry = card.chatName ? entryByChatName.get(card.chatName) : undefined;
             const unread = !!card.chatName && unreadChatNames.has(card.chatName);
             return <OverlayNoteCard card={card} entry={entry} unread={unread} isMobile={isMobile} />;
         }
 
         if (dragState.activeType === 'column') {
-            const column = dragState.activeItem as ColumnItem;
+            const column = dragState.activeItem;
             return (
                 <Column
                     column={column}

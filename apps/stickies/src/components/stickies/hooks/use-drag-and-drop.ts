@@ -1,3 +1,8 @@
+// Dragging on a Stickies board: a card to another place or column, a column to another place, and an Alt-drop that
+// leaves a copy of the card where it lands. Each drop is one Yjs transaction and one undo step, and a move or a copy
+// is recorded in the file's history. The board passes in what it shows, and renders the dragged item from the state
+// this returns.
+
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import { getIdArray, getIdArrayRoot, getItemMapRoot } from '@workspace/lib/collab';
 import type { CreateCommentCardInput } from '@workspace/lib/comments';
@@ -8,11 +13,10 @@ import type * as Y from 'yjs';
 import { normalizeBoard } from '../normalize-board';
 import type { BoardData, ColumnItem } from '../types';
 
-type DragState = {
-    activeId: string | null;
-    activeType: 'task' | 'column' | null;
-    activeItem: CommentCard | ColumnItem | null;
-};
+type DragState =
+    | { activeId: string; activeType: 'task'; activeItem: CommentCard }
+    | { activeId: string; activeType: 'column'; activeItem: ColumnItem }
+    | { activeId: null; activeType: null; activeItem: null };
 
 type UseDragAndDropProps = {
     board: BoardData;
@@ -20,13 +24,13 @@ type UseDragAndDropProps = {
     yjsDoc: Y.Doc | null;
     // Seals the drag-end commit as its own undo step.
     undoManager: Y.UndoManager | null;
-    // Alt-drag duplicate goes through the frozen createCard seam: a fresh chatName, the
-    // new card id anchored at the drop slot in ONE transact.
+    // An Alt-drop copies the card through createCard: a fresh chatName, and the new id lands at the drop slot in the
+    // same transaction.
     createCard: (
         input: CreateCommentCardInput,
         anchorInTransact?: (card: CommentCard) => void,
     ) => Promise<CommentCard | undefined>;
-    // cardId required: the write contract (POST /history typebox), not the optional read shape.
+    // The history route requires a cardId, which the event's read shape leaves optional.
     onRecordEvent?: (
         event:
             | { eventType: 'sticky-moved'; details: FileEventDetailsMap['sticky-moved'] & { cardId: string } }
@@ -41,23 +45,26 @@ export const useDragAndDrop = ({
     undoManager,
     createCard,
     onRecordEvent,
-}: UseDragAndDropProps) => {
+}: UseDragAndDropProps): {
+    dragState: DragState;
+    handleDragStart: (event: DragStartEvent) => void;
+    handleDragEnd: (event: DragEndEvent) => void;
+} => {
     const [dragState, setDragState] = useState<DragState>({
         activeId: null,
         activeType: null,
         activeItem: null,
     });
 
-    // dnd-kit's DragEndEvent carries no drop-time modifier state, so track Alt globally and read it at
-    // drop (Alt held AT DROP → duplicate the card, original stays).
+    // dnd-kit's DragEndEvent says nothing about the keys held at the drop, so the hook tracks Alt itself. Alt held at
+    // the drop copies the card, and the original stays.
     const altHeldRef = useRef(false);
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
             altHeldRef.current = e.altKey;
         };
-        // Alt+Tab (Win/Linux) lets the OS eat the keyup, stranding the ref true — a later plain drag
-        // would silently duplicate. Reset on focus loss / tab hide (vector binds window blur for the
-        // same class of stuck-modifier bug).
+        // On Windows and Linux, Alt+Tab lets the system swallow the keyup, and a later plain drag would copy. So losing
+        // focus or hiding the tab clears it.
         const onBlur = () => {
             altHeldRef.current = false;
         };
@@ -83,7 +90,7 @@ export const useDragAndDrop = ({
     const resetDragState = () => setDragState({ activeId: null, activeType: null, activeItem: null });
 
     const handleDragStart = (event: DragStartEvent) => {
-        const activeId = event.active.id as string;
+        const activeId = String(event.active.id);
         if (activeId in cards) {
             setDragState({ activeId, activeType: 'task', activeItem: cards[activeId] });
         } else if (activeId in board.columns) {
@@ -97,16 +104,14 @@ export const useDragAndDrop = ({
             resetDragState();
             return;
         }
-        const activeId = active.id as string;
-        const overId = over.id as string;
+        const activeId = String(active.id);
+        const overId = String(over.id);
         const columnsMap = getItemMapRoot(yjsDoc, 'columns');
         const columnOrderArray = getIdArrayRoot(yjsDoc, 'columnOrder');
 
-        // Alt-drag duplicate: a COPY of the dragged CARD lands at the drop slot, the
-        // original stays put. It goes through the frozen createCard seam — a fresh chatName (a card's
-        // chatName binds its own comment thread, never copied); title/description/color/attachments are
-        // copied (attachments may reference the same media files, safe to share); the new id is anchored
-        // in createCard's own transact (one undo step).
+        // An Alt-drop puts a copy of the card at the drop slot and leaves the original. The copy gets a thread of its
+        // own, because a chatName names one card's thread. Its title, description, color and attachments are copied,
+        // and the attachments may share their media files. createCard places the copy in its own transaction.
         const source = cards[activeId];
         if (altHeldRef.current && dragState.activeType === 'task' && source) {
             const overIsColumn = overId in board.columns;
@@ -129,7 +134,7 @@ export const useDragAndDrop = ({
                 )
                     .then((created) => {
                         undoManager?.stopCapturing();
-                        // Parity with the dialog add — duplicates show in file history too.
+                        // A copy shows in the file's history, as a card added through the dialog does.
                         if (created) {
                             onRecordEvent?.({
                                 eventType: 'sticky-added',
