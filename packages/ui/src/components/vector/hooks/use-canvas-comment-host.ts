@@ -145,6 +145,7 @@ export const useCanvasCommentHost = ({
             currentUserEmail: user?.email ?? '',
             filter: commentFilter,
             activeComments,
+            isCardDeleted: lifecycle.isCardDeleted,
             commentContextMenu,
             // The mobile pane hides the canvas, so its element reveal would go unseen there.
             onOpenCard: isMobile ? setOpenCardId : openCard,

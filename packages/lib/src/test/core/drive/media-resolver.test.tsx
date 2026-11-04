@@ -1,5 +1,6 @@
 // What a renderer reads to swap its loader for the missing look: a name that cannot resolve reads missing,
-// one still uploading in this tab never does. And which URL a small copy of a picture draws.
+// one still uploading in this tab never does. A comment thread reads missing the same way. And which URL a small
+// copy of a picture draws.
 import { describe, expect, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import { driveKeys } from '../../../core/drive/hooks/keys';
@@ -31,6 +32,29 @@ describe('isMediaMissing', () => {
     test('an upload still pending in this tab never reads missing', async () => {
         const { latest, unmount } = await resolverWithoutMediaFolder();
         expect(latest.isMediaMissing(`${PENDING_PREFIX}upload-1`)).toBe(false);
+        await unmount();
+    });
+});
+
+describe('isChatMissing', () => {
+    test('a document with no chat folder reads every thread missing', async () => {
+        const { latest, unmount } = await resolverWithoutMediaFolder();
+        expect(latest.isChatMissing('thread-1.eigenchat')).toBe(true);
+        await unmount();
+    });
+
+    test('a thread the listing holds never reads missing', async () => {
+        const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Number.POSITIVE_INFINITY } } });
+        queryClient.setQueryData(driveKeys.folder('owner-1', 'm1', 'chat-1'), [
+            mediaFile({ id: 'chat-a', name: 'thread-1.eigenchat', parentId: 'chat-1' }),
+        ]);
+        const { latest, unmount } = await renderHook(useMediaResolver, queryClient, (children) => (
+            <MediaResolverProvider ownerId="owner-1" mountId="m1" mediaFolderId={null} chatFolderId="chat-1">
+                {children}
+            </MediaResolverProvider>
+        ));
+        expect(latest.resolveChatId('thread-1.eigenchat')).toBe('chat-a');
+        expect(latest.isChatMissing('thread-1.eigenchat')).toBe(false);
         await unmount();
     });
 });

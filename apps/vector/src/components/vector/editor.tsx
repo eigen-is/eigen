@@ -1,3 +1,7 @@
+// The vector editor: one infinite canvas with its toolbar, properties panel and comments. Tool and selection state
+// live here, so the toolbar, the canvas and the panel share them, while the viewport and the gestures stay in the
+// canvas. The vector route renders it for one vector file.
+
 import { useAuth } from '@workspace/lib/auth';
 import { MediaResolverProvider } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -32,11 +36,24 @@ type VectorEditorProps = {
     initialSearchTerm?: string;
 };
 
-// The live scene plus pointer/keyboard interaction. Tool and selection state are lifted here so the
-// toolbar, canvas, and properties panel share one source (the slides editor/canvas idiom); viewport
-// and gestures stay in the canvas. Wrapped in MediaResolverProvider (the slides idiom) so the canvas
-// resolves + uploads images through the container's media/ folder.
-export function VectorEditor({
+// The media provider wraps the editor rather than living inside it: the editor's comment host reads the resolver, and
+// a hook cannot read a context its own component provides. Inside it the canvas resolves and uploads images through
+// the container's media folder.
+export function VectorEditor(props: VectorEditorProps) {
+    const { ownerId, path, mediaFolderId, chatFolderId } = props;
+    return (
+        <MediaResolverProvider
+            ownerId={ownerId}
+            mountId={path.mountId}
+            mediaFolderId={mediaFolderId}
+            chatFolderId={chatFolderId}
+        >
+            <VectorEditorInner {...props} />
+        </MediaResolverProvider>
+    );
+}
+
+function VectorEditorInner({
     ownerId,
     path,
     canWrite,
@@ -47,14 +64,14 @@ export function VectorEditor({
     initialSearchTerm,
 }: VectorEditorProps) {
     const { isMobile } = useLayout();
-    // Small screens view the scene, never edit it (the slides canEdit split: file menu, share and
-    // comments keep canWrite); tablets sit above the breakpoint.
+    // A phone views the scene and never edits it, as in slides. The file menu, sharing and comments still follow
+    // canWrite. A tablet sits above the breakpoint, so it edits.
     const canEdit = canWrite && !isMobile;
     const doc = useCanvasDoc(ownerId, path.mountId, path.id, VECTOR_STYLE_DEFAULTS);
     const { tool, setTool, toolLocked, setToolLocked } = useTool();
     const { selectedIds, setSelectedIds, toggle } = useSelection();
-    // Awareness: publish this user's identity + selection, get a throttled cursor publisher for the
-    // canvas. Selection is threaded from here (the editor owns selectedIds).
+    // Peers see this user's name and selection, and the canvas gets a throttled publisher for the cursor. The selection
+    // comes from here, because the editor owns it.
     const { user } = useAuth();
     // '' is the infinite canvas' frame: every peer publishes it, so every peer is visible.
     const publishCursor = useCanvasPresence(doc.provider, user, selectedIds, '');
@@ -63,14 +80,14 @@ export function VectorEditor({
         () => doc.elements.filter((el) => selectedIds.includes(el.id)),
         [doc.elements, selectedIds],
     );
-    // Aspect lock, lifted here so the panel checkbox and the canvas' ObjectTransform
-    // resizeMode share one ephemeral setting. Default ON for image-only selections.
+    // The aspect lock lives here, so the panel's checkbox and the canvas' resize handles share one setting. It starts on
+    // when only images are selected.
     const allImageSelected = selectedElements.length > 0 && selectedElements.every((el) => el.type === 'image');
     const [aspectLocked, setAspectLocked] = useAspectLock(selectedIds, allImageSelected);
 
     const canvasRef = useRef<CanvasHandle | null>(null);
 
-    // A reveal (⌘F, a comment card) selects the element and brings it to the center — the infinite
+    // A reveal, such as a ⌘F match or a comment card, selects the element and brings it to the center. The infinite
     // canvas has no slide to go to first, but the element may sit anywhere.
     const revealElement = useCallback(
         (el: VectorElement) => {
@@ -92,7 +109,8 @@ export function VectorEditor({
         onReveal: revealElement,
     });
 
-    // ⌘F over the scene: a reveal selects the matching element (stable, or the controller churns).
+    // ⌘F over the scene: a reveal selects the matching element. The reveal keeps its identity, or the controller would
+    // start over on every render.
     const {
         controller: docSearchController,
         matchedIds: searchMatchedIds,
@@ -104,110 +122,102 @@ export function VectorEditor({
         onReveal: revealElement,
     });
 
-    // Toolbar "Add image": the picker lives here, placement goes through the canvas handle.
+    // The toolbar's Add image opens the picker here, and the canvas handle places what was picked.
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
     const insertImage = canEdit && mediaFolderId ? () => setImagePickerOpen(true) : undefined;
 
     return (
-        <MediaResolverProvider
-            ownerId={ownerId}
-            mountId={path.mountId}
+        <CanvasDocumentShell
+            doc={doc}
+            comments={comments}
+            path={path}
+            canWrite={canWrite}
+            canEdit={canEdit}
             mediaFolderId={mediaFolderId}
-            chatFolderId={chatFolderId}
+            searchController={docSearchController}
+            initialSearchTerm={initialSearchTerm}
+            imagePickerOpen={imagePickerOpen}
+            onImagePickerOpenChange={setImagePickerOpen}
+            canvasRef={canvasRef}
+            toolbar={
+                <CanvasToolbar
+                    path={path}
+                    canWrite={canWrite}
+                    canEdit={canEdit}
+                    offline={doc.offline}
+                    storageUnavailable={doc.storageUnavailable}
+                    undoManager={doc.undoManager}
+                    tool={tool}
+                    setTool={setTool}
+                    toolLocked={toolLocked}
+                    setToolLocked={setToolLocked}
+                    onInsertImage={insertImage}
+                    canvasRef={canvasRef}
+                    onAccessDialogOpen={onAccessDialogOpen}
+                    createLabel="New vector"
+                    createIcon={Diamond}
+                    createType="vector"
+                    onToggleCommentPanel={comments.toggleComments}
+                    commentPanelOpen={comments.commentPanelOpen}
+                    assignedCommentCount={comments.assignedCount}
+                    onToggleActivityPanel={comments.toggleActivity}
+                    activityPanelOpen={comments.activityPanelOpen}
+                />
+            }
+            propertiesPanel={
+                <CanvasPropertiesPanel
+                    elements={doc.elements}
+                    selectedElements={selectedElements}
+                    updateElements={doc.updateElements}
+                    reorderElements={doc.reorderElements}
+                    replaceElement={doc.replaceElement}
+                    setSelectedIds={setSelectedIds}
+                    undoManager={doc.undoManager}
+                    aspectLocked={aspectLocked}
+                    onAspectLockChange={setAspectLocked}
+                    emptySection={
+                        <PropertySection title="Background">
+                            {/* The scene background is a plain color (meta.background), not a Fill. A frame's
+                                background is a Fill, which the deck's own panel edits. Transparent is the default
+                                and draws as such, so None is the way back from a color. */}
+                            <ColorRow
+                                label="Color"
+                                value={doc.meta.background}
+                                onChange={(c) => doc.updateMeta({ background: c })}
+                                allowNone
+                            />
+                        </PropertySection>
+                    }
+                />
+            }
         >
-            <CanvasDocumentShell
-                doc={doc}
-                comments={comments}
-                path={path}
-                canWrite={canWrite}
-                canEdit={canEdit}
-                mediaFolderId={mediaFolderId}
-                searchController={docSearchController}
-                initialSearchTerm={initialSearchTerm}
-                imagePickerOpen={imagePickerOpen}
-                onImagePickerOpenChange={setImagePickerOpen}
-                canvasRef={canvasRef}
-                toolbar={
-                    <CanvasToolbar
-                        path={path}
-                        canWrite={canWrite}
-                        canEdit={canEdit}
-                        offline={doc.offline}
-                        storageUnavailable={doc.storageUnavailable}
-                        undoManager={doc.undoManager}
-                        tool={tool}
-                        setTool={setTool}
-                        toolLocked={toolLocked}
-                        setToolLocked={setToolLocked}
-                        onInsertImage={insertImage}
-                        canvasRef={canvasRef}
-                        onAccessDialogOpen={onAccessDialogOpen}
-                        createLabel="New vector"
-                        createIcon={Diamond}
-                        createType="vector"
-                        onToggleCommentPanel={comments.toggleComments}
-                        commentPanelOpen={comments.commentPanelOpen}
-                        assignedCommentCount={comments.assignedCount}
-                        onToggleActivityPanel={comments.toggleActivity}
-                        activityPanelOpen={comments.activityPanelOpen}
-                    />
-                }
-                propertiesPanel={
-                    <CanvasPropertiesPanel
-                        elements={doc.elements}
-                        selectedElements={selectedElements}
-                        updateElements={doc.updateElements}
-                        reorderElements={doc.reorderElements}
-                        replaceElement={doc.replaceElement}
-                        setSelectedIds={setSelectedIds}
-                        undoManager={doc.undoManager}
-                        aspectLocked={aspectLocked}
-                        onAspectLockChange={setAspectLocked}
-                        emptySection={
-                            <PropertySection title="Background">
-                                {/* The scene background is a plain color (meta.background), not a Fill —
-                                    a frame's background is a Fill and the deck's own panel edits it.
-                                    Transparent is its default and a rendered state, so None is the way
-                                    back from a color. */}
-                                <ColorRow
-                                    label="Color"
-                                    value={doc.meta.background}
-                                    onChange={(c) => doc.updateMeta({ background: c })}
-                                    allowNone
-                                />
-                            </PropertySection>
-                        }
-                    />
-                }
-            >
-                <div className="flex-1 min-w-0">
-                    <CanvasEditor
-                        doc={doc}
-                        styleDefaults={VECTOR_STYLE_DEFAULTS}
-                        viewport="infinite"
-                        canEdit={canEdit}
-                        ownerId={ownerId}
-                        mountId={path.mountId}
-                        fileName={path.name}
-                        tool={tool}
-                        setTool={setTool}
-                        toolLocked={toolLocked}
-                        setToolLocked={setToolLocked}
-                        selectedIds={selectedIds}
-                        setSelectedIds={setSelectedIds}
-                        toggle={toggle}
-                        aspectLocked={aspectLocked}
-                        publishCursor={publishCursor}
-                        canvasRef={canvasRef}
-                        onOpenCard={comments.openCard}
-                        commentCards={comments.lifecycle.cards}
-                        onAddComment={canWrite && chatFolderId ? comments.addCommentTo : undefined}
-                        searchMatchedIds={searchMatchedIds}
-                        searchActiveId={searchActiveId}
-                        onInsertImage={insertImage}
-                    />
-                </div>
-            </CanvasDocumentShell>
-        </MediaResolverProvider>
+            <div className="flex-1 min-w-0">
+                <CanvasEditor
+                    doc={doc}
+                    styleDefaults={VECTOR_STYLE_DEFAULTS}
+                    viewport="infinite"
+                    canEdit={canEdit}
+                    ownerId={ownerId}
+                    mountId={path.mountId}
+                    fileName={path.name}
+                    tool={tool}
+                    setTool={setTool}
+                    toolLocked={toolLocked}
+                    setToolLocked={setToolLocked}
+                    selectedIds={selectedIds}
+                    setSelectedIds={setSelectedIds}
+                    toggle={toggle}
+                    aspectLocked={aspectLocked}
+                    publishCursor={publishCursor}
+                    canvasRef={canvasRef}
+                    onOpenCard={comments.openCard}
+                    commentCards={comments.lifecycle.cards}
+                    onAddComment={canWrite && chatFolderId ? comments.addCommentTo : undefined}
+                    searchMatchedIds={searchMatchedIds}
+                    searchActiveId={searchActiveId}
+                    onInsertImage={insertImage}
+                />
+            </div>
+        </CanvasDocumentShell>
     );
 }

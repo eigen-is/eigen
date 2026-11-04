@@ -33,6 +33,7 @@ type PanelColumnProps = {
     currentUserEmail: string;
     filter: ReturnType<typeof useCommentFilter>;
     activeComments?: ActiveComments;
+    isCardDeleted: (card: CommentCard) => boolean;
     commentContextMenu: ReturnType<typeof useContextMenu<CommentContextMenuItem>>;
     onOpenCard: (cardId: string) => void;
     // The canvas (slides, vector) creates document-level comments from the panel, anchored to no
@@ -50,6 +51,7 @@ export function PanelColumn({
     currentUserEmail,
     filter,
     activeComments = NO_ACTIVE_COMMENTS,
+    isCardDeleted,
     commentContextMenu,
     onOpenCard,
     onAddComment,
@@ -90,6 +92,7 @@ export function PanelColumn({
                     entries={entries}
                     activeCardIds={activeComments.ids}
                     anchorTexts={activeComments.anchorTexts}
+                    isCardDeleted={isCardDeleted}
                     pathId={path.id}
                     currentUserEmail={currentUserEmail}
                     filter={filter}

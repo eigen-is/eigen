@@ -1,6 +1,7 @@
 // The comment list in a document's side panel: one card per comment the document still anchors, narrowed by the
 // comment filter, with a line saying how many the filter hides. Each card shows its replies, status and assignee,
-// and a dot while its thread holds an unread notification. Opening a card is the host's to handle.
+// and a dot while its thread holds an unread notification. A card whose thread is gone shows the deleted state
+// instead. Opening a card is the host's to handle.
 
 import { useAuth } from '@workspace/lib/auth';
 import { useUnreadCommentChatNames } from '@workspace/lib/chat';
@@ -11,16 +12,19 @@ import type { CommentCard } from '@workspace/lib/types/comments';
 import { MessageSquareOff } from 'lucide-react';
 import { useMemo } from 'react';
 import { useAttachmentMeta } from '../attachment/use-attachment-meta';
+import { Card, CardContent } from '../card';
 import { NoteCard } from '../notes/note-card';
 import { PropertiesPanel } from '../properties-panel';
 import { FilterSummary } from './comment-filter-summary';
+import { DeletedComment } from './deleted-comment';
 
-// Row component so each card gets its own useAttachmentMeta call (hooks can't run in the map).
+// One row per card, so each card gets its own useAttachmentMeta call: a hook can't run inside the map.
 function PanelCard({
     card,
     entry,
     title,
     unread,
+    deleted,
     onClick,
     onContextMenu,
 }: {
@@ -28,10 +32,24 @@ function PanelCard({
     entry: CommentEntry | undefined;
     title: string;
     unread: boolean;
+    deleted: boolean;
     onClick?: () => void;
     onContextMenu?: (e: React.MouseEvent) => void;
 }) {
     const { coverThumbnailUrl, attachmentCount } = useAttachmentMeta(card.attachments);
+    if (deleted) {
+        return (
+            <Card
+                className="w-full cursor-pointer select-none rounded-none border p-0 shadow-md"
+                onClick={onClick}
+                onContextMenu={onContextMenu}
+            >
+                <CardContent className="p-3">
+                    <DeletedComment title={title} />
+                </CardContent>
+            </Card>
+        );
+    }
     return (
         <NoteCard
             title={title}
@@ -52,8 +70,9 @@ function PanelCard({
 type CommentPanelProps = {
     cards: Record<string, CommentCard>;
     entries: CommentEntry[];
-    activeCardIds: Set<string>;
-    anchorTexts: Map<string, string>;
+    activeCardIds: ReadonlySet<string>;
+    anchorTexts: ReadonlyMap<string, string>;
+    isCardDeleted: (card: CommentCard) => boolean;
     pathId: string;
     currentUserEmail: string;
     filter: ReturnType<typeof useCommentFilter>;
@@ -67,6 +86,7 @@ export function CommentPanel({
     entries,
     activeCardIds,
     anchorTexts,
+    isCardDeleted,
     pathId,
     currentUserEmail,
     filter,
@@ -120,6 +140,7 @@ export function CommentPanel({
                                 entry={entry}
                                 title={anchorTexts.get(card.id) || card.title || 'Comment'}
                                 unread={!!card.chatName && unreadChatNames.has(card.chatName)}
+                                deleted={isCardDeleted(card)}
                                 onClick={() => onCommentClick?.(card.id)}
                                 onContextMenu={
                                     onCommentContextMenu ? (e) => onCommentContextMenu(e, card, entry) : undefined

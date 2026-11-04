@@ -27,7 +27,7 @@ const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = a
 const realAuth = await import('@workspace/lib/auth');
 const realCollab = await import('@workspace/lib/collab');
 const { BAND_ROOTS, PAGE_ROOT, STYLE_ROOT } = await import('@workspace/lib/docs/eigendoc');
-const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
+const { DRIVE_MIME_CHAT, DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
 const { CommandPaletteProvider } = await import('@workspace/ui');
 const { useCommandPalette } = await import('@workspace/lib/command-palette');
 const { LayoutContext } = await import('@workspace/ui/components/layout/app/layout-context');
@@ -78,11 +78,14 @@ const { CollaborativeEditor } = await import('../../../components/docs/editor');
 
 const path = drivePath({ name: 'Letter', mimeType: DRIVE_MIME_DOC });
 
-// Every request answers empty, but an upload, which answers when the test lets it.
+// Every request answers empty, but the chat folder, which lists one thread, and an upload, which answers when the test
+// lets it.
+const thread = { ...path, id: 'chat-a', name: 'thread-1.eigenchat', parentId: 'chat', mimeType: DRIVE_MIME_CHAT };
 let finishUpload = (_name: string) => {};
 spyOn(globalThis, 'fetch').mockImplementation(
     Object.assign(
-        async (_input: RequestInfo | URL, init?: RequestInit) => {
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+            if (String(input).includes('/folder/chat')) return Response.json([thread]);
             if (init?.method !== 'POST') return Response.json([]);
             const name = await new Promise<string>((resolve) => {
                 finishUpload = resolve;
@@ -120,12 +123,15 @@ async function render({
     isMobile,
     mediaFolderId = null,
     chatFolderId = null,
+    initialChatName,
     width = 1920,
 }: {
     canWrite: boolean;
     isMobile: boolean;
     mediaFolderId?: string | null;
     chatFolderId?: string | null;
+    // A `?chat=` landing, such as a notification's link.
+    initialChatName?: string;
     // The toolbar folds its menus by the window's width, the panes by the layout's isMobile.
     width?: number;
 }) {
@@ -141,6 +147,7 @@ async function render({
             mediaFolderId,
             chatFolderId,
             onAccessDialogOpen: () => {},
+            initialChatName,
         });
     }
     const router = createRouter({
@@ -561,6 +568,21 @@ test('a click on a comment card leaves the band for the comment’s anchor in th
     await waitUntil(() => card() !== undefined, 'the comment card');
     await act(async () => card()?.click());
     expect(editing()).toEqual([]);
+});
+
+test('a link to a comment whose text was deleted opens it as deleted, its thread still there', async () => {
+    const stored = new Y.Map<unknown>();
+    stored.set('title', 'Check this');
+    stored.set('chatName', 'thread-1.eigenchat');
+    doc.getMap('comments').set('c1', stored);
+    write('default', 'Hello');
+    await render({ ...WRITER, chatFolderId: 'chat', initialChatName: 'thread-1.eigenchat' });
+    await waitUntil(
+        () => document.body.textContent?.includes('This comment was deleted') === true,
+        'the deleted state',
+    );
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Check this');
+    expect(document.querySelector('[role="dialog"] [contenteditable="true"]')).toBeNull();
 });
 
 test('word count from a band counts the body, and gives focus back to the band', async () => {

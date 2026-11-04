@@ -1,13 +1,15 @@
+// The number on a document's comments button: the open comments assigned to this user that the document still uses.
+// It is personal, not document-wide, because a count of every open comment would turn every viewer's badge red for
+// threads that belong to someone else. The server stores the assignee in lowercase.
+
 import { useMemo } from 'react';
 import type { CommentEntry } from '../../../types/chat';
 import type { CommentCard } from '../../../types/comments';
 
-// Personal, not document-wide: a plain unresolved count turned every viewer's badge red for threads
-// that belong to someone else. Assignee is stored lowercased server-side.
 export function useAssignedCommentCount(
     cards: Record<string, CommentCard>,
-    entries: CommentEntry[],
-    activeCardIds: Set<string>,
+    entries: readonly CommentEntry[],
+    activeCardIds: ReadonlySet<string>,
     currentUserEmail: string,
 ): number {
     return useMemo(() => {

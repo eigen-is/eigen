@@ -1,3 +1,9 @@
+// The comment bundle the docs, sheets, slides, vector and stickies editors share: the cards in the Y.Doc, the
+// server's index rows, create, update, resolve and assign, the open card, the ?chat= and ?card= landings, and the rule
+// that says a card is deleted. Each editor keeps only what its anchor decides: where a card anchors on create and
+// delete, and which cards it uses (its active set). It composes the side effects of opening a card, such as slides
+// selecting the element's slide, around the `setOpenCardId` this returns.
+
 import { useAuth } from '@workspace/lib/auth';
 import { useState } from 'react';
 import type * as Y from 'yjs';
@@ -7,22 +13,13 @@ import { useAssignedCommentCount } from './use-assigned-comment-count';
 import { useCardIdFromChatName } from './use-card-id-from-chat-name';
 import { useCommentCards } from './use-comment-cards';
 import { useCreateCommentCard } from './use-create-comment-card';
+import { useIsCardDeleted } from './use-is-card-deleted';
 import { useOpenCardById } from './use-open-card-by-id';
 import { useOpenCommentCard } from './use-open-comment-card';
 import { useUpdateCommentCard } from './use-update-comment-card';
 
-// The shared comment open/view bundle for the docs / slides / sheets / stickies editors. Each
-// editor wires its own anchor (TipTap mark / slide commentCardIds / cell commentCardIds / column
-// taskIds) on create + delete and computes its own active-card set; everything else — the
-// server-metadata query, the Y.Doc card state, the resolve mutation, and the open-card
-// resolution — is identical and lives here.
-//
-// Returns `setOpenCardId` so callers can compose app-specific side effects (slides selects the
-// object's slide, docs scrolls the mark into view) before opening the dialog, and `openCardForEdit`
-// for the menus' Edit row, which opens the same dialog straight in its edit form.
-//
-// Hosts that mount before Yjs sync (slides, sheets, stickies) must pass `ready` so the ?chat=
-// deep link keeps polling until cards arrive instead of giving up against an unsynced doc.
+// A host passes `ready` once its cards have synced and its active set is computed. Until then a landing waits instead
+// of opening a card the host may not use, and no card reads deleted.
 export function useCommentLifecycle({
     ownerId,
     mountId,
@@ -44,10 +41,10 @@ export function useCommentLifecycle({
     chatFolderId: string | null;
     mediaFolderId: string | null;
     doc: Y.Doc | null;
-    activeCardIds: Set<string>;
+    activeCardIds: ReadonlySet<string>;
     initialChatName?: string;
     mapName?: 'comments' | 'tasks';
-    ready?: boolean;
+    ready: boolean;
     onChatNotFound?: () => void;
     initialCardId?: string;
     onCardNotFound?: () => void;
@@ -67,6 +64,7 @@ export function useCommentLifecycle({
 
     const assignedCount = useAssignedCommentCount(cards, allComments, activeCardIds, user?.email ?? '');
     const { card: openCard, entry: openEntry } = useOpenCommentCard(cards, allComments, openCardId);
+    const isCardDeleted = useIsCardDeleted(activeCardIds, ready);
     useCardIdFromChatName(cards, initialChatName, setOpenCardId, { ready, onChatNotFound });
     useOpenCardById(cards, initialCardId, setOpenCardId, { ready, onCardNotFound });
 
@@ -81,6 +79,7 @@ export function useCommentLifecycle({
         assignedCount,
         openCard,
         openEntry,
+        isCardDeleted,
         setOpenCardId,
         openCardForEdit: (cardId: string) => {
             setOpenCardId(cardId);

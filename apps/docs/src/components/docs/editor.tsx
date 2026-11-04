@@ -520,8 +520,10 @@ const TiptapEditor = ({
         doc: yDoc,
         activeCardIds: activeComments.ids,
         initialChatName,
+        ready: activeComments.ready,
     });
-    const { allComments, cards, createCard, assignComment, members, assignedCount, setOpenCardId } = lifecycle;
+    const { allComments, cards, createCard, assignComment, members, assignedCount, setOpenCardId, isCardDeleted } =
+        lifecycle;
     // The page owns the filter, so it survives when the comments panel closes and opens again.
     const commentFilter = useCommentFilter();
     allCommentsRef.current = allComments;
@@ -693,9 +695,10 @@ const TiptapEditor = ({
         cards,
         entries: allComments,
         members,
-        currentUserEmail: auth.user!.email,
+        currentUserEmail: auth.user?.email ?? '',
         filter: commentFilter,
         activeComments,
+        isCardDeleted,
         commentContextMenu,
         onOpenCard: openCard,
     };

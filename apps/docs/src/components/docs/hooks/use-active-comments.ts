@@ -1,19 +1,21 @@
+// The comments the body uses, and the text each one's anchor covers, read from the editor's comment anchors: the
+// `comment` mark on text and `commentCardId` on a node such as a figure or an equation. The pane lists them and the
+// comment lifecycle reads them as the active set. The walk runs 200 ms after the editor's last change, so `ready`
+// stays false until the first walk ran, and until then no card reads deleted.
+
 import type { Editor } from '@tiptap/react';
 import type { ActiveComments } from '@workspace/lib/types/comments';
 import { useEffect, useState } from 'react';
 import { commentAnchorText, nodeCommentCardId } from '../extensions/comment-mark';
 
-const EMPTY_ACTIVE: ActiveComments = { ids: new Set(), anchorTexts: new Map() };
+type BodyComments = ActiveComments & { ready: boolean };
 
-// Active comment cards + their anchor text, derived from the editor's comment anchors (the `comment`
-// mark on text, `commentCardId` on a figure or an equation). Doc-model specific (walks the ProseMirror doc), so it
-// stays a per-app hook — the slides/sheets siblings walk their own models. Debounced 200ms and
-// refreshed on every editor update.
-export function useActiveComments(editor: Editor | null): ActiveComments {
-    const [result, setResult] = useState<ActiveComments>(EMPTY_ACTIVE);
+const NOT_READY: BodyComments = { ids: new Set(), anchorTexts: new Map(), ready: false };
+
+export function useActiveComments(editor: Editor): BodyComments {
+    const [result, setResult] = useState<BodyComments>(NOT_READY);
 
     useEffect(() => {
-        if (!editor) return;
         let timer: ReturnType<typeof setTimeout>;
 
         const update = () => {
@@ -31,7 +33,7 @@ export function useActiveComments(editor: Editor | null): ActiveComments {
                     }
                 });
 
-                setResult({ ids, anchorTexts: texts });
+                setResult({ ids, anchorTexts: texts, ready: true });
             }, 200);
         };
 

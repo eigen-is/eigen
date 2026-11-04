@@ -1,13 +1,13 @@
+// Binds the shared comment rows to the comment lifecycle bundle, so every host's menu, such as a card's right-click
+// menu or the sheet's cell menu, offers the same actions and a new row lands in all of them at once. A host supplies
+// only what its anchor decides: the item under the cursor, add and delete. Every row is a real menu item, so picking
+// one closes the host's menu.
+
 import { useAuth } from '@workspace/lib/auth';
 import type { useCommentLifecycle } from '@workspace/lib/comments';
 import type { CommentContextMenuItem } from './comment-menu-items';
 import { CommentMenuItems } from './comment-menu-items';
 
-// Binds the shared comment rows to the lifecycle bundle so every host — the stickies/docs/vector
-// context menu, slides' object menu, sheets' cell menu — offers the same actions from one wiring,
-// and a new row lands in all of them at once. Hosts supply only what is anchor-specific: the item
-// under the cursor, add and delete. Selecting any row closes the host menu on its own — every row is
-// a real menu item, and the anchor turns Radix's close into the context menu's own `close()`.
 type CommentLifecycleMenuItemsProps = {
     lifecycle: ReturnType<typeof useCommentLifecycle>;
     item: CommentContextMenuItem | null;
@@ -27,8 +27,11 @@ export function CommentLifecycleMenuItems({
     onDelete,
     part,
 }: CommentLifecycleMenuItemsProps) {
-    const { setOpenCardId, openCardForEdit, updateCard, resolveComment, assignComment, members } = lifecycle;
+    const { setOpenCardId, openCardForEdit, updateCard, resolveComment, assignComment, members, isCardDeleted } =
+        lifecycle;
     const { user } = useAuth();
+    // A deleted comment keeps only View and Delete: its thread is gone, or the document no longer uses it.
+    const canChange = canWrite && !(item && isCardDeleted(item.card));
 
     return (
         <CommentMenuItems
@@ -37,21 +40,21 @@ export function CommentLifecycleMenuItems({
             part={part}
             onAddComment={canWrite ? onAddComment : undefined}
             onOpen={setOpenCardId}
-            onEdit={canWrite ? openCardForEdit : undefined}
-            onChangeColor={canWrite ? (cardId, color) => updateCard(cardId, { color }) : undefined}
+            onEdit={canChange ? openCardForEdit : undefined}
+            onChangeColor={canChange ? (cardId, color) => updateCard(cardId, { color }) : undefined}
             onResolve={
-                canWrite
+                canChange
                     ? (chatName, title) => resolveComment.mutate({ chatName, status: 'resolved', title })
                     : undefined
             }
             onReopen={
-                canWrite ? (chatName, title) => resolveComment.mutate({ chatName, status: 'open', title }) : undefined
+                canChange ? (chatName, title) => resolveComment.mutate({ chatName, status: 'open', title }) : undefined
             }
             onDelete={canWrite ? onDelete : undefined}
             members={members}
             currentUserEmail={user?.email}
             onAssign={
-                canWrite
+                canChange
                     ? (chatName, email, title) => assignComment.mutate({ chatName, assignee: email, title })
                     : undefined
             }

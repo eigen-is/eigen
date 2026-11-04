@@ -156,9 +156,11 @@ function SheetEditorInner({
         doc: docRef.current,
         activeCardIds: activeComments.ids,
         initialChatName,
-        ready: synced,
+        // The workbook names its sheets once it loaded, and it always holds one, so the active set counts from then.
+        ready: sheets.length > 0,
     });
-    const { allComments, cards, createCard, assignComment, members, assignedCount, setOpenCardId } = lifecycle;
+    const { allComments, cards, createCard, assignComment, members, assignedCount, setOpenCardId, isCardDeleted } =
+        lifecycle;
     // The filter lives here, so it survives closing and opening the panel.
     const commentFilter = useCommentFilter();
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
@@ -475,6 +477,7 @@ function SheetEditorInner({
                             currentUserEmail={auth.user.email}
                             filter={commentFilter}
                             activeComments={activeComments}
+                            isCardDeleted={isCardDeleted}
                             commentContextMenu={commentContextMenu}
                             onOpenCard={setOpenCardId}
                         />

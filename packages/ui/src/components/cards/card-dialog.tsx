@@ -1,3 +1,8 @@
+// The dialog a comment card opens into, in every host: the card's title, description and attachments, its assignee
+// and resolve controls, the edit form in place, and the card's thread below. A deleted comment opens the deleted
+// state instead, with nothing that acts. The host's comment lifecycle decides which state a card is in, and it does
+// the writes this dialog asks for.
+
 import { useResolveCardAttachments } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { useAttachmentSubjects, useMediaResolver } from '@workspace/lib/drive';
@@ -16,7 +21,9 @@ import { AssigneeChip } from '../comments/assignee-chip';
 import { AssigneePicker } from '../comments/assignee-picker';
 import { CommentThread } from '../comments/comment-thread';
 import { CreatedByMeta } from '../comments/created-by-meta';
+import { DeletedComment } from '../comments/deleted-comment';
 import { ContextMenuAnchor } from '../context-menu';
+import { Dialog, DialogContent, DialogTitle } from '../dialog';
 import { FileActionMenuItems } from '../file-actions/file-action-menu-items';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
 import { NoteCardDialog } from '../notes/note-card-dialog';
@@ -29,9 +36,10 @@ type CardDialogProps = {
     entry?: CommentEntry;
     ownerId: string;
     mountId: string;
-    // The container the card belongs to — the comment thread's notifications are tagged with it.
+    // The container the card belongs to. The comment thread's notifications are tagged with it.
     pathId: string;
     canWrite?: boolean;
+    deleted: boolean;
     // Edit mode is owned by the lifecycle bundle so the menus' Edit row can open straight into it.
     isEditing: boolean;
     onEditingChange: (editing: boolean) => void;
@@ -52,6 +60,7 @@ export function CardDialog({
     mountId,
     pathId,
     canWrite = true,
+    deleted,
     isEditing,
     onEditingChange,
     copyLinkUrl,
@@ -70,16 +79,32 @@ export function CardDialog({
     // The card's own attachments are the siblings, so a quick look from here keeps its Save all row.
     const runner = useFileActionRunner(chipMenu.item, attachmentSubjects);
 
+    const handleOpenChange = (next: boolean) => {
+        if (!next) onEditingChange(false);
+        onOpenChange(next);
+    };
+
     if (!card) return null;
 
-    // Missing entry = unseeded legacy thread, open and unassigned (matchesCommentFilter's rule);
-    // its first message or assignment seeds it server-side.
+    if (deleted) {
+        return (
+            <Dialog open={open} onOpenChange={handleOpenChange}>
+                <DialogContent size="sm" aria-describedby={undefined}>
+                    <DialogTitle className="sr-only">Deleted comment</DialogTitle>
+                    <DeletedComment title={card.title} className="pr-8" />
+                </DialogContent>
+            </Dialog>
+        );
+    }
+
+    // A thread without an index row reads as open and unassigned, as the comment filter reads it. Its first message or
+    // assignment creates the row on the server.
     const chatName = card.chatName;
     const status = entry?.status ?? 'open';
     const assignee = entry?.assignee ?? null;
 
-    // Resolve/re-open is a write, gated like the menus' row and the Edit pencil: a read-only viewer
-    // would only get the 403 the collab route answers with.
+    // Resolve and reopen are writes, so they are gated like the menus' rows and the Edit pencil. A viewer would only
+    // get the 403 the route answers with.
     const action =
         canWrite && chatName && onResolve
             ? {
@@ -92,8 +117,8 @@ export function CardDialog({
     const attachmentNames = card.attachments?.filter((a): a is string => typeof a === 'string') ?? [];
 
     const handleEditSave = async (patch: CardFormPatch, drafts?: CardAttachmentDraft[], assignee?: string | null) => {
-        // Same Save may rename the card — use the new title so the activity event + title cache
-        // don't record the stale pre-edit name.
+        // The same Save may rename the card. The new title goes along, so the activity row and the title cache don't
+        // record the old name.
         if (assignee !== undefined && chatName) onAssign?.(chatName, assignee, patch.title ?? card.title);
         if (!onUpdate) return;
         if (drafts === undefined) {
@@ -104,8 +129,8 @@ export function CardDialog({
         onUpdate({ ...patch, attachments });
     };
 
-    // The assignee sits in the dialog's meta row: an inline picker when reassignable, else an inert
-    // chip; a read-only card with no assignee shows nothing to avoid noise.
+    // The assignee sits in the meta row: a picker when the user may reassign, else a plain chip. A read-only card with
+    // no assignee shows nothing there.
     let assigneeControl: React.ReactNode = null;
     if (chatName) {
         if (canWrite && onAssign && members && currentUserEmail) {
@@ -118,7 +143,7 @@ export function CardDialog({
                 >
                     <button
                         type="button"
-                        // items-baseline (avatar self-centers) aligns the name with the Created-by baseline.
+                        // items-baseline lines the name up with the Created by text. The avatar centers itself.
                         className="-my-0.5 inline-flex items-baseline gap-1 rounded-sm px-1 py-0.5 hover:bg-muted"
                     >
                         {assignee ? (
@@ -171,11 +196,6 @@ export function CardDialog({
                 onCancel={() => onEditingChange(false)}
             />
         ) : undefined;
-
-    const handleOpenChange = (next: boolean) => {
-        if (!next) onEditingChange(false);
-        onOpenChange(next);
-    };
 
     return (
         <NoteCardDialog

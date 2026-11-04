@@ -1,5 +1,5 @@
 // The comment thread beside a card, such as a sticky's: the messages of its chat room, the composer, and the dialog
-// that deletes a message.
+// that deletes a message. It finds the chat room by name in the document's chat folder.
 
 import { useChatEditing, useChatRoom } from '@workspace/lib/chat';
 import { useMediaResolver } from '@workspace/lib/drive';
@@ -33,10 +33,8 @@ function CommentThreadInner({
     const inputRef = useRef<ChatMessageInputHandle>(null);
 
     return (
-        // Overflow stays visible so the input's @-mention suggest can extend above the thread.
-        // min-h-0 keeps the sizing side effect overflow-hidden used to provide: without it this
-        // flex item refuses to shrink below its content, so the list never scrolls and the input
-        // gets pushed below the dialog.
+        // Overflow stays visible, so the input's @-mention list can reach above the thread. min-h-0 lets this flex
+        // item shrink below its content. Without it the list never scrolls, and the input ends up below the dialog.
         <div className={cn('flex flex-col h-[50vh] min-h-0', className)}>
             <ChatMessageList
                 messages={chat.messages}
@@ -91,9 +89,9 @@ export function CommentThread({ ownerId, mountId, pathId, chatName, className }:
     const { resolveChatId } = useMediaResolver();
     const chatId = resolveChatId(chatName);
 
-    if (!chatId) {
-        return <div className={cn('px-4 pb-4 text-sm text-muted-foreground', className)}>Comment not found.</div>;
-    }
+    // A name the listing lacks waits for the listing's refetch. If the thread is gone, the card reads deleted and the
+    // dialog shows that instead of this thread.
+    if (!chatId) return <div className={cn('h-[50vh] min-h-0', className)} />;
 
     return (
         <CommentThreadInner ownerId={ownerId} mountId={mountId} pathId={pathId} chatId={chatId} className={className} />

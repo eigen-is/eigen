@@ -1,6 +1,7 @@
 // Turns the media names a document stores into URLs. A document keeps its pictures and attachments in a media folder
 // of its own and stores only their names, so a renderer such as a canvas image or a chat embed asks this provider for
-// the URL. It also shows a picture this tab is still uploading from a local blob URL until the upload lands.
+// the URL. It also shows a picture this tab is still uploading from a local blob URL until the upload lands, and finds
+// a comment's thread by name in the document's chat folder.
 
 import type { ReactNode } from 'react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from 'react';
@@ -34,6 +35,8 @@ type MediaResolverValue = {
     // True once a name is known not to resolve, so a renderer swaps its loader for a missing look.
     isMediaMissing: (name: string) => boolean;
     resolveChatId: (name: string) => string | null;
+    // True once a comment thread's name is known not to resolve, as isMediaMissing is for a picture.
+    isChatMissing: (name: string) => boolean;
     mediaFolderId: string | null;
     startUpload: (file: File) => { pendingName: string; promise: Promise<DrivePath | null> };
 };
@@ -45,6 +48,7 @@ const MediaResolverContext = createContext<MediaResolverValue>({
     resolveMediaPath: () => undefined,
     isMediaMissing: () => false,
     resolveChatId: () => null,
+    isChatMissing: () => false,
     mediaFolderId: null,
     startUpload: () => {
         throw new Error('startUpload called outside MediaResolverProvider');
@@ -147,13 +151,14 @@ export function MediaResolverProvider({
             resolveMediaUrlByPath,
             resolveMediaPath: (name: string) => media.findByName(name),
             // The editor routes mount this only after the document's listing loaded, so a null
-            // folder id means the document has no media folder, not that it is still unknown.
+            // folder id means the document has no such folder, not that it is still unknown.
             isMediaMissing: (name: string) => !isPendingMediaName(name) && (!mediaFolderId || media.isMissing(name)),
             resolveChatId: (name: string) => chat.findByName(name)?.id ?? null,
+            isChatMissing: (name: string) => !chatFolderId || chat.isMissing(name),
             mediaFolderId,
             startUpload,
         }),
-        [resolveMediaUrl, resolveMediaThumbnailUrl, media, chat, mediaFolderId, startUpload],
+        [resolveMediaUrl, resolveMediaThumbnailUrl, media, chat, mediaFolderId, chatFolderId, startUpload],
     );
 
     return <MediaResolverContext value={value}>{children}</MediaResolverContext>;

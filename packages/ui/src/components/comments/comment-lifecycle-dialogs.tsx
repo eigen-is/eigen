@@ -1,3 +1,7 @@
+// The card dialog and the comment right-click menu every editor mounts, driven by the comment lifecycle bundle. The
+// editor owns the context menu's state and supplies the delete that strips its own anchor, such as a mark in docs or a
+// cell's card ids in sheets. Everything else, the deleted state included, comes from the bundle.
+
 import { getDriveItemUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import type { useCommentLifecycle } from '@workspace/lib/comments';
@@ -7,10 +11,6 @@ import type { useContextMenu } from '../context-menu';
 import { CommentContextMenu } from './comment-context-menu';
 import type { CommentContextMenuItem } from './comment-menu-items';
 
-// Renders the view/edit dialog + right-click menu shared verbatim by the docs / slides / sheets /
-// stickies editors. The editor owns the `useContextMenu` instance (a ui-layer primitive) and
-// supplies the per-app `onDelete` that strips the host anchor; everything else is driven by the
-// lifecycle bundle.
 type CommentLifecycleDialogsProps = {
     lifecycle: ReturnType<typeof useCommentLifecycle>;
     path: DrivePath;
@@ -30,7 +30,8 @@ export function CommentLifecycleDialogs({
     noun,
     onCardDialogClose,
 }: CommentLifecycleDialogsProps) {
-    const { updateCard, members, openCard, openEntry, setOpenCardId, resolveComment, assignComment } = lifecycle;
+    const { updateCard, members, openCard, openEntry, isCardDeleted, setOpenCardId, resolveComment, assignComment } =
+        lifecycle;
     const { user } = useAuth();
 
     return (
@@ -49,13 +50,10 @@ export function CommentLifecycleDialogs({
                 mountId={path.mountId}
                 pathId={path.id}
                 canWrite={canWrite}
+                deleted={!!openCard && isCardDeleted(openCard)}
                 isEditing={lifecycle.openCardEditing}
                 onEditingChange={lifecycle.setOpenCardEditing}
-                copyLinkUrl={
-                    openCard?.chatName
-                        ? `${getDriveItemUrl(path)}?chat=${encodeURIComponent(openCard.chatName)}`
-                        : undefined
-                }
+                copyLinkUrl={openCard?.chatName ? getDriveItemUrl(path, { chat: openCard.chatName }) : undefined}
                 members={members}
                 currentUserEmail={user?.email}
                 onUpdate={(patch) => openCard && updateCard(openCard.id, patch)}
