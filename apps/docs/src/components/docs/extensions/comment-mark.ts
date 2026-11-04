@@ -192,9 +192,7 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions, CommentP
         const { onCommentClick, onCommentContextMenu, onSelectionContextMenu } = this.options;
         const { storage } = this;
 
-        const plugins: Plugin[] = [];
-
-        plugins.push(
+        return [
             new Plugin({
                 key: new PluginKey('commentInteraction'),
                 props: {
@@ -225,9 +223,6 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions, CommentP
                     },
                 },
             }),
-        );
-
-        plugins.push(
             new Plugin({
                 key: decorationKey,
                 state: {
@@ -243,9 +238,7 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions, CommentP
                     decorations: (state) => decorationKey.getState(state),
                 },
             }),
-        );
-
-        return plugins;
+        ];
     },
 });
 
@@ -254,6 +247,8 @@ export function updateCommentDecorations(
     resolvedIds: ReadonlySet<string>,
     colorMap: ReadonlyMap<string, string>,
 ): void {
+    // A destroyed editor has empty storage, and the cards may still change as the page unmounts.
+    if (editor.isDestroyed) return;
     // The decoration plugin holds this storage object, so the fields change in place.
     const storage = editor.storage.comment;
     storage.resolvedIds = resolvedIds;

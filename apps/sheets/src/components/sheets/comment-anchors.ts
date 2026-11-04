@@ -2,11 +2,10 @@
 // editor asks two things of them: which cards are anchored, for the comments pane and its counts, and how a delete
 // takes a card off its cells. Both read every sheet, because a card on a tab that is not open is still in use.
 
+import type { CellMatrix } from '@workspace/lib/sheets';
 import { columnIndexToLabel } from '@workspace/lib/sheets';
 import type { ActiveComments } from '@workspace/lib/types/comments';
 import type { Sheet, WorkbookInstance } from '@workspace/sheet';
-
-type CellMatrix = NonNullable<Sheet['data']>;
 
 // The first cell of each card on a sheet, such as "B2", by the sheet's cell grid. An edit gives only the grid it
 // changes a new reference, so each change walks only the sheets it edited again.

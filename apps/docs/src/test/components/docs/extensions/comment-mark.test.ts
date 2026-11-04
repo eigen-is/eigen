@@ -9,11 +9,13 @@ import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { AtomMarks } from '../../../../components/docs/extensions/atom-marks';
 import {
     addCommentAnchor,
+    CommentMark,
     canAnchorComment,
     commentAnchorText,
     nodeCommentCardId,
     removeCommentAnchors,
     selectCommentAnchor,
+    updateCommentDecorations,
 } from '../../../../components/docs/extensions/comment-mark';
 
 // An equation reads its stored MathML with DOMParser.
@@ -67,6 +69,16 @@ test('a new card on an equation selected alone anchors as its attribute', () => 
         ['equation', 'card-1', null],
     ]);
     editor.destroy();
+});
+
+// The editor's cards can change after it is gone, such as in the effect that runs as the page unmounts.
+test('new comment colors for an editor that is gone are dropped', () => {
+    const editor = new Editor({
+        extensions: [...getDocExtensions({ exclude: ['comment'] }), CommentMark],
+        content: docOf(text('a', { type: 'comment', attrs: { cardId: 'card-1' } })),
+    });
+    editor.destroy();
+    expect(() => updateCommentDecorations(editor, new Set(), new Map([['card-1', '#123456']]))).not.toThrow();
 });
 
 // A mark on the equation would last only until reload.

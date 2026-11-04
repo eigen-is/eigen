@@ -5,7 +5,7 @@ import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@
 import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortable';
 import { useAuth } from '@workspace/lib/auth';
 import { useUnreadCommentChatNames } from '@workspace/lib/chat';
-import { boardCardIds, getIdArray, getItemMapRoot, useYjsUndoHotkeys } from '@workspace/lib/collab';
+import { getIdArray, getItemMapRoot, useYjsUndoHotkeys } from '@workspace/lib/collab';
 import {
     findCardIdByChatName,
     matchesCommentFilter,
@@ -121,9 +121,11 @@ export function StickiesBoard({
     } = useBoard(ownerId, path.mountId, path.id, chatFolderId);
     const { user } = useAuth();
 
-    // A card is in use while a column lists it, the rule the server reads too. The board changes whenever the cards
-    // the columns list change.
-    const activeCardIds = useMemo(() => (yjsDoc ? boardCardIds(yjsDoc) : new Set<string>()), [yjsDoc, board]);
+    // A card is in use while a column lists it. The board lists the cards boardCardIds finds, the rule the server reads.
+    const activeCardIds = useMemo(
+        () => new Set(Object.values(board.columns).flatMap((column) => column.taskIds)),
+        [board.columns],
+    );
 
     const lifecycle = useCommentLifecycle({
         ownerId,

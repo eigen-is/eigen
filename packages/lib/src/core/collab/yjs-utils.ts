@@ -152,8 +152,9 @@ function cloneXmlChildren(source: Y.XmlFragment | Y.XmlElement): (Y.XmlElement |
     });
 }
 
-// The root needs no check: doc.getMap gives a root that Y.applyUpdate left untyped its kind in place. Its entries
-// stay unknown, because a peer can write a scalar where a map belongs, so every reader checks for a Y.Map.
+// The root needs no check. Y.applyUpdate may leave a root without a type, and doc.getMap then gives it the map type in
+// place. Its entries stay unknown, because a peer can write a scalar where a map belongs, so every reader checks for a
+// Y.Map.
 export function getItemMapRoot(doc: Y.Doc, name: string): Y.Map<unknown> {
     return doc.getMap<unknown>(name);
 }
