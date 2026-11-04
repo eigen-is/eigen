@@ -41,9 +41,8 @@ export const useCanvasCommentHost = ({
 }: CanvasCommentHostArgs) => {
     const { user } = useAuth();
 
-    // Read the cards here so the "active" set is derived independently of the lifecycle's own card
-    // read. A card anchored to an element takes that element's text as its panel row; every card stays
-    // active either way — one whose element was deleted degrades to document-level rather than vanishing.
+    // Read the cards here so the active set is derived independently of the lifecycle's own card read.
+    // A card anchored to an element takes that element's text as its panel row.
     const cards = useCommentCards(doc.yjsDoc, 'comments');
     const activeComments = useCanvasComments(doc.elements, cards);
 
@@ -109,9 +108,9 @@ export const useCanvasCommentHost = ({
                 // Idempotent: a double submit must not list the same card twice on the element.
                 const ids = el ? parseIdList(el.commentCardIds) : [];
                 if (el && !ids.includes(card.id)) {
-                    // Untracked, symmetric with deleteCard: the card itself lives in the `comments` map,
-                    // outside the UndoManager's scope, so a ⌘Z that reverted the anchor alone would leave
-                    // an orphaned card with nothing pointing at it.
+                    // Untracked, as the delete is: the card itself lives in the `comments` map, outside the
+                    // UndoManager's scope, so a ⌘Z that reverted the anchor alone would turn the new comment
+                    // into a document-level one.
                     doc.updateElementUntracked(anchorId, { commentCardIds: serializeIdList([...ids, card.id]) });
                 }
             }
@@ -122,26 +121,6 @@ export const useCanvasCommentHost = ({
             setAddOpen(false);
         },
         [commentAnchorId, createCard, assignComment, doc.elements, doc.updateElementUntracked],
-    );
-
-    // Delete drops the card from the `comments` Y.Map and strips it from its anchor element, so no
-    // element keeps a flag for a card that is gone. The .eigenchat + comments.db row persist server-side.
-    const deleteCard = useCallback(
-        (cardId: string) => {
-            const yjsDoc = doc.yjsDoc;
-            if (!yjsDoc) return;
-            const anchor = elementForCommentCard(doc.elements, cardId);
-            yjsDoc.transact(() => {
-                yjsDoc.getMap('comments').delete(cardId);
-            });
-            // Untracked: stripping the anchor is bookkeeping for a delete the UndoManager never saw (the
-            // comments map is outside its scope), so ⌘Z must not resurrect the flag without its card.
-            if (anchor) {
-                const ids = parseIdList(anchor.commentCardIds).filter((id) => id !== cardId);
-                doc.updateElementUntracked(anchor.id, { commentCardIds: serializeIdList(ids) });
-            }
-        },
-        [doc.yjsDoc, doc.elements, doc.updateElementUntracked],
     );
 
     return {
@@ -156,7 +135,7 @@ export const useCanvasCommentHost = ({
         addCommentTo,
         openCard,
         handleSaveNew,
-        deleteCard,
+        deleteCard: doc.deleteCommentCard,
         panelProps: {
             onClose: panels.closePanels,
             path,

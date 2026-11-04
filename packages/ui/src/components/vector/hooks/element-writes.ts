@@ -1,14 +1,16 @@
-// The editor's multi-element passes over a vector Y.Doc: replace and duplicate, over the shared writer
-// (write-vector.ts). Plain functions over the doc, the way the tools modules are plain functions over
-// the scene, so the hook stays the thin React surface.
+// The editor's multi-element passes over a vector Y.Doc, such as replace, duplicate, reorder and a comment
+// card's delete, over the shared element writer. Plain functions over the doc, the way the tools modules
+// are plain functions over the scene, so the hook stays the thin React surface.
 
 import type { NewVectorElement, StyleDefaults, ZOp } from '@workspace/lib/vector';
 import {
     generateNKeysBetween,
     isValidFractionalIndex,
     newElementId,
+    parseIdList,
     randomSeed,
     remapBinding,
+    serializeIdList,
     storedElementFields,
     topmostIndex,
     writeElementInDoc,
@@ -131,4 +133,20 @@ export function duplicateElementsInDoc(doc: Y.Doc, ids: string[], dx: number, dy
         }
     });
     return newIds;
+}
+
+// A card's delete, in ONE transact under the caller's origin, which the canvas makes one the UndoManager ignores. The
+// card stays in the `comments` map, marked deleted, and its id leaves every element that holds it. The map is outside
+// the undo scope, so an undo that put the ids back would show a card that was deleted.
+export function deleteCommentCardInDoc(doc: Y.Doc, cardId: string, origin: unknown): void {
+    doc.transact(() => {
+        const card = doc.getMap('comments').get(cardId);
+        if (card instanceof Y.Map) card.set('deletedAt', Date.now());
+        for (const element of doc.getMap('elements').values()) {
+            if (!(element instanceof Y.Map)) continue;
+            const stored = element.get('commentCardIds');
+            const ids = parseIdList(typeof stored === 'string' ? stored : '');
+            if (ids.includes(cardId)) element.set('commentCardIds', serializeIdList(ids.filter((id) => id !== cardId)));
+        }
+    }, origin);
 }

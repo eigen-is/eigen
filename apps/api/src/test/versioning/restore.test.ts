@@ -1,6 +1,14 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { encodeSheetsSnapshot } from '@workspace/lib/sheets';
+import type { CommentCard } from '@workspace/lib/types/comments';
 import type { Snapshot } from '@workspace/lib/types/versioning';
+import {
+    activeCommentCardIds,
+    readVectorFromDoc,
+    VECTOR_STYLE_DEFAULTS,
+    writeElementInDoc,
+} from '@workspace/lib/vector';
+import * as Y from 'yjs';
 import type { Drive } from '../../lib/drive/drive';
 import { getHome } from '../../lib/home/get-home';
 import type { Mount } from '../../lib/mount/mount';
@@ -96,5 +104,50 @@ describe('a sheet version in an encoding the editor cannot read', () => {
         await expect(drive.restoreContainer(M, sheets.id, old.name)).rejects.toMatchObject({ status: 409 });
         expect(state.get('snapshot')).toBe(current);
         await drive.closeCollabDocument(M, sheets.id);
+    });
+});
+
+describe('a canvas comment deleted after a version', () => {
+    // The canvas card as the comments pane reads it, with only the fields the active set looks at.
+    function cardsOf(doc: Y.Doc): Record<string, CommentCard> {
+        const cards: Record<string, CommentCard> = {};
+        for (const [id, card] of doc.getMap('comments')) {
+            if (!(card instanceof Y.Map)) continue;
+            const deletedAt = card.get('deletedAt');
+            cards[id] = {
+                id,
+                title: '',
+                description: '',
+                deletedAt: typeof deletedAt === 'number' ? deletedAt : undefined,
+            };
+        }
+        return cards;
+    }
+
+    test('comes back with its element when the version is restored', async () => {
+        const board = await drive.create(M, rootId, 'Board', 'vector');
+        const { doc } = await drive.getCollabDocument(M, board.id);
+        const card = new Y.Map<unknown>();
+        doc.transact(() => {
+            card.set('id', 'c1');
+            card.set('title', 'Fix the logo');
+            doc.getMap('comments').set('c1', card);
+            writeElementInDoc(doc, { type: 'rectangle', commentCardIds: '["c1"]' }, 'a0', VECTOR_STYLE_DEFAULTS, 'r1');
+        });
+        const saved = await drive.saveVersion(M, board.id);
+
+        // The canvas delete: the card stays, marked, and the element loses its anchor.
+        doc.transact(() => {
+            card.set('deletedAt', Date.now());
+            const element = doc.getMap('elements').get('r1');
+            if (element instanceof Y.Map) element.set('commentCardIds', '');
+        });
+        const active = () => activeCommentCardIds(readVectorFromDoc(doc).elements, cardsOf(doc));
+        expect(active().has('c1')).toBe(false);
+
+        await drive.restoreContainer(M, board.id, saved.name);
+        expect(readVectorFromDoc(doc).elements.map((el) => el.commentCardIds)).toEqual(['["c1"]']);
+        expect(active().has('c1')).toBe(true);
+        await drive.closeCollabDocument(M, board.id, { skipFinalSnapshot: true });
     });
 });

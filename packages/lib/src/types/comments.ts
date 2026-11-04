@@ -1,3 +1,6 @@
+// The comment types the hosts and the shared comment hooks pass around, such as the card a document's
+// Y.Doc holds, the patch its form saves and the set of cards a host finds in use.
+
 import type { ChatAttachment } from './chat';
 import type { DrivePath } from './drive';
 
@@ -10,6 +13,9 @@ export type CommentCard = {
     creator?: string;
     createdAt?: number;
     attachments?: ChatAttachment[];
+    // When a canvas deleted the card. The other hosts delete a comment by stripping its anchor, but a canvas card
+    // with no element has no anchor to strip, so the card itself carries the delete.
+    deletedAt?: number;
 };
 
 // What a card form emits on Save: only the fields the user actually changed.

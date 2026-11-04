@@ -5,6 +5,7 @@ import { convertToShapes, readVectorFromDoc, serializeBinding, VECTOR_STYLE_DEFA
 import * as Y from 'yjs';
 import { sealed } from '../../../../components/properties-panel/property-gesture';
 import {
+    deleteCommentCardInDoc,
     duplicateElementsInDoc,
     reorderElementsInDoc,
     replaceElementInDoc,
@@ -217,5 +218,40 @@ describe('reorderElementsInDoc', () => {
         const doc = tied();
         reorderElementsInDoc(doc, ['a', 'd'], ['d'], 'toBack');
         expect(order(doc)[0]).toBe('d');
+    });
+});
+
+describe('deleteCommentCardInDoc', () => {
+    function docWithCard(): Y.Doc {
+        const doc = docWith([
+            { ...RECT, id: 'r1', commentCardIds: '["c1","c2"]' },
+            { ...RECT, id: 'r2', index: 'a1', commentCardIds: '["c1"]' },
+            { ...RECT, id: 'r3', index: 'a2', commentCardIds: '["c2"]' },
+        ]);
+        const card = new Y.Map<unknown>();
+        card.set('id', 'c1');
+        card.set('title', 'Fix the logo');
+        doc.getMap('comments').set('c1', card);
+        return doc;
+    }
+    const anchors = (doc: Y.Doc) =>
+        Object.fromEntries(readVectorFromDoc(doc).elements.map((el) => [el.id, el.commentCardIds]));
+
+    test('marks the card deleted, keeps it in the map and takes it off every element that holds it', () => {
+        const doc = docWithCard();
+        deleteCommentCardInDoc(doc, 'c1', 'untracked');
+        expect(anchors(doc)).toEqual({ r1: '["c2"]', r2: '', r3: '["c2"]' });
+        const card = doc.getMap('comments').get('c1');
+        expect(card instanceof Y.Map && card.get('title')).toBe('Fix the logo');
+        expect(card instanceof Y.Map && typeof card.get('deletedAt')).toBe('number');
+    });
+
+    // The comments map is outside the undo scope, so an undo that put the anchors back would show a deleted card.
+    test('an undo leaves the delete alone', () => {
+        const doc = docWithCard();
+        const undoManager = new Y.UndoManager([doc.getMap('elements')]);
+        deleteCommentCardInDoc(doc, 'c1', 'untracked');
+        undoManager.undo();
+        expect(anchors(doc)).toEqual({ r1: '["c2"]', r2: '', r3: '["c2"]' });
     });
 });

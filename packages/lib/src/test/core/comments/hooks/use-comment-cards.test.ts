@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
 import { getItemMapRoot } from '../../../../core/collab/yjs-utils';
-import { readCards } from '../../../../core/comments/hooks/use-comment-cards';
+import { readCards, useCommentCards } from '../../../../core/comments/hooks/use-comment-cards';
 import { countTaskItems } from '../../../../core/html';
 import { sanitizeCommentCardHtml } from '../../../../core/html-dom';
 import type { CommentCard } from '../../../../types/comments';
@@ -217,5 +217,46 @@ describe('readCards sanitizes hostile description HTML', () => {
             '</li></ul>';
         const once = sanitizeCommentCardHtml(dirty);
         expect(sanitizeCommentCardHtml(once)).toBe(once);
+    });
+});
+
+describe('the canvas delete mark', () => {
+    function docWithCard(deletedAt?: unknown): Y.Doc {
+        const doc = new Y.Doc();
+        doc.transact(() => {
+            const card = new Y.Map<unknown>();
+            card.set('id', 'c1');
+            card.set('title', 'Card');
+            if (deletedAt !== undefined) card.set('deletedAt', deletedAt);
+            doc.getMap<unknown>('comments').set('c1', card);
+        });
+        return doc;
+    }
+
+    test('readCards carries the mark, and a value that is not a time reads as not deleted', () => {
+        expect(readCards(docWithCard(1700000000000).getMap('comments'))['c1'].deletedAt).toBe(1700000000000);
+        expect(readCards(docWithCard('yes').getMap('comments'))['c1'].deletedAt).toBeUndefined();
+    });
+
+    // useCommentCards reuses a card object whose fields are unchanged, so a mark it does not compare would never
+    // reach the host.
+    test('marking a card deleted hands the host a new card', async () => {
+        const { act, createElement } = await import('react');
+        const { createRoot } = await import('react-dom/client');
+        const doc = docWithCard();
+        const seen: CommentCard[] = [];
+        function Harness() {
+            const card = useCommentCards(doc, 'comments')['c1'];
+            if (card) seen.push(card);
+            return null;
+        }
+        const root = createRoot(document.createElement('div'));
+        await act(async () => root.render(createElement(Harness)));
+        await act(async () => {
+            const card = doc.getMap('comments').get('c1');
+            if (card instanceof Y.Map) card.set('deletedAt', 5);
+        });
+        expect(seen.at(-1)?.deletedAt).toBe(5);
+        await act(async () => root.unmount());
     });
 });

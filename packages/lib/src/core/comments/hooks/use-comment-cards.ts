@@ -1,3 +1,7 @@
+// A document's comment cards as React reads them: readCards turns the Y.Map that holds them into plain
+// CommentCard objects, sanitizing each description on the way, and useCommentCards keeps that read live.
+// Every host reads its cards through here, such as the comment lifecycle bundle and a canvas's active set.
+
 import { useEffect, useState } from 'react';
 import * as Y from 'yjs';
 import type { ChatAttachment } from '../../../types/chat';
@@ -5,7 +9,7 @@ import type { CommentCard } from '../../../types/comments';
 import { getItemMapRoot } from '../../collab/yjs-utils';
 import { sanitizeCommentCardHtml } from '../../html-dom';
 
-function readCards(map: Y.Map<unknown>): Record<string, CommentCard> {
+export function readCards(map: Y.Map<unknown>): Record<string, CommentCard> {
     const out: Record<string, CommentCard> = {};
     for (const [id, yCard] of map) {
         if (!(yCard instanceof Y.Map)) continue;
@@ -16,6 +20,7 @@ function readCards(map: Y.Map<unknown>): Record<string, CommentCard> {
         const creator = yCard.get('creator');
         const createdAt = yCard.get('createdAt');
         const attachments = yCard.get('attachments');
+        const deletedAt = yCard.get('deletedAt');
         out[id] = {
             id,
             title: typeof title === 'string' ? title : '',
@@ -26,13 +31,14 @@ function readCards(map: Y.Map<unknown>): Record<string, CommentCard> {
             chatName: typeof chatName === 'string' ? chatName : undefined,
             creator: typeof creator === 'string' ? creator : undefined,
             createdAt: typeof createdAt === 'number' ? createdAt : undefined,
-            // Element filter guards against malformed values from buggy peers — a null/number
-            // element would crash sameAttachments and the chip renderers.
+            // A buggy peer can write a null or a number into the list, which would crash
+            // sameAttachments and the chip renderers.
             attachments: Array.isArray(attachments)
                 ? attachments.filter(
                       (a): a is ChatAttachment => typeof a === 'string' || (typeof a === 'object' && a !== null),
                   )
                 : undefined,
+            deletedAt: typeof deletedAt === 'number' ? deletedAt : undefined,
         };
     }
     return out;
@@ -56,6 +62,7 @@ function sameCard(a: CommentCard, b: CommentCard): boolean {
         a.chatName === b.chatName &&
         a.creator === b.creator &&
         a.createdAt === b.createdAt &&
+        a.deletedAt === b.deletedAt &&
         sameAttachments(a.attachments, b.attachments)
     );
 }
@@ -93,5 +100,3 @@ export function useCommentCards(
 
     return cards;
 }
-
-export { readCards };

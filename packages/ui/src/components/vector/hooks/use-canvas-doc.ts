@@ -32,7 +32,12 @@ import {
 import { sealed } from '@workspace/ui/components/properties-panel';
 import { useCallback, useRef, useState } from 'react';
 import * as Y from 'yjs';
-import { duplicateElementsInDoc, reorderElementsInDoc, replaceElementInDoc } from './element-writes';
+import {
+    deleteCommentCardInDoc,
+    duplicateElementsInDoc,
+    reorderElementsInDoc,
+    replaceElementInDoc,
+} from './element-writes';
 import {
     addFrameInDoc,
     deleteFrameInDoc,
@@ -187,6 +192,10 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         if (docRef.current) reorderElementsInDoc(docRef.current, ids, selectedIds, op);
     }, []);
 
+    const deleteCommentCard = useCallback((cardId: string) => {
+        if (docRef.current) deleteCommentCardInDoc(docRef.current, cardId, UNTRACKED_ORIGIN);
+    }, []);
+
     // The frame writes. Each is a discrete op, so each is sealed: adding a page and then renaming it are two undo
     // steps. Adding and duplicating return the new frame's id, so the caller can show it.
     const addFrame = useCallback(
@@ -260,6 +269,7 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         duplicateElements,
         replaceElement,
         reorderElements,
+        deleteCommentCard,
         addFrame,
         deleteFrame,
         duplicateFrame,

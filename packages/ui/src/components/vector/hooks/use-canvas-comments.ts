@@ -3,17 +3,16 @@
 
 import type { ActiveComments, CommentCard } from '@workspace/lib/types/comments';
 import type { VectorElement } from '@workspace/lib/vector';
-import { commentAnchorTexts } from '@workspace/lib/vector';
+import { activeCommentCardIds, commentAnchorTexts } from '@workspace/lib/vector';
 import { useMemo } from 'react';
 import { elementLabel } from '../kinds';
 
-// Every card in the document's `comments` map is active. A card whose element was deleted stays in the panel as a
-// comment on the document. An element with no text of its own gives its card its label, such as Rectangle or Text, so a
-// panel row is never blank.
+// An element with no text of its own gives its card its label, such as Rectangle or Text, so a panel row is never
+// blank.
 export function useCanvasComments(elements: VectorElement[], cards: Record<string, CommentCard>): ActiveComments {
     return useMemo(
         () => ({
-            ids: new Set(Object.keys(cards)),
+            ids: activeCommentCardIds(elements, cards),
             anchorTexts: commentAnchorTexts(elements, elementLabel),
         }),
         [elements, cards],
