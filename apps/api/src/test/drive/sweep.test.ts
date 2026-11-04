@@ -8,9 +8,10 @@ import { eigenMediaHref } from '@workspace/lib/vector';
 import { eq } from 'drizzle-orm';
 import * as Y from 'yjs';
 import { CLOSE_LINGER_MS } from '../../lib/collab/collab-document';
+import { ApiError } from '../../lib/core/errors';
 import { REFERENCE_READER_VERSION } from '../../lib/document/references';
 import type { Drive } from '../../lib/drive/drive';
-import { isSweepDue, sweepDocument } from '../../lib/drive/sweep';
+import { isSweepDue, sweepAfterClose, sweepDocument } from '../../lib/drive/sweep';
 import { getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
 import type { Mount } from '../../lib/mount/mount';
@@ -436,6 +437,61 @@ describe('the media sweep', () => {
         await sweepDocument(drive, path);
         expect(await mediaNames(mount, path.id)).toEqual(['a.png']);
     });
+
+    test('a delete that fails lets the other deletes end before the lock is let go', async () => {
+        const { path } = await openDoc(mount, M, 'FailedDelete', [paragraph()]);
+        const failing = await addMedia(mount, path.id, 'failing.png');
+        await addMedia(mount, path.id, 'slow.png');
+        await close(M, path);
+        const ended: string[] = [];
+        const deletePath = mount.deletePath.bind(mount);
+        const deletes = spyOn(mount, 'deletePath').mockImplementation(async (pathId) => {
+            if (pathId === failing) throw new Error('disk full');
+            await Bun.sleep(20);
+            await deletePath(pathId);
+            ended.push('delete');
+        });
+        const withPathLock = mount.withPathLock.bind(mount);
+        const locks = spyOn(mount, 'withPathLock').mockImplementation(async (pathId, fn) => {
+            try {
+                return await withPathLock(pathId, fn);
+            } finally {
+                if (pathId === path.id) ended.push('lock');
+            }
+        });
+        try {
+            await expect(sweepDocument(drive, path)).rejects.toThrow('disk full');
+        } finally {
+            deletes.mockRestore();
+            locks.mockRestore();
+        }
+        await Bun.sleep(40);
+        expect(ended).toEqual(['delete', 'lock']);
+        expect(await mediaNames(mount, path.id)).toEqual(['failing.png']);
+    });
+
+    test('a sweep of a document already being swept leaves it to that sweep', async () => {
+        const { path } = await openDoc(mount, M, 'Twice', [paragraph()]);
+        await addMedia(mount, path.id, 'loose.png');
+        await close(M, path);
+        const gate = Promise.withResolvers<void>();
+        const resolveFile = drive.resolveFile.bind(drive);
+        const resolves = spyOn(drive, 'resolveFile').mockImplementation(async (mountId, pathId) => {
+            if (pathId === path.id && resolves.mock.calls.length === 1) await gate.promise;
+            return resolveFile(mountId, pathId);
+        });
+        try {
+            const first = sweepDocument(drive, path);
+            await sweepDocument(drive, path);
+            expect(resolves.mock.calls.filter(([, pathId]) => pathId === path.id).length).toBe(1);
+            gate.resolve();
+            await first;
+        } finally {
+            gate.resolve();
+            resolves.mockRestore();
+        }
+        expect(await mediaNames(mount, path.id)).toEqual([]);
+    });
 });
 
 describe('the sweep after a linger close', () => {
@@ -501,6 +557,21 @@ describe('the sweep after a linger close', () => {
         } finally {
             clock.mockRestore();
         }
+    });
+
+    test('a Home that is closing still closes the document, without a sweep', async () => {
+        const { path } = await openDoc(mount, M, 'HomeClosing', [paragraph()]);
+        const holds = spyOn(drive, 'holdHome').mockImplementation(() => {
+            throw new ApiError(503, 'Home is closing');
+        });
+        const closeDocument = jest.fn(() => close(M, path));
+        try {
+            await sweepAfterClose(drive, path, closeDocument);
+        } finally {
+            holds.mockRestore();
+        }
+        expect(closeDocument).toHaveBeenCalledTimes(1);
+        expect(drive.hasCollabDocument(M, path.id)).toBe(false);
     });
 
     test('a workbook whose close folded its op log is swept after it', async () => {

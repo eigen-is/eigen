@@ -13,7 +13,7 @@ import { decodeSheetsSnapshot, readSheetsSnapshotJson, sheetsOpLog } from '@work
 import type { ChatAttachment } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { DriveCollabType } from '@workspace/lib/types/drive';
-import { EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
+import { DRIVE_TYPE_FILE, DRIVE_TYPE_FOLDER, EIGEN_DOC_TYPE_INFO, EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
 import { activeCommentCardIds, readVectorFromDoc } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import type { DocumentReferences } from '../mount/schema';
@@ -88,9 +88,10 @@ export function documentReferences(type: DriveCollabType, doc: Y.Doc): DocumentR
 }
 
 // Two card readers exist on purpose. The client's readCards is lenient: it drops a field it cannot read and sanitizes
-// the rest for display. This one is strict, so a field a peer wrote in a shape the editor never writes throws, rather
-// than silently drop a thread or a file it may name. The title and the description name nothing, so they are read as
-// leniently as readCards reads them.
+// the rest for display. This one is strict about the fields that name a part, so a thread or a file list a peer wrote
+// in a shape the editor never writes throws, rather than silently drop a part it may name. The title and the
+// description name nothing, so they are read as leniently as readCards reads them. So is the deleted mark: one that
+// is no number reads as not deleted, which only keeps more.
 function readCards(doc: Y.Doc, mapName: 'comments' | 'tasks'): Record<string, CommentCard> {
     const entries = [...getItemMapRoot(doc, mapName)].map(([id, card]): [string, CommentCard] => {
         if (!(card instanceof Y.Map)) throw new Error(`Unreadable comment card ${id}`);
@@ -101,10 +102,22 @@ function readCards(doc: Y.Doc, mapName: 'comments' | 'tasks'): Record<string, Co
         const deletedAt: unknown = card.get('deletedAt');
         if (
             (chatName !== undefined && typeof chatName !== 'string') ||
-            (deletedAt !== undefined && typeof deletedAt !== 'number') ||
             !Array.isArray(attachments) ||
-            // A Drive reference is a record, and it names no file in media/.
-            !attachments.every((item): item is ChatAttachment => typeof item === 'string' || isRecord(item))
+            // An attachment is a file name in media/, or a Drive reference as toAttachmentReference writes it.
+            !attachments.every(
+                (item): item is ChatAttachment =>
+                    typeof item === 'string' ||
+                    (isRecord(item) &&
+                        item['type'] === 'reference' &&
+                        typeof item['ownerId'] === 'string' &&
+                        typeof item['mountId'] === 'string' &&
+                        typeof item['id'] === 'string' &&
+                        typeof item['name'] === 'string' &&
+                        typeof item['mimeType'] === 'string' &&
+                        (item['driveType'] === DRIVE_TYPE_FOLDER ||
+                            item['driveType'] === DRIVE_TYPE_FILE ||
+                            EIGEN_DOC_TYPES.some((type) => type === item['driveType']))),
+            )
         ) {
             throw new Error(`Unreadable comment card ${id}`);
         }
@@ -116,7 +129,7 @@ function readCards(doc: Y.Doc, mapName: 'comments' | 'tasks'): Record<string, Co
                 description: typeof description === 'string' ? description : '',
                 chatName,
                 attachments,
-                deletedAt,
+                deletedAt: typeof deletedAt === 'number' ? deletedAt : undefined,
             },
         ];
     });

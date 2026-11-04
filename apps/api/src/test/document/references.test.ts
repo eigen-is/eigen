@@ -276,16 +276,23 @@ describe('documentReferences', () => {
         expect(() => documentReferences('doc', doc)).toThrow();
     });
 
-    test('a deleted mark that is no time throws', () => {
+    // Reading the mark as no mark only keeps more, where a throw would fail the document's sweep every day.
+    test('a deleted mark that is no time reads as not deleted', () => {
         const doc = buildCanvas();
-        addCard(doc, 'comments', 'c-odd', { chatName: 'thread-odd' });
+        addCard(doc, 'comments', 'c-odd', { chatName: 'thread-odd', attachments: ['odd.pdf'] });
         doc.getMap<Y.Map<unknown>>('comments').get('c-odd')?.set('deletedAt', 'yesterday');
-        expect(() => documentReferences('vector', doc)).toThrow();
+        const references = documentReferences('vector', doc);
+        expect(references.chat).toContain('thread-odd');
+        expect(references.media).toContain('odd.pdf');
     });
 
-    test('an attachment it cannot read throws', () => {
+    test.each([
+        ['a number', 42],
+        ['a Drive reference without its id', { ...DRIVE_DOCUMENT, id: undefined }],
+        ['a Drive reference of no Drive type', { ...DRIVE_DOCUMENT, driveType: 'spreadsheet' }],
+    ])('an attachment that is %s throws', (_, attachment) => {
         const doc = buildStickies();
-        addCard(doc, 'tasks', 'on-board', { attachments: [42] });
+        addCard(doc, 'tasks', 'on-board', { attachments: [attachment] });
         expect(() => documentReferences('stickies', doc)).toThrow();
     });
 

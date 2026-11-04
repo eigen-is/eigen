@@ -26,6 +26,9 @@ const MEDIA_GRACE_MS = 72 * HOUR_MS;
 // When each document's last sweep ended, by owner, mount and path. It lives in memory, so a restart forgets it, which
 // costs one extra sweep.
 const sweptAt = new Map<string, number>();
+// The documents a sweep is reading or deleting now. A reopen and a second close during a long read find the document
+// still due, and that second sweep leaves it to the first.
+const sweeping = new Set<string>();
 
 export function isSweepDue(path: DrivePath): boolean {
     const at = sweptAt.get(sweepKey(path));
@@ -36,7 +39,13 @@ export function isSweepDue(path: DrivePath): boolean {
 // hold the lingering document kept, and an idle Home would close before the sweep began. It resolves with the close,
 // and the sweep goes on in the background.
 export function sweepAfterClose(drive: Drive, path: DrivePath, close: () => Promise<void>): Promise<void> {
-    const releaseHome = drive.holdHome();
+    // A Home that is closing refuses the hold. The document still closes, and the sweep waits for a later close.
+    let releaseHome: () => void;
+    try {
+        releaseHome = drive.holdHome();
+    } catch {
+        return close();
+    }
     const closed = close();
     closed
         .then(() => sweepDocument(drive, path))
@@ -50,7 +59,9 @@ export function sweepAfterClose(drive: Drive, path: DrivePath, close: () => Prom
 // Reads everything first, outside any lock: the names in the current state and in every saved version. Then, under
 // the document's lock, it deletes only if nothing changed while it read.
 export async function sweepDocument(drive: Drive, container: DrivePath): Promise<void> {
-    if (!isCollabType(container.type)) return;
+    const key = sweepKey(container);
+    if (!isCollabType(container.type) || sweeping.has(key)) return;
+    sweeping.add(key);
     // A change while it read leaves the document due, so its next close tries again. Every other end marks the
     // document swept for the day, a failure included.
     let changed = false;
@@ -109,7 +120,10 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
                     !keptNames.has(foldName(file.name)) &&
                     file.createdAt.getTime() <= cutoff,
             );
-            await Promise.all(unnamed.map((file) => mount.deletePath(file.id)));
+            // Every delete ends before the lock is let go, so a failed one doesn't leave the others running outside it.
+            const results = await Promise.allSettled(unnamed.map((file) => mount.deletePath(file.id)));
+            const failed = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+            if (failed) throw failed.reason;
             return unnamed;
         });
         if (!deleted) {
@@ -120,10 +134,11 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
         const freed = deleted.reduce((sum, file) => sum + file.size, 0);
         console.log(`[sweep] ${container.id}: deleted ${deleted.length} media files, freed ${freed} bytes`);
     } finally {
+        sweeping.delete(key);
         if (!changed) {
             const now = Date.now();
-            for (const [key, at] of sweptAt) if (now - at >= DAY_MS) sweptAt.delete(key);
-            sweptAt.set(sweepKey(container), now);
+            for (const [swept, at] of sweptAt) if (now - at >= DAY_MS) sweptAt.delete(swept);
+            sweptAt.set(key, now);
         }
     }
 }
