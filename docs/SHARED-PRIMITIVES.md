@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2132 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2134 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -1004,7 +1004,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1164)
+## Utilities & constants (1166)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1264,6 +1264,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `COLLAB_STORAGE_UNAVAILABLE_CLOSE` | `@workspace/lib/constants` | packages/lib/src/constants/collab.ts |
 | `COLLAB_STORAGE_UNAVAILABLE_REASON` | `@workspace/lib/constants` | packages/lib/src/constants/collab.ts |
 | `commentIndicatorColor` | `@workspace/lib/constants` | packages/lib/src/constants/comment-indicator.ts |
+| `CONTAINER_CHAT_FOLDER` | `@workspace/lib/constants` | packages/lib/src/constants/container.ts |
+| `CONTAINER_MEDIA_FOLDER` | `@workspace/lib/constants` | packages/lib/src/constants/container.ts |
 | `DEFAULT_CALENDAR_COLOR` | `@workspace/lib/constants` | packages/lib/src/constants/calendar.ts |
 | `DEFAULT_RELAY_PORT` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `defaultSenderAddress` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |

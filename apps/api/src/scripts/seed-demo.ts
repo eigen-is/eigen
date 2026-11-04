@@ -14,6 +14,7 @@ import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
 import { getItemMapRoot } from '@workspace/lib/collab/yjs-utils';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { VCARD_CONTENT_TYPE } from '@workspace/lib/constants/contact';
+import { CONTAINER_CHAT_FOLDER, CONTAINER_MEDIA_FOLDER } from '@workspace/lib/constants/container';
 import { MAILBOX_INBOX, MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
 import { XLSX_MIME } from '@workspace/lib/constants/mime';
 import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
@@ -494,7 +495,7 @@ async function main(): Promise<void> {
         files: string[],
         author: User,
     ): Promise<void> => {
-        const mediaFolder = await drive.getChildByName(mountId, container.id, 'media');
+        const mediaFolder = await drive.getChildByName(mountId, container.id, CONTAINER_MEDIA_FOLDER);
         if (!mediaFolder) throw new Error(`media/ subfolder missing for ${container.name}`);
         for (const file of files) {
             const path = join(FIXTURES_DIR, file);
@@ -514,7 +515,7 @@ async function main(): Promise<void> {
         await uploadMedia(teamDrive, teamMountId, docPath, doc.media ?? [], author);
 
         // Comment threads are chats inside the container's chat/ subfolder (see assertCommentChatExists).
-        const chatFolder = await teamDrive.getChildByName(teamMountId, docPath.id, 'chat');
+        const chatFolder = await teamDrive.getChildByName(teamMountId, docPath.id, CONTAINER_CHAT_FOLDER);
         if (!chatFolder) throw new Error(`chat/ subfolder missing for ${docPath.name}`);
         const docJson = htmlToDocJson(docSchema(), doc.html);
         const cards: { spec: (typeof doc.comments)[number]; card: CommentCard; chatName: string }[] = [];
@@ -634,14 +635,14 @@ async function main(): Promise<void> {
         const bytes = readFileSync(join(FIXTURES_DIR, 'festival-kanban.eigenstickies', dbName));
         await teamDrive.createFileFromData(teamMountId, boardPath.id, dbName, SQLITE_MIME, bytes, boardAuthor);
     }
-    await teamDrive.createFolder(teamMountId, boardPath.id, 'media', boardAuthor);
-    await teamDrive.createFolder(teamMountId, boardPath.id, 'chat', boardAuthor);
+    await teamDrive.createFolder(teamMountId, boardPath.id, CONTAINER_MEDIA_FOLDER, boardAuthor);
+    await teamDrive.createFolder(teamMountId, boardPath.id, CONTAINER_CHAT_FOLDER, boardAuthor);
     teamDocs.set(KANBAN.name, boardPath);
     const boardId = boardPath.id;
 
     // Card chat threads work like doc comments: a real chat in the container's chat/ subfolder, started by the
     // card's creator and linked back onto the card by name.
-    const boardChatFolder = await teamDrive.getChildByName(teamMountId, boardId, 'chat');
+    const boardChatFolder = await teamDrive.getChildByName(teamMountId, boardId, CONTAINER_CHAT_FOLDER);
     if (!boardChatFolder) throw new Error(`chat/ subfolder missing for ${KANBAN.name}`);
     const cardChatNames: string[] = [];
     for (const card of KANBAN.cards) {
@@ -655,7 +656,7 @@ async function main(): Promise<void> {
             for (const name of reply.attachVCards ?? []) {
                 const vcf = VCARD_FILES.find((file) => file.name === name);
                 if (!vcf) throw new Error(`Card chat reply attaches unknown vCard file '${name}'`);
-                const chatMedia = await teamDrive.getChildByName(teamMountId, chat.id, 'media');
+                const chatMedia = await teamDrive.getChildByName(teamMountId, chat.id, CONTAINER_MEDIA_FOLDER);
                 if (!chatMedia) throw new Error(`media/ subfolder missing for ${chat.name}`);
                 const upload = await teamDrive.createFileFromData(
                     teamMountId,

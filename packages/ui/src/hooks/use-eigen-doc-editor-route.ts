@@ -4,6 +4,7 @@
 // is a guard plus its own component. The editor's File menu hands the open document to the palette.
 
 import { useCollabDocumentInfo } from '@workspace/lib/collab';
+import { CONTAINER_CHAT_FOLDER, CONTAINER_MEDIA_FOLDER } from '@workspace/lib/constants/container';
 import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
@@ -39,8 +40,8 @@ export function useEigenDocEditorRoute(ownerId: string, mountId: string, pathId:
     const openAccessDialog = useCallback(() => setAccessDialogOpen(true), []);
 
     const path = docInfo?.path ?? null;
-    const mediaFolderId = docInfo?.folderContents?.find((item) => item.name === 'media')?.id ?? null;
-    const chatFolderId = docInfo?.folderContents?.find((item) => item.name === 'chat')?.id ?? null;
+    const mediaFolderId = docInfo?.folderContents?.find((item) => item.name === CONTAINER_MEDIA_FOLDER)?.id ?? null;
+    const chatFolderId = docInfo?.folderContents?.find((item) => item.name === CONTAINER_CHAT_FOLDER)?.id ?? null;
 
     return {
         docInfo,

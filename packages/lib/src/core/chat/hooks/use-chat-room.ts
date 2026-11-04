@@ -3,6 +3,7 @@
 // A chat file and a comment thread on a document both render through it.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { CONTAINER_MEDIA_FOLDER } from '../../../constants/container';
 import type { ChatAttachment, ChatMessage, RoomMember } from '../../../types/chat';
 import { isAttachmentReference } from '../../../types/chat';
 import type { DrivePath } from '../../../types/drive';
@@ -100,7 +101,10 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string, co
         return null;
     }, [messages, user?.email]);
 
-    const mediaFolder = useMemo(() => chatContents.find((item) => item.name === 'media') ?? null, [chatContents]);
+    const mediaFolder = useMemo(
+        () => chatContents.find((item) => item.name === CONTAINER_MEDIA_FOLDER) ?? null,
+        [chatContents],
+    );
 
     const addDriveAttachments = useCallback(
         async (paths: readonly DrivePath[]) => {
