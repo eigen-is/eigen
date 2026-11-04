@@ -497,10 +497,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useUpdateTeamSettings` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-settings.ts |
 | `useUploadTeamAvatar` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-avatar.ts |
 | `useDebouncedValue` | `@workspace/lib/use-debounced-value` | packages/lib/src/core/use-debounced-value.ts |
-| `useDeleteVersions` | `@workspace/lib/versioning` | packages/lib/src/core/versioning/hooks.ts |
-| `useRestoreVersion` | `@workspace/lib/versioning` | packages/lib/src/core/versioning/hooks.ts |
-| `useSaveVersion` | `@workspace/lib/versioning` | packages/lib/src/core/versioning/hooks.ts |
-| `useVersions` | `@workspace/lib/versioning` | packages/lib/src/core/versioning/hooks.ts |
+| `useDeleteVersions` | `@workspace/lib/versioning` | packages/lib/src/core/versioning/hooks/use-versions.ts |
+| `useRestoreVersion` | `@workspace/lib/versioning` | packages/lib/src/core/versioning/hooks/use-versions.ts |
+| `useSaveVersion` | `@workspace/lib/versioning` | packages/lib/src/core/versioning/hooks/use-versions.ts |
+| `useVersions` | `@workspace/lib/versioning` | packages/lib/src/core/versioning/hooks/use-versions.ts |
 | `useApp` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 | `useContactAvatarUpload` | `@workspace/ui` | packages/ui/src/components/use-contact-avatar-upload.ts |
 | `useLayout` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |

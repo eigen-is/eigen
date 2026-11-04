@@ -1,8 +1,8 @@
 // Delete history refreshes the document's version list, so the menu shows what is left.
 import { expect, test } from 'bun:test';
-import { versionsKeys } from '../../../core/versioning/keys';
-import { renderHook } from '../../render-hook';
-import { hasKey, installTransferHarness, OWNER, toasts, trackingClient } from '../../transfer-harness';
+import { versionsKeys } from '../../../../core/versioning/hooks/keys';
+import { renderHook } from '../../../render-hook';
+import { hasKey, installTransferHarness, OWNER, toasts, trackingClient } from '../../../transfer-harness';
 
 installTransferHarness();
 
@@ -11,7 +11,7 @@ const g = globalThis as any;
 
 test('Delete history sends the delete and refreshes the version list', async () => {
     const { act } = await import('react');
-    const { useDeleteVersions } = await import('../../../core/versioning/hooks');
+    const { useDeleteVersions } = await import('../../../../core/versioning/hooks/use-versions');
     const requests: string[] = [];
     g.fetch = async (url: string, init?: RequestInit) => {
         requests.push(`${init?.method} ${url}`);
