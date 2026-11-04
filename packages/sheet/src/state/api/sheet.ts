@@ -69,6 +69,9 @@ export function copySheet(ctx: Context, sheetId: string) {
     // workbook's cells finds the copy's.
     const copyIndex = getSheetIndex(ctx, copyId);
     if (copyIndex != null) initSheetData(ctx, copyIndex, ctx.sheets[copyIndex]);
+    // A formula map built before the copy, such as while the browser was idle after a load, lacks the copy's formulas.
+    // A peer's add reads them into the map once its batch applied; here the next edit builds the map again.
+    ctx.formulaCache.formulaCellInfoMap = null;
 }
 
 function calculateSheetFormula(ctx: Context, id: string, range?: SingleRange) {

@@ -838,7 +838,7 @@ describe('a structural undo or redo applies exactly what it sends', () => {
         expectAgree(s);
     });
 
-    test('undoing the delete of a copy nobody opened brings back its cells', () => {
+    test('undoing the delete of a copy brings back its cells', () => {
         const s = session(workbook({}, { A1: text('two') }));
         s.edit(s.a, (ctx) => copySheet(ctx, TWO), { addSheetOp: true });
         const copy = s.a.ctx.sheets[3];

@@ -8,7 +8,7 @@ import { getCellValue, setCellValue } from '../../../state/api/cell';
 import { calculateFormula, copySheet, getAllSheets, seedCalcChain } from '../../../state/api/sheet';
 import { addSheet } from '../../../state/api/workbook';
 import type { Context } from '../../../state/context';
-import { execFunctionGroup, groupValuesRefresh } from '../../../state/modules/formula-exec';
+import { execFunctionGroup, groupValuesRefresh, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import { deleteSheet } from '../../../state/modules/sheet';
 import type { Sheet } from '../../../state/types';
 import { author, join, receive } from '../factories/collab';
@@ -187,8 +187,9 @@ describe('sheet/core/api/sheet', () => {
         expect(receive(base, ops).sheets[1].data?.[0]?.[0]).toEqual({ v: 'a', m: 'a' });
     });
 
-    // The formula map is built from every sheet's recalc list, so a copy's list names the copy.
-    test("a copy's formula follows an edit of the copy's cells", () => {
+    // The formula map is built from every sheet's recalc list, so a copy's list names the copy. The map may be built
+    // before the copy, such as while the browser is idle after a load, and the add must not leave the copy out of it.
+    test("a copy's formula follows an edit of the copy's cells once the formula map is built", () => {
         const base = workbookContextFactory({
             currentSheetId: 'id_1',
             sheets: [
@@ -209,6 +210,7 @@ describe('sheet/core/api/sheet', () => {
         });
         const copied = produce(base, (draft: Context) => {
             seedCalcChain(draft);
+            warmFormulaCellInfoMap(draft);
             copySheet(draft, 'id_1');
         });
         const copyId = copied.sheets[1].id ?? '';
