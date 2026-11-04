@@ -1,8 +1,7 @@
-import { afterEach, beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types';
 import { DRIVE_TYPE_FOLDER } from '@workspace/lib/types/drive';
 import * as enforcement from '../../lib/config/enforcement';
-import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { getHome } from '../../lib/home';
 import { copySize } from '../../lib/mount/copy';
 import { getUserById } from '../../lib/user';
@@ -11,6 +10,7 @@ import type { TestUser } from '../setup';
 import {
     assertJson,
     authedRequest,
+    capUserDrive,
     createTestUser,
     driveGet,
     drivePost,
@@ -162,25 +162,23 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
 
         // A file under the per-file cap that doesn't fit the free space is a full drive, as an upload is.
         test('returns 507 when the source file is under the upload cap but past the free space', async () => {
-            const before = getServerSettings().quotas.defaultMountMaxSizeMB;
-            await updateServerSettings({ quotas: { defaultMountMaxSizeMB: 30 } });
-            let user: TestUser;
+            const user = await createTestUser(`copy-full-${crypto.randomUUID()}@test.eigen.is`, 'pw-12345678', 'F');
+            await getHome(user.id);
+            const restore = await capUserDrive(user.id, mountId, 30);
             try {
-                user = await createTestUser(`copy-full-${crypto.randomUUID()}@test.eigen.is`, 'pw-12345678', 'F');
-                await getHome(user.id);
-            } finally {
-                await updateServerSettings({ quotas: { defaultMountMaxSizeMB: before } });
-            }
-            const rootId = (await driveGet(user.sessionToken, user.id, mountId, 'root')).id;
-            const twenty = new File([new Uint8Array(20 * 1024 * 1024)], 'twenty.bin');
-            const source = await driveUpload<DrivePath>(user.sessionToken, user.id, mountId, rootId, twenty);
+                const rootId = (await driveGet(user.sessionToken, user.id, mountId, 'root')).id;
+                const twenty = new File([new Uint8Array(20 * 1024 * 1024)], 'twenty.bin');
+                const source = await driveUpload<DrivePath>(user.sessionToken, user.id, mountId, rootId, twenty);
 
-            const res = await copyFile(user.sessionToken, user.id, mountId, source.id, {
-                targetOwnerId: user.id,
-                targetMountId: mountId,
-                targetParentId: rootId,
-            });
-            expect(res.status).toBe(507);
+                const res = await copyFile(user.sessionToken, user.id, mountId, source.id, {
+                    targetOwnerId: user.id,
+                    targetMountId: mountId,
+                    targetParentId: rootId,
+                });
+                expect(res.status).toBe(507);
+            } finally {
+                await restore();
+            }
         });
 
         describe('a folder whose child has lost its bytes', () => {
@@ -256,20 +254,17 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
             let rootId: string;
             let folder: DrivePath;
 
-            // A new home takes the server's default drive size, so this user's drive holds 100 MB.
+            let restoreDrive: () => Promise<void>;
+
+            // The drive holds 100 MB: its own cap and the server default both, as the larger of the two applies.
             beforeAll(async () => {
-                const before = getServerSettings().quotas.defaultMountMaxSizeMB;
-                await updateServerSettings({ quotas: { defaultMountMaxSizeMB: 100 } });
-                try {
-                    user = await createTestUser(
-                        `copy-size-${crypto.randomUUID()}@test.eigen.is`,
-                        'testpassword123',
-                        'Copy',
-                    );
-                    await getHome(user.id);
-                } finally {
-                    await updateServerSettings({ quotas: { defaultMountMaxSizeMB: before } });
-                }
+                user = await createTestUser(
+                    `copy-size-${crypto.randomUUID()}@test.eigen.is`,
+                    'testpassword123',
+                    'Copy',
+                );
+                await getHome(user.id);
+                restoreDrive = await capUserDrive(user.id, mountId, 100);
                 rootId = (await driveGet(user.sessionToken, user.id, mountId, 'root')).id;
                 folder = await drivePost<DrivePath>(user.sessionToken, user.id, mountId, `folder/${rootId}`, {
                     folderName: 'two-files',
@@ -278,6 +273,10 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
                     const bytes = new Uint8Array(20 * 1024 * 1024);
                     await driveUpload(user.sessionToken, user.id, mountId, folder.id, new File([bytes], name));
                 }
+            });
+
+            afterAll(async () => {
+                await restoreDrive();
             });
 
             function copyFolder(): Promise<Response> {

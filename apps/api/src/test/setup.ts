@@ -13,7 +13,7 @@ import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../auth-schema';
 import { app } from '../app';
 import { auth, getAuthDrizzleDb } from '../lib/auth/auth';
-import { getStorageType, updateServerSettings } from '../lib/config/server-settings';
+import { getServerSettings, getStorageType, updateServerSettings } from '../lib/config/server-settings';
 import { drainACLFanOuts } from '../lib/drive/acl-propagation';
 import type { MediaPixels } from '../lib/export/sheets/render';
 import { getHome } from '../lib/home';
@@ -444,6 +444,20 @@ export async function addTeamMount(ctx: TestContext, teamId: string, name: strin
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, storageType: 'local', maxSizeMB: 500 }),
     });
+}
+
+// A user's drive meets the larger of its own cap and the server default, so a test that fills a drive lowers both.
+// Returns the restore for the test's `finally` or `afterAll`.
+export async function capUserDrive(userId: string, mountId: string, maxSizeMB: number): Promise<() => Promise<void>> {
+    const home = await getHome(userId);
+    const snapshot = { ...home.drive.getMountConfig(mountId) };
+    const defaultMB = getServerSettings().quotas.defaultMountMaxSizeMB;
+    await updateServerSettings({ quotas: { defaultMountMaxSizeMB: maxSizeMB } });
+    await home.drive.updateMount({ ...snapshot, maxSizeMB }, true);
+    return async () => {
+        await home.drive.updateMount(snapshot, true);
+        await updateServerSettings({ quotas: { defaultMountMaxSizeMB: defaultMB } });
+    };
 }
 
 export async function firstMountId(token: string, ownerId: string): Promise<string> {

@@ -3,7 +3,7 @@ import type { DrivePath, EditorSaveResult, FileEditorContent } from '@workspace/
 import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
 import { MAX_INLINE_EDIT_SIZE } from '../../lib/drive/inline-edit';
 import { getHome } from '../../lib/home';
-import { authedRequest, driveGet, drivePut, driveUpload, getTestContext } from '../setup';
+import { authedRequest, capUserDrive, driveGet, drivePut, driveUpload, getTestContext } from '../setup';
 
 describe('Editor', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -289,19 +289,16 @@ describe('Editor', () => {
             expect(status).toBe(413);
         });
 
-        // The default mount persists maxSizeMB (500) and team overrides only *raise* it, so this shrinks
-        // the live mount config directly (mirrors team-mount-live-update.test.ts) to leave room for the
-        // seed but not for a 4 MB save. getMountConfig returns the live object and applyConfig mutates it
-        // in place, so the restore needs a detached copy of the values before the change.
+        // A user's drive meets the larger of its own cap and the server default, so this lowers both to
+        // leave room for the seed but not for a 4 MB save.
         async function withFullMount(run: () => Promise<void>): Promise<void> {
             const home = await getHome(ctx.alice.user.id);
-            const snapshot = { ...home.drive.getMountConfig(mountId) };
             const usedMB = (await home.drive.size(mountId)) / (1024 * 1024);
-            await home.drive.updateMount({ ...snapshot, maxSizeMB: usedMB + 1 }, true);
+            const restore = await capUserDrive(ctx.alice.user.id, mountId, usedMB + 1);
             try {
                 await run();
             } finally {
-                await home.drive.updateMount(snapshot, true);
+                await restore();
             }
         }
         const tooBig = 'y'.repeat(4 * 1024 * 1024);

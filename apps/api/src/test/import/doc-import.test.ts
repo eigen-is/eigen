@@ -28,6 +28,7 @@ import { buildDeclaredSizeBombZip } from '../fixtures/zip-bomb';
 import {
     assertJson,
     authedRequest,
+    capUserDrive,
     collectSSE,
     driveGet,
     drivePost,
@@ -469,17 +470,16 @@ describe('docx import quota', () => {
         return toTransferableBuffer(writeZip(entries));
     }
 
-    // The default mount persists maxSizeMB and team overrides only raise it, so the live config shrinks
-    // (as in editor.test.ts) to leave `room` bytes, and is restored from a detached copy.
+    // A user's drive meets the larger of its own cap and the server default, so this lowers both
+    // (as in editor.test.ts) to leave `room` bytes.
     async function withMountRoom(room: number, fn: () => Promise<void>): Promise<void> {
         const home = await getHome(ctx.alice.user.id);
-        const snapshot = { ...home.drive.getMountConfig(mountId) };
         const used = await home.drive.size(mountId);
-        await home.drive.updateMount({ ...snapshot, maxSizeMB: (used + room) / (1024 * 1024) }, true);
+        const restore = await capUserDrive(ctx.alice.user.id, mountId, (used + room) / (1024 * 1024));
         try {
             await fn();
         } finally {
-            await home.drive.updateMount(snapshot, true);
+            await restore();
         }
     }
 

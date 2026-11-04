@@ -6,6 +6,7 @@ import { DAV_PASSWORD } from '../dav-test-helpers';
 import type { TestContext } from '../setup';
 import {
     authedRequest,
+    capUserDrive,
     createTestUser,
     driveGet,
     drivePut,
@@ -287,15 +288,14 @@ describe('WebDAV PUT', () => {
         expect((await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'kept' })).status).toBe(201);
 
         const home = await getHome(ctx.alice.user.id);
-        const snapshot = { ...home.drive.getMountConfig(mountId) };
         const usedMB = (await home.drive.size(mountId)) / (1024 * 1024);
         // Room for 512 KB more, under the 35 MB per-file cap, so only the mount can refuse.
-        await home.drive.updateMount({ ...snapshot, maxSizeMB: usedMB + 0.5 }, true);
+        const restore = await capUserDrive(ctx.alice.user.id, mountId, usedMB + 0.5);
         try {
             const res = await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: chunked(1024 * 1024) });
             expect(res.status).toBe(507);
         } finally {
-            await home.drive.updateMount(snapshot, true);
+            await restore();
         }
         expect(await (await webdavRequest(ctx.alice.user.email, 'GET', url)).text()).toBe('kept');
     });
@@ -311,9 +311,8 @@ describe('WebDAV PUT', () => {
         await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${folder.id}/acl`, {
             add: [{ id: ctx.bob.user.email, read: true, write: false }],
         });
-        const snapshot = { ...home.drive.getMountConfig(mountId) };
         const usedMB = (await home.drive.size(mountId)) / (1024 * 1024);
-        await home.drive.updateMount({ ...snapshot, maxSizeMB: usedMB + 0.5 }, true);
+        const restore = await capUserDrive(ctx.alice.user.id, mountId, usedMB + 0.5);
         try {
             const body = 'x'.repeat(1024 * 1024);
             const res = await webdavRequest(ctx.bob.user.email, 'PUT', url, {
@@ -322,7 +321,7 @@ describe('WebDAV PUT', () => {
             });
             expect(res.status).toBe(403);
         } finally {
-            await home.drive.updateMount(snapshot, true);
+            await restore();
         }
     });
 
@@ -331,9 +330,8 @@ describe('WebDAV PUT', () => {
         const filler = `/webdav/${ctx.alice.user.id}/${mountId}/put-empty-filler.txt`;
         expect((await webdavRequest(ctx.alice.user.email, 'PUT', filler, { body: 'filler' })).status).toBe(201);
         const home = await getHome(ctx.alice.user.id);
-        const snapshot = { ...home.drive.getMountConfig(mountId) };
         const usedMB = (await home.drive.size(mountId)) / (1024 * 1024);
-        await home.drive.updateMount({ ...snapshot, maxSizeMB: usedMB / 2 }, true);
+        const restore = await capUserDrive(ctx.alice.user.id, mountId, usedMB / 2);
         try {
             const res = await webdavRequest(ctx.alice.user.email, 'PUT', url, {
                 body: '',
@@ -341,7 +339,7 @@ describe('WebDAV PUT', () => {
             });
             expect(res.status).toBe(201);
         } finally {
-            await home.drive.updateMount(snapshot, true);
+            await restore();
         }
     });
 

@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
+import { getServerSettings } from '../../lib/config/server-settings';
 import { getHome } from '../../lib/home';
 import type { TestUser } from '../setup';
-import { createTestUser, getTestContext, setMaxUploadSizeMB } from '../setup';
+import { capUserDrive, createTestUser, getTestContext, setMaxUploadSizeMB } from '../setup';
 import { getDefaultMountId, webdavRequest } from './setup';
 
 describe('WebDAV MOVE/COPY', () => {
@@ -197,17 +197,14 @@ describe('WebDAV MOVE/COPY', () => {
         let href: string;
         const MB = 1024 * 1024;
 
-        // A new home takes the server's default drive size, so this user's drive holds 100 MB.
+        let restoreDrive: () => Promise<void>;
+
+        // The drive holds 100 MB: its own cap and the server default both, as the larger of the two applies.
         beforeAll(async () => {
-            const before = getServerSettings().quotas.defaultMountMaxSizeMB;
-            await updateServerSettings({ quotas: { defaultMountMaxSizeMB: 100 } });
-            try {
-                user = await createTestUser(`dav-copy-${crypto.randomUUID()}@test.eigen.is`, 'testpassword123', 'D');
-                await getHome(user.id);
-            } finally {
-                await updateServerSettings({ quotas: { defaultMountMaxSizeMB: before } });
-            }
-            href = `/webdav/${user.id}/${await getDefaultMountId(user.sessionToken, user.id)}`;
+            user = await createTestUser(`dav-copy-${crypto.randomUUID()}@test.eigen.is`, 'testpassword123', 'D');
+            const driveId = await getDefaultMountId(user.sessionToken, user.id);
+            restoreDrive = await capUserDrive(user.id, driveId, 100);
+            href = `/webdav/${user.id}/${driveId}`;
             await webdavRequest(user.email, 'MKCOL', `${href}/big/`);
             for (const name of ['a.bin', 'b.bin']) {
                 const put = await webdavRequest(user.email, 'PUT', `${href}/big/${name}`, {
@@ -215,6 +212,10 @@ describe('WebDAV MOVE/COPY', () => {
                 });
                 expect(put.status).toBe(201);
             }
+        });
+
+        afterAll(async () => {
+            await restoreDrive();
         });
 
         function copyTo(source: string, destination: string): Promise<Response> {

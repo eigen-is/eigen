@@ -1,7 +1,15 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { getHome } from '../../lib/home';
-import { authedRequest, driveGet, drivePost, driveUpload, driveUploadMultiple, getTestContext } from '../setup';
+import {
+    authedRequest,
+    capUserDrive,
+    driveGet,
+    drivePost,
+    driveUpload,
+    driveUploadMultiple,
+    getTestContext,
+} from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
@@ -203,16 +211,15 @@ describe('Streaming Upload', () => {
 
     test('upload to a mount already at quota returns 507 before the body is read', async () => {
         // Seed so the mount has bytes, then shrink the live mount quota to exactly what's used
-        // (mirrors editor.test.ts — team overrides only *raise* the quota). remaining <= 0 makes
+        // (mirrors editor.test.ts, which also lowers the server default). remaining <= 0 makes
         // getUploadMaxSize throw up front: even this tiny file, which the parser's maxFileSize
         // would never reject, must bounce with 507.
         const seed = new File(['seed'], 'quota-seed.txt', { type: 'text/plain' });
         await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, folderId, seed);
 
         const home = await getHome(ctx.alice.user.id);
-        const snapshot = { ...home.drive.getMountConfig(aliceMountId) };
         const usedMB = (await home.drive.size(aliceMountId)) / (1024 * 1024);
-        await home.drive.updateMount({ ...snapshot, maxSizeMB: usedMB }, true);
+        const restore = await capUserDrive(ctx.alice.user.id, aliceMountId, usedMB);
         try {
             const file = new File(['tiny'], 'over-quota.txt', { type: 'text/plain' });
             const formData = new FormData();
@@ -225,7 +232,7 @@ describe('Streaming Upload', () => {
             expect(res.status).toBe(507);
             expect(await res.text()).toBe('Insufficient Storage');
         } finally {
-            await home.drive.updateMount(snapshot, true);
+            await restore();
         }
     });
 });
