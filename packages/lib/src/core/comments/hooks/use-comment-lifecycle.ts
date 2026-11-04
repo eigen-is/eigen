@@ -68,9 +68,15 @@ export function useCommentLifecycle({
     const isCardDeleted = useIsCardDeleted(activeCardIds, ready);
     // Stable, because hosts hand it to memoized components such as a board's columns.
     const setOpenCardId = useCallback((cardId: string | null) => setOpen(cardId ? { cardId } : null), []);
-    // A chat name no card holds opens while the index has its row, and then it opens as deleted.
+    // A chat name a card holds opens that card by its id, so it closes on delete however it was opened. A chat name
+    // no card holds opens while the index has its row, and then it opens as deleted.
     const openChat = (chatName: string) => {
-        const known = !!findCardIdByChatName(cards, chatName) || allComments.some((e) => e.chatName === chatName);
+        const cardId = findCardIdByChatName(cards, chatName);
+        if (cardId) {
+            setOpen({ cardId });
+            return true;
+        }
+        const known = allComments.some((e) => e.chatName === chatName);
         if (known) setOpen({ chatName });
         return known;
     };
@@ -79,10 +85,10 @@ export function useCommentLifecycle({
         if (known) setOpen({ cardId });
         return known;
     };
-    // A landing waits for the index rows too, or a comment whose card is gone would read as not found.
-    const landingReady = ready && !commentsPending;
-    useOpenOnLanding(initialChatName, openChat, { ready: landingReady, onNotFound: onChatNotFound });
-    useOpenOnLanding(initialCardId, openCardById, { ready: landingReady, onNotFound: onCardNotFound });
+    // A chat landing waits for the index rows too, or a comment whose card is gone would read as not found. A card id
+    // names only a card, so its landing needs only the cards.
+    useOpenOnLanding(initialChatName, openChat, { ready: ready && !commentsPending, onNotFound: onChatNotFound });
+    useOpenOnLanding(initialCardId, openCardById, { ready, onNotFound: onCardNotFound });
 
     return {
         allComments,

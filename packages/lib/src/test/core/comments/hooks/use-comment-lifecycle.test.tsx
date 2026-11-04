@@ -60,13 +60,14 @@ afterAll(() => fetchSpy.mockRestore());
 let unmount = async () => {};
 afterEach(() => unmount());
 
-async function mountBoard(options: { initialChatName?: string; rows?: CommentEntry[] }) {
+async function mountBoard(options: { initialChatName?: string; initialCardId?: string; rows?: CommentEntry[] }) {
     const queryClient = new QueryClient({
         defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } },
     });
     if (options.rows) queryClient.setQueryData(listKey, options.rows);
     queryClient.setQueryData(driveKeys.effectiveMembers('owner-1', 'm1', 'board-1'), []);
     const onChatNotFound = mock(() => {});
+    const onCardNotFound = mock(() => {});
     const doc = board();
     const seen: { lifecycle: ReturnType<typeof useCommentLifecycle> | null } = { lifecycle: null };
     function Harness() {
@@ -82,6 +83,8 @@ async function mountBoard(options: { initialChatName?: string; rows?: CommentEnt
             mapName: 'tasks',
             ready: true,
             onChatNotFound,
+            initialCardId: options.initialCardId,
+            onCardNotFound,
         });
         return null;
     }
@@ -94,7 +97,7 @@ async function mountBoard(options: { initialChatName?: string; rows?: CommentEnt
         if (!seen.lifecycle) throw new Error('not rendered');
         return seen.lifecycle;
     };
-    return { lifecycle, onChatNotFound, queryClient };
+    return { lifecycle, onChatNotFound, onCardNotFound, queryClient, doc };
 }
 
 test('a landing on a comment whose card is gone opens it as deleted, with the title of its row', async () => {
@@ -139,4 +142,26 @@ test('a search hit or an activity row opens a live card live, and one whose card
         expect(lifecycle().openChat('unknown.eigenchat')).toBe(false);
     });
     expect(lifecycle().openCard?.title).toBe('Ship it');
+});
+
+test('a live card opened by its chat name closes when it is deleted, as one opened by its id does', async () => {
+    const { lifecycle, doc } = await mountBoard({ rows });
+    await act(async () => {
+        expect(lifecycle().openChat('kept.eigenchat')).toBe(true);
+    });
+    expect(lifecycle().openCard?.id).toBe('card-1');
+    await act(async () => {
+        doc.getMap('tasks').delete('card-1');
+    });
+    expect(lifecycle().openCard).toBeNull();
+    expect(lifecycle().openCardDeleted).toBe(false);
+});
+
+test('a card link opens its card before the rows arrive, and reports an id no card holds', async () => {
+    const live = await mountBoard({ initialCardId: 'card-1' });
+    expect(live.lifecycle().openCard?.id).toBe('card-1');
+    await unmount();
+
+    const unknown = await mountBoard({ initialCardId: 'card-9' });
+    expect(unknown.onCardNotFound).toHaveBeenCalledTimes(1);
 });
