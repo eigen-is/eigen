@@ -68,26 +68,27 @@ export async function inlineSvgMediaRefs(mount: Mount, parentId: string, svgByte
     }
 }
 
-// The names given and every sibling an svg among them pulls in when it is served, to the depth the inliner reads, so a
-// sweep or a copy keeps what the svg draws. A missing file or one that is no svg adds nothing. A sibling a leaf at the
-// last depth names is kept too, which only keeps more.
+// The names given, and every sibling that an svg among them draws when it is served, to the depth the inliner reads. So
+// a sweep keeps what the svg draws. A missing file, or one that is no svg, adds nothing. At the last depth, the names an
+// svg holds are kept as well, though the inliner strips them. Keeping more is safe.
 export async function withSvgSiblings(mount: Mount, parentId: string, names: Iterable<string>): Promise<Set<string>> {
     const kept = new Set(names);
     let svgs = [...kept];
     for (let depth = 0; depth <= MAX_SVG_INLINE_DEPTH && svgs.length > 0; depth++) {
-        const next: string[] = [];
-        for (const name of svgs) {
-            const child = await mount.getChildByName(parentId, name);
-            if (child?.type !== 'file' || child.mimeType !== 'image/svg+xml') continue;
-            const bytes = await mount.readBytes(child.id);
-            if (!bytes) continue;
-            for (const ref of listEigenMediaRefs(Buffer.from(bytes).toString('utf8'))) {
-                if (kept.has(ref)) continue;
-                kept.add(ref);
-                next.push(ref);
-            }
+        const sources = await Promise.all(
+            svgs.map(async (name) => {
+                const child = await mount.getChildByName(parentId, name);
+                if (child?.type !== 'file' || child.mimeType !== 'image/svg+xml') return '';
+                const bytes = await mount.readBytes(child.id);
+                return bytes ? Buffer.from(bytes).toString('utf8') : '';
+            }),
+        );
+        svgs = [];
+        for (const ref of sources.flatMap((source) => listEigenMediaRefs(source))) {
+            if (kept.has(ref)) continue;
+            kept.add(ref);
+            svgs.push(ref);
         }
-        svgs = next;
     }
     return kept;
 }

@@ -1224,6 +1224,10 @@ export class Drive {
         return this.documents.isTrashing(this.getMount(mountId), pathId);
     }
 
+    public isRestoring(mountId: string, pathId: string): boolean {
+        return this.documents.isRestoring(mountId, pathId);
+    }
+
     public async closeCollabDocument(
         mountId: string,
         pathId: string,
@@ -1249,7 +1253,9 @@ export class Drive {
         const mount = this.getMount(mountId);
         const container = await mount.getPath(containerId);
         if (!container) throw new ApiError(404, `Container ${containerId} not found`);
-        await restoreContainer(this, mount, container, snapshotName);
+        await this.documents.whileRestoring(mountId, containerId, () =>
+            restoreContainer(this, mount, container, snapshotName),
+        );
         if (user) {
             await this.recordFileEvent(mountId, containerId, user, {
                 eventType: 'version-restored',
