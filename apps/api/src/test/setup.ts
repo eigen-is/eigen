@@ -10,7 +10,7 @@ import type { ServerStorageType } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import { eq } from 'drizzle-orm';
-import { user as userSchema } from '../../auth-schema';
+import { member as memberSchema, teamMember as teamMemberSchema, user as userSchema } from '../../auth-schema';
 import { app } from '../app';
 import { auth, getAuthDrizzleDb } from '../lib/auth/auth';
 import { getServerSettings, getStorageType, updateServerSettings } from '../lib/config/server-settings';
@@ -166,12 +166,16 @@ export async function createTestUserOnStorage(storageType: ServerStorageType, na
 }
 
 // A signed-in guest on an external address. The admin API only creates users and admins, so the
-// role is set straight in the auth database.
+// role is set straight in the auth database. The admin API also joins every new user to the org and its
+// default team, which a guest never joins, so those rows go.
 export async function createTestGuest(name: string): Promise<TestUser> {
     const email = `${name.toLowerCase().replaceAll(' ', '-')}-${crypto.randomUUID()}@external.com`;
     const password = crypto.randomUUID();
     const created = await auth.api.createUser({ body: { email, password, name, role: 'user' } });
-    getAuthDrizzleDb().update(userSchema).set({ role: 'guest' }).where(eq(userSchema.id, created.user.id)).run();
+    const db = getAuthDrizzleDb();
+    db.update(userSchema).set({ role: 'guest' }).where(eq(userSchema.id, created.user.id)).run();
+    db.delete(teamMemberSchema).where(eq(teamMemberSchema.userId, created.user.id)).run();
+    db.delete(memberSchema).where(eq(memberSchema.userId, created.user.id)).run();
     const signIn = await auth.api.signInEmail({ returnHeaders: true, body: { email, password } });
     return { id: created.user.id, email, name, sessionToken: extractSessionToken(signIn.headers) };
 }
