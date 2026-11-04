@@ -6,7 +6,7 @@ Every Eigen document is a container, a Drive folder named like a file that holds
 
 ## A name survives a copy, a path id does not
 
-A copy gives every file a new id but keeps its name. A reference by name therefore resolves against the copy's own files, and a copy is a plain byte copy of the tree with no Yjs or SQLite rewriting ([STORAGE.md](STORAGE.md#copy-goes-anywhere-a-move-stays-in-its-mount)). A URL would also bake in the API host, which differs per deployment.
+A copy gives every file a new id but keeps its name. A reference by name therefore resolves against the copy's own files, and a copy writes each file's bytes as they are, with no Yjs rewriting. It leaves out the parts the current state does not name, and its `comments.db` drops the rows of the threads it left ([STORAGE.md](STORAGE.md#copy-goes-anywhere-a-move-stays-in-its-mount)). A URL would also bake in the API host, which differs per deployment.
 
 Two things keep it safe. `Mount.assertUniqueName` refuses a second live item with the same name in a folder, case-insensitively. And the folders are fixed: media in `{doc}/media/`, comment threads in `{doc}/chat/`, a chat's attachments in `{chat}/media/`. An upload that collides is renamed (`getUniqueFileName`, `apps/api/src/lib/drive/naming.ts`), so a caller always stores the name the upload returned, not the one it sent.
 
