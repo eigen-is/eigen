@@ -90,6 +90,7 @@ import {
 import { CollabRegistry } from './collab-registry';
 import type { CopyTarget } from './copy-across';
 import { copyPathAcross } from './copy-across';
+import { keepRowsOfCopiedThreads, withNamedPartsOnly } from './copy-parts';
 import { LockManager } from './lock-manager';
 import { getSharedDatabase } from './shared';
 import {
@@ -736,6 +737,7 @@ export class Drive {
             name,
             (pathId, createdIds) => this.deleteFailedCopy(mountId, pathId, createdIds, user),
             user,
+            (copy, src) => keepRowsOfCopiedThreads(this, mountId, copy, src),
         );
         this.emit(
             isContainerType(copied.type) ? SSEventType.DRIVE_FOLDER_CREATED : SSEventType.DRIVE_FILE_CREATED,
@@ -756,14 +758,15 @@ export class Drive {
         return copied;
     }
 
-    // The copy writes exactly what this lists, so it never copies its own output. Every copy has to fit the
-    // target's free space, and a single file also the per-file upload cap, the same as an upload.
+    // The copy writes exactly what this lists, so it never copies its own output. A document in it takes only the
+    // parts its current state names. Every copy has to fit the target's free space, and a single file also the
+    // per-file upload cap, the same as an upload.
     private async listCopyWithinLimits(
         mount: Mount,
         srcPathId: string,
         limits: { ownerId: string; mountId: string },
     ): Promise<CopyTree> {
-        const tree = await mount.listCopy(srcPathId);
+        const tree = await withNamedPartsOnly(mount, await mount.listCopy(srcPathId));
         if (!isContainerType(tree.path.type)) enforceMaxUploadSize(tree.path.size);
         await enforceMountQuota(limits.ownerId, limits.mountId, copySize(tree));
         return tree;

@@ -9,6 +9,7 @@ import { storageGone } from '../core';
 import type { CopyTree } from '../mount/copy';
 import { writeCopy } from '../mount/copy';
 import type { User } from '../user';
+import { keepRowsOfCopiedThreads } from './copy-parts';
 import type { Drive } from './drive';
 import type { DriveLike } from './get-drive';
 
@@ -31,6 +32,7 @@ export function copyPathAcross(
             if (!file) throw storageGone();
             return to.drive.createFileFromData(to.mountId, parentId, fileName, src.mimeType, file, user);
         },
+        folderCopied: (copy, src) => keepRowsOfCopiedThreads(to.drive, to.mountId, copy, src),
         discard: (pathId, createdIds) => to.drive.deleteFailedCopy(to.mountId, pathId, createdIds, user),
     });
 }
