@@ -363,8 +363,8 @@ export function CanvasEditor({
 
     // The marked elements: those carrying at least one comment card, with the card's color and the corner the mark sits
     // on. The corner is a zero-size box, so boxToStyle maps it to the screen point at render time. A card id with no
-    // card is skipped: `comments` is not a declared yjsRoot, so restoring a version from before a delete brings the
-    // element's id back without its card.
+    // card is skipped. A delete keeps the card, so a restore brings an id back with it, but a card that an older build
+    // removed outright can leave an id behind.
     const commentedElements = useMemo(
         () =>
             ordered.flatMap((el) => {
