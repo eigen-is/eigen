@@ -8,10 +8,11 @@ Each app that shows comments is called a host. A host decides only where a card 
 
 A comment is spread over three stores in the document's container, the Drive folder that holds one document, such as `Notes.eigendoc` ([STORAGE.md](STORAGE.md)). The card lives in the document's Y.Doc, the shared Yjs state every editor holds a copy of ([COLLAB.md](COLLAB.md)). The thread is a chat in the container's `chat/` folder ([CHAT.md](CHAT.md)). And `comments.db` keeps one index row per thread ([A comment lives in three stores](#a-comment-lives-in-three-stores)).
 
-Three things surprise people:
+Four things surprise people:
 
 - Text and color are collaborative Yjs state, but status and assignee are written by the server, which records the activity row and sends the notification ([A comment lives in three stores](#a-comment-lives-in-three-stores)).
 - A delete strips the anchor and keeps the card, so whatever brings the anchor back, such as an undo or a version restore, brings the whole comment back ([A delete strips the anchor and keeps the card](#a-delete-strips-the-anchor-and-keeps-the-card)).
+- A link to a deleted comment still opens it, as "This comment was deleted" with nothing that acts ([A deleted comment shows as deleted wherever it is reached](#a-deleted-comment-shows-as-deleted-wherever-it-is-reached)).
 - On a phone the pane hides the editor instead of unmounting it ([The pane hides the editor, never unmounts it](#the-pane-hides-the-editor-never-unmounts-it)).
 
 ## A comment lives in three stores
@@ -54,6 +55,14 @@ The canvas also marks the card deleted with `deletedAt`, because on the canvas a
 The canvas writes the mark and strips the id from every element that holds it in one untracked transaction (`deleteCommentCardInDoc`), and appends the id to its element after `createCard` resolves, untracked too. The comment map is outside the canvas undo scope, so a ⌘Z that moved only the anchor would bring back a card the user deleted, or turn a new comment into a document-level one. The append is idempotent, so a double submit lists the card once.
 
 Stickies is the exception. Its `tasks` map is a declared root and in its undo scope. A delete removes the card from its column and from `tasks` in one transaction (`deleteCardFromBoard`), so one ⌘Z brings back the card and its place. A restore rewrites the cards too: a card added after the version drops off the board while its thread and row stay, and an edit made since to a card's text or color reverts.
+
+## A deleted comment shows as deleted wherever it is reached
+
+A card is deleted when its host no longer uses it, or when its thread is gone from `chat/`, which the sweep does ([A sweep removes a thread nothing names](#a-sweep-removes-a-thread-nothing-names)). One rule says so, `useIsCardDeleted`, and the lifecycle hands it out as `isCardDeleted`. The card dialog, the pane and the comment menus read it, so a `?chat=` or `?card=` landing, a notification's link, an activity row and a comment search hit all open the same deleted state (`DeletedComment`): the title greyed and "This comment was deleted", with no thread, no description and nothing that acts. The menus keep only View and Delete. A resolve or an assignment on a gone thread would only get the 404 of `assertCommentChatExists`, a reply has no thread to go to, and a card nothing anchors would otherwise open through a link as if it were live.
+
+Neither half decides early. The active set counts only once the host's `ready` is true, or every landing in docs would show the deleted state for the 200 ms before its first walk of the body. A thread counts as gone only once the chat folder's refetch settled (`isChatMissing` on the media resolver, the twin of `isMediaMissing`), so a new comment whose thread the listing doesn't hold yet never flashes deleted. While it waits, the dialog shows an empty thread. The lifecycle reads the resolver, so every host renders its `MediaResolverProvider` above the component that calls `useCommentLifecycle`.
+
+The pane lists only active cards, so it shows the deleted state only for a card whose thread went while the card stayed anchored, such as one an offline tab anchored again after the sweep.
 
 ## A sweep removes a thread nothing names
 
@@ -101,7 +110,7 @@ Mentions are recorded in `comment_mentions` on every message, and nothing reads 
 
 ## One lifecycle bundle drives every host
 
-`useCommentLifecycle` bundles the card read, the server entries, create, update, resolve, assign, the open card and `?chat=` resolution. `mapName` picks `comments` or `tasks`. A host that mounts before Yjs sync passes `ready`, so a deep link waits for the cards instead of resolving against an empty map.
+`useCommentLifecycle` bundles the card read, the server entries, create, update, resolve, assign, the open card, `?chat=` and `?card=` resolution and the deleted rule. `mapName` picks `comments` or `tasks`. Every host passes `ready` once its cards have synced and its active set is computed: docs after the first walk of the body, sheets once the workbook names its sheets, the canvas and stickies on sync. A landing waits for it instead of resolving against an empty map, and opens the card in the state the host shows it in.
 
 `CommentLifecycleMenuItems` binds the shared rows (view, edit, color, assign, resolve or reopen, delete) to that bundle. It gates every write on `canWrite` in one place, and the host supplies only what its anchor decides: the item under the cursor, add and delete. So a new row lands in every app at once. It renders in `CommentContextMenu` (through `CommentLifecycleDialogs`, which every editor mounts), in the sheet's cell menu and in docs' image menu. Every row is a real menu item, so selecting one closes the host menu.
 
