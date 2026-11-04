@@ -11,8 +11,10 @@ import { MediaResolverProvider, useRecordHistory } from '@workspace/lib/drive';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace/lib/types/comments';
+import { commentMapName } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_TYPE_STICKIES } from '@workspace/lib/types/drive';
 import {
     CollabDocumentGate,
     ColumnLayout,
@@ -147,7 +149,7 @@ function StickiesBoardInner({
         doc: yjsDoc,
         activeCardIds,
         initialChatName,
-        mapName: 'tasks',
+        mapName: commentMapName(DRIVE_TYPE_STICKIES),
         ready: isSynced,
         onChatNotFound: onClearInitialChat,
         initialCardId,

@@ -7,6 +7,9 @@
 import { useAuth } from '@workspace/lib/auth';
 import { useCallback, useState } from 'react';
 import type * as Y from 'yjs';
+import type { CommentEntry } from '../../../types/chat';
+import type { CommentCard, CommentMapName } from '../../../types/comments';
+import type { EffectiveMember } from '../../../types/drive';
 import { useAssignComment, useComments, useResolveComment } from '../../chat';
 import { useEffectiveMembers } from '../../drive';
 import { findCardIdByChatName } from '../find-card-id-by-chat-name';
@@ -18,6 +21,28 @@ import type { OpenComment } from './use-open-comment-card';
 import { useOpenCommentCard } from './use-open-comment-card';
 import { useOpenOnLanding } from './use-open-on-landing';
 import { useUpdateCommentCard } from './use-update-comment-card';
+
+type CommentLifecycle = {
+    allComments: CommentEntry[];
+    resolveComment: ReturnType<typeof useResolveComment>;
+    assignComment: ReturnType<typeof useAssignComment>;
+    members: EffectiveMember[];
+    cards: Record<string, CommentCard>;
+    createCard: ReturnType<typeof useCreateCommentCard>;
+    updateCard: ReturnType<typeof useUpdateCommentCard>;
+    assignedCount: number;
+    // The open comment: its card, or none for a comment whose card is gone, and its index row.
+    openCard: CommentCard | null;
+    openEntry: CommentEntry | undefined;
+    openCardDeleted: boolean;
+    isCardDeleted: (card: CommentCard) => boolean;
+    setOpenCardId: (cardId: string | null) => void;
+    // Opens the comment a chat name names, and says whether one did.
+    openChat: (chatName: string) => boolean;
+    openCardForEdit: (cardId: string) => void;
+    openCardEditing: boolean;
+    setOpenCardEditing: (editing: boolean) => void;
+};
 
 // A host passes `ready` once its cards have synced and its active set is computed. Until then a landing waits instead
 // of opening a card the host may not use, and no card reads deleted.
@@ -44,12 +69,12 @@ export function useCommentLifecycle({
     doc: Y.Doc | null;
     activeCardIds: ReadonlySet<string>;
     initialChatName?: string;
-    mapName?: 'comments' | 'tasks';
+    mapName?: CommentMapName;
     ready: boolean;
     onChatNotFound?: () => void;
     initialCardId?: string;
     onCardNotFound?: () => void;
-}) {
+}): CommentLifecycle {
     const [open, setOpen] = useState<OpenComment | null>(null);
     // Edit mode is pinned to a card id, so opening another card lands in view mode on its own.
     const [editCardId, setEditCardId] = useState<string | null>(null);

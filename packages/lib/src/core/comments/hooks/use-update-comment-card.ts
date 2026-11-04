@@ -1,6 +1,11 @@
+// Saves a comment card's edit into the Y.Doc: the fields the patch names, in one transaction, and an empty
+// attachment list clears the field. The comment lifecycle hands it to the card dialog. applyCardPatch is the plain
+// write it wraps.
+
 import { useCallback } from 'react';
 import * as Y from 'yjs';
 import type { ChatAttachment } from '../../../types/chat';
+import type { CommentMapName } from '../../../types/comments';
 import { getItemMapRoot } from '../../collab/yjs-utils';
 
 export type CommentCardPatch = {
@@ -10,7 +15,7 @@ export type CommentCardPatch = {
     attachments?: ChatAttachment[];
 };
 
-export function applyCardPatch(doc: Y.Doc, mapName: string, cardId: string, patch: CommentCardPatch): void {
+export function applyCardPatch(doc: Y.Doc, mapName: CommentMapName, cardId: string, patch: CommentCardPatch): void {
     const card = getItemMapRoot(doc, mapName).get(cardId);
     if (!(card instanceof Y.Map)) return;
     doc.transact(() => {
@@ -24,7 +29,7 @@ export function applyCardPatch(doc: Y.Doc, mapName: string, cardId: string, patc
     });
 }
 
-export function useUpdateCommentCard(doc: Y.Doc | null, mapName: 'comments' | 'tasks' = 'comments') {
+export function useUpdateCommentCard(doc: Y.Doc | null, mapName: CommentMapName = 'comments') {
     return useCallback(
         (cardId: string, patch: CommentCardPatch): void => {
             if (!doc) return;

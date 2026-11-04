@@ -1,3 +1,7 @@
+// Raises a comment card: its thread in the document's chat folder first, then the card in the Y.Doc. The host's anchor
+// lands in the same transaction, so one undo takes both back. The comment lifecycle hands it to every host, and a
+// board's duplicate drag calls it too. writeCardToDoc is the plain write, which a new board's first card also uses.
+
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@workspace/lib/auth';
 import { invalidateComments } from '@workspace/lib/chat';
@@ -5,7 +9,7 @@ import { useCreateDriveItem } from '@workspace/lib/drive';
 import { nanoid } from 'nanoid';
 import { useCallback, useRef } from 'react';
 import * as Y from 'yjs';
-import type { CardAttachmentDraft, CommentCard } from '../../../types/comments';
+import type { CardAttachmentDraft, CommentCard, CommentMapName } from '../../../types/comments';
 import { getItemMapRoot } from '../../collab/yjs-utils';
 import { useResolveCardAttachments } from './use-resolve-card-attachments';
 
@@ -16,8 +20,8 @@ export type CreateCommentCardInput = {
     attachments?: CardAttachmentDraft[];
 };
 
-// Pure write — callers control the transaction boundary so card + anchor can land in one undo step.
-export function writeCardToDoc(doc: Y.Doc, mapName: string, card: CommentCard): void {
+// The caller opens the transaction, so the card and its anchor land in one undo step.
+export function writeCardToDoc(doc: Y.Doc, mapName: CommentMapName, card: CommentCard): void {
     const map = getItemMapRoot(doc, mapName);
     const y = new Y.Map<unknown>();
     y.set('id', card.id);
@@ -38,7 +42,7 @@ export function useCreateCommentCard(
     chatFolderId: string | null,
     mediaFolderId: string | null,
     doc: Y.Doc | null,
-    mapName: 'comments' | 'tasks' = 'comments',
+    mapName: CommentMapName = 'comments',
 ) {
     const queryClient = useQueryClient();
     const createChat = useCreateDriveItem('chat');
@@ -49,9 +53,8 @@ export function useCreateCommentCard(
     const userEmailRef = useRef(user?.email);
     userEmailRef.current = user?.email;
 
-    // anchorInTransact runs INSIDE doc.transact() so the new card + the host anchor land in
-    // one Yjs transaction = one undo step. The callback must be synchronous (no awaits, no
-    // setTimeout) — anything outside the synchronous frame escapes the transaction.
+    // anchorInTransact runs inside the card's transaction, so the card and the host's anchor are one undo step. It must
+    // be synchronous: whatever it awaits or defers runs outside the transaction.
     return useCallback(
         async (
             input: CreateCommentCardInput = {},
@@ -59,7 +62,7 @@ export function useCreateCommentCard(
         ): Promise<CommentCard | undefined> => {
             if (!doc || !chatFolderId) return undefined;
 
-            // Resolve first: a failed upload aborts the whole create (no half-attached card).
+            // The attachments resolve first, so a failed upload stops the create before any card exists.
             const attachments = input.attachments?.length ? await resolveAttachments(input.attachments) : undefined;
 
             const fileName = `comment-${Date.now()}-${nanoid(6)}`;
@@ -84,8 +87,8 @@ export function useCreateCommentCard(
                 writeCardToDoc(doc, mapName, card);
                 anchorInTransact?.(card);
             });
-            // The chat create seeded a comments.db row server-side and broadcast no index event, so
-            // without this refetch the new card has no entry until staleTime.
+            // Creating the chat wrote its index row on the server but sent no event. Without this refetch the new card
+            // would have no row until the list goes stale.
             invalidateComments(queryClient, ownerId, mountId, pathId);
             return card;
         },

@@ -5,7 +5,7 @@
 import { useEffect, useState } from 'react';
 import * as Y from 'yjs';
 import type { ChatAttachment } from '../../../types/chat';
-import type { CommentCard } from '../../../types/comments';
+import type { CommentCard, CommentMapName } from '../../../types/comments';
 import { getItemMapRoot } from '../../collab/yjs-utils';
 import { sanitizeCommentCardHtml } from '../../html-dom';
 
@@ -67,10 +67,7 @@ function sameCard(a: CommentCard, b: CommentCard): boolean {
     );
 }
 
-export function useCommentCards(
-    doc: Y.Doc | null,
-    mapName: 'comments' | 'tasks' = 'comments',
-): Record<string, CommentCard> {
+export function useCommentCards(doc: Y.Doc | null, mapName: CommentMapName = 'comments'): Record<string, CommentCard> {
     // The first render reads the cards at once. A host that mounts after the Yjs sync, such as docs, must see its
     // cards right away, or the ?chat= deep-link effect runs once against no cards and gives up.
     const [cards, setCards] = useState<Record<string, CommentCard>>(() =>
