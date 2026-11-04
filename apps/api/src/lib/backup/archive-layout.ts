@@ -18,7 +18,7 @@ import { CONTAINER_COMMENTS_DB, CONTAINER_DATA_DB, isContainerDatabase } from '.
 import { isUsableName, trashStorageKey } from '../mount/names';
 import { paths } from '../mount/schema';
 import { NOTIFICATION_CENTER_DB_CONFIG } from '../notification-center/db-config';
-import { VERSIONS_FOLDER_NAME } from '../versioning/versions-folder';
+import { isVersionsName } from '../versioning/versions-folder';
 
 // Home-level databases outside the mounts. Absent files are skipped: a team home has no mail,
 // contacts or notifications, and opening one through getLocalDatabase would create it empty.
@@ -116,7 +116,7 @@ export function storageKeyOf(row: MountPathRow, byId: ReadonlyMap<string, MountP
 export function managedDbContainer(row: MountPathRow, byId: ReadonlyMap<string, MountPathRow>): MountPathRow | null {
     const parent = row.parentId ? byId.get(row.parentId) : undefined;
     if (!parent) return null;
-    if (parent.name === VERSIONS_FOLDER_NAME) {
+    if (isVersionsName(parent.name)) {
         const container = parent.parentId ? byId.get(parent.parentId) : undefined;
         return container && isDocumentType(container.type) ? container : null;
     }
