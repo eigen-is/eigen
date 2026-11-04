@@ -383,8 +383,7 @@ export class CollabDocument {
         }
         const close = () => this.drive.closeCollabDocument(this.path.mountId, this.path.id, { skipFinalSnapshot });
         if (!isSweepDue(this.path)) return close();
-        // The sweep reads the state that closes, so it is encoded before the close destroys the doc.
-        await sweepAfterClose(this.drive, this.path, Y.encodeStateAsUpdate(this.doc), close);
+        await sweepAfterClose(this.drive, this.path, close);
     }
 
     private sendSyncStep1(conn: ServerWebSocket<unknown>): void {

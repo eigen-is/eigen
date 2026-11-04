@@ -91,11 +91,9 @@ async function mediaNames(sweepMount: Mount, containerId: string): Promise<strin
     return (await sweepMount.listFolder(media.id)).map((file) => file.name).sort();
 }
 
-// The state as the document closes, then the close, with no version of its own.
-async function close(mountId: string, path: DrivePath, doc: Y.Doc): Promise<Uint8Array> {
-    const state = Y.encodeStateAsUpdate(doc);
+// The close, with no version of its own.
+async function close(mountId: string, path: DrivePath): Promise<void> {
     await drive.closeCollabDocument(mountId, path.id, { skipFinalSnapshot: true });
-    return state;
 }
 
 async function versionIds(sweepMount: Mount, containerId: string): Promise<string[]> {
@@ -105,11 +103,12 @@ async function versionIds(sweepMount: Mount, containerId: string): Promise<strin
 
 describe('the media sweep', () => {
     test('a file no state names goes, one the current state names stays', async () => {
-        const { path, collab } = await openDoc(mount, M, 'Plain', [paragraph(figure('kept.png'))]);
+        const { path } = await openDoc(mount, M, 'Plain', [paragraph(figure('kept.png'))]);
         await addMedia(mount, path.id, 'kept.png');
         await addMedia(mount, path.id, 'loose.png');
 
-        await sweepDocument(drive, path, await close(M, path, collab.doc));
+        await close(M, path);
+        await sweepDocument(drive, path);
         expect(await mediaNames(mount, path.id)).toEqual(['kept.png']);
     });
 
@@ -119,7 +118,8 @@ describe('the media sweep', () => {
         collab.doc.getXmlFragment('default').delete(0, 1);
         await drive.saveVersion(M, path.id);
 
-        await sweepDocument(drive, path, await close(M, path, collab.doc));
+        await close(M, path);
+        await sweepDocument(drive, path);
         expect(await mediaNames(mount, path.id)).toEqual([]);
     });
 
@@ -128,22 +128,23 @@ describe('the media sweep', () => {
         await addMedia(mount, path.id, 'a.png');
         await drive.saveVersion(M, path.id);
         collab.doc.getXmlFragment('default').delete(0, 1);
-        const state = await close(M, path, collab.doc);
+        await close(M, path);
 
-        await sweepDocument(drive, path, state);
+        await sweepDocument(drive, path);
         expect(await mediaNames(mount, path.id)).toEqual(['a.png']);
 
         for (const id of await versionIds(mount, path.id)) await mount.deletePath(id);
-        await sweepDocument(drive, path, state);
+        await sweepDocument(drive, path);
         expect(await mediaNames(mount, path.id)).toEqual([]);
     });
 
     test('a file under three days old stays', async () => {
-        const { path, collab } = await openDoc(mount, M, 'Young', [paragraph()]);
+        const { path } = await openDoc(mount, M, 'Young', [paragraph()]);
         await addMedia(mount, path.id, 'young.png', { ageHours: 71 });
         await addMedia(mount, path.id, 'old.png', { ageHours: 73 });
 
-        await sweepDocument(drive, path, await close(M, path, collab.doc));
+        await close(M, path);
+        await sweepDocument(drive, path);
         expect(await mediaNames(mount, path.id)).toEqual(['young.png']);
     });
 
@@ -154,12 +155,13 @@ describe('the media sweep', () => {
         await addMedia(mount, path.id, 'card.pdf', { mimeType: 'application/pdf' });
         await addMedia(mount, path.id, 'loose.pdf', { mimeType: 'application/pdf' });
 
-        await sweepDocument(drive, path, await close(M, path, collab.doc));
+        await close(M, path);
+        await sweepDocument(drive, path);
         expect(await mediaNames(mount, path.id)).toEqual(['card.pdf']);
     });
 
     test("an SVG figure's sibling media stay, to the inline depth", async () => {
-        const { path, collab } = await openDoc(mount, M, 'Svg', [paragraph(figure('outer.svg'))]);
+        const { path } = await openDoc(mount, M, 'Svg', [paragraph(figure('outer.svg'))]);
         const svg = (...names: string[]) =>
             `<svg xmlns="http://www.w3.org/2000/svg">${names.map((name) => `<image href="${eigenMediaHref(name)}"/>`).join('')}</svg>`;
         const asSvg = (body: string) => ({ mimeType: 'image/svg+xml', body });
@@ -169,15 +171,16 @@ describe('the media sweep', () => {
         await addMedia(mount, path.id, 'deep.png');
         await addMedia(mount, path.id, 'loose.png');
 
-        await sweepDocument(drive, path, await close(M, path, collab.doc));
+        await close(M, path);
+        await sweepDocument(drive, path);
         expect(await mediaNames(mount, path.id)).toEqual(['deep.png', 'inner.svg', 'leaf.png', 'outer.svg']);
     });
 
     test('an open document is never swept', async () => {
-        const { path, collab } = await openDoc(mount, M, 'Open', [paragraph()]);
+        const { path } = await openDoc(mount, M, 'Open', [paragraph()]);
         await addMedia(mount, path.id, 'loose.png');
 
-        await sweepDocument(drive, path, Y.encodeStateAsUpdate(collab.doc));
+        await sweepDocument(drive, path);
         expect(await mediaNames(mount, path.id)).toEqual(['loose.png']);
         await drive.closeCollabDocument(M, path.id, { skipFinalSnapshot: true });
     });
@@ -198,14 +201,14 @@ describe('the media sweep', () => {
     }
 
     test('a reopen between the read and the delete aborts the delete', async () => {
-        const { path, collab } = await openDoc(mount, M, 'Reopened', [paragraph()]);
+        const { path } = await openDoc(mount, M, 'Reopened', [paragraph()]);
         await addMedia(mount, path.id, 'loose.png');
-        const state = await close(M, path, collab.doc);
+        await close(M, path);
         const restore = await changeBeforeDelete(path.id, async () => {
             await drive.getCollabDocument(M, path.id);
         });
         try {
-            await sweepDocument(drive, path, state);
+            await sweepDocument(drive, path);
         } finally {
             restore();
         }
@@ -215,14 +218,14 @@ describe('the media sweep', () => {
     });
 
     test('a version saved between the read and the delete aborts the delete', async () => {
-        const { path, collab } = await openDoc(mount, M, 'Saved', [paragraph()]);
+        const { path } = await openDoc(mount, M, 'Saved', [paragraph()]);
         await addMedia(mount, path.id, 'loose.png');
-        const state = await close(M, path, collab.doc);
+        await close(M, path);
         const restore = await changeBeforeDelete(path.id, async () => {
             await drive.saveVersion(M, path.id);
         });
         try {
-            await sweepDocument(drive, path, state);
+            await sweepDocument(drive, path);
         } finally {
             restore();
         }
@@ -230,21 +233,21 @@ describe('the media sweep', () => {
     });
 
     test('a version that fails to load sweeps nothing, and the next sweep tries again', async () => {
-        const { path, collab } = await openDoc(mount, M, 'Corrupt', [paragraph()]);
+        const { path } = await openDoc(mount, M, 'Corrupt', [paragraph()]);
         await addMedia(mount, path.id, 'loose.png');
         await drive.saveVersion(M, path.id);
         const [versionId] = await versionIds(mount, path.id);
         if (!versionId) throw new Error('no version');
         await mount.writeFile(versionId, Buffer.from('not a database'));
-        const state = await close(M, path, collab.doc);
+        await close(M, path);
 
-        await expect(sweepDocument(drive, path, state)).rejects.toThrow();
+        await expect(sweepDocument(drive, path)).rejects.toThrow();
         expect(await mediaNames(mount, path.id)).toEqual(['loose.png']);
         // A failure waits a day, so a version that never reads costs one try a day.
         expect(isSweepDue(path)).toBe(false);
 
         await mount.deletePath(versionId);
-        await sweepDocument(drive, path, state);
+        await sweepDocument(drive, path);
         expect(await mediaNames(mount, path.id)).toEqual([]);
     });
 
@@ -253,37 +256,38 @@ describe('the media sweep', () => {
         addCard(collab.doc, 'c-odd', { chatName: 42 });
         await addMedia(mount, path.id, 'loose.png');
 
-        await expect(sweepDocument(drive, path, await close(M, path, collab.doc))).rejects.toThrow();
+        await close(M, path);
+        await expect(sweepDocument(drive, path)).rejects.toThrow();
         expect(await mediaNames(mount, path.id)).toEqual(['loose.png']);
         expect(isSweepDue(path)).toBe(false);
     });
 
     test("the drive's size drops by the deleted bytes", async () => {
-        const { path, collab } = await openDoc(mount, M, 'Size', [paragraph()]);
+        const { path } = await openDoc(mount, M, 'Size', [paragraph()]);
         const body = 'x'.repeat(5_000);
         await addMedia(mount, path.id, 'loose.png', { body });
-        const state = await close(M, path, collab.doc);
+        await close(M, path);
         const before = { drive: await drive.size(M), container: (await mount.getPath(path.id))?.size ?? 0 };
 
-        await sweepDocument(drive, path, state);
+        await sweepDocument(drive, path);
         expect(await drive.size(M)).toBe(before.drive - body.length);
         expect((await mount.getPath(path.id))?.size).toBe(before.container - body.length);
     });
 
     test('a version is read once, and again when its row is from an older reader', async () => {
-        const { path, collab } = await openDoc(mount, M, 'Scanned', [paragraph()]);
+        const { path } = await openDoc(mount, M, 'Scanned', [paragraph()]);
         await drive.saveVersion(M, path.id);
         const [versionId] = await versionIds(mount, path.id);
         if (!versionId) throw new Error('no version');
-        const state = await close(M, path, collab.doc);
+        await close(M, path);
         const downloads = spyOn(mount, 'downloadToTemp');
         const versionReads = () => downloads.mock.calls.filter(([id]) => id === versionId).length;
         try {
-            await sweepDocument(drive, path, state);
+            await sweepDocument(drive, path);
             expect(getVersionReferences(mount, [versionId])).toEqual([
                 { versionPathId: versionId, readerVersion: REFERENCE_READER_VERSION, names: { media: [], chat: [] } },
             ]);
-            await sweepDocument(drive, path, state);
+            await sweepDocument(drive, path);
             expect(versionReads()).toBe(1);
 
             // A row an older reader wrote is no record: its names keep nothing, and the version is read again.
@@ -295,7 +299,7 @@ describe('the media sweep', () => {
                 },
             ]);
             await addMedia(mount, path.id, 'stale.png');
-            await sweepDocument(drive, path, state);
+            await sweepDocument(drive, path);
             expect(versionReads()).toBe(2);
             expect(await mediaNames(mount, path.id)).toEqual([]);
             expect(getVersionReferences(mount, [versionId])[0]?.readerVersion).toBe(REFERENCE_READER_VERSION);
@@ -312,27 +316,29 @@ describe('the media sweep', () => {
         // Versions are read newest first, so the newer one is read before the older one fails.
         const newer = await drive.saveVersion(M, path.id);
 
-        await expect(sweepDocument(drive, path, await close(M, path, collab.doc))).rejects.toThrow();
+        await close(M, path);
+        await expect(sweepDocument(drive, path)).rejects.toThrow();
         expect(getVersionReferences(mount, [older.id, newer.id]).map((row) => row.versionPathId)).toEqual([newer.id]);
     });
 
     test('a name that differs from its file only in case or in Unicode form keeps the file', async () => {
         const decomposed = 'Café.png'.normalize('NFD');
-        const { path, collab } = await openDoc(mount, M, 'Case', [
+        const { path } = await openDoc(mount, M, 'Case', [
             paragraph(figure('Photo.PNG')),
             paragraph(figure(decomposed)),
         ]);
         await addMedia(mount, path.id, 'photo.png');
         await addMedia(mount, path.id, decomposed);
 
-        await sweepDocument(drive, path, await close(M, path, collab.doc));
+        await close(M, path);
+        await sweepDocument(drive, path);
         expect(await mediaNames(mount, path.id)).toEqual(['Café.png'.normalize('NFC'), 'photo.png']);
     });
 
     test('a trash under way when the delete starts aborts the delete', async () => {
-        const { path, collab } = await openDoc(mount, M, 'Trashed', [paragraph()]);
+        const { path } = await openDoc(mount, M, 'Trashed', [paragraph()]);
         const loose = await addMedia(mount, path.id, 'loose.png');
-        const state = await close(M, path, collab.doc);
+        await close(M, path);
         // The trash waits before it marks the rows, until the sweep is done.
         const started = Promise.withResolvers<void>();
         const swept = Promise.withResolvers<void>();
@@ -348,7 +354,7 @@ describe('the media sweep', () => {
             await started.promise;
         });
         try {
-            await sweepDocument(drive, path, state);
+            await sweepDocument(drive, path);
         } finally {
             swept.resolve();
             restore();
@@ -362,17 +368,17 @@ describe('the media sweep', () => {
         const other = await openDoc(mount, M, 'Other', [
             paragraph({ type: 'text', text: Array.from({ length: 2_000 }, () => crypto.randomUUID()).join(' ') }),
         ]);
-        await close(M, other.path, other.collab.doc);
+        await close(M, other.path);
         const otherDataDb = await mount.getChildByName(other.path.id, 'data.db');
         if (!otherDataDb) throw new Error('no data.db');
-        const { path, collab } = await openDoc(mount, M, 'Replaced', [paragraph()]);
+        const { path } = await openDoc(mount, M, 'Replaced', [paragraph()]);
         await addMedia(mount, path.id, 'loose.png');
-        const state = await close(M, path, collab.doc);
+        await close(M, path);
         const tempId = crypto.randomUUID();
         const source = await mount.downloadToTemp(otherDataDb.id, tempId);
         const restore = await changeBeforeDelete(path.id, () => mount.replaceContainerDataDb(path.id, source));
         try {
-            await sweepDocument(drive, path, state);
+            await sweepDocument(drive, path);
         } finally {
             restore();
             await mount.cleanupTemp(tempId);
@@ -382,10 +388,10 @@ describe('the media sweep', () => {
     });
 
     test('a restore under way when the delete starts aborts the delete', async () => {
-        const { path, collab } = await openDoc(mount, M, 'Restoring', [paragraph()]);
+        const { path } = await openDoc(mount, M, 'Restoring', [paragraph()]);
         await addMedia(mount, path.id, 'loose.png');
         const version = await drive.saveVersion(M, path.id);
-        const state = await close(M, path, collab.doc);
+        await close(M, path);
         // The restore waits at its first step, the download of the version, until the sweep is done. Nothing it does
         // before that step moves the fence.
         const started = Promise.withResolvers<void>();
@@ -404,7 +410,7 @@ describe('the media sweep', () => {
             await started.promise;
         });
         try {
-            await sweepDocument(drive, path, state);
+            await sweepDocument(drive, path);
         } finally {
             swept.resolve();
             restore();
@@ -412,6 +418,23 @@ describe('the media sweep', () => {
             download.mockRestore();
         }
         expect(await mediaNames(mount, path.id)).toEqual(['loose.png']);
+    });
+
+    // The restore's own save can prune the version it restores, so only data.db may name what it put back.
+    test('a restore between the close and the sweep keeps the media the restored state names', async () => {
+        const { path, collab } = await openDoc(mount, M, 'RestoredAfterClose', [
+            paragraph(figure('a.png')),
+            paragraph(),
+        ]);
+        await addMedia(mount, path.id, 'a.png');
+        const version = await drive.saveVersion(M, path.id);
+        collab.doc.getXmlFragment('default').delete(0, 1);
+        await close(M, path);
+        await drive.restoreContainer(M, path.id, version.name);
+        await mount.deletePath(version.id);
+
+        await sweepDocument(drive, path);
+        expect(await mediaNames(mount, path.id)).toEqual(['a.png']);
     });
 });
 
@@ -442,9 +465,9 @@ describe('the sweep after a linger close', () => {
     }
 
     test('sweeps once, and a second close the same day does not', async () => {
-        const { path, collab } = await openDoc(mount, M, 'Lingered', [paragraph()]);
+        const { path } = await openDoc(mount, M, 'Lingered', [paragraph()]);
         await addMedia(mount, path.id, 'first.png');
-        await close(M, path, collab.doc);
+        await close(M, path);
 
         const first = await lingerClose(path);
         expect(first.sweeps).toBe(1);
@@ -460,7 +483,7 @@ describe('the sweep after a linger close', () => {
     test('a sweep that fails is not tried again that day, but is the next day', async () => {
         const { path, collab } = await openDoc(mount, M, 'Failing', [paragraph()]);
         addCard(collab.doc, 'c-odd', { chatName: 42 });
-        await close(M, path, collab.doc);
+        await close(M, path);
         const warn = spyOn(console, 'warn').mockImplementation(() => {});
         try {
             const first = await lingerClose(path);
@@ -492,7 +515,7 @@ describe('the sweep after a linger close', () => {
         });
         await addMedia(mount, path.id, 'op.png');
         await addMedia(mount, path.id, 'loose.png');
-        await close(M, path, collab.doc);
+        await close(M, path);
 
         const closed = await lingerClose(path);
         expect(closed.sweeps).toBe(1);
@@ -536,7 +559,8 @@ describe('the media sweep on s3', () => {
             expect(s3.mount.pendingStagedCopy(await s3.mount.getStorageKey(versionId))).not.toBeNull();
             collab.doc.getXmlFragment('default').delete(0, 1);
 
-            await sweepDocument(drive, path, await close(S3_MOUNT, path, collab.doc));
+            await close(S3_MOUNT, path);
+            await sweepDocument(drive, path);
             expect(await mediaNames(s3.mount, path.id)).toEqual(['kept.png', 'versioned.png']);
         } finally {
             held.mockRestore();

@@ -7,11 +7,9 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_FILE, isCollabType } from '@workspace/lib/types/drive';
 import type { Snapshot } from '@workspace/lib/types/versioning';
-import { compressBlob } from '../collab/blob-codec';
 import type { YjsStatePayload } from '../collab/yjs-loader';
 import { readYjsStatePayloadFromFile } from '../collab/yjs-loader';
 import { REFERENCE_READER_VERSION } from '../document/references';
-import { toTransferableBuffer } from '../document/transform/protocol';
 import { runDocumentReferences } from '../document/transform/run-transform';
 import type { Mount } from '../mount';
 import { foldName } from '../mount/names';
@@ -35,18 +33,13 @@ export function isSweepDue(path: DrivePath): boolean {
 }
 
 // Closes a lingering document and then sweeps it. The hold on the Home comes first, because the close lets go of the
-// hold the lingering document kept, and an idle Home would close before the sweep began. `state` is the document as
-// it closes, encoded before the close destroys it. It resolves with the close, and the sweep goes on in the background.
-export function sweepAfterClose(
-    drive: Drive,
-    path: DrivePath,
-    state: Uint8Array,
-    close: () => Promise<void>,
-): Promise<void> {
+// hold the lingering document kept, and an idle Home would close before the sweep began. It resolves with the close,
+// and the sweep goes on in the background.
+export function sweepAfterClose(drive: Drive, path: DrivePath, close: () => Promise<void>): Promise<void> {
     const releaseHome = drive.holdHome();
     const closed = close();
     closed
-        .then(() => sweepDocument(drive, path, state))
+        .then(() => sweepDocument(drive, path))
         .catch((error: unknown) => {
             console.warn(`[sweep] skipped ${path.id}:`, error instanceof Error ? error.message : error);
         })
@@ -56,7 +49,7 @@ export function sweepAfterClose(
 
 // Reads everything first, outside any lock: the names in the current state and in every saved version. Then, under
 // the document's lock, it deletes only if nothing changed while it read.
-export async function sweepDocument(drive: Drive, container: DrivePath, state: Uint8Array): Promise<void> {
+export async function sweepDocument(drive: Drive, container: DrivePath): Promise<void> {
     if (!isCollabType(container.type)) return;
     // A change while it read leaves the document due, so its next close tries again. Every other end marks the
     // document swept for the day, a failure included.
@@ -68,12 +61,15 @@ export async function sweepDocument(drive: Drive, container: DrivePath, state: U
             changed = true;
             return;
         }
+        // The current state is read from data.db after the fence. A change before the fence, such as a restore, is
+        // in what it reads, and a change after it moves the fence the delete checks.
         const read = await readFence(mount, container.id);
+        if (!read.dataDb) throw new Error(`${container.id}: data.db missing`);
 
-        // The current state goes compressed, as a stored version does. Then each version is read once, and again only
-        // when the reader changed. Every read is a job of its own, and a version's row is written as soon as its job
-        // returns. So memory and the child's time stay bounded to one version, and a failure keeps the work done.
-        const current = { snapshot: null, updates: [{ id: 0, data: toTransferableBuffer(compressBlob(state)) }] };
+        // Each read is a job of its own, and a version is read again only when the reader changed. A version's row is
+        // written as soon as its job returns. So memory and the child's time stay bounded to one state, and a failure
+        // keeps the work done.
+        const current = await readStoredState(mount, read.dataDb.id);
         const named = [await runDocumentReferences({ documentType, source: current }, { priority: 'background' })];
         const rows = getVersionReferences(
             mount,
@@ -83,14 +79,7 @@ export async function sweepDocument(drive: Drive, container: DrivePath, state: U
         const known = new Set(rows.map((row) => row.versionPathId));
         for (const version of read.versions) {
             if (known.has(version.id)) continue;
-            // A version is read from a temp copy of its own, still compressed.
-            const tempId = crypto.randomUUID();
-            let source: YjsStatePayload;
-            try {
-                source = readYjsStatePayloadFromFile(await mount.downloadToTemp(version.id, tempId));
-            } finally {
-                await mount.cleanupTemp(tempId);
-            }
+            const source = await readStoredState(mount, version.id);
             const names = await runDocumentReferences({ documentType, source }, { priority: 'background' });
             named.push(names);
             putVersionReferences(mount, [
@@ -156,11 +145,25 @@ function isBusy(drive: Drive, mount: Mount, containerId: string): boolean {
 
 // What a change to the document while the sweep read would move: the data.db row, which every save stamps, and the
 // list of versions, which a save, a prune or a restore changes.
-async function readFence(mount: Mount, containerId: string): Promise<{ versions: Snapshot[]; fence: string }> {
+async function readFence(
+    mount: Mount,
+    containerId: string,
+): Promise<{ dataDb: DrivePath | null; versions: Snapshot[]; fence: string }> {
     const [dataDb, versions] = await Promise.all([
         mount.getChildByName(containerId, 'data.db'),
         listVersions(mount, containerId),
     ]);
     const fence = JSON.stringify([dataDb?.size, dataDb?.updatedAt.getTime(), versions.map((version) => version.id)]);
-    return { versions, fence };
+    return { dataDb, versions, fence };
+}
+
+// A data.db nobody serves, the document's own after its close or a version's, is read from a temp copy of its own,
+// still compressed. On a bucket the copy is the staged one while its upload is pending, so it is the newest.
+async function readStoredState(mount: Mount, dataDbId: string): Promise<YjsStatePayload> {
+    const tempId = crypto.randomUUID();
+    try {
+        return readYjsStatePayloadFromFile(await mount.downloadToTemp(dataDbId, tempId));
+    } finally {
+        await mount.cleanupTemp(tempId);
+    }
 }
