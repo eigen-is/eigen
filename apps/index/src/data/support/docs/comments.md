@@ -6,7 +6,7 @@ category: Collaboration
 tags: [docs, comments, collaboration, review]
 related: [docs/share-a-document, docs/create-and-edit]
 order: 80
-updated: 2026-11-02
+updated: 2026-11-04
 ---
 
 Comments let you leave a note on any piece of text or image in a document. Each comment has its own thread, so collaborators can reply, discuss, and resolve it without touching the document itself.
@@ -66,10 +66,12 @@ Right-click a comment highlight in the document to open its context menu. In a t
 - **View comment**: opens the thread.
 - **Comment color**: change the highlight color.
 - **Resolve comment** / **Reopen comment**: toggle the status.
-- **Delete comment**: removes the comment and its highlight. The thread history is preserved but the comment no longer appears in the document or sidebar.
+- **Delete comment**: removes the comment and its highlight, so it no longer appears in the document or the sidebar.
 
 To edit the title or description of an existing comment, open the thread and click the pencil icon (**Edit**) near the top.
 
 ## Copy a link to a comment
 
 Open a comment thread and click the link icon (**Copy link**) near the top of the dialog. The link goes straight to the document with that comment thread open, so you can share it with a collaborator.
+
+If the comment is deleted later, the link still opens it, but only its title shows, grayed out, with **This comment was deleted** below it. Its replies are gone, and it can't be replied to, resolved or assigned. The same goes for a notification about it.

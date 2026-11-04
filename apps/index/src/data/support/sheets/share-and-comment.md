@@ -112,3 +112,5 @@ To edit the title or description of an existing comment, open the thread and cli
 ## Copy a link to a comment
 
 Open a comment thread and click the link icon (**Copy link**) near the top of the dialog. The link opens the spreadsheet with that comment thread already visible, so you can share it directly with a collaborator.
+
+If the comment is deleted later, the link still opens it, but only its title shows, grayed out, with **This comment was deleted** below it. Its replies are gone, and it can't be replied to, resolved or assigned.
