@@ -11,10 +11,13 @@ import type { YjsStatePayload } from '../../lib/collab/yjs-loader';
 import { ApiError } from '../../lib/core/errors';
 import { documentReferences } from '../../lib/document/references';
 import { toTransferableBuffer } from '../../lib/document/transform/protocol';
-import { runDocumentReferences, TransformFailedError } from '../../lib/document/transform/run-transform';
+import {
+    MAX_REFERENCES_INPUT_BYTES,
+    runDocumentReferences,
+    TransformFailedError,
+} from '../../lib/document/transform/run-transform';
 import { documentTransformRunner } from '../../lib/document/transform/runner';
 import type { DocumentReferences } from '../../lib/mount/schema';
-import { MAX_DECOMPRESSED_BYTES } from '../../lib/ooxml/zip';
 import {
     buildGoldenDeckScene,
     GOLDEN_MEDIA_NAME,
@@ -361,7 +364,7 @@ describe('runDocumentReferences', () => {
         try {
             const huge: YjsStatePayload = {
                 snapshot: null,
-                updates: [{ id: 1, data: new ArrayBuffer(MAX_DECOMPRESSED_BYTES + 1) }],
+                updates: [{ id: 1, data: new ArrayBuffer(MAX_REFERENCES_INPUT_BYTES + 1) }],
             };
             const refused = runDocumentReferences({ documentType: 'doc', source: huge }, {});
             await expect(refused).rejects.toBeInstanceOf(ApiError);
