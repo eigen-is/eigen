@@ -3,7 +3,7 @@
 // slide rail, the phone's slide strip, present mode, page setup and the slide background panel.
 
 import { useAuth } from '@workspace/lib/auth';
-import { MediaResolverProvider, useCopyToMediaFolder, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
+import { useCopyToMediaFolder, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { VectorElement } from '@workspace/lib/vector';
 import {
@@ -52,27 +52,10 @@ type SlideEditorProps = {
     initialSearchTerm?: string;
 };
 
-// The media provider wraps the deck rather than living inside it: the editor itself calls
-// useMediaResolver (for the slide background's preview URL), and a hook cannot read a context its own
-// component provides. `key` remounts the whole editor when the route swaps documents.
-export function SlideEditor(props: SlideEditorProps) {
-    const { ownerId, path, mediaFolderId, chatFolderId } = props;
-    return (
-        <MediaResolverProvider
-            ownerId={ownerId}
-            mountId={path.mountId}
-            mediaFolderId={mediaFolderId}
-            chatFolderId={chatFolderId}
-        >
-            <SlideEditorInner key={path.id} {...props} />
-        </MediaResolverProvider>
-    );
-}
-
 // The deck: a canvas with one frame of the deck's slide size per slide. Tool, selection and the active
 // frame live here, so the toolbar, rail, canvas and panel share them. The viewport, gestures, keymap,
 // clipboard and in-place editing all belong to the engine.
-function SlideEditorInner({
+export function SlideEditor({
     ownerId,
     path,
     canWrite,

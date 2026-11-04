@@ -1,10 +1,13 @@
 // The body every eigendoc editor route shares: resolve the document, show the status screen while it
 // is still resolving or has failed, hand a denied reader the request-access screen, and otherwise
-// render the app's editor beside the share dialog. The five routes then differ only in which editor
-// they mount and what extra search params they thread into it.
+// render the app's editor beside the share dialog. The editor sits inside the document's media
+// resolver and remounts for another document. The routes then differ only in which editor they
+// mount and what extra search params they thread into it.
 
+import { MediaResolverProvider } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { ReactNode } from 'react';
+import { Fragment } from 'react';
 import { useEigenDocEditorRoute } from '../../../hooks/use-eigen-doc-editor-route';
 import { DriveAccessDialog } from '../../drive/drive-access-dialog';
 import { EigenDocRouteStatus } from './eigen-doc-route-status';
@@ -46,15 +49,26 @@ export function EigenDocEditorRoute({
     if (!docInfo) return <EigenDocRouteStatus isError={isError} error={error} onRetry={refetch} />;
     if (!docInfo.canRead || !path) return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={pathId} />;
 
+    // The resolver wraps the editor rather than living inside it, because an editor's own hooks read it, such as its
+    // comment lifecycle, and a hook cannot read a context its own component provides.
     return (
         <>
-            {children({
-                path,
-                canWrite: docInfo.canWrite,
-                mediaFolderId,
-                chatFolderId,
-                onAccessDialogOpen: openAccessDialog,
-            })}
+            <MediaResolverProvider
+                ownerId={ownerId}
+                mountId={mountId}
+                mediaFolderId={mediaFolderId}
+                chatFolderId={chatFolderId}
+            >
+                <Fragment key={path.id}>
+                    {children({
+                        path,
+                        canWrite: docInfo.canWrite,
+                        mediaFolderId,
+                        chatFolderId,
+                        onAccessDialogOpen: openAccessDialog,
+                    })}
+                </Fragment>
+            </MediaResolverProvider>
             <DriveAccessDialog path={path} open={accessDialogOpen} onOpenChange={setAccessDialogOpen} />
         </>
     );

@@ -3,7 +3,6 @@
 // canvas. The vector route renders it for one vector file.
 
 import { useAuth } from '@workspace/lib/auth';
-import { MediaResolverProvider } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { VectorElement } from '@workspace/lib/vector';
 import { VECTOR_STYLE_DEFAULTS } from '@workspace/lib/vector';
@@ -36,24 +35,7 @@ type VectorEditorProps = {
     initialSearchTerm?: string;
 };
 
-// The media provider wraps the editor rather than living inside it: the editor's comment host reads the resolver, and
-// a hook cannot read a context its own component provides. Inside it the canvas resolves and uploads images through
-// the container's media folder.
-export function VectorEditor(props: VectorEditorProps) {
-    const { ownerId, path, mediaFolderId, chatFolderId } = props;
-    return (
-        <MediaResolverProvider
-            ownerId={ownerId}
-            mountId={path.mountId}
-            mediaFolderId={mediaFolderId}
-            chatFolderId={chatFolderId}
-        >
-            <VectorEditorInner {...props} />
-        </MediaResolverProvider>
-    );
-}
-
-function VectorEditorInner({
+export function VectorEditor({
     ownerId,
     path,
     canWrite,

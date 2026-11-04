@@ -32,7 +32,6 @@ import {
     readPageSetup,
     STYLE_ROOT,
 } from '@workspace/lib/docs/eigendoc';
-import { MediaResolverProvider } from '@workspace/lib/drive';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardChartItem } from '@workspace/lib/types/clipboard';
@@ -162,15 +161,9 @@ export const CollaborativeEditor = ({
     return (
         <CollabDocumentGate collab={{ loaded, storageUnavailable, storageGone }} path={path} canWrite={canWrite}>
             {provider && yDoc && (
-                <MediaResolverProvider
-                    ownerId={path.ownerId}
-                    mountId={path.mountId}
-                    mediaFolderId={mediaFolderId}
-                    chatFolderId={chatFolderId}
-                >
+                <>
                     <UnsyncedEditsGuard active={unsyncedEdits} />
                     <TiptapEditor
-                        key={path.id}
                         path={path}
                         yDoc={yDoc}
                         provider={provider}
@@ -184,7 +177,7 @@ export const CollaborativeEditor = ({
                         initialChatName={initialChatName}
                         initialSearchTerm={initialSearchTerm}
                     />
-                </MediaResolverProvider>
+                </>
             )}
         </CollabDocumentGate>
     );

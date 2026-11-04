@@ -75,6 +75,7 @@ afterAll(() => {
 });
 
 const { CollaborativeEditor } = await import('../../../components/docs/editor');
+const { MediaResolverProvider } = await import('@workspace/lib/drive');
 
 const path = drivePath({ name: 'Letter', mimeType: DRIVE_MIME_DOC });
 
@@ -141,13 +142,20 @@ async function render({
     function Editor() {
         const [writer, setWriter] = useState(canWrite);
         setCanWrite = setWriter;
-        return createElement(CollaborativeEditor, {
-            path,
-            canWrite: writer,
+        // The editor route provides the document's media resolver.
+        return createElement(MediaResolverProvider, {
+            ownerId: path.ownerId,
+            mountId: path.mountId,
             mediaFolderId,
             chatFolderId,
-            onAccessDialogOpen: () => {},
-            initialChatName,
+            children: createElement(CollaborativeEditor, {
+                path,
+                canWrite: writer,
+                mediaFolderId,
+                chatFolderId,
+                onAccessDialogOpen: () => {},
+                initialChatName,
+            }),
         });
     }
     const router = createRouter({

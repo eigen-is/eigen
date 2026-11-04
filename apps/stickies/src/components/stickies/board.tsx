@@ -7,7 +7,7 @@ import { useAuth } from '@workspace/lib/auth';
 import { useUnreadCommentChatNames } from '@workspace/lib/chat';
 import { boardCardIds, getIdArray, getItemMapRoot, useYjsUndoHotkeys } from '@workspace/lib/collab';
 import { matchesCommentFilter, useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
-import { MediaResolverProvider, useRecordHistory } from '@workspace/lib/drive';
+import { useRecordHistory } from '@workspace/lib/drive';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace/lib/types/comments';
@@ -42,8 +42,7 @@ import { useStickiesDocSearch } from './hooks/use-stickies-doc-search';
 import { useCardPresence, useStickiesPresence } from './hooks/use-stickies-presence';
 import { Toolbar } from './toolbar';
 
-// The card a drag carries. It renders inside the DragOverlay, below the MediaResolverProvider that StickiesBoard
-// renders, because useAttachmentMeta reads that provider.
+// The card a drag carries, in the DragOverlay. useAttachmentMeta reads its cover through the document's media resolver.
 function OverlayNoteCard({
     card,
     entry,
@@ -88,23 +87,7 @@ type StickiesBoardProps = {
     onClearInitialCard?: () => void;
 };
 
-// The media provider wraps the board rather than living inside it: the board's comment lifecycle reads the resolver,
-// and a hook cannot read a context its own component provides.
-export function StickiesBoard(props: StickiesBoardProps) {
-    const { ownerId, path, mediaFolderId, chatFolderId } = props;
-    return (
-        <MediaResolverProvider
-            ownerId={ownerId}
-            mountId={path.mountId}
-            mediaFolderId={mediaFolderId}
-            chatFolderId={chatFolderId}
-        >
-            <StickiesBoardInner {...props} />
-        </MediaResolverProvider>
-    );
-}
-
-function StickiesBoardInner({
+export function StickiesBoard({
     ownerId,
     path,
     canWrite,

@@ -8,7 +8,6 @@ import { useCommentFilter, useCommentLifecycle, useDocumentPanels } from '@works
 import { commentIndicatorColor } from '@workspace/lib/constants/comment-indicator';
 import {
     isPendingMediaName,
-    MediaResolverProvider,
     useCopyToMediaFolder,
     useMediaResolver,
     useUploadFile,
@@ -62,20 +61,7 @@ type SheetEditorProps = {
     initialSearchTerm?: string;
 };
 
-export function SheetEditor(props: SheetEditorProps) {
-    return (
-        <MediaResolverProvider
-            ownerId={props.ownerId}
-            mountId={props.path.mountId}
-            mediaFolderId={props.mediaFolderId}
-            chatFolderId={props.chatFolderId}
-        >
-            <SheetEditorInner key={props.path.id} {...props} />
-        </MediaResolverProvider>
-    );
-}
-
-function SheetEditorInner({
+export function SheetEditor({
     ownerId,
     path,
     canWrite,
