@@ -41,7 +41,7 @@ A restore brings back the comments that version had, including one you deleted s
 
 To free up the space a file's versions take, you can delete its whole history. Open the file, click **File** in the toolbar, point at **Version history** and click **Delete history…**, the last row below the list, greyed out until there is a version. A dialog says how much space it frees. Click **Delete history** to confirm.
 
-Every earlier version goes, and so do the versions of the file's comments. You can't undo this. Images and comments you deleted from the file are removed once everyone has closed it, except those from the last three days.
+Every earlier version goes, and so do the versions of the file's comments. You can't undo this. Images and comments you deleted from the file are removed once everyone has closed it, except those added or replied to in the last three days.
 
 ## How long versions are kept
 

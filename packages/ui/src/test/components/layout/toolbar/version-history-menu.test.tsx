@@ -1,5 +1,6 @@
 // The Version history submenu lists the versions to restore and, for an owner of the drive, ends with Delete history
-// below them, outside the list's scroll area so a long list never hides it. Its dialog says how much it frees.
+// below them, outside the list's scroll area so a long list never hides it. Its pick hands the dialog the size of the
+// listed versions, so the dialog says how much it frees without a fetch of its own.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { formatFileSize } from '@workspace/lib/format';
 import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
@@ -56,7 +57,7 @@ afterEach(() => {
     listed = versions;
 });
 
-async function openVersionHistory(onRequestDeleteHistory = () => {}): Promise<Element | undefined> {
+async function openVersionHistory(onRequestDeleteHistory = (_size: number) => {}): Promise<Element | undefined> {
     ({ unmount } = await renderOpenMenu(
         createElement(VersionHistoryMenu, { path, onRequestRestore: () => {}, onRequestDeleteHistory }),
     ));
@@ -71,7 +72,7 @@ const deleteRow = (submenu: Element | undefined) =>
 
 test('an owner of the drive gets Delete history as the last row, red, below the scrolling list', async () => {
     isEffectiveOwner = true;
-    const onRequestDeleteHistory = mock(() => {});
+    const onRequestDeleteHistory = mock((_size: number) => {});
     const submenu = await openVersionHistory(onRequestDeleteHistory);
 
     const row = deleteRow(submenu);
@@ -83,7 +84,7 @@ test('an owner of the drive gets Delete history as the last row, red, below the 
     expect(row && list?.contains(row)).toBe(false);
 
     await clickRow('Delete history…');
-    expect(onRequestDeleteHistory).toHaveBeenCalledTimes(1);
+    expect(onRequestDeleteHistory.mock.calls).toEqual([[versions.reduce((sum, version) => sum + version.size, 0)]]);
 });
 
 test('an editor who does not own the drive gets no Delete history', async () => {
@@ -93,17 +94,17 @@ test('an editor who does not own the drive gets no Delete history', async () => 
     expect(deleteRow(submenu)).toBeUndefined();
 });
 
-test('the dialog names the size of the listed versions and deletes on its button', async () => {
+test('the dialog names the size the menu passed and deletes on its button', async () => {
     deleteVersions.mockClear();
-    ({ unmount } = await renderInDocument(createElement(DeleteHistoryDialog, { path, open: true, onClose: () => {} })));
+    const size = 5 * 1024 * 1024;
+    ({ unmount } = await renderInDocument(createElement(DeleteHistoryDialog, { path, size, onClose: () => {} })));
     const dialog = document.querySelector('[role="dialog"]');
-    const total = versions.reduce((sum, version) => sum + version.size, 0);
 
     expect(dialog?.querySelector('h2')?.textContent).toBe('Delete version history?');
     expect(dialog?.querySelector('p')?.textContent).toBe(
-        `Frees ${formatFileSize(total)}. Earlier versions of this document and its comments can't be restored after ` +
-            'this. Images and comments you deleted are removed once everyone has closed it, except those from the last ' +
-            '3 days.',
+        `Frees ${formatFileSize(size)}. Earlier versions of this document and its comments can't be restored after ` +
+            'this. Images and comments you deleted are removed once everyone has closed it, except those added or ' +
+            'replied to in the last 3 days.',
     );
     const confirm = [...(dialog?.querySelectorAll('button') ?? [])].find(
         (button) => button.textContent === 'Delete history',

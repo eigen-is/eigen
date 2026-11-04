@@ -1,7 +1,9 @@
-// A document's versions in its File menu: Save version now, and a Version history submenu whose pick asks to
-// restore that version, ending with Delete history (greyed out until there is a version) for an owner of the drive. Their dialogs live outside the
-// menu, and the same versions show as buttons on the screen a document opens to when its storage is gone.
+// A document's versions in its File menu: Save version now, and a Version history submenu whose pick asks to restore
+// that version, ending with Delete history for an owner of the drive, greyed out until there is a version. Their
+// dialogs live outside the menu, and the same versions show as buttons on the screen a document opens to when its
+// storage is gone.
 
+import { SWEEP_GRACE_MS } from '@workspace/lib/constants/sweep';
 import { formatDateTime } from '@workspace/lib/date';
 import { useIsEffectiveOwner } from '@workspace/lib/drive';
 import { formatFileSize } from '@workspace/lib/format';
@@ -20,6 +22,8 @@ import {
     DropdownMenuSubTrigger,
 } from '../../dropdown-menu';
 
+const GRACE_DAYS = SWEEP_GRACE_MS / (24 * 60 * 60 * 1000);
+
 // VersionHistoryMenu renders only the menu rows. Pair it with RestoreVersionDialog and DeleteHistoryDialog
 // rendered outside the menu's content: inside it, Radix unmounts the dialog the moment the menu closes, and
 // the dialog flashes and disappears.
@@ -30,7 +34,8 @@ export function VersionHistoryMenu({
 }: {
     path: DrivePath;
     onRequestRestore: (snap: Snapshot) => void;
-    onRequestDeleteHistory: () => void;
+    // The size of the listed versions, which the dialog says it frees.
+    onRequestDeleteHistory: (size: number) => void;
 }) {
     const { data } = useVersions(path.ownerId, path.mountId, path.id);
     const save = useSaveVersion(path.ownerId, path.mountId, path.id);
@@ -69,7 +74,9 @@ export function VersionHistoryMenu({
                             <DropdownMenuItem
                                 variant="destructive"
                                 disabled={!data || data.length === 0}
-                                onSelect={onRequestDeleteHistory}
+                                onSelect={() =>
+                                    onRequestDeleteHistory((data ?? []).reduce((sum, snap) => sum + snap.size, 0))
+                                }
                             >
                                 <Trash2 className="h-4 w-4" /> Delete history…
                             </DropdownMenuItem>
@@ -120,21 +127,30 @@ export function RestoreVersionDialog({
     );
 }
 
-// The size is that of the versions the list shows. The versions of the comment threads go too, uncounted.
-export function DeleteHistoryDialog({ path, open, onClose }: { path: DrivePath; open: boolean; onClose: () => void }) {
-    const { data } = useVersions(path.ownerId, path.mountId, path.id);
+// Open while the menu's pick holds a size, that of the versions the list showed. The versions of the comment threads
+// go too, uncounted.
+export function DeleteHistoryDialog({
+    path,
+    size,
+    onClose,
+}: {
+    path: DrivePath;
+    size: number | null;
+    onClose: () => void;
+}) {
     const deleteVersions = useDeleteVersions(path.ownerId, path.mountId, path.id);
-    const size = (data ?? []).reduce((sum, snap) => sum + snap.size, 0);
 
     return (
         <ConfirmDialog
-            open={open}
+            open={size !== null}
             onOpenChange={(next) => !next && onClose()}
             title="Delete version history?"
             description={
-                `Frees ${formatFileSize(size)}. Earlier versions of this document and its comments can't be restored ` +
-                `after this. Images and comments you deleted are removed once everyone has closed it, except those ` +
-                `from the last 3 days.`
+                size === null
+                    ? ''
+                    : `Frees ${formatFileSize(size)}. Earlier versions of this document and its comments can't be ` +
+                      `restored after this. Images and comments you deleted are removed once everyone has closed it, ` +
+                      `except those added or replied to in the last ${GRACE_DAYS} days.`
             }
             confirmText="Delete history"
             destructive

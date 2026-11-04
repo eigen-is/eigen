@@ -87,7 +87,7 @@ export function FileMenu({
     const [emailOpen, setEmailOpen] = useState(false);
     // Lifted out of VersionHistoryMenu so the dialogs survive the menu's unmount-on-close.
     const [pendingSnapshot, setPendingSnapshot] = useState<Snapshot | null>(null);
-    const [deleteHistoryOpen, setDeleteHistoryOpen] = useState(false);
+    const [deleteHistorySize, setDeleteHistorySize] = useState<number | null>(null);
     const openConfig = OPEN_LABELS[createType];
     const downloadFormats = exportFormatsFor(createType);
     const canExport = !!onExport && downloadFormats.length > 0;
@@ -172,7 +172,7 @@ export function FileMenu({
                     <VersionHistoryMenu
                         path={path}
                         onRequestRestore={setPendingSnapshot}
-                        onRequestDeleteHistory={() => setDeleteHistoryOpen(true)}
+                        onRequestDeleteHistory={setDeleteHistorySize}
                     />
                 )}
                 {children}
@@ -214,9 +214,7 @@ export function FileMenu({
                 }}
             />
             <RestoreVersionDialog path={path} snapshot={pendingSnapshot} onClose={() => setPendingSnapshot(null)} />
-            {canWrite && (
-                <DeleteHistoryDialog path={path} open={deleteHistoryOpen} onClose={() => setDeleteHistoryOpen(false)} />
-            )}
+            <DeleteHistoryDialog path={path} size={deleteHistorySize} onClose={() => setDeleteHistorySize(null)} />
         </>
     );
 }
