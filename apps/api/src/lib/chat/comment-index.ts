@@ -96,13 +96,13 @@ export class CommentIndex {
             .where(eq(commentSchema.comments.chatName, chatName));
     }
 
-    // Drops the rows and the mentions of every thread not in threads, the folded names of the threads that are left,
-    // in one transaction, and returns how many threads that was. The mentions have no foreign key, so they go by name.
-    // The search table follows the rows through its delete trigger. It runs without an await, so a caller that reads
-    // threads right before the call, with no await in between, never drops the row of a thread made meanwhile.
-    public deleteRowsWithoutThread(threads: ReadonlySet<string>): number {
+    // Drops the rows and the mentions of every thread that is not in threads, which holds the folded names of the
+    // threads that are left. The mentions have no foreign key, so they go by name. The search table follows the rows
+    // through its delete trigger. The whole drop is one transaction with no await in it. So a caller that reads the
+    // threads right before the call never drops the row of a thread made meanwhile.
+    public deleteRowsWithoutThread(threads: ReadonlySet<string>): void {
         const { comments, commentMentions } = commentSchema;
-        return this.db.transaction((tx) => {
+        this.db.transaction((tx) => {
             const names = new Set(
                 [
                     ...tx.select({ chatName: comments.chatName }).from(comments).all(),
@@ -110,10 +110,9 @@ export class CommentIndex {
                 ].map((row) => row.chatName),
             );
             const gone = [...names].filter((chatName) => !threads.has(foldName(chatName)));
-            if (gone.length === 0) return 0;
+            if (gone.length === 0) return;
             tx.delete(comments).where(inArray(comments.chatName, gone)).run();
             tx.delete(commentMentions).where(inArray(commentMentions.chatName, gone)).run();
-            return gone.length;
         });
     }
 
