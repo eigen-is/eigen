@@ -53,9 +53,9 @@ describe('readBoard', () => {
         expect(board.columns.c1.taskIds).toEqual(['t1']);
     });
 
-    // The server keeps the threads of the cards boardCardIds finds. A card the board shows that it missed would lose its
-    // thread, so it finds every card a column of the board lists, as the board's comment pane counts them.
-    it("the server's read of the board finds every card the board shows", () => {
+    // The board and the server both count the cards boardCardIds finds as in use. A card the board shows that it missed
+    // would lose its thread, and a card it found that the board hides would keep one nobody sees.
+    it('boardCardIds finds the cards the board shows', () => {
         const doc = new Y.Doc();
         doc.transact(() => {
             const tasks = doc.getMap<unknown>('tasks');
@@ -71,8 +71,7 @@ describe('readBoard', () => {
         });
 
         const shown = Object.values(readBoard(doc).columns).flatMap((column) => column.taskIds);
-        const kept = boardCardIds(doc);
         expect(shown.length).toBe(2);
-        expect(shown.filter((id) => !kept.has(id))).toEqual([]);
+        expect(boardCardIds(doc)).toEqual(new Set(shown));
     });
 });

@@ -5,7 +5,7 @@ import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@
 import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortable';
 import { useAuth } from '@workspace/lib/auth';
 import { useUnreadCommentChatNames } from '@workspace/lib/chat';
-import { getIdArray, getItemMapRoot, useYjsUndoHotkeys } from '@workspace/lib/collab';
+import { boardCardIds, getIdArray, getItemMapRoot, useYjsUndoHotkeys } from '@workspace/lib/collab';
 import {
     findCardIdByChatName,
     matchesCommentFilter,
@@ -46,8 +46,8 @@ import { useCardPresence, useStickiesPresence } from './hooks/use-stickies-prese
 import { Toolbar } from './toolbar';
 import type { ColumnItem } from './types';
 
-// Rendered inside the DragOverlay (and therefore inside MediaResolverProvider) — the
-// useAttachmentMeta context read only works below the provider StickiesBoard renders.
+// The card a drag carries. It renders inside the DragOverlay, below the MediaResolverProvider that StickiesBoard
+// renders, because useAttachmentMeta reads that provider.
 function OverlayNoteCard({
     card,
     entry,
@@ -121,14 +121,9 @@ export function StickiesBoard({
     } = useBoard(ownerId, path.mountId, path.id, chatFolderId);
     const { user } = useAuth();
 
-    // Cards are anchored by column membership — every referenced taskId is an active card.
-    const activeCardIds = useMemo(() => {
-        const ids = new Set<string>();
-        for (const column of Object.values(board.columns)) {
-            for (const id of column.taskIds) ids.add(id);
-        }
-        return ids;
-    }, [board]);
+    // A card is in use while a column lists it, the rule the server reads too. The board changes whenever the cards
+    // the columns list change.
+    const activeCardIds = useMemo(() => (yjsDoc ? boardCardIds(yjsDoc) : new Set<string>()), [yjsDoc, board]);
 
     const lifecycle = useCommentLifecycle({
         ownerId,
@@ -147,12 +142,12 @@ export function StickiesBoard({
     });
     const { allComments, cards, createCard, assignComment, members, setOpenCardId, openCard } = lifecycle;
 
-    // Palette IN COMMENTS capability. Plain object per render — usePaletteDocSearch stabilises via
-    // ref + docKey, so the reveal closure always sees the current cards.
+    // The command palette's search in comments. It is a new object each render, and usePaletteDocSearch keeps it
+    // stable itself, so the reveal closure always sees the current cards.
     const commentSearchHalf = useDocCommentSearchHalf(ownerId, path.mountId, path.id);
     const commentSearch: DocCommentSearch = {
         ...commentSearchHalf,
-        // chatName → cardId client-side; a stale or unknown chatName no-ops — never throws.
+        // An unknown or stale chat name opens nothing.
         reveal: (chatName) => {
             const cardId = findCardIdByChatName(cards, chatName);
             if (cardId) setOpenCardId(cardId);
@@ -176,8 +171,8 @@ export function StickiesBoard({
     }, [allComments]);
     const unreadChatNames = useUnreadCommentChatNames(user?.id ?? '', path.id);
 
-    // Presence: the card the local user is "working on" — the open edit dialog's card, else the card
-    // being dragged. Published to awareness; peers render it as a colored outline + name chip.
+    // The card this user works on: the card open in the dialog, else the card being dragged. Peers see it outlined
+    // in this user's color, with their name.
     const workingCardId = openCard?.id ?? (dragState.activeType === 'task' ? dragState.activeId : null);
     const presenceCardIds = useMemo(() => (workingCardId ? [workingCardId] : []), [workingCardId]);
     useStickiesPresence(provider, user, presenceCardIds);
@@ -189,7 +184,7 @@ export function StickiesBoard({
 
     const { isMobile } = useLayout();
     const [editColumnId, setEditColumnId] = useState<string | null>(null);
-    // Board shows resolved cards by default (status:'all'); clear() returns to that.
+    // The board shows resolved cards too by default, and clearing the filter returns to that.
     const commentFilter = useCommentFilter({ status: 'all' });
     const currentUserEmail = user?.email ?? '';
     const isCardVisible = useCallback(
@@ -218,7 +213,6 @@ export function StickiesBoard({
         boardScrollRef,
     });
 
-    // Add-card dialog state
     const [addOpen, setAddOpen] = useState(false);
     const [addTargetColumn, setAddTargetColumn] = useState<string | null>(null);
     // Bumped after each successful add so the target column scrolls its newly-inserted top card into view.
@@ -282,8 +276,8 @@ export function StickiesBoard({
         [openCardContextMenuAt, entryByChatName],
     );
 
-    // Per-column card arrays with stable identity, so memoized columns only re-render
-    // when their own cards (or the filter) actually change.
+    // Each column keeps its card array while its cards and the filter stay the same, so a memoized column renders
+    // again only for its own changes.
     const prevColumnCardsRef = useRef<Record<string, CommentCard[]>>({});
     const columnCards = useMemo(() => {
         const next: Record<string, CommentCard[]> = {};
@@ -332,7 +326,8 @@ export function StickiesBoard({
         return null;
     };
 
-    // Latched: a WS blip keeps the board mounted; `isSynced` still gates presence + seeding. See useCollabDoc.
+    // `loaded` stays true once set, so a dropped connection keeps the board mounted. `isSynced` still gates the
+    // presence and the seeding of a new board.
     return (
         <CollabDocumentGate collab={{ loaded, storageUnavailable, storageGone }} path={path} canWrite={canWrite}>
             <MediaResolverProvider
@@ -366,8 +361,7 @@ export function StickiesBoard({
                                         filter={commentFilter}
                                         members={members}
                                         currentUserEmail={currentUserEmail}
-                                        // Only offer the toggle where the panel can render (!isMobile),
-                                        // else it's an enabled no-op. DocumentShareCluster hides it when absent.
+                                        // The panel only renders off mobile, so the toggle is offered only there.
                                         onToggleActivityPanel={
                                             !isMobile ? () => setActivityPanelOpen((v) => !v) : undefined
                                         }
@@ -403,7 +397,7 @@ export function StickiesBoard({
                                                 layoutShiftCompensation: false,
                                             }}
                                         >
-                                            <div className={`flex gap-0 h-full bg-muted`}>
+                                            <div className="flex gap-0 h-full bg-muted">
                                                 <SortableContext
                                                     items={board.columnOrder}
                                                     strategy={horizontalListSortingStrategy}
@@ -471,8 +465,8 @@ export function StickiesBoard({
                                                 isOpen={!!editColumnId}
                                                 onClose={() => setEditColumnId(null)}
                                                 columnId={editColumnId}
-                                                columnTitle={board.columns[editColumnId]?.title || ''}
-                                                cardCount={board.columns[editColumnId]?.taskIds.length || 0}
+                                                columnTitle={board.columns[editColumnId]?.title ?? ''}
+                                                cardCount={board.columns[editColumnId]?.taskIds.length ?? 0}
                                                 yjsDoc={yjsDoc}
                                                 undoManager={undoManager}
                                             />

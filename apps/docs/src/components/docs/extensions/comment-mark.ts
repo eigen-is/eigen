@@ -11,6 +11,8 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { lightenColor } from '@workspace/lib/constants';
 import type { FigureFrameNode } from '@workspace/lib/docs/eigendoc';
 import {
+    COMMENT_CARD_ATTRIBUTE,
+    COMMENT_MARK_CARD_ATTRIBUTE,
     CommentMarkSchema,
     isFigureFrameNode,
     isStoryNode,
@@ -28,21 +30,27 @@ export type CommentMarkOptions = {
     onToggleCommentPanel?: () => void;
 };
 
-type CommentMeta = {
-    resolvedIds: Set<string>;
-    colorMap: Map<string, string>;
+type CommentPanelState = {
+    resolvedIds: ReadonlySet<string>;
+    colorMap: ReadonlyMap<string, string>;
 };
+
+declare module '@tiptap/core' {
+    interface Storage {
+        comment: CommentPanelState;
+    }
+}
 
 const decorationKey = new PluginKey('commentDecorations');
 
-// A node whose schema gives it a commentCardId, such as an image, a text box or an equation, holds its card there: the
-// Yjs binding persists a mark only on text.
-const anchorsByAttribute = (node: Node): boolean => node.type.spec.attrs?.['commentCardId'] !== undefined;
+// A node whose schema gives it the card attribute, such as an image, a text box or an equation, holds its card there:
+// the Yjs binding persists a mark only on text.
+const anchorsByAttribute = (node: Node): boolean => node.type.spec.attrs?.[COMMENT_CARD_ATTRIBUTE] !== undefined;
 
 // The card a node anchors: by attribute, or on text as the comment mark.
 export function nodeCommentCardId(node: Node): string | null {
-    if (anchorsByAttribute(node)) return node.attrs.commentCardId;
-    return node.marks.find((m) => m.type.name === 'comment')?.attrs.cardId ?? null;
+    if (anchorsByAttribute(node)) return node.attrs[COMMENT_CARD_ATTRIBUTE];
+    return node.marks.find((m) => m.type.name === CommentMarkSchema.name)?.attrs[COMMENT_MARK_CARD_ATTRIBUTE] ?? null;
 }
 
 function findCommentAnchors(doc: Node, cardId: string): { node: Node; pos: number; end: number }[] {
@@ -63,7 +71,7 @@ export function commentCardIdAt(target: EventTarget | null): string | null {
 export function addCommentAnchor(editor: Editor, { from, to }: { from: number; to: number }, cardId: string): void {
     const node = editor.state.doc.nodeAt(from);
     if (node && anchorsByAttribute(node) && to === from + node.nodeSize) {
-        editor.view.dispatch(editor.state.tr.setNodeAttribute(from, 'commentCardId', cardId));
+        editor.view.dispatch(editor.state.tr.setNodeAttribute(from, COMMENT_CARD_ATTRIBUTE, cardId));
         return;
     }
     editor.chain().focus().setTextSelection({ from, to }).setComment(cardId).run();
@@ -87,9 +95,9 @@ export function canAnchorComment({ doc, selection: { from, to, empty } }: Editor
 // A deleted card leaves no anchor behind.
 export function removeCommentAnchors(editor: Editor, cardId: string): void {
     const { tr } = editor.state;
-    const commentType = editor.state.schema.marks.comment;
+    const commentType = editor.state.schema.marks[CommentMarkSchema.name];
     for (const { node, pos, end } of findCommentAnchors(editor.state.doc, cardId)) {
-        if (anchorsByAttribute(node)) tr.setNodeAttribute(pos, 'commentCardId', null);
+        if (anchorsByAttribute(node)) tr.setNodeAttribute(pos, COMMENT_CARD_ATTRIBUTE, null);
         else tr.removeMark(pos, end, commentType);
     }
     editor.view.dispatch(tr);
@@ -125,18 +133,18 @@ export function commentAnchorText(doc: Node, from: number, to: number): string {
     ).slice(0, 100);
 }
 
-function buildDecorations(state: EditorState, meta: CommentMeta): DecorationSet {
+function buildDecorations(state: EditorState, panel: CommentPanelState): DecorationSet {
     const decorations: Decoration[] = [];
     state.doc.descendants((node, pos) => {
         const cardId = nodeCommentCardId(node);
         if (cardId) {
             const end = pos + node.nodeSize;
-            const color = meta.colorMap.get(cardId);
+            const color = panel.colorMap.get(cardId);
             // The node view of a node that holds its card, such as an image's or a text box's, paints the corner mark
             // from this spec, resolved or not, like a commented canvas element.
             if (anchorsByAttribute(node)) decorations.push(Decoration.node(pos, end, {}, { commentColor: color }));
             // Text, and an equation among it, is highlighted until resolved; the sidebar shows a resolved one.
-            if (!isFigureFrameNode(node.type.name) && !meta.resolvedIds.has(cardId) && color) {
+            if (!isFigureFrameNode(node.type.name) && !panel.resolvedIds.has(cardId) && color) {
                 decorations.push(
                     Decoration.inline(pos, end, {
                         class: 'comment-colored',
@@ -149,7 +157,7 @@ function buildDecorations(state: EditorState, meta: CommentMeta): DecorationSet 
     return decorations.length > 0 ? DecorationSet.create(state.doc, decorations) : DecorationSet.empty;
 }
 
-export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
+export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions, CommentPanelState>({
     addOptions() {
         return {
             onCommentClick: undefined,
@@ -161,7 +169,7 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
     },
 
     addStorage() {
-        return { resolvedIds: new Set<string>(), colorMap: new Map<string, string>() } satisfies CommentMeta;
+        return { resolvedIds: new Set<string>(), colorMap: new Map<string, string>() };
     },
 
     addKeyboardShortcuts() {
@@ -182,7 +190,7 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
 
     addProseMirrorPlugins() {
         const { onCommentClick, onCommentContextMenu, onSelectionContextMenu } = this.options;
-        const storage = this.storage as CommentMeta;
+        const { storage } = this;
 
         const plugins: Plugin[] = [];
 
@@ -241,12 +249,14 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
     },
 });
 
-export function updateCommentDecorations(editor: Editor, resolvedIds: Set<string>, colorMap: Map<string, string>) {
-    const storage = (editor.extensionStorage as unknown as Record<string, CommentMeta>)?.comment;
-    if (storage) {
-        storage.resolvedIds = resolvedIds;
-        storage.colorMap = colorMap;
-    }
-    const tr = editor.view.state.tr.setMeta(decorationKey, true);
-    editor.view.dispatch(tr);
+export function updateCommentDecorations(
+    editor: Editor,
+    resolvedIds: ReadonlySet<string>,
+    colorMap: ReadonlyMap<string, string>,
+): void {
+    // The decoration plugin holds this storage object, so the fields change in place.
+    const storage = editor.storage.comment;
+    storage.resolvedIds = resolvedIds;
+    storage.colorMap = colorMap;
+    editor.view.dispatch(editor.view.state.tr.setMeta(decorationKey, true));
 }
