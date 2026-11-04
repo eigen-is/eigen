@@ -64,7 +64,7 @@ The listing links (`?sharePathId=`, `?pid=`) open the item's parent folder, whic
 
 ## In an editor, only card and comment rows are clickable
 
-`ActivityPanel` passes `ActivityEventList` an `onOpenCard` and the editor's comment cards. A row that references a card or a comment thread opens it in place, resolving a `chatName` to its card. Every other row would only reopen the document you are in, so it stays inert. Drive's **Recent activity** mounts `ActivityEventList` without `onOpenCard`, so its rows keep their URLs.
+`ActivityPanel` passes `ActivityEventList` an `onOpenCard`, so a row that names a card or a comment opens it in place, through one of two callbacks from the host. A card row, such as a sticky added to a column, calls `onOpenCard` with its card id, and a comment row calls `onOpenChat` with its thread's chat name. The panel never reads the cards: the host decides whether a chat name opens live or as deleted, the rule every landing shares ([COMMENTS.md](COMMENTS.md#a-deleted-comment-shows-as-deleted-wherever-it-is-reached)). Every other row would only reopen the document you are in, so it stays inert. Drive's **Recent activity** mounts `ActivityEventList` without `onOpenCard`, so its rows keep their URLs.
 
 ## An old row degrades, never breaks
 
