@@ -1,14 +1,17 @@
 import { describe, expect, test } from 'bun:test';
 import { newSheetChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
+import type { Sheet as LibSheet } from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartSpec } from '@workspace/lib/types/chart';
 import { produce } from 'immer';
+import { celldataToData, dataToCelldata } from '../../../engine/celldata';
 import { getCellValue } from '../../../state/api/cell';
 import { calculateFormula, copySheet, getAllSheets } from '../../../state/api/sheet';
 import { addSheet } from '../../../state/api/workbook';
 import type { Context } from '../../../state/context';
 import { deleteSheet } from '../../../state/modules/sheet';
 import type { Sheet } from '../../../state/types';
-import { contextFactory, selectionFactory } from '../factories/context';
+import { author, join, receive } from '../factories/collab';
+import { contextFactory, selectionFactory, workbookContextFactory } from '../factories/context';
 
 describe('sheet/core/api/sheet', () => {
     const getContext = () =>
@@ -123,6 +126,64 @@ describe('sheet/core/api/sheet', () => {
         expect(copied.id).not.toBe('i1');
         expect(Object.keys(next.sheets[1].images!)).toEqual([copied.id]);
         expect(next.sheets[0].images).toEqual({ i1: image });
+    });
+
+    // A comment stays on the cells it was put on, as a duplicated canvas element starts without its comments.
+    test('a copied sheet starts without comment anchors, for the author, a peer and a joiner', () => {
+        const commented = { v: 'a', m: 'a', commentCardIds: ['c1'] };
+        const base = workbookContextFactory({
+            currentSheetId: 'id_1',
+            sheets: [
+                {
+                    name: 'S',
+                    id: 'id_1',
+                    order: 0,
+                    row: 2,
+                    column: 2,
+                    data: [
+                        [commented, null],
+                        [null, null],
+                    ],
+                },
+            ],
+        });
+        const { next, ops } = author(base, (ctx) => copySheet(ctx, 'id_1'), { addSheetOp: true });
+        const anchors = (sheets: readonly LibSheet[]) =>
+            sheets.map((sheet) =>
+                dataToCelldata(sheet.data ?? celldataToData(sheet.celldata ?? [], 0, 0)).flatMap(
+                    ({ v }) => v?.commentCardIds ?? [],
+                ),
+            );
+        expect(anchors(next.sheets)).toEqual([['c1'], []]);
+        expect(anchors(receive(base, ops).sheets)).toEqual([['c1'], []]);
+        expect(anchors(join(base, [ops]))).toEqual([['c1'], []]);
+        expect(next.sheets[1].data?.[0]?.[0]?.v).toBe('a');
+    });
+
+    // A copy is a sheet like any other on the tab that made it, as on a peer's, so a read of every sheet's cells, such
+    // as a search or a copy of the copy, finds its cells.
+    test('a copied sheet has its cell matrix, and a copy of it keeps the cells', () => {
+        const base = workbookContextFactory({
+            currentSheetId: 'id_1',
+            sheets: [
+                {
+                    name: 'S',
+                    id: 'id_1',
+                    order: 0,
+                    row: 2,
+                    column: 2,
+                    data: [
+                        [{ v: 'a', m: 'a' }, null],
+                        [null, null],
+                    ],
+                },
+            ],
+        });
+        const once = produce(base, (draft: Context) => copySheet(draft, 'id_1'));
+        expect(once.sheets[1].data?.[0]?.[0]?.v).toBe('a');
+        const copyId = once.sheets[1].id ?? '';
+        const twice = produce(once, (draft: Context) => copySheet(draft, copyId));
+        expect(twice.sheets[2].data?.[0]?.[0]?.v).toBe('a');
     });
 });
 

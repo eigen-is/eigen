@@ -86,4 +86,24 @@ describe('stripCommentCard', () => {
         expect(idsAt(workbook, 's1', 1, 1)).toEqual(['c1', 'c2']);
         expect(idsAt(workbook, 's2', 2, 2)).toEqual(['c1']);
     });
+
+    test('leaves no anchor anywhere after a tab was duplicated', async () => {
+        const workbook = await mountWorkbook();
+        const tab = [...document.querySelectorAll('[role="button"]')].find((el) => el.textContent?.includes('One'));
+        await act(async () => {
+            tab?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+        });
+        const duplicate = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+            (item) => item.textContent === 'Duplicate',
+        );
+        if (!duplicate) throw new Error('no Duplicate item');
+        await act(async () => duplicate.click());
+        expect(workbook.getAllSheets()).toHaveLength(3);
+
+        await act(async () => stripCommentCard(workbook, 'c1'));
+        const stored = workbook
+            .getAllSheets()
+            .flatMap((sheet) => [...(sheet.data ?? []).flat(), ...(sheet.celldata ?? []).map(({ v }) => v)]);
+        expect(stored.some((cell) => cell?.commentCardIds?.includes('c1'))).toBe(false);
+    });
 });

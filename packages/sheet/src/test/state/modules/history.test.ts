@@ -838,12 +838,10 @@ describe('a structural undo or redo applies exactly what it sends', () => {
         expectAgree(s);
     });
 
-    // A copy keeps its cells as celldata until someone opens it.
     test('undoing the delete of a copy nobody opened brings back its cells', () => {
         const s = session(workbook({}, { A1: text('two') }));
         s.edit(s.a, (ctx) => copySheet(ctx, TWO), { addSheetOp: true });
         const copy = s.a.ctx.sheets[3];
-        expect(copy.data).toBeUndefined();
         s.edit(s.a, ...removeSheet(String(copy.id)));
         s.undo(s.a);
         expect(view(s.a.ctx.sheets)[3].cells).toEqual([{ r: 0, c: 0, v: text('two') }]);

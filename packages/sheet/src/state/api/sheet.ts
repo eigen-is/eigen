@@ -7,7 +7,7 @@ import { mapChartRefs } from '../../engine/chart-data';
 import { copySheetName } from '../../engine/sheet-name';
 import { api, createContextResolver, execfunction, setCellValue as setCellValueInternal } from '..';
 import type { Context } from '../context';
-import { leaveCurrentSheet } from '../modules';
+import { initSheetData, leaveCurrentSheet } from '../modules';
 import type { FormulaCell, SingleRange } from '../types';
 import { getSheetIndex, sheetOrder } from '../utils';
 import { dataToCelldata, getSheet } from './common';
@@ -48,7 +48,8 @@ export function copySheet(ctx: Context, sheetId: string) {
     sheetData.id = copyId;
     delete sheetData.status;
     sheetData.celldata = dataToCelldata(sheetData.data);
-    delete sheetData.data;
+    // A copy starts without comments, as a duplicated canvas element does: a card stays on the cells it was put on.
+    for (const { v } of sheetData.celldata) delete v?.commentCardIds;
     // A copy's images and charts take fresh ids, and its charts read the copy where they read the sheet copied, as
     // in Excel and Google.
     const toCopy = (ref: CellRangeRef) => (ref.sheetId === sheetId ? { ...ref, sheetId: copyId } : ref);
@@ -61,35 +62,35 @@ export function copySheet(ctx: Context, sheetId: string) {
         Object.values(sheetData.charts ?? {}).map((chart) => withFreshId(mapChartRefs(chart, toCopy))),
     );
     api.addSheet(ctx, copyId, ctx.sheets[index].isPivotTable, sheetName, sheetData);
-    const sheetOrderList: Record<string, number> = {};
-    sheetOrderList[copyId] = order;
-    api.setSheetOrder(ctx, sheetOrderList);
+    api.setSheetOrder(ctx, { [copyId]: order });
+    // The copy gets its cell matrix now, as a peer's tab builds it when the add arrives, so every read of the open
+    // workbook's cells finds the copy's.
+    const copyIndex = getSheetIndex(ctx, copyId);
+    if (copyIndex != null) initSheetData(ctx, copyIndex, ctx.sheets[copyIndex]);
 }
 
-function calculateSheetFromula(ctx: Context, id: string, range?: SingleRange) {
+function calculateSheetFormula(ctx: Context, id: string, range?: SingleRange) {
     const index = getSheetIndex(ctx, id);
     if (index == null) return;
     const sheet = ctx.sheets[index];
-    if (!sheet.data) return;
-    const data = sheet.data;
+    const { data } = sheet;
+    if (!data) return;
 
     const rStart = range?.row[0] ?? 0;
     const rEnd = range?.row[1] ?? data.length - 1;
     const cStart = range?.column[0] ?? 0;
     const cEnd = range?.column[1] ?? data[0].length - 1;
 
-    // The public setCellValue + insertUpdateFunctionGroup pair each linear-scan
-    // calcChain to dedupe, so batch recompute used to be quadratic per sheet
-    // (78k formulas → 25s on import). We're visiting every formula cell in the
-    // range exactly once, so we can rebuild calcChain in one pass and write
-    // values via the underlying setCellValueInternal (which doesn't touch the
-    // chain at all). Entries outside the range are preserved.
+    // The public setCellValue scans the whole recalc list for each cell it writes, which makes a large sheet's
+    // recompute quadratic. This sweep visits every formula cell of the range once, so it rebuilds the list in one
+    // pass and writes each value through the internal setCellValue, which leaves the list alone. Entries outside the
+    // range stay.
     const newChain: FormulaCell[] = (sheet.calcChain ?? []).filter(
         (cc) => cc.id !== id || cc.r < rStart || cc.r > rEnd || cc.c < cStart || cc.c > cEnd,
     );
 
-    // Live (unsnapshotted) resolver: this sweep runs in cell order, not
-    // dependency order, and each evaluation must see the writes before it.
+    // The resolver reads the live cells: the sweep runs in cell order, not in dependency order, and each evaluation
+    // must see the writes before it.
     const resolver = createContextResolver(ctx);
     for (let r = rStart; r <= rEnd; r += 1) {
         for (let c = cStart; c <= cEnd; c += 1) {
@@ -106,20 +107,17 @@ function calculateSheetFromula(ctx: Context, id: string, range?: SingleRange) {
 
 export function calculateFormula(ctx: Context, id?: string, range?: SingleRange) {
     if (id) {
-        calculateSheetFromula(ctx, id, range);
+        calculateSheetFormula(ctx, id, range);
         return;
     }
-    for (const sheet_obj of ctx.sheets) {
-        if (!sheet_obj.id) continue;
-        calculateSheetFromula(ctx, sheet_obj.id, range);
+    for (const sheet of ctx.sheets) {
+        if (sheet.id) calculateSheetFormula(ctx, sheet.id, range);
     }
 }
 
-// Walk each sheet's data once and rebuild calcChain from cells that carry a
-// formula — but don't evaluate anything. Edits trigger execFunctionGroup which
-// reads calcChain to lazy-prime formulaCellInfoMap and recomputes only the
-// affected sub-graph. Used at mount when the imported/persisted values are
-// already current and a full re-evaluation would waste a second on a large file.
+// Rebuilds each sheet's recalc list from the cells that hold a formula, without computing any. The workbook calls it
+// when it mounts, because the stored values are already current and computing them all takes a second on a large
+// file. An edit then computes only the formulas it affects, and the formula map learns them from this list.
 export function seedCalcChain(ctx: Context) {
     for (const sheet of ctx.sheets) {
         const { id, data } = sheet;
