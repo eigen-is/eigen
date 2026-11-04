@@ -6,7 +6,7 @@ category: Sharing
 tags: [sheets, sharing, permissions, comments, collaboration]
 related: [sheets/get-started, drive/share-a-file, getting-started/how-sharing-works]
 order: 120
-updated: 2026-11-02
+updated: 2026-11-04
 ---
 
 A spreadsheet is private to you until you share it. You can give specific people access, share with a whole team, or give anyone with the link the ability to view or edit. Once collaborators have access, you can use cell comments to leave notes and discuss specific values without changing the data itself.
@@ -77,7 +77,7 @@ A small triangle appears in the corner of the cell to show it has a comment atta
 
 Click the **Comments** button (the speech bubble icon) in the top-right corner of the toolbar. A number badge shows how many open comments the spreadsheet has.
 
-The panel slides open on the right and lists every comment. Click a comment to open its thread.
+The panel slides open on the right and lists every comment, on every tab. Each comment shows the cell it sits on, such as "Cell B2". A comment on another tab shows that tab's name first, such as "Sheet2 · B2". Click a comment to open its thread.
 
 A red dot on a comment means it has something new for you: a reply in a thread you've written in, a mention, or an assignment. Opening the comment clears the dot.
 

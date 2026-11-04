@@ -77,7 +77,8 @@ enablePatches();
 export type WorkbookInstance = ReturnType<typeof generateAPIs>;
 
 type AdditionalProps = {
-    onChange?: (data: SheetType[]) => void;
+    // The sheets after each change, with the sheet the tab shows.
+    onChange?: (data: SheetType[], currentSheetId: string) => void;
     onOp?: (op: Op[]) => void;
     toolbarLeftItems?: React.ReactNode;
     toolbarRightItems?: React.ReactNode;
@@ -168,7 +169,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             setContext(next);
         }, []);
 
-        // biome-ignore lint/correctness/useExhaustiveDependencies: deps spread from Object.values(props) — biome can't see through the spread
+        // biome-ignore lint/correctness/useExhaustiveDependencies: the deps are the props' values, spread, which biome can't read
         const mergedSettings = useMemo(
             () => Object.assign(cloneDeep(defaultSettings), props),
             [...Object.values(props)],
@@ -336,11 +337,11 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
         useEffect(() => {
             if (context.sheets.length > 0) {
-                onChange?.(context.sheets);
+                onChange?.(context.sheets, context.currentSheetId);
             }
-        }, [context.sheets, onChange]);
+        }, [context.sheets, context.currentSheetId, onChange]);
 
-        // biome-ignore lint/correctness/useExhaustiveDependencies: context.currentSheetId + context.sheets.length are intentional re-trigger deps — body reads via draftCtx, but we want this effect to re-sync settings whenever the user switches sheets or sheets are added/removed
+        // biome-ignore lint/correctness/useExhaustiveDependencies: the current sheet and the sheet count re-run the effect on a sheet switch, add or delete; the body reads them through draftCtx
         useEffect(() => {
             setContextWithProduce(
                 (draftCtx) => {
@@ -500,9 +501,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     if (e.type === 'cut' && ctx.allowEdit !== false) setContextWithProduce(deleteActiveObject);
                     return;
                 }
-                // A selected floating image takes precedence over the pending cell copy: its
-                // copy is a pure image — eigen JSON only, no text/plain and no png, as vector's is (a
-                // native copy event can't await a media/ blob fetch, so png is dropped). A cut deletes it.
+                // A selected floating image wins over the pending cell copy. Its copy is only the Eigen clipboard
+                // item, as Vector's is: no plain text and no PNG, because a native copy event can't wait for the
+                // image's file to load. A cut deletes the image.
                 if (image && floating) {
                     const source = mergedSettings.hooks?.resolveImagePath?.(image.mediaName);
                     if (source) {
@@ -558,18 +559,16 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         return;
                     }
 
-                    // A same-tab sheet→sheet copy tags text/html with COPY_ACTION_TABLE_MARKER and is
-                    // served from ctx.copyState (formulas/formats), not the eigen wire — the classifier
-                    // suppresses the eigen + svg flavors for it, so those rungs skip and we fall through
-                    // to the native table paste below. Every other producer flows through the rungs.
+                    // A copy between sheets of this tab marks its HTML with COPY_ACTION_TABLE_MARKER and pastes
+                    // from ctx.copyState, which keeps the formulas and formats. The classifier then reports no
+                    // Eigen or SVG content, so the paste falls through to the table paste below.
                     const paste = classifyPaste(clipboardData, { internalMarkerText: COPY_ACTION_TABLE_MARKER });
 
-                    // A vector SVG payload (or a pasted SVG document) becomes a floating image through the
-                    // app's exact image-file path — stored in media/, served as-is, rendered by <image>.
-                    // Ahead of the eigen-items split so a vector selection lands as one image, not as its
-                    // separate items. An image-bearing selection's svg references its images BY NAME
-                    // (eigen-media:), so it rides onPasteSvgFile — the app materializes each into its media/
-                    // before storing the svg; an image-free svg rides onPasteImageFile.
+                    // A Vector selection or a pasted SVG document becomes one floating image, through the app's
+                    // image file path. It goes before the split into Eigen items, so a Vector selection lands as
+                    // one image and not as its separate items. An SVG with images names them as eigen-media
+                    // references, so it goes to onPasteSvgFile, which stores each image before the SVG. An SVG
+                    // without images goes to onPasteImageFile.
                     if (paste.svg) {
                         const svgImageItems = paste.svg.items.filter(
                             (item): item is EigenClipboardImageItem => item.type === 'image',
@@ -577,8 +576,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         const onPasteSvgFile = mergedSettings.hooks?.onPasteSvgFile;
                         const onPasteImageFile = mergedSettings.hooks?.onPasteImageFile;
                         if (onPasteSvgFile) {
-                            // Always materialize (even with no image items) so a forged/dangling
-                            // eigen-media ref is stripped before the svg is stored — same as docs/slides.
+                            // It goes there even without image items, so a forged or dangling eigen-media
+                            // reference is stripped before the SVG is stored, as in Docs and Slides.
                             e.preventDefault();
                             selectionCache.isPasteAction = false;
                             onPasteSvgFile(paste.svg.svg, svgImageItems);

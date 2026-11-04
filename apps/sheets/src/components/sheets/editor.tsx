@@ -138,10 +138,15 @@ function SheetEditorInner({
     const [addInitialTitle, setAddInitialTitle] = useState('');
     const [addTargetCell, setAddTargetCell] = useState<{ r: number; c: number } | null>(null);
     const [sheets, setSheets] = useState<readonly Sheet[]>([]);
+    const [currentSheetId, setCurrentSheetId] = useState('');
+    const handleWorkbookChange = useCallback((next: readonly Sheet[], shown: string) => {
+        setSheets(next);
+        setCurrentSheetId(shown);
+    }, []);
     // Every Workbook onChange sets new sheets. The search controller keys on them, so an open search
     // runs again after each change to the document.
     const searchController = useSheetSearchController(workbookRef, sheets, canWrite);
-    const activeComments = useMemo(() => anchoredComments(sheets), [sheets]);
+    const activeComments = useMemo(() => anchoredComments(sheets, currentSheetId), [sheets, currentSheetId]);
     const lifecycle = useCommentLifecycle({
         ownerId,
         mountId: path.mountId,
@@ -396,7 +401,7 @@ function SheetEditorInner({
                                         key={snapshotVersion}
                                         ref={workbookRef}
                                         data={initialData}
-                                        onChange={setSheets}
+                                        onChange={handleWorkbookChange}
                                         onOp={handleOp}
                                         showToolbar={true}
                                         showFormulaBar={true}

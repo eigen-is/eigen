@@ -64,13 +64,29 @@ const idsAt = (workbook: WorkbookInstance, sheetId: string, r: number, c: number
     workbook.getFlowdata(sheetId)?.[r]?.[c]?.commentCardIds;
 
 describe('anchoredComments', () => {
-    test('a card anchored only on a tab that is not open is in use', async () => {
+    test('a card anchored only on a tab that is not open is in use, labeled with its tab', async () => {
         const workbook = await mountWorkbook();
-        const active = anchoredComments(workbook.getAllSheets());
+        const active = anchoredComments(workbook.getAllSheets(), 's1');
         expect([...active.ids].sort()).toEqual(['c1', 'c2', 'c3']);
-        expect(active.anchorTexts.get('c3')).toBe('Cell A1');
+        expect(active.anchorTexts.get('c3')).toBe('Two · A1');
         // A card on several cells takes the first sheet's cell as its anchor text.
         expect(active.anchorTexts.get('c1')).toBe('Cell B2');
+    });
+
+    test('the labels follow the open tab, a renamed tab and an edited cell', async () => {
+        const workbook = await mountWorkbook();
+        expect(anchoredComments(workbook.getAllSheets(), 's2').anchorTexts.get('c2')).toBe('One · B2');
+        expect(anchoredComments(workbook.getAllSheets(), 's2').anchorTexts.get('c3')).toBe('Cell A1');
+
+        const renamed = workbook
+            .getAllSheets()
+            .map((sheet) => (sheet.id === 's1' ? { ...sheet, name: 'First' } : sheet));
+        expect(anchoredComments(renamed, 's2').anchorTexts.get('c2')).toBe('First · B2');
+
+        await act(async () => workbook.setCellFormat(4, 4, 'commentCardIds', ['c4'], { id: 's2' }));
+        const edited = anchoredComments(workbook.getAllSheets(), 's1');
+        expect(edited.ids.has('c4')).toBe(true);
+        expect(edited.anchorTexts.get('c4')).toBe('Two · E5');
     });
 });
 
@@ -80,7 +96,7 @@ describe('stripCommentCard', () => {
         await act(async () => stripCommentCard(workbook, 'c1'));
         expect(idsAt(workbook, 's1', 1, 1)).toEqual(['c2']);
         expect(idsAt(workbook, 's2', 2, 2)).toEqual([]);
-        expect(anchoredComments(workbook.getAllSheets()).ids.has('c1')).toBe(false);
+        expect(anchoredComments(workbook.getAllSheets(), 's1').ids.has('c1')).toBe(false);
 
         await act(async () => workbook.undo());
         expect(idsAt(workbook, 's1', 1, 1)).toEqual(['c1', 'c2']);
