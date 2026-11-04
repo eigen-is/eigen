@@ -1,9 +1,8 @@
-// Applies one op batch to the editor's context as replaySheetsOps applies it to a joiner's sheets: the sheet and row or
-// column ops first, then the cell and field patches, whole or not at all, skipping each op the replay's shape check
-// refuses. Every batch that changes the open workbook outside an edit's own recipe goes through it, such as a peer's
-// batch, a replay of the log and a structural undo, so every tab and a joiner end the same. It reports the row or
-// column ops that moved rows, which the undo stacks follow. A batch new to the tab also moves the tab's view: the cell
-// editor and the selection follow their cells, and a filter or a hidden or deleted sheet changes what the tab shows.
+// Applies one op batch to the editor's context, as replaySheetsOps applies it to a joiner's sheets: the sheet, row and
+// column ops first, then the cell and field patches, whole or not at all. An op the replay's shape check refuses is
+// skipped. A batch that changes the open workbook outside an edit's own recipe comes through here, such as a peer's
+// batch, a log replay or a structural undo, so every tab ends the same. It reports the ops that moved rows, which the
+// undo stacks follow, and a batch new to the tab moves the tab's view too, such as the cell editor and the selection.
 
 import { cloneDeep } from 'es-toolkit/compat';
 import type { Patch } from 'immer';

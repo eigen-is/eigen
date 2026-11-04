@@ -277,8 +277,8 @@ function rowColStep(ctx: Context, from: Patch[], to: Patch[], options: PatchOpti
     const left = withoutDeletedFloatingEdits(ctx, atSheetIndex(ctx, from));
     const target = withoutDeletedFloatingEdits(ctx, atSheetIndex(ctx, to));
     const restored = applyPatches(ctx, target);
-    // What the marker alone makes of the sheet the op left, and of the live sheet. These runs are trials, so each gets a
-    // formula map of its own: a run writes into the map and the open editor's range state, which live outside immer.
+    // What the marker alone makes of the sheet the op left, and of the live sheet. These runs are trials, so each gets
+    // a formula map of its own: a run writes into the map and the open editor's range state, which live outside immer.
     const trial = (start: Context) => applyOpBatch({ ...start, formulaCache: new FormulaCache() }, [marker]);
     const made = trial(applyPatches(ctx, left));
     const live = trial(ctx);
