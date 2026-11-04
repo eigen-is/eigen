@@ -100,6 +100,9 @@ export function RestoreVersionDialog({
     onClose: () => void;
 }) {
     const restore = useRestoreVersion(path.ownerId, path.mountId, path.id);
+    // The last version picked, so the text stays while the dialog fades out.
+    const [shown, setShown] = useState(snapshot);
+    if (snapshot && snapshot !== shown) setShown(snapshot);
 
     return (
         <ConfirmDialog
@@ -107,12 +110,12 @@ export function RestoreVersionDialog({
             onOpenChange={(open) => !open && onClose()}
             title="Restore this version?"
             description={
-                !snapshot
+                !shown
                     ? ''
                     : storageGone
-                      ? `Rebuild the document from the ${formatDateTime(snapshot.createdAt)} version. ` +
+                      ? `Rebuild the document from the ${formatDateTime(shown.createdAt)} version. ` +
                         `Comments go back with the text they're on. Their replies stay as they are now.`
-                      : `Replace current contents with the ${formatDateTime(snapshot.createdAt)} version. ` +
+                      : `Replace current contents with the ${formatDateTime(shown.createdAt)} version. ` +
                         `Comments go back with the text they're on. Their replies stay as they are now. The current state ` +
                         `is saved as a new version first, so you can undo this by restoring it.`
             }
@@ -127,7 +130,7 @@ export function RestoreVersionDialog({
 }
 
 // Open while `size` holds the total size of the versions the menu listed. The comment threads' versions are deleted
-// too, but their size is not counted.
+// too, but their size is not counted. The text keeps the last size while the dialog fades out, or it would read "?".
 export function DeleteHistoryDialog({
     path,
     size,
@@ -138,6 +141,8 @@ export function DeleteHistoryDialog({
     onClose: () => void;
 }) {
     const deleteVersions = useDeleteVersions(path.ownerId, path.mountId, path.id);
+    const [shownSize, setShownSize] = useState(size ?? 0);
+    if (size !== null && size !== shownSize) setShownSize(size);
 
     return (
         <DeleteDialog
@@ -145,11 +150,9 @@ export function DeleteHistoryDialog({
             onOpenChange={(next) => !next && onClose()}
             title="Delete version history?"
             description={
-                size === null
-                    ? ''
-                    : `Frees ${formatFileSize(size)}. Earlier versions of this document and its comments can't be ` +
-                      `restored after this. Images and comments you deleted are removed once everyone has closed it, ` +
-                      `except those added or replied to in the last ${SWEEP_GRACE_DAYS} days.`
+                `Frees ${formatFileSize(shownSize)}. Earlier versions of this document and its comments can't be ` +
+                `restored after this. Images and comments you deleted are removed once everyone has closed it, ` +
+                `except those added or replied to in the last ${SWEEP_GRACE_DAYS} days.`
             }
             deleteText="Delete history"
             onDelete={() => deleteVersions.mutateAsync()}

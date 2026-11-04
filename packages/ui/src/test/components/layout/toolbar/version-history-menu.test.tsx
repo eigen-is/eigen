@@ -2,9 +2,11 @@
 // below them, outside the list's scroll area so a long list never hides it. Its pick hands the dialog the size of the
 // listed versions, so the dialog says how much it frees without a fetch of its own.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
+import { formatDateTime } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
 import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
 import type { Snapshot } from '@workspace/lib/types/versioning';
+import type { ReactElement } from 'react';
 import { drivePath } from '../../../drive-path';
 import { installHappyDom } from '../../../happy-dom';
 import { clickRow, openSubmenu, renderOpenMenu } from '../../../menu-rows';
@@ -40,7 +42,7 @@ afterAll(() => {
     mock.module('@workspace/lib/drive', () => realDrive);
 });
 
-const { act, createElement } = await import('react');
+const { act, createElement, useState } = await import('react');
 const { DeleteHistoryDialog, RestoreVersionDialog, VersionHistoryMenu } = await import(
     '../../../../components/layout/toolbar/version-history-menu'
 );
@@ -53,8 +55,10 @@ afterEach(async () => {
     unmount = async () => {};
 });
 
+const realGetComputedStyle = globalThis.getComputedStyle;
 afterEach(() => {
     listed = versions;
+    globalThis.getComputedStyle = realGetComputedStyle;
 });
 
 async function openVersionHistory(onRequestDeleteHistory = (_size: number) => {}): Promise<Element | undefined> {
@@ -113,6 +117,41 @@ test('the dialog names the size the menu passed and deletes on its button', asyn
     expect(deleteVersions).toHaveBeenCalledTimes(1);
 });
 
+// Renders a dialog, cancels it and returns its text as it fades out. Radix keeps a closing dialog mounted while its
+// animation runs. happy-dom computes no animation from a style sheet and never ends one, so the content reports a
+// fade-out once it closes and stays.
+async function textWhileClosing(dialogHarness: () => ReactElement): Promise<string | null | undefined> {
+    globalThis.getComputedStyle = (element, pseudo) => {
+        const style = realGetComputedStyle(element, pseudo);
+        if (!(element instanceof HTMLElement) || element.dataset.slot !== 'dialog-content') return style;
+        return new Proxy(style, {
+            get: (target, key) =>
+                key === 'animationName'
+                    ? element.dataset.state === 'closed'
+                        ? 'fade-out'
+                        : 'fade-in'
+                    : Reflect.get(target, key),
+        });
+    };
+    ({ unmount } = await renderInDocument(createElement(dialogHarness)));
+    const cancel = [...document.querySelectorAll('[role="dialog"] button')].find(
+        (button) => button.textContent === 'Cancel',
+    );
+    await act(async () => cancel?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog?.getAttribute('data-state')).toBe('closed');
+    return dialog?.querySelector('p')?.textContent;
+}
+
+test('the dialog keeps naming the size while it closes', async () => {
+    const size = 5 * 1024 * 1024;
+    function Harness() {
+        const [shown, setShown] = useState<number | null>(size);
+        return createElement(DeleteHistoryDialog, { path, size: shown, onClose: () => setShown(null) });
+    }
+    expect(await textWhileClosing(Harness)).toStartWith(`Frees ${formatFileSize(size)}.`);
+});
+
 test('Delete history is grayed out while there are no versions, and live with one', async () => {
     isEffectiveOwner = true;
     listed = [];
@@ -123,6 +162,15 @@ test('Delete history is grayed out while there are no versions, and live with on
     listed = versions.slice(0, 1);
     const submenu = await openVersionHistory();
     expect(deleteRow(submenu)?.hasAttribute('data-disabled')).toBe(false);
+});
+
+test('the restore dialog keeps naming the version while it closes', async () => {
+    const [version] = versions;
+    function Harness() {
+        const [shown, setShown] = useState<Snapshot | null>(version ?? null);
+        return createElement(RestoreVersionDialog, { path, snapshot: shown, onClose: () => setShown(null) });
+    }
+    expect(await textWhileClosing(Harness)).toContain(`the ${version && formatDateTime(version.createdAt)} version`);
 });
 
 test('the restore dialog says comments go back with their text and replies stay', async () => {
