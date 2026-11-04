@@ -616,7 +616,7 @@ export class Drive {
     // document. Renamed, moved, trashed or overwritten on its own, a database breaks the document and a
     // version leaves a gap in its history. A file put into versions/ would list and restore as a version. So
     // a user write refuses such a path, both as the item it changes and as the folder it writes into. The
-    // server's own writers, such as a snapshot or the media sweep, write through Mount and never meet this check.
+    // server's own writers, such as a snapshot or the sweep, write through Mount and never meet this check.
     private async refuseDocumentPart(mount: Mount, path: DrivePath): Promise<void> {
         let parent: DrivePath | undefined;
         for (const crumb of await mount.getBreadcrumb(path.id)) {

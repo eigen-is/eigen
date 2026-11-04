@@ -1,9 +1,7 @@
-// The one walk behind every copy of a file or folder, in one mount or to another drive. It lists the
-// whole source tree first and writes only after that, so a copy never follows its own output, even when
-// its target moves into the source or an opposite copy writes into it meanwhile. Drive.copyPath may
-// leave parts out of that list, such as those a document's state no longer names, and checks it against
-// the target's limits before the write. A writer does the writing, such as the one here that copies
-// inside the mount, or one that uploads into another drive.
+// The one walk behind every copy of a file or folder, in one mount or to another drive. It lists the whole source
+// tree first and writes only after that, so a copy never follows its own output, even when its target moves into the
+// source or an opposite copy writes into it meanwhile. The caller may leave parts out of the list and checks it
+// against the target's limits. A writer does the writing, such as the one here that copies inside the mount.
 
 import type { DriveContainerType, DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_FOLDER, isContainerType } from '@workspace/lib/types/drive';

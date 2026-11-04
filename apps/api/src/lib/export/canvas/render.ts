@@ -79,7 +79,7 @@ export function sceneBackground(scene: VectorScene): BackgroundFill | null {
 }
 
 // One page on screen: a clipped box at `scale`, holding the scene at 1:1 with the whole thing scaled
-// once. The resolver is only for a frame's image background — a drawing's background is a color token,
+// once. The resolver is only for a frame's image background. A drawing's background is a color token,
 // so those callers pass nothing.
 export function renderCanvasPage(page: CanvasPage, scale: number, resolveMedia?: MediaResolver): string {
     // scale first, then translate: the shift is expressed in scene units and rides the scale.

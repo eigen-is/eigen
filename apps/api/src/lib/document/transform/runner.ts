@@ -42,7 +42,7 @@ export const TRANSFORM_LIMITS: Record<
     // A workbook's log folded at its close: a decode, a replay and an encode, less than an export does. It runs in the
     // background and holds the one child, so it gets a preview's cost and room for a large workbook.
     compact: { deadlineMs: 60_000, admissionCostMs: 15_000 },
-    // A read of what a document's state names, such as a version before a media sweep. It is a materialize and a walk,
+    // A read of what a document's state names, such as a version before a sweep. It is a materialize and a walk,
     // so it gets a compaction's limits.
     references: { deadlineMs: 60_000, admissionCostMs: 15_000 },
 };
@@ -72,8 +72,8 @@ const LIMITED_COMMAND =
     'echo 1000 > /proc/self/oom_score_adj; echo 0 > /proc/self/coredump_filter; ulimit -d "$1" 2>/dev/null || echo "memory limit not applied" >&2; ulimit -St "$2"; ulimit -c 0; shift 2; exec "$@"';
 // GC and JIT threads spend CPU on every core beside the job's own, so the CPU limit is the deadline on each, plus slack.
 const CPU_SLACK_SECONDS = 60;
-// The machine's memory, the cgroup's where there is one, which Bun's constrainedMemory() answers both: a process
-// never claims more than there is (DOCUMENT-TRANSFORMS.md § A child runs under the machine's memory).
+// The machine's memory, or the cgroup's where there is one, as Bun's constrainedMemory() answers both. A child never
+// claims more memory than there is.
 const MACHINE_MEMORY_KIB = Math.floor(process.constrainedMemory() / 1024);
 // JSC reserves 512 MB for JIT code inside the data limit; 64 MB hands about 0.33 GB back to the heap, no slowdown measured.
 const JIT_RESERVATION_BYTES = '67108864';
@@ -259,8 +259,7 @@ export class DocumentTransformRunner {
         }
     }
 
-    // Overload is an outcome too (DOCUMENT-TRANSFORMS.md § The runner logs one line per job,
-    // overload included): a 503 flood must be visible in the logs, with the queue state that caused it.
+    // Overload is an outcome too, so a flood of 503s shows in the logs with the queue state that caused it.
     private refuse(priority: TransformPriority, reason: string, predictedWaitMs?: number): never {
         console.warn(
             `[transform] admission refused reason=${reason} priority=${priority} ` +

@@ -2,7 +2,7 @@
 // its data.db, saves every edit back to it, and relays edits and cursors between the sockets that have it open.
 // Server-side writers, such as an import or a version restore, edit the same Y.Doc, so every editor sees them. Drive
 // opens each document once and closes it a while after the last socket leaves, and it holds its Home while it waits.
-// That close may first fold a workbook's op log into its snapshot, and may start a sweep of media nothing names.
+// That close may first fold a workbook's op log into its snapshot, and may start a sweep of the parts nothing names.
 
 import { restoreYjsDoc } from '@workspace/lib/collab/yjs-utils';
 import { isRecord } from '@workspace/lib/guards';

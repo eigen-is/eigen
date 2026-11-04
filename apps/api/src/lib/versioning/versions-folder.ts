@@ -1,5 +1,5 @@
 // The name of the folder inside a document's container that holds its saved versions, one database file each. A
-// save makes the folder on first use, and the version list, a restore and Delete history find it by this name.
+// save makes the folder on first use, and other code finds it by this name, such as a restore or Delete history.
 // Every lookup ignores case the way getChildByName does, so a check of the name folds it the same way.
 
 import type { DrivePath } from '@workspace/lib/types/drive';

@@ -1,8 +1,8 @@
-// What a state of a collab document names among its own parts, such as its current state or a saved version: the
-// files in its `media/` folder and the comment threads in its `chat/` folder. A later sweep deletes the parts nothing
-// names, so a name a reader misses deletes a part in use, and each reader errs on the side of more names. The canvas
-// reads its content as its editor does and drops the shapes the editor drops. The other readers throw on a shape they
-// do not know, which the sweep takes as "delete nothing". The references job runs it in the transform process.
+// What a state of a collab document, such as its current state or a saved version, names among its own parts: the
+// files in its media folder, the threads in its chat folder and the comment cards it has in use. A sweep deletes the
+// parts nothing names, so a missed name deletes a part in use, and each reader errs on the side of more names. The
+// canvas reader drops the shapes its editor drops, and the others throw on a shape they do not know, which the sweep
+// takes as "delete nothing". The references job runs this in the transform process.
 
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { boardCardIds, getItemMapRoot } from '@workspace/lib/collab/yjs-utils';
@@ -110,7 +110,8 @@ function readCards(doc: Y.Doc, mapName: CommentMapName): Record<string, CommentC
         if (
             (chatName !== undefined && typeof chatName !== 'string') ||
             !Array.isArray(attachments) ||
-            // An attachment is a file name in media/, or a Drive reference as toAttachmentReference writes it.
+            // An attachment is a file name in media/, or a Drive reference as toAttachmentReference writes it. The
+            // routes check that shape with an Elysia schema, which the transform process that runs this never loads.
             !attachments.every(
                 (item): item is ChatAttachment =>
                     typeof item === 'string' ||

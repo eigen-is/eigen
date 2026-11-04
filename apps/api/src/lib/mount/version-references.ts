@@ -1,6 +1,7 @@
-// What each saved version of a document names among the document's parts, kept in the mount's metadata.db. The media
-// sweep reads a version once and writes its names here, so a later sweep need not load the version again. The mount
-// only stores and returns the rows: reading a version's state is the sweep's work. A row goes with its version's row.
+// What each saved version of a document names among the document's parts, and the comment cards it has in use, kept
+// in the mount's metadata.db. The sweep reads a version once and writes its names here, so a later sweep need not load
+// the version again. The mount only stores and returns the rows: reading a version is the sweep's work. A row goes
+// with its version's row.
 
 import { inArray, sql } from 'drizzle-orm';
 import type { Mount } from './mount';

@@ -1,8 +1,7 @@
-// The names of the parts in an Eigen document's container folder that server code looks up by name: its own
-// state in data.db, a collab document's comment index in comments.db, the chat folder that holds its comment
-// threads, and the media folder that holds its files, which a chat has too. Code that must tell a database from a user's own file asks isContainerDatabase, such as the drive's
-// guard on user writes and the backup. A backup restore stages an archive while the API runs, so this file
-// imports nothing that opens anything.
+// The names of the parts in an Eigen document's container folder that server code looks up by name, such as its
+// state in data.db, a collab document's comment index in comments.db and the folders of its threads and its files.
+// Code that must tell a database from a user's own file asks isContainerDatabase, such as the drive's guard on user
+// writes and the backup. A backup restore stages an archive while the API runs, so this file opens nothing.
 
 import type { DrivePathType } from '@workspace/lib/types/drive';
 import { isCollabType, isDocumentType } from '@workspace/lib/types/drive';

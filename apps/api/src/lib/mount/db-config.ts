@@ -282,7 +282,7 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
         },
         {
             // What each saved version of a document names. Additive: an existing version has no row yet, and the
-            // media sweep reads it the first time it meets it.
+            // sweep reads it the first time it meets it.
             version: 9,
             up: (db) =>
                 db.exec(`

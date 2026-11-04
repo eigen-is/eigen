@@ -1,7 +1,7 @@
 // The serve-time inliner for vector SVGs. A stored SVG names each image by its media file, never by its bytes, so a
 // copied container resolves against its own media. An SVG drawn through <img> fetches nothing, so on the way out of
 // the preview, each name becomes a data: URI of the file's bytes, and the font slices its text draws with are
-// embedded too. The screen preview cache calls it, and a sweep of a document's media keeps what it would inline.
+// embedded too. Callers include the screen preview cache, and a sweep or a copy keeps what the inliner would read.
 
 import { EIGEN_MEDIA_SCHEME, eigenMediaHref, listEigenMediaRefs, stripEigenMediaRefs } from '@workspace/lib/vector';
 import { spliceAfterSvgOpenTag } from '@workspace/lib/xml';
@@ -77,9 +77,9 @@ export async function inlineSvgMediaRefs(mount: Mount, parentId: string, svgByte
     }
 }
 
-// The names given, and every sibling that an svg among them draws when it is served, to the depth the inliner reads. So
-// a sweep keeps what the svg draws. A missing file, or one that is no svg, adds nothing. At the last depth, the names an
-// svg holds are kept as well, though the inliner strips them. Keeping more is safe. A few svgs are read at a time.
+// The names given, and every sibling that an svg among them draws when it is served, to the depth the inliner reads,
+// so a sweep or a copy keeps what the svg draws. A missing file, or one that is no svg, adds nothing. At the last
+// depth, the names an svg holds are kept as well, though the inliner strips them, because keeping more is safe.
 export async function withSvgSiblings(
     mount: Mount,
     parentId: string,

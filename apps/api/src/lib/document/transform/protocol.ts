@@ -4,6 +4,7 @@
 // or function name user input could influence.
 
 import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
+import { isRecord } from '@workspace/lib/guards';
 import type { DriveCollabType, ImageDimensions } from '@workspace/lib/types/drive';
 import type { TextPreviewResult } from '@workspace/lib/types/preview';
 import type { SlidePage } from '@workspace/lib/vector';
@@ -342,9 +343,11 @@ export function inputBytesOf(request: DocumentTransformRequest): number {
 // runner has already released the job, so junk in here would throw with nobody left
 // to settle the request.
 function isTransformMedia(value: unknown): boolean {
-    const media = value as Partial<TransformMedia> | undefined;
     return (
-        typeof media?.name === 'string' && typeof media.contentType === 'string' && media.data instanceof ArrayBuffer
+        isRecord(value) &&
+        typeof value['name'] === 'string' &&
+        typeof value['contentType'] === 'string' &&
+        value['data'] instanceof ArrayBuffer
     );
 }
 
@@ -354,14 +357,7 @@ function isStringList(value: unknown): boolean {
 
 function isDocumentReferences(value: unknown): boolean {
     return (
-        typeof value === 'object' &&
-        value !== null &&
-        'media' in value &&
-        'chat' in value &&
-        'cards' in value &&
-        isStringList(value.media) &&
-        isStringList(value.chat) &&
-        isStringList(value.cards)
+        isRecord(value) && isStringList(value['media']) && isStringList(value['chat']) && isStringList(value['cards'])
     );
 }
 

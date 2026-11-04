@@ -1,7 +1,7 @@
 // The collab documents that are open in one Drive, such as docs that someone edits right now. It opens
 // each document once, however many people connect, and closes it again. When sharing changes, it
 // closes the connections of people who may no longer read. It also marks the documents a trash or a
-// version restore works on, so an open or a media sweep keeps away from them meanwhile.
+// version restore works on, so an open or a sweep keeps away from them meanwhile.
 
 import { isCollabType, isContainerType } from '@workspace/lib/types/drive';
 import { createAsyncSingleton } from '../../utils/singleton';
@@ -23,7 +23,7 @@ export class CollabRegistry {
     // databases before it marks them trashed, so a document opened in between would lose its edits. A
     // key counts the trashes that guard it, because two trashes of nested paths can overlap.
     private readonly trashing = new Map<string, number>();
-    // The keys of a document a version restore puts back. The restore works in steps, and a media sweep that read
+    // The keys of a document a version restore puts back. The restore works in steps, and a sweep that read
     // the document before it ends would miss the names the old state brings back. Two restores of one document can
     // overlap too, so a key counts them as well.
     private readonly restoring = new Map<string, number>();
