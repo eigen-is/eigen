@@ -1,3 +1,7 @@
+// The rows of a file's or a folder's history, one per event, such as "You edited" or "Ann restored a version". Drive's
+// detail pane shows the newest few, and an editor's Activity panel shows more. describeFileEvent gives each row its
+// words. In Drive a row links to what it names, and in an editor a comment or card row opens it in the document.
+
 import { getDriveAppUrl, getDriveItemUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { usePublicUsers } from '@workspace/lib/public';
@@ -9,23 +13,22 @@ import { useMemo } from 'react';
 import { ActivityRow } from '../activity-row';
 import { UserNameCard } from '../user/user-name-card';
 
-// A row's card/comment target, resolved by the host against its lifecycle `cards` map.
+// The card or comment a row names, which the editor finds among its own cards.
 type CardOpenRef = { cardId?: string; chatName?: string };
 
 type ActivityEventListProps = {
     path: DrivePath;
     events: FileEvent[];
-    // In-editor mode: rows referencing a card/comment open it in-doc; every other row is inert (no
-    // URL navigation). Absent (drive Recent Activity) keeps the resolveEventUrl deep-link behavior.
+    // Set in an editor: a row that names a card or a comment opens it in the document, and every other row does
+    // nothing. In Drive it is not set, and each row links to what it names.
     onOpenCard?: (ref: CardOpenRef) => void;
 };
 
 export function ActivityEventList({ path, events, onOpenCard }: ActivityEventListProps) {
     const { user } = useAuth();
 
-    // Names for the principals rows render: emails inside comment previews (mentions, emote targets),
-    // the 'assigned' target, and the acl-changed diff's team entries — describeFileEvent renders its
-    // emails as-is. usePublicUsers resolves users and teams alike.
+    // The people and teams the rows name get their names looked up, such as an email in a comment's preview, the
+    // person a comment was assigned to and a team in a sharing change.
     const principals = useMemo(() => {
         const set = new Set<string>();
         for (const e of events) {
@@ -47,7 +50,7 @@ export function ActivityEventList({ path, events, onOpenCard }: ActivityEventLis
     return (
         <>
             {events.map((event) => {
-                // 'own' = the file's own events (panel title already names it); else name the item.
+                // A row of the file's own event leaves its name out, because the list's title shows it.
                 const ctx = !isFolder && event.pathId === path.id ? 'own' : 'container';
                 const lines = describeFileEvent(event, ctx, previewOpts);
                 const target = resolveRowTarget(event, path, ctx, onOpenCard);
@@ -82,9 +85,7 @@ export function ActivityEventList({ path, events, onOpenCard }: ActivityEventLis
     );
 }
 
-// In-editor mode (onOpenCard set) opens card/comment rows in-doc and leaves every other row inert;
-// drive mode hands the row its resolveEventUrl deep-link, so the row is an anchor the user can also
-// cmd/middle-click into a new tab. Either side may be empty: that row has no target and stays inert.
+// In Drive a row is a link, so it can also open in a new tab. A row with no target does nothing.
 function resolveRowTarget(
     event: FileEvent,
     path: DrivePath,
@@ -98,31 +99,25 @@ function resolveRowTarget(
     return { href: resolveEventUrl(event, path, ctx) };
 }
 
-// The card/comment a row references, or undefined for rows that don't open a card in the editor
-// (sticky-removed points at a card that no longer exists; comment rows need a chatName to resolve).
+// The card or comment a row opens in the editor. A removed card is gone, and a comment row needs its chatName.
 function resolveEventCardRef(event: FileEvent): CardOpenRef | undefined {
     const details = event.details;
     if (event.eventType === 'sticky-added' || event.eventType === 'sticky-moved') {
         return { cardId: details && 'cardId' in details ? details.cardId : undefined };
     }
-    if (
-        event.eventType === 'commented' ||
-        event.eventType === 'assigned' ||
-        event.eventType === 'resolved' ||
-        event.eventType === 'reopened'
-    ) {
+    if (isCommentEvent(event)) {
         const chatName = details && 'chatName' in details ? details.chatName : undefined;
         return chatName ? { chatName } : undefined;
     }
     return undefined;
 }
 
-// Row click target per Inventory B: deep-links for sticky/comment, share dialog for acl-changed, item open
-// otherwise.
+// Where a row links in Drive: a card or a comment in its document, the Share dialog for a sharing change, and the item
+// for the rest. A trashed or deleted item has nowhere to go.
 function resolveEventUrl(event: FileEvent, path: DrivePath, ctx: 'own' | 'container'): string | undefined {
     if (event.eventType === 'trashed' || event.eventType === 'deleted') return undefined;
 
-    // Folder behind the fs share-dialog / ?pid= select: own → the item's parent, container → the folder we're viewing.
+    // The folder Drive opens to show the Share dialog or select the item: the item's own folder, or the folder listed.
     const parentIdOrSelf = ctx === 'own' ? (path.parentId ?? path.id) : path.id;
 
     const containerRef: DriveItemRef =
@@ -148,18 +143,22 @@ function resolveEventUrl(event: FileEvent, path: DrivePath, ctx: 'own' | 'contai
         const cardId = details && 'cardId' in details ? details.cardId : undefined;
         return getDriveItemUrl(containerRef, { card: cardId });
     }
-    if (event.eventType === 'sticky-removed') return itemUrl; // card is gone — board only
-    // Comment lifecycle rows all carry chatName — deep-link to the comment, not just the doc.
-    if (
-        event.eventType === 'commented' ||
-        event.eventType === 'assigned' ||
-        event.eventType === 'resolved' ||
-        event.eventType === 'reopened'
-    ) {
+    // A removed card is gone, so its row opens the board.
+    if (event.eventType === 'sticky-removed') return itemUrl;
+    if (isCommentEvent(event)) {
         const chatName = details && 'chatName' in details ? details.chatName : undefined;
         return getDriveItemUrl(containerRef, { chat: chatName });
     }
 
     // Every other event, such as created, renamed or a version restored, opens the item.
     return itemUrl ?? fsLink(`pid=${event.pathId}`);
+}
+
+function isCommentEvent(event: FileEvent): boolean {
+    return (
+        event.eventType === 'commented' ||
+        event.eventType === 'assigned' ||
+        event.eventType === 'resolved' ||
+        event.eventType === 'reopened'
+    );
 }
