@@ -145,6 +145,23 @@ test('a search hit or an activity row opens a live card live, and one whose card
     expect(lifecycle().openEntry?.title).toBe('Ship it');
 });
 
+test("a host's own openCard opens a live card it finds, and the lifecycle one whose card is gone", async () => {
+    const { lifecycle } = await mountBoard({ rows });
+    const openCard = mock((_cardId: string) => {});
+    await act(async () => {
+        expect(lifecycle().openChat('kept.eigenchat', openCard)).toBe(true);
+    });
+    expect(openCard.mock.calls).toEqual([['card-1']]);
+    expect(lifecycle().openCard).toBeNull();
+
+    await act(async () => {
+        expect(lifecycle().openChat('removed.eigenchat', openCard)).toBe(true);
+    });
+    expect(openCard).toHaveBeenCalledTimes(1);
+    expect(lifecycle().openEntry?.title).toBe('Ship it');
+    expect(lifecycle().openCardDeleted).toBe(true);
+});
+
 test('a live card opened by its chat name closes when it is deleted, as one opened by its id does', async () => {
     const { lifecycle, doc } = await mountBoard({ rows });
     await act(async () => {

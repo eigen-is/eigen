@@ -11,12 +11,7 @@ import { EditorContent } from '@tiptap/react';
 import { yUndoPluginKey } from '@tiptap/y-tiptap';
 import { useAuth } from '@workspace/lib/auth';
 import { useCollabDoc, useYjsUndoState } from '@workspace/lib/collab';
-import {
-    findCardIdByChatName,
-    useCommentFilter,
-    useCommentLifecycle,
-    useDocumentPanels,
-} from '@workspace/lib/comments';
+import { useCommentFilter, useCommentLifecycle, useDocumentPanels } from '@workspace/lib/comments';
 import { useDocsTextWidth } from '@workspace/lib/docs';
 import type { BandEdge, BandRoot, PageSetup, StoryNode } from '@workspace/lib/docs/eigendoc';
 import {
@@ -684,12 +679,8 @@ const TiptapEditor = ({
         setOpenCardId(cardId);
     };
     // A comment named by its chat name opens like a tap on its card, anchor and all. One whose card is gone opens
-    // through the lifecycle, as deleted.
-    const openChat = (chatName: string) => {
-        const cardId = findCardIdByChatName(cardsRef.current, chatName);
-        if (cardId) openCard(cardId);
-        else lifecycle.openChat(chatName);
-    };
+    // as deleted.
+    const openChat = (chatName: string) => lifecycle.openChat(chatName, openCard);
 
     const panelProps = {
         onClose: closePanels,

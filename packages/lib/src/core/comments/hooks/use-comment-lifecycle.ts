@@ -37,8 +37,9 @@ type CommentLifecycle = {
     openCardDeleted: boolean;
     isCardDeleted: (card: CommentCard) => boolean;
     setOpenCardId: (cardId: string | null) => void;
-    // Opens the comment a chat name names, and says whether one did.
-    openChat: (chatName: string) => boolean;
+    // Opens the comment a chat name names, and says whether one did. A host that reveals a card's anchor first passes
+    // its own openCard, which then opens a card the chat name finds.
+    openChat: (chatName: string, openCard?: (cardId: string) => void) => boolean;
     openCardForEdit: (cardId: string) => void;
     openCardEditing: boolean;
     setOpenCardEditing: (editing: boolean) => void;
@@ -96,10 +97,11 @@ export function useCommentLifecycle({
     // A chat name a card holds opens that card by its id, so it closes on delete however it was opened. A chat name
     // no card holds opens while the index has its row, and then it opens as deleted.
     const openChat = useCallback(
-        (chatName: string) => {
+        (chatName: string, openCard?: (cardId: string) => void) => {
             const cardId = findCardIdByChatName(cards, chatName);
             if (cardId) {
-                setOpen({ cardId });
+                if (openCard) openCard(cardId);
+                else setOpen({ cardId });
                 return true;
             }
             const known = allComments.some((e) => e.chatName === chatName);
