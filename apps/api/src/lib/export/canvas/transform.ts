@@ -9,7 +9,7 @@ import canvasTextCSSRaw from '@workspace/ui/styles/canvas-text.css' with { type:
 import type * as Y from 'yjs';
 import { ApiError } from '../../core/errors';
 import { FONT_STACK_SANS, SANS_FONT_NAME } from '../../document/font-stacks';
-import { toDataUriMap } from '../../document/media';
+import { sceneMediaNames, toDataUriMap } from '../../document/media';
 import type {
     DocumentExportFormat,
     ExportMediaLoader,
@@ -21,7 +21,7 @@ import { exportHtmlDocument } from '../html-document';
 import { sanitizeSceneHtml } from '../sanitize';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
 import type { CanvasPage } from './render';
-import { framePages, renderFittedPage, renderPrintPage, sceneMediaNames } from './render';
+import { framePages, renderFittedPage, renderPrintPage } from './render';
 
 // A screen document scales its pages; a PDF document has no scale to take, because it lays each page out
 // at 1:1 and htmlToPdf's zoom scales it onto the sheet.

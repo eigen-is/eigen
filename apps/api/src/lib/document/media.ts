@@ -1,8 +1,11 @@
-// The media of eigen documents: the main thread lists a document's media folder and prepares its URLs or bytes, and
-// the transform process turns the bytes into the data: URIs the export renders. The transform process loads this
-// module, so it imports nothing heavy, such as the preview cache and the sheet engine behind it.
+// The media of eigen documents: which files of its media folder a document's content names, the main thread's listing
+// of that folder and the URLs or bytes it prepares, and the data: URIs the transform process turns the bytes into for an
+// export. The transform process loads this module, so it imports nothing heavy, such as the preview cache and the sheet
+// engine behind it.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type { VectorScene } from '@workspace/lib/vector';
+import { parseBackgroundFill } from '@workspace/lib/vector/fill';
 import type { Mount } from '../mount';
 import type { ExportMedia, TransformMedia } from './transform/protocol';
 
@@ -12,8 +15,8 @@ export async function listDocumentMedia(mount: Mount, drivePath: DrivePath): Pro
     return new Map(children.map((file) => [file.name, file]));
 }
 
-// The media names a document read for an export holds: every document kind names a file in `media/` by a `mediaName`
-// field (docs/MEDIA-REFERENCES.md), wherever it sits in the tree.
+// The media names a document's content holds, for an export or a read of the parts it uses. Every document kind names a
+// file in `media/` by a `mediaName` field (docs/MEDIA-REFERENCES.md), wherever it sits in the tree.
 export function mediaNamesIn(tree: unknown): Set<string> {
     const names = new Set<string>();
     const stack = [tree];
@@ -28,10 +31,14 @@ export function mediaNamesIn(tree: unknown): Set<string> {
     return names;
 }
 
-// Public-facing API URL for preview HTML embedded in exported documents. The frontend
-// convention switched to relative VITE_API_HOST (e.g. "/eigen"), so resolve against the
-// absolute API_URL here — these <img src=...> URLs end up in HTML that may be rendered
-// in contexts (PDF export, mail) where there is no current origin to splice in.
+// The media a deck or drawing names: its images, and the frame backgrounds, which the scene keeps as stored JSON.
+export function sceneMediaNames(scene: VectorScene): Set<string> {
+    return mediaNamesIn([scene.elements, scene.frames.map((frame) => parseBackgroundFill(frame.background))]);
+}
+
+// The API's absolute public URL, for the preview HTML embedded in exported documents. VITE_API_HOST may be relative,
+// such as "/eigen", so it is resolved against API_URL. These <img src> URLs end up in HTML that has no origin to
+// resolve against, such as a PDF export or a mail.
 function resolvePublicApiUrl(): string {
     const apiHost = process.env['VITE_API_HOST'] || '';
     const apiUrl = process.env['API_URL'] || 'http://localhost:8000';

@@ -5,10 +5,10 @@
 import { isTransparentColor, readVectorFromDoc } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import { ApiError } from '../../core/errors';
-import { toDataUriMap } from '../../document/media';
+import { sceneMediaNames, toDataUriMap } from '../../document/media';
 import type { ExportMediaLoader, TransformWarning } from '../../document/transform/protocol';
 import { toTransferableText } from '../../document/transform/protocol';
-import { drawingPage, sceneMediaNames } from '../canvas/render';
+import { drawingPage } from '../canvas/render';
 import { canvasHtmlDocument } from '../canvas/transform';
 import { sanitizeSceneHtml } from '../sanitize';
 

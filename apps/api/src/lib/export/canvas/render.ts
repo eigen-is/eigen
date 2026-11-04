@@ -19,12 +19,6 @@ import {
     sceneBounds,
     sceneLayers,
 } from '@workspace/lib/vector';
-import { mediaNamesIn } from '../../document/media';
-
-// The media a deck or drawing names: its images, and the frame backgrounds, which the scene keeps as stored JSON.
-export function sceneMediaNames(scene: VectorScene): Set<string> {
-    return mediaNamesIn([scene.elements, scene.frames.map((frame) => parseBackgroundFill(frame.background))]);
-}
 
 // A page in scene units plus the offset that brings its top-left to (0,0): a frame is (0,0)-based
 // so its origin is zero, a frameless drawing's content bounds start wherever the user drew.

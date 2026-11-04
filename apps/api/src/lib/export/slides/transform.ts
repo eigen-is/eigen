@@ -3,6 +3,7 @@
 
 import { readVectorFromDoc } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
+import { sceneMediaNames } from '../../document/media';
 import type {
     ExportMediaLoader,
     ExportTransformResult,
@@ -10,7 +11,6 @@ import type {
     TransformWarning,
 } from '../../document/transform/protocol';
 import { lossCounter, toTransferableBuffer } from '../../document/transform/protocol';
-import { sceneMediaNames } from '../canvas/render';
 import { renderEigenslidesHtml } from '../canvas/transform';
 import { withSvgFallbacks } from '../export-image';
 import { sanitizeSceneHtml } from '../sanitize';

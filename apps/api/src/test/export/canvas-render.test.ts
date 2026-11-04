@@ -7,6 +7,7 @@ import {
     serializeBackgroundFill,
     solidFill,
 } from '@workspace/lib/vector';
+import { sceneMediaNames } from '../../lib/document/media';
 import {
     drawingPage,
     emptyPage,
@@ -14,7 +15,6 @@ import {
     renderCanvasPage,
     renderFittedPage,
     renderPrintPage,
-    sceneMediaNames,
 } from '../../lib/export/canvas/render';
 import { sanitizeExportHtml } from '../../lib/export/sanitize';
 import { buildGoldenDeckScene, buildGoldenVectorScene, GOLDEN_MEDIA_NAME } from '../fixtures/golden-documents';
