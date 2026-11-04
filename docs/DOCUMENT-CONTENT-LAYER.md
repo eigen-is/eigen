@@ -47,9 +47,18 @@ Only the export read recalcs, and only a workbook nobody computed ([SHEETS.md §
 
 ## The references reader names the parts a state uses
 
-`documentReferences` (`references.ts`) returns the files in a document's `media/` folder and the comment threads in its `chat/` folder that one state of the document names. It is the read that document lifecycle's sweep and fresh copy build on, which keep only the parts some state names ([PROPOSAL_DOCUMENT_LIFECYCLE.md](proposals/PROPOSAL_DOCUMENT_LIFECYCLE.md)). A name it misses would delete a part in use, so it errs toward more names, and it throws on a shape it does not know, such as a card that is no map or a workbook snapshot it can't decode. The caller takes a throw as "delete nothing".
+`documentReferences` (`references.ts`) returns what one state of a document names among its own parts: the files in its `media/` folder, the comment threads in its `chat/` folder, and the comment cards it has in use. The sweep and a fresh copy build on it, and keep only the parts some state names ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md#a-file-stays-while-a-state-names-it-and-a-sweep-deletes-the-rest)). A name it misses would delete a part in use, so it errs toward more names. A throw means "delete nothing": the sweep skips the document, and a copy takes it whole.
 
-Media come from `mediaNamesIn` over every content root: a doc's body and every band, a canvas's elements and its frame pictures (`sceneMediaNames`), a workbook's floating images. A card's attachment that is a name is a file in `media/` too. Only a card in use counts, by its host's rule: a doc's `comment` mark or a node's `commentCardId` in any fragment (`commentCardIdsIn`), a canvas card that an element anchors or that is not marked deleted (`activeCommentCardIds`), a cell's `commentCardIds`, and a stickies card some column lists (`boardCardIds`). A workbook is read as stored, its snapshot plus every pending op and no replay, so an image or a comment an op removed stays named until the next compaction. `REFERENCE_READER_VERSION` changes whenever what a reader finds changes.
+Media come from `mediaNamesIn` over every content root: a doc's body and every band, a canvas's elements and its frame pictures (`sceneMediaNames`), a workbook's floating images. A card's attachment that is a name is a file in `media/` too. Only a card in use counts, by its host's rule: a doc's `comment` mark or a node's `commentCardId` in any fragment (`commentCardIdsIn`), a canvas card that an element anchors or that is not marked deleted (`activeCommentCardIds`), a cell's `commentCardIds`, and a stickies card some column lists (`boardCardIds`). A restore brings back a version's anchors but keeps today's cards, so a read of the current state can be given the cards the saved versions have in use, and then names the thread and the files today's card holds for each. `REFERENCE_READER_VERSION` changes whenever what a reader finds changes.
+
+Each type reads its content as its editor does, so a shape the editor never shows names nothing:
+
+- A doc and a workbook are walked whole for any `mediaName` and any anchor field, whatever node or cell holds it, so a node type the reader does not know still names its parts.
+- A workbook is read as stored, its snapshot plus every pending op and no replay, so an image or a comment an op removed stays named until the next compaction. A snapshot it can't decode, such as broken JSON or another format, throws, and so does an op it can't read.
+- The canvas reads its scene through `readVectorFromDoc`, which drops an element its editor can't read, so that element names nothing and draws nothing either.
+- A board reads its cards through `boardCardIds`, as the board does: an id that no column lists, or that the `tasks` map holds as no card, is not in use.
+
+The cards are read strictly in every type. A card that is no map, or whose thread name or attachment list has a shape the editor never writes, throws, because dropping it could drop a part it names.
 
 ## A replace doesn't merge; an insert arrives as a peer's edit
 
