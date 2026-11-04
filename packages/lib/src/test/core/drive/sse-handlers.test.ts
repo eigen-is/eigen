@@ -7,6 +7,7 @@ import { collabKeys } from '../../../core/collab/hooks/keys';
 import { driveKeys } from '../../../core/drive/hooks/keys';
 import { handleDriveSSEvent } from '../../../core/drive/sse-handlers';
 import { notificationKeys } from '../../../core/notification/hooks/keys';
+import { versionsKeys } from '../../../core/versioning/hooks/keys';
 import { invalidatedBy } from '../../invalidation';
 
 // A relayed drive event must never reach the user as a toast, so every toast is counted.
@@ -172,6 +173,14 @@ describe('handleDriveSSEvent — DRIVE_FILE_HISTORY_UPDATED', () => {
 
         handleDriveSSEvent(driveEvent(SSEventType.DRIVE_FILE_HISTORY_UPDATED), queryClient, VIEWER);
         expect(hasKey(invalidated, driveKeys.history(OWNER))).toBe(true);
+    });
+
+    // A restore or Delete history in another tab records a file event, and the event names the document.
+    test("refreshes the document's version list, so another tab's File menu lists what is left", () => {
+        const { queryClient, invalidated } = trackingClient();
+
+        handleDriveSSEvent(driveEvent(SSEventType.DRIVE_FILE_HISTORY_UPDATED), queryClient, VIEWER);
+        expect(hasKey(invalidated, versionsKeys.container(OWNER, MOUNT, PATH))).toBe(true);
     });
 });
 

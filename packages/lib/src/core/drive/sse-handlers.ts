@@ -9,6 +9,7 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import { invalidateChatMatches } from '../chat/hooks/keys';
 import { debouncePerOwner } from '../debounce-per-owner';
 import { invalidateSearchOwner } from '../search';
+import { invalidateVersions } from '../versioning/hooks/keys';
 import {
     invalidateAclSharedOrUnshared,
     invalidateAclUpdated,
@@ -122,8 +123,10 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, use
             invalidateFileHistory(queryClient, path.ownerId);
             break;
 
+        // A restore and Delete history record a file event too, so the document's version list refetches with it.
         case SSEventType.DRIVE_FILE_HISTORY_UPDATED:
             invalidateFileHistory(queryClient, path.ownerId);
+            invalidateVersions(queryClient, path.ownerId, path.mountId, path.id);
             break;
     }
 }
