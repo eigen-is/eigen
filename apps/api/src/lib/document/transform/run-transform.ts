@@ -253,8 +253,8 @@ export async function runSheetsCompaction(
     return { snapshot: new TextDecoder().decode(result.snapshot), dropped: result.dropped };
 }
 
-// The parts each document names, such as a document's current state and each of its versions, or every document of a
-// copy, read in one job. The states cross to the child as a copy, so together they are held to what an import may send.
+// The parts each document names, read in one job. The states cross to the child as a copy, so together they are held
+// to what an import may send.
 export async function runDocumentReferences(
     documents: ReferencesJob['documents'],
     opts: TransformOptions,

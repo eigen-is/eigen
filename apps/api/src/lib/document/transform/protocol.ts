@@ -140,7 +140,7 @@ export type SheetsCompactionJob = {
     batches: string;
 };
 
-// The parts each of a list of documents names, such as a document's current state and its versions, in one job.
+// The parts each of a list of documents names, read in one job.
 export type ReferencesJob = {
     kind: 'references';
     documents: { documentType: DriveCollabType; source: YjsStatePayload }[];

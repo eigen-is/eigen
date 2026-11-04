@@ -14,7 +14,7 @@ export const paths = sqliteTable('paths', {
     parentId: text('parentId'),
     ownerId: text('ownerId').notNull(),
     mimeType: text('mimeType').notNull(),
-    // NULL = the folder-size cache was invalidated; recomputed lazily (invalidateSizesFrom / computeFolderSizeInTx).
+    // A folder's NULL size means its cached size was dropped, and the next read computes it again.
     size: integer('size').default(0),
     thumbnail: text('thumbnail'),
     acl: text('acl', { mode: 'json' }).$type<DriveACL[] | null>(),
@@ -26,22 +26,19 @@ export const paths = sqliteTable('paths', {
     updatedAt: integer('updatedAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),
     trashedAt: integer('trashedAt', { mode: 'timestamp' }),
     trashedFrom: text('trashedFrom'),
-    // Drive-wide content search (metadata.db v6). contentDirty is set on a real body
-    // write (plaintext at the file-write seam; containers via onSync) and drained by the
-    // content-reindex sweep. contentIndexedAt drives the 2-min per-container re-extract cap.
+    // The Drive-wide content search. A write of a text file's body, or a container's sync, sets contentDirty, and the
+    // content reindex sweep clears it. contentIndexedAt holds a container to one extract every two minutes.
     contentDirty: integer('contentDirty').notNull().default(0),
     contentIndexedAt: integer('contentIndexedAt', { mode: 'timestamp' }),
 });
 
-// Write-behind upload queue for S3-backed mounts. One row per storage key
-// with an upload owed; deleted on ack. Local to metadata.db so the queue's own state is
-// synchronously durable, transactional with the path rows it guards, and moves with the
-// Home. `stagingPath` is the BASENAME of a frozen staged copy in the mount's stagingDir — a VACUUM
-// INTO copy of a managed database, or a plain file a home restore staged (resolved at read time so
-// it survives a data-dir relocation); epochs are plain ms numbers.
-// `isDatabase` says what the staged copy holds: true for the managed databases the queue was
-// written for (a VACUUM INTO copy, refused before the PUT if it lost its SQLite header), false for
-// the plain files a restore stages (materializeMount), which have no header to check.
+// The write-behind upload queue of an S3 mount: one row per storage key that still owes an upload, deleted when the
+// bucket acknowledges it. It lives in metadata.db, so the queue's state is durable at once, changes in the same
+// transaction as the path rows it guards, and moves with the Home. `stagingPath` is only the file name of a frozen
+// staged copy in the mount's staging folder. That copy is a VACUUM INTO copy of a managed database, or a plain file a
+// home restore staged. The folder is joined in at read time, so a moved data folder still works. The times are plain
+// milliseconds. `isDatabase` says what the copy holds. It is true for a managed database, whose copy is refused before
+// the upload if it lost its SQLite header. It is false for a plain file a restore staged, which has no header to check.
 export const pendingUploads = sqliteTable('pending_uploads', {
     storageKey: text('storageKey').primaryKey(),
     stagingPath: text('stagingPath').notNull(),

@@ -1,7 +1,7 @@
-// The media of eigen documents: which files of its media folder a document's content names, the main thread's listing
-// of that folder and the URLs or bytes it prepares, and the data: URIs the transform process turns the bytes into for an
-// export. The transform process loads this module, so it imports nothing heavy, such as the preview cache and the sheet
-// engine behind it.
+// The media of eigen documents, the files in a document's media folder. It finds which of them a document's content
+// names. On the main thread it lists the folder and prepares the URLs or the bytes a transform needs. In the transform
+// process it turns those bytes into the data: URIs an export embeds. The transform process loads this module, so it
+// imports nothing heavy, such as the preview cache and the sheet engine behind it.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { VectorScene } from '@workspace/lib/vector';
@@ -16,7 +16,7 @@ export async function listDocumentMedia(mount: Mount, drivePath: DrivePath): Pro
 }
 
 // The media names a document's content holds, for an export or a read of the parts it uses. Every document kind names a
-// file in `media/` by a `mediaName` field (docs/MEDIA-REFERENCES.md), wherever it sits in the tree.
+// file in `media/` by a `mediaName` field, wherever it sits in the tree.
 export function mediaNamesIn(tree: unknown): Set<string> {
     const names = new Set<string>();
     const stack = [tree];
@@ -48,10 +48,9 @@ function resolvePublicApiUrl(): string {
 }
 const PUBLIC_API_URL = resolvePublicApiUrl();
 
-// Preview media prep: the name → embed-URL map a preview transform carries. Previews
-// reference media by URL, so no bytes cross into the transform process. A Map, so a
-// mediaName that is document data (`constructor`, `toString`) can never resolve to
-// something off Object.prototype.
+// The map from each media name to the URL a preview embeds. A preview names its media by URL, so no bytes cross into
+// the transform process. It is a Map, because a mediaName is document data, and a name such as `constructor` must
+// never resolve to something on Object.prototype.
 export async function buildPreviewUrlMap(mount: Mount, drivePath: DrivePath): Promise<Map<string, string>> {
     const media = await listDocumentMedia(mount, drivePath);
     return new Map(

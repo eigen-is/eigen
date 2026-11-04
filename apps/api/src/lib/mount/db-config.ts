@@ -138,12 +138,11 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
             `),
         },
         {
-            // Drive-wide content index. Additive + regenerable: a sibling
-            // paths_content_fts over a dedicated path_content table keeps large body text
-            // off the hot `paths` row. The dirty bit + sweep populate it; the AFTER DELETE
-            // ON paths trigger clears the content row. The 5 container type values are the
-            // EIGEN_DOC_TYPES frozen at v6 — kept literal so this historical migration never
-            // shifts if that constant later changes.
+            // The Drive-wide content index. It is additive and can be built again. A sibling paths_content_fts over a
+            // table of its own, path_content, keeps large body text off the busy `paths` row. The dirty bit and the
+            // reindex sweep fill it, and the AFTER DELETE trigger on paths clears a path's row. The five container
+            // types are EIGEN_DOC_TYPES as it was at v6. They stay literal, so this migration never shifts when that
+            // constant changes.
             version: 6,
             up: (db) => {
                 db.exec(`
@@ -207,16 +206,16 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
             up: (db) => {
                 // The index cannot be created over an existing duplicate, so every one but the oldest is
                 // renamed first. Rows trashed with a folder count, since restoreDescendants restores them
-                // with no conflict check; rows trashed on their own restore through restorePath's conflict
+                // with no conflict check. Rows trashed on their own restore through restorePath's conflict
                 // rename. Only `name` changes: an id-keyed `file` does not depend on it, and on a by-name
-                // mount the duplicates already share one path. Roots never collide: NULLs are distinct.
+                // mount the duplicates already share one path. Roots never collide, as NULLs are distinct.
 
-                // Mirror SQLite's ASCII-only LOWER() — the index and assertUniqueName both fold with it —
-                // so the dedup renames EXACTLY the rows CREATE UNIQUE INDEX would reject, no more (a JS
-                // toLowerCase would over-fold non-ASCII case variants SQLite keeps distinct).
+                // This folds case as SQLite's LOWER() does, ASCII letters only. The index and assertUniqueName fold
+                // the same way, so the dedup renames exactly the rows CREATE UNIQUE INDEX would reject, and no more.
+                // A JS toLowerCase would also fold the non-ASCII case variants that SQLite keeps apart.
                 const lower = (s: string): string => s.replace(/[A-Z]/g, (c) => c.toLowerCase());
-                // Suffix goes BEFORE the extension; a leading dot is a dotfile, not an extension
-                // (matches buildStorageKey's dotIdx > 0 rule).
+                // The suffix goes before the extension. A leading dot makes a dotfile, not an extension, as in
+                // buildStorageKey.
                 const split = (name: string): { base: string; ext: string } => {
                     const dot = name.lastIndexOf('.');
                     return dot > 0 ? { base: name.slice(0, dot), ext: name.slice(dot) } : { base: name, ext: '' };

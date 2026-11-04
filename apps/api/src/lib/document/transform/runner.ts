@@ -42,8 +42,8 @@ export const TRANSFORM_LIMITS: Record<
     // A workbook's log folded at its close: a decode, a replay and an encode, less than an export does. It runs in the
     // background and holds the one child, so it gets a preview's cost and room for a large workbook.
     compact: { deadlineMs: 60_000, admissionCostMs: 15_000 },
-    // A read of what a document's states name, such as its current state and its versions before a sweep, or every
-    // document of a copy. Each read is a materialize and a walk, so it gets a compaction's limits.
+    // A read of what a document's state names, such as a version before a media sweep. It is a materialize and a walk,
+    // so it gets a compaction's limits.
     references: { deadlineMs: 60_000, admissionCostMs: 15_000 },
 };
 
@@ -59,7 +59,7 @@ const MAX_PREDICTED_WAIT_MS = 120_000;
 const CLOSE_GRACE_MS = 5_000;
 // A killed child stuck in the kernel can't exit, and must not hold the shutdown.
 const KILL_WAIT_MS = 1_000;
-// Shown verbatim by useExportDocument's error toast — keep it human-readable.
+// useExportDocument's error toast shows it word for word, so it stays readable for a person.
 export const BUSY_MESSAGE = 'The server is busy, please try again in a moment';
 
 // Linux alone takes these limits, as macOS refuses setrlimit for the data segment. $1 is the data segment in KiB, $2
@@ -81,10 +81,10 @@ const JIT_RESERVATION_BYTES = '67108864';
 // killer sends SIGKILL.
 const OUT_OF_MEMORY_SIGNALS = new Set<number | NodeJS.Signals>(['SIGABRT', 'SIGSEGV', 'SIGBUS', 'SIGTRAP', 'SIGKILL']);
 
-// captureMs / prepMs: main-thread source-capture and media-preparation time measured
-// by the caller — logged per job because a fast transform with slow main-thread
-// preparation is not a successful offload. prepareMedia answers an export child that asks
-// for the media its document names, inside the job's deadline; the signal aborts once the job ends.
+// captureMs and prepMs are the time the caller spent on the main thread, capturing the source and preparing the
+// media. They are logged per job, because a fast transform after a slow preparation is no real offload. prepareMedia
+// answers an export child that asks for the media its document names, inside the job's deadline. Its signal aborts
+// once the job ends.
 export type RunOptions = {
     priority: TransformPriority;
     deadlineMs: number;
@@ -192,8 +192,7 @@ function isValidResponse(response: unknown, request: DocumentTransformRequest): 
         return Array.isArray(r.warnings) && r.warnings.every(isValidWarning) && resultMatchesRequest(request, r.result);
     }
     if (r.ok === false) {
-        // `status` becomes the HTTP status the main thread throws (run-transform.ts) —
-        // only an error-range integer may cross.
+        // `status` becomes the HTTP status the main thread throws, so only an integer in the error range may cross.
         const status = r.error?.status;
         return (
             typeof r.error?.code === 'string' &&
@@ -205,9 +204,11 @@ function isValidResponse(response: unknown, request: DocumentTransformRequest): 
     return false;
 }
 
-// An import has no source document type — log the type it produces. A references job logs each type it reads.
+// An import has no source document type, so it logs the type it produces. A references job logs each type it reads.
 function requestType(request: DocumentTransformRequest): string {
-    if (request.kind === 'references') return [...new Set(request.documents.map((d) => d.documentType))].join(',');
+    if (request.kind === 'references') {
+        return [...new Set(request.documents.map((document) => document.documentType))].join(',');
+    }
     return request.kind === 'import' ? request.targetType : request.documentType;
 }
 
@@ -219,9 +220,8 @@ function requestFormat(request: DocumentTransformRequest): string {
     return '-';
 }
 
-// The count/bytes a warning carries is the diagnostic — a bare code hides how many
-// blobs were skipped. recalc-failed's message stays out of the logs: it can quote
-// document content.
+// The count or the bytes a warning carries is the diagnostic, since a bare code hides how many blobs were skipped.
+// recalc-failed's message stays out of the logs, because it can quote document content.
 function formatWarning(warning: TransformWarning): string {
     if ('count' in warning) return `${warning.code}:${warning.count}`;
     if ('bytes' in warning) return `${warning.code}:${warning.bytes}`;
@@ -369,9 +369,9 @@ export class DocumentTransformRunner {
             const outputBytes = response.ok ? resultBytes(response.result) : 0;
             const warnings = response.ok && response.warnings.length > 0 ? response.warnings : null;
             const signal = exited ? child?.signalCode : null;
-            // The child stamps transform-only time, so the rest of the job is spawn,
-            // module evaluation and messaging — the one-shot cost worth watching. Clamped:
-            // totalMs is whole-ms while the child's stamp is fractional, and -1 is taken.
+            // The child stamps only the transform's own time. The rest of the job is the spawn, the module
+            // evaluation and the messaging, the one-off cost worth watching. It is clamped at 0, because totalMs is
+            // whole milliseconds while the child's stamp is fractional, and -1 already means no stamp.
             const startupMs = transformMs === undefined ? -1 : Math.max(0, Math.round(totalMs - transformMs));
             console.log(
                 `[transform] job=${job.id} kind=${job.request.kind} type=${requestType(job.request)} ` +
@@ -421,10 +421,9 @@ export class DocumentTransformRunner {
         this.active.set(job.id, { kill, settle, admissionCostMs: job.admissionCostMs });
 
         const timer = setTimeout(() => kill('timeout'), job.deadlineMs);
-        // Spawning and sending can throw synchronously (a failed spawn under resource
-        // exhaustion, a DataCloneError on a detached buffer). Unhandled, that holds the
-        // only slot until the deadline and escapes into run()'s executor — rejecting a
-        // promise that is documented to always resolve.
+        // Spawning and sending can throw synchronously, such as a spawn that fails under resource exhaustion or a
+        // DataCloneError on a detached buffer. Unhandled, that holds the only slot until the deadline. It also escapes
+        // into run()'s executor and rejects a promise that must always resolve.
         try {
             child = Bun.spawn(limitedCommand([process.execPath, this.entry], job.deadlineMs, this.memoryLimitKiB), {
                 // What the transform graph reads: the data root and mode the eml preview's mail imports resolve
