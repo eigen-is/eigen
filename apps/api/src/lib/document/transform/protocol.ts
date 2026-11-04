@@ -147,7 +147,7 @@ export type ReferencesJob = {
     kind: 'references';
     documentType: DriveCollabType;
     source: YjsStatePayload;
-    versionCards?: string[];
+    versionCards?: readonly string[];
 };
 
 export type DocumentTransformRequest =

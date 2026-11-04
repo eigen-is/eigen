@@ -5,6 +5,7 @@
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import type { MountConfig, MountSettings } from '@workspace/lib/types';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
 import type { SQL } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
@@ -13,6 +14,7 @@ import { getS3Config, getServerSettings, mapStorageType } from '../config/server
 import { ApiError } from '../core';
 import type { StorageBackend } from '../storage';
 import { LocalStorage, S3Storage } from '../storage';
+import { WEEK_MS } from '../versioning/retention';
 
 // The ids of every Eigen document container and of every path inside one. A query adds it as
 // `parentId NOT IN (…)` to leave out the insides of documents, such as their data.db, media and
@@ -140,6 +142,28 @@ export function isViableRecoveryTemp(tempPath: string, knownSize: number): boole
 // works on.
 export function pathKey(ownerId: string, mountId: string, pathId: string): string {
     return `${ownerId}.${mountId}.${pathId}`;
+}
+
+// What was read from a stored file, such as the names an SVG draws, kept while the file's row is the same. Every write
+// stamps the row's updatedAt, so a changed row means the file is read again. An entry lives for a week from its last
+// use, long enough for a daily sweep to find it, and the old ones go whenever a file is read.
+export class RowMemo<T> {
+    private readonly entries = new Map<string, { row: string; value: T; usedAt: number }>();
+
+    public async get(file: DrivePath, read: () => Promise<T>): Promise<T> {
+        const key = pathKey(file.ownerId, file.mountId, file.id);
+        const row = `${file.size}.${file.updatedAt.getTime()}`;
+        const known = this.entries.get(key);
+        if (known?.row === row) {
+            known.usedAt = Date.now();
+            return known.value;
+        }
+        const value = await read();
+        const now = Date.now();
+        for (const [old, entry] of this.entries) if (now - entry.usedAt >= WEEK_MS) this.entries.delete(old);
+        this.entries.set(key, { row, value, usedAt: now });
+        return value;
+    }
 }
 
 const DEFAULT_MOUNT_NAME = 'My Drive';

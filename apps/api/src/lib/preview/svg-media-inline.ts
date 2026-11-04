@@ -8,8 +8,7 @@ import { spliceAfterSvgOpenTag } from '@workspace/lib/xml';
 import { Semaphore } from '../../utils/semaphore';
 import { drawnCodePoints, namedFamilies, slicesFaceCss } from '../export/fonts';
 import type { Mount } from '../mount';
-import { pathKey } from '../mount/helpers';
-import { WEEK_MS } from '../versioning/retention';
+import { RowMemo } from '../mount/helpers';
 
 // The raw SVG is hostile bytes, and three rails keep it safe:
 //   - A name resolves in the svg's own folder only, through mount.getChildByName. The codec behind listEigenMediaRefs
@@ -41,8 +40,8 @@ const FONT_FACE_SNIFF = Buffer.from('@font-face');
 // How many sibling svgs withSvgSiblings reads at once.
 const SVG_READS = 4;
 
-// The names each sibling svg withSvgSiblings read holds, by owner, mount and path, with its row as it was read.
-const svgRefs = new Map<string, { row: string; refs: readonly string[]; usedAt: number }>();
+// The names each sibling svg withSvgSiblings read holds. A media file never changes, so each is read once.
+const svgRefs = new RowMemo<readonly string[]>();
 
 // Thrown when the running output would exceed the ceiling; caught at the top to serve a stripped svg.
 class OutputTooLargeError extends Error {}
@@ -100,25 +99,14 @@ export async function withSvgSiblings(
     return kept;
 }
 
-// The names one sibling svg holds. A media file never changes, so they are read once and remembered while its row
-// stays the same. An entry lives for a week from its last use, and the old ones go whenever one is read.
+// The names one sibling svg holds.
 async function siblingRefs(mount: Mount, parentId: string, name: string): Promise<readonly string[]> {
     const child = await mount.getChildByName(parentId, name);
     if (child?.type !== 'file' || child.mimeType !== 'image/svg+xml') return [];
-    const key = pathKey(child.ownerId, child.mountId, child.id);
-    const row = `${child.size}.${child.updatedAt.getTime()}`;
-    const known = svgRefs.get(key);
-    const now = Date.now();
-    if (known?.row === row) {
-        known.usedAt = now;
-        return known.refs;
-    }
-    const bytes = await mount.readBytes(child.id);
-    if (!bytes) return [];
-    const refs = listEigenMediaRefs(Buffer.from(bytes).toString('utf8'));
-    for (const [old, entry] of svgRefs) if (now - entry.usedAt >= WEEK_MS) svgRefs.delete(old);
-    svgRefs.set(key, { row, refs, usedAt: now });
-    return refs;
+    return svgRefs.get(child, async () => {
+        const bytes = await mount.readBytes(child.id);
+        return bytes ? listEigenMediaRefs(Buffer.from(bytes).toString('utf8')) : [];
+    });
 }
 
 async function resolveSvgRefs(

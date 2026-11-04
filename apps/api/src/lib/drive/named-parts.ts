@@ -12,17 +12,14 @@ import { runDocumentReferences } from '../document/transform/run-transform';
 import type { TransformPriority } from '../document/transform/runner';
 import { documentTransformRunner } from '../document/transform/runner';
 import type { Mount } from '../mount';
-import { pathKey } from '../mount/helpers';
+import { RowMemo } from '../mount/helpers';
 import { foldName } from '../mount/names';
 import type { DocumentReferences } from '../mount/schema';
 import { withSvgSiblings } from '../preview/svg-media-inline';
-import { WEEK_MS } from '../versioning/retention';
 
-// The files each kept thread's messages name, by owner, mount and data.db, with the data.db row as it was read. A
-// thread that names an old file would otherwise be read at every sweep, and on a bucket that read is a whole
-// download. So it is read again only once a sync changed its row. A document is swept at most once a day, so an entry
-// lives for a week from its last use, and the old ones go whenever one is read.
-const attachmentNames = new Map<string, { row: string; names: ReadonlySet<string>; usedAt: number }>();
+// The files each kept thread's messages name, by its data.db. A thread that names an old file would otherwise be read
+// at every sweep, and on a bucket that read is a whole download. So it is read again only once a sync changed its row.
+const attachmentNames = new RowMemo<ReadonlySet<string>>();
 
 // The parts one stored state names, such as a document's data.db or one of its versions. Each read is a job of its
 // own, so memory and the transform process's time stay bounded to one state. A read of the current state is given the
@@ -32,7 +29,7 @@ export async function storedReferences(
     documentType: DriveCollabType,
     pathId: string,
     priority: TransformPriority,
-    versionCards?: string[],
+    versionCards?: readonly string[],
 ): Promise<DocumentReferences> {
     // A job the transform process would refuse is refused before the download, so it costs nothing.
     documentTransformRunner.assertAdmissible(priority);
@@ -55,19 +52,8 @@ export async function mediaKeptBy(
 }
 
 // The files a thread's messages name, a deleted message included, folded the same way.
-export async function threadAttachmentNames(mount: Mount, dataDb: DrivePath): Promise<ReadonlySet<string>> {
-    const key = pathKey(dataDb.ownerId, dataDb.mountId, dataDb.id);
-    const row = `${dataDb.size}.${dataDb.updatedAt.getTime()}`;
-    const known = attachmentNames.get(key);
-    if (known?.row === row) {
-        known.usedAt = Date.now();
-        return known.names;
-    }
-    const names = await readStoredCopy(mount, dataDb.id, readAttachmentNames);
-    const now = Date.now();
-    for (const [old, entry] of attachmentNames) if (now - entry.usedAt >= WEEK_MS) attachmentNames.delete(old);
-    attachmentNames.set(key, { row, names, usedAt: now });
-    return names;
+export function threadAttachmentNames(mount: Mount, dataDb: DrivePath): Promise<ReadonlySet<string>> {
+    return attachmentNames.get(dataDb, () => readStoredCopy(mount, dataDb.id, readAttachmentNames));
 }
 
 // A database nobody serves, such as a closed document's data.db, a version or a thread's data.db, is read from a temp
