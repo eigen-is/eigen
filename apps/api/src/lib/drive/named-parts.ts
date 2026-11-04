@@ -23,15 +23,17 @@ import { DAY_MS } from '../versioning/retention';
 const attachmentNames = new Map<string, { row: string; names: ReadonlySet<string>; usedAt: number }>();
 
 // The parts one stored state names, such as a document's data.db or one of its versions. Each read is a job of its
-// own, so memory and the transform process's time stay bounded to one state.
+// own, so memory and the transform process's time stay bounded to one state. A read of the current state is given the
+// cards the saved versions have in use.
 export async function storedReferences(
     mount: Mount,
     documentType: DriveCollabType,
     pathId: string,
     priority: TransformPriority,
+    versionCards?: string[],
 ): Promise<DocumentReferences> {
     const source = await readStoredCopy(mount, pathId, readYjsStatePayloadFromFile);
-    return runDocumentReferences({ documentType, source }, { priority });
+    return runDocumentReferences({ documentType, source, versionCards }, { priority });
 }
 
 // The files in a media folder that the names keep, folded the way getChildByName finds a file, whatever its case or

@@ -35,10 +35,14 @@ const version = (name: string) => mount.createFile(rootId, name, 'application/x-
 describe('version_references', () => {
     test("a version's names come back as stored, and a second write replaces them", async () => {
         const id = await version('2026-11-01T10-00-00-000Z.db');
-        putVersionReferences(mount, [{ versionPathId: id, readerVersion: 1, names: { media: ['a.png'], chat: [] } }]);
-        putVersionReferences(mount, [{ versionPathId: id, readerVersion: 2, names: { media: [], chat: ['t1'] } }]);
+        putVersionReferences(mount, [
+            { versionPathId: id, readerVersion: 1, names: { media: ['a.png'], chat: [], cards: [] } },
+        ]);
+        putVersionReferences(mount, [
+            { versionPathId: id, readerVersion: 2, names: { media: [], chat: ['t1'], cards: ['c1'] } },
+        ]);
         expect(getVersionReferences(mount, [id])).toEqual([
-            { versionPathId: id, readerVersion: 2, names: { media: [], chat: ['t1'] } },
+            { versionPathId: id, readerVersion: 2, names: { media: [], chat: ['t1'], cards: ['c1'] } },
         ]);
     });
 
@@ -49,7 +53,9 @@ describe('version_references', () => {
 
     test('deleting the version file deletes its row', async () => {
         const id = await version('2026-11-01T12-00-00-000Z.db');
-        putVersionReferences(mount, [{ versionPathId: id, readerVersion: 1, names: { media: ['b.png'], chat: [] } }]);
+        putVersionReferences(mount, [
+            { versionPathId: id, readerVersion: 1, names: { media: ['b.png'], chat: [], cards: [] } },
+        ]);
         await mount.deletePath(id);
         expect(getVersionReferences(mount, [id])).toEqual([]);
     });

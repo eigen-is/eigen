@@ -82,12 +82,11 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
 
         // A version is read again only when the reader changed. A version's row is written as soon as its read
         // returns, so a failure keeps the work done.
-        const named = [await storedReferences(mount, documentType, read.dataDb.id, 'background')];
         const rows = getVersionReferences(
             mount,
             read.versions.map((version) => version.id),
         ).filter((row) => row.readerVersion >= REFERENCE_READER_VERSION);
-        named.push(...rows.map((row) => row.names));
+        const named = rows.map((row) => row.names);
         const known = new Set(rows.map((row) => row.versionPathId));
         for (const version of read.versions) {
             if (known.has(version.id)) continue;
@@ -97,6 +96,10 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
                 { versionPathId: version.id, readerVersion: REFERENCE_READER_VERSION, names },
             ]);
         }
+        // A restore brings back a version's anchors but keeps today's cards, so the current state also names what
+        // today's card holds for every card a version has in use.
+        const versionCards = [...new Set(named.flatMap((names) => names.cards))];
+        named.push(await storedReferences(mount, documentType, read.dataDb.id, 'background', versionCards));
 
         const media = await mount.getChildByName(container.id, 'media');
         const keptNames = media

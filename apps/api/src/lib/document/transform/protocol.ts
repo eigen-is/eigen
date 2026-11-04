@@ -140,8 +140,14 @@ export type SheetsCompactionJob = {
     batches: string;
 };
 
-// The parts one document's state names.
-export type ReferencesJob = { kind: 'references'; documentType: DriveCollabType; source: YjsStatePayload };
+// The parts one document's state names. `versionCards` are the cards a saved version has in use, whose thread and
+// files the current state's cards name too.
+export type ReferencesJob = {
+    kind: 'references';
+    documentType: DriveCollabType;
+    source: YjsStatePayload;
+    versionCards?: string[];
+};
 
 export type DocumentTransformRequest =
     | (CollabTransformJob & { source: YjsStatePayload })
@@ -352,8 +358,10 @@ function isDocumentReferences(value: unknown): boolean {
         value !== null &&
         'media' in value &&
         'chat' in value &&
+        'cards' in value &&
         isStringList(value.media) &&
-        isStringList(value.chat)
+        isStringList(value.chat) &&
+        isStringList(value.cards)
     );
 }
 

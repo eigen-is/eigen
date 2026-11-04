@@ -20,7 +20,7 @@ import type { DocumentReferences } from '../mount/schema';
 import { mediaNamesIn, sceneMediaNames } from './media';
 
 // Bump it whenever what any reader here finds changes.
-export const REFERENCE_READER_VERSION = 1;
+export const REFERENCE_READER_VERSION = 2;
 
 // The doc's body and its bands, and any other fragment the doc declares.
 const DOC_FRAGMENTS = Object.entries(EIGEN_DOC_TYPE_INFO.doc.yjsRoots)
@@ -32,8 +32,13 @@ const CELL_ANCHOR = 'commentCardIds' satisfies keyof Cell;
 
 // Only a card in use names its thread and its files, such as a card the content anchors, or on a canvas a card nobody
 // deleted. The rules a client shares live in lib beside it, such as the canvas's and the board's. An attachment that is
-// a Drive reference names a document elsewhere, not a file in media/.
-export function documentReferences(type: DriveCollabType, doc: Y.Doc): DocumentReferences {
+// a Drive reference names a document elsewhere, not a file in media/. A restore brings back a version's anchors but
+// keeps today's cards, so the cards a saved version has in use name their thread and their files here as well.
+export function documentReferences(
+    type: DriveCollabType,
+    doc: Y.Doc,
+    versionCards: readonly string[] = [],
+): DocumentReferences {
     const cards = readCards(doc, type === 'stickies' ? 'tasks' : 'comments');
     let media: Set<string>;
     let inUse: Set<string>;
@@ -76,15 +81,16 @@ export function documentReferences(type: DriveCollabType, doc: Y.Doc): DocumentR
             inUse = boardCardIds(doc);
             break;
     }
+    const named = new Set([...inUse, ...versionCards]);
     const chat = new Set<string>();
     for (const card of Object.values(cards)) {
-        if (!inUse.has(card.id)) continue;
+        if (!named.has(card.id)) continue;
         if (card.chatName) chat.add(card.chatName);
         for (const attachment of card.attachments ?? []) {
             if (typeof attachment === 'string') media.add(attachment);
         }
     }
-    return { media: [...media].sort(), chat: [...chat].sort() };
+    return { media: [...media].sort(), chat: [...chat].sort(), cards: [...inUse].sort() };
 }
 
 // Two card readers exist on purpose. The client's readCards is lenient: it drops a field it cannot read and sanitizes

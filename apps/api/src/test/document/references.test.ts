@@ -49,7 +49,7 @@ function addCard(
     doc.getMap(mapName).set(id, card);
 }
 
-const sorted = (references: DocumentReferences): DocumentReferences => ({
+const sorted = (references: DocumentReferences): Pick<DocumentReferences, 'media' | 'chat'> => ({
     media: [...references.media].sort(),
     chat: [...references.chat].sort(),
 });
@@ -223,6 +223,25 @@ describe('documentReferences', () => {
         });
     });
 
+    test('a state lists the cards it has in use', () => {
+        expect(documentReferences('doc', buildDoc()).cards).toEqual(
+            ['c-band', 'c-box', 'c-chart', 'c-equation', 'c-figure', 'c-mark'].sort(),
+        );
+        expect(documentReferences('vector', buildCanvas()).cards).toEqual([
+            'c-anchored',
+            'c-deleted-anchored',
+            'c-document',
+        ]);
+        expect(documentReferences('stickies', buildStickies()).cards).toEqual(['on-board']);
+    });
+
+    test("a card a saved version has in use names today's thread and files, though the state does not anchor it", () => {
+        const references = documentReferences('doc', buildDoc(), ['c-loose', 'c-gone']);
+        expect(references.media).toContain('loose.pdf');
+        expect(references.chat).toContain('thread-loose');
+        expect(references.cards).not.toContain('c-loose');
+    });
+
     test('a doc names the figure and the comment of a footnote', () => {
         const doc = new Y.Doc();
         const note = {
@@ -318,8 +337,12 @@ describe('runDocumentReferences', () => {
             ['stickies', buildStickies],
             ['doc', buildDoc],
         ] as const) {
-            const references = await runDocumentReferences({ documentType, source: payloadOf(build()) }, {});
-            expect(sorted(references)).toEqual(sorted(documentReferences(documentType, build())));
+            const versionCards = ['c-loose'];
+            const references = await runDocumentReferences(
+                { documentType, source: payloadOf(build()), versionCards },
+                {},
+            );
+            expect(references).toEqual(documentReferences(documentType, build(), versionCards));
         }
     });
 

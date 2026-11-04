@@ -192,7 +192,8 @@ async function handleRequest(jobId: number, request: DocumentTransformRequest): 
     if (request.kind === 'references') {
         if (blobsSkipped > 0) throw new Error(`${request.documentType}: ${blobsSkipped} unreadable Yjs blobs`);
         const { documentReferences } = await import('../references');
-        return { ok: true, result: { references: documentReferences(request.documentType, doc) }, warnings: [] };
+        const references = documentReferences(request.documentType, doc, request.versionCards);
+        return { ok: true, result: { references }, warnings: [] };
     }
 
     const { result, warnings } = await renderCollabRequest(request, doc, mediaLoader(jobId));

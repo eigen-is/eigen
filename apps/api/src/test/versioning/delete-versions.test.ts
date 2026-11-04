@@ -87,7 +87,7 @@ describe('DELETE .../file/:pathId/versions', () => {
         const owner = ctx.alice.user;
         const { doc, thread, mount } = await docWithHistory(owner.id, aliceMountId, aliceRootId);
         const ids = [...(await versionIds(mount, doc.id)), ...(await versionIds(mount, thread.id))];
-        const names = { media: ['a.png'], chat: [] };
+        const names = { media: ['a.png'], chat: [], cards: [] };
         putVersionReferences(
             mount,
             ids.map((versionPathId) => ({ versionPathId, readerVersion: REFERENCE_READER_VERSION, names })),

@@ -1,6 +1,8 @@
 import { afterAll, afterEach, beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
+import { commentCardIdsIn } from '@workspace/lib/docs/eigendoc';
 import type { Sheet, SheetImage } from '@workspace/lib/sheets';
 import { encodeSheetsSnapshot, sheetsOpLog, sheetsStateMap } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -251,6 +253,35 @@ describe('the media sweep', () => {
         expect(await mediaNames(mount, path.id)).toEqual(['card.pdf']);
     });
 
+    // A restore brings back the version's anchors but keeps today's cards, so a card a version anchors keeps
+    // the attachment and the thread its card has today, such as ones added after the version was saved.
+    test("a card a version anchors keeps today's attachment and thread", async () => {
+        const { path, collab } = await openDoc(mount, M, 'CardLater', [paragraph(marked('c1')), paragraph()]);
+        addCard(collab.doc, 'c1', {});
+        const version = await drive.saveVersion(M, path.id);
+        const thread = await addThread(mount, M, path.id);
+        await addMedia(mount, path.id, 'later.pdf', { mimeType: 'application/pdf' });
+        const card = collab.doc.getMap('comments').get('c1');
+        if (!(card instanceof Y.Map)) throw new Error('no card');
+        card.set('attachments', ['later.pdf']);
+        card.set('chatName', thread.name);
+        collab.doc.getXmlFragment('default').delete(0, 1);
+        await close(M, path);
+
+        await sweepDocument(drive, path);
+        expect(await mediaNames(mount, path.id)).toEqual(['later.pdf']);
+        expect(await threadNames(mount, path.id)).toEqual([thread.name]);
+
+        await drive.restoreContainer(M, path.id, version.name);
+        const restored = await drive.getCollabDocument(M, path.id);
+        const anchors = commentCardIdsIn([yXmlFragmentToProsemirrorJSON(restored.doc.getXmlFragment('default'))]);
+        expect([...anchors]).toEqual(['c1']);
+        const restoredCard = restored.doc.getMap('comments').get('c1');
+        if (!(restoredCard instanceof Y.Map)) throw new Error('no card');
+        expect(restoredCard.get('attachments')).toEqual(['later.pdf']);
+        await close(M, path);
+    });
+
     test("an SVG figure's sibling media stay, to the inline depth", async () => {
         const { path } = await openDoc(mount, M, 'Svg', [paragraph(figure('outer.svg'))]);
         const svg = (...names: string[]) =>
@@ -361,7 +392,11 @@ describe('the media sweep', () => {
         try {
             await sweepDocument(drive, path);
             expect(getVersionReferences(mount, [versionId])).toEqual([
-                { versionPathId: versionId, readerVersion: REFERENCE_READER_VERSION, names: { media: [], chat: [] } },
+                {
+                    versionPathId: versionId,
+                    readerVersion: REFERENCE_READER_VERSION,
+                    names: { media: [], chat: [], cards: [] },
+                },
             ]);
             await sweepDocument(drive, path);
             expect(versionReads()).toBe(1);
@@ -371,7 +406,7 @@ describe('the media sweep', () => {
                 {
                     versionPathId: versionId,
                     readerVersion: REFERENCE_READER_VERSION - 1,
-                    names: { media: ['stale.png'], chat: [] },
+                    names: { media: ['stale.png'], chat: [], cards: [] },
                 },
             ]);
             await addMedia(mount, path.id, 'stale.png');
