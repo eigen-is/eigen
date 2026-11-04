@@ -125,9 +125,7 @@ async function sweep(drive: Drive, container: DrivePath, documentType: DriveColl
             if (known.has(version.id)) continue;
             const names = await storedReferences(mount, documentType, version.id, 'background');
             named.push(names);
-            putVersionReferences(mount, [
-                { versionPathId: version.id, readerVersion: REFERENCE_READER_VERSION, names },
-            ]);
+            putVersionReferences(mount, { versionPathId: version.id, readerVersion: REFERENCE_READER_VERSION, names });
         }
         // A restore brings back a version's anchors but keeps today's cards, so the current state also names what
         // today's card holds for every card a version has in use.

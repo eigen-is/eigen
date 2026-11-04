@@ -18,11 +18,10 @@ export function getVersionReferences(mount: Mount, versionPathIds: readonly stri
 }
 
 // A row read again, such as by a newer reader, replaces the old one.
-export function putVersionReferences(mount: Mount, rows: readonly VersionReferences[]): void {
-    if (rows.length === 0) return;
+export function putVersionReferences(mount: Mount, row: VersionReferences): void {
     mount.db
         .insert(versionReferences)
-        .values([...rows])
+        .values(row)
         .onConflictDoUpdate({
             target: versionReferences.versionPathId,
             set: { readerVersion: sql`excluded.readerVersion`, names: sql`excluded.names` },

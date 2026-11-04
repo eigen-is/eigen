@@ -88,10 +88,9 @@ describe('DELETE .../file/:pathId/versions', () => {
         const { doc, thread, mount } = await docWithHistory(owner.id, aliceMountId, aliceRootId);
         const ids = [...(await versionIds(mount, doc.id)), ...(await versionIds(mount, thread.id))];
         const names = { media: ['a.png'], chat: [], cards: [] };
-        putVersionReferences(
-            mount,
-            ids.map((versionPathId) => ({ versionPathId, readerVersion: REFERENCE_READER_VERSION, names })),
-        );
+        for (const versionPathId of ids) {
+            putVersionReferences(mount, { versionPathId, readerVersion: REFERENCE_READER_VERSION, names });
+        }
         expect(getVersionReferences(mount, ids)).toHaveLength(3);
 
         const res = await deleteVersions(owner.sessionToken, owner.id, aliceMountId, doc.id);

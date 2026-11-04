@@ -491,13 +491,11 @@ describe('the media sweep', () => {
             expect(versionReads()).toBe(1);
 
             // A row an older reader wrote is no record: its names keep nothing, and the version is read again.
-            putVersionReferences(mount, [
-                {
-                    versionPathId: versionId,
-                    readerVersion: REFERENCE_READER_VERSION - 1,
-                    names: { media: ['stale.png'], chat: [], cards: [] },
-                },
-            ]);
+            putVersionReferences(mount, {
+                versionPathId: versionId,
+                readerVersion: REFERENCE_READER_VERSION - 1,
+                names: { media: ['stale.png'], chat: [], cards: [] },
+            });
             await addMedia(mount, path.id, 'stale.png');
             await sweepDocument(drive, path);
             expect(versionReads()).toBe(2);
