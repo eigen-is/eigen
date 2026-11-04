@@ -650,6 +650,22 @@ describe('the thread sweep', () => {
         expect(await commentRows(M, path.id)).toEqual([]);
     });
 
+    test('a thread in the trash keeps its row and its status when another thread goes', async () => {
+        const { path } = await openDoc(mount, M, 'ThreadTrashed', [paragraph()]);
+        const trashed = await addThread(mount, M, path.id);
+        await drive.setCommentStatus(M, path.id, trashed.name, 'resolved', home.user);
+        await drive.deletePath(M, trashed.id);
+        const gone = await addThread(mount, M, path.id);
+
+        await close(M, path);
+        await sweepDocument(drive, path);
+        expect(await threadNames(mount, path.id)).toEqual([]);
+        expect(await commentRows(M, path.id)).toEqual([trashed.name]);
+        expect(await commentRows(M, path.id)).not.toContain(gone.name);
+        const row = await withCommentIndex(drive, M, path.id, (index) => index.get(trashed.name));
+        expect(row?.status).toBe('resolved');
+    });
+
     test("a thread's media nobody names goes, and a file a message names stays, a deleted message too", async () => {
         const { path, collab } = await openDoc(mount, M, 'ThreadMedia', [paragraph(marked('c1'))]);
         const thread = await addThread(mount, M, path.id, {

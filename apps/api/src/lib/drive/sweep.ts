@@ -151,11 +151,13 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
             const failed = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
             if (failed) throw failed.reason;
             // The rows go only once their threads went, because a thread that stays without its row loses its status
-            // and its assignee. A row whose thread went is harmless, and the next sweep that deletes a thread drops it.
+            // and its assignee. A thread in the trash keeps its row too, so a restore brings it back as it was. A row
+            // whose thread went is harmless, and the next sweep that deletes a thread drops it.
             if (chat && threads.length > 0) {
-                await withCommentIndex(drive, mount.id, container.id, async (index) =>
-                    index.deleteRowsWithoutThread((chatName) => mount.hasLiveChild(chat.id, chatName)),
-                );
+                await withCommentIndex(drive, mount.id, container.id, async (index) => {
+                    const present = new Set(mount.childNamesWithTrash(chat.id).map(foldName));
+                    return index.deleteRowsWithoutThread((chatName) => present.has(foldName(chatName)));
+                });
             }
             return { files, threads };
         });

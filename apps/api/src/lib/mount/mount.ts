@@ -14,7 +14,7 @@ import type { MountConfig } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { CONTROL_CHARS } from '@workspace/lib/validation';
 import type { BunFile } from 'bun';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { RWLock } from '../../utils/rw-lock';
 import { PATHS } from '../config/paths';
@@ -377,6 +377,17 @@ export class Mount {
             .select({ name: paths.name })
             .from(paths)
             .where(and(eq(paths.parentId, parentId), isNull(paths.trashedAt)))
+            .all()
+            .map((row) => row.name);
+    }
+
+    // The names of every child, those in the trash included. A child trashed on its own hangs under the
+    // mount root, and its trashedFrom keeps the folder it came from.
+    public childNamesWithTrash(parentId: string): string[] {
+        return this.db
+            .select({ name: paths.name })
+            .from(paths)
+            .where(or(eq(paths.parentId, parentId), eq(paths.trashedFrom, parentId)))
             .all()
             .map((row) => row.name);
     }
