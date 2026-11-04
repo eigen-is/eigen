@@ -287,9 +287,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             }
         }, [context.currentSheetId, context.selections, mergedSettings.hooks]);
 
-        // Surface the selected image or chart to the app so it can mount its properties panel. Fires on
-        // select and deselect and after a write; immer keeps the record's reference while it is unchanged,
-        // and the item is memoized on it, so the app's setState bails when nothing moved.
+        // Tells the app about the selected image or chart, so it can mount its properties panel. It fires on select,
+        // on deselect and after a write. Immer keeps the record's reference while it is unchanged, and the item is
+        // memoized on it, so the app's setState bails out when nothing moved.
         const { image: activeImage, chart: activeChart } = activeFloating(context);
         const activeItem = useMemo((): SheetFloatingItem | null => {
             if (activeImage) return { kind: 'image', object: activeImage };
@@ -527,9 +527,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
                 e.preventDefault();
 
-                // Cell text as an eigen text item, carried on the same wire as the image branch above:
-                // the sheet's HTML table rides after the marker span so a non-eigen consumer still pastes
-                // a real table, and the custom MIME lands for same-origin reads.
+                // The cells go out as an Eigen text item, the same way the image above does. The sheet's HTML table
+                // follows the marker span, so an app outside Eigen still pastes a real table. The Eigen item travels
+                // under its own MIME type, which a read from the same origin picks up.
                 const eigenData: EigenClipboardData = {
                     version: 1,
                     items: [buildCellRangeClipboardItem(ctx, pending.cellText)],
@@ -592,9 +592,10 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     }
 
                     if (paste.eigen) {
-                        // Mixed eigen payloads split by kind: image and chart items become floating objects,
-                        // text items land in cells. All apply when all are present. The image
-                        // insert is app-owned (typed size + cross-mount re-upload), gated on its hook.
+                        // A mixed Eigen payload splits by kind. Image and chart items become floating
+                        // objects, and text items land in cells, all in one paste. The app inserts the
+                        // images itself, at their copied size and re-uploaded from another mount, so
+                        // they paste only when its hook is set.
                         const onPasteEigenImage = mergedSettings.hooks?.onPasteEigenImage;
                         const imageItems = onPasteEigenImage
                             ? paste.eigen.items.filter((item): item is EigenClipboardImageItem => item.type === 'image')

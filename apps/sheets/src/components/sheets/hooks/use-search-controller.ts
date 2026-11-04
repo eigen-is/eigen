@@ -7,11 +7,10 @@ import type { SearchResult, WorkbookInstance } from '@workspace/sheet';
 import type { RefObject } from 'react';
 import { useMemo } from 'react';
 
-// The controller keeps no state of its own. Every id names its cell, and replace is handed the query, because the
-// command palette runs its own searches on this controller between the find bar's calls. `doc` is only compared by
-// identity: the editor passes the sheets of each change, so the controller is made again after each change and the
-// find bar's count stays current. Each call reads workbookRef.current at the time, since a new snapshot mounts a new
-// Workbook.
+// The controller keeps no state of its own, because the command palette runs its own searches on it between the
+// find bar's calls. So every id names its cell, and replace is handed the query. `doc` is only compared by identity.
+// The editor passes the sheets of each change, so the controller is made again after each change and the find bar's
+// count stays current. Each call reads workbookRef.current at the time, since a new snapshot mounts a new Workbook.
 export function useSheetSearchController(
     workbookRef: RefObject<WorkbookInstance | null>,
     doc: unknown,
@@ -20,7 +19,7 @@ export function useSheetSearchController(
     return useMemo<DocSearchController>(() => {
         void doc;
 
-        const toMatches = (results: SearchResult[]): DocSearchMatch[] => results.map(toDocMatch);
+        const toMatches = (results: readonly SearchResult[]): DocSearchMatch[] => results.map(toDocMatch);
 
         return {
             search(q, opts) {
@@ -41,11 +40,11 @@ export function useSheetSearchController(
             // takes as they are. The Workbook checks the cell against the query again, so an id of a cell that
             // changed since writes nothing and still returns the matches.
             replace(matchId, query, replacement, opts, preserveCase) {
-                const wb = workbookRef.current;
-                if (!wb) return [];
-                const m = cellOf(matchId);
-                if (!m || !canWrite) return toMatches(wb.searchAll(query, opts));
-                return toMatches(wb.replace(m, query, replacement, opts, preserveCase));
+                const workbook = workbookRef.current;
+                if (!workbook) return [];
+                const cell = cellOf(matchId);
+                if (!cell || !canWrite) return toMatches(workbook.searchAll(query, opts));
+                return toMatches(workbook.replace(cell, query, replacement, opts, preserveCase));
             },
             replaceAll(query, replacement, opts, preserveCase) {
                 const wb = workbookRef.current;

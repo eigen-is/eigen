@@ -41,9 +41,9 @@ import { settleCurrentSheet, shiftSheetOrders } from './sheet';
 // stacks.
 type Step = { ctx: Context; ops: Op[]; refused?: 'undo' | 'redo' };
 
-// What setContextWithProduce keeps of one edit. Its options are the ones the edit's batch is built from: a sheet delete
-// adds the deleted sheet, and keeps only that: its undo and redo are ops, and its patches would hold the whole sheet
-// list twice.
+// What setContextWithProduce keeps of one edit. Its options are the ones the edit's batch is built from. A sheet
+// delete adds the deleted sheet to them and keeps nothing else, because its undo and redo are ops and its patches
+// would hold the whole sheet list twice.
 export function recordEntry(
     before: Context,
     after: Context,
@@ -163,8 +163,8 @@ function addedSheet(entry: History): Sheet | undefined {
     return entry.patches.find((patch) => patch.op === 'add' && patch.path.length === 2)?.value;
 }
 
-// ['sheets', index, …] → ['sheets', id, …] for a cell or field path. Shorter paths, a whole sheet or the sheet list,
-// occur only in sheet add, copy and delete entries, which undo and redo replay as ops.
+// Rewrites a cell or field path from ['sheets', index, …] to ['sheets', id, …]. A shorter path, such as a whole sheet
+// or the sheet list, occurs only in a sheet add, copy or delete entry, which undo and redo replay as ops.
 function bySheetId(patches: Patch[], sheets: Sheet[]): Patch[] {
     return patches.map((patch) => {
         const [root, index, ...rest] = patch.path;

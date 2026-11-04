@@ -324,7 +324,7 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
                     if (!cell?.f) continue;
                     const newF = `=${shift(cell.f.startsWith('=') ? cell.f.slice(1) : cell.f)}`;
                     if (newF === cell.f) continue;
-                    if (!newData) newData = [...sheet.data];
+                    newData ??= [...sheet.data];
                     if (newData[r] === row) newData[r] = [...row];
                     newData[r][c] = { ...cell, f: newF };
                 }
@@ -355,7 +355,7 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
                 const txt = String(cf.conditionValue[0]);
                 const shifted = txt.startsWith('=') ? `=${shift(txt.slice(1))}` : shift(txt);
                 if (shifted === txt) continue;
-                if (!newRules) newRules = [...rules];
+                newRules ??= [...rules];
                 newRules[i] = { ...cf, conditionValue: [shifted] };
             }
             if (newRules) newSheet = { ...newSheet, conditionalFormatRules: newRules };
@@ -388,8 +388,8 @@ function shiftChartsAcrossSheets<S extends Sheet>(
     });
 }
 
-// config carries several index-keyed maps (rowlen, rowhidden, customHeight and
-// their column twins) that all shift identically when rows/columns move.
+// A sheet's config keeps several maps keyed by a row or column index, such as rowlen, rowhidden and customHeight.
+// All of them shift the same way when rows or columns move.
 export function shiftKeyedMapForInsert(
     map: Record<string, number>,
     index: number,
@@ -453,7 +453,7 @@ function applyInsert<S extends ShiftedSheet>(sheets: S[], targetIndex: number, o
 
         const cols = newData[0]?.length ?? 0;
         const blank = () => new Array<null>(cols).fill(null);
-        // Single splice: one-at-a-time inserts re-shift the tail per row.
+        // One splice for all the new rows, because inserting them one by one would move the rows below each time.
         const blankRows: (typeof newData)[number][] = [];
         for (let i = 0; i < count; i += 1) blankRows.push(blank());
         newData.splice(insertAt, 0, ...blankRows);
@@ -555,24 +555,20 @@ function applyDelete<S extends ShiftedSheet>(sheets: S[], targetIndex: number, o
     setSize(newTarget, newData, op.type);
 
     if (target.conditionalFormatRules != null) {
-        const newCFarr = [];
+        const rules = [];
         for (const cf of target.conditionalFormatRules) {
-            const cf_new_range: SingleRange[] = [];
+            const ranges: SingleRange[] = [];
             for (const range of cf.cellrange) {
                 const shifted = shiftRangeForDelete(range, op);
-                if (shifted) cf_new_range.push(shifted);
+                if (shifted) ranges.push(shifted);
             }
-            if (cf_new_range.length > 0) {
-                const first = op.type === 'row' ? cf_new_range[0].row[0] : cf_new_range[0].column[0];
+            if (ranges.length > 0) {
+                const first = op.type === 'row' ? ranges[0].row[0] : ranges[0].column[0];
                 const shift = first >= op.start ? -removeCount : 0;
-                newCFarr.push(
-                    op.type === 'row'
-                        ? withCfRanges(cf, cf_new_range, shift, 0)
-                        : withCfRanges(cf, cf_new_range, 0, shift),
-                );
+                rules.push(op.type === 'row' ? withCfRanges(cf, ranges, shift, 0) : withCfRanges(cf, ranges, 0, shift));
             }
         }
-        newTarget.conditionalFormatRules = newCFarr;
+        newTarget.conditionalFormatRules = rules;
     }
     if (target.dataValidations != null) {
         newTarget.dataValidations = shiftValidations(target.dataValidations, (range) => shiftRangeForDelete(range, op));

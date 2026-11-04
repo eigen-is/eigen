@@ -21,7 +21,7 @@ import { deleteRowCol, insertRowCol } from './rowcol';
 import { addSheet, deleteSheet, initSheetData, leaveCurrentSheet } from './sheet';
 
 // A row or column op the batch applied, with the sheets it was applied to.
-export type AppliedRowCol = { op: Op; sheets: Sheet[] };
+type AppliedRowCol = { op: Op; sheets: Sheet[] };
 
 // The next context and the row or column ops that moved rows, or null when an op failed and the batch was skipped. A
 // replay passes moveView false for a batch the tab applied before, which already moved the view once.

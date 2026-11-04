@@ -152,8 +152,7 @@ export function SheetEditor({
     const commentFilter = useCommentFilter();
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
 
-    const addCommentRef = useRef<(r: number, c: number) => void>(null);
-    addCommentRef.current = useCallback((r: number, c: number) => {
+    const addComment = useCallback((r: number, c: number) => {
         setAddTargetCell({ r, c });
         setAddInitialTitle(`Cell ${columnIndexToLabel(c)}${r + 1}`);
         setAddOpen(true);
@@ -175,9 +174,9 @@ export function SheetEditor({
             // name is swapped for the real one. A swap that ran first would find nothing to rename, and the
             // zombie sweep would later delete the placeholder. A file without a size, such as some SVGs,
             // gets the default box.
-            const bmp = await createImageBitmap(file).catch(() => null);
-            const intrinsic = bmp ? { width: bmp.width, height: bmp.height } : null;
-            bmp?.close();
+            const bitmap = await createImageBitmap(file).catch(() => null);
+            const intrinsic = bitmap ? { width: bitmap.width, height: bitmap.height } : null;
+            bitmap?.close();
             const { width, height } = fitToPane(intrinsic);
             workbookRef.current?.insertImage(pendingName, width, height);
 
@@ -282,10 +281,10 @@ export function SheetEditor({
         async (patch: CardFormPatch, attachments?: CardAttachmentDraft[], assignee?: string | null) => {
             if (!addTargetCell || !workbookRef.current) return;
             const cell = addTargetCell;
-            const card = await createCard({ title: addInitialTitle, ...patch, attachments }, (card) => {
-                const fd = workbookRef.current?.getFlowdata();
-                const existing = fd?.[cell.r]?.[cell.c]?.commentCardIds ?? [];
-                workbookRef.current?.setCellFormat(cell.r, cell.c, 'commentCardIds', [...existing, card.id]);
+            const card = await createCard({ title: addInitialTitle, ...patch, attachments }, (created) => {
+                const grid = workbookRef.current?.getFlowdata();
+                const existing = grid?.[cell.r]?.[cell.c]?.commentCardIds ?? [];
+                workbookRef.current?.setCellFormat(cell.r, cell.c, 'commentCardIds', [...existing, created.id]);
             });
             if (assignee !== undefined && card?.chatName) {
                 assignComment.mutate({ chatName: card.chatName, assignee, title: card.title });
@@ -420,9 +419,7 @@ export function SheetEditor({
                                             resolveImagePath: resolveMediaPath,
                                             ...(canWrite && chatFolderId
                                                 ? {
-                                                      onAddComment: (r: number, c: number) => {
-                                                          addCommentRef.current?.(r, c);
-                                                      },
+                                                      onAddComment: addComment,
                                                   }
                                                 : {}),
                                             commentLifecycle: lifecycle,
@@ -437,12 +434,12 @@ export function SheetEditor({
                                                   }
                                                 : {}),
                                             getCommentInfo: (r: number, c: number) => {
-                                                const fd = workbookRef.current?.getFlowdata();
-                                                const cardId = fd?.[r]?.[c]?.commentCardIds?.[0];
+                                                const grid = workbookRef.current?.getFlowdata();
+                                                const cardId = grid?.[r]?.[c]?.commentCardIds?.[0];
                                                 const card = cardId ? cards[cardId] : undefined;
                                                 if (!card) return null;
                                                 const entry = card.chatName
-                                                    ? allComments.find((c) => c.chatName === card.chatName)
+                                                    ? allComments.find((comment) => comment.chatName === card.chatName)
                                                     : undefined;
                                                 const indicatorColor = commentIndicatorColor(card.color);
                                                 return { card, entry, indicatorColor };

@@ -241,8 +241,8 @@ const TiptapEditor = ({
     const handleAddCommentRef = useRef<(() => void) | null>(null);
     const allCommentsRef = useRef<CommentEntry[]>([]);
     const cardsRef = useRef<Record<string, CommentCard>>({});
-    // The extensions keep the closures they were created with, so the figure, table, equation and table of contents menus
-    // read this render's state here.
+    // The extensions keep the closures they were created with, so the figure, table, equation and table of contents
+    // menus read this render's state here.
     const figureContextMenuRef = useRef<(node: Node, pos: number, event: React.MouseEvent) => void>(() => {});
     const tableContextMenuRef = useRef<(editor: Editor, pos: number, event: MouseEvent) => boolean>(() => false);
     const equationContextMenuRef = useRef<(editor: Editor, node: Node, pos: number, event: React.MouseEvent) => void>(
@@ -278,8 +278,8 @@ const TiptapEditor = ({
     const panelClearWidth = 2 * (textColumnRight + PANEL_INTRUSION_PX) - page.width;
     const containerWidth = Math.min(scrollSize.width, panelClearWidth);
 
-    // Hand-rolled rather than useElementSize: this measures the BORDER box, and stays quiet while
-    // unscaled so a doc that needs no scaling never re-renders on its own growth.
+    // This measures the border box, which useElementSize does not. It also stays quiet while the page is unscaled,
+    // so a doc that needs no scaling never re-renders when it grows.
     const setDocumentEl = useCallback((el: HTMLDivElement | null) => {
         documentRef.current = el;
         if (!el) return;
@@ -356,13 +356,15 @@ const TiptapEditor = ({
         },
         [handleCommentClick, isMobile],
     );
-    // The body's editor is built anew with its comment handler, and an upload settles into whichever holds the doc then.
+    // The body's editor is built anew with its comment handler, and an upload settles into whichever holds the doc
+    // then.
     const editorRef = useRef<Editor | null>(null);
     editorRef.current = editor;
 
-    // The band being edited in place: a writer's, on a desktop or a tablet. Explicit rather than the focused editor,
-    // as a menu takes focus when it opens. Losing write access or the desktop leaves it, and a first page's band hands
-    // over to the other pages' once Different first page goes off, a collaborator's untick too.
+    // The band being edited in place, by a writer on a desktop or a tablet. It is kept in state rather than read from
+    // the focused editor, because a menu takes the focus when it opens. Losing write access or the desktop leaves the
+    // band. When Different first page goes off, even by a collaborator, the first page's band hands over to the band
+    // of the other pages.
     const bandsAllowed = canWrite && !isMobile;
     const [editingBand, setEditingBand] = useState<BandRoot | null>(null);
     // A page-less doc draws no bands, so a switch to it, a collaborator's too, leaves the one being edited.
@@ -543,8 +545,8 @@ const TiptapEditor = ({
     // Only the body's images, charts and text boxes open this menu, and a comment anchors on each.
     const figureComment = { editor, comment: figureContextMenu.item?.comment ?? null };
 
-    // A writer's table and equation menus, about what was right-clicked in `editor`: the body's, the band's being edited
-    // or the open story's. A viewer, and a band not being edited, keep the browser's.
+    // A writer's table and equation menus, about what was right-clicked in `editor`: the body's, the band's being
+    // edited or the open story's. A viewer, and a band not being edited, keep the browser's.
     const tableContextMenu = useContextMenu<TableMenuItem>();
     tableContextMenuRef.current = (target, pos, event) => {
         if (!target.isEditable) return false;
@@ -704,7 +706,7 @@ const TiptapEditor = ({
         onOpenChat: openChat,
     };
 
-    // Plain object per render; usePaletteDocSearch stabilises it, so reveal sees the current cards.
+    // A new object on each render, which usePaletteDocSearch stabilizes, so reveal sees the current cards.
     const commentSearch: DocCommentSearch = {
         ...commentSearchHalf,
         // openCard opens the comments panel on a desktop only, as a tap on a phone comes from the pane. A search hit
@@ -763,7 +765,8 @@ const TiptapEditor = ({
             onSetupChange={writeSetup}
             onDifferentFirstPage={(differentFirstPage) => {
                 writeSetup(pageSetup, { ...pageSetup, differentFirstPage });
-                // Ticked, what was typed stays the other pages' and the caret goes into page 1's new band, as in Google.
+                // Ticked, what was typed stays the other pages' and the caret goes into page 1's new band, as in
+                // Google.
                 const edge = bandEdge(editingBand);
                 if (differentFirstPage) enterBand(FIRST_PAGE_BAND[edge]);
                 else if (editingBand !== edge) enterBand(edge);
@@ -836,8 +839,8 @@ const TiptapEditor = ({
                                             : undefined
                                     }
                                     onReplaceImage={() => setReplacePickerOpen(true)}
-                                    // Comments anchor in the body only, and a band's or a note's equation comes from a paste
-                                    // or a Word file, which its panel edits: Insert grays both out there.
+                                    // Comments anchor in the body only, and a band's or a note's equation comes from a
+                                    // paste or a Word file, which its panel edits: Insert grays both out there.
                                     onAddComment={chatFolderId ? handleAddComment : undefined}
                                     onInsertEquation={insertEquation}
                                     onInsertFootnote={bandsAllowed ? insertFootnote : undefined}
@@ -853,7 +856,8 @@ const TiptapEditor = ({
                             }
                         >
                             <div className="h-full relative overflow-hidden">
-                                {/* The page box, and on paper the @page margins in its place; the printed clone matches it too. */}
+                                {/* The page box, and on paper the @page margins in its place. The printed clone
+                                    matches it too. */}
                                 <style>
                                     {pageStylesheet(pageSetup, '[data-document]')}
                                     {pageless && `\n${pagelessStylesheet}`}
@@ -862,7 +866,8 @@ const TiptapEditor = ({
                                     ref={setScrollContainer}
                                     className={cn(
                                         'h-full w-full overflow-y-scroll p-4',
-                                        // A page-less doc has no paper, so the whole view is its white, in dark mode too.
+                                        // A page-less doc has no paper, so the whole view is its white, in dark mode
+                                        // too.
                                         pageless ? 'eigen-paper bg-white' : 'bg-muted',
                                         needsScale && 'overflow-x-hidden',
                                     )}
@@ -871,12 +876,12 @@ const TiptapEditor = ({
                                             editor.commands.blur();
                                         }
                                     }}
-                                    // While a band is edited a press in the body leaves it, the caret where it landed,
-                                    // as in Google, and one in another band moves there, as that band is read-only
-                                    // until entered; a press anywhere else would focus nothing, leaving the band
-                                    // edited with Esc and typing reaching nothing, so it keeps the caret. A portaled
-                                    // menu or dialog is the band's own. An open story is left and kept alike, and
-                                    // another story opens itself.
+                                    // While a band is edited, a press in the body leaves the band and puts
+                                    // the caret where it landed, as in Google. A press in another band moves
+                                    // there, because that band is read-only until entered. A press anywhere
+                                    // else keeps the caret: it would focus nothing, and Esc and typing would
+                                    // then reach nothing. A portaled menu or dialog belongs to the band. An
+                                    // open story is left or kept the same way, and another story opens itself.
                                     onMouseDown={
                                         story.anchor && !editingBand
                                             ? (e) => {

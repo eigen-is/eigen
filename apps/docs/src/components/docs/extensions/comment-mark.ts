@@ -21,7 +21,7 @@ import {
 } from '@workspace/lib/docs/eigendoc';
 import { textOutsideStories } from './story';
 
-export type CommentMarkOptions = {
+type CommentMarkOptions = {
     onCommentClick?: (cardId: string) => void;
     onCommentContextMenu?: (cardId: string, event: MouseEvent) => void;
     // True when it opened a menu; false leaves the browser's own.
@@ -67,7 +67,8 @@ export function commentCardIdAt(target: EventTarget | null): string | null {
     return target.closest('.comment-highlight')?.getAttribute('data-comment-id') || null;
 }
 
-// A new card anchors by attribute on a node that holds one, selected alone, else as the mark on the range's text.
+// A node that holds a card attribute and is selected alone takes the new card there. Any other range takes it as the
+// comment mark on its text.
 export function addCommentAnchor(editor: Editor, { from, to }: { from: number; to: number }, cardId: string): void {
     const node = editor.state.doc.nodeAt(from);
     if (node && anchorsByAttribute(node) && to === from + node.nodeSize) {
@@ -115,9 +116,9 @@ export function selectCommentAnchor(editor: Editor, cardId: string): void {
 
 const QUOTE_WORDS: Record<FigureFrameNode, string> = { figure: 'Image', chart: 'Chart', textBox: 'Text box' };
 
-// A comment on an image or a chart alone has no text to quote, so it reads as "Image" or "Chart", and an equation with
-// no text as "Equation", and a page number as its #. A story's text is no part of the quote, as its node takes no
-// comment.
+// A comment on an image, a chart or a text box alone has no text to quote, so it reads as the word for that node,
+// such as "Image". An equation with no text reads as "Equation", and a page number as its #. A story's text stays
+// out of the quote, because a story takes no comment.
 export function commentAnchorText(doc: Node, from: number, to: number): string {
     return textOutsideStories(
         doc,
@@ -154,7 +155,7 @@ function buildDecorations(state: EditorState, panel: CommentPanelState): Decorat
             }
         }
     });
-    return decorations.length > 0 ? DecorationSet.create(state.doc, decorations) : DecorationSet.empty;
+    return DecorationSet.create(state.doc, decorations);
 }
 
 export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions, CommentPanelState>({

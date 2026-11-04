@@ -9,25 +9,15 @@ import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
 import { cloneDeep, isEqual, isNumber, partition } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import { dataToCelldata } from '../../engine/celldata';
+import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import type { Op, Sheet } from '../types';
 import { getSheetIndex, sheetOrder } from '.';
 
 export type PatchOptions = {
-    insertRowColOp?: {
-        type: 'row' | 'column';
-        index: number;
-        count: number;
-        direction: 'lefttop' | 'rightbottom';
-        id: string;
-    };
-    deleteRowColOp?: {
-        type: 'row' | 'column';
-        start: number;
-        end: number;
-        id: string;
-    };
+    insertRowColOp?: InsertRowColOp;
+    deleteRowColOp?: DeleteRowColOp;
     addSheetOp?: boolean;
     deleteSheetOp?: {
         id: string;
@@ -56,16 +46,7 @@ function mergeStampOps(ops: Op[], id: string): Op[] {
     return stamps;
 }
 
-function additionalCellOps(
-    ctx: Context,
-    insertRowColOp: {
-        id: string;
-        index: number;
-        direction: string;
-        count: number;
-        type: string;
-    },
-) {
+function additionalCellOps(ctx: Context, insertRowColOp: InsertRowColOp) {
     const { id, index, direction, count, type } = insertRowColOp;
     const d = getFlowdata(ctx, id);
     const startIndex = index + (direction === 'rightbottom' ? 1 : 0);
@@ -156,9 +137,9 @@ function writesOneObject(op: Op): boolean {
     return op.path.length > 1 && PER_OBJECT_SHEET_FIELDS.has(op.path[0]);
 }
 
-// Only `sheets[*]` belongs on the wire — the rest of the Context is per-client UI state
-// (scroll position, hover, dialogs) that patchToOp could not give a sheet id anyway.
-export function filterPatch(patches: Patch[]) {
+// Only `sheets[*]` belongs on the wire. The rest of the Context is per-client UI state, such as the scroll position,
+// the hover and the dialogs, which patchToOp could not give a sheet id anyway.
+export function filterPatch(patches: readonly Patch[]) {
     return patches.filter((p) => p.path[0] === 'sheets' && !PER_CLIENT_SHEET_FIELDS.has(p.path[2]));
 }
 
@@ -235,16 +216,16 @@ export function patchToOp(ctx: Context, patches: Patch[], options: PatchOptions 
 // A sheet add as a batch: the sheet as stored, then the order of each sheet at or past its place, as `sheets` hold
 // them once it was added. A peer and a joiner's replay only add the sheet, and the orders come from the batch. The
 // edit, its undo and its redo all send this batch.
-export function addSheetOps(added: Sheet, sheets: Sheet[]): Op[] {
+export function addSheetOps(added: Sheet, sheets: readonly Sheet[]): Op[] {
     return [{ op: 'addSheet', id: added.id, path: [], value: storedCopy(added) }, ...orderOps(added, sheets)];
 }
 
 // A sheet delete as a batch, for the same reason with the orders `sheets` hold once it was deleted.
-export function deleteSheetOps(deleted: Sheet, sheets: Sheet[]): Op[] {
+export function deleteSheetOps(deleted: Sheet, sheets: readonly Sheet[]): Op[] {
     return [{ op: 'deleteSheet', id: deleted.id, path: [], value: { id: deleted.id } }, ...orderOps(deleted, sheets)];
 }
 
-function orderOps(changed: Sheet, sheets: Sheet[]): Op[] {
+function orderOps(changed: Sheet, sheets: readonly Sheet[]): Op[] {
     const from = sheetOrder(changed);
     return sheets
         .filter((sheet) => sheet.id !== changed.id && sheetOrder(sheet) >= from)

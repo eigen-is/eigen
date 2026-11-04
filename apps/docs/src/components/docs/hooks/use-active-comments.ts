@@ -22,18 +22,18 @@ export function useActiveComments(editor: Editor): BodyComments {
             clearTimeout(timer);
             timer = setTimeout(() => {
                 const ids = new Set<string>();
-                const texts = new Map<string, string>();
+                const anchorTexts = new Map<string, string>();
 
                 editor.state.doc.descendants((node, pos) => {
                     const cardId = nodeCommentCardId(node);
                     if (!cardId) return;
                     ids.add(cardId);
-                    if (!texts.has(cardId)) {
-                        texts.set(cardId, commentAnchorText(editor.state.doc, pos, pos + node.nodeSize));
+                    if (!anchorTexts.has(cardId)) {
+                        anchorTexts.set(cardId, commentAnchorText(editor.state.doc, pos, pos + node.nodeSize));
                     }
                 });
 
-                setResult({ ids, anchorTexts: texts, ready: true });
+                setResult({ ids, anchorTexts, ready: true });
             }, 200);
         };
 

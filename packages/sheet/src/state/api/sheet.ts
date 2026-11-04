@@ -1,5 +1,5 @@
-// The sheet calls of the Workbook's imperative API: hiding, showing and copying a sheet, and computing or seeding its
-// formulas. A host reaches them through the Workbook's ref, and the menus call some of them inside an edit's recipe.
+// The sheet calls on the workbook's context: listing, hiding, showing and copying a sheet, and computing or seeding
+// its formulas. Most of them write the context they are given, so a caller runs them inside an edit's recipe.
 
 import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { cloneDeep } from 'es-toolkit/compat';
@@ -91,7 +91,7 @@ function calculateSheetFormula(ctx: Context, id: string, range?: SingleRange) {
     // pass and writes each value through the internal setCellValue, which leaves the list alone. Entries outside the
     // range stay.
     const newChain: FormulaCell[] = (sheet.calcChain ?? []).filter(
-        (cc) => cc.id !== id || cc.r < rStart || cc.r > rEnd || cc.c < cStart || cc.c > cEnd,
+        (entry) => entry.id !== id || entry.r < rStart || entry.r > rEnd || entry.c < cStart || entry.c > cEnd,
     );
 
     // The resolver reads the live cells: the sweep runs in cell order, not in dependency order, and each evaluation

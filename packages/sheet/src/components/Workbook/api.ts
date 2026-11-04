@@ -149,7 +149,7 @@ export function generateAPIs(
         addPresences: (newPresences: Presence[]) => {
             setContext((draftCtx) => {
                 const newKeys = new Set(newPresences.map(presenceKey));
-                draftCtx.presences = (draftCtx.presences || [])
+                draftCtx.presences = (draftCtx.presences ?? [])
                     .filter((v) => !newKeys.has(presenceKey(v)))
                     .concat(newPresences);
             });
@@ -182,8 +182,8 @@ export function generateAPIs(
         removeImageByMediaName: (name: string) =>
             setContext((draftCtx) => removeImageByMediaName(draftCtx, name), { noUndo: true }),
 
-        // A move, the ObjectTransform resize/rotate commit and a properties-panel numeric edit: one op and
-        // undo step each.
+        // One op and one undo step, such as a move, a resize or rotate from the grips, or a number typed in the
+        // properties panel.
         updateFloatingBox: (ref: FloatingRef, fields: Partial<Box>) =>
             setContext((draftCtx) => updateFloatingBox(draftCtx, ref, fields)),
 
@@ -192,8 +192,8 @@ export function generateAPIs(
 
         deleteFloatingObject: (ref: FloatingRef) => setContext((draftCtx) => deleteFloatingObject(draftCtx, ref)),
 
-        // One op + undo step each, on the current sheet. The id is made here so the caller can
-        // select the new chart. A viewer or a missing sheet inserts nothing and returns null.
+        // One op and one undo step on the current sheet. The id is made here so the caller can select the new chart.
+        // A viewer or a missing sheet inserts nothing and returns null.
         insertChart: (box: ChartInsertBox, spec: ChartSpec): string | null => {
             const id = crypto.randomUUID();
             const { sheets } = getContext();
@@ -214,7 +214,7 @@ export function generateAPIs(
             setContext((draftCtx) => setChartDataRange(draftCtx, id, ref));
         },
 
-        // Opens one undo step for a panel edit and returns its release (PropertyGestureContext).
+        // Opens one undo step that every write of a panel edit joins, and returns the function that closes it.
         beginGesture: () => {
             const gesture = {};
             history.undoGesture = gesture;
@@ -267,4 +267,4 @@ export function generateAPIs(
 }
 
 // A collaborator's key: the user id, or the name for a presence that has none.
-const presenceKey = (v: { username: string; userId?: string }) => (v.userId == null ? v.username : v.userId);
+const presenceKey = (presence: { username: string; userId?: string }) => presence.userId ?? presence.username;
