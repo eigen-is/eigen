@@ -1,11 +1,11 @@
 // Deletes the parts of a collab document that nothing names any more, such as an image deleted before every saved
 // version, or the thread of a deleted comment. A part stays while the current state or a saved version names it, or
 // while it is younger than the grace period. A linger close starts a sweep, once a day per document or sooner after a
-// Delete history, and sweeps run one at a time. A change or a busy transform process while it reads waits for the next
-// close, and a failure for the next day, so a sweep can keep a part too long but never deletes one in use.
+// Delete history. A change or a busy transform process while it reads waits for the next close, and a failure for the
+// next day, so a sweep can keep a part too long but never deletes one in use.
 
 import { SWEEP_GRACE_MS } from '@workspace/lib/constants/sweep';
-import type { DriveCollabType, DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_CHAT, DRIVE_TYPE_FILE, isCollabType } from '@workspace/lib/types/drive';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import { withCommentIndex } from '../chat';
@@ -21,17 +21,19 @@ import { DAY_MS } from '../versioning/retention';
 import type { Drive } from './drive';
 import { mediaKeptBy, storedReferences, threadAttachmentNames } from './named-parts';
 
+// The most unread versions one sweep reads, so a document with a long history costs a few downloads and jobs per
+// close. A sweep that left some unread deletes nothing, and the next close reads on.
+export const MAX_VERSIONS_PER_SWEEP = 8;
+
 // When each document's last sweep ended, by owner, mount and path. It lives in memory, so a restart forgets it, which
 // costs one extra sweep.
 const sweptAt = new Map<string, number>();
-// The documents a sweep waits for or works on. A reopen and a second close during a long read find the document
-// still due, and that second sweep leaves it to the first.
+// The documents a sweep works on. A reopen and a second close during a long read find the document still due, and
+// that second sweep leaves it to the first.
 const sweeping = new Set<string>();
 // The documents marked due while their sweep ran, such as by a Delete history. That sweep may have read what was
 // there before, so the document stays due.
 const markedWhileSwept = new Set<string>();
-// Sweeps run one after another, so a burst of closes never fills the transform queue or the disk with downloads.
-let queue: Promise<void> = Promise.resolve();
 
 export function isSweepDue(path: DrivePath): boolean {
     const at = sweptAt.get(pathKey(path.ownerId, path.mountId, path.id));
@@ -66,21 +68,14 @@ export function sweepAfterClose(drive: Drive, path: DrivePath, close: () => Prom
     return closed;
 }
 
-// Queues one sweep of the document behind the sweeps already queued, and resolves when it ends.
-export function sweepDocument(drive: Drive, container: DrivePath): Promise<void> {
-    const key = pathKey(container.ownerId, container.mountId, container.id);
-    const documentType = container.type;
-    if (!isCollabType(documentType) || sweeping.has(key)) return Promise.resolve();
-    sweeping.add(key);
-    const swept = queue.then(() => sweep(drive, container, documentType, key));
-    queue = swept.catch(() => undefined);
-    return swept;
-}
-
 // Lists first what could go: the old files in media/, the idle threads and the threads that hold an old file. Only
 // then, outside any lock, it reads the names in the saved versions and in the current state, and the files the
 // messages of each thread name. Under the document's lock it deletes only if nothing changed while it read.
-async function sweep(drive: Drive, container: DrivePath, documentType: DriveCollabType, key: string): Promise<void> {
+export async function sweepDocument(drive: Drive, container: DrivePath): Promise<void> {
+    const key = pathKey(container.ownerId, container.mountId, container.id);
+    const documentType = container.type;
+    if (!isCollabType(documentType) || sweeping.has(key)) return;
+    sweeping.add(key);
     // A change while it read, a busy transform process or a Delete history meanwhile leave the document due, so its
     // next close tries again. Every other end marks the document swept for the day, a failure included.
     let due = false;
@@ -121,11 +116,15 @@ async function sweep(drive: Drive, container: DrivePath, documentType: DriveColl
         ).filter((row) => row.readerVersion >= REFERENCE_READER_VERSION);
         const named = rows.map((row) => row.names);
         const known = new Set(rows.map((row) => row.versionPathId));
-        for (const version of read.versions) {
-            if (known.has(version.id)) continue;
+        const unread = read.versions.filter((version) => !known.has(version.id));
+        for (const version of unread.slice(0, MAX_VERSIONS_PER_SWEEP)) {
             const names = await storedReferences(mount, documentType, version.id, 'background');
             named.push(names);
             putVersionReferences(mount, { versionPathId: version.id, readerVersion: REFERENCE_READER_VERSION, names });
+        }
+        if (unread.length > MAX_VERSIONS_PER_SWEEP) {
+            due = true;
+            return;
         }
         // A restore brings back a version's anchors but keeps today's cards, so the current state also names what
         // today's card holds for every card a version has in use.

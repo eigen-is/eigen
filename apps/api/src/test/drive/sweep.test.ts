@@ -19,7 +19,13 @@ import { ApiError } from '../../lib/core/errors';
 import { REFERENCE_READER_VERSION } from '../../lib/document/references';
 import { documentTransformRunner } from '../../lib/document/transform/runner';
 import type { Drive } from '../../lib/drive/drive';
-import { isSweepDue, markSweepDue, sweepAfterClose, sweepDocument } from '../../lib/drive/sweep';
+import {
+    isSweepDue,
+    MAX_VERSIONS_PER_SWEEP,
+    markSweepDue,
+    sweepAfterClose,
+    sweepDocument,
+} from '../../lib/drive/sweep';
 import { getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
 import type { Mount } from '../../lib/mount/mount';
@@ -710,9 +716,9 @@ describe('the media sweep', () => {
         expect(isSweepDue(path)).toBe(true);
     });
 
-    test('sweeps one document at a time', async () => {
-        const first = await openDoc(mount, M, 'QueueFirst', [paragraph()]);
-        const second = await openDoc(mount, M, 'QueueSecond', [paragraph()]);
+    test('sweeps of two documents run side by side', async () => {
+        const first = await openDoc(mount, M, 'SideFirst', [paragraph()]);
+        const second = await openDoc(mount, M, 'SideSecond', [paragraph()]);
         await close(M, first.path);
         await close(M, second.path);
         const gate = Promise.withResolvers<void>();
@@ -725,15 +731,43 @@ describe('the media sweep', () => {
         });
         try {
             const sweeps = [sweepDocument(drive, first.path), sweepDocument(drive, second.path)];
-            await Bun.sleep(20);
-            expect(resolved).toEqual([first.path.id]);
+            await waitFor(() => resolved.length === 2);
+            expect(resolved).toEqual([first.path.id, second.path.id]);
             gate.resolve();
             await Promise.all(sweeps);
-            expect(resolved).toEqual([first.path.id, second.path.id]);
         } finally {
             gate.resolve();
             resolves.mockRestore();
         }
+    });
+
+    test(`a sweep reads at most ${MAX_VERSIONS_PER_SWEEP} unread versions, and the next one goes on`, async () => {
+        const { path, collab } = await openDoc(mount, M, 'ManyVersions', [paragraph()]);
+        await addMedia(mount, path.id, 'loose.png');
+        // Each version lands in an hour of its own, or retention would keep only the newest of the hour.
+        const start = Date.now() - (MAX_VERSIONS_PER_SWEEP + 2) * HOUR_MS;
+        try {
+            for (let i = 0; i <= MAX_VERSIONS_PER_SWEEP; i++) {
+                jest.setSystemTime(new Date(start + i * HOUR_MS));
+                collab.doc.getXmlFragment('default').insert(0, [new Y.XmlElement('paragraph')]);
+                await drive.saveVersion(M, path.id);
+            }
+        } finally {
+            jest.setSystemTime();
+        }
+        await close(M, path);
+        const versions = await versionIds(mount, path.id);
+        expect(versions.length).toBe(MAX_VERSIONS_PER_SWEEP + 1);
+
+        await sweepDocument(drive, path);
+        expect(getVersionReferences(mount, versions).length).toBe(MAX_VERSIONS_PER_SWEEP);
+        expect(await mediaNames(mount, path.id)).toEqual(['loose.png']);
+        expect(isSweepDue(path)).toBe(true);
+
+        await sweepDocument(drive, path);
+        expect(getVersionReferences(mount, versions).length).toBe(MAX_VERSIONS_PER_SWEEP + 1);
+        expect(await mediaNames(mount, path.id)).toEqual([]);
+        expect(isSweepDue(path)).toBe(false);
     });
 
     test('a sweep of a document already being swept leaves it to that sweep', async () => {
