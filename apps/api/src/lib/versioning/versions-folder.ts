@@ -1,9 +1,17 @@
+// The name of the folder inside a document's container that holds its saved versions, one database file each. A
+// save makes the folder on first use, and the version list, a restore and Delete history find it by this name.
+// Every lookup ignores case the way getChildByName does, so a check of the name folds it the same way.
+
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_FOLDER } from '@workspace/lib/types/drive';
+import { foldName } from '../mount/names';
 
-// Snapshot history lives in <container>/versions/ — see STORAGE.md § Version snapshots live inside the container.
 export const VERSIONS_FOLDER_NAME = 'versions';
 
+export function isVersionsName(name: string): boolean {
+    return foldName(name) === VERSIONS_FOLDER_NAME;
+}
+
 export function isVersionsFolder(child: DrivePath): boolean {
-    return child.type === DRIVE_TYPE_FOLDER && child.name === VERSIONS_FOLDER_NAME;
+    return child.type === DRIVE_TYPE_FOLDER && isVersionsName(child.name);
 }

@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { getHome } from '../../lib/home/get-home';
 import {
     authedRequest,
     driveGet,
@@ -313,6 +314,157 @@ describe('Container write guard', () => {
                 new File([TEST_PNG_BYTES], 'photo.png', { type: 'image/png' }),
             );
             expect(image.parentId).toBe(media.id);
+        });
+    });
+
+    // Every lookup of versions/ ignores case, and a document has none before its first saved version or after a
+    // Delete history. A folder or file a writer gives that name would take the place of the real one, so no write
+    // names a child of a document that way.
+    describe('a versions folder planted in a document', () => {
+        const bobToken = () => ctx.bob.user.sessionToken;
+        let sharedFolder: DrivePath;
+
+        beforeAll(async () => {
+            sharedFolder = await drivePost<DrivePath>(
+                ctx.alice.user.sessionToken,
+                aliceId(),
+                mountId,
+                `folder/${rootId}`,
+                { folderName: 'planted-versions' },
+            );
+            await drivePut(ctx.alice.user.sessionToken, aliceId(), mountId, `path/${sharedFolder.id}/acl`, {
+                add: [{ id: ctx.bob.user.email, read: true, write: true }],
+            });
+        });
+
+        function bobRequest(method: string, path: string, body: Record<string, unknown>) {
+            return authedRequest(bobToken(), `/drive/${aliceId()}/${mountId}/${path}`, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+        }
+
+        // A plain folder named versions, with a file in it a save could list as a version.
+        async function fakeVersions(token: string, ownerId: string, parentId: string): Promise<DrivePath> {
+            const folder = await drivePost<DrivePath>(token, ownerId, mountId, `folder/${parentId}`, {
+                folderName: 'versions',
+            });
+            await driveUpload(
+                token,
+                ownerId,
+                mountId,
+                folder.id,
+                new File(['fake'], '2026-01-01T00-00-00-000Z.db', { type: 'application/x-sqlite3' }),
+            );
+            return folder;
+        }
+
+        async function expectNoVersions(doc: DrivePath) {
+            const children = await containerChildren(doc.id);
+            expect(children.filter((child) => child.name.toLowerCase() === 'versions')).toEqual([]);
+            expect(await listVersions(ctx.alice.user.sessionToken, aliceId(), mountId, doc.id)).toEqual([]);
+        }
+
+        test('a writer cannot create, rename to, copy in or move in a versions folder', async () => {
+            const doc = await createDoc('planted-versions-doc', sharedFolder.id);
+            const notes = await bobRequest('POST', `folder/${doc.id}`, { folderName: 'notes' });
+            expect(notes.status).toBe(200);
+            const notesFolder: DrivePath = await notes.json();
+            const inShared = await fakeVersions(bobToken(), aliceId(), sharedFolder.id);
+            const bobRoot = await driveGet<DrivePath>(bobToken(), ctx.bob.user.id, mountId, 'root');
+            const inBobsDrive = await fakeVersions(bobToken(), ctx.bob.user.id, bobRoot.id);
+
+            const writes = {
+                'create Versions': await bobRequest('POST', `folder/${doc.id}`, { folderName: 'Versions' }),
+                'rename to versions': await bobRequest('PUT', `path/${notesFolder.id}/rename`, { newName: 'versions' }),
+                copy: await bobRequest('POST', `path/${inShared.id}/copy`, {
+                    targetOwnerId: aliceId(),
+                    targetMountId: mountId,
+                    targetParentId: doc.id,
+                }),
+                'copy from another drive': await authedRequest(
+                    bobToken(),
+                    `/drive/${ctx.bob.user.id}/${mountId}/path/${inBobsDrive.id}/copy`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            targetOwnerId: aliceId(),
+                            targetMountId: mountId,
+                            targetParentId: doc.id,
+                        }),
+                    },
+                ),
+            };
+            const statuses = Object.entries(writes).map(([write, res]) => `${write}: ${res.status}`);
+            expect(statuses).toEqual(Object.keys(writes).map((write) => `${write}: 400`));
+            // A move only goes into a folder, and a document is not one.
+            const moved = await bobRequest('PUT', `path/${inShared.id}/move`, { targetParentId: doc.id });
+            expect(moved.status).toBe(404);
+            await expectNoVersions(doc);
+        });
+
+        test('a writer cannot upload into a versions folder whose name differs in case', async () => {
+            const doc = await createDoc('planted-versions-upload', sharedFolder.id);
+            const { mount } = await (await getHome(aliceId())).drive.resolveFile(mountId, doc.id);
+            const plantedId = await mount.createFolder(doc.id, 'Versions');
+            const formData = new FormData();
+            formData.append(
+                'file',
+                new File(['fake'], '2026-01-01T00-00-00-000Z.db', { type: 'application/x-sqlite3' }),
+            );
+            const res = await authedRequest(bobToken(), `/drive/${aliceId()}/${mountId}/file/${plantedId}`, {
+                method: 'POST',
+                body: formData,
+            });
+            expect(res.status).toBe(400);
+            expect(await listVersions(ctx.alice.user.sessionToken, aliceId(), mountId, doc.id)).toEqual([]);
+        });
+
+        test("a document's databases keep their names: a twin is a name taken", async () => {
+            const doc = await createDoc('planted-database', sharedFolder.id);
+            const res = await bobRequest('POST', `folder/${doc.id}`, { folderName: 'Data.db' });
+            expect(res.status).toBe(409);
+            const names = (await containerChildren(doc.id)).map((child) => child.name).sort();
+            expect(names).toEqual(['chat', 'comments.db', 'data.db', 'media']);
+        });
+
+        test("a chat keeps no comments.db, so an item of that name in a chat is a writer's own", async () => {
+            const chat = await drivePost<DrivePath>(
+                ctx.alice.user.sessionToken,
+                aliceId(),
+                mountId,
+                `folder/${sharedFolder.id}/create/chat`,
+                { fileName: 'planted-chat' },
+            );
+            const created = await bobRequest('POST', `folder/${chat.id}`, { folderName: 'comments.db' });
+            expect(created.status).toBe(200);
+            const item: DrivePath = await created.json();
+            const renamed = await bobRequest('PUT', `path/${item.id}/rename`, { newName: 'notes' });
+            expect(renamed.status).toBe(200);
+        });
+
+        test('a save still makes the versions folder, and a copy to another drive still copies the document', async () => {
+            const doc = await createDoc('planted-versions-save', sharedFolder.id);
+            const saved = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${aliceId()}/${mountId}/file/${doc.id}/versions/save`,
+                { method: 'POST' },
+            );
+            expect(saved.status).toBe(200);
+            expect(await listVersions(ctx.alice.user.sessionToken, aliceId(), mountId, doc.id)).toHaveLength(1);
+
+            const bobRoot = await driveGet<DrivePath>(bobToken(), ctx.bob.user.id, mountId, 'root');
+            const copied = await bobRequest('POST', `path/${doc.id}/copy`, {
+                targetOwnerId: ctx.bob.user.id,
+                targetMountId: mountId,
+                targetParentId: bobRoot.id,
+            });
+            expect(copied.status).toBe(200);
+            const copy: DrivePath = await copied.json();
+            const inCopy = await driveGetList(bobToken(), ctx.bob.user.id, mountId, `folder/${copy.id}`);
+            expect(inCopy.map((child) => child.name).sort()).toEqual(['chat', 'comments.db', 'data.db', 'media']);
         });
     });
 });

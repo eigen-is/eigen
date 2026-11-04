@@ -147,6 +147,27 @@ describe('DELETE .../file/:pathId/versions', () => {
         expect(await versionIds(mount, thread.id)).toEqual([]);
     });
 
+    test('a versions folder whose name differs in case goes too', async () => {
+        const owner = ctx.alice.user;
+        const doc = await drivePost<DrivePath>(
+            owner.sessionToken,
+            owner.id,
+            aliceMountId,
+            `folder/${aliceRootId}/create/doc`,
+            { fileName: `history-${crypto.randomUUID()}` },
+        );
+        const drive = (await getHome(owner.id)).drive;
+        const { mount } = await drive.resolveFile(aliceMountId, doc.id);
+        // The lookup a save makes ignores case, so the version lands in this folder.
+        await mount.createFolder(doc.id, 'Versions');
+        await drive.saveVersion(aliceMountId, doc.id);
+        expect(await versionIds(mount, doc.id)).toHaveLength(1);
+
+        const res = await deleteVersions(owner.sessionToken, owner.id, aliceMountId, doc.id);
+        expect(res.status).toBe(200);
+        expect(await mount.getChildByName(doc.id, 'versions')).toBeNull();
+    });
+
     test('a folder that is not a document keeps a child named versions', async () => {
         const owner = ctx.alice.user;
         const folder = await drivePost<DrivePath>(owner.sessionToken, owner.id, aliceMountId, `folder/${aliceRootId}`, {

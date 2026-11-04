@@ -5,13 +5,16 @@
 // imports nothing that opens anything.
 
 import type { DrivePathType } from '@workspace/lib/types/drive';
-import { isDocumentType } from '@workspace/lib/types/drive';
+import { isCollabType, isDocumentType } from '@workspace/lib/types/drive';
 
 export const CONTAINER_DATA_DB = 'data.db';
 export const CONTAINER_COMMENTS_DB = 'comments.db';
 // The folder of a document's comment threads, not the folder a user's own chats go in.
 export const CONTAINER_CHAT_FOLDER = 'chat';
 
+// Every Eigen document has its data.db, and only a collab document a comments.db, so a file of that name in a chat
+// is a user's own.
 export function isContainerDatabase(name: string, parentType: DrivePathType): boolean {
-    return (name === CONTAINER_DATA_DB || name === CONTAINER_COMMENTS_DB) && isDocumentType(parentType);
+    if (name === CONTAINER_DATA_DB) return isDocumentType(parentType);
+    return name === CONTAINER_COMMENTS_DB && isCollabType(parentType);
 }

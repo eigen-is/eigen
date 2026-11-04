@@ -67,7 +67,7 @@ import { deleteVersions } from '../versioning/delete';
 import { listVersions } from '../versioning/list';
 import { restoreContainer } from '../versioning/restore';
 import { saveVersion } from '../versioning/save';
-import { isVersionsFolder } from '../versioning/versions-folder';
+import { isVersionsFolder, isVersionsName } from '../versioning/versions-folder';
 import {
     canonicalACLId,
     canReadFromAncestors,
@@ -112,6 +112,8 @@ export type ContentWriteOptions = { user?: User; ifMatch?: string; event?: 'uplo
 // The row and its etag as this write committed them, under the file's lock. A write that lands right
 // after can't show in either. The caller sends them back, so its next save is checked against its own bytes.
 export type ContentWriteResult = { path: DrivePath; etag: string };
+
+const DOCUMENT_PART_ERROR = "Cannot change a document's databases or versions";
 
 export class Drive {
     // A live WebDAV lock holds the home, so only a close for another reason, such as a restore, drops it.
@@ -381,6 +383,7 @@ export class Drive {
         if (!isContainerType(parent.type)) {
             throw new ApiError(404, 'Parent folder not found');
         }
+        refuseVersionsName(parent, folderName);
 
         const pathId = await mount.createFolder(parentId, folderName, containerType);
         const folder = await mount.getPath(pathId);
@@ -509,6 +512,7 @@ export class Drive {
         // A document container is a valid parent too. Copying a document to another drive writes its
         // databases into the new container this way.
         if (!isContainerType(parent.type)) throw new ApiError(400, 'Target is not a folder');
+        refuseVersionsName(parent, name);
 
         const tempId = crypto.randomUUID();
         let created: DrivePath;
@@ -618,7 +622,7 @@ export class Drive {
                 parent &&
                 isDocumentType(parent.type) &&
                 (isVersionsFolder(crumb) || isContainerDatabase(crumb.name, parent.type));
-            if (isPart) throw new ApiError(400, "Cannot change a document's databases or versions");
+            if (isPart) throw new ApiError(400, DOCUMENT_PART_ERROR);
             parent = crumb;
         }
     }
@@ -685,6 +689,7 @@ export class Drive {
         const mount = this.getMount(mountId);
         const item = await mount.getActivePath(pathId);
         await this.refuseDocumentPart(mount, item);
+        if (item.parentId) refuseVersionsName(await mount.getActivePath(item.parentId), newName);
         const oldName = item.name;
 
         const renamedItem = await mount.updatePath(pathId, { name: newName });
@@ -723,7 +728,7 @@ export class Drive {
         if (await mount.isSelfOrDescendant(srcPathId, destParentId)) {
             throw new ApiError(409, 'Cannot copy a folder into itself or its own descendant');
         }
-        await this.getTargetFolder(mount, destParentId);
+        refuseVersionsName(await this.getTargetFolder(mount, destParentId), name);
         const tree = await this.listCopyWithinLimits(mount, srcPathId, { ownerId: this.owner.id, mountId });
         const copied = await mount.copyPath(
             tree,
@@ -1471,4 +1476,11 @@ export class Drive {
         });
         return run;
     }
+}
+
+// A document makes its versions/ folder at its first saved version, and Delete history removes it again. In between,
+// a folder or file a user gave that name would take its place, so no user write names a child of a document so. Its
+// databases need no such check: a whole document always has them, so their names are taken.
+function refuseVersionsName(folder: DrivePath, name: string): void {
+    if (isDocumentType(folder.type) && isVersionsName(name)) throw new ApiError(400, DOCUMENT_PART_ERROR);
 }
