@@ -1,8 +1,8 @@
-// The sweep. Once a document's last tab has closed, it deletes the parts of the document that nothing names any more,
-// such as an image deleted before every version that is still kept, or the thread of a deleted comment. A part stays
-// while the current state or a saved version names it, or while it is younger than three days. A linger close starts
-// it, once a day per document or sooner after a Delete history. A change while it reads waits for the next close, and
-// a failure for the next day, so a sweep can keep a part too long but never deletes one in use.
+// Deletes the parts of a collab document that nothing names any more, such as an image deleted before every saved
+// version, or the thread of a deleted comment. A part stays while the current state or a saved version names it, or
+// while it is younger than the grace period. A linger close starts a sweep, once a day per document or sooner after a
+// Delete history, and sweeps run one at a time. A change or a busy transform process while it reads waits for the next
+// close, and a failure for the next day, so a sweep can keep a part too long but never deletes one in use.
 
 import { SWEEP_GRACE_MS } from '@workspace/lib/constants/sweep';
 import type { DriveCollabType, DrivePath } from '@workspace/lib/types/drive';

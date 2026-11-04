@@ -16,7 +16,7 @@ import { pathKey } from '../mount/helpers';
 import { foldName } from '../mount/names';
 import type { DocumentReferences } from '../mount/schema';
 import { withSvgSiblings } from '../preview/svg-media-inline';
-import { DAY_MS } from '../versioning/retention';
+import { WEEK_MS } from '../versioning/retention';
 
 // The files each kept thread's messages name, by owner, mount and data.db, with the data.db row as it was read. A
 // thread that names an old file would otherwise be read at every sweep, and on a bucket that read is a whole
@@ -65,7 +65,7 @@ export async function threadAttachmentNames(mount: Mount, dataDb: DrivePath): Pr
     }
     const names = await readStoredCopy(mount, dataDb.id, readAttachmentNames);
     const now = Date.now();
-    for (const [old, entry] of attachmentNames) if (now - entry.usedAt >= 7 * DAY_MS) attachmentNames.delete(old);
+    for (const [old, entry] of attachmentNames) if (now - entry.usedAt >= WEEK_MS) attachmentNames.delete(old);
     attachmentNames.set(key, { row, names, usedAt: now });
     return names;
 }

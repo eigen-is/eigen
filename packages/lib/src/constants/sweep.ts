@@ -3,4 +3,5 @@
 // that was offline may still hold such an edit. The server's sweep keeps such parts, and a screen that explains the
 // sweep, such as the Delete history dialog, says how long.
 
-export const SWEEP_GRACE_MS = 72 * 60 * 60 * 1000;
+export const SWEEP_GRACE_DAYS = 3;
+export const SWEEP_GRACE_MS = SWEEP_GRACE_DAYS * 24 * 60 * 60 * 1000;
