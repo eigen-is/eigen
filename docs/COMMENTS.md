@@ -78,7 +78,7 @@ The thread list is read before the lock, so under the lock each idle thread is r
 
 ## A thread's own media go when no message names them
 
-Inside each thread that stays, a file in the thread's `media/` goes once it is 72 hours old and no message row names it, a deleted message's row included. The sweep lists the folder first and reads the thread's `data.db` only when a file is old enough to go, because on a bucket that read is a whole download. Only the current messages count: a thread's versions get no row of names. `ChatRoom.deleteMessage` trashes a deleted message's files itself ([CHAT.md](CHAT.md)), so a version of a thread can name an attachment that is gone. No screen restores a thread version.
+Inside each thread that stays, a file in the thread's `media/` goes once it is 72 hours old and no message row names it, a deleted message's row included. The sweep lists the folder first and reads the thread's `data.db` only when a file is old enough to go, because on a bucket that read is a whole download. A thread whose messages name an old file would still be read at every sweep, so the names it read are kept in memory by the `data.db` row, its size and `updatedAt`, and read again only once a sync changed that row. A document is swept at most once a day, so an entry lives a week from its last use, and a restart costs one read. Only the current messages count: a thread's versions get no row of names. `ChatRoom.deleteMessage` trashes a deleted message's files itself ([CHAT.md](CHAT.md)), so a version of a thread can name an attachment that is gone. No screen restores a thread version.
 
 ## Card attachments are staged until Save
 

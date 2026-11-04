@@ -33,15 +33,20 @@ const sweptAt = new Map<string, number>();
 // The documents a sweep is reading or deleting now. A reopen and a second close during a long read find the document
 // still due, and that second sweep leaves it to the first.
 const sweeping = new Set<string>();
+// The files each kept thread's messages name, by owner, mount and data.db, with the data.db row as it was read. A
+// thread that names an old file would otherwise be read at every sweep, and on a bucket that read is a whole
+// download. So it is read again only once a sync changed its row. A document is swept at most once a day, so an entry
+// lives for a week from its last use, and the old ones go whenever one is read.
+const attachmentNames = new Map<string, { row: string; names: ReadonlySet<string>; usedAt: number }>();
 
 export function isSweepDue(path: DrivePath): boolean {
-    const at = sweptAt.get(sweepKey(path));
+    const at = sweptAt.get(pathKey(path));
     return at === undefined || Date.now() - at >= DAY_MS;
 }
 
 // A change that leaves parts only the next sweep can free, such as Delete history, makes the document due at once.
 export function markSweepDue(path: DrivePath): void {
-    sweptAt.delete(sweepKey(path));
+    sweptAt.delete(pathKey(path));
 }
 
 // Closes a lingering document and then sweeps it. The hold on the Home comes first, because the close lets go of the
@@ -68,7 +73,7 @@ export function sweepAfterClose(drive: Drive, path: DrivePath, close: () => Prom
 // Reads everything first, outside any lock: the names in the current state and in every saved version, and the files
 // the messages of each thread name. Then, under the document's lock, it deletes only if nothing changed while it read.
 export async function sweepDocument(drive: Drive, container: DrivePath): Promise<void> {
-    const key = sweepKey(container);
+    const key = pathKey(container);
     if (!isCollabType(container.type) || sweeping.has(key)) return;
     sweeping.add(key);
     // A change while it read leaves the document due, so its next close tries again. Every other end marks the
@@ -137,7 +142,7 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
             const threadDataDb = await mount.getChildByName(thread.id, CONTAINER_DATA_DB);
             if (!threadMediaFolder || !threadDataDb) continue;
             if (!(await mount.listFolder(threadMediaFolder.id)).some(isOld)) continue;
-            threadMedia.set(threadMediaFolder.id, await readStoredCopy(mount, threadDataDb.id, readAttachmentNames));
+            threadMedia.set(threadMediaFolder.id, await threadAttachmentNames(mount, threadDataDb));
         }
 
         const deleted = await mount.withPathLock(container.id, async () => {
@@ -191,7 +196,7 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
     }
 }
 
-function sweepKey(path: DrivePath): string {
+function pathKey(path: DrivePath): string {
     return `${path.ownerId}.${path.mountId}.${path.id}`;
 }
 
@@ -239,6 +244,21 @@ async function readStoredCopy<T>(mount: Mount, pathId: string, read: (localPath:
     } finally {
         await mount.cleanupTemp(tempId);
     }
+}
+
+async function threadAttachmentNames(mount: Mount, dataDb: DrivePath): Promise<ReadonlySet<string>> {
+    const key = pathKey(dataDb);
+    const row = `${dataDb.size}.${dataDb.updatedAt.getTime()}`;
+    const known = attachmentNames.get(key);
+    if (known?.row === row) {
+        known.usedAt = Date.now();
+        return known.names;
+    }
+    const names = await readStoredCopy(mount, dataDb.id, readAttachmentNames);
+    const now = Date.now();
+    for (const [old, entry] of attachmentNames) if (now - entry.usedAt >= 7 * DAY_MS) attachmentNames.delete(old);
+    attachmentNames.set(key, { row, names, usedAt: now });
+    return names;
 }
 
 // The files a thread's messages name, folded the way a name finds its file. A message's attachment is a file in the

@@ -780,6 +780,31 @@ describe('the thread sweep', () => {
         expect((await mount.getPath(thread.id))?.trashedAt).not.toBeNull();
     });
 
+    test("a thread's messages are read again only once its data.db changed", async () => {
+        const { path, collab } = await openDoc(mount, M, 'ThreadMemo', [paragraph(marked('c1'))]);
+        const thread = await addThread(mount, M, path.id, {
+            messages: [{ content: 'named', attachments: ['named.png'] }],
+        });
+        addCard(collab.doc, 'c1', { chatName: thread.name });
+        await addMedia(mount, thread.id, 'named.png');
+        const dataDb = await threadDataDb(mount, thread.id);
+        await close(M, path);
+        const downloads = spyOn(mount, 'downloadToTemp');
+        const reads = () => downloads.mock.calls.filter(([id]) => id === dataDb.id).length;
+        try {
+            await sweepDocument(drive, path);
+            await sweepDocument(drive, path);
+            expect(reads()).toBe(1);
+            await (await drive.getChat(M, thread.id)).postMessage(home.user, 'a reply');
+            await closeThreadDb(mount, thread.id);
+            await sweepDocument(drive, path);
+            expect(reads()).toBe(2);
+        } finally {
+            downloads.mockRestore();
+        }
+        expect(await mediaNames(mount, thread.id)).toEqual(['named.png']);
+    });
+
     test('a thread with no old media is never opened', async () => {
         const { path, collab } = await openDoc(mount, M, 'ThreadUnopened', [paragraph(marked('c1'))]);
         const thread = await addThread(mount, M, path.id);
