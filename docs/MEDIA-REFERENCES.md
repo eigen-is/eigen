@@ -2,7 +2,7 @@
 
 > **TLDR:** An Eigen document refers to its embedded files (images, backgrounds, comment threads, chat attachments) by **file name**, never by path id or URL. Names are unique per folder, and the folders are fixed (`{doc}/media/`, `{doc}/chat/`, `{chat}/media/`), so a name resolves to a path id at render time through `MediaResolverProvider` (`packages/lib/src/core/drive/media-resolver.tsx`). A copied container therefore needs no rewriting, and no stored reference bakes in the API host. Not obvious from the code: a new upload renders from a `pending:` name before it lands, a container document attached to a chat or card is the one reference by id, and a download never goes through the preview URL the image renders from.
 
-Every Eigen document is a container, a Drive folder named like a file that holds the document's own files ([STORAGE.md](STORAGE.md#containers-name-users-by-email-never-by-id)). Its content is a Yjs document ([COLLAB.md](COLLAB.md)), or for a chat room a SQLite database ([CHAT.md](CHAT.md)), and a reference is a field in that content that names one of those files. Inserting an image, starting a comment thread and attaching a file to a message all write such a name. The sections cover why names beat ids, the fields per document kind, the one reference by id, and how a name becomes an image on screen.
+Every Eigen document is a container, a Drive folder named like a file that holds the document's own files ([STORAGE.md](STORAGE.md#containers-name-users-by-email-never-by-id)). Its content is a Yjs document ([COLLAB.md](COLLAB.md)), or for a chat room a SQLite database ([CHAT.md](CHAT.md)), and a reference is a field in that content that names one of those files. Inserting an image, starting a comment thread and attaching a file to a message all write such a name. The sections cover why names beat ids, the fields per document kind, the one reference by id, how a name becomes an image on screen, and the sweep that deletes a file nothing names any more once the document's last tab closed.
 
 ## A name survives a copy, a path id does not
 
@@ -22,6 +22,7 @@ An Office import writes its pictures without that rename, so it picks names no f
 | eigenslides | a frame's `background`, image variant only | an image in `media/` |
 | docs, sheets, slides, vector | `comments` card's `chatName` | a thread in `chat/` |
 | eigenstickies | `tasks` card's `chatName` | a thread in `chat/` |
+| docs, sheets, slides, vector, stickies | a card's `attachments` that are plain names | files in `media/` |
 | eigenchat | a message's `attachments` | files in the room's `media/` |
 
 The docs `figure` (`packages/lib/src/docs/eigendoc/nodes/figure.ts`) keeps `mediaName` as its only durable reference; `src` is filled in at render. A comment anchor is not a name: the docs `comment` mark and a canvas element's `commentCardIds` hold a card id, and the card holds the `chatName`. The infinite canvas' own `meta.background` is a color token and never names media.
@@ -53,6 +54,20 @@ A tab closed mid-upload leaves its `pending:` name in the document, and no one c
 ## The clipboard carries ids, the document stores names
 
 The clipboard is transient, so its image item carries the source's path ids to find and download the file. On paste into another container the image re-uploads, and the document stores the name the upload returned ([CLIPBOARD.md](CLIPBOARD.md#a-pasted-image-re-uploads-as-the-pasting-user)).
+
+## A file stays while a state names it, and a sweep deletes the rest
+
+A delete in a document drops only the name, so an undo or a version restore brings the image back. A file in `media/` therefore stays while the current state or a saved version names it, through any field in the table, a card's fields only while the card is in use, such as anchored in the content ([COMMENTS.md](COMMENTS.md#each-app-anchors-a-card-in-its-own-content)), or while it is younger than 72 hours by its `createdAt`. The grace exists because an upload lands before the edit that names it reaches the server, and a tab that was offline may still hold that edit. Everything else goes in a sweep (`sweepDocument`, `apps/api/src/lib/drive/sweep.ts`). A file whose `createdAt` is null reads as now (`Mount.toDrivePath`), so it never ages and no sweep deletes it. Threads in `chat/` are not swept.
+
+An SVG in `media/`, such as a pasted canvas selection, names its sibling images through `eigen-media:` hrefs, which the preview inliner resolves at serve time ([CLIPBOARD.md](CLIPBOARD.md#the-svg-names-its-images-never-their-bytes)). A kept SVG keeps those siblings too, to the depth the inliner reads (`withSvgSiblings`, `apps/api/src/lib/preview/svg-media-inline.ts`), or the drawing would show blank images.
+
+## The sweep runs after the last tab closed and deletes only if nothing changed
+
+The sweep starts from `CollabDocument.closeAfterLinger`, the close a minute after the last socket left, at most once a day per document. A close for a trash or a restore starts none. The day is a mark in memory, set only when a sweep finished, so a restart costs one extra sweep. The document's state is encoded from the live Y.Doc before the close destroys it, and the sweep holds the Home from before the close, because the close lets go of the lingering document's hold and an idle Home would close first.
+
+It reads everything first, outside any lock. It lists `versions/`, and each version without a current row in `version_references` ([DATABASE.md](DATABASE.md#a-versions-names-are-a-row-the-media-sweep-fills)) is downloaded and its stored state sent, still compressed, with the current state to the `references` transform job, in chunks under the job's copy cap. Each chunk's rows are written as it returns, so the reads survive a failure later on. Then, under the container's path lock, it deletes only if nothing changed: the document is not open again, not on its way to the trash or in it, its mount is not closing, and neither the `data.db` row (size and `updatedAt`) nor the list of versions moved since the read. A reopened tab's undo or a restore changes one of them. The deletes go through `Mount.deletePath`, so the folder sizes and the quota follow. A close-time version try-locks the container, so one that lands during the deletes is skipped.
+
+Any failure, such as a version that does not download or read, a reader that throws, a job past its cap or a full transform queue, skips the document until its next close. A sweep can keep a file too long but never deletes one in use. A version that can never be read keeps its document unswept until retention prunes it.
 
 ## See also
 
