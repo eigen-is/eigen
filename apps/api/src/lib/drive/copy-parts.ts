@@ -15,7 +15,9 @@ import { mediaKeptBy, storedReferences, threadAttachmentNames } from './named-pa
 
 // The tree with each collab document inside reduced to the parts its current state names. The listing flushed each
 // document first, so its stored data.db holds its latest edits. The documents are read one at a time, so a folder of
-// many runs one references job at a time. A read that fails fails the copy before anything is written.
+// many runs one references job at a time. A document whose parts can't be read, such as one past the reader's size
+// limit or one the strict reader refuses, copies whole. Such a copy keeps more than it needs, never less, and it never
+// fails for it.
 export async function withNamedPartsOnly(mount: Mount, tree: CopyTree): Promise<CopyTree> {
     const { path } = tree;
     if (!isContainerType(path.type)) return tree;
@@ -30,27 +32,33 @@ export async function withNamedPartsOnly(mount: Mount, tree: CopyTree): Promise<
     const hasFiles = media?.children.some((child) => child.path.type === DRIVE_TYPE_FILE);
     const hasThreads = chat?.children.some((child) => child.path.type === DRIVE_TYPE_CHAT);
     if (!hasFiles && !hasThreads) return tree;
-    const dataDb = childNamed(tree, CONTAINER_DATA_DB);
-    if (!dataDb) throw new Error(`${path.id}: data.db missing`);
+    try {
+        const dataDb = childNamed(tree, CONTAINER_DATA_DB);
+        if (!dataDb) throw new Error(`${path.id}: data.db missing`);
 
-    const named = await storedReferences(mount, path.type, dataDb.path.id, 'foreground');
-    const keptThreads = new Set(named.chat.map(foldName));
-    const children: CopyTree[] = [];
-    for (const child of tree.children) {
-        if (child === media) {
-            children.push(onlyFiles(child, await mediaKeptBy(mount, child.path.id, named.media)));
-        } else if (child === chat) {
-            const threads: CopyTree[] = [];
-            for (const thread of child.children) {
-                if (thread.path.type !== DRIVE_TYPE_CHAT) threads.push(thread);
-                else if (keptThreads.has(foldName(thread.path.name))) threads.push(await withNamedMedia(mount, thread));
+        const named = await storedReferences(mount, path.type, dataDb.path.id, 'foreground');
+        const keptThreads = new Set(named.chat.map(foldName));
+        const children: CopyTree[] = [];
+        for (const child of tree.children) {
+            if (child === media) {
+                children.push(onlyFiles(child, await mediaKeptBy(mount, child.path.id, named.media)));
+            } else if (child === chat) {
+                const threads: CopyTree[] = [];
+                for (const thread of child.children) {
+                    if (thread.path.type !== DRIVE_TYPE_CHAT) threads.push(thread);
+                    else if (keptThreads.has(foldName(thread.path.name)))
+                        threads.push(await withNamedMedia(mount, thread));
+                }
+                children.push({ path: child.path, children: threads });
+            } else {
+                children.push(child);
             }
-            children.push({ path: child.path, children: threads });
-        } else {
-            children.push(child);
         }
+        return { path, children };
+    } catch (error) {
+        console.warn(`[copy] ${path.id} copies whole:`, error instanceof Error ? error.message : error);
+        return tree;
     }
-    return { path, children };
 }
 
 // Runs once a copied document has landed. Its comments.db came over whole, with the rows of every thread the source

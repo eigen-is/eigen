@@ -245,14 +245,21 @@ describe('a copy of a document', () => {
         expect(await commentRows(copied.id)).toEqual([kept.name]);
     });
 
-    test('whose state does not read fails and writes nothing', async () => {
+    test('whose state does not read copies whole, and the server says so', async () => {
         const { path, collab } = await openDoc('Unreadable', [paragraph()]);
         addCard(collab.doc, 'c-odd', { chatName: 42 });
         await addMedia(path.id, 'loose.png');
-        const name = `${path.name} copy`;
-
-        await expect(copyOf(path)).rejects.toThrow();
-        expect(await mount.getChildByName(rootId, name)).toBeNull();
+        const left = await addThread(path.id, [{ content: 'left behind' }]);
+        const warn = spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            const copied = await copyOf(path);
+            expect(await mediaNames(copied.id)).toEqual(['loose.png']);
+            expect(await threadNames(copied.id)).toEqual([left.name]);
+            expect(await commentRows(copied.id)).toEqual([left.name]);
+            expect(warn).toHaveBeenCalledTimes(1);
+        } finally {
+            warn.mockRestore();
+        }
     });
 });
 
