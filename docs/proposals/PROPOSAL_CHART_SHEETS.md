@@ -22,7 +22,6 @@ This proposal gives every chart in Docs, Slides and Vector a real Eigen sheet as
 - Charts in Sheets. A sheet's chart already reads its own cells.
 - Opening a chart's sheet in the Sheets app. It is a child of the document, hidden from Drive lists and search as comment threads are, and only Edit data opens it.
 - Comments on a chart's sheet. The dialog hides the comment UI.
-- Restoring a chart's sheet with a version of its document. A version restore brings back the chart's cache and leaves the sheet as it is ([§ Risks](#risks)).
 - Drawings embedded in docs. CANVAS-TODO's row "Vector drawing app: embedding" plans a nested `drawings/` folder by the same pattern, and should share this one's rules when it is built.
 
 ## Current state
@@ -92,7 +91,7 @@ The last two rows keep one sheet per chart without the clipboard knowing where a
 
 `embeddedChartSheet` moves from `apps/api/src/lib/ooxml/ooxml-chart-writer.ts` to `packages/sheet/src/engine/`, so the dialog and the docx and pptx writers fill a sheet the same way. The writer keeps importing it from there.
 
-The sheet is a live collab document, so an edit is stored as it is typed and there is no draft: Save and Cancel become one Done, as in Google's linked sheet. While the dialog is open, each change the sheet computes resolves the block (`resolveRangeChartData` over a `CellResolver` on the mounted workbook) and, when the result differs from the cache, writes the chart's `data` part through the chart's existing change path, debounced to one write per 300 ms. So the chart redraws behind the dialog as the user types, and a peer sees the doc's chart change. Opening the dialog does the same once, so a cache left stale by a crashed tab, a version restore or an older build is refreshed on the next open.
+The sheet is a live collab document, so an edit is stored as it is typed and there is no draft: Save and Cancel become one Done, as in Google's linked sheet. While the dialog is open, each change the sheet computes resolves the block (`resolveRangeChartData` over a `CellResolver` on the mounted workbook) and, when the result differs from the cache, writes the chart's `data` part through the chart's existing change path, debounced to one write per 300 ms. So the chart redraws behind the dialog as the user types, and a peer sees the doc's chart change. Opening the dialog does the same once, so a cache left stale by a crashed tab or an older build is refreshed on the next open.
 
 A cache write is no undo step in the document: the sheet's own undo stack undoes the edit, and a ⌘Z in the doc after Done must not set the cache back while the sheet stays. So the host writes it with an origin its undo manager doesn't track (open question 3). Two editors with the dialog open on one chart both write the same cache from the same sheet, and an equal cache writes nothing.
 
@@ -124,8 +123,8 @@ Phase 1 ends with the domain docs: CHARTS.md's Edit data sections rewritten, MED
 
 ## Risks
 
-- **The cache and the sheet can disagree.** A version restore of the document, a crashed tab or an edit by an older build that can only read leaves the cache behind its sheet until the next Edit data opens. The chart draws the cache meanwhile, which is the number it showed last, never a wrong one it computed.
-- **A deleted chart leaves its sheet.** As a comment thread stays when its anchor goes, so an undo or a version restore brings the chart back with its sheet. Nothing sweeps a sheet no chart names. A sheet is a few tens of KB, and a sweep is a later row once one is measured.
+- **The cache and the sheet can disagree.** A crashed tab or an edit by an older build that can only read leaves the cache behind its sheet until the next Edit data opens. A version restore does not: the document's version holds the sheet's state too ([PROPOSAL_DOCUMENT_LIFECYCLE.md](PROPOSAL_DOCUMENT_LIFECYCLE.md#a-version-of-a-document-is-a-set)). The chart draws the cache meanwhile, which is the number it showed last, never a wrong one it computed.
+- **A deleted chart leaves its sheet.** As a comment thread stays when its anchor goes, so an undo or a version restore brings the chart back with its sheet. The media sweep of [PROPOSAL_DOCUMENT_LIFECYCLE.md](PROPOSAL_DOCUMENT_LIFECYCLE.md#a-media-file-lives-as-long-as-something-names-it) removes a sheet once neither the document nor any retained version names it.
 - **The Workbook in a dialog is the hard part.** The probe's focus, clipboard and Escape problems are known and the root cause of the first isn't. Phase 1 starts there, so a dead end is found before the rest is built.
 - **Bundle size.** Docs, Slides and Vector load the sheet package only when a dialog opens; a first open waits for it.
 - **A sheets document inside a document is new for collab.** The collab route, `findContainerPath`, version snapshots and `copyPathAcross` already handle a chat inside a document, and a sheets container is the same shape, but no test covers a collab document nested in another one yet. Phase 1 adds one for each.
@@ -134,6 +133,7 @@ Phase 1 ends with the domain docs: CHARTS.md's Edit data sections rewritten, MED
 
 - **One sheet per chart** (owner, 2026-10-29). A chart and its numbers copy, paste and delete together, as an Office chart and its embedded workbook do. A sheet shared by charts is not offered.
 - **The `sheets/` folder and a chart naming its sheet** (owner, 2026-10-29): a new seam beside `media/` and `chat/`, approved as designed here. A route change for open question 1 still needs its own yes.
+- **A chart's sheet goes back with a version of its document** (owner, 2026-11-04): the document's version is a set that holds the sheet's `data.db` too, and the sheet keeps no versions of its own ([PROPOSAL_DOCUMENT_LIFECYCLE.md](PROPOSAL_DOCUMENT_LIFECYCLE.md#a-version-of-a-document-is-a-set)). Phase 1 builds the set.
 
 ## Open questions
 
