@@ -12,7 +12,7 @@ import { withCommentIndex } from '../chat';
 import { ApiError } from '../core/errors';
 import { REFERENCE_READER_VERSION } from '../document/references';
 import type { Mount } from '../mount';
-import { CONTAINER_CHAT_FOLDER, CONTAINER_DATA_DB } from '../mount/container-dbs';
+import { CONTAINER_CHAT_FOLDER, CONTAINER_DATA_DB, CONTAINER_MEDIA_FOLDER } from '../mount/container-dbs';
 import { foldName } from '../mount/names';
 import { getVersionReferences, putVersionReferences } from '../mount/version-references';
 import { listVersions } from '../versioning/list';
@@ -94,14 +94,14 @@ async function sweep(drive: Drive, container: DrivePath, documentType: DriveColl
 
         // A listing is cheap, so a document where nothing could go costs no download and no job. On a bucket a
         // thread's data.db is read as a whole download, so it is read only for a thread that holds an old file.
-        const media = await mount.getChildByName(container.id, 'media');
+        const media = await mount.getChildByName(container.id, CONTAINER_MEDIA_FOLDER);
         const oldMedia = media ? (await mount.listFolder(media.id)).filter(isOld) : [];
         const chat = await mount.getChildByName(container.id, CONTAINER_CHAT_FOLDER);
         const candidateThreads: { thread: DrivePath; idle: boolean; oldMediaIn: DrivePath | null }[] = [];
         for (const thread of chat ? await mount.listFolder(chat.id) : []) {
             if (thread.type !== DRIVE_TYPE_CHAT) continue;
             const idle = !(await isActive(mount, thread, cutoff));
-            const threadMedia = await mount.getChildByName(thread.id, 'media');
+            const threadMedia = await mount.getChildByName(thread.id, CONTAINER_MEDIA_FOLDER);
             const holdsOld = threadMedia !== null && (await mount.listFolder(threadMedia.id)).some(isOld);
             if (idle || holdsOld) candidateThreads.push({ thread, idle, oldMediaIn: holdsOld ? threadMedia : null });
         }

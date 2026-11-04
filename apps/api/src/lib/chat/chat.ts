@@ -17,7 +17,7 @@ import { ApiError } from '../core/errors';
 import type { Drive } from '../drive';
 import type { Home } from '../home';
 import { broadcastToOwnerAndMembers, sendToUserHomes } from '../home/home-relay';
-import { CONTAINER_DATA_DB } from '../mount/container-dbs';
+import { CONTAINER_DATA_DB, CONTAINER_MEDIA_FOLDER } from '../mount/container-dbs';
 import type { User } from '../user';
 import { getUserByEmail } from '../user';
 import { formatEmoteForViewer, parseCommand, searchableMessageText } from './commands';
@@ -42,7 +42,7 @@ export class ChatRoom {
         // The databases are set up in one step that cleans up after itself. A storage failure then leaves
         // no data.db row without a database, which would make every later init answer 503.
         await drive.provisionManagedDbs(mountId, roomId, [{ name: CONTAINER_DATA_DB, config: CHAT_ROOM_DB_CONFIG }]);
-        await drive.createFolder(mountId, roomId, 'media');
+        await drive.createFolder(mountId, roomId, CONTAINER_MEDIA_FOLDER);
     }
 
     // Finds the room's data.db, and creates it when it is missing. It opens nothing: each method below
@@ -392,7 +392,11 @@ export class ChatRoom {
         if (existing.attachments) {
             // An attachment is a file name in this chat's own media folder. It is looked up only there, so a
             // crafted name can't trash another path of the owner's.
-            const mediaFolder = await this.drive.getChildByName(this.path.mountId, this.path.id, 'media');
+            const mediaFolder = await this.drive.getChildByName(
+                this.path.mountId,
+                this.path.id,
+                CONTAINER_MEDIA_FOLDER,
+            );
             if (mediaFolder) {
                 for (const attachment of existing.attachments) {
                     if (typeof attachment !== 'string') continue;

@@ -9,7 +9,12 @@ import { withCommentIndex } from '../chat';
 import { readYjsStatePayloadFromFile } from '../collab/yjs-loader';
 import { runDocumentReferences } from '../document/transform/run-transform';
 import type { Mount } from '../mount';
-import { CONTAINER_CHAT_FOLDER, CONTAINER_COMMENTS_DB, CONTAINER_DATA_DB } from '../mount/container-dbs';
+import {
+    CONTAINER_CHAT_FOLDER,
+    CONTAINER_COMMENTS_DB,
+    CONTAINER_DATA_DB,
+    CONTAINER_MEDIA_FOLDER,
+} from '../mount/container-dbs';
 import type { CopyTree } from '../mount/copy';
 import { foldName } from '../mount/names';
 import type { DriveLike } from './get-drive';
@@ -29,7 +34,7 @@ export async function withNamedPartsOnly(mount: Mount, tree: CopyTree): Promise<
         for (const child of tree.children) children.push(await withNamedPartsOnly(mount, child));
         return { path, children };
     }
-    const media = childNamed(tree, 'media');
+    const media = childNamed(tree, CONTAINER_MEDIA_FOLDER);
     const chat = childNamed(tree, CONTAINER_CHAT_FOLDER);
     // A document with no file in media/ and no thread has nothing to leave behind, so it costs no job.
     const hasFiles = media?.children.some((child) => child.path.type === DRIVE_TYPE_FILE);
@@ -98,7 +103,7 @@ export async function keepRowsOfCopiedThreads(
 // names nothing it could be read for, so it copies whole.
 async function withNamedThreadMedia(mount: Mount, thread: CopyTree): Promise<CopyTree> {
     const dataDb = childNamed(thread, CONTAINER_DATA_DB);
-    const media = childNamed(thread, 'media');
+    const media = childNamed(thread, CONTAINER_MEDIA_FOLDER);
     if (!dataDb || !media?.children.some((child) => child.path.type === DRIVE_TYPE_FILE)) return thread;
     const names = await threadAttachmentNames(mount, dataDb.path);
     return {

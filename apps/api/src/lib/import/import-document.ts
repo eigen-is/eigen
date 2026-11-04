@@ -45,6 +45,7 @@ import {
 import { documentTransformRunner } from '../document/transform/runner';
 import type { DriveLike } from '../drive/get-drive';
 import type { Mount } from '../mount';
+import { CONTAINER_MEDIA_FOLDER } from '../mount/container-dbs';
 import { MAX_DECOMPRESSED_BYTES } from '../ooxml/zip';
 import type { User } from '../user';
 import { IMPORT_MESSAGES, PRESENTATION_EMPTY } from './messages';
@@ -259,7 +260,7 @@ async function saveImportedImages(
     user: User,
 ): Promise<void> {
     if (images.length === 0) return;
-    const mediaFolder = await drive.getChildByName(docPath.mountId, docPath.id, 'media');
+    const mediaFolder = await drive.getChildByName(docPath.mountId, docPath.id, CONTAINER_MEDIA_FOLDER);
     if (!mediaFolder) throw new ApiError(500, 'Document media folder not found');
     await enforceMountQuota(docPath.ownerId, docPath.mountId, imagesSize(images));
     for (const image of images) {

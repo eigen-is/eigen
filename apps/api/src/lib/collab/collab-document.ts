@@ -21,7 +21,12 @@ import { restampRestoredSheetsBase, stampMissingSheetsBase } from '../document/s
 import { compactSheets, sheetsNeedCompaction } from '../document/sheets-compaction';
 import type { Drive } from '../drive';
 import { isSweepDue, sweepAfterClose } from '../drive/sweep';
-import { CONTAINER_CHAT_FOLDER, CONTAINER_COMMENTS_DB, CONTAINER_DATA_DB } from '../mount/container-dbs';
+import {
+    CONTAINER_CHAT_FOLDER,
+    CONTAINER_COMMENTS_DB,
+    CONTAINER_DATA_DB,
+    CONTAINER_MEDIA_FOLDER,
+} from '../mount/container-dbs';
 import type { User } from '../user';
 import { COLLAB_DB_CONFIG } from './db-config';
 import { DbProvider } from './db-provider';
@@ -97,7 +102,7 @@ export class CollabDocument {
             { name: CONTAINER_DATA_DB, config: COLLAB_DB_CONFIG },
             { name: CONTAINER_COMMENTS_DB, config: COMMENT_INDEX_DB_CONFIG },
         ]);
-        await drive.createFolder(mountId, docId, 'media');
+        await drive.createFolder(mountId, docId, CONTAINER_MEDIA_FOLDER);
         await drive.createFolder(mountId, docId, CONTAINER_CHAT_FOLDER);
     }
 

@@ -7,10 +7,11 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type { VectorScene } from '@workspace/lib/vector';
 import { parseBackgroundFill } from '@workspace/lib/vector/fill';
 import type { Mount } from '../mount';
+import { CONTAINER_MEDIA_FOLDER } from '../mount/container-dbs';
 import type { ExportMedia, TransformMedia } from './transform/protocol';
 
 export async function listDocumentMedia(mount: Mount, drivePath: DrivePath): Promise<Map<string, DrivePath>> {
-    const mediaFolder = await mount.getChildByName(drivePath.id, 'media');
+    const mediaFolder = await mount.getChildByName(drivePath.id, CONTAINER_MEDIA_FOLDER);
     const children = mediaFolder ? await mount.listFolder(mediaFolder.id) : [];
     return new Map(children.map((file) => [file.name, file]));
 }
