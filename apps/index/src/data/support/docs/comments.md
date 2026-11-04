@@ -57,7 +57,7 @@ When a discussion is done, you can mark it resolved.
 - In the sidebar or in the document, right-click the comment and choose **Resolve comment**.
 - Or open the thread and click the checkmark icon at the top right of the dialog.
 
-Resolved comments are still there; switch the sidebar filter to **Resolved** or **All** to see them. To reopen one, right-click it and choose **Reopen comment**, or open the thread and click the circular-arrow icon (**Re-open**).
+Resolved comments are still there; switch the sidebar filter to **Resolved** or **All** to see them. To reopen one, right-click it and choose **Reopen comment**, or open the thread and click the circular-arrow icon (**Reopen**).
 
 ## Edit or delete a comment
 

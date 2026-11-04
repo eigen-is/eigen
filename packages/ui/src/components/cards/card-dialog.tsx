@@ -110,12 +110,12 @@ export function CardDialog({
         canWrite && chatName && onResolve
             ? {
                   actionIcon: status === 'open' ? Check : RotateCcw,
-                  actionTooltip: status === 'open' ? 'Resolve' : 'Re-open',
+                  actionTooltip: status === 'open' ? 'Resolve' : 'Reopen',
                   onAction: () => onResolve(chatName, status === 'open' ? 'resolved' : 'open', card.title),
               }
             : {};
 
-    const attachmentNames = card.attachments?.filter((a): a is string => typeof a === 'string') ?? [];
+    const attachmentNames = card.attachments?.filter((name): name is string => typeof name === 'string') ?? [];
 
     const handleEditSave = async (patch: CardFormPatch, drafts?: CardAttachmentDraft[], assignee?: string | null) => {
         // The same Save may rename the card. The new title goes along, so the activity row and the title cache don't

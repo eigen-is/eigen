@@ -96,7 +96,7 @@ When a discussion is finished, you can mark the comment resolved.
 - Right-click the cell and choose **Resolve comment** from the menu.
 - Or open the comment thread and click the checkmark icon (**Resolve**) near the top of the dialog.
 
-Resolved comments stay in the spreadsheet. Switch the panel filter to **Resolved** or **All** to see them. To reopen one, right-click the cell and choose **Reopen comment**, or open the thread and click the circular-arrow icon (**Re-open**).
+Resolved comments stay in the spreadsheet. Switch the panel filter to **Resolved** or **All** to see them. To reopen one, right-click the cell and choose **Reopen comment**, or open the thread and click the circular-arrow icon (**Reopen**).
 
 ## Edit, change color, or delete a comment
 
