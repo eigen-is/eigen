@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2129 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2132 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -549,7 +549,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (449)
+## Types (450)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -850,6 +850,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CardAttachmentDraft` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `CardFormPatch` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `CommentCard` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
+| `CommentMapName` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `DocumentPanel` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `DocCommentMatch` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
 | `DocCommentSearch` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
@@ -1003,7 +1004,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1162)
+## Utilities & constants (1164)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1347,6 +1348,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `STANDARD_MAILBOXES` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `STORAGE_TYPE_HINTS` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
 | `STORAGE_TYPE_LABELS` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
+| `SWEEP_GRACE_DAYS` | `@workspace/lib/constants` | packages/lib/src/constants/sweep.ts |
 | `SWEEP_GRACE_MS` | `@workspace/lib/constants` | packages/lib/src/constants/sweep.ts |
 | `TEXT_FALLBACK_FAMILIES` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `TEXT_PREVIEW_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
@@ -1746,6 +1748,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CHART_TYPES` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `isStackingChartType` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `LEGEND_POSITIONS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `commentMapName` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `toAttachmentReference` | `@workspace/lib/types/drive-reference` | packages/lib/src/types/drive-reference.ts |
 | `BACKUP_ARTIFACT_EXTENSION` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
 | `BACKUP_FORMAT_VERSION` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
