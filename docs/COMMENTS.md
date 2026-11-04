@@ -47,13 +47,27 @@ ProseMirror never sees a right-click inside a node view, so the figure's node vi
 
 ## A delete strips the anchor and keeps the card
 
-A delete takes the card's id out of the content and leaves the card, its thread and its index row where they are. The panel shows only active cards, the ones the host finds in use, so the deleted comment disappears from view. An undo or a version restore that brings the anchor back brings the whole comment back, thread included. A restore moves only the anchors and leaves the cards alone, because the `comments` map is not one of the document's declared `yjsRoots` ([COLLAB.md](COLLAB.md#a-version-restore-rewrites-an-open-document-in-one-transaction)).
+A delete takes the card's id out of the content and leaves the card, its thread and its index row where they are, until a sweep after the document closed removes a thread nothing names ([A sweep removes a thread nothing names](#a-sweep-removes-a-thread-nothing-names)). The panel shows only active cards, the ones the host finds in use, so the deleted comment disappears from view. An undo or a version restore that brings the anchor back brings the whole comment back, thread included. A restore moves only the anchors and leaves the cards alone, because the `comments` map is not one of the document's declared `yjsRoots` ([COLLAB.md](COLLAB.md#a-version-restore-rewrites-an-open-document-in-one-transaction)).
 
 The canvas also marks the card deleted with `deletedAt`, because on the canvas a card that no element anchors is a document-level comment, not an orphan: stripping the anchor alone would leave it in the panel. Its active set, `activeCommentCardIds` (`packages/lib/src/vector/comments.ts`), counts a card that an element anchors or that is not marked. So a card whose element was deleted stays in the panel as a document-level comment, and a deleted card whose element comes back, through an undo of the element's delete or a restore, shows again. It keeps its `deletedAt`, so it shows only while an element anchors it: once that element is deleted again, the card hides, as a comment on deleted text hides in docs. A card raised from the pane is document-level from the start.
 
 The canvas writes the mark and strips the id from every element that holds it in one untracked transaction (`deleteCommentCardInDoc`), and appends the id to its element after `createCard` resolves, untracked too. The comment map is outside the canvas undo scope, so a ⌘Z that moved only the anchor would bring back a card the user deleted, or turn a new comment into a document-level one. The append is idempotent, so a double submit lists the card once.
 
 Stickies is the exception. Its `tasks` map is a declared root and in its undo scope. A delete removes the card from its column and from `tasks` in one transaction (`deleteCardFromBoard`), so one ⌘Z brings back the card and its place. A restore rewrites the cards too: a card added after the version drops off the board while its thread and row stay, and an edit made since to a card's text or color reverts.
+
+## A sweep removes a thread nothing names
+
+A deleted comment's thread stays while something could bring its card back. Once the document's last tab closed, the sweep that deletes unnamed media ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md#the-sweep-runs-after-the-last-tab-closed-and-deletes-only-if-nothing-changed)) also deletes a thread in `chat/` when no card in use names it, in the current state or in a kept version, and nobody created or wrote in it for 72 hours. A card is in use when its host's active set holds it: anchored in docs and sheets, on the board in stickies, anchored or not marked deleted on the canvas. The server reads that rule through `documentReferences` (`apps/api/src/lib/document/references.ts`).
+
+The thread goes first, through `Mount.deletePath`, and only then its row in `comments.db` and its `comment_mentions` rows (`CommentIndex.deleteRowsWithoutThread`). The mentions have no foreign key, so they go by name, and the search hit follows the row through the `comments_ad` trigger. The order matters: a thread that stays without its row heals as open and unassigned and loses its status, while a row whose thread went is harmless. The same delete drops every row whose thread is no longer in `chat/`, so a leftover row goes with the next swept thread. `comments.db` is opened only when a thread went.
+
+The card stays in the document's card map as dead bytes, because the sweep reads the closed document and never writes it. The activity rows that name the thread keep their entries ([FILE-HISTORY.md](FILE-HISTORY.md)).
+
+A thread's last activity is the newer of its own `createdAt` and the `updatedAt` of its `data.db` row. A write stamps that row when the database syncs, within 30 s, so a reply through a notification while the document is closed keeps the thread for another 72 hours. On a disk mount a close stamps the row too, a close after a read included, so a thread someone opened counts as active. The sweep reads a thread's `data.db` from a temp copy, which stamps nothing.
+
+## A thread's own media go when no message names them
+
+Inside each thread that stays, a file in the thread's `media/` goes once it is 72 hours old and no message row names it, a deleted message's row included. The sweep lists the folder first and reads the thread's `data.db` only when a file is old enough to go, because on a bucket that read is a whole download. Only the current messages count: a thread's versions get no row of names. `ChatRoom.deleteMessage` trashes a deleted message's files itself ([CHAT.md](CHAT.md)), so a version of a thread can name an attachment that is gone. No screen restores a thread version.
 
 ## Card attachments are staged until Save
 
