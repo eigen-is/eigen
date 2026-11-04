@@ -10,6 +10,7 @@ import { ChatMessageInput } from '../chat/chat-message-input';
 import { ChatMessageList } from '../chat/chat-message-list';
 import { DeleteDialog } from '../delete/delete-dialog';
 import { DrivePickerWithUpload } from '../drive/drive-picker-with-upload';
+import { LoadingState } from '../layout/app/loading-state';
 
 type CommentThreadProps = {
     ownerId: string;
@@ -89,9 +90,15 @@ export function CommentThread({ ownerId, mountId, pathId, chatName, className }:
     const { resolveChatId } = useMediaResolver();
     const chatId = resolveChatId(chatName);
 
-    // A name the listing lacks waits for the listing's refetch. If the thread is gone, the card reads deleted and the
-    // dialog shows that instead of this thread.
-    if (!chatId) return <div className={cn('h-[50vh] min-h-0', className)} />;
+    // A name the listing lacks waits for the listing's refetch, with the loading line the message list shows. If the
+    // thread is gone, the card reads deleted and the dialog shows that instead of this thread.
+    if (!chatId) {
+        return (
+            <div className={cn('h-[50vh] min-h-0', className)}>
+                <LoadingState />
+            </div>
+        );
+    }
 
     return (
         <CommentThreadInner ownerId={ownerId} mountId={mountId} pathId={pathId} chatId={chatId} className={className} />

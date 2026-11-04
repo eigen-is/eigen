@@ -1,6 +1,6 @@
 // A deleted comment, one whose thread is gone or whose card the document no longer uses, shows its title greyed and
 // the line "This comment was deleted", in the card dialog and in the pane. Nothing on it acts: no reply, resolve,
-// assign or edit. A thread the chat folder doesn't list shows nothing of its own while the dialog decides.
+// assign or edit. A thread the chat folder doesn't list shows the loading line while the dialog decides.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
@@ -96,7 +96,7 @@ test('the dialog of a live comment keeps its actions', async () => {
     expect(buttons().length).toBeGreaterThan(1);
 });
 
-test('a thread the chat folder does not list draws nothing of its own', async () => {
+test('a thread the chat folder does not list shows the loading line and no reply box', async () => {
     ({ unmount } = await renderInDocument(
         createElement(CommentThread, {
             ownerId: 'owner-1',
@@ -105,7 +105,7 @@ test('a thread the chat folder does not list draws nothing of its own', async ()
             chatName: card.chatName ?? '',
         }),
     ));
-    expect(text()).toBe('');
+    expect(document.querySelector('svg')).not.toBeNull();
     expect(document.querySelector('textarea, [contenteditable="true"]')).toBeNull();
 });
 
