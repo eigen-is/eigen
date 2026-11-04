@@ -306,18 +306,14 @@ const payloadOf = (doc: Y.Doc): YjsStatePayload => ({
 });
 
 describe('runDocumentReferences', () => {
-    test("one job reads each document in the transform process and answers each one's references in order", async () => {
-        const references = await runDocumentReferences(
-            [
-                { documentType: 'stickies', source: payloadOf(buildStickies()) },
-                { documentType: 'doc', source: payloadOf(buildDoc()) },
-            ],
-            {},
-        );
-        expect(references.map(sorted)).toEqual([
-            sorted(documentReferences('stickies', buildStickies())),
-            sorted(documentReferences('doc', buildDoc())),
-        ]);
+    test('a job reads the document in the transform process and answers its references', async () => {
+        for (const [documentType, build] of [
+            ['stickies', buildStickies],
+            ['doc', buildDoc],
+        ] as const) {
+            const references = await runDocumentReferences({ documentType, source: payloadOf(build()) }, {});
+            expect(sorted(references)).toEqual(sorted(documentReferences(documentType, build())));
+        }
     });
 
     test('a blob it cannot read fails the job, as a name in it would be missed', async () => {
@@ -325,7 +321,7 @@ describe('runDocumentReferences', () => {
             snapshot: null,
             updates: [{ id: 1, data: toTransferableBuffer(new Uint8Array([255, 1, 2, 3, 4, 5])) }],
         };
-        await expect(runDocumentReferences([{ documentType: 'doc', source: corrupt }], {})).rejects.toBeInstanceOf(
+        await expect(runDocumentReferences({ documentType: 'doc', source: corrupt }, {})).rejects.toBeInstanceOf(
             TransformFailedError,
         );
     });
@@ -337,7 +333,7 @@ describe('runDocumentReferences', () => {
                 snapshot: null,
                 updates: [{ id: 1, data: new ArrayBuffer(MAX_DECOMPRESSED_BYTES + 1) }],
             };
-            const refused = runDocumentReferences([{ documentType: 'doc', source: huge }], {});
+            const refused = runDocumentReferences({ documentType: 'doc', source: huge }, {});
             await expect(refused).rejects.toBeInstanceOf(ApiError);
             await expect(refused).rejects.toMatchObject({ status: 413 });
             expect(run).not.toHaveBeenCalled();

@@ -140,11 +140,8 @@ export type SheetsCompactionJob = {
     batches: string;
 };
 
-// The parts each of a list of documents names, read in one job.
-export type ReferencesJob = {
-    kind: 'references';
-    documents: { documentType: DriveCollabType; source: YjsStatePayload }[];
-};
+// The parts one document's state names.
+export type ReferencesJob = { kind: 'references'; documentType: DriveCollabType; source: YjsStatePayload };
 
 export type DocumentTransformRequest =
     | (CollabTransformJob & { source: YjsStatePayload })
@@ -271,8 +268,8 @@ export type DocImportResult = DocImportTransformResult & { warnings: TransformWa
 export type SlidesImportTransformResult = { update: ArrayBuffer; images: TransformMedia[] };
 // The compacted snapshot's JSON as UTF-8 bytes, and how many op batches the replay dropped because they failed to apply.
 export type SheetsCompactionResult = { snapshot: ArrayBuffer; dropped: number };
-// The references of each document of the job, in the job's order.
-export type ReferencesResult = { references: DocumentReferences[] };
+// The media files and comment threads the job's document names.
+export type ReferencesResult = { references: DocumentReferences };
 
 export type TransformResult =
     | PreviewResult
@@ -330,15 +327,8 @@ export function inputBytesOf(request: DocumentTransformRequest): number {
     if ('data' in request) return request.data.byteLength;
     if (request.kind === 'compact')
         return Buffer.byteLength(request.snapshot ?? '') + Buffer.byteLength(request.batches);
-    if (request.kind === 'references') {
-        return request.documents.reduce((bytes, { source }) => bytes + sourceBytes(source), 0);
-    }
-    return sourceBytes(request.source);
-}
-
-function sourceBytes(source: YjsStatePayload): number {
-    let bytes = source.snapshot?.data.byteLength ?? 0;
-    for (const update of source.updates) bytes += update.data.byteLength;
+    let bytes = request.source.snapshot?.data.byteLength ?? 0;
+    for (const update of request.source.updates) bytes += update.data.byteLength;
     return bytes;
 }
 
@@ -408,11 +398,7 @@ export function resultMatchesRequest(request: DocumentTransformRequest, result: 
         case 'compact':
             return r?.snapshot instanceof ArrayBuffer && typeof r.dropped === 'number';
         case 'references':
-            return (
-                Array.isArray(r?.references) &&
-                r.references.length === request.documents.length &&
-                r.references.every(isDocumentReferences)
-            );
+            return isDocumentReferences(r?.references);
         case 'export':
             return (
                 r?.data instanceof ArrayBuffer &&

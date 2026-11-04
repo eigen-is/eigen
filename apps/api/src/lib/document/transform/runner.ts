@@ -204,11 +204,8 @@ function isValidResponse(response: unknown, request: DocumentTransformRequest): 
     return false;
 }
 
-// An import has no source document type, so it logs the type it produces. A references job logs each type it reads.
+// An import has no source document type, so it logs the type it produces.
 function requestType(request: DocumentTransformRequest): string {
-    if (request.kind === 'references') {
-        return [...new Set(request.documents.map((document) => document.documentType))].join(',');
-    }
     return request.kind === 'import' ? request.targetType : request.documentType;
 }
 

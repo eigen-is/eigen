@@ -86,10 +86,8 @@ async function runTransformRequest<R extends DocumentTransformRequest>(
         if (repeatsForSameInput(response.error.code) && request.kind === 'extract-text') {
             throw new ApiError(413, TOO_LARGE_TO_INDEX);
         }
-        // A references job reads documents of several types, so it names only its kind.
-        let what: string = request.kind;
-        if (request.kind === 'import') what = `${request.sourceFormat} import`;
-        else if ('documentType' in request) what = `${request.documentType} ${request.kind}`;
+        const what =
+            request.kind === 'import' ? `${request.sourceFormat} import` : `${request.documentType} ${request.kind}`;
         throw new TransformFailedError(
             response.error.code,
             `${what} transform failed (${response.error.code}): ${response.error.message}`,
@@ -253,13 +251,13 @@ export async function runSheetsCompaction(
     return { snapshot: new TextDecoder().decode(result.snapshot), dropped: result.dropped };
 }
 
-// The parts each document names, read in one job. The states cross to the child as a copy, so together they are held
-// to what an import may send.
+// The parts one document's state names. The state crosses to the child as a copy, so it is held to what an import may
+// send.
 export async function runDocumentReferences(
-    documents: ReferencesJob['documents'],
+    document: Omit<ReferencesJob, 'kind'>,
     opts: TransformOptions,
-): Promise<DocumentReferences[]> {
-    const request: ReferencesJob = { kind: 'references', documents };
+): Promise<DocumentReferences> {
+    const request: ReferencesJob = { kind: 'references', ...document };
     if (inputBytesOf(request) > MAX_DECOMPRESSED_BYTES) throw new ApiError(413, 'Too large to read its references');
     const { result } = await runTransformRequest(request, opts);
     return result.references;

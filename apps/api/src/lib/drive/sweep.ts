@@ -74,7 +74,7 @@ export async function sweepDocument(drive: Drive, container: DrivePath, state: U
         // when the reader changed. Every read is a job of its own, and a version's row is written as soon as its job
         // returns. So memory and the child's time stay bounded to one version, and a failure keeps the work done.
         const current = { snapshot: null, updates: [{ id: 0, data: toTransferableBuffer(compressBlob(state)) }] };
-        const named = await runDocumentReferences([{ documentType, source: current }], { priority: 'background' });
+        const named = [await runDocumentReferences({ documentType, source: current }, { priority: 'background' })];
         const rows = getVersionReferences(
             mount,
             read.versions.map((version) => version.id),
@@ -91,16 +91,11 @@ export async function sweepDocument(drive: Drive, container: DrivePath, state: U
             } finally {
                 await mount.cleanupTemp(tempId);
             }
-            const references = await runDocumentReferences([{ documentType, source }], { priority: 'background' });
-            named.push(...references);
-            putVersionReferences(
-                mount,
-                references.map((names) => ({
-                    versionPathId: version.id,
-                    readerVersion: REFERENCE_READER_VERSION,
-                    names,
-                })),
-            );
+            const names = await runDocumentReferences({ documentType, source }, { priority: 'background' });
+            named.push(names);
+            putVersionReferences(mount, [
+                { versionPathId: version.id, readerVersion: REFERENCE_READER_VERSION, names },
+            ]);
         }
 
         // A name matches its file as getChildByName finds it, whatever its case or Unicode form.
