@@ -20,7 +20,7 @@ Drive mutations take an optional `user`. Without one, nothing is recorded, so in
 
 ## `recordFileEvent` records every event on a live path
 
-`Drive.recordFileEvent` records the row, fans out to watchers and broadcasts the live refresh. It skips a missing or trashed path. Creates, content writes, renames, sharing changes, version and trash restores, comment status changes, chat messages and collab edits all go through it.
+`Drive.recordFileEvent` records the row, fans out to watchers and broadcasts the live refresh. It skips a missing or trashed path. Creates, content writes, renames, sharing changes, version and trash restores, a Delete history, comment status changes, chat messages and collab edits all go through it.
 
 ## Chain-rewriting mutations record their own events
 

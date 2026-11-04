@@ -1278,12 +1278,13 @@ export class Drive {
 
     // Delete history. The media and threads that only the versions named go in the document's next sweep, which this
     // makes due. An open document is never swept, so that sweep runs once its last tab closed.
-    public async deleteVersions(mountId: string, containerId: string): Promise<void> {
+    public async deleteVersions(mountId: string, containerId: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const container = await mount.getActivePath(containerId);
         if (!isDocumentType(container.type)) throw new ApiError(400, 'Only a document has versions');
         await deleteVersions(mount, containerId);
         markSweepDue(container);
+        if (user) await this.recordFileEvent(mountId, containerId, user, { eventType: 'versions-deleted' });
     }
 
     public async restoreContainer(

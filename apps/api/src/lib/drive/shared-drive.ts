@@ -497,9 +497,9 @@ export class SharedDrive {
     }
 
     // Delete history needs an owner of the drive, the same as a delete forever in the trash.
-    public async deleteVersions(mountId: string, containerId: string): Promise<void> {
+    public async deleteVersions(mountId: string, containerId: string, _user?: User): Promise<void> {
         await this.requireDriveOwner('Only the drive owner can delete version history');
-        return this.drive.deleteVersions(mountId, containerId);
+        return this.drive.deleteVersions(mountId, containerId, this.user);
     }
 
     // ---- File history and watches ----

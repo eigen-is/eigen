@@ -114,6 +114,14 @@ describe('describeFileEvent', () => {
         expect(describeFileEvent(e, 'own').primary).toBe('a.txt → b.txt');
         expect(describeFileEvent(e, 'container').primary).toBe('a.txt → b.txt');
     });
+    test('versions-deleted says the version history went, and names the doc in container ctx', () => {
+        const e = { ...base, eventType: 'versions-deleted', details: null } as const;
+        expect(describeFileEvent(e, 'own')).toEqual({ action: 'deleted the version history' });
+        expect(describeFileEvent(e, 'container')).toEqual({
+            action: 'deleted the version history',
+            primary: 'Roadmap',
+        });
+    });
     test('created: names the item in the own-ctx action, name as primary in container ctx', () => {
         const e = { pathName: 'notes.txt', pathType: 'file', eventType: 'created', details: null } as const;
         expect(describeFileEvent(e, 'own')).toEqual({ action: 'created "notes.txt"' });
@@ -600,6 +608,25 @@ describe('Drive history recording', () => {
         const versionRestored = events.find((e) => e.eventType === 'version-restored');
         expect(versionRestored).toBeDefined();
         expect((versionRestored!.details as { versionName: string }).versionName).toBe(version.name);
+    });
+
+    test('versions-deleted after Delete history', async () => {
+        const doc = await drivePost(aliceToken, aliceOwnerId, aliceMountId, `folder/${aliceRootId}/create/doc`, {
+            fileName: 'DeleteHistoryDoc',
+        });
+        const home = await getHome(aliceOwnerId);
+        await home.drive.saveVersion(aliceMountId, doc.id);
+        const deleted = await authedRequest(
+            aliceToken,
+            `/drive/${aliceOwnerId}/${aliceMountId}/file/${doc.id}/versions`,
+            { method: 'DELETE' },
+        );
+        expect(deleted.status).toBe(200);
+
+        const res = await authedRequest(aliceToken, `/drive/${aliceOwnerId}/${aliceMountId}/path/${doc.id}/history`);
+        const events = (await res.json()) as FileEvent[];
+        const entry = events.find((e) => e.eventType === 'versions-deleted');
+        expect(entry?.actorEmail).toBe(ctx.alice.user.email);
     });
 
     test('recording a file event broadcasts drive:file-history-updated to owner + shared members', async () => {

@@ -15,31 +15,36 @@ export type FileEventDetailsMap = {
     copied: { sourceOwnerId: string; sourceMountId: string; sourcePathId: string };
     'acl-changed': { added: string[]; removed: string[] };
     'version-restored': { versionName: string };
-    // cardId/chatName are additive deep-link fields — old rows lack them and fall back to the container link.
+    // A row may lack chatName, and then its link opens the document.
     commented: { preview: string; chatName?: string };
     'sticky-added': { card: string; toColumn: string; cardId?: string };
     'sticky-moved': { card: string; toColumn: string; cardId?: string };
     'sticky-removed': { card: string; cardId?: string };
-    // card = the client-posted card title, matching the sticky-* naming.
+    // card is the card's title, named as in the sticky events.
     assigned: { assignee: string; card?: string; chatName?: string };
     resolved: { card?: string; chatName?: string };
     reopened: { card?: string; chatName?: string };
 };
 
-export type FileEventType = 'created' | 'edited' | 'trashed' | 'restored' | 'deleted' | keyof FileEventDetailsMap;
+export type FileEventType =
+    | 'created'
+    | 'edited'
+    | 'trashed'
+    | 'restored'
+    | 'deleted'
+    | 'versions-deleted'
+    | keyof FileEventDetailsMap;
 
-// Client-postable subset; everything else is server-only (the POST route rejects the rest).
-// Only types with a real emitter AND human-meaningful content (a card name) live here.
-// Lower-signal structural verbs (slide reorder/add/remove, sheet row/col ops, doc edits)
-// are deferred to the in-doc history feature that consumes them — see
-// docs/FILE-HISTORY.md. Until then those changes surface as the generic 'edited'.
+// The events a client may post. The server records every other one itself, and the route refuses the rest. Only a
+// card event names something a person can read, so a structural change, such as a slide added or a sheet row
+// inserted, shows as the plain 'edited'.
 const CLIENT_FILE_EVENT_TYPES = [
     'sticky-added',
     'sticky-moved',
     'sticky-removed',
 ] as const satisfies readonly FileEventType[];
 
-// More than the two clamped lines an activity row shows, so a clip is never visible; the client-post route caps its details at it.
+// More than the two lines an activity row shows, so a clip is never visible. The route caps a posted detail at it.
 export const CARD_TITLE_MAX_LENGTH = 200;
 
 type ClientFileEventType = (typeof CLIENT_FILE_EVENT_TYPES)[number];
@@ -48,7 +53,7 @@ export function isClientFileEventType(t: string): t is ClientFileEventType {
     return CLIENT_FILE_EVENT_TYPES.some((x) => x === t);
 }
 
-// Discriminated write payload: details required exactly when the event type has them.
+// What a writer records: details are required exactly when the event type has them.
 export type FileEventRecord = {
     [K in FileEventType]: { eventType: K } & (K extends keyof FileEventDetailsMap
         ? { details: FileEventDetailsMap[K] }
@@ -57,8 +62,7 @@ export type FileEventRecord = {
 
 export type ClientFileEventRecord = Extract<FileEventRecord, { eventType: ClientFileEventType }>;
 
-// What a client may POST to /history. cardId is required on the wire; the read shape keeps it optional
-// because old persisted rows lack it.
+// What a client may post to the history route. A posted event must carry its cardId, while a stored row may lack it.
 export type ClientFileEventInput = {
     [K in ClientFileEventType]: { eventType: K; details: Flatten<FileEventDetailsMap[K] & { cardId: string }> };
 }[ClientFileEventType];
@@ -68,8 +72,8 @@ type Flatten<T> = { [P in keyof T]: T[P] };
 
 export type FileEventInput = FileEventRecord & { pathId: string; actor: { id: string; email: string } };
 
-// Discriminated read shape. pathName/pathType are resolved at read time so folder
-// timelines can name and link the descendant the event happened on.
+// An event as it is read. The path's name and type are read with it, so a folder's timeline can name and link the
+// item inside it that the event happened on.
 export type FileEvent = {
     id: string;
     pathId: string;
@@ -90,11 +94,9 @@ export type PathWatchStatus = {
     viaAncestor?: { pathId: string; name: string };
 };
 
-// Bare third-person past-tense verb per event type. describeFileEvent renders the plain
-// drive verbs (created/edited/…) straight from this table and phrases the richer types in
-// its switch, so those entries exist mainly to complete the registry toFileEventType
-// validates against. (Lives here, not a UI module, because the server composes notification
-// titles from it — same precedent as stripEigenExtension in types/drive.ts.)
+// The verb of each event type, as a row says it after the actor. describeFileEvent says the plain ones, such as
+// edited or trashed, straight from this table, and phrases the richer ones itself. The table is also the list
+// toFileEventType checks a stored type against. The server writes notification titles with it, so it lives here.
 const FILE_EVENT_PHRASES: Record<FileEventType, string> = {
     created: 'created',
     uploaded: 'uploaded',
@@ -107,6 +109,7 @@ const FILE_EVENT_PHRASES: Record<FileEventType, string> = {
     restored: 'restored',
     deleted: 'deleted',
     'version-restored': 'restored a version',
+    'versions-deleted': 'deleted the version history',
     commented: 'commented',
     'sticky-added': 'added a card',
     'sticky-moved': 'moved a card',
@@ -116,11 +119,8 @@ const FILE_EVENT_PHRASES: Record<FileEventType, string> = {
     reopened: 'reopened a comment',
 };
 
-// Persisted rows can hold an eventType outside today's union — older builds, or the
-// deferred slide/sheet structural verbs that (per CLIENT_FILE_EVENT_TYPES) surface as
-// the generic 'edited' until the in-doc history feature consumes them. Coerce unknowns
-// to 'edited' here, at the read seam (history.ts reads file_events), so every typed
-// FileEvent stays honest and the phrasing helpers stay total over the union.
+// A stored row can hold a type this build doesn't know. It reads as 'edited', so every FileEvent has a known type
+// and every row has words.
 export function toFileEventType(raw: string): FileEventType {
     return Object.hasOwn(FILE_EVENT_PHRASES, raw) ? (raw as FileEventType) : 'edited';
 }
@@ -129,16 +129,16 @@ export type ActivityLines = { action: string; primary?: string; secondary?: stri
 
 const isTeamPrincipal = (id: string) => parseOwnerId(id).type === 'team';
 
-// One source for the label below and both prefetchers, so no prefetch list can drift from what renders.
+// The teams an acl-changed row names. The row's words and every list that looks up the team names first read them
+// here, so the lookup never misses a team the row shows.
 export function aclPrincipalsToResolve(details: FileEvent['details'] | undefined): string[] {
     if (!details || !('added' in details)) return [];
     return [...new Set([...details.added, ...details.removed])].filter(isTeamPrincipal);
 }
 
-// One phrasing layer for the activity panel and file-event notifications; callers prepend
-// the actor ("You" / <UserNameCard/> / `${actor.name}`). ctx 'own' omits the item name (the
-// panel title shows it); 'container' names it. Details are read via `in`-narrowing since
-// Pick<FileEvent> flattens the discriminated union. Spec Inventory B is normative.
+// The words of one event, for the activity lists and the file-event notifications. The caller puts the actor in front,
+// such as "You" or a name. In 'own' the item's name is left out, because the list's title shows it, and in
+// 'container' it is named. The details are narrowed with `in`, because the Pick loses the union.
 export function describeFileEvent(
     event: Pick<FileEvent, 'eventType' | 'details' | 'pathName' | 'pathType'>,
     ctx: 'own' | 'container',
@@ -153,8 +153,7 @@ export function describeFileEvent(
             const d = details && 'oldName' in details ? details : null;
             return { action: 'renamed', primary: d ? `${d.oldName} → ${d.newName}` : undefined };
         }
-        // created/uploaded name the item in the own-ctx action line — a bare "created" row on the
-        // item's own panel reads dangling; the other drive verbs read fine bare.
+        // A bare "created" on the item's own list reads as if a word were missing, so these two name the item.
         case 'created':
             return { action: container ? 'created' : `created "${name}"`, primary: container ? name : undefined };
         case 'uploaded': {
@@ -240,7 +239,7 @@ export function describeFileEvent(
             };
         }
         default:
-            // edited/moved/copied/trashed/restored/deleted: bare verb; name is the primary line.
+            // The plain verbs, such as edited, moved or trashed: the phrase, with the name as the primary line.
             return { action: FILE_EVENT_PHRASES[event.eventType], primary: container ? name : undefined };
     }
 }

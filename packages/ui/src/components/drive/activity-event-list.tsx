@@ -160,6 +160,6 @@ function resolveEventUrl(event: FileEvent, path: DrivePath, ctx: 'own' | 'contai
         return getDriveItemUrl(containerRef, { chat: chatName });
     }
 
-    // created/edited/moved/copied/uploaded/renamed/restored/version-restored.
+    // Every other event, such as created, renamed or a version restored, opens the item.
     return itemUrl ?? fsLink(`pid=${event.pathId}`);
 }

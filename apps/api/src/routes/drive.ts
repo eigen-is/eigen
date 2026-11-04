@@ -416,7 +416,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/file/:pathId/versions',
         async ({ params, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            await drive.deleteVersions(params.mountId, params.pathId);
+            await drive.deleteVersions(params.mountId, params.pathId, user);
             return { success: true };
         },
         { auth: true },
