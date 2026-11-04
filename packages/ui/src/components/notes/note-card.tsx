@@ -1,6 +1,7 @@
 // A card as it sits on a board or in a list, such as a sticky: its cover image, title, a preview of the
 // description, how far its checklist is done, a footer with replies, attachments and the assignee, and a dot
-// when the caller marks it unread. Clicking it is the caller's to handle, usually by opening NoteCardDialog.
+// when the caller marks it unread. A deleted comment keeps the frame, without its color, and shows only its title
+// and that it was deleted. Clicking it is the caller's to handle, usually by opening NoteCardDialog.
 
 import { EIGEN_STICKIES_INDICATOR_MAP, isLightColor, lightenColor } from '@workspace/lib/constants';
 import { countTaskItems } from '@workspace/lib/html';
@@ -8,6 +9,7 @@ import { cn } from '@workspace/ui/lib/utils';
 import { Check, Paperclip } from 'lucide-react';
 import type { HTMLAttributes } from 'react';
 import { Card, CardContent } from '../card';
+import { DeletedComment } from '../comments/deleted-comment';
 import { MemberAvatar } from '../comments/member-avatar';
 import { Progress } from '../progress';
 import { UnreadDot } from '../unread-dot';
@@ -22,6 +24,7 @@ type NoteCardProps = Omit<HTMLAttributes<HTMLDivElement>, 'title' | 'color'> & {
     coverThumbnailUrl?: string;
     attachmentCount?: number;
     assigneeEmail?: string | null;
+    deleted?: boolean;
     ref?: React.Ref<HTMLDivElement>;
 };
 
@@ -35,6 +38,7 @@ export function NoteCard({
     coverThumbnailUrl,
     attachmentCount,
     assigneeEmail,
+    deleted,
     onClick,
     onContextMenu,
     className,
@@ -43,13 +47,14 @@ export function NoteCard({
     ...rest
 }: NoteCardProps) {
     const { checked, total } = countTaskItems(description ?? '');
+    const frameColor = deleted ? null : color;
 
     return (
         <Card
             ref={ref}
             className={cn(
                 'p-0 w-full shadow-md select-none rounded-none',
-                color
+                frameColor
                     ? // Inset shadow, not a border: the color bar must not shift the text.
                       // Dark mode mirrors the mail list row: 2px inset stripe in the saturated
                       // color + a 14% color-mix wash over --background (see --note-soft below).
@@ -59,11 +64,11 @@ export function NoteCard({
                 className,
             )}
             style={{
-                ...(color
+                ...(frameColor
                     ? ({
-                          '--note-bg': lightenColor(color, 0.25),
-                          '--note-fg': isLightColor(lightenColor(color, 0.25)) ? '#000' : '#fff',
-                          '--note-indicator': EIGEN_STICKIES_INDICATOR_MAP.get(color) ?? color,
+                          '--note-bg': lightenColor(frameColor, 0.25),
+                          '--note-fg': isLightColor(lightenColor(frameColor, 0.25)) ? '#000' : '#fff',
+                          '--note-indicator': EIGEN_STICKIES_INDICATOR_MAP.get(frameColor) ?? frameColor,
                           '--note-soft': 'color-mix(in oklab, var(--note-indicator) 14%, var(--background))',
                       } as React.CSSProperties)
                     : undefined),
@@ -74,49 +79,57 @@ export function NoteCard({
             {...rest}
         >
             <CardContent className="p-3 text-sm relative">
-                {unread && <UnreadDot />}
-                {coverThumbnailUrl && (
-                    <img
-                        src={coverThumbnailUrl}
-                        alt=""
-                        draggable={false}
-                        className="mb-2 h-20 w-full object-cover rounded-sm"
-                    />
-                )}
-                <span className="line-clamp-2">{title}</span>
-                {description && (
-                    <div
-                        className="text-xs mt-1 max-h-24 overflow-hidden opacity-70 pointer-events-none [&>*+*]:mt-1.5 [mask-image:linear-gradient(to_bottom,black_70%,transparent)]"
-                        dangerouslySetInnerHTML={{ __html: description }}
-                    />
-                )}
-                {total > 0 && (
-                    <div className="mt-2 flex items-center gap-2 opacity-60">
-                        <Progress
-                            value={(checked / total) * 100}
-                            className="flex-1 h-1 bg-current/20"
-                            indicatorClassName="bg-current"
-                        />
-                        <span className="text-xs tabular-nums">
-                            {checked}/{total}
-                        </span>
-                    </div>
-                )}
-                {(!!replyCount || !!attachmentCount || resolved || assigneeEmail) && (
-                    <p className="text-xs mt-0.5 opacity-50 flex items-center gap-2">
-                        {!!replyCount && (
-                            <span>
-                                {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
-                            </span>
+                {deleted ? (
+                    <DeletedComment title={title} />
+                ) : (
+                    <>
+                        {unread && <UnreadDot />}
+                        {coverThumbnailUrl && (
+                            <img
+                                src={coverThumbnailUrl}
+                                alt=""
+                                draggable={false}
+                                className="mb-2 h-20 w-full object-cover rounded-sm"
+                            />
                         )}
-                        {!!attachmentCount && (
-                            <span className="flex items-center gap-0.5">
-                                <Paperclip className="h-3 w-3" /> {attachmentCount}
-                            </span>
+                        <span className="line-clamp-2">{title}</span>
+                        {description && (
+                            <div
+                                className="text-xs mt-1 max-h-24 overflow-hidden opacity-70 pointer-events-none [&>*+*]:mt-1.5 [mask-image:linear-gradient(to_bottom,black_70%,transparent)]"
+                                dangerouslySetInnerHTML={{ __html: description }}
+                            />
                         )}
-                        {resolved && <Check className="h-3 w-3 ml-auto" />}
-                        {assigneeEmail && <MemberAvatar email={assigneeEmail} className={resolved ? '' : 'ml-auto'} />}
-                    </p>
+                        {total > 0 && (
+                            <div className="mt-2 flex items-center gap-2 opacity-60">
+                                <Progress
+                                    value={(checked / total) * 100}
+                                    className="flex-1 h-1 bg-current/20"
+                                    indicatorClassName="bg-current"
+                                />
+                                <span className="text-xs tabular-nums">
+                                    {checked}/{total}
+                                </span>
+                            </div>
+                        )}
+                        {(!!replyCount || !!attachmentCount || resolved || assigneeEmail) && (
+                            <p className="text-xs mt-0.5 opacity-50 flex items-center gap-2">
+                                {!!replyCount && (
+                                    <span>
+                                        {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
+                                    </span>
+                                )}
+                                {!!attachmentCount && (
+                                    <span className="flex items-center gap-0.5">
+                                        <Paperclip className="h-3 w-3" /> {attachmentCount}
+                                    </span>
+                                )}
+                                {resolved && <Check className="h-3 w-3 ml-auto" />}
+                                {assigneeEmail && (
+                                    <MemberAvatar email={assigneeEmail} className={resolved ? '' : 'ml-auto'} />
+                                )}
+                            </p>
+                        )}
+                    </>
                 )}
             </CardContent>
         </Card>

@@ -91,7 +91,7 @@ export function CardDialog({
             <Dialog open={open} onOpenChange={handleOpenChange}>
                 <DialogContent size="sm" aria-describedby={undefined}>
                     <DialogTitle className="sr-only">Deleted comment</DialogTitle>
-                    <DeletedComment title={card.title} className="pr-8" />
+                    <DeletedComment title={card.title || 'Comment'} className="pr-8" />
                 </DialogContent>
             </Dialog>
         );

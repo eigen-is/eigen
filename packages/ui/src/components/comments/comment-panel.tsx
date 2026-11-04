@@ -12,11 +12,9 @@ import type { CommentCard } from '@workspace/lib/types/comments';
 import { MessageSquareOff } from 'lucide-react';
 import { useMemo } from 'react';
 import { useAttachmentMeta } from '../attachment/use-attachment-meta';
-import { Card, CardContent } from '../card';
 import { NoteCard } from '../notes/note-card';
 import { PropertiesPanel } from '../properties-panel';
 import { FilterSummary } from './comment-filter-summary';
-import { DeletedComment } from './deleted-comment';
 
 // One row per card, so each card gets its own useAttachmentMeta call: a hook can't run inside the map.
 function PanelCard({
@@ -37,19 +35,6 @@ function PanelCard({
     onContextMenu?: (e: React.MouseEvent) => void;
 }) {
     const { coverThumbnailUrl, attachmentCount } = useAttachmentMeta(card.attachments);
-    if (deleted) {
-        return (
-            <Card
-                className="w-full cursor-pointer select-none rounded-none border p-0 shadow-md"
-                onClick={onClick}
-                onContextMenu={onContextMenu}
-            >
-                <CardContent className="p-3">
-                    <DeletedComment title={title} />
-                </CardContent>
-            </Card>
-        );
-    }
     return (
         <NoteCard
             title={title}
@@ -61,6 +46,7 @@ function PanelCard({
             coverThumbnailUrl={coverThumbnailUrl}
             attachmentCount={attachmentCount}
             assigneeEmail={entry?.assignee}
+            deleted={deleted}
             onClick={onClick}
             onContextMenu={onContextMenu}
         />

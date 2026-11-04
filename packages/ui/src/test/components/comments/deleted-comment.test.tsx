@@ -52,7 +52,7 @@ const text = () => document.body.textContent ?? '';
 const buttons = () =>
     [...document.querySelectorAll('button')].map((b) => b.textContent?.trim() || b.getAttribute('aria-label'));
 
-function renderDialog(deleted: boolean) {
+function renderDialog(deleted: boolean, shown: CommentCard = card) {
     return renderInDocument(
         createElement(
             PreviewProvider,
@@ -60,7 +60,7 @@ function renderDialog(deleted: boolean) {
             createElement(CardDialog, {
                 open: true,
                 onOpenChange: () => {},
-                card,
+                card: shown,
                 entry,
                 ownerId: 'owner-1',
                 mountId: 'm1',
@@ -87,6 +87,11 @@ test('the dialog of a deleted comment shows its title and the line, and nothing 
     expect(text()).not.toContain('The second paragraph');
     expect(document.querySelector('textarea, [contenteditable="true"]')).toBeNull();
     expect(buttons()).toEqual(['Close']);
+});
+
+test('the dialog of a deleted comment without a title calls it a comment, as the pane does', async () => {
+    ({ unmount } = await renderDialog(true, { ...card, title: '' }));
+    expect(document.querySelector('[role="dialog"] p')?.textContent).toBe('Comment');
 });
 
 test('the dialog of a live comment keeps its actions', async () => {
