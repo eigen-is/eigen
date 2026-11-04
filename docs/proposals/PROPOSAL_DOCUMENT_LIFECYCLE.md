@@ -4,7 +4,7 @@ This proposal settles what happens over a document's life to the parts it holds 
 
 **Status:** not built. [ROADMAP.md](../ROADMAP.md) has its row. The owner made the rulings in § Decisions on 2026-11-04, and two independent reviews checked the design against the code the same day. What this proposal says about the code was true on 2026-11-04, as far as a read of the repository could tell. Treat every such claim as a pointer and verify it in the code before building on it.
 
-> **TLDR**: A version is a copy of `data.db` and nothing else. Nothing is ever removed from a document's `media/` or `chat/`, so undo and restore keep working and a document only grows. A restore rewinds the content but not the comment threads, and the hosts disagree about the cards. This proposal treats every part of a container the same way: a media file, an embedded sheet or drawing, and a comment thread each sit in a fixed folder, and the content names them. **A part stays while the current state or a retained version names it**, and a server sweep after a document closes removes the rest. The parts differ only in what a restore does with them. A media file never changes, so it only has to exist. An embedded document changes, so a version of its parent becomes a **version set** that holds its state too. A thread is conversation, so a restore never rewinds it, as in Google Docs. Each version's names are rows in the mount's `metadata.db`, beside the search text it already holds. The owner can also delete a document's history from the Version history panel. One new API route and one new `metadata.db` table, each needing the owner's yes right before it is built. About 11 working days in five phases.
+> **TLDR**: A version is a copy of `data.db` and nothing else. Nothing is ever removed from a document's `media/` or `chat/`, so undo and restore keep working and a document only grows. A restore rewinds the content but not the comment threads, and the hosts disagree about the cards. This proposal treats every part of a container the same way: a media file, an embedded sheet or drawing, and a comment thread each sit in a fixed folder, and the content names them. **A part stays while the current state or a retained version names it**, and a server sweep after a document closes removes the rest. The parts differ only in what a restore does with them. A media file never changes, so it only has to exist. An embedded document changes, so a version of its parent becomes a **version set** that holds its state too. A thread is conversation, so a restore never rewinds it, as in Google Docs. Each version's names are rows in the mount's `metadata.db`, beside the search text it already holds. The owner can also delete a document's history from the Version history panel. One new API route and one new `metadata.db` table, each needing the owner's yes right before it is built. A copy and a download take only the current state's parts. About 12.5 working days in six phases.
 
 ## Goals
 
@@ -12,7 +12,7 @@ This proposal settles what happens over a document's life to the parts it holds 
 2. Undo and version restore keep working for every part they could bring back.
 3. A restore treats comments the same way in every host: the anchors go back, the conversation does not.
 4. A document embedded in another one goes back with it on a restore.
-5. An export or a download carries only the parts the document shows.
+5. An export, a download and a copy carry only the parts the document shows.
 6. The owner of a document can make it small now, by deleting its history.
 
 ## Non-goals
@@ -121,9 +121,11 @@ The card stays in the map as dead bytes, because removing it would mean opening 
 
 So a card whose thread is gone shows a **This comment was deleted** state, in the pane, in the card dialog and where a link lands. It offers no reply, resolve or assign. Activity rows keep their entries, because history is conversation too.
 
-### A download carries the current state's parts
+### A copy and a download carry the current state's parts
 
 The Office exports already pack only the media the document names. The portable package packs the parts `documentReferences` reads from the current state, threads included: it leaves versions behind, so nothing else in it could ever name the rest.
+
+A Drive copy does the same. Today `listCopy` (`apps/api/src/lib/mount/copy.ts`) copies the container's tree as bytes and leaves `versions/` behind, so everything only a version names comes along and can never be used. Instead it runs `documentReferences` on the current state and copies only what that names: the media, the embedded documents and the threads whose card is in use, with `data.db` and `comments.db` as today. An open document's Y.Doc is in memory; a closed one is loaded once, the same load an export pays. The copy's `comments.db` keeps rows for threads it left behind, and its first sweep drops them. A copy across drives (`copyPathAcross`) takes the same list. The current state's names are not cached: a copy is rare, and a cache keyed by the `data.db` hash waits until a copy of a large sheet is measured slow.
 
 ### A version of a document is a set
 
@@ -158,6 +160,7 @@ The sweep removes only what no restore could bring back, so it loses nothing. De
 | 3. Thread sweep | The in-use rule per host; the sweep of `chat/`, its `comments.db` rows and mentions, and of each thread's `media/`; the deleted-comment state in the pane, the dialog and a `?chat=` link. Tests: a thread whose card is anchored in no retained version goes, with its row, mentions and search hit; one anchored in a retained version stays; a new thread under 72 h stays; a re-anchored card of a swept thread shows the deleted state; a deleted message's attachment stays while a thread version names it | 2.5 |
 | 4. Version sets | The set layout, taking, pruning and restoring it, the redirected `onSnapshot`, the refused routes, the reader's one level, the sweep inside an embedded document. Built in the same branch as phase 1 of [PROPOSAL_CHART_SHEETS.md](PROPOSAL_CHART_SHEETS.md), which gives it its first embedded document. Tests: a restore brings a chart's sheet back to the version; a sheet deleted since comes back; one added since goes after the sweep; an image in a sheet stays while a set's copy names it | 2.5 |
 | 5. Delete history | The route, its `SharedDrive` ownership check and the `Drive` method, the hook, the button and confirm dialog in the Version history panel. Tests: the owner's delete leaves no version, the threads' included, and sweeps what only versions named; a writer who is not the owner gets 403 | 1.5 |
+| 6. Fresh copy | `listCopy` and `copyPathAcross` take the current state's parts from `documentReferences`. Tests: a copy holds no media, sheet or thread that only a version names; it holds every part the current state names; its first sweep drops the rows of the threads it left behind; a copy of an open document reads the live Y.Doc | 1.5 |
 
 Docs: MEDIA-REFERENCES.md gets the rule and the sweep, STORAGE.md's version section the set and the names table, COMMENTS.md the in-use rule, the swept thread and its deleted state, COLLAB.md the set restore. The help center's version article (`docs/doc-versions.md` and its siblings) says that comments stay as they are on a restore, and how the owner deletes a document's history, through the support-article skill.
 
@@ -175,7 +178,7 @@ Docs: MEDIA-REFERENCES.md gets the rule and the sweep, STORAGE.md's version sect
 
 1. **A restore never rewinds conversation.** Comment threads, their index and the comment cards stay as they are; the anchors go back. Every host but stickies follows this. (Owner, 2026-11-04.)
 2. **A document embedded in another one goes back with it, through version sets.** A version of the parent holds the parent's `data.db` and each embedded document's, taken and restored together. Chosen over putting the embedded content in the parent's Y.Doc, which would have changed the Workbook's own roots and compaction. (Owner, 2026-11-04.)
-3. **A copy leaves zombies behind, in a later round.** A copy keeps no versions, so only the current state's names matter, as for the package. Not in this round: today's copy is a byte copy, and reading the names first adds a Yjs load to every copy. (Owner, 2026-11-04.)
+3. **A copy carries only the current state's parts.** It reads the current state's names and copies only what they name, with no cache of those names until one is measured to be needed (§ A copy and a download carry the current state's parts). Phase 6, after the rest. (Owner, 2026-11-04.)
 4. **Delete history is a button at the bottom of the Version history panel, for the owner only, and it deletes the comment threads' versions too.** No screen in Eigen restores a thread, so their versions are part of the history a user sees as the document's. (Owner, 2026-11-04.) The route it needs still waits for its own yes.
 5. **No one-off sweep of documents nobody opens again.** Their zombies go at their next close, or with Delete history. (Owner, 2026-11-04.)
 6. **One rule for every part, comment threads included.** A media file, an embedded document and a comment thread each stay while the current state or a retained version names them, and the sweep removes the rest. (Owner, 2026-11-04.)
