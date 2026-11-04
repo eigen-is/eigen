@@ -136,6 +136,12 @@ export function isViableRecoveryTemp(tempPath: string, knownSize: number): boole
     return !(knownSize >= RECOVERY_COLLAPSE_FLOOR_BYTES && tempSize < knownSize * RECOVERY_COLLAPSE_RATIO);
 }
 
+// One path among every owner's mounts, as the key of a map the whole server shares, such as the documents a sweep
+// works on.
+export function pathKey(ownerId: string, mountId: string, pathId: string): string {
+    return `${ownerId}.${mountId}.${pathId}`;
+}
+
 const DEFAULT_MOUNT_NAME = 'My Drive';
 // A user's own drive. Its id is also the name of its folder under the home.
 export const DEFAULT_MOUNT_ID = PATHS.DRIVE.DEFAULT_MOUNT;

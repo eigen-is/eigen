@@ -12,6 +12,7 @@ import { runDocumentReferences } from '../document/transform/run-transform';
 import type { TransformPriority } from '../document/transform/runner';
 import { documentTransformRunner } from '../document/transform/runner';
 import type { Mount } from '../mount';
+import { pathKey } from '../mount/helpers';
 import { foldName } from '../mount/names';
 import type { DocumentReferences } from '../mount/schema';
 import { withSvgSiblings } from '../preview/svg-media-inline';
@@ -55,7 +56,7 @@ export async function mediaKeptBy(
 
 // The files a thread's messages name, a deleted message included, folded the same way.
 export async function threadAttachmentNames(mount: Mount, dataDb: DrivePath): Promise<ReadonlySet<string>> {
-    const key = `${dataDb.ownerId}.${dataDb.mountId}.${dataDb.id}`;
+    const key = pathKey(dataDb.ownerId, dataDb.mountId, dataDb.id);
     const row = `${dataDb.size}.${dataDb.updatedAt.getTime()}`;
     const known = attachmentNames.get(key);
     if (known?.row === row) {

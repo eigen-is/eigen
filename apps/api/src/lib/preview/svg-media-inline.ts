@@ -8,6 +8,7 @@ import { spliceAfterSvgOpenTag } from '@workspace/lib/xml';
 import { Semaphore } from '../../utils/semaphore';
 import { drawnCodePoints, namedFamilies, slicesFaceCss } from '../export/fonts';
 import type { Mount } from '../mount';
+import { pathKey } from '../mount/helpers';
 import { WEEK_MS } from '../versioning/retention';
 
 // The raw SVG is hostile bytes, and three rails keep it safe:
@@ -104,7 +105,7 @@ export async function withSvgSiblings(
 async function siblingRefs(mount: Mount, parentId: string, name: string): Promise<readonly string[]> {
     const child = await mount.getChildByName(parentId, name);
     if (child?.type !== 'file' || child.mimeType !== 'image/svg+xml') return [];
-    const key = `${child.ownerId}.${child.mountId}.${child.id}`;
+    const key = pathKey(child.ownerId, child.mountId, child.id);
     const row = `${child.size}.${child.updatedAt.getTime()}`;
     const known = svgRefs.get(key);
     const now = Date.now();

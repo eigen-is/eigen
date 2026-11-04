@@ -13,6 +13,7 @@ import { ApiError } from '../core/errors';
 import { REFERENCE_READER_VERSION } from '../document/references';
 import type { Mount } from '../mount';
 import { CONTAINER_CHAT_FOLDER, CONTAINER_DATA_DB, CONTAINER_MEDIA_FOLDER } from '../mount/container-dbs';
+import { pathKey } from '../mount/helpers';
 import { foldName } from '../mount/names';
 import { getVersionReferences, putVersionReferences } from '../mount/version-references';
 import { listVersions } from '../versioning/list';
@@ -33,13 +34,13 @@ const markedWhileSwept = new Set<string>();
 let queue: Promise<void> = Promise.resolve();
 
 export function isSweepDue(path: DrivePath): boolean {
-    const at = sweptAt.get(pathKey(path));
+    const at = sweptAt.get(pathKey(path.ownerId, path.mountId, path.id));
     return at === undefined || Date.now() - at >= DAY_MS;
 }
 
 // A change that leaves parts only the next sweep can free, such as Delete history, makes the document due at once.
 export function markSweepDue(path: DrivePath): void {
-    const key = pathKey(path);
+    const key = pathKey(path.ownerId, path.mountId, path.id);
     sweptAt.delete(key);
     if (sweeping.has(key)) markedWhileSwept.add(key);
 }
@@ -67,7 +68,7 @@ export function sweepAfterClose(drive: Drive, path: DrivePath, close: () => Prom
 
 // Queues one sweep of the document behind the sweeps already queued, and resolves when it ends.
 export function sweepDocument(drive: Drive, container: DrivePath): Promise<void> {
-    const key = pathKey(container);
+    const key = pathKey(container.ownerId, container.mountId, container.id);
     const documentType = container.type;
     if (!isCollabType(documentType) || sweeping.has(key)) return Promise.resolve();
     sweeping.add(key);
@@ -221,10 +222,6 @@ async function sweep(drive: Drive, container: DrivePath, documentType: DriveColl
             sweptAt.set(key, now);
         }
     }
-}
-
-function pathKey(path: DrivePath): string {
-    return `${path.ownerId}.${path.mountId}.${path.id}`;
 }
 
 // A document someone opened again, one on its way to the trash, one a restore puts back and a mount that closes are

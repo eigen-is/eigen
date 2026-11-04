@@ -8,6 +8,7 @@ import { createAsyncSingleton } from '../../utils/singleton';
 import { CollabDocument } from '../collab/collab-document';
 import { ApiError } from '../core';
 import type { Mount } from '../mount';
+import { pathKey } from '../mount/helpers';
 import type { Drive } from './drive';
 
 export class CollabRegistry {
@@ -157,7 +158,7 @@ export class CollabRegistry {
     }
 
     private key(mountId: string, pathId: string): string {
-        return `${this.ownerId}.${mountId}.${pathId}`;
+        return pathKey(this.ownerId, mountId, pathId);
     }
 }
 
