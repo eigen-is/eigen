@@ -5,6 +5,7 @@
 // a failure for the next day, so a sweep can keep a part too long but never deletes one in use.
 
 import { Database as BunDatabase } from 'bun:sqlite';
+import { SWEEP_GRACE_MS } from '@workspace/lib/constants/sweep';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_CHAT, DRIVE_TYPE_FILE, isCollabType } from '@workspace/lib/types/drive';
 import type { Snapshot } from '@workspace/lib/types/versioning';
@@ -20,12 +21,8 @@ import { foldName } from '../mount/names';
 import { getVersionReferences, putVersionReferences } from '../mount/version-references';
 import { withSvgSiblings } from '../preview/svg-media-inline';
 import { listVersions } from '../versioning/list';
-import { DAY_MS, HOUR_MS } from '../versioning/retention';
+import { DAY_MS } from '../versioning/retention';
 import type { Drive } from './drive';
-
-// A part this young stays, whatever names it: a file by its upload, a thread by its last message. An upload lands in
-// media/ before the edit that names it reaches the server, and a tab that was offline may still hold such an edit.
-const GRACE_MS = 72 * HOUR_MS;
 
 // When each document's last sweep ended, by owner, mount and path. It lives in memory, so a restart forgets it, which
 // costs one extra sweep.
@@ -81,7 +78,7 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
     let changed = false;
     try {
         const documentType = container.type;
-        const cutoff = Date.now() - GRACE_MS;
+        const cutoff = Date.now() - SWEEP_GRACE_MS;
         const isOld = (file: DrivePath) => file.type === DRIVE_TYPE_FILE && file.createdAt.getTime() <= cutoff;
         const { mount } = await drive.resolveFile(container.mountId, container.id);
         if (isBusy(drive, mount, container.id)) {

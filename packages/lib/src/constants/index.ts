@@ -16,4 +16,5 @@ export * from './public';
 export * from './s3';
 export * from './setup';
 export * from './stale-time';
+export * from './sweep';
 export * from './theme';
