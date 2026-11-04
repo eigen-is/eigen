@@ -128,7 +128,7 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
         const keptThreads = new Set(named.flatMap((names) => names.chat).map(foldName));
         const chat = await mount.getChildByName(container.id, CONTAINER_CHAT_FOLDER);
         const idleThreads: DrivePath[] = [];
-        const threadMedia = new Map<string, ReadonlySet<string>>();
+        const threadMedia: { thread: DrivePath; folderId: string; names: ReadonlySet<string> }[] = [];
         for (const thread of chat ? await mount.listFolder(chat.id) : []) {
             if (thread.type !== DRIVE_TYPE_CHAT) continue;
             if (!keptThreads.has(foldName(thread.name)) && !(await isActive(mount, thread, cutoff))) {
@@ -139,7 +139,8 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
             const threadDataDb = await mount.getChildByName(thread.id, CONTAINER_DATA_DB);
             if (!threadMediaFolder || !threadDataDb) continue;
             if (!(await mount.listFolder(threadMediaFolder.id)).some(isOld)) continue;
-            threadMedia.set(threadMediaFolder.id, await threadAttachmentNames(mount, threadDataDb));
+            const names = await threadAttachmentNames(mount, threadDataDb);
+            threadMedia.push({ thread, folderId: threadMediaFolder.id, names });
         }
 
         const deleted = await mount.withPathLock(container.id, async () => {
@@ -148,15 +149,21 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
             if ((await readFence(mount, container.id)).fence !== read.fence) return null;
             const unnamedIn = async (folderId: string, names: ReadonlySet<string>) =>
                 (await mount.listFolder(folderId)).filter((file) => isOld(file) && !names.has(foldName(file.name)));
+            // A thread is read again, because since the read someone may have moved or trashed it, and then it and
+            // its media stay where they went. An idle thread also stays when someone replied in it since.
+            const stillInChat = async (id: string) => {
+                const thread = await mount.getPath(id);
+                if (!thread || thread.trashedAt || thread.parentId !== chat?.id) return null;
+                return drive.isTrashing(mount.id, thread.id) ? null : thread;
+            };
             const files = media ? await unnamedIn(media.id, keptNames) : [];
-            for (const [folderId, names] of threadMedia) files.push(...(await unnamedIn(folderId, names)));
-            // A thread is read again, because since the read someone may have replied in it, or moved or trashed it.
+            for (const { thread, folderId, names } of threadMedia) {
+                if (await stillInChat(thread.id)) files.push(...(await unnamedIn(folderId, names)));
+            }
             const threads: DrivePath[] = [];
             for (const idle of idleThreads) {
-                const thread = await mount.getPath(idle.id);
-                if (!thread || thread.trashedAt || thread.parentId !== chat?.id) continue;
-                if (drive.isTrashing(mount.id, thread.id) || (await isActive(mount, thread, cutoff))) continue;
-                threads.push(thread);
+                const thread = await stillInChat(idle.id);
+                if (thread && !(await isActive(mount, thread, cutoff))) threads.push(thread);
             }
 
             // Every delete ends before the lock is let go, so a failed one doesn't leave the others running outside it.

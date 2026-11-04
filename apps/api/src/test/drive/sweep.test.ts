@@ -751,6 +751,29 @@ describe('the thread sweep', () => {
         expect((await mount.getPath(moved.id))?.parentId).toBe(folder.id);
     });
 
+    test('a kept thread trashed or moved while the sweep read keeps its media', async () => {
+        const { path, collab } = await openDoc(mount, M, 'ThreadKeptLeft', [paragraph(marked('c1'), marked('c2'))]);
+        const trashed = await addThread(mount, M, path.id);
+        const moved = await addThread(mount, M, path.id);
+        addCard(collab.doc, 'c1', { chatName: trashed.name });
+        addCard(collab.doc, 'c2', { chatName: moved.name });
+        const trashedFile = await addMedia(mount, trashed.id, 'loose.png');
+        const movedFile = await addMedia(mount, moved.id, 'loose.png');
+        const folder = await drive.createFolder(M, rootId, `ThreadKeptLeft-${crypto.randomUUID()}`);
+        await close(M, path);
+        const restore = await changeBeforeDelete(path.id, async () => {
+            await drive.deletePath(M, trashed.id);
+            await drive.movePath(M, moved.id, folder.id);
+        });
+        try {
+            await sweepDocument(drive, path);
+        } finally {
+            restore();
+        }
+        expect(await mount.getPath(trashedFile)).not.toBeNull();
+        expect(await mount.getPath(movedFile)).not.toBeNull();
+    });
+
     test('a thread on its way to the trash when the delete starts stays for the trash', async () => {
         const { path } = await openDoc(mount, M, 'ThreadTrashing', [paragraph()]);
         const thread = await addThread(mount, M, path.id);
