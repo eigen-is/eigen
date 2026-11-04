@@ -1,7 +1,11 @@
+// The Drizzle tables of a mount's metadata.db, such as the tree of paths, the upload queue and the file history. Mount
+// and its sibling modules query them, and the mount's migrations create them.
+
 import type { DriveACL, DrivePathDetails, DrivePathType, DriveVisibility } from '@workspace/lib/types/drive';
 import type { FileEventDetailsMap, FileEventType } from '@workspace/lib/types/file-history';
 import { sql } from 'drizzle-orm';
 import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import type { DocumentReferences } from '../document/references';
 
 export const paths = sqliteTable('paths', {
     id: text('id').primaryKey(),
@@ -80,3 +84,13 @@ export const pathWatchers = sqliteTable(
         userIdx: index('idx_path_watchers_user').on(table.userId),
     }),
 );
+
+// What each saved version of a document names among the document's parts, as a sweep last read it. The row is the
+// record that the version was read: one that names nothing has empty lists. A row from an older reader counts as no row.
+export const versionReferences = sqliteTable('version_references', {
+    versionPathId: text('versionPathId')
+        .primaryKey()
+        .references(() => paths.id, { onDelete: 'cascade' }),
+    readerVersion: integer('readerVersion').notNull(),
+    names: text('names', { mode: 'json' }).notNull().$type<DocumentReferences>(),
+});
