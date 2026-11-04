@@ -40,7 +40,7 @@ import { DriveEmailCollaborators } from '../../drive/drive-email-collaborators';
 import { DriveFilePicker } from '../../drive/drive-file-picker';
 import { DriveRenameItem } from '../../drive/drive-rename-item';
 import { AppBarMenu } from './app-bar-menu';
-import { RestoreVersionDialog, VersionHistoryMenu } from './version-history-menu';
+import { DeleteHistoryDialog, RestoreVersionDialog, VersionHistoryMenu } from './version-history-menu';
 
 const OPEN_LABELS: Record<EigenDocType, { mime: string; title: string }> = {
     doc: { mime: DRIVE_MIME_DOC, title: 'Open doc' },
@@ -85,8 +85,9 @@ export function FileMenu({
     const [renameOpen, setRenameOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [emailOpen, setEmailOpen] = useState(false);
-    // Lifted out of VersionHistoryMenu so the dialog survives the menu's unmount-on-close.
+    // Lifted out of VersionHistoryMenu so the dialogs survive the menu's unmount-on-close.
     const [pendingSnapshot, setPendingSnapshot] = useState<Snapshot | null>(null);
+    const [deleteHistoryOpen, setDeleteHistoryOpen] = useState(false);
     const openConfig = OPEN_LABELS[createType];
     const downloadFormats = exportFormatsFor(createType);
     const canExport = !!onExport && downloadFormats.length > 0;
@@ -167,7 +168,13 @@ export function FileMenu({
                 {rowFor('email-collaborators')}
 
                 <DropdownMenuSeparator />
-                {canWrite && <VersionHistoryMenu path={path} onRequestRestore={setPendingSnapshot} />}
+                {canWrite && (
+                    <VersionHistoryMenu
+                        path={path}
+                        onRequestRestore={setPendingSnapshot}
+                        onRequestDeleteHistory={() => setDeleteHistoryOpen(true)}
+                    />
+                )}
                 {children}
 
                 {remove && (
@@ -207,6 +214,9 @@ export function FileMenu({
                 }}
             />
             <RestoreVersionDialog path={path} snapshot={pendingSnapshot} onClose={() => setPendingSnapshot(null)} />
+            {canWrite && (
+                <DeleteHistoryDialog path={path} open={deleteHistoryOpen} onClose={() => setDeleteHistoryOpen(false)} />
+            )}
         </>
     );
 }
