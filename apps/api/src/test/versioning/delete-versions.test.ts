@@ -13,6 +13,7 @@ import {
     addTeamMount,
     authedRequest,
     createTeam,
+    createTestGuest,
     driveGet,
     drivePost,
     drivePut,
@@ -145,6 +146,30 @@ describe('DELETE .../file/:pathId/versions', () => {
         expect(res.status).toBe(200);
         expect(await versionIds(mount, doc.id)).toEqual([]);
         expect(await versionIds(mount, thread.id)).toEqual([]);
+    });
+
+    // Every account of the organization is a member of its default team, so each of them owns that team's drive.
+    test('a member of the default team deletes the history of its documents, and a guest gets 403', async () => {
+        const defaultTeamId = getServerConfig()?.defaultTeamId;
+        if (!defaultTeamId) throw new Error('no default team');
+        const owner = teamOwnerId(defaultTeamId);
+        await addTeamMount(ctx, defaultTeamId, 'Default Team Drive');
+        const mountId = await firstMountId(ctx.alice.user.sessionToken, owner);
+        const rootId = (await driveGet<DrivePath>(ctx.alice.user.sessionToken, owner, mountId, 'root')).id;
+        const guest = await createTestGuest('History Guest');
+        const shared = await docWithHistory(owner, mountId, rootId);
+        await drivePut(ctx.alice.user.sessionToken, owner, mountId, `path/${shared.doc.id}/acl`, {
+            add: [{ id: guest.email, read: true, write: true }],
+        });
+
+        const refused = await deleteVersions(guest.sessionToken, owner, mountId, shared.doc.id);
+        expect(refused.status).toBe(403);
+        expect(await versionIds(shared.mount, shared.doc.id)).toHaveLength(2);
+
+        const res = await deleteVersions(ctx.charlie.user.sessionToken, owner, mountId, shared.doc.id);
+        expect(res.status).toBe(200);
+        expect(await versionIds(shared.mount, shared.doc.id)).toEqual([]);
+        expect(await versionIds(shared.mount, shared.thread.id)).toEqual([]);
     });
 
     test('a versions folder whose name differs in case goes too', async () => {
