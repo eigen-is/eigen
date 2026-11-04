@@ -8,13 +8,14 @@ import { searchableMessageText, searchablePerson } from '../chat/commands';
 import { CHAT_ROOM_DB_CONFIG } from '../chat/db-config';
 import { messages, NEWEST_FIRST, olderThan, SEARCHABLE_MESSAGES } from '../chat/schema';
 import type { Mount } from '../mount';
+import { CONTAINER_DATA_DB } from '../mount/container-dbs';
 
 const CHAT_CONTENT_PAGE = 512;
 
 // The newest searchable messages of a chat, up to capBytes, because they best answer a search for the chat
 // that mentioned something. It reads from the end through idx_messages_createdAt and never scans the chat.
 export async function readChatContent(mount: Mount, drivePath: DrivePath, capBytes: number): Promise<string> {
-    const dataDbPath = await mount.getChildByName(drivePath.id, 'data.db');
+    const dataDbPath = await mount.getChildByName(drivePath.id, CONTAINER_DATA_DB);
     if (!dataDbPath) return '';
 
     // A chat has few authors, so each one is looked up once and not once per line.

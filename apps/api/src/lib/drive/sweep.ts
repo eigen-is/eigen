@@ -15,6 +15,7 @@ import { readYjsStatePayloadFromFile } from '../collab/yjs-loader';
 import { REFERENCE_READER_VERSION } from '../document/references';
 import { runDocumentReferences } from '../document/transform/run-transform';
 import type { Mount } from '../mount';
+import { CONTAINER_CHAT_FOLDER, CONTAINER_DATA_DB } from '../mount/container-dbs';
 import { foldName } from '../mount/names';
 import { getVersionReferences, putVersionReferences } from '../mount/version-references';
 import { withSvgSiblings } from '../preview/svg-media-inline';
@@ -123,7 +124,7 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
         // stays go when no message names them, a deleted message included. On a bucket a thread's data.db is read as
         // a whole download, so it is read only when an old file could go.
         const keptThreads = new Set(named.flatMap((names) => names.chat).map(foldName));
-        const chat = await mount.getChildByName(container.id, 'chat');
+        const chat = await mount.getChildByName(container.id, CONTAINER_CHAT_FOLDER);
         const idleThreads: DrivePath[] = [];
         const threadMedia = new Map<string, ReadonlySet<string>>();
         for (const thread of chat ? await mount.listFolder(chat.id) : []) {
@@ -133,7 +134,7 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
                 continue;
             }
             const threadMediaFolder = await mount.getChildByName(thread.id, 'media');
-            const threadDataDb = await mount.getChildByName(thread.id, 'data.db');
+            const threadDataDb = await mount.getChildByName(thread.id, CONTAINER_DATA_DB);
             if (!threadMediaFolder || !threadDataDb) continue;
             if (!(await mount.listFolder(threadMediaFolder.id)).some(isOld)) continue;
             threadMedia.set(threadMediaFolder.id, await readStoredCopy(mount, threadDataDb.id, readAttachmentNames));
@@ -160,8 +161,7 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
             // whose thread went is harmless, and the next sweep that deletes a thread drops it.
             if (chat && threads.length > 0) {
                 await withCommentIndex(drive, mount.id, container.id, async (index) => {
-                    const present = new Set(mount.childNamesWithTrash(chat.id).map(foldName));
-                    return index.deleteRowsWithoutThread((chatName) => present.has(foldName(chatName)));
+                    return index.deleteRowsWithoutThread(new Set(mount.childNamesWithTrash(chat.id).map(foldName)));
                 });
             }
             return { files, threads };
@@ -208,7 +208,7 @@ async function readFence(
     containerId: string,
 ): Promise<{ dataDb: DrivePath | null; versions: Snapshot[]; fence: string }> {
     const [dataDb, versions] = await Promise.all([
-        mount.getChildByName(containerId, 'data.db'),
+        mount.getChildByName(containerId, CONTAINER_DATA_DB),
         listVersions(mount, containerId),
     ]);
     const fence = JSON.stringify([dataDb?.size, dataDb?.updatedAt.getTime(), versions.map((version) => version.id)]);
@@ -217,7 +217,7 @@ async function readFence(
 
 // When someone last wrote in a thread: its creation, or the last sync of its data.db, which stamps the row.
 async function lastActivity(mount: Mount, thread: DrivePath): Promise<number> {
-    const dataDb = await mount.getChildByName(thread.id, 'data.db');
+    const dataDb = await mount.getChildByName(thread.id, CONTAINER_DATA_DB);
     return Math.max(thread.createdAt.getTime(), dataDb?.updatedAt.getTime() ?? 0);
 }
 

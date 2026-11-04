@@ -17,6 +17,7 @@ import { ApiError } from '../core/errors';
 import type { Drive } from '../drive';
 import type { Home } from '../home';
 import { broadcastToOwnerAndMembers, sendToUserHomes } from '../home/home-relay';
+import { CONTAINER_DATA_DB } from '../mount/container-dbs';
 import type { User } from '../user';
 import { getUserByEmail } from '../user';
 import { formatEmoteForViewer, parseCommand, searchableMessageText } from './commands';
@@ -40,22 +41,22 @@ export class ChatRoom {
     public static async create(drive: Drive, mountId: string, roomId: string): Promise<void> {
         // The databases are set up in one step that cleans up after itself. A storage failure then leaves
         // no data.db row without a database, which would make every later init answer 503.
-        await drive.provisionManagedDbs(mountId, roomId, [{ name: 'data.db', config: CHAT_ROOM_DB_CONFIG }]);
+        await drive.provisionManagedDbs(mountId, roomId, [{ name: CONTAINER_DATA_DB, config: CHAT_ROOM_DB_CONFIG }]);
         await drive.createFolder(mountId, roomId, 'media');
     }
 
     // Finds the room's data.db, and creates it when it is missing. It opens nothing: each method below
     // opens data.db for its own queries.
     public static async open(drive: Drive, home: Home, path: DrivePath): Promise<ChatRoom> {
-        let dataDb = await drive.getChildByName(path.mountId, path.id, 'data.db');
+        let dataDb = await drive.getChildByName(path.mountId, path.id, CONTAINER_DATA_DB);
         if (!dataDb) {
             // Drive.getChat opens a new ChatRoom for every request. Two first requests at once would each
             // create a data.db, so the create runs under the chat's lock and checks again there.
             dataDb = await drive.withPathLock(path.mountId, path.id, async () => {
-                const existing = await drive.getChildByName(path.mountId, path.id, 'data.db');
+                const existing = await drive.getChildByName(path.mountId, path.id, CONTAINER_DATA_DB);
                 if (existing) return existing;
                 await ChatRoom.create(drive, path.mountId, path.id);
-                const created = await drive.getChildByName(path.mountId, path.id, 'data.db');
+                const created = await drive.getChildByName(path.mountId, path.id, CONTAINER_DATA_DB);
                 if (!created) throw new ApiError(500, `Failed to create data.db in ${path.name}`);
                 return created;
             });

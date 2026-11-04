@@ -27,6 +27,7 @@ import type { StorageBackend, StorageFile } from '../storage';
 import { isMissingObjectCause, readStorageFile, writeTempWithHash } from '../storage';
 import type { RetentionPolicy } from '../versioning/retention';
 import * as snapshot from '../versioning/snapshot';
+import { CONTAINER_DATA_DB } from './container-dbs';
 import type { ContentExtractor } from './content-reindex-queue';
 import { ContentReindexQueue } from './content-reindex-queue';
 import type { CopyTree, DiscardCopy } from './copy';
@@ -1392,7 +1393,7 @@ export class Mount {
     // Flushes the container's open data.db, so a byte copy of its storage holds the pending Yjs edits.
     // A container whose data.db is closed or missing needs nothing.
     public async flushContainerDb(containerId: string): Promise<void> {
-        const dataDb = await this.getChildByName(containerId, 'data.db');
+        const dataDb = await this.getChildByName(containerId, CONTAINER_DATA_DB);
         if (!dataDb) return;
         await documentDb.withDocumentDb(this, dataDb.id, async (slot) => {
             await slot.db?.flush();

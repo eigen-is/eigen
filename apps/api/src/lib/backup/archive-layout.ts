@@ -14,7 +14,7 @@ import { CONTACTS_DB_CONFIG } from '../contacts/db-config';
 import type { DatabaseConfig, SchemaType } from '../core/managed-database';
 import { SHARED_DB_CONFIG } from '../drive/db-config';
 import { MAIL_DB_CONFIG } from '../mail/db-config';
-import { CONTAINER_COMMENTS_DB, CONTAINER_DATA_DB, CONTAINER_DB_NAMES } from '../mount/container-dbs';
+import { CONTAINER_COMMENTS_DB, CONTAINER_DATA_DB, isContainerDatabase } from '../mount/container-dbs';
 import { isUsableName, trashStorageKey } from '../mount/names';
 import { paths } from '../mount/schema';
 import { NOTIFICATION_CENTER_DB_CONFIG } from '../notification-center/db-config';
@@ -120,7 +120,7 @@ export function managedDbContainer(row: MountPathRow, byId: ReadonlyMap<string, 
         const container = parent.parentId ? byId.get(parent.parentId) : undefined;
         return container && isDocumentType(container.type) ? container : null;
     }
-    return CONTAINER_DB_NAMES.has(row.name) && isDocumentType(parent.type) ? parent : null;
+    return isContainerDatabase(row.name, parent.type) ? parent : null;
 }
 
 // The rows no path builder can place, by their chain or by a part a path cannot hold: the capture leaves them out of

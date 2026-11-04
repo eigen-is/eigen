@@ -7,9 +7,10 @@ import { COLLAB_DB_CONFIG } from '../../collab/db-config';
 import type { YjsStatePayload } from '../../collab/yjs-loader';
 import { readYjsStatePayload } from '../../collab/yjs-loader';
 import type { Mount } from '../../mount';
+import { CONTAINER_DATA_DB } from '../../mount/container-dbs';
 
 export async function captureCollabSource(mount: Mount, drivePath: DrivePath): Promise<YjsStatePayload> {
-    const dataDbPath = await mount.getChildByName(drivePath.id, 'data.db');
+    const dataDbPath = await mount.getChildByName(drivePath.id, CONTAINER_DATA_DB);
     if (!dataDbPath) throw new Error(`${drivePath.name}: data.db missing`);
     return mount.withDatabase(COLLAB_DB_CONFIG, dataDbPath.id, async (managedDb) => readYjsStatePayload(managedDb));
 }

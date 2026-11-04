@@ -718,17 +718,17 @@ describe('CommentIndex.deleteRowsWithoutThread', () => {
         // A mention whose row never existed is gone too.
         await index.addMention('mention-only.eigenchat', BOB_EMAIL);
 
-        expect(index.deleteRowsWithoutThread((chatName) => chatName === 'kept.eigenchat')).toBe(2);
+        expect(index.deleteRowsWithoutThread(new Set(['kept.eigenchat']))).toBe(2);
 
         expect((await index.list()).map((entry) => entry.chatName)).toEqual(['kept.eigenchat']);
         expect(raw.query('SELECT chatName FROM comment_mentions').all()).toEqual([{ chatName: 'kept.eigenchat' }]);
         expect((await index.searchComments('needle')).map((match) => match.id)).toEqual(['kept.eigenchat']);
     });
 
-    test('drops nothing while every thread is there', async () => {
+    test('drops nothing while every thread is there, whatever the case of its name', async () => {
         const { index } = makeIndex();
-        await index.ensureComment('kept.eigenchat');
-        expect(index.deleteRowsWithoutThread(() => true)).toBe(0);
+        await index.ensureComment('Kept.eigenchat');
+        expect(index.deleteRowsWithoutThread(new Set(['kept.eigenchat']))).toBe(0);
         expect(await index.list()).toHaveLength(1);
     });
 });

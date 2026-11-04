@@ -53,7 +53,7 @@ import { composeCollaboratorsEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
 import type { DatabaseHold } from '../mount';
 import { createMountConfig, DEFAULT_MOUNT_ID, Mount } from '../mount';
-import { CONTAINER_DB_NAMES } from '../mount/container-dbs';
+import { isContainerDatabase } from '../mount/container-dbs';
 import type { CopyTree } from '../mount/copy';
 import { copySize } from '../mount/copy';
 import { validateName } from '../mount/names';
@@ -612,11 +612,15 @@ export class Drive {
     // refuses such a path, both as the item it changes and as the folder it writes into. The server's own
     // writers, such as a snapshot or the media sweep, write through Mount and never meet this check.
     private async refuseDocumentPart(mount: Mount, path: DrivePath): Promise<void> {
-        const chain = await mount.getBreadcrumb(path.id);
-        const parent = chain.at(-2);
-        const isDatabase = parent && isDocumentType(parent.type) && CONTAINER_DB_NAMES.has(path.name);
-        const inVersions = chain.slice(1).some((crumb, i) => isVersionsFolder(crumb) && isDocumentType(chain[i].type));
-        if (isDatabase || inVersions) throw new ApiError(400, "Cannot change a document's databases or versions");
+        let parent: DrivePath | undefined;
+        for (const crumb of await mount.getBreadcrumb(path.id)) {
+            const isPart =
+                parent &&
+                isDocumentType(parent.type) &&
+                (isVersionsFolder(crumb) || isContainerDatabase(crumb.name, parent.type));
+            if (isPart) throw new ApiError(400, "Cannot change a document's databases or versions");
+            parent = crumb;
+        }
     }
 
     public async updatePathDetails(mountId: string, pathId: string, details: DrivePathDetails): Promise<void> {

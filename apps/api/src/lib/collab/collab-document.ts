@@ -21,6 +21,7 @@ import { restampRestoredSheetsBase, stampMissingSheetsBase } from '../document/s
 import { compactSheets, sheetsNeedCompaction } from '../document/sheets-compaction';
 import type { Drive } from '../drive';
 import { isSweepDue, sweepAfterClose } from '../drive/sweep';
+import { CONTAINER_CHAT_FOLDER, CONTAINER_COMMENTS_DB, CONTAINER_DATA_DB } from '../mount/container-dbs';
 import type { User } from '../user';
 import { COLLAB_DB_CONFIG } from './db-config';
 import { DbProvider } from './db-provider';
@@ -93,17 +94,17 @@ export class CollabDocument {
     // provisionManagedDbs removes both, so a retry starts clean.
     public static async create(drive: Drive, mountId: string, docId: string): Promise<void> {
         await drive.provisionManagedDbs(mountId, docId, [
-            { name: 'data.db', config: COLLAB_DB_CONFIG },
-            { name: 'comments.db', config: COMMENT_INDEX_DB_CONFIG },
+            { name: CONTAINER_DATA_DB, config: COLLAB_DB_CONFIG },
+            { name: CONTAINER_COMMENTS_DB, config: COMMENT_INDEX_DB_CONFIG },
         ]);
         await drive.createFolder(mountId, docId, 'media');
-        await drive.createFolder(mountId, docId, 'chat');
+        await drive.createFolder(mountId, docId, CONTAINER_CHAT_FOLDER);
     }
 
     public async init(): Promise<CollabDocument> {
         const [dataDbPath, commentsDbPath] = await Promise.all([
-            this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db'),
-            this.drive.getChildByName(this.path.mountId, this.path.id, 'comments.db'),
+            this.drive.getChildByName(this.path.mountId, this.path.id, CONTAINER_DATA_DB),
+            this.drive.getChildByName(this.path.mountId, this.path.id, CONTAINER_COMMENTS_DB),
         ]);
         // A copy makes the container before it copies data.db into it. A socket that opens the copy in
         // between gets a 503 and tries again, so it never makes a data.db the copy then can't write.

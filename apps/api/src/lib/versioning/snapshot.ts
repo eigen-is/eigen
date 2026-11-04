@@ -1,4 +1,4 @@
-// Takes a version of a document: a copy of its database saved in the versions folder of the mount, after which old
+// Takes a version of a document: a copy of its database saved in the document's versions folder, after which old
 // versions are removed by the retention rules. A save by the user waits for its turn, and the periodic save skips
 // when the document is busy. It can also replace the live database with a copy, which is what a restore uses.
 // The restore code decides which version to bring back.
@@ -8,6 +8,7 @@ import * as fs from 'node:fs';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { eq } from 'drizzle-orm';
 import { ApiError, storageGone } from '../core';
+import { CONTAINER_DATA_DB } from '../mount/container-dbs';
 import { closeInSlot, withDocumentDb } from '../mount/document-db';
 import { isViableRecoveryTemp } from '../mount/helpers';
 import type { Mount } from '../mount/mount';
@@ -58,7 +59,7 @@ async function takeSnapshot(
     policy: RetentionPolicy,
     order: CopyOrder,
 ): Promise<DrivePath> {
-    const dataDb = await mount.getChildByName(containerId, 'data.db');
+    const dataDb = await mount.getChildByName(containerId, CONTAINER_DATA_DB);
     if (!dataDb) throw new ApiError(404, `data.db not found in container ${containerId}`);
 
     // The flush brings data.db's stored object, row and search index up to this version now, not at the
@@ -233,7 +234,7 @@ export async function stageManagedDbCopy(
 // comes in between.
 export async function replaceContainerDataDb(mount: Mount, containerId: string, sourcePath: string): Promise<void> {
     return mount.withPathLock(containerId, async () => {
-        const dataDb = await mount.getChildByName(containerId, 'data.db');
+        const dataDb = await mount.getChildByName(containerId, CONTAINER_DATA_DB);
         if (!dataDb) throw new ApiError(404, `data.db not found in container ${containerId}`);
         const { size, hash } = await hashFile(sourcePath);
         await withDocumentDb(mount, dataDb.id, async (slot) => {

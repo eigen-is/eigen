@@ -1,12 +1,15 @@
+// Drive search over one mount's metadata.db: the names of its paths, and the text of each file's body in a
+// content index beside them. The content reindex queue keeps that index current. It finds the paths whose body
+// changed through the dirty mark set here, and writes each new body back. Mount reaches these functions for
+// its search and reindex work, and a synced data.db marks its document as changed.
+
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { eq, inArray, sql } from 'drizzle-orm';
 import { sanitizeFtsQuery } from '../core';
+import { CONTAINER_DATA_DB } from './container-dbs';
 import { docContainerDescendantIds } from './helpers';
 import type { Mount } from './mount';
 import { paths } from './schema';
-
-// Drive-wide content index (metadata.db v6) + name/body search over the mount's metadata.db.
-// The ContentReindexQueue drains the contentDirty bit through the Mount facades for these.
 
 export function upsertPathContent(mount: Mount, pathId: string, body: string): void {
     mount.db.run(sql`
@@ -19,9 +22,8 @@ export function clearPathContent(mount: Mount, pathId: string): void {
     mount.db.run(sql`DELETE FROM path_content WHERE pathId = ${pathId}`);
 }
 
-// Indexable rows whose body is stale: dirty AND (never indexed OR indexed longer ago than
-// the cap). The dirty bit is only ever set on a real body write, so this is the work-list;
-// `limit` keeps one drain turn (and its id-hydrate) bounded.
+// The paths whose body changed and is due again: never indexed, or indexed longer ago than the cap. Only a real
+// write of a body sets the dirty mark, so this is the list of work. The limit keeps one turn of the queue small.
 export function getContentDirtyPaths(mount: Mount, reindexCapSeconds: number, limit: number): DrivePath[] {
     const dirty = mount.db.all<{ id: string }>(sql`
         SELECT id FROM paths
@@ -36,9 +38,9 @@ export function getContentDirtyPaths(mount: Mount, reindexCapSeconds: number, li
     return rows.map((r) => mount.toDrivePath(r));
 }
 
-// Epoch ms when the earliest not-yet-due dirty row becomes eligible, or null if none are
-// dirty. A never-indexed row reads as due-now (0) so a row that slipped in mid-drain is never
-// stranded. Drives the reindexer's self-timer in place of a poll.
+// When the first changed path that is not due yet becomes due, in epoch ms, or null when nothing changed. A path
+// never indexed is due at once, so a path marked during a turn is never left behind. The queue sets its timer
+// by it instead of polling.
 export function earliestPendingReindexAt(mount: Mount, reindexCapSeconds: number): number | null {
     const row = mount.db.all<{ dueSec: number | null }>(sql`
         SELECT MIN(CASE WHEN contentIndexedAt IS NULL THEN 0 ELSE contentIndexedAt + ${reindexCapSeconds} END) AS dueSec
@@ -57,8 +59,8 @@ export function markContentIndexed(mount: Mount, pathId: string): void {
     mount.db.update(paths).set({ contentDirty: 0, contentIndexedAt: new Date() }).where(eq(paths.id, pathId)).run();
 }
 
-// A failed extract stamps the attempt time but keeps contentDirty = 1, so the cap window defers the
-// retry to a later drain instead of dropping the doc from body search (see the reindex catch).
+// A failed extract stamps the time of the try but keeps the dirty mark. The cap then puts the retry off to a later
+// turn, and the document stays in body search meanwhile.
 export function markContentIndexAttempted(mount: Mount, pathId: string): void {
     mount.db.update(paths).set({ contentIndexedAt: new Date() }).where(eq(paths.id, pathId)).run();
 }
@@ -67,8 +69,8 @@ export function searchPaths(mount: Mount, opts: { q: string; limit: number }): D
     const match = sanitizeFtsQuery(opts.q);
     if (!match) return [];
 
-    // Pass 1a: name hits, FTS-ranked. docContainerDescendantIds keeps eigendoc internals
-    // (data.db, embedded media, embedded chats) out — same exclusion as the body pass.
+    // The parts inside a document, such as its data.db, its media and its comment threads, are left out of both
+    // passes (docContainerDescendantIds).
     const nameRanked = mount.db.all<{ id: string }>(sql`
         SELECT p.id AS id
         FROM paths_fts
@@ -81,7 +83,6 @@ export function searchPaths(mount: Mount, opts: { q: string; limit: number }): D
         LIMIT ${opts.limit}
     `);
 
-    // Pass 1b: body hits via the sibling content index.
     const bodyRanked = mount.db.all<{ id: string }>(sql`
         SELECT p.id AS id
         FROM paths_content_fts
@@ -95,21 +96,11 @@ export function searchPaths(mount: Mount, opts: { q: string; limit: number }): D
         LIMIT ${opts.limit}
     `);
 
-    // Merge: name hits first, then body-only hits. The name boost is structural — a
-    // file whose name matches always outranks one matched only on body. Dedup by id.
-    const seen = new Set<string>();
-    const orderedIds: string[] = [];
-    for (const r of [...nameRanked, ...bodyRanked]) {
-        if (!seen.has(r.id)) {
-            seen.add(r.id);
-            orderedIds.push(r.id);
-        }
-    }
-    const ids = orderedIds.slice(0, opts.limit);
+    // A file whose name matches always comes before one that matches only by its body.
+    const ids = [...new Set([...nameRanked, ...bodyRanked].map((r) => r.id))].slice(0, opts.limit);
     if (ids.length === 0) return [];
 
-    // Pass 2: hydrate through Drizzle so timestamp columns come back as Date. Order
-    // preserved via the id-keyed map.
+    // The rows are read again through Drizzle, so the timestamps come back as Date, in the order of the hits.
     const rows = mount.db.select().from(paths).where(inArray(paths.id, ids)).all();
     const byId = new Map(rows.map((r) => [r.id, r]));
     return ids
@@ -118,13 +109,12 @@ export function searchPaths(mount: Mount, opts: { q: string; limit: number }): D
         .map((r) => mount.toDrivePath(r));
 }
 
-// A container's data.db just synced. Mark the CONTAINER (the data.db's parent) for
-// content re-extraction. Gated on the synced file being the primary `data.db` so
-// sibling DBs (e.g. comments.db) don't mark the parent. Touches ONLY contentDirty —
-// never name/updatedAt — so paths_fts is not churned.
+// A document's data.db just synced, so the document's text is read again. Another database in it, such as its
+// comments.db, marks nothing. Only the dirty mark changes, never the name or updatedAt, so the name index is left
+// alone.
 export async function markContainerContentDirty(mount: Mount, dataDbPathId: string): Promise<void> {
     const dataDb = await mount.getPath(dataDbPathId);
-    if (dataDb?.name !== 'data.db' || !dataDb.parentId) return;
+    if (dataDb?.name !== CONTAINER_DATA_DB || !dataDb.parentId) return;
     mount.reindexQueue?.bumpGeneration(dataDb.parentId);
     markContentDirty(mount, dataDb.parentId);
     mount.reindexQueue?.kick();

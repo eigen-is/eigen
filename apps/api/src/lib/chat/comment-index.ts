@@ -11,6 +11,8 @@ import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { sanitizeFtsQuery } from '../core';
 import { ApiError } from '../core/errors';
 import type { DriveLike } from '../drive/get-drive';
+import { CONTAINER_CHAT_FOLDER, CONTAINER_COMMENTS_DB } from '../mount/container-dbs';
+import { foldName } from '../mount/names';
 import { COMMENT_INDEX_DB_CONFIG } from './comment-db-config';
 import * as commentSchema from './comment-schema';
 
@@ -94,10 +96,11 @@ export class CommentIndex {
             .where(eq(commentSchema.comments.chatName, chatName));
     }
 
-    // Drops the rows and the mentions of every thread hasThread no longer finds, in one transaction, and returns how
-    // many threads that was. The mentions have no foreign key, so they go by name. The search table follows the rows
-    // through its delete trigger. It runs without an await, so a thread made meanwhile is either found or has no row.
-    public deleteRowsWithoutThread(hasThread: (chatName: string) => boolean): number {
+    // Drops the rows and the mentions of every thread not in threads, the folded names of the threads that are left,
+    // in one transaction, and returns how many threads that was. The mentions have no foreign key, so they go by name.
+    // The search table follows the rows through its delete trigger. It runs without an await, so a thread made
+    // meanwhile is either in threads or has no row.
+    public deleteRowsWithoutThread(threads: ReadonlySet<string>): number {
         const { comments, commentMentions } = commentSchema;
         return this.db.transaction((tx) => {
             const names = new Set(
@@ -106,7 +109,7 @@ export class CommentIndex {
                     ...tx.select({ chatName: commentMentions.chatName }).from(commentMentions).all(),
                 ].map((row) => row.chatName),
             );
-            const gone = [...names].filter((chatName) => !hasThread(chatName));
+            const gone = [...names].filter((chatName) => !threads.has(foldName(chatName)));
             if (gone.length === 0) return 0;
             tx.delete(comments).where(inArray(comments.chatName, gone)).run();
             tx.delete(commentMentions).where(inArray(commentMentions.chatName, gone)).run();
@@ -170,7 +173,7 @@ export async function withCommentIndex<T>(
     pathId: string,
     fn: (index: CommentIndex) => Promise<T>,
 ): Promise<T> {
-    const dbPath = await drive.getChildByName(mountId, pathId, 'comments.db');
+    const dbPath = await drive.getChildByName(mountId, pathId, CONTAINER_COMMENTS_DB);
     if (!dbPath) throw new ApiError(404, 'comments.db not found');
     return drive.withDatabase(mountId, COMMENT_INDEX_DB_CONFIG, dbPath.id, (managed) =>
         fn(new CommentIndex(managed.db)),
@@ -186,7 +189,7 @@ export async function assertCommentChatExists(
     containerId: string,
     chatName: string,
 ): Promise<void> {
-    const chatFolder = await drive.getChildByName(mountId, containerId, 'chat');
+    const chatFolder = await drive.getChildByName(mountId, containerId, CONTAINER_CHAT_FOLDER);
     const chat = chatFolder ? await drive.getChildByName(mountId, chatFolder.id, chatName) : null;
     if (chat?.mimeType !== DRIVE_MIME_CHAT) throw new ApiError(404, 'Comment thread not found');
 }

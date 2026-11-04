@@ -8,6 +8,7 @@ import * as Y from 'yjs';
 import { COLLAB_DB_CONFIG } from '../collab/db-config';
 import { loadYjsState } from '../collab/yjs-loader';
 import type { Mount } from '../mount';
+import { CONTAINER_DATA_DB } from '../mount/container-dbs';
 
 export type StickiesContent = {
     tasks: { title?: string; description?: string }[];
@@ -15,7 +16,7 @@ export type StickiesContent = {
 };
 
 export async function readStickiesContent(mount: Mount, drivePath: DrivePath): Promise<StickiesContent> {
-    const dataDbPath = await mount.getChildByName(drivePath.id, 'data.db');
+    const dataDbPath = await mount.getChildByName(drivePath.id, CONTAINER_DATA_DB);
     if (!dataDbPath) throw new Error('eigenstickies data.db missing');
 
     const { doc } = await mount.withDatabase(COLLAB_DB_CONFIG, dataDbPath.id, async (managedDb) =>
