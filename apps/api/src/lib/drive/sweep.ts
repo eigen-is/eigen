@@ -5,10 +5,11 @@
 // a failure for the next day, so a sweep can keep a part too long but never deletes one in use.
 
 import { SWEEP_GRACE_MS } from '@workspace/lib/constants/sweep';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DriveCollabType, DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_CHAT, DRIVE_TYPE_FILE, isCollabType } from '@workspace/lib/types/drive';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import { withCommentIndex } from '../chat';
+import { ApiError } from '../core/errors';
 import { REFERENCE_READER_VERSION } from '../document/references';
 import type { Mount } from '../mount';
 import { CONTAINER_CHAT_FOLDER, CONTAINER_DATA_DB } from '../mount/container-dbs';
@@ -22,9 +23,14 @@ import { mediaKeptBy, storedReferences, threadAttachmentNames } from './named-pa
 // When each document's last sweep ended, by owner, mount and path. It lives in memory, so a restart forgets it, which
 // costs one extra sweep.
 const sweptAt = new Map<string, number>();
-// The documents a sweep is reading or deleting now. A reopen and a second close during a long read find the document
+// The documents a sweep waits for or works on. A reopen and a second close during a long read find the document
 // still due, and that second sweep leaves it to the first.
 const sweeping = new Set<string>();
+// The documents marked due while their sweep ran, such as by a Delete history. That sweep may have read what was
+// there before, so the document stays due.
+const markedWhileSwept = new Set<string>();
+// Sweeps run one after another, so a burst of closes never fills the transform queue or the disk with downloads.
+let queue: Promise<void> = Promise.resolve();
 
 export function isSweepDue(path: DrivePath): boolean {
     const at = sweptAt.get(pathKey(path));
@@ -33,7 +39,9 @@ export function isSweepDue(path: DrivePath): boolean {
 
 // A change that leaves parts only the next sweep can free, such as Delete history, makes the document due at once.
 export function markSweepDue(path: DrivePath): void {
-    sweptAt.delete(pathKey(path));
+    const key = pathKey(path);
+    sweptAt.delete(key);
+    if (sweeping.has(key)) markedWhileSwept.add(key);
 }
 
 // Closes a lingering document and then sweeps it. The hold on the Home comes first, because the close lets go of the
@@ -57,24 +65,48 @@ export function sweepAfterClose(drive: Drive, path: DrivePath, close: () => Prom
     return closed;
 }
 
-// Reads everything first, outside any lock: the names in the current state and in every saved version, and the files
-// the messages of each thread name. Then, under the document's lock, it deletes only if nothing changed while it read.
-export async function sweepDocument(drive: Drive, container: DrivePath): Promise<void> {
+// Queues one sweep of the document behind the sweeps already queued, and resolves when it ends.
+export function sweepDocument(drive: Drive, container: DrivePath): Promise<void> {
     const key = pathKey(container);
-    if (!isCollabType(container.type) || sweeping.has(key)) return;
+    const documentType = container.type;
+    if (!isCollabType(documentType) || sweeping.has(key)) return Promise.resolve();
     sweeping.add(key);
-    // A change while it read leaves the document due, so its next close tries again. Every other end marks the
-    // document swept for the day, a failure included.
-    let changed = false;
+    const swept = queue.then(() => sweep(drive, container, documentType, key));
+    queue = swept.catch(() => undefined);
+    return swept;
+}
+
+// Lists first what could go: the old files in media/, the idle threads and the threads that hold an old file. Only
+// then, outside any lock, it reads the names in the saved versions and in the current state, and the files the
+// messages of each thread name. Under the document's lock it deletes only if nothing changed while it read.
+async function sweep(drive: Drive, container: DrivePath, documentType: DriveCollabType, key: string): Promise<void> {
+    // A change while it read, a busy transform process or a Delete history meanwhile leave the document due, so its
+    // next close tries again. Every other end marks the document swept for the day, a failure included.
+    let due = false;
     try {
-        const documentType = container.type;
         const cutoff = Date.now() - SWEEP_GRACE_MS;
         const isOld = (file: DrivePath) => file.type === DRIVE_TYPE_FILE && file.createdAt.getTime() <= cutoff;
         const { mount } = await drive.resolveFile(container.mountId, container.id);
         if (isBusy(drive, mount, container.id)) {
-            changed = true;
+            due = true;
             return;
         }
+
+        // A listing is cheap, so a document where nothing could go costs no download and no job. On a bucket a
+        // thread's data.db is read as a whole download, so it is read only for a thread that holds an old file.
+        const media = await mount.getChildByName(container.id, 'media');
+        const oldMedia = media ? (await mount.listFolder(media.id)).filter(isOld) : [];
+        const chat = await mount.getChildByName(container.id, CONTAINER_CHAT_FOLDER);
+        const candidateThreads: { thread: DrivePath; idle: boolean; oldMediaIn: DrivePath | null }[] = [];
+        for (const thread of chat ? await mount.listFolder(chat.id) : []) {
+            if (thread.type !== DRIVE_TYPE_CHAT) continue;
+            const idle = !(await isActive(mount, thread, cutoff));
+            const threadMedia = await mount.getChildByName(thread.id, 'media');
+            const holdsOld = threadMedia !== null && (await mount.listFolder(threadMedia.id)).some(isOld);
+            if (idle || holdsOld) candidateThreads.push({ thread, idle, oldMediaIn: holdsOld ? threadMedia : null });
+        }
+        if (oldMedia.length === 0 && candidateThreads.length === 0) return;
+
         // The current state is read from data.db after the fence. A change before the fence, such as a restore, is
         // in what it reads, and a change after it moves the fence the delete checks.
         const read = await readFence(mount, container.id);
@@ -101,34 +133,30 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
         const versionCards = [...new Set(named.flatMap((names) => names.cards))];
         named.push(await storedReferences(mount, documentType, read.dataDb.id, 'background', versionCards));
 
-        const media = await mount.getChildByName(container.id, 'media');
         const keptNames = media
             ? await mediaKeptBy(
                   mount,
                   media.id,
                   named.flatMap((names) => names.media),
+                  oldMedia,
               )
             : new Set<string>();
 
-        // A thread goes when no state names it and nobody wrote in it for three days. The media of a thread that
-        // stays go when no message names them, a deleted message included. On a bucket a thread's data.db is read as
-        // a whole download, so it is read only when an old file could go.
+        // A thread goes when no state names it and nobody wrote in it for the grace period. The media of a thread
+        // that stays go when no message names them, a deleted message included.
         const keptThreads = new Set(named.flatMap((names) => names.chat).map(foldName));
-        const chat = await mount.getChildByName(container.id, CONTAINER_CHAT_FOLDER);
         const idleThreads: DrivePath[] = [];
         const threadMedia: { thread: DrivePath; folderId: string; names: ReadonlySet<string> }[] = [];
-        for (const thread of chat ? await mount.listFolder(chat.id) : []) {
-            if (thread.type !== DRIVE_TYPE_CHAT) continue;
-            if (!keptThreads.has(foldName(thread.name)) && !(await isActive(mount, thread, cutoff))) {
+        for (const { thread, idle, oldMediaIn } of candidateThreads) {
+            if (idle && !keptThreads.has(foldName(thread.name))) {
                 idleThreads.push(thread);
                 continue;
             }
-            const threadMediaFolder = await mount.getChildByName(thread.id, 'media');
+            if (!oldMediaIn) continue;
             const threadDataDb = await mount.getChildByName(thread.id, CONTAINER_DATA_DB);
-            if (!threadMediaFolder || !threadDataDb) continue;
-            if (!(await mount.listFolder(threadMediaFolder.id)).some(isOld)) continue;
+            if (!threadDataDb) continue;
             const names = await threadAttachmentNames(mount, threadDataDb);
-            threadMedia.push({ thread, folderId: threadMediaFolder.id, names });
+            threadMedia.push({ thread, folderId: oldMediaIn.id, names });
         }
 
         const deleted = await mount.withPathLock(container.id, async () => {
@@ -171,7 +199,7 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
             return { files, threads };
         });
         if (!deleted) {
-            changed = true;
+            due = true;
             return;
         }
         const { files, threads } = deleted;
@@ -180,9 +208,14 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
         console.log(
             `[sweep] ${container.id}: deleted ${files.length} files and ${threads.length} threads, freed ${freed} bytes`,
         );
+    } catch (error) {
+        // A busy transform process says nothing about the document.
+        if (!(error instanceof ApiError && error.status === 503)) throw error;
+        due = true;
     } finally {
         sweeping.delete(key);
-        if (!changed) {
+        if (markedWhileSwept.delete(key)) due = true;
+        if (!due) {
             const now = Date.now();
             for (const [swept, at] of sweptAt) if (now - at >= DAY_MS) sweptAt.delete(swept);
             sweptAt.set(key, now);

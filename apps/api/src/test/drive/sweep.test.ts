@@ -17,8 +17,9 @@ import * as chatSchema from '../../lib/chat/schema';
 import { CLOSE_LINGER_MS } from '../../lib/collab/collab-document';
 import { ApiError } from '../../lib/core/errors';
 import { REFERENCE_READER_VERSION } from '../../lib/document/references';
+import { documentTransformRunner } from '../../lib/document/transform/runner';
 import type { Drive } from '../../lib/drive/drive';
-import { isSweepDue, sweepAfterClose, sweepDocument } from '../../lib/drive/sweep';
+import { isSweepDue, markSweepDue, sweepAfterClose, sweepDocument } from '../../lib/drive/sweep';
 import { getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
 import type { Mount } from '../../lib/mount/mount';
@@ -298,6 +299,92 @@ describe('the media sweep', () => {
         expect(await mediaNames(mount, path.id)).toEqual(['deep.png', 'inner.svg', 'leaf.png', 'outer.svg']);
     });
 
+    test('a document with no old file and no idle thread is never read', async () => {
+        const { path, collab } = await openDoc(mount, M, 'NothingOld', [paragraph(marked('c1'))]);
+        await addMedia(mount, path.id, 'young.png', { ageHours: 71 });
+        const thread = await addThread(mount, M, path.id, { ageHours: 71 });
+        addCard(collab.doc, 'c1', { chatName: thread.name });
+        await drive.saveVersion(M, path.id);
+        await close(M, path);
+        const downloads = spyOn(mount, 'downloadToTemp');
+        try {
+            await sweepDocument(drive, path);
+            expect(downloads).not.toHaveBeenCalled();
+        } finally {
+            downloads.mockRestore();
+        }
+        expect(isSweepDue(path)).toBe(false);
+        expect(await mediaNames(mount, path.id)).toEqual(['young.png']);
+    });
+
+    test('an SVG is read only when an old file is not one the states name', async () => {
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg"><image href="${eigenMediaHref('leaf.png')}"/></svg>`;
+        const { path } = await openDoc(mount, M, 'SvgUnread', [
+            paragraph(figure('outer.svg')),
+            paragraph(figure('leaf.png')),
+        ]);
+        const outer = await addMedia(mount, path.id, 'outer.svg', { mimeType: 'image/svg+xml', body: svg });
+        await addMedia(mount, path.id, 'leaf.png');
+        await close(M, path);
+        const reads = spyOn(mount, 'readBytes');
+        try {
+            await sweepDocument(drive, path);
+            expect(reads.mock.calls.filter(([id]) => id === outer)).toEqual([]);
+        } finally {
+            reads.mockRestore();
+        }
+        expect(await mediaNames(mount, path.id)).toEqual(['leaf.png', 'outer.svg']);
+    });
+
+    test('an SVG is read once, and the next sweep remembers what it draws', async () => {
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg"><image href="${eigenMediaHref('leaf.png')}"/></svg>`;
+        const { path } = await openDoc(mount, M, 'SvgMemo', [paragraph(figure('outer.svg'))]);
+        const outer = await addMedia(mount, path.id, 'outer.svg', { mimeType: 'image/svg+xml', body: svg });
+        await addMedia(mount, path.id, 'leaf.png');
+        await close(M, path);
+        const reads = spyOn(mount, 'readBytes');
+        try {
+            await sweepDocument(drive, path);
+            await sweepDocument(drive, path);
+            expect(reads.mock.calls.filter(([id]) => id === outer).length).toBe(1);
+        } finally {
+            reads.mockRestore();
+        }
+        expect(await mediaNames(mount, path.id)).toEqual(['leaf.png', 'outer.svg']);
+    });
+
+    test('reads a few SVGs at a time', async () => {
+        const names = Array.from({ length: 12 }, (_, index) => `drawing-${index}.svg`);
+        const { path } = await openDoc(
+            mount,
+            M,
+            'SvgPool',
+            names.map((name) => paragraph(figure(name))),
+        );
+        const svg = '<svg xmlns="http://www.w3.org/2000/svg"></svg>';
+        for (const name of names) await addMedia(mount, path.id, name, { mimeType: 'image/svg+xml', body: svg });
+        await addMedia(mount, path.id, 'loose.png');
+        await close(M, path);
+        const readBytes = mount.readBytes.bind(mount);
+        let running = 0;
+        let most = 0;
+        const reads = spyOn(mount, 'readBytes').mockImplementation(async (id) => {
+            running++;
+            most = Math.max(most, running);
+            await Bun.sleep(5);
+            running--;
+            return readBytes(id);
+        });
+        try {
+            await sweepDocument(drive, path);
+        } finally {
+            reads.mockRestore();
+        }
+        expect(most).toBeGreaterThan(1);
+        expect(most).toBeLessThanOrEqual(4);
+        expect(await mediaNames(mount, path.id)).toEqual(names.sort());
+    });
+
     test('an open document is never swept', async () => {
         const { path } = await openDoc(mount, M, 'Open', [paragraph()]);
         await addMedia(mount, path.id, 'loose.png');
@@ -382,7 +469,9 @@ describe('the media sweep', () => {
     });
 
     test('a version is read once, and again when its row is from an older reader', async () => {
-        const { path } = await openDoc(mount, M, 'Scanned', [paragraph()]);
+        // A file the state names stays old, so every sweep has something to read for.
+        const { path } = await openDoc(mount, M, 'Scanned', [paragraph(figure('kept.png'))]);
+        await addMedia(mount, path.id, 'kept.png');
         await drive.saveVersion(M, path.id);
         const [versionId] = await versionIds(mount, path.id);
         if (!versionId) throw new Error('no version');
@@ -395,7 +484,7 @@ describe('the media sweep', () => {
                 {
                     versionPathId: versionId,
                     readerVersion: REFERENCE_READER_VERSION,
-                    names: { media: [], chat: [], cards: [] },
+                    names: { media: ['kept.png'], chat: [], cards: [] },
                 },
             ]);
             await sweepDocument(drive, path);
@@ -412,7 +501,7 @@ describe('the media sweep', () => {
             await addMedia(mount, path.id, 'stale.png');
             await sweepDocument(drive, path);
             expect(versionReads()).toBe(2);
-            expect(await mediaNames(mount, path.id)).toEqual([]);
+            expect(await mediaNames(mount, path.id)).toEqual(['kept.png']);
             expect(getVersionReferences(mount, [versionId])[0]?.readerVersion).toBe(REFERENCE_READER_VERSION);
         } finally {
             downloads.mockRestore();
@@ -421,6 +510,7 @@ describe('the media sweep', () => {
 
     test('a version that fails to load keeps the rows of the versions read before it', async () => {
         const { path, collab } = await openDoc(mount, M, 'Partial', [paragraph()]);
+        await addMedia(mount, path.id, 'loose.png');
         const older = await drive.saveVersion(M, path.id);
         await mount.writeFile(older.id, Buffer.from('not a database'));
         collab.doc.getXmlFragment('default').insert(0, [new Y.XmlElement('paragraph')]);
@@ -578,6 +668,74 @@ describe('the media sweep', () => {
         await Bun.sleep(40);
         expect(ended).toEqual(['delete', 'lock']);
         expect(await mediaNames(mount, path.id)).toEqual(['failing.png']);
+    });
+
+    test('a busy transform process leaves the document due, with nothing read or deleted', async () => {
+        const { path } = await openDoc(mount, M, 'RunnerBusy', [paragraph()]);
+        await addMedia(mount, path.id, 'loose.png');
+        await close(M, path);
+        const admits = spyOn(documentTransformRunner, 'assertAdmissible').mockImplementation(() => {
+            throw new ApiError(503, 'Server busy');
+        });
+        const downloads = spyOn(mount, 'downloadToTemp');
+        try {
+            await sweepDocument(drive, path);
+            expect(downloads).not.toHaveBeenCalled();
+        } finally {
+            admits.mockRestore();
+            downloads.mockRestore();
+        }
+        expect(await mediaNames(mount, path.id)).toEqual(['loose.png']);
+        expect(isSweepDue(path)).toBe(true);
+    });
+
+    test('Delete history while a sweep reads leaves the document due', async () => {
+        const { path } = await openDoc(mount, M, 'MarkedWhileRead', [paragraph()]);
+        await addMedia(mount, path.id, 'loose.png');
+        await close(M, path);
+        const gate = Promise.withResolvers<void>();
+        const resolveFile = drive.resolveFile.bind(drive);
+        const resolves = spyOn(drive, 'resolveFile').mockImplementation(async (mountId, pathId) => {
+            if (pathId === path.id) await gate.promise;
+            return resolveFile(mountId, pathId);
+        });
+        try {
+            const swept = sweepDocument(drive, path);
+            await Bun.sleep(10);
+            markSweepDue(path);
+            gate.resolve();
+            await swept;
+        } finally {
+            gate.resolve();
+            resolves.mockRestore();
+        }
+        expect(isSweepDue(path)).toBe(true);
+    });
+
+    test('sweeps one document at a time', async () => {
+        const first = await openDoc(mount, M, 'QueueFirst', [paragraph()]);
+        const second = await openDoc(mount, M, 'QueueSecond', [paragraph()]);
+        await close(M, first.path);
+        await close(M, second.path);
+        const gate = Promise.withResolvers<void>();
+        const resolveFile = drive.resolveFile.bind(drive);
+        const resolved: string[] = [];
+        const resolves = spyOn(drive, 'resolveFile').mockImplementation(async (mountId, pathId) => {
+            resolved.push(pathId);
+            if (pathId === first.path.id) await gate.promise;
+            return resolveFile(mountId, pathId);
+        });
+        try {
+            const sweeps = [sweepDocument(drive, first.path), sweepDocument(drive, second.path)];
+            await Bun.sleep(20);
+            expect(resolved).toEqual([first.path.id]);
+            gate.resolve();
+            await Promise.all(sweeps);
+            expect(resolved).toEqual([first.path.id, second.path.id]);
+        } finally {
+            gate.resolve();
+            resolves.mockRestore();
+        }
     });
 
     test('a sweep of a document already being swept leaves it to that sweep', async () => {
@@ -926,6 +1084,7 @@ describe('the sweep after a linger close', () => {
     test('a sweep that fails is not tried again that day, but is the next day', async () => {
         const { path, collab } = await openDoc(mount, M, 'Failing', [paragraph()]);
         addCard(collab.doc, 'c-odd', { chatName: 42 });
+        await addMedia(mount, path.id, 'loose.png');
         await close(M, path);
         const warn = spyOn(console, 'warn').mockImplementation(() => {});
         try {

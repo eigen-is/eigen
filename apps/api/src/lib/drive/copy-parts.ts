@@ -49,7 +49,8 @@ export async function withNamedPartsOnly(mount: Mount, tree: CopyTree): Promise<
             if (child === dataDb) {
                 children.push({ ...child, read: { tempId, file: Bun.file(localPath) } });
             } else if (child === media) {
-                children.push(onlyFiles(child, await mediaKeptBy(mount, child.path.id, named.media)));
+                const files = child.children.map((file) => file.path).filter((file) => file.type === DRIVE_TYPE_FILE);
+                children.push(onlyFiles(child, await mediaKeptBy(mount, child.path.id, named.media, files)));
             } else if (child === chat) {
                 const threads: CopyTree[] = [];
                 for (const thread of child.children) {

@@ -10,6 +10,7 @@ import * as chatSchema from '../chat/schema';
 import { readYjsStatePayloadFromFile } from '../collab/yjs-loader';
 import { runDocumentReferences } from '../document/transform/run-transform';
 import type { TransformPriority } from '../document/transform/runner';
+import { documentTransformRunner } from '../document/transform/runner';
 import type { Mount } from '../mount';
 import { foldName } from '../mount/names';
 import type { DocumentReferences } from '../mount/schema';
@@ -32,13 +33,23 @@ export async function storedReferences(
     priority: TransformPriority,
     versionCards?: string[],
 ): Promise<DocumentReferences> {
+    // A job the transform process would refuse is refused before the download, so it costs nothing.
+    documentTransformRunner.assertAdmissible(priority);
     const source = await readStoredCopy(mount, pathId, readYjsStatePayloadFromFile);
     return runDocumentReferences({ documentType, source, versionCards }, { priority });
 }
 
 // The files in a media folder that the names keep, folded the way getChildByName finds a file, whatever its case or
-// Unicode form. A file an SVG among them draws is kept too.
-export async function mediaKeptBy(mount: Mount, mediaId: string, names: Iterable<string>): Promise<Set<string>> {
+// Unicode form. A file an SVG among them draws is kept too, but the SVGs are read only when one of the files that
+// could go is not among the names.
+export async function mediaKeptBy(
+    mount: Mount,
+    mediaId: string,
+    names: readonly string[],
+    couldGo: readonly DrivePath[],
+): Promise<ReadonlySet<string>> {
+    const kept = new Set(names.map(foldName));
+    if (couldGo.every((file) => kept.has(foldName(file.name)))) return kept;
     return new Set([...(await withSvgSiblings(mount, mediaId, names))].map(foldName));
 }
 
