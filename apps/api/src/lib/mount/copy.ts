@@ -7,6 +7,7 @@
 
 import type { DriveContainerType, DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_FOLDER, isContainerType } from '@workspace/lib/types/drive';
+import type { BunFile } from 'bun';
 import { storageGone } from '../core';
 import { copyThumbnail } from '../shared/thumbnails';
 import { writeTempWithHash } from '../storage';
@@ -14,8 +15,15 @@ import { isVersionsFolder } from '../versioning/versions-folder';
 import type { Mount } from './mount';
 import { markContentDirty } from './search-index';
 
-// A source path with the paths below it that a copy writes, as they were when the copy began.
-export type CopyTree = { readonly path: DrivePath; readonly children: readonly CopyTree[] };
+// A source path with the paths below it that a copy writes, as they were when the copy began. A file whose bytes were
+// read while the tree was listed, such as the data.db a document's filter read, keeps them in a temp copy, and the copy
+// writes those bytes. A document whose filter left threads behind says so, so its copy cuts their comment rows.
+export type CopyTree = {
+    readonly path: DrivePath;
+    readonly children: readonly CopyTree[];
+    readonly read?: { readonly tempId: string; readonly file: BunFile };
+    readonly leftThreads?: boolean;
+};
 
 // Removes the top folder of a copy that failed part way. createdIds holds every path the copy made.
 export type DiscardCopy = (pathId: string, createdIds: ReadonlySet<string>) => Promise<void>;
@@ -27,7 +35,8 @@ export type DocumentCopied = (copy: DrivePath, src: CopyTree) => Promise<void>;
 // How a copy writes into its target. Each create returns the path it made.
 type CopyWriter = {
     createFolder: (parentId: string, name: string, type: DriveContainerType, src: DrivePath) => Promise<DrivePath>;
-    copyFile: (parentId: string, name: string, src: DrivePath) => Promise<DrivePath>;
+    // `read` holds the bytes the listing read, when it read them.
+    copyFile: (parentId: string, name: string, src: DrivePath, read?: BunFile) => Promise<DrivePath>;
     // Runs once everything inside a copied folder or document has landed.
     folderCopied?: (copy: DrivePath, src: CopyTree) => Promise<void>;
     discard: DiscardCopy;
@@ -104,18 +113,19 @@ export async function copyPath(
             recordCopied(newId, src);
             return mount.getActivePath(newId);
         },
-        copyFile: async (parentId, fileName, listed) => {
+        copyFile: async (parentId, fileName, listed, read) => {
             // The row is read again, as the listing can be a while ago. A thumbnail made since then comes
             // along, and a file trashed since then stops the copy.
             const src = await mount.getActivePath(listed.id);
             // readFile reads the freshest copy, such as the staged bytes of an upload the bucket has not
-            // acknowledged yet. For a document's data.db, the flush of its container put the latest edits there.
+            // acknowledged yet. A document's data.db that the filter did not read holds what the flush of its
+            // container put there.
             const tempId = crypto.randomUUID();
             try {
                 // The read holds the tree lock shared. On `local` a rename of a folder above it would otherwise
                 // make the file read as gone.
                 const { size, hash } = await mount.withTreeShared(async () => {
-                    const srcFile = await mount.readFile(src.id);
+                    const srcFile = read ?? (await mount.readFile(src.id));
                     if (!srcFile) throw storageGone();
                     return writeTempWithHash(mount.getTempPath(tempId), srcFile);
                 });
@@ -162,7 +172,7 @@ async function writeTree(
 ): Promise<DrivePath> {
     const src = tree.path;
     if (!isContainerType(src.type)) {
-        const copy = await writer.copyFile(parentId, name, src);
+        const copy = await writer.copyFile(parentId, name, src, tree.read?.file);
         createdIds.add(copy.id);
         return copy;
     }

@@ -1,11 +1,12 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { eigenMediaHref } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import { withCommentIndex } from '../../lib/chat';
 import * as enforcement from '../../lib/config/enforcement';
+import { ApiError } from '../../lib/core/errors';
 import type { Drive } from '../../lib/drive/drive';
 import { getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
@@ -243,6 +244,85 @@ describe('a copy of a document', () => {
         expect(await mediaNames(copied.id)).toEqual(['card.pdf', 'drawing.svg', 'figure.png', 'sibling.png']);
         expect(await threadNames(copied.id)).toEqual([kept.name]);
         expect(await commentRows(copied.id)).toEqual([kept.name]);
+    });
+
+    // The edit lands after the copy read the document and before it writes, where the copy checks its quota.
+    test.each([
+        ['in one mount', undefined],
+        ['to another drive', 'across'],
+    ] as const)('%s writes the data.db it read, so an edit after the read reaches neither', async (_, across) => {
+        const { path, collab } = await openDoc('Between', [paragraph()]);
+        await addMedia(path.id, 'later.png');
+        const quota = spyOn(enforcement, 'enforceMountQuota').mockImplementation(async () => {
+            const added = new Y.XmlElement('figure');
+            added.setAttribute('mediaName', 'later.png');
+            collab.doc.getXmlFragment('default').insert(0, [added]);
+            await drive.flushContainerDb(M, path.id);
+        });
+        let copied: DrivePath;
+        try {
+            const to = across && { drive, ownerId: home.user.id, mountId: M };
+            copied = await drive.copyPath(M, path.id, rootId, `${path.name} ${across}`, home.user, to);
+        } finally {
+            quota.mockRestore();
+        }
+        expect(await mediaNames(copied.id)).toEqual([]);
+        const copy = await drive.getCollabDocument(M, copied.id);
+        expect(copy.doc.getXmlFragment('default').toString()).not.toContain('later.png');
+        await drive.closeCollabDocument(M, copied.id, { skipFinalSnapshot: true });
+    });
+
+    test('leaves no temp copy of what it read, whether it lands or fails', async () => {
+        const { path } = await openDoc('Temps', [paragraph(figure('kept.png'))]);
+        await addMedia(path.id, 'kept.png');
+        const downloads = spyOn(mount, 'downloadToTemp');
+        try {
+            await copyOf(path);
+            const quota = spyOn(enforcement, 'enforceMountQuota').mockRejectedValue(new ApiError(507, 'full'));
+            try {
+                await expect(copyOf(path)).rejects.toThrow('full');
+            } finally {
+                quota.mockRestore();
+            }
+            expect(downloads.mock.calls.length).toBe(2);
+            for (const [, tempId] of downloads.mock.calls) expect(existsSync(mount.getTempPath(tempId))).toBe(false);
+        } finally {
+            downloads.mockRestore();
+        }
+    });
+
+    test("never reads a kept thread's messages when its media folder holds no file", async () => {
+        const { path, collab } = await openDoc('NoThreadMedia', [paragraph(marked('c1'))]);
+        const thread = await addThread(path.id, [{ content: 'no files' }]);
+        addCard(collab.doc, 'c1', { chatName: thread.name });
+        const dataDb = await mount.getChildByName(thread.id, 'data.db');
+        if (!dataDb) throw new Error('no data.db');
+        const downloads = spyOn(mount, 'downloadToTemp');
+        try {
+            const copied = await copyOf(path);
+            expect(await threadNames(copied.id)).toEqual([thread.name]);
+            expect(downloads.mock.calls.filter(([id]) => id === dataDb.id)).toEqual([]);
+        } finally {
+            downloads.mockRestore();
+        }
+    });
+
+    test('that keeps every thread, or has none, never opens its comment index', async () => {
+        const { path, collab } = await openDoc('EveryThread', [paragraph(marked('c1'), figure('a.png'))]);
+        const thread = await addThread(path.id);
+        addCard(collab.doc, 'c1', { chatName: thread.name });
+        await addMedia(path.id, 'a.png');
+        const { path: none } = await openDoc('NoThread', [paragraph()]);
+        const opens = spyOn(mount, 'withDatabase');
+        try {
+            for (const source of [path, none]) {
+                const copied = await copyOf(source);
+                const commentsDb = await mount.getChildByName(copied.id, 'comments.db');
+                expect(opens.mock.calls.filter(([, pathId]) => pathId === commentsDb?.id)).toEqual([]);
+            }
+        } finally {
+            opens.mockRestore();
+        }
     });
 
     test('whose state does not read copies whole, and the server says so', async () => {
