@@ -27,8 +27,8 @@ export function copyPathAcross(
     return writeCopy(tree, destParentId, name, {
         createFolder: (parentId, folderName, type) =>
             to.drive.createFolder(to.mountId, parentId, folderName, user, type),
-        copyFile: async (parentId, fileName, src, read) => {
-            const file = read ?? (await source.downloadFile(src.mountId, src.id));
+        copyFile: async (parentId, fileName, src) => {
+            const file = await source.downloadFile(src.mountId, src.id);
             if (!file) throw storageGone();
             return to.drive.createFileFromData(to.mountId, parentId, fileName, src.mimeType, file, user);
         },

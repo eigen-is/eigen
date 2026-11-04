@@ -90,7 +90,7 @@ import {
 import { CollabRegistry } from './collab-registry';
 import type { CopyTarget } from './copy-across';
 import { copyPathAcross } from './copy-across';
-import { discardReads, keepRowsOfCopiedThreads, withNamedPartsOnly } from './copy-parts';
+import { keepRowsOfCopiedThreads, withNamedPartsOnly } from './copy-parts';
 import { LockManager } from './lock-manager';
 import { getSharedDatabase } from './shared';
 import {
@@ -763,7 +763,7 @@ export class Drive {
 
     // The copy writes exactly what this lists, so it never copies its own output. A document in it takes only the
     // parts its current state names. Every copy has to fit the target's free space, and a single file also the
-    // per-file upload cap, the same as an upload. The temp copies the filter read go however the copy ends.
+    // per-file upload cap, the same as an upload.
     private async copyWithinLimits(
         mount: Mount,
         srcPathId: string,
@@ -771,13 +771,9 @@ export class Drive {
         write: (tree: CopyTree) => Promise<DrivePath>,
     ): Promise<DrivePath> {
         const tree = await withNamedPartsOnly(mount, await mount.listCopy(srcPathId));
-        try {
-            if (!isContainerType(tree.path.type)) enforceMaxUploadSize(tree.path.size);
-            await enforceMountQuota(limits.ownerId, limits.mountId, copySize(tree));
-            return await write(tree);
-        } finally {
-            await discardReads(mount, tree);
-        }
+        if (!isContainerType(tree.path.type)) enforceMaxUploadSize(tree.path.size);
+        await enforceMountQuota(limits.ownerId, limits.mountId, copySize(tree));
+        return write(tree);
     }
 
     // Writes a document's open databases to storage, so a byte copy of the container gets its latest state.

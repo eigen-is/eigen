@@ -250,34 +250,44 @@ describe('a copy of a document', () => {
     test.each([
         ['in one mount', undefined],
         ['to another drive', 'across'],
-    ] as const)('%s writes the data.db it read, so an edit after the read reaches neither', async (_, across) => {
-        const { path, collab } = await openDoc('Between', [paragraph()]);
-        await addMedia(path.id, 'later.png');
-        const quota = spyOn(enforcement, 'enforceMountQuota').mockImplementation(async () => {
-            const added = new Y.XmlElement('figure');
-            added.setAttribute('mediaName', 'later.png');
-            collab.doc.getXmlFragment('default').insert(0, [added]);
-            await drive.flushContainerDb(M, path.id);
-        });
-        let copied: DrivePath;
-        try {
-            const to = across && { drive, ownerId: home.user.id, mountId: M };
-            copied = await drive.copyPath(M, path.id, rootId, `${path.name} ${across}`, home.user, to);
-        } finally {
-            quota.mockRestore();
-        }
-        expect(await mediaNames(copied.id)).toEqual([]);
-        const copy = await drive.getCollabDocument(M, copied.id);
-        expect(copy.doc.getXmlFragment('default').toString()).not.toContain('later.png');
-        await drive.closeCollabDocument(M, copied.id, { skipFinalSnapshot: true });
-    });
+    ] as const)(
+        '%s after an edit since the read copies whole, so its data.db names no part it lacks',
+        async (_, across) => {
+            const { path, collab } = await openDoc('Between', [paragraph()]);
+            await addMedia(path.id, 'later.png');
+            const quota = spyOn(enforcement, 'enforceMountQuota').mockImplementation(async () => {
+                const added = new Y.XmlElement('figure');
+                added.setAttribute('mediaName', 'later.png');
+                collab.doc.getXmlFragment('default').insert(0, [added]);
+                await drive.flushContainerDb(M, path.id);
+            });
+            let copied: DrivePath;
+            try {
+                const to = across && { drive, ownerId: home.user.id, mountId: M };
+                copied = await drive.copyPath(M, path.id, rootId, `${path.name} ${across}`, home.user, to);
+            } finally {
+                quota.mockRestore();
+            }
+            expect(await mediaNames(copied.id)).toEqual(['later.png']);
+            const copy = await drive.getCollabDocument(M, copied.id);
+            expect(copy.doc.getXmlFragment('default').toString()).toContain('later.png');
+            await drive.closeCollabDocument(M, copied.id, { skipFinalSnapshot: true });
+        },
+    );
 
-    test('leaves no temp copy of what it read, whether it lands or fails', async () => {
+    test('drops the temp copy of what it read before it writes, whether it lands or fails', async () => {
         const { path } = await openDoc('Temps', [paragraph(figure('kept.png'))]);
         await addMedia(path.id, 'kept.png');
         const downloads = spyOn(mount, 'downloadToTemp');
+        const tempsLeft = () => downloads.mock.calls.filter(([, tempId]) => existsSync(mount.getTempPath(tempId)));
+        const held: unknown[] = [];
+        const sized = spyOn(enforcement, 'enforceMountQuota').mockImplementation(async () => {
+            held.push(...tempsLeft());
+        });
         try {
             await copyOf(path);
+            sized.mockRestore();
+            expect(held).toEqual([]);
             const quota = spyOn(enforcement, 'enforceMountQuota').mockRejectedValue(new ApiError(507, 'full'));
             try {
                 await expect(copyOf(path)).rejects.toThrow('full');
@@ -285,8 +295,9 @@ describe('a copy of a document', () => {
                 quota.mockRestore();
             }
             expect(downloads.mock.calls.length).toBe(2);
-            for (const [, tempId] of downloads.mock.calls) expect(existsSync(mount.getTempPath(tempId))).toBe(false);
+            expect(tempsLeft()).toEqual([]);
         } finally {
+            sized.mockRestore();
             downloads.mockRestore();
         }
     });

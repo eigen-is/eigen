@@ -17,15 +17,16 @@ import {
 } from '../mount/container-dbs';
 import type { CopyTree } from '../mount/copy';
 import { foldName } from '../mount/names';
+import { hashFile } from '../storage';
 import type { DriveLike } from './get-drive';
 import { mediaKeptBy, threadAttachmentNames } from './named-parts';
 
 // The tree with each collab document inside reduced to the parts its current state names. The listing flushed each
-// document first, so its stored data.db holds its latest edits. That data.db is read once into a temp copy, and the
-// copy writes those same bytes, so an edit after the read reaches neither the filter nor the copy. The documents are
-// read one at a time, so a folder of many runs one references job at a time. A document whose parts can't be read,
-// such as one past the reader's size limit or one the strict reader refuses, copies whole. Such a copy keeps more
-// than it needs, never less, and it never fails for it. The caller removes the temp copies with discardReads.
+// document first, so its stored data.db holds its latest edits. Each data.db is read from a temp copy that goes before
+// the next document is read. The filter keeps the hash of the bytes it read, so the copy can tell when the data.db it
+// writes is another. The documents are read one at a time, so a folder of many runs one references job at a time. A
+// document whose parts can't be read, such as one past the reader's size limit or one the strict reader refuses,
+// copies whole. Such a copy keeps more than it needs, never less, and it never fails for it.
 export async function withNamedPartsOnly(mount: Mount, tree: CopyTree): Promise<CopyTree> {
     const { path } = tree;
     if (!isContainerType(path.type)) return tree;
@@ -45,15 +46,14 @@ export async function withNamedPartsOnly(mount: Mount, tree: CopyTree): Promise<
         const dataDb = childNamed(tree, CONTAINER_DATA_DB);
         if (!dataDb) throw new Error(`${path.id}: data.db missing`);
         const localPath = await mount.downloadToTemp(dataDb.path.id, tempId);
+        const { hash } = await hashFile(localPath);
         const source = readYjsStatePayloadFromFile(localPath);
         const named = await runDocumentReferences({ documentType: path.type, source }, { priority: 'foreground' });
         const keptThreads = new Set(named.chat.map(foldName));
         let leftThreads = false;
         const children: CopyTree[] = [];
         for (const child of tree.children) {
-            if (child === dataDb) {
-                children.push({ ...child, read: { tempId, file: Bun.file(localPath) } });
-            } else if (child === media) {
+            if (child === media) {
                 const files = child.children.map((file) => file.path).filter((file) => file.type === DRIVE_TYPE_FILE);
                 children.push(onlyFiles(child, await mediaKeptBy(mount, child.path.id, named.media, files)));
             } else if (child === chat) {
@@ -69,18 +69,13 @@ export async function withNamedPartsOnly(mount: Mount, tree: CopyTree): Promise<
                 children.push(child);
             }
         }
-        return { path, children, leftThreads };
+        return { path, children, filtered: { dataDb, hash, whole: tree }, leftThreads };
     } catch (error) {
-        await mount.cleanupTemp(tempId);
         console.warn(`[copy] ${path.id} copies whole:`, error instanceof Error ? error.message : error);
         return tree;
+    } finally {
+        await mount.cleanupTemp(tempId);
     }
-}
-
-// Removes the temp copies withNamedPartsOnly read, once the copy is written or has failed.
-export async function discardReads(mount: Mount, tree: CopyTree): Promise<void> {
-    if (tree.read) await mount.cleanupTemp(tree.read.tempId);
-    for (const child of tree.children) await discardReads(mount, child);
 }
 
 // Runs once a copied document has landed. Its comments.db came over whole, with the rows of every thread the source
