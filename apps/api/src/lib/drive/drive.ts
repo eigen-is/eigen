@@ -598,7 +598,22 @@ export class Drive {
     // document put there meanwhile could take edits it can't save.
     private async getTargetFolder(mount: Mount, folderId: string): Promise<DrivePath> {
         if (this.documents.isTrashing(mount, folderId)) throw new ApiError(404, 'Folder not found');
-        return mount.getActivePath(folderId);
+        const folder = await mount.getActivePath(folderId);
+        await this.refuseDocumentPart(mount, folder);
+        return folder;
+    }
+
+    // A document's databases and its versions/ folder, with each version in it, change only with the whole
+    // document. Renamed, moved or trashed on its own, a database breaks the document and a version leaves
+    // a gap in its history. A file put into versions/ would list and restore as a version. So a user write
+    // refuses such a path, both as the item it changes and as the folder it writes into. The server's own
+    // writers, such as a snapshot or the media sweep, write through Mount and never meet this check.
+    private async refuseDocumentPart(mount: Mount, path: DrivePath): Promise<void> {
+        const chain = await mount.getBreadcrumb(path.id);
+        const parent = chain.at(-2);
+        const isDatabase = parent && isDocumentType(parent.type) && ['data.db', 'comments.db'].includes(path.name);
+        const inVersions = chain.slice(1).some((crumb, i) => isVersionsFolder(crumb) && isDocumentType(chain[i].type));
+        if (isDatabase || inVersions) throw new ApiError(400, "Cannot change a document's databases or versions");
     }
 
     public async updatePathDetails(mountId: string, pathId: string, details: DrivePathDetails): Promise<void> {
@@ -612,6 +627,7 @@ export class Drive {
     public async movePath(mountId: string, pathId: string, targetParentId: string, user?: User): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const path = await mount.getActivePath(pathId);
+        await this.refuseDocumentPart(mount, path);
         const oldParentId = path.parentId;
 
         const targetParent = await this.getTargetFolder(mount, targetParentId);
@@ -661,6 +677,7 @@ export class Drive {
     public async renamePath(mountId: string, pathId: string, newName: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getActivePath(pathId);
+        await this.refuseDocumentPart(mount, item);
         const oldName = item.name;
 
         const renamedItem = await mount.updatePath(pathId, { name: newName });
@@ -804,15 +821,7 @@ export class Drive {
         return this.runInOrder(`acl:${mountId}:${pathId}`, async () => {
             const item = await mount.getActivePath(pathId);
             if (item.parentId === null) throw new ApiError(400, 'Cannot trash root folder');
-            // A document's databases and saved versions go only with the whole document. Trashed on its own,
-            // a database breaks the document, and a version leaves a gap in its history.
-            const chain = await mount.getBreadcrumb(item.id);
-            const parent = chain.at(-2);
-            const isDatabase = parent && isDocumentType(parent.type) && ['data.db', 'comments.db'].includes(item.name);
-            const inVersions = chain
-                .slice(1)
-                .some((path, i) => isVersionsFolder(path) && isDocumentType(chain[i].type));
-            if (isDatabase || inVersions) throw new ApiError(400, "Cannot trash a document's databases or versions");
+            await this.refuseDocumentPart(mount, item);
             await this.documents.whileTrashing(mount, item.id, () => remove(mount, item));
             await this.releaseLocksUnder(mountId, item.id);
         });

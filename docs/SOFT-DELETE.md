@@ -67,7 +67,7 @@ A folder's permanent delete first removes every trash root whose `trashedFrom` l
 
 ## A document's databases and versions go only with the whole document
 
-A writer can name a document's `data.db` and `comments.db`, its `versions/` folder and each version in it: the folder listing and the version list return their ids. Trashed on its own, a database breaks the document, and a version leaves a gap in its history. So `Drive.removePath` answers a 400 for any of them, the owner's request included, beside its refusal of the mount root. Every REST delete passes there, on an own drive and through `SharedDrive` alike, while WebDAV refuses every delete inside a document with a 423 before it gets that far. Server code that cleans up a document, such as the version prune and the media sweep, deletes through `Mount.deletePath` and never meets the check. A message's attachment sits in the chat's `media/` folder, so `ChatRoom.deleteMessage` still trashes it. `apps/api/src/test/drive/container-write-guard.test.ts` pins it.
+A document's `data.db` and `comments.db`, its `versions/` folder and each version in it are trashed only with the whole document. `Drive.removePath`, which every REST delete passes on an own drive and through `SharedDrive` alike, answers a 400 for any of them, the owner's request included, beside its refusal of the mount root. That is one case of the rule that no user write changes those parts ([STORAGE.md](STORAGE.md#a-user-write-never-changes-a-documents-databases-or-versions)), which also says why. A message's attachment sits in the chat's `media/` folder, so `ChatRoom.deleteMessage` still trashes it.
 
 ## Expired trash is purged only when a Home loads
 
