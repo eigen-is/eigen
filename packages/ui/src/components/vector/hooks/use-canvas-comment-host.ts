@@ -12,11 +12,12 @@ import {
     useDocumentPanels,
 } from '@workspace/lib/comments';
 import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/comments';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
 import type { VectorElement } from '@workspace/lib/vector';
 import { elementForCommentCard, parseIdList, serializeIdList } from '@workspace/lib/vector';
+import type { ComponentProps } from 'react';
 import { useCallback, useState } from 'react';
-import type { CommentContextMenuItem } from '../../comments';
+import type { CommentContextMenuItem, PanelColumn } from '../../comments';
 import { useContextMenu } from '../../context-menu';
 import { useCanvasComments } from './use-canvas-comments';
 import type { CanvasDoc } from './use-canvas-doc';
@@ -34,7 +35,26 @@ type CanvasCommentHostArgs = {
     onReveal: (el: VectorElement) => void;
 };
 
-export const useCanvasCommentHost = ({
+export type CanvasCommentHost = ReturnType<typeof useDocumentPanels> & {
+    assignedCount: number;
+    lifecycle: ReturnType<typeof useCommentLifecycle>;
+    members: EffectiveMember[];
+    currentUserEmail: string | undefined;
+    commentContextMenu: ReturnType<typeof useContextMenu<CommentContextMenuItem>>;
+    addOpen: boolean;
+    closeAdd: (open: boolean) => void;
+    addCommentTo: (elementId: string) => void;
+    openCard: (cardId: string) => void;
+    handleSaveNew: (
+        patch: CardFormPatch,
+        attachments?: CardAttachmentDraft[],
+        assignee?: string | null,
+    ) => Promise<void>;
+    deleteCard: (cardId: string) => void;
+    panelProps: Omit<ComponentProps<typeof PanelColumn>, 'activePanel'>;
+};
+
+export function useCanvasCommentHost({
     ownerId,
     path,
     canWrite,
@@ -44,7 +64,7 @@ export const useCanvasCommentHost = ({
     doc,
     isMobile,
     onReveal,
-}: CanvasCommentHostArgs) => {
+}: CanvasCommentHostArgs): CanvasCommentHost {
     const { user } = useAuth();
 
     // The cards are read here, so the active set doesn't depend on the lifecycle's own read of them. A card
@@ -171,6 +191,4 @@ export const useCanvasCommentHost = ({
             onAddComment: canWrite && chatFolderId ? () => setAddOpen(true) : undefined,
         },
     };
-};
-
-export type CanvasCommentHost = ReturnType<typeof useCanvasCommentHost>;
+}
