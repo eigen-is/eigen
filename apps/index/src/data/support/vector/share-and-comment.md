@@ -6,7 +6,7 @@ category: Sharing
 tags: [vector, sharing, permissions, comments, collaboration]
 related: [vector/get-started, drive/share-a-file]
 order: 70
-updated: 2026-11-02
+updated: 2026-11-04
 ---
 
 Drawings are private to you until you share them. You can share with specific people, with a team, or with anyone who has a link, and choose whether they can view or edit. If you can edit a drawing, you can also leave comments, either on a single object or on the drawing as a whole.
@@ -76,3 +76,9 @@ A red dot on a comment means it has something new for you: a reply in a thread y
 ### Resolve a comment
 
 Open a comment and mark it as resolved. Resolved comments are hidden by default. Set the status filter to **Resolved** or **All** to see them again.
+
+### Copy a link to a comment
+
+Open a comment and click the link icon (**Copy link**) near the top of the dialog. The link opens the drawing with that comment's thread already visible.
+
+If the comment is deleted later, the link still opens it, but only its title shows, grayed out, with **This comment was deleted** below it. Its replies are gone, and it can't be replied to, resolved or assigned. The same goes for a notification about it.
