@@ -86,7 +86,7 @@ Run on an embedded document, the reader returns no `sheet` or `drawing` names, s
 
 ### A version's names are rows in `metadata.db`
 
-A `version_references` table in the mount's `metadata.db` (`apps/api/src/lib/mount/db-config.ts`) holds, per version, the names it uses: `versionPathId`, a foreign key to the version file's `paths` row with `ON DELETE CASCADE` as `file_events` and `path_watchers` have, then `scope`, `kind` and `name`. It follows `path_content`'s pattern: the document layer computes the names, and the mount stores them as plain strings and never parses Yjs. A version set's names are the union of its parts' and sit on its `.db`'s row.
+A `version_references` table in the mount's `metadata.db` (`apps/api/src/lib/mount/db-config.ts`) holds, per version, the names it uses: `versionPathId`, a foreign key to the version file's `paths` row with `ON DELETE CASCADE` as `file_events` and `path_watchers` have, then `scope`, `kind`, `name` and `readerVersion`. It follows `path_content`'s pattern: the document layer computes the names, and the mount stores them as plain strings and never parses Yjs. A version set's names are the union of its parts' and sit on its `.db`'s row.
 
 So the names go where the version goes:
 
@@ -95,16 +95,16 @@ So the names go where the version goes:
 - A copy gets no versions, so it gets no names.
 - A backup copies the rows and their names together, in the one copy of `metadata.db`.
 
-**The rows fill lazily.** The first sweep that meets a version without rows loads that version once and writes its names. A version never changes, so that happens once in its life, and taking a version stays as it is: the close-time version is staged inside `ManagedDatabase.close`, which has no handle on the open document.
+**The rows heal themselves.** The sweep treats a version without rows as unknown, never as empty. It loads the version's own copy, and for a set the copies of its embedded documents, runs the type's `documentReferences` on each, and writes the rows. A version never changes, so that happens once in its life, and taking a version stays as it is: the close-time version is staged inside `ManagedDatabase.close`, which has no handle on the open document. A load that fails skips the document until its next sweep. The current state's names are never stored; every sweep reads them fresh.
 
-**A version without rows is unknown, never empty.** The sweep loads it, or skips the document when the load fails. A crash, a backup taken between a version and its rows, or a bug can then only keep a part too long.
+**A fixed reader refills its old rows.** Each row carries the `readerVersion` of the reader that wrote it, one constant beside `documentReferences`. A change to what any reader finds, such as a new field that names media or a new kind of comment anchor, bumps it, and every row with an older number counts as unknown again and is refilled at the next sweep. So a crash, a backup taken between a version and its rows, and a reader bug once fixed can each only keep a part too long.
 
 ### The sweep runs after a close
 
 After a document's close-time version, in the background, at most once a day per document, the server lists `media/`, `sheets/`, `drawings/` and `chat/`, and permanently deletes each part that is:
 
 - named by neither the current state nor any retained version's rows, and
-- older than 24 hours, by its `createdAt`. An upload whose name swap has not reached the server yet, and a thread `useCreateCommentCard` created over REST before its card's update landed, are never taken.
+- older than 72 hours, by its `createdAt`. An upload whose name swap has not reached the server yet, and a thread `useCreateCommentCard` created over REST before its card's update landed, are never taken, even from a laptop closed over a weekend.
 
 It then runs inside each surviving embedded document and thread, over its own `media/`. An embedded document's media names come from its current `data.db` and from its copies in the parent's version sets, since it keeps no versions of its own. A thread's come from its messages that are not deleted, now and in its own retained versions, through rows of the same table on the thread's version files.
 
@@ -114,7 +114,7 @@ A document closes only when no socket is left ([COLLAB.md](../COLLAB.md#a-docume
 
 ### A swept thread leaves pointers behind
 
-The card stays in the map as dead bytes, and removing it would mean opening the document again for one write (Open question 2). Two things can still reach it:
+The card stays in the map as dead bytes, because removing it would mean opening the document again for one write (§ Decisions). Two things can still reach it:
 
 - **An offline tab that undoes past a sweep**, or a card whose update landed late, re-anchors a card whose thread is gone.
 - **A link to the thread:** a `?chat=` deep link, a notification in another home, an activity row. `useCardIdFromChatName` finds the card, so `onChatNotFound` never fires, and the thread then answers 404. `matchesCommentFilter` shows the comment as open and unassigned, because its row is gone.
@@ -145,7 +145,7 @@ The sweep removes only what no restore could bring back, so it loses nothing. De
 
 **Who.** The document's owner only, because nothing brings a deleted version back, unlike a trash. Verify against [ACL.md](../ACL.md) who that is on a team mount before building.
 
-**What.** Every version of the document goes, `versions/<iso-ts>/` folders and their embedded documents' copies included, and so do the comment threads' own versions: no screen restores a thread, so to a user they are part of the document's history, and the threads take new versions afterwards as before. Then the sweep runs at once instead of after the next close, and the document is left with its current state. The 24-hour rule still holds. A peer with the editor open who then undoes a delete gets the missing image or the deleted-comment state, and the confirm dialog says so.
+**What.** Every version of the document goes, `versions/<iso-ts>/` folders and their embedded documents' copies included, and so do the comment threads' own versions: no screen restores a thread, so to a user they are part of the document's history, and the threads take new versions afterwards as before. Then the sweep runs at once instead of after the next close, and the document is left with its current state. The 72-hour rule still holds, so a part uploaded and deleted in the last three days survives a Delete history, and the confirm dialog says so. A peer with the editor open who then undoes a delete gets the missing image or the deleted-comment state, and the confirm dialog says so.
 
 **The route.** No route deletes a version today; the version routes list, save and restore. Delete history needs one, `DELETE /drive/:ownerId/:mountId/file/:pathId/versions`, with a `SharedDrive` wrapper that checks ownership. The way to a document without history that needs no route is Copy, which leaves the versions behind, but a copy is a new document with new links and new sharing.
 
@@ -154,8 +154,8 @@ The sweep removes only what no restore could bring back, so it loses nothing. De
 | Phase | Work | Days |
 |---|---|---|
 | 1. Comments | The canvas keeps a deleted card, marked; its active set; COMMENTS.md's table becomes one rule plus the stickies exception. Tests: a canvas restore from before a card delete shows the card and its flag; a deleted card is not document-level | 1 |
-| 2. Media sweep | `documentReferences` per type and the exports on it; the `version_references` table and its lazy fill; the sweep of `media/` after close; the portable package's parts. Tests: a document with every kind of reference, read whole; an image deleted before every retained version goes after close; one a retained version names stays until that version prunes, then goes; a file under 24 h stays; a card attachment stays; an open document is never swept; a reader that throws sweeps nothing; the quota drops by the bytes | 3.5 |
-| 3. Thread sweep | The in-use rule per host; the sweep of `chat/`, its `comments.db` rows and mentions, and of each thread's `media/`; the deleted-comment state in the pane, the dialog and a `?chat=` link. Tests: a thread whose card is anchored in no retained version goes, with its row, mentions and search hit; one anchored in a retained version stays; a new thread under 24 h stays; a re-anchored card of a swept thread shows the deleted state; a deleted message's attachment stays while a thread version names it | 2.5 |
+| 2. Media sweep | `documentReferences` per type and the exports on it; the `version_references` table and its lazy fill; the sweep of `media/` after close; the portable package's parts. Tests: a document with every kind of reference, read whole; an image deleted before every retained version goes after close; one a retained version names stays until that version prunes, then goes; a file under 72 h stays; a card attachment stays; an open document is never swept; a reader that throws sweeps nothing; the quota drops by the bytes | 3.5 |
+| 3. Thread sweep | The in-use rule per host; the sweep of `chat/`, its `comments.db` rows and mentions, and of each thread's `media/`; the deleted-comment state in the pane, the dialog and a `?chat=` link. Tests: a thread whose card is anchored in no retained version goes, with its row, mentions and search hit; one anchored in a retained version stays; a new thread under 72 h stays; a re-anchored card of a swept thread shows the deleted state; a deleted message's attachment stays while a thread version names it | 2.5 |
 | 4. Version sets | The set layout, taking, pruning and restoring it, the redirected `onSnapshot`, the refused routes, the reader's one level, the sweep inside an embedded document. Built in the same branch as phase 1 of [PROPOSAL_CHART_SHEETS.md](PROPOSAL_CHART_SHEETS.md), which gives it its first embedded document. Tests: a restore brings a chart's sheet back to the version; a sheet deleted since comes back; one added since goes after the sweep; an image in a sheet stays while a set's copy names it | 2.5 |
 | 5. Delete history | The route, its `SharedDrive` ownership check and the `Drive` method, the hook, the button and confirm dialog in the Version history panel. Tests: the owner's delete leaves no version, the threads' included, and sweeps what only versions named; a writer who is not the owner gets 403 | 1.5 |
 
@@ -164,7 +164,7 @@ Docs: MEDIA-REFERENCES.md gets the rule and the sweep, STORAGE.md's version sect
 ## Risks
 
 - **A deleted part can stay for a year.** A monthly version keeps every part it names for up to 12 months. That is the price of restoring it. A document that is mostly zombies and edited every day still shrinks only as its versions prune.
-- **An offline tab can undo past a sweep.** A tab that went offline with a delete in its undo history, and undoes it after the document closed and swept, brings back a name with nothing behind it. The image draws as missing (`isMediaMissing`), and the comment as deleted. The 24-hour rule does not cover an update that stays offline longer.
+- **An offline tab can undo past a sweep.** A tab that went offline with a delete in its undo history, and undoes it after the document closed and swept, brings back a name with nothing behind it. The image draws as missing (`isMediaMissing`), and the comment as deleted. The 72-hour rule does not cover an update that stays offline longer.
 - **A reader that misses a field deletes a part still in use.** A new field that names media, or a new kind of comment anchor, missed in `documentReferences`, loses that part at the next sweep, and for a thread that is conversation, not an image. Each type gets a test that builds a document with every kind of reference and checks that the reader finds them all, and the sweep refuses to run on a document whose reader throws.
 - **A document nobody opens again keeps its zombies.** The sweep runs after a close, so such a document shrinks at its next close, or when its owner deletes its history. The owner chose no one-off pass over every container (§ Decisions).
 - **Delete history cannot be undone.** A misclick loses every restore point. The confirm dialog names the loss, and only the owner sees the button.
@@ -179,18 +179,21 @@ Docs: MEDIA-REFERENCES.md gets the rule and the sweep, STORAGE.md's version sect
 4. **Delete history is a button at the bottom of the Version history panel, for the owner only, and it deletes the comment threads' versions too.** No screen in Eigen restores a thread, so their versions are part of the history a user sees as the document's. (Owner, 2026-11-04.) The route it needs still waits for its own yes.
 5. **No one-off sweep of documents nobody opens again.** Their zombies go at their next close, or with Delete history. (Owner, 2026-11-04.)
 6. **One rule for every part, comment threads included.** A media file, an embedded document and a comment thread each stay while the current state or a retained version names them, and the sweep removes the rest. (Owner, 2026-11-04.)
+7. **A swept thread's card stays in the map.** It is a few hundred bytes and never shows, and removing it would mean opening the document again after its close for one write. (Owner, 2026-11-04.)
+8. **The sweep spares parts younger than 72 hours**, so an upload or a new thread from a tab that went offline over a weekend survives. (Owner, 2026-11-04.)
+9. **A version's names are rows in `metadata.db` that heal themselves.** A version without rows, or with rows from an older reader, is loaded once and its rows written again. (Owner, 2026-11-04.) The table is a migration of `metadata.db`, which still waits for its own yes right before it is built.
 
-## Open questions
+## Alternatives weighed
 
-1. **Where a version's names are stored.** Preferred: the `version_references` table in `metadata.db` (§ A version's names are rows in `metadata.db`). The owner is still thinking it over. What else was weighed, with the reviews of 2026-11-04:
-    - **A file per version, `versions/<iso-ts>/references.json`.** Up to 47 object reads per sweep. On S3 a plain file written during a close is a direct PUT the close waits for, while a version goes through the upload queue. The prune skips it today.
-    - **A table in the live `data.db`.** The close-time version is staged after the final sync, so a row written then never reaches S3. Every version copy and every Drive copy carries the table, and a restore that writes a version's bytes over `data.db` brings back an old table that forgets newer versions. Every row also makes the next sync upload the whole `data.db`.
-    - **A database of its own per container**, such as a `media.db`, `sheets.db` and `drawings.db`, or one `versions/index.db`. Each is one more container database: on S3 a whole-object download on open, a staged copy, a queued upload and a `pending_uploads` row per change, and more open files per container ([PROPOSAL_FD_BUDGET.md](PROPOSAL_FD_BUDGET.md)). None can cascade with the version rows, so every prune becomes two writes with a crash between. One at the container's root also travels with a copy and with a restore that writes bytes, as the table in `data.db` does; `versions/index.db` does not, but a backup copies it at another moment than `metadata.db`. A kind column does what one database per kind would.
-    - **One mutable index file for the document.** One read, but a lost or late rewrite forgets a live version.
-    - **The names in the version row's `details` JSON.** The table's properties without a migration, but `details` is a loose bag, and `Drive.updatePathDetails` replaces it whole.
+The owner chose the `metadata.db` table (§ Decisions, 9). What else was weighed for where a version's names are stored, with the reviews of 2026-11-04:
 
-    The cost of the table: the mount's `metadata.db` holds names that come from document content. `path_content` already does the same for search text, so the layer rule holds as long as the mount only stores the rows. It is a migration of `metadata.db`.
-2. **Remove a swept thread's dead card from the map?** Recommended: no. It is a few hundred bytes and never shows, and removing it means opening the document again after its close for one write. The other choice is a server write into the Y.Doc after the sweep, which also stops an offline undo from re-anchoring it.
+- **A file per version, `versions/<iso-ts>/references.json`.** Up to 47 object reads per sweep. On S3 a plain file written during a close is a direct PUT the close waits for, while a version goes through the upload queue. The prune skips it today.
+- **A table in the live `data.db`.** The close-time version is staged after the final sync, so a row written then never reaches S3. Every version copy and every Drive copy carries the table, and a restore that writes a version's bytes over `data.db` brings back an old table that forgets newer versions. Every row also makes the next sync upload the whole `data.db`.
+- **A database of its own per container**, such as a `media.db`, `sheets.db` and `drawings.db`, or one `versions/index.db`. Each is one more container database: on S3 a whole-object download on open, a staged copy, a queued upload and a `pending_uploads` row per change, and more open files per container ([PROPOSAL_FD_BUDGET.md](PROPOSAL_FD_BUDGET.md)). None can cascade with the version rows, so every prune becomes two writes with a crash between. One at the container's root also travels with a copy and with a restore that writes bytes, as the table in `data.db` does; `versions/index.db` does not, but a backup copies it at another moment than `metadata.db`. A kind column does what one database per kind would.
+- **One mutable index file for the document.** One read, but a lost or late rewrite forgets a live version.
+- **The names in the version row's `details` JSON.** The table's properties without a migration, but `details` is a loose bag, and `Drive.updatePathDetails` replaces it whole.
+
+The cost of the table: the mount's `metadata.db` holds names that come from document content. `path_content` already does the same for search text, so the layer rule holds as long as the mount only stores the rows. It is a migration of `metadata.db`.
 
 ## Related
 
