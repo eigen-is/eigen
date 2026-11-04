@@ -7,10 +7,10 @@
 import { isRecord } from '@workspace/lib/guards';
 import type { MergeCell } from '@workspace/lib/sheets';
 import { parseCellKey } from '@workspace/lib/sheets';
-import { cloneDeep, get, isEqual } from 'es-toolkit/compat';
+import { get, isEqual } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import { applyPatches, produce, produceWithPatches } from 'immer';
-import { celldataToData, dataToCelldata } from '../../engine/celldata';
+import { celldataToData } from '../../engine/celldata';
 import { RowColError } from '../../engine/rowcol';
 import type { CalcChainEntry, Cell, CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
@@ -27,6 +27,7 @@ import {
     patchToOp,
     rowColMarker,
     sheetOrder,
+    storedCopy,
 } from '../utils';
 import { applyOpBatch } from './apply-ops';
 import { setCellValue } from './cell';
@@ -155,14 +156,6 @@ export function redoEntry(ctx: Context, entry: History): Step {
         return rowColStep(ctx, entry.inversePatches, entry.patches, options, 'redo');
     }
     return patchStep(ctx, entry.patches, entry.inversePatches);
-}
-
-// A sheet about to be deleted, kept with its cells as stored cells so its undo can add it back.
-function storedCopy(sheet: Sheet): Sheet {
-    const { data, ...value } = cloneDeep(sheet);
-    if (data) value.celldata = dataToCelldata(data);
-    value.status = 0;
-    return value;
 }
 
 // The sheet an add or copy entry put in, as its redo adds it back.
@@ -423,8 +416,8 @@ function repairOps(ctx: Context, from: Patch[], to: Patch[], options: PatchOptio
     return ops;
 }
 
-// The whole matrices a row or column entry records, by sheet index. A sheet nobody opened, such as a copy, has no
-// matrix, so the entry records its stored cells.
+// The whole matrices a row or column entry records, by sheet index. A sheet that holds only its stored cells has no
+// matrix, so the entry records those.
 function matrices(patches: Patch[]) {
     const found = new Map<number, CellMatrix>();
     for (const { path, value } of patches) {

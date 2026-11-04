@@ -112,8 +112,8 @@ export function generateAPIs(
                         else accepted = false;
                     }
                     // The grid gives a sheet its cell matrix when the sheet opens, and that write never reaches the
-                    // log. So an anchor kept before it, such as right after the tab's own add or copy of the sheet,
-                    // holds the open sheet without one.
+                    // log. So an anchor kept before it, such as right after the tab's own add of the sheet, holds the
+                    // open sheet without one.
                     const shown = getSheetIndex(next, next.currentSheetId);
                     if (shown != null && !next.sheets[shown].data) {
                         next = produce(next, (draft: Context) => initSheetData(draft, shown, draft.sheets[shown]));

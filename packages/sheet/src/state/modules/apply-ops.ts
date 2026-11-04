@@ -38,8 +38,8 @@ export function applyOpBatch(
     let next: Context;
     try {
         next = produce(ctx, (draft: Context) => {
-            // A sheet nobody opened, such as a copy, holds only its stored cells. A cell or row op on it needs the
-            // matrix, as the replay builds it for a joiner.
+            // A sheet without its cell matrix, such as one this tab added before the grid opened it, gets one first.
+            // A cell or row op on it needs the matrix, as the replay builds it for a joiner.
             for (const op of ops) {
                 const { id } = op;
                 if (id == null || (op.path[0] !== 'data' && !isRowColOp(op))) continue;

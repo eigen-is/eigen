@@ -160,6 +160,32 @@ describe('sheet/core/api/sheet', () => {
         expect(next.sheets[1].data?.[0]?.[0]?.v).toBe('a');
     });
 
+    // The op log keeps every add, and a matrix holds a null per empty cell, so the add of a large copy would be large.
+    test('the add a copy sends carries its stored cells, not its cell matrix', () => {
+        const base = workbookContextFactory({
+            currentSheetId: 'id_1',
+            sheets: [
+                {
+                    name: 'S',
+                    id: 'id_1',
+                    order: 0,
+                    row: 2,
+                    column: 2,
+                    data: [
+                        [{ v: 'a', m: 'a', commentCardIds: ['c1'] }, null],
+                        [null, null],
+                    ],
+                },
+            ],
+        });
+        const { next, ops } = author(base, (ctx) => copySheet(ctx, 'id_1'), { addSheetOp: true });
+        const added = ops.find((op) => op.op === 'addSheet')?.value;
+        expect(added?.data).toBeUndefined();
+        expect(added?.celldata).toEqual([{ r: 0, c: 0, v: { v: 'a', m: 'a' } }]);
+        expect(next.sheets[1].data?.[0]?.[0]).toEqual({ v: 'a', m: 'a' });
+        expect(receive(base, ops).sheets[1].data?.[0]?.[0]).toEqual({ v: 'a', m: 'a' });
+    });
+
     // A copy is a sheet like any other on the tab that made it, as on a peer's, so a read of every sheet's cells, such
     // as a search or a copy of the copy, finds its cells.
     test('a copied sheet has its cell matrix, and a copy of it keeps the cells', () => {

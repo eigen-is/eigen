@@ -1,12 +1,14 @@
 // Converts between the editor's immer patches and the ops it sends to peers. patchToOp names each sheet by id and
 // swaps the matrices a row or column op rewrote for the op itself, with the sheet fields no receiver derives.
-// addSheetOps and deleteSheetOps build a sheet's add and delete batches. filterPatch keeps what belongs on the wire,
-// and opToPatch turns a peer's ops back into patches on this client's sheet indices.
+// addSheetOps and deleteSheetOps build a sheet's add and delete batches, the add with the sheet's cells as stored.
+// filterPatch keeps what belongs on the wire, and opToPatch turns a peer's ops back into patches on this client's sheet
+// indices.
 
 import type { MergeCell } from '@workspace/lib/sheets';
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
-import { isEqual, isNumber, partition } from 'es-toolkit/compat';
+import { cloneDeep, isEqual, isNumber, partition } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
+import { dataToCelldata } from '../../engine/celldata';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import type { Op, Sheet } from '../types';
@@ -230,11 +232,11 @@ export function patchToOp(ctx: Context, patches: Patch[], options: PatchOptions 
     return ops;
 }
 
-// A sheet add as a batch: the sheet, then the order of each sheet at or past its place, as `sheets` hold them once it
-// was added. A peer and a joiner's replay only add the sheet, and the orders come from the batch. The edit, its undo
-// and its redo all send this batch.
+// A sheet add as a batch: the sheet as stored, then the order of each sheet at or past its place, as `sheets` hold
+// them once it was added. A peer and a joiner's replay only add the sheet, and the orders come from the batch. The
+// edit, its undo and its redo all send this batch.
 export function addSheetOps(added: Sheet, sheets: Sheet[]): Op[] {
-    return [{ op: 'addSheet', id: added.id, path: [], value: added }, ...orderOps(added, sheets)];
+    return [{ op: 'addSheet', id: added.id, path: [], value: storedCopy(added) }, ...orderOps(added, sheets)];
 }
 
 // A sheet delete as a batch, for the same reason with the orders `sheets` hold once it was deleted.
@@ -247,6 +249,15 @@ function orderOps(changed: Sheet, sheets: Sheet[]): Op[] {
     return sheets
         .filter((sheet) => sheet.id !== changed.id && sheetOrder(sheet) >= from)
         .map((sheet): Op => ({ op: 'replace', id: sheet.id, path: ['order'], value: sheet.order }));
+}
+
+// A sheet as an add carries it and a delete's undo keeps it: its cells as the stored list, since the matrix holds a
+// null for every empty cell and the op log keeps every add. No tab has it open yet.
+export function storedCopy(sheet: Sheet): Sheet {
+    const { data, ...value } = cloneDeep(sheet);
+    if (data) value.celldata = dataToCelldata(data);
+    value.status = 0;
+    return value;
 }
 
 export function opToPatch(ctx: Context, ops: Op[]): [Patch[], Op[]] {

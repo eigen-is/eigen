@@ -331,8 +331,8 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
             }
             if (newData) newSheet = { ...newSheet, data: newData };
         } else if (sheet.celldata) {
-            // A sheet nobody opened, such as a copy or any sheet a joiner's batch doesn't name, holds only its
-            // stored cells. Its formulas move too, or a joiner and the server read them at the old rows.
+            // A sheet without its matrix, such as any sheet a joiner's batch doesn't name, holds only its stored
+            // cells. Its formulas move too, or a joiner and the server read them at the old rows.
             let newCelldata: typeof sheet.celldata | null = null;
             for (let i = 0; i < sheet.celldata.length; i += 1) {
                 const entry = sheet.celldata[i];
