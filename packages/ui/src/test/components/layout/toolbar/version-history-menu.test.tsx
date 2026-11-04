@@ -21,6 +21,7 @@ const versions: Snapshot[] = Array.from({ length: 40 }, (_, i) => ({
 }));
 
 let isEffectiveOwner = true;
+let listed = versions;
 const deleteVersions = mock(async () => {});
 
 // Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts the originals back.
@@ -28,7 +29,7 @@ const realVersioning = { ...(await import('@workspace/lib/versioning')) };
 const realDrive = { ...(await import('@workspace/lib/drive')) };
 mock.module('@workspace/lib/versioning', () => ({
     ...realVersioning,
-    useVersions: () => ({ data: versions }),
+    useVersions: () => ({ data: listed }),
     useSaveVersion: () => ({ mutate: () => {}, isPending: false }),
     useDeleteVersions: () => ({ mutateAsync: deleteVersions }),
 }));
@@ -39,7 +40,7 @@ afterAll(() => {
 });
 
 const { act, createElement } = await import('react');
-const { DeleteHistoryDialog, VersionHistoryMenu } = await import(
+const { DeleteHistoryDialog, RestoreVersionDialog, VersionHistoryMenu } = await import(
     '../../../../components/layout/toolbar/version-history-menu'
 );
 
@@ -49,6 +50,10 @@ let unmount = async () => {};
 afterEach(async () => {
     await unmount();
     unmount = async () => {};
+});
+
+afterEach(() => {
+    listed = versions;
 });
 
 async function openVersionHistory(onRequestDeleteHistory = () => {}): Promise<Element | undefined> {
@@ -105,4 +110,25 @@ test('the dialog names the size of the listed versions and deletes on its button
     );
     await act(async () => confirm?.click());
     expect(deleteVersions).toHaveBeenCalledTimes(1);
+});
+
+test('Delete history is greyed out while there are no versions, and live with one', async () => {
+    isEffectiveOwner = true;
+    listed = [];
+    const empty = await openVersionHistory();
+    expect(deleteRow(empty)?.hasAttribute('data-disabled')).toBe(true);
+    await unmount();
+
+    listed = versions.slice(0, 1);
+    const submenu = await openVersionHistory();
+    expect(deleteRow(submenu)?.hasAttribute('data-disabled')).toBe(false);
+});
+
+test('the restore dialog says comments go back with their text and replies stay', async () => {
+    ({ unmount } = await renderInDocument(
+        createElement(RestoreVersionDialog, { path, snapshot: versions[0], onClose: () => {} }),
+    ));
+    const text = document.querySelector('[role="dialog"] p')?.textContent;
+    expect(text).toContain("Comments go back with the text they're on. Their replies stay as they are now.");
+    expect(text).not.toContain('attachments');
 });

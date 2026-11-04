@@ -1,5 +1,5 @@
 // A document's versions in its File menu: Save version now, and a Version history submenu whose pick asks to
-// restore that version, ending with Delete history for an owner of the drive. Their dialogs live outside the
+// restore that version, ending with Delete history (greyed out until there is a version) for an owner of the drive. Their dialogs live outside the
 // menu, and the same versions show as buttons on the screen a document opens to when its storage is gone.
 
 import { formatDateTime } from '@workspace/lib/date';
@@ -66,7 +66,11 @@ export function VersionHistoryMenu({
                     {isEffectiveOwner && (
                         <>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem variant="destructive" onSelect={onRequestDeleteHistory}>
+                            <DropdownMenuItem
+                                variant="destructive"
+                                disabled={!data || data.length === 0}
+                                onSelect={onRequestDeleteHistory}
+                            >
                                 <Trash2 className="h-4 w-4" /> Delete history…
                             </DropdownMenuItem>
                         </>
@@ -101,10 +105,10 @@ export function RestoreVersionDialog({
                     ? ''
                     : storageGone
                       ? `Rebuild the document from the ${formatDateTime(snapshot.createdAt)} version. ` +
-                        `Comments and attachments are not rolled back.`
+                        `Comments go back with the text they're on. Their replies stay as they are now.`
                       : `Replace current contents with the ${formatDateTime(snapshot.createdAt)} version. ` +
-                        `Comments and attachments are not rolled back. The current state is saved as a new ` +
-                        `version first, so you can undo this by restoring it.`
+                        `Comments go back with the text they're on. Their replies stay as they are now. The current state ` +
+                        `is saved as a new version first, so you can undo this by restoring it.`
             }
             confirmText="Restore"
             onConfirm={async () => {

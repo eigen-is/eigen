@@ -39,7 +39,7 @@ A restore brings back the comments that version had, including one you deleted s
 You can delete a document's whole version history, for example to free up space.
 
 1. Click **File** in the toolbar.
-2. Point at **Version history**. **Delete history…** is the last row, below the list of versions.
+2. Point at **Version history**. **Delete history…** is the last row, below the list of versions, and greyed out until there is a version.
 3. Click **Delete history…**. A dialog says how much space it frees.
 4. Click **Delete history** to confirm.
 
