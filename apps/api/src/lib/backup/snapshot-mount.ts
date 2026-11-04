@@ -21,7 +21,8 @@ type MountSnapshot = { entries: BackupEntry[]; databases: number; pathIds: Set<s
 
 // A metadata-only capture of an s3 mount reads no object, so an open document's newest commits reach
 // the archive only through staging/: flushing stages them there with a pending row, which the
-// metadata.db staged after this names. comments.db included, which Mount.flushContainerDb skips.
+// metadata.db staged after this names. It flushes every open database of the mount, such as a comment
+// thread's, not only those of one container.
 export async function flushOpenDocumentDbs(mount: Mount): Promise<void> {
     for (const pathId of [...mount.documentDbs.keys()]) {
         await withDocumentDb(mount, pathId, async (slot) => {

@@ -769,7 +769,7 @@ export class Drive {
         return tree;
     }
 
-    // Writes a document's open database to storage, so a copy of the container gets its latest state.
+    // Writes a document's open databases to storage, so a byte copy of the container gets its latest state.
     public async flushContainerDb(mountId: string, containerId: string): Promise<void> {
         await this.getMount(mountId).flushContainerDb(containerId);
     }

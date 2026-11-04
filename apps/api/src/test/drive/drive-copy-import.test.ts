@@ -321,9 +321,11 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
                     (child) => child.name === VERSIONS_FOLDER_NAME,
                 );
                 expect(versions.size).toBeGreaterThan(0);
+                // The listing flushes the document's open databases, so its size is read after it.
+                const { mount } = await drive.resolveFile(mountId, doc.id);
+                const tree = await mount.listCopy(doc.id);
                 const sized = await driveGet(user.sessionToken, user.id, mountId, `file/${doc.id}`);
-                const { mount } = await drive.resolveFile(mountId, sized.id);
-                expect(copySize(await mount.listCopy(sized.id))).toBe(sized.size - versions.size);
+                expect(copySize(tree)).toBe(sized.size - versions.size);
             });
         });
 
