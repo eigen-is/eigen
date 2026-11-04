@@ -3,7 +3,7 @@
 // Server-side writers, such as an import or a version restore, edit the same Y.Doc, so every editor sees them. Drive
 // opens each document once, however many sockets connect, and closes it a while after the last socket leaves or after
 // an open that no socket joins. It holds its Home while it waits. Before that close, a workbook saves a version and
-// folds its op log into its snapshot.
+// folds its op log into its snapshot, and once a day the close starts a sweep of the media the document no longer names.
 
 import { restoreYjsDoc } from '@workspace/lib/collab/yjs-utils';
 import { isRecord } from '@workspace/lib/guards';
@@ -21,6 +21,7 @@ import { ApiError } from '../core/errors';
 import { restampRestoredSheetsBase, stampMissingSheetsBase } from '../document/sheets';
 import { compactSheets, sheetsNeedCompaction } from '../document/sheets-compaction';
 import type { Drive } from '../drive';
+import { isSweepDue, sweepAfterClose } from '../drive/sweep';
 import type { User } from '../user';
 import { COLLAB_DB_CONFIG } from './db-config';
 import { DbProvider } from './db-provider';
@@ -336,8 +337,10 @@ export class CollabDocument {
     }
 
     // A workbook folds its op log into its snapshot first. The registry still holds the document meanwhile, so a
-    // socket that connects reattaches to it, and then the document stays open until the next linger.
+    // socket that connects reattaches to it, and then the document stays open until the next linger. Once a day the
+    // close also starts a sweep of the media the document no longer names.
     private async closeAfterLinger(): Promise<void> {
+        let skipFinalSnapshot = false;
         if (sheetsNeedCompaction(this.path, this.doc)) {
             const generation = this.generation;
             this.compaction = new AbortController();
@@ -376,12 +379,15 @@ export class CollabDocument {
                     );
                     // The version is the session's only one. A final version of the folded state would be newer, so
                     // retention would keep it and drop the copy of the log.
-                    await this.drive.closeCollabDocument(this.path.mountId, this.path.id, { skipFinalSnapshot: true });
-                    return;
+                    skipFinalSnapshot = true;
                 }
             }
         }
-        await this.drive.closeCollabDocument(this.path.mountId, this.path.id);
+        // The sweep reads the state that closes, so it is encoded before the close destroys the doc.
+        const state = isSweepDue(this.drive, this.path) ? Y.encodeStateAsUpdate(this.doc) : null;
+        const closed = this.drive.closeCollabDocument(this.path.mountId, this.path.id, { skipFinalSnapshot });
+        if (state) sweepAfterClose(this.drive, this.path, state, closed);
+        await closed;
     }
 
     private sendSyncStep1(conn: ServerWebSocket<unknown>): void {

@@ -1,7 +1,7 @@
 // The serve-time inliner for vector SVGs. A stored SVG names each image by its media file, never by its bytes, so a
 // copied container resolves against its own media. An SVG drawn through <img> fetches nothing, so on the way out of
 // the preview, each name becomes a data: URI of the file's bytes, and the font slices its text draws with are
-// embedded too. The screen preview cache calls it.
+// embedded too. The screen preview cache calls it, and a sweep of a document's media keeps what it would inline.
 
 import { EIGEN_MEDIA_SCHEME, eigenMediaHref, listEigenMediaRefs, stripEigenMediaRefs } from '@workspace/lib/vector';
 import { spliceAfterSvgOpenTag } from '@workspace/lib/xml';
@@ -66,6 +66,30 @@ export async function inlineSvgMediaRefs(mount: Mount, parentId: string, svgByte
         if (err instanceof OutputTooLargeError) return stripAll(original);
         throw err;
     }
+}
+
+// The names given and every sibling an svg among them pulls in when it is served, to the depth the inliner reads, so a
+// sweep or a copy keeps what the svg draws. A missing file or one that is no svg adds nothing. A sibling a leaf at the
+// last depth names is kept too, which only keeps more.
+export async function withSvgSiblings(mount: Mount, parentId: string, names: Iterable<string>): Promise<Set<string>> {
+    const kept = new Set(names);
+    let svgs = [...kept];
+    for (let depth = 0; depth <= MAX_SVG_INLINE_DEPTH && svgs.length > 0; depth++) {
+        const next: string[] = [];
+        for (const name of svgs) {
+            const child = await mount.getChildByName(parentId, name);
+            if (child?.type !== 'file' || child.mimeType !== 'image/svg+xml') continue;
+            const bytes = await mount.readBytes(child.id);
+            if (!bytes) continue;
+            for (const ref of listEigenMediaRefs(Buffer.from(bytes).toString('utf8'))) {
+                if (kept.has(ref)) continue;
+                kept.add(ref);
+                next.push(ref);
+            }
+        }
+        svgs = next;
+    }
+    return kept;
 }
 
 async function resolveSvgRefs(

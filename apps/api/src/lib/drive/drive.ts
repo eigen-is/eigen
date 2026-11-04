@@ -1219,6 +1219,11 @@ export class Drive {
         return this.documents.has(mountId, pathId);
     }
 
+    // Whether the path is on its way to the trash, on its own or with a folder above it.
+    public isTrashing(mountId: string, pathId: string): boolean {
+        return this.documents.isTrashing(this.getMount(mountId), pathId);
+    }
+
     public async closeCollabDocument(
         mountId: string,
         pathId: string,

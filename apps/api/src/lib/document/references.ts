@@ -10,6 +10,7 @@ import { isRecord } from '@workspace/lib/guards';
 import type { Cell, Op } from '@workspace/lib/sheets';
 import { decodeSheetsSnapshot, readSheetsSnapshotJson, sheetsOpLog } from '@workspace/lib/sheets';
 import type { CommentCard } from '@workspace/lib/types/comments';
+import type { DRIVE_TYPE_CHAT, EigenDocType } from '@workspace/lib/types/drive';
 import { EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
 import { activeCommentCardIds, readVectorFromDoc } from '@workspace/lib/vector';
 import * as Y from 'yjs';
@@ -18,6 +19,15 @@ import { mediaNamesIn, sceneMediaNames } from './media';
 
 export type ReferencedDocumentType = CollabDocumentType | 'eigenstickies';
 export type DocumentReferences = { media: string[]; chat: string[] };
+
+// The reader each kind of collab document takes, by its Drive type.
+export const REFERENCED_TYPE_BY_DRIVE_TYPE = {
+    doc: 'eigendoc',
+    sheets: 'eigensheets',
+    slides: 'eigenslides',
+    vector: 'eigenvector',
+    stickies: 'eigenstickies',
+} as const satisfies Record<Exclude<EigenDocType, typeof DRIVE_TYPE_CHAT>, ReferencedDocumentType>;
 
 // Bump it whenever what any reader here finds changes.
 export const REFERENCE_READER_VERSION = 1;
