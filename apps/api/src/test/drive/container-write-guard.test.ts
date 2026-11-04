@@ -7,7 +7,9 @@ import {
     drivePost,
     drivePut,
     driveUpload,
+    findOrFail,
     getTestContext,
+    listVersions,
     TEST_PNG_BYTES,
 } from '../setup';
 
@@ -111,6 +113,65 @@ describe('Container write guard', () => {
             });
             expect(res.status).toBe(200);
             expect((await res.json()).conflict).toBe(false);
+        });
+    });
+
+    // A document's databases and its saved versions are rows a writer can name, through the folder
+    // listing and the version list. Trashing one would break the document or undo its history, so
+    // the delete route refuses them for everyone, the owner included.
+    describe('trash of a document part', () => {
+        function deletePath(token: string, pathId: string) {
+            return authedRequest(token, `/drive/${aliceId()}/${mountId}/path/${pathId}`, { method: 'DELETE' });
+        }
+
+        async function docWithVersion(name: string): Promise<{ doc: DrivePath; parts: DrivePath[] }> {
+            const doc = await createDoc(name);
+            await drivePut(ctx.alice.user.sessionToken, aliceId(), mountId, `path/${doc.id}/acl`, {
+                add: [{ id: ctx.bob.user.email, read: true, write: true }],
+            });
+            const saved = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${aliceId()}/${mountId}/file/${doc.id}/versions/save`,
+                { method: 'POST' },
+            );
+            expect(saved.status).toBe(200);
+            const children = await containerChildren(doc.id);
+            const versionsFolder = findOrFail(children, (c) => c.name === 'versions');
+            const [version] = await listVersions(ctx.alice.user.sessionToken, aliceId(), mountId, doc.id);
+            const parts = [
+                findOrFail(children, (c) => c.name === 'data.db'),
+                findOrFail(children, (c) => c.name === 'comments.db'),
+                versionsFolder,
+                findOrFail(await containerChildren(versionsFolder.id), (c) => c.id === version.id),
+            ];
+            return { doc, parts };
+        }
+
+        test('a writer and the owner cannot trash a database, the versions folder or a version', async () => {
+            const { parts } = await docWithVersion('parts-guard.eigendoc');
+            for (const part of parts) {
+                for (const token of [ctx.bob.user.sessionToken, ctx.alice.user.sessionToken]) {
+                    const res = await deletePath(token, part.id);
+                    expect(`${part.name}: ${res.status}`).toBe(`${part.name}: 400`);
+                }
+                const after = await driveGet<DrivePath>(
+                    ctx.alice.user.sessionToken,
+                    aliceId(),
+                    mountId,
+                    `path/${part.id}`,
+                );
+                expect(after.trashedAt).toBeNull();
+            }
+            const trash = await driveGetList(ctx.alice.user.sessionToken, aliceId(), mountId, 'trash');
+            expect(trash.filter((item) => parts.some((part) => part.id === item.id))).toEqual([]);
+        });
+
+        test('the whole document still goes to the trash', async () => {
+            const { doc } = await docWithVersion('parts-guard-whole.eigendoc');
+            const res = await deletePath(ctx.alice.user.sessionToken, doc.id);
+            expect(res.status).toBe(200);
+            const trash = await driveGetList(ctx.alice.user.sessionToken, aliceId(), mountId, 'trash');
+            expect(trash.map((item) => item.id)).toContain(doc.id);
         });
     });
 });

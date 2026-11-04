@@ -23,6 +23,7 @@ import {
     DRIVE_TYPE_FILE,
     DRIVE_TYPE_FOLDER,
     isContainerType,
+    isDocumentType,
     withEigenExtension,
 } from '@workspace/lib/types/drive';
 import type {
@@ -64,6 +65,7 @@ import { getMemberships, getUserByEmail } from '../user';
 import { listVersions } from '../versioning/list';
 import { restoreContainer } from '../versioning/restore';
 import { saveVersion } from '../versioning/save';
+import { isVersionsFolder } from '../versioning/versions-folder';
 import {
     canonicalACLId,
     canReadFromAncestors,
@@ -802,6 +804,15 @@ export class Drive {
         return this.runInOrder(`acl:${mountId}:${pathId}`, async () => {
             const item = await mount.getActivePath(pathId);
             if (item.parentId === null) throw new ApiError(400, 'Cannot trash root folder');
+            // A document's databases and saved versions go only with the whole document. Trashed on its own,
+            // a database breaks the document, and a version leaves a gap in its history.
+            const chain = await mount.getBreadcrumb(item.id);
+            const parent = chain.at(-2);
+            const isDatabase = parent && isDocumentType(parent.type) && ['data.db', 'comments.db'].includes(item.name);
+            const inVersions = chain
+                .slice(1)
+                .some((path, i) => isVersionsFolder(path) && isDocumentType(chain[i].type));
+            if (isDatabase || inVersions) throw new ApiError(400, "Cannot trash a document's databases or versions");
             await this.documents.whileTrashing(mount, item.id, () => remove(mount, item));
             await this.releaseLocksUnder(mountId, item.id);
         });
