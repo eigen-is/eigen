@@ -14,6 +14,7 @@ import { CONTACTS_DB_CONFIG } from '../contacts/db-config';
 import type { DatabaseConfig, SchemaType } from '../core/managed-database';
 import { SHARED_DB_CONFIG } from '../drive/db-config';
 import { MAIL_DB_CONFIG } from '../mail/db-config';
+import { CONTAINER_COMMENTS_DB, CONTAINER_DATA_DB, CONTAINER_DB_NAMES } from '../mount/container-dbs';
 import { isUsableName, trashStorageKey } from '../mount/names';
 import { paths } from '../mount/schema';
 import { NOTIFICATION_CENTER_DB_CONFIG } from '../notification-center/db-config';
@@ -65,18 +66,6 @@ type ManagedArchiveDatabase = {
     config: DatabaseConfig<SchemaType>;
     // The row this file belongs to, so a restore can put it back at the key its mount will look for.
     row: MountPathRow;
-};
-
-// The two databases a container owns. A mount never manages any other, as openDocumentDb shows.
-const CONTAINER_DATA_DB = 'data.db';
-const CONTAINER_COMMENTS_DB = 'comments.db';
-const CONTAINER_DB_NAMES = new Set([CONTAINER_DATA_DB, CONTAINER_COMMENTS_DB]);
-
-// Every schema a container's databases carry.
-const CONTAINER_DB_CONFIGS = {
-    collab: COLLAB_DB_CONFIG,
-    chat: CHAT_ROOM_DB_CONFIG,
-    comments: COMMENT_INDEX_DB_CONFIG,
 };
 
 // The rows of an archived metadata.db, in the shape every reader of one wants.
@@ -186,9 +175,9 @@ function unusableParts(row: MountPathRow): string[] {
     return failures;
 }
 
-// The same rule, read back from an archived metadata.db: which of a mount's archived files are
-// Eigen's own databases. Verify needs it to know what it may open: a user's own SQLite upload is
-// stored byte-identical, journal header and all, and opening it is not verify's business.
+// Which of a mount's archived files are Eigen's own databases, by managedDbContainer's rule. Verify needs
+// it to know what it may open: a user's own SQLite upload is stored byte-identical, journal header and
+// all, and opening it is not verify's business.
 export function listManagedDatabases(rows: readonly MountPathRow[]): ManagedArchiveDatabase[] {
     const byId = new Map(rows.map((row) => [row.id, row]));
     const found: ManagedArchiveDatabase[] = [];
@@ -213,8 +202,8 @@ export function listManagedDatabases(rows: readonly MountPathRow[]): ManagedArch
 // which is Yjs for every collab type and chat's own for a chat room. A versions/ snapshot is a copy
 // of the container's data.db, so it answers the same.
 function configOf(name: string, containerType: DrivePathType): DatabaseConfig<SchemaType> {
-    if (name === CONTAINER_COMMENTS_DB) return CONTAINER_DB_CONFIGS.comments;
-    return isCollabType(containerType) ? CONTAINER_DB_CONFIGS.collab : CONTAINER_DB_CONFIGS.chat;
+    if (name === CONTAINER_COMMENTS_DB) return COMMENT_INDEX_DB_CONFIG;
+    return isCollabType(containerType) ? COLLAB_DB_CONFIG : CHAT_ROOM_DB_CONFIG;
 }
 
 // Ancestors of `row`, nearest first. Guarded against a corrupt parentId cycle, which would

@@ -53,6 +53,7 @@ import { composeCollaboratorsEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
 import type { DatabaseHold } from '../mount';
 import { createMountConfig, DEFAULT_MOUNT_ID, Mount } from '../mount';
+import { CONTAINER_DB_NAMES } from '../mount/container-dbs';
 import type { CopyTree } from '../mount/copy';
 import { copySize } from '../mount/copy';
 import { validateName } from '../mount/names';
@@ -611,7 +612,7 @@ export class Drive {
     private async refuseDocumentPart(mount: Mount, path: DrivePath): Promise<void> {
         const chain = await mount.getBreadcrumb(path.id);
         const parent = chain.at(-2);
-        const isDatabase = parent && isDocumentType(parent.type) && ['data.db', 'comments.db'].includes(path.name);
+        const isDatabase = parent && isDocumentType(parent.type) && CONTAINER_DB_NAMES.has(path.name);
         const inVersions = chain.slice(1).some((crumb, i) => isVersionsFolder(crumb) && isDocumentType(chain[i].type));
         if (isDatabase || inVersions) throw new ApiError(400, "Cannot change a document's databases or versions");
     }
