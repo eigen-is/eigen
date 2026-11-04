@@ -5,7 +5,7 @@ type: how-to
 tags: [docs, versions, history, restore]
 related: [docs/create-and-edit, docs/comments]
 order: 130
-updated: 2026-06-08
+updated: 2026-11-04
 ---
 
 Docs keeps a version history for every document you own or can edit. You can save a snapshot at any point, then browse the list and roll back to an earlier state whenever you need to.
@@ -30,10 +30,23 @@ Docs saves the current state as a new version before it overwrites anything, so 
 
 <div class="eigen-callout">
 
-Comments and attachments are not rolled back when you restore a version. Only the document text and formatting return to the earlier state.
+A restore brings back the comments that version had, including one you deleted since. It doesn't roll back what was said: each comment's replies stay as they are now.
 
 </div>
+
+## Delete the version history
+
+You can delete a document's whole version history, for example to free up space.
+
+1. Click **File** in the toolbar.
+2. Point at **Version history**. **Delete history…** is the last row, below the list of versions.
+3. Click **Delete history…**. A dialog says how much space it frees.
+4. Click **Delete history** to confirm.
+
+Every earlier version goes, and so do the versions of the document's comments. You can't undo this. Images and comments you deleted from the document are removed once everyone has closed it, except those from the last three days.
 
 ## Who can use version history
 
 Version history is available to anyone with edit access to the document. If you can only view the document, the **File** menu does not show these options. See [Share a document and set access](/support/docs/share-a-document) to change who can edit.
+
+Only an owner of the drive the document is in can delete its history: you in your own drive, or any member of the team in a team drive. An editor you shared the document with can save and restore versions, but doesn't see **Delete history…**.
