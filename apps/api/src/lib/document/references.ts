@@ -1,8 +1,8 @@
 // What a state of a collab document, such as its current state or a saved version, names among its own parts: the
 // files in its media folder, the threads in its chat folder and the comment cards it has in use. A sweep deletes the
 // parts nothing names, so a missed name deletes a part in use, and each reader errs on the side of more names. The
-// canvas reader drops the shapes its editor drops, and the others throw on a shape they do not know, which the sweep
-// takes as "delete nothing". The references job runs this in the transform process.
+// canvas and the board drop what their editors drop. A workbook it can't decode and a card in a shape no editor writes
+// throw, which the sweep takes as "delete nothing". The references job runs this in the transform process.
 
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { boardCardIds, getItemMapRoot } from '@workspace/lib/collab/yjs-utils';
