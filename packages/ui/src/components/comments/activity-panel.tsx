@@ -1,3 +1,7 @@
+// A document's activity pane: its file history, newest first, as rows that open in the editor the card or the comment
+// they name. Rows of other events, such as a rename, stay inert. Hosts show it through the panel column, beside the
+// comments pane.
+
 import { findCardIdByChatName } from '@workspace/lib/comments';
 import { useFileHistory } from '@workspace/lib/drive';
 import type { CommentCard } from '@workspace/lib/types/comments';
@@ -11,10 +15,12 @@ type ActivityPanelProps = {
     cards: Record<string, CommentCard>;
     // Opens the card a row references in-doc; other rows stay inert (see ActivityEventList).
     onOpenCard: (cardId: string) => void;
+    // Opens a comment row whose card is gone from the map, by its chat name, such as a sticky deleted from its board.
+    onOpenChat?: (chatName: string) => void;
     className?: string;
 };
 
-export function ActivityPanel({ path, cards, onOpenCard, className }: ActivityPanelProps) {
+export function ActivityPanel({ path, cards, onOpenCard, onOpenChat, className }: ActivityPanelProps) {
     const { data: events = [], isPending } = useFileHistory(path.ownerId, path.mountId, path.id, 50);
 
     return (
@@ -33,6 +39,7 @@ export function ActivityPanel({ path, cards, onOpenCard, className }: ActivityPa
                         onOpenCard={({ cardId, chatName }) => {
                             const id = cardId ?? (chatName ? findCardIdByChatName(cards, chatName) : undefined);
                             if (id) onOpenCard(id);
+                            else if (chatName) onOpenChat?.(chatName);
                         }}
                     />
                 </div>

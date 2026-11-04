@@ -30,7 +30,7 @@ export function CommentLifecycleDialogs({
     noun,
     onCardDialogClose,
 }: CommentLifecycleDialogsProps) {
-    const { updateCard, members, openCard, openEntry, isCardDeleted, setOpenCardId, resolveComment, assignComment } =
+    const { updateCard, members, openCard, openEntry, openCardDeleted, setOpenCardId, resolveComment, assignComment } =
         lifecycle;
     const { user } = useAuth();
 
@@ -50,7 +50,7 @@ export function CommentLifecycleDialogs({
                 mountId={path.mountId}
                 pathId={path.id}
                 canWrite={canWrite}
-                deleted={!!openCard && isCardDeleted(openCard)}
+                deleted={openCardDeleted}
                 isEditing={lifecycle.openCardEditing}
                 onEditingChange={lifecycle.setOpenCardEditing}
                 copyLinkUrl={openCard?.chatName ? getDriveItemUrl(path, { chat: openCard.chatName }) : undefined}

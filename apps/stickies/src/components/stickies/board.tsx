@@ -6,12 +6,7 @@ import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortabl
 import { useAuth } from '@workspace/lib/auth';
 import { useUnreadCommentChatNames } from '@workspace/lib/chat';
 import { getIdArray, getItemMapRoot, useYjsUndoHotkeys } from '@workspace/lib/collab';
-import {
-    findCardIdByChatName,
-    matchesCommentFilter,
-    useCommentFilter,
-    useCommentLifecycle,
-} from '@workspace/lib/comments';
+import { matchesCommentFilter, useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
 import { MediaResolverProvider, useRecordHistory } from '@workspace/lib/drive';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CommentEntry } from '@workspace/lib/types/chat';
@@ -158,19 +153,15 @@ function StickiesBoardInner({
         initialCardId,
         onCardNotFound: onClearInitialCard,
     });
-    const { allComments, cards, createCard, assignComment, members, setOpenCardId, openCard, isCardDeleted } =
-        lifecycle;
+    const { allComments, cards, createCard, assignComment, members, setOpenCardId, openChat, openCard } = lifecycle;
 
     // The command palette's search in comments. It is a new object each render, and usePaletteDocSearch keeps it
     // stable itself, so the reveal closure always sees the current cards.
     const commentSearchHalf = useDocCommentSearchHalf(ownerId, path.mountId, path.id);
     const commentSearch: DocCommentSearch = {
         ...commentSearchHalf,
-        // An unknown or stale chat name opens nothing.
-        reveal: (chatName) => {
-            const cardId = findCardIdByChatName(cards, chatName);
-            if (cardId) setOpenCardId(cardId);
-        },
+        // A hit whose card was deleted from the board opens as deleted, and an unknown chat name opens nothing.
+        reveal: openChat,
     };
 
     const recordHistory = useRecordHistory(ownerId, path.mountId, path.id);
@@ -520,9 +511,9 @@ function StickiesBoardInner({
                                         members={members}
                                         currentUserEmail={currentUserEmail}
                                         filter={commentFilter}
-                                        isCardDeleted={isCardDeleted}
                                         commentContextMenu={cardContextMenu}
                                         onOpenCard={setOpenCardId}
+                                        onOpenChat={openChat}
                                     />
                                 )}
                             </div>

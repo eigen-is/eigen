@@ -4,6 +4,7 @@
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
+import type { FileEvent } from '@workspace/lib/types/file-history';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
 
@@ -11,8 +12,27 @@ installHappyDom();
 
 const realAuth = await import('@workspace/lib/auth');
 mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => ({ user: null }), useIsGuest: () => false }));
+// The document's history holds one row, a resolve of the comment of a sticky since deleted from its board.
+const resolvedRow: FileEvent = {
+    id: 'event-1',
+    pathId: 'doc-1',
+    pathName: 'Board',
+    pathType: 'stickies',
+    actorUserId: 'user-2',
+    actorEmail: 'ada@example.com',
+    createdAt: new Date(0),
+    eventType: 'resolved',
+    details: { card: 'Ship it', chatName: 'removed.eigenchat' },
+};
+// Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts the originals back.
+const realDrive = { ...(await import('@workspace/lib/drive')) };
+mock.module('@workspace/lib/drive', () => ({
+    ...realDrive,
+    useFileHistory: () => ({ data: [resolvedRow], isPending: false }),
+}));
 afterAll(() => {
     mock.module('@workspace/lib/auth', () => realAuth);
+    mock.module('@workspace/lib/drive', () => realDrive);
 });
 
 const { createElement } = await import('react');
@@ -20,6 +40,9 @@ const { DEFAULT_COMMENT_FILTER } = await import('@workspace/lib/comments');
 const { CardDialog } = await import('../../../components/cards/card-dialog');
 const { CommentPanel } = await import('../../../components/comments/comment-panel');
 const { CommentThread } = await import('../../../components/comments/comment-thread');
+const { ActivityPanel } = await import('../../../components/comments/activity-panel');
+const { DRIVE_MIME_STICKIES } = await import('@workspace/lib/types/drive');
+const { drivePath } = await import('../../drive-path');
 const { PreviewProvider } = await import('../../../components/preview-provider');
 
 let unmount = async () => {};
@@ -112,6 +135,17 @@ test('a thread the chat folder does not list shows the loading line and no reply
     ));
     expect(document.querySelector('svg')).not.toBeNull();
     expect(document.querySelector('textarea, [contenteditable="true"]')).toBeNull();
+});
+
+test('an activity row of a comment whose card is gone opens it by its chat name', async () => {
+    const onOpenCard = mock((_cardId: string) => {});
+    const onOpenChat = mock((_chatName: string) => {});
+    const path = drivePath({ id: 'doc-1', name: 'Board', type: 'stickies', mimeType: DRIVE_MIME_STICKIES });
+    ({ unmount } = await renderInDocument(createElement(ActivityPanel, { path, cards: {}, onOpenCard, onOpenChat })));
+    const { act } = await import('react');
+    await act(async () => document.querySelector<HTMLElement>('[role="button"]')?.click());
+    expect(onOpenChat.mock.calls).toEqual([['removed.eigenchat']]);
+    expect(onOpenCard).not.toHaveBeenCalled();
 });
 
 test('the pane card of a re-anchored comment whose thread was swept shows the deleted state', async () => {

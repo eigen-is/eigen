@@ -20,8 +20,9 @@ import { CommentFilterButton } from './comment-filter-button';
 import type { CommentContextMenuItem } from './comment-menu-items';
 import { CommentPanel } from './comment-panel';
 
-// Activity-only hosts (stickies) never render the comments body.
+// A host that shows only the activity, such as stickies, never renders the comments body, so it passes neither.
 const NO_ACTIVE_COMMENTS: ActiveComments = { ids: new Set(), anchorTexts: new Map() };
+const NEVER_DELETED = () => false;
 
 type PanelColumnProps = {
     activePanel: DocumentPanel;
@@ -33,9 +34,11 @@ type PanelColumnProps = {
     currentUserEmail: string;
     filter: ReturnType<typeof useCommentFilter>;
     activeComments?: ActiveComments;
-    isCardDeleted: (card: CommentCard) => boolean;
+    isCardDeleted?: (card: CommentCard) => boolean;
     commentContextMenu: ReturnType<typeof useContextMenu<CommentContextMenuItem>>;
     onOpenCard: (cardId: string) => void;
+    // Opens an activity row's comment whose card is gone from the map, such as a sticky deleted from its board.
+    onOpenChat?: (chatName: string) => void;
     // The canvas (slides, vector) creates document-level comments from the panel, anchored to no
     // element. Absent for docs/sheets/stickies, which add against their own anchor.
     onAddComment?: () => void;
@@ -51,9 +54,10 @@ export function PanelColumn({
     currentUserEmail,
     filter,
     activeComments = NO_ACTIVE_COMMENTS,
-    isCardDeleted,
+    isCardDeleted = NEVER_DELETED,
     commentContextMenu,
     onOpenCard,
+    onOpenChat,
     onAddComment,
 }: PanelColumnProps) {
     const { isMobile } = useLayout();
@@ -101,7 +105,13 @@ export function PanelColumn({
                     onCommentContextMenu={(e, card, entry) => commentContextMenu.handleContextMenu(e, { card, entry })}
                 />
             ) : (
-                <ActivityPanel path={path} cards={cards} className="w-full border-l-0" onOpenCard={onOpenCard} />
+                <ActivityPanel
+                    path={path}
+                    cards={cards}
+                    className="w-full border-l-0"
+                    onOpenCard={onOpenCard}
+                    onOpenChat={onOpenChat}
+                />
             )}
         </Column>
     );
