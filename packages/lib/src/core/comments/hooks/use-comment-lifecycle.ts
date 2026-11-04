@@ -70,16 +70,19 @@ export function useCommentLifecycle({
     const setOpenCardId = useCallback((cardId: string | null) => setOpen(cardId ? { cardId } : null), []);
     // A chat name a card holds opens that card by its id, so it closes on delete however it was opened. A chat name
     // no card holds opens while the index has its row, and then it opens as deleted.
-    const openChat = (chatName: string) => {
-        const cardId = findCardIdByChatName(cards, chatName);
-        if (cardId) {
-            setOpen({ cardId });
-            return true;
-        }
-        const known = allComments.some((e) => e.chatName === chatName);
-        if (known) setOpen({ chatName });
-        return known;
-    };
+    const openChat = useCallback(
+        (chatName: string) => {
+            const cardId = findCardIdByChatName(cards, chatName);
+            if (cardId) {
+                setOpen({ cardId });
+                return true;
+            }
+            const known = allComments.some((e) => e.chatName === chatName);
+            if (known) setOpen({ chatName });
+            return known;
+        },
+        [cards, allComments],
+    );
     const openCardById = (cardId: string) => {
         const known = !!cards[cardId];
         if (known) setOpen({ cardId });

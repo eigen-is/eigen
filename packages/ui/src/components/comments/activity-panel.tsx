@@ -2,9 +2,7 @@
 // they name. Rows of other events, such as a rename, stay inert. Hosts show it through the panel column, beside the
 // comments pane.
 
-import { findCardIdByChatName } from '@workspace/lib/comments';
 import { useFileHistory } from '@workspace/lib/drive';
-import type { CommentCard } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Activity } from 'lucide-react';
 import { ActivityEventList } from '../drive/activity-event-list';
@@ -12,15 +10,14 @@ import { PropertiesPanel } from '../properties-panel';
 
 type ActivityPanelProps = {
     path: DrivePath;
-    cards: Record<string, CommentCard>;
-    // Opens the card a row references in-doc; other rows stay inert (see ActivityEventList).
+    // Opens the card a row names by its id, such as a sticky added to a column.
     onOpenCard: (cardId: string) => void;
-    // Opens a comment row whose card is gone from the map, by its chat name, such as a sticky deleted from its board.
-    onOpenChat?: (chatName: string) => void;
+    // Opens the comment a row names by its chat name. The host decides whether it opens live or as deleted.
+    onOpenChat: (chatName: string) => void;
     className?: string;
 };
 
-export function ActivityPanel({ path, cards, onOpenCard, onOpenChat, className }: ActivityPanelProps) {
+export function ActivityPanel({ path, onOpenCard, onOpenChat, className }: ActivityPanelProps) {
     const { data: events = [], isPending } = useFileHistory(path.ownerId, path.mountId, path.id, 50);
 
     return (
@@ -37,9 +34,8 @@ export function ActivityPanel({ path, cards, onOpenCard, onOpenChat, className }
                         path={path}
                         events={events}
                         onOpenCard={({ cardId, chatName }) => {
-                            const id = cardId ?? (chatName ? findCardIdByChatName(cards, chatName) : undefined);
-                            if (id) onOpenCard(id);
-                            else if (chatName) onOpenChat?.(chatName);
+                            if (cardId) onOpenCard(cardId);
+                            else if (chatName) onOpenChat(chatName);
                         }}
                     />
                 </div>

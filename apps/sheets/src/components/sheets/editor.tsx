@@ -480,6 +480,7 @@ function SheetEditorInner({
                             isCardDeleted={isCardDeleted}
                             commentContextMenu={commentContextMenu}
                             onOpenCard={setOpenCardId}
+                            onOpenChat={lifecycle.openChat}
                         />
                     )}
                     {/* The comment and activity panels take the place of the properties panel, as in Slides. A

@@ -688,6 +688,13 @@ const TiptapEditor = ({
         }
         setOpenCardId(cardId);
     };
+    // A comment named by its chat name opens like a tap on its card, anchor and all. One whose card is gone opens
+    // through the lifecycle, as deleted.
+    const openChat = (chatName: string) => {
+        const cardId = findCardIdByChatName(cardsRef.current, chatName);
+        if (cardId) openCard(cardId);
+        else lifecycle.openChat(chatName);
+    };
 
     const panelProps = {
         onClose: closePanels,
@@ -701,6 +708,7 @@ const TiptapEditor = ({
         isCardDeleted,
         commentContextMenu,
         onOpenCard: openCard,
+        onOpenChat: openChat,
     };
 
     // Plain object per render; usePaletteDocSearch stabilises it, so reveal sees the current cards.
@@ -709,10 +717,8 @@ const TiptapEditor = ({
         // openCard opens the comments panel on a desktop only, as a tap on a phone comes from the pane. A search hit
         // comes from the palette, so it opens the pane on a phone too.
         reveal: (chatName) => {
-            const cardId = findCardIdByChatName(cardsRef.current, chatName);
-            if (!cardId) return;
             openComments();
-            openCard(cardId);
+            openChat(chatName);
         },
     };
 

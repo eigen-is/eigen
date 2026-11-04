@@ -141,7 +141,7 @@ test('an activity row of a comment whose card is gone opens it by its chat name'
     const onOpenCard = mock((_cardId: string) => {});
     const onOpenChat = mock((_chatName: string) => {});
     const path = drivePath({ id: 'doc-1', name: 'Board', type: 'stickies', mimeType: DRIVE_MIME_STICKIES });
-    ({ unmount } = await renderInDocument(createElement(ActivityPanel, { path, cards: {}, onOpenCard, onOpenChat })));
+    ({ unmount } = await renderInDocument(createElement(ActivityPanel, { path, onOpenCard, onOpenChat })));
     const { act } = await import('react');
     await act(async () => document.querySelector<HTMLElement>('[role="button"]')?.click());
     expect(onOpenChat.mock.calls).toEqual([['removed.eigenchat']]);

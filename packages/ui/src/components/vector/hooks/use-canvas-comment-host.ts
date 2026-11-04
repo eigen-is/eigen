@@ -4,7 +4,13 @@
 // CanvasDocumentShell renders what this returns.
 
 import { useAuth } from '@workspace/lib/auth';
-import { useCommentCards, useCommentFilter, useCommentLifecycle, useDocumentPanels } from '@workspace/lib/comments';
+import {
+    findCardIdByChatName,
+    useCommentCards,
+    useCommentFilter,
+    useCommentLifecycle,
+    useDocumentPanels,
+} from '@workspace/lib/comments';
 import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { VectorElement } from '@workspace/lib/vector';
@@ -67,6 +73,7 @@ export const useCanvasCommentHost = ({
         members,
         assignedCount,
         setOpenCardId,
+        openChat: openLifecycleChat,
     } = lifecycle;
 
     // The host owns the filter, so it survives closing and opening the panel.
@@ -96,6 +103,17 @@ export const useCanvasCommentHost = ({
             setOpenCardId(cardId);
         },
         [doc.elements, onReveal, setOpenCardId],
+    );
+
+    // A comment an activity row names opens like a tap on its card. One whose card is gone opens through the
+    // lifecycle, as deleted.
+    const openChat = useCallback(
+        (chatName: string) => {
+            const cardId = findCardIdByChatName(lifecycleCards, chatName);
+            if (cardId) openCard(cardId);
+            else openLifecycleChat(chatName);
+        },
+        [lifecycleCards, openCard, openLifecycleChat],
     );
 
     // A comment raised from an element anchors to it; one raised from the panel stays document-level.
@@ -149,6 +167,7 @@ export const useCanvasCommentHost = ({
             commentContextMenu,
             // The mobile pane hides the canvas, so its element reveal would go unseen there.
             onOpenCard: isMobile ? setOpenCardId : openCard,
+            onOpenChat: isMobile ? openLifecycleChat : openChat,
             onAddComment: canWrite && chatFolderId ? () => setAddOpen(true) : undefined,
         },
     };

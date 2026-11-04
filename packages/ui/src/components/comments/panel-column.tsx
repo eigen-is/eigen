@@ -37,8 +37,8 @@ type PanelColumnProps = {
     isCardDeleted?: (card: CommentCard) => boolean;
     commentContextMenu: ReturnType<typeof useContextMenu<CommentContextMenuItem>>;
     onOpenCard: (cardId: string) => void;
-    // Opens an activity row's comment whose card is gone from the map, such as a sticky deleted from its board.
-    onOpenChat?: (chatName: string) => void;
+    // Opens an activity row's comment by its chat name, live or as deleted, such as the lifecycle's openChat.
+    onOpenChat: (chatName: string) => void;
     // The canvas (slides, vector) creates document-level comments from the panel, anchored to no
     // element. Absent for docs/sheets/stickies, which add against their own anchor.
     onAddComment?: () => void;
@@ -107,7 +107,6 @@ export function PanelColumn({
             ) : (
                 <ActivityPanel
                     path={path}
-                    cards={cards}
                     className="w-full border-l-0"
                     onOpenCard={onOpenCard}
                     onOpenChat={onOpenChat}
