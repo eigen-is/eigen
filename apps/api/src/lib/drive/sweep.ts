@@ -10,7 +10,7 @@ import type { Snapshot } from '@workspace/lib/types/versioning';
 import { compressBlob } from '../collab/blob-codec';
 import type { YjsStatePayload } from '../collab/yjs-loader';
 import { readYjsStatePayloadFromFile } from '../collab/yjs-loader';
-import { REFERENCE_READER_VERSION, REFERENCED_TYPE_BY_DRIVE_TYPE } from '../document/references';
+import { REFERENCE_READER_VERSION } from '../document/references';
 import { toTransferableBuffer } from '../document/transform/protocol';
 import { runDocumentReferences } from '../document/transform/run-transform';
 import type { Mount } from '../mount';
@@ -62,7 +62,7 @@ export async function sweepDocument(drive: Drive, container: DrivePath, state: U
     // document swept for the day, a failure included.
     let changed = false;
     try {
-        const documentType = REFERENCED_TYPE_BY_DRIVE_TYPE[container.type];
+        const documentType = container.type;
         const { mount } = await drive.resolveFile(container.mountId, container.id);
         if (isBusy(drive, mount, container.id)) {
             changed = true;

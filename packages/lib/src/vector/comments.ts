@@ -37,7 +37,7 @@ export function elementForCommentCard(elements: readonly VectorElement[], cardId
 // back brings its card back too, even a deleted one.
 export function activeCommentCardIds(
     elements: readonly VectorElement[],
-    cards: Readonly<Record<string, Pick<CommentCard, 'id' | 'deletedAt'>>>,
+    cards: Readonly<Record<string, CommentCard>>,
 ): Set<string> {
     const anchored = new Set(elements.flatMap((el) => parseIdList(el.commentCardIds)));
     const active = Object.values(cards).filter((card) => anchored.has(card.id) || card.deletedAt === undefined);

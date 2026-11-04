@@ -1,33 +1,23 @@
-// What the current state of a collab document names among its own parts: the files in its `media/` folder and the
-// comment threads in its `chat/` folder. A later sweep deletes the parts nothing names, so a name a reader misses
-// deletes a part in use. Each reader therefore errs on the side of more names, and throws on a shape it does not know,
-// which the sweep takes as "delete nothing". The references job runs it in the transform process, on a materialized doc.
+// What a state of a collab document names among its own parts, such as its current state or a saved version: the
+// files in its `media/` folder and the comment threads in its `chat/` folder. A later sweep deletes the parts nothing
+// names, so a name a reader misses deletes a part in use, and each reader errs on the side of more names. The canvas
+// reads its content as its editor does and drops the shapes the editor drops. The other readers throw on a shape they
+// do not know, which the sweep takes as "delete nothing". The references job runs it in the transform process.
 
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { boardCardIds, getItemMapRoot } from '@workspace/lib/collab/yjs-utils';
 import { commentCardIdsIn } from '@workspace/lib/docs/eigendoc';
 import { isRecord } from '@workspace/lib/guards';
-import type { Cell, Op } from '@workspace/lib/sheets';
+import type { Cell } from '@workspace/lib/sheets';
 import { decodeSheetsSnapshot, readSheetsSnapshotJson, sheetsOpLog } from '@workspace/lib/sheets';
+import type { ChatAttachment } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
-import type { DRIVE_TYPE_CHAT, EigenDocType } from '@workspace/lib/types/drive';
+import type { DriveCollabType } from '@workspace/lib/types/drive';
 import { EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
 import { activeCommentCardIds, readVectorFromDoc } from '@workspace/lib/vector';
 import * as Y from 'yjs';
-import type { CollabDocumentType } from './collab-types';
+import type { DocumentReferences } from '../mount/schema';
 import { mediaNamesIn, sceneMediaNames } from './media';
-
-export type ReferencedDocumentType = CollabDocumentType | 'eigenstickies';
-export type DocumentReferences = { media: string[]; chat: string[] };
-
-// The reader each kind of collab document takes, by its Drive type.
-export const REFERENCED_TYPE_BY_DRIVE_TYPE = {
-    doc: 'eigendoc',
-    sheets: 'eigensheets',
-    slides: 'eigenslides',
-    vector: 'eigenvector',
-    stickies: 'eigenstickies',
-} as const satisfies Record<Exclude<EigenDocType, typeof DRIVE_TYPE_CHAT>, ReferencedDocumentType>;
 
 // Bump it whenever what any reader here finds changes.
 export const REFERENCE_READER_VERSION = 1;
@@ -40,91 +30,98 @@ const DOC_FRAGMENTS = Object.entries(EIGEN_DOC_TYPE_INFO.doc.yjsRoots)
 // The field a cell keeps its comment cards in.
 const CELL_ANCHOR = 'commentCardIds' satisfies keyof Cell;
 
-// What a comment card names: its thread, and the files it attached by name. An attachment that is a Drive reference
-// names a document elsewhere, not a file in media/.
-type CardParts = Pick<CommentCard, 'id' | 'chatName' | 'deletedAt'> & { media: string[] };
-
 // Only a card in use names its thread and its files, such as a card the content anchors, or on a canvas a card nobody
-// deleted. The rules a client shares live in lib beside it, such as the canvas's and the board's.
-export function documentReferences(type: ReferencedDocumentType, doc: Y.Doc): DocumentReferences {
-    const cards = readCardParts(doc, type === 'eigenstickies' ? 'tasks' : 'comments');
-    const { media, inUse } = contentReferences(type, doc, cards);
+// deleted. The rules a client shares live in lib beside it, such as the canvas's and the board's. An attachment that is
+// a Drive reference names a document elsewhere, not a file in media/.
+export function documentReferences(type: DriveCollabType, doc: Y.Doc): DocumentReferences {
+    const cards = readCards(doc, type === 'stickies' ? 'tasks' : 'comments');
+    let media: Set<string>;
+    let inUse: Set<string>;
+    switch (type) {
+        case 'doc': {
+            const fragments = DOC_FRAGMENTS.map((root) => yXmlFragmentToProsemirrorJSON(doc.getXmlFragment(root)));
+            media = mediaNamesIn(fragments);
+            inUse = commentCardIdsIn(fragments);
+            break;
+        }
+        case 'slides':
+        case 'vector': {
+            const scene = readVectorFromDoc(doc);
+            media = sceneMediaNames(scene);
+            inUse = activeCommentCardIds(scene.elements, cards);
+            break;
+        }
+        case 'sheets': {
+            // The sheets the snapshot stores and every op still pending, read without a replay: an image or a comment
+            // an op removed stays named until the next compaction. An op that writes one field, such as an upload's
+            // final mediaName or one card id added to a cell's list, holds that field's name only in its path. So each
+            // op is read as the object it writes.
+            const snapshot = readSheetsSnapshotJson(doc);
+            const ops = sheetsOpLog(doc)
+                .toArray()
+                .flatMap((batch) => {
+                    if (!Array.isArray(batch)) throw new Error('Unreadable sheets op batch');
+                    return batch.map((op) => {
+                        if (!isRecord(op) || !Array.isArray(op.path)) throw new Error('Unreadable sheets op');
+                        return op.path.reduceRight<unknown>((value, key) => ({ [key]: value }), op.value);
+                    });
+                });
+            const sheets = [snapshot ? decodeSheetsSnapshot(snapshot) : [], ops];
+            media = mediaNamesIn(sheets);
+            inUse = cellCardIds(sheets);
+            break;
+        }
+        case 'stickies':
+            media = new Set();
+            inUse = boardCardIds(doc);
+            break;
+    }
     const chat = new Set<string>();
-    for (const id of inUse) {
-        const card = cards.get(id);
-        if (!card) continue;
+    for (const card of Object.values(cards)) {
+        if (!inUse.has(card.id)) continue;
         if (card.chatName) chat.add(card.chatName);
-        for (const name of card.media) media.add(name);
+        for (const attachment of card.attachments ?? []) {
+            if (typeof attachment === 'string') media.add(attachment);
+        }
     }
     return { media: [...media].sort(), chat: [...chat].sort() };
 }
 
-function contentReferences(
-    type: ReferencedDocumentType,
-    doc: Y.Doc,
-    cards: ReadonlyMap<string, CardParts>,
-): { media: Set<string>; inUse: Set<string> } {
-    switch (type) {
-        case 'eigendoc': {
-            const fragments = DOC_FRAGMENTS.map((root) => yXmlFragmentToProsemirrorJSON(doc.getXmlFragment(root)));
-            return { media: mediaNamesIn(fragments), inUse: commentCardIdsIn(fragments) };
-        }
-        case 'eigenslides':
-        case 'eigenvector': {
-            const scene = readVectorFromDoc(doc);
-            return {
-                media: sceneMediaNames(scene),
-                inUse: activeCommentCardIds(scene.elements, Object.fromEntries(cards)),
-            };
-        }
-        case 'eigensheets': {
-            const sheets = sheetsAsStored(doc);
-            return { media: mediaNamesIn(sheets), inUse: cellCardIds(sheets) };
-        }
-        case 'eigenstickies':
-            return { media: new Set(), inUse: boardCardIds(doc) };
-    }
-}
-
-// A card a peer wrote in a shape the editor never writes throws rather than drop the thread it may name.
-function readCardParts(doc: Y.Doc, mapName: 'comments' | 'tasks'): Map<string, CardParts> {
-    const cards = new Map<string, CardParts>();
-    for (const [id, card] of getItemMapRoot(doc, mapName)) {
+// Two card readers exist on purpose. The client's readCards is lenient: it drops a field it cannot read and sanitizes
+// the rest for display. This one is strict, so a field a peer wrote in a shape the editor never writes throws, rather
+// than silently drop a thread or a file it may name. The title and the description name nothing, so they are read as
+// leniently as readCards reads them.
+function readCards(doc: Y.Doc, mapName: 'comments' | 'tasks'): Record<string, CommentCard> {
+    const entries = [...getItemMapRoot(doc, mapName)].map(([id, card]): [string, CommentCard] => {
         if (!(card instanceof Y.Map)) throw new Error(`Unreadable comment card ${id}`);
+        const title: unknown = card.get('title');
+        const description: unknown = card.get('description');
         const chatName: unknown = card.get('chatName');
         const attachments: unknown = card.get('attachments') ?? [];
         const deletedAt: unknown = card.get('deletedAt');
-        if ((chatName !== undefined && typeof chatName !== 'string') || !Array.isArray(attachments)) {
+        if (
+            (chatName !== undefined && typeof chatName !== 'string') ||
+            (deletedAt !== undefined && typeof deletedAt !== 'number') ||
+            !Array.isArray(attachments) ||
+            // A Drive reference is a record, and it names no file in media/.
+            !attachments.every((item): item is ChatAttachment => typeof item === 'string' || isRecord(item))
+        ) {
             throw new Error(`Unreadable comment card ${id}`);
         }
-        const media: string[] = [];
-        for (const attachment of attachments) {
-            if (typeof attachment === 'string') media.push(attachment);
-            else if (!isRecord(attachment)) throw new Error(`Unreadable attachment on comment card ${id}`);
-        }
-        cards.set(id, { id, chatName, media, deletedAt: typeof deletedAt === 'number' ? deletedAt : undefined });
-    }
-    return cards;
-}
-
-// The sheets the snapshot stores and every op still pending, read without a replay: an image or a comment an op
-// removed stays named until the next compaction. An op that writes one field, such as an upload's final mediaName or
-// one card id added to a cell's list, holds that field's name only in its path, so each op is read as the object it
-// writes.
-function sheetsAsStored(doc: Y.Doc): unknown[] {
-    const snapshot = readSheetsSnapshotJson(doc);
-    const ops = sheetsOpLog(doc)
-        .toArray()
-        .flatMap((batch) => {
-            if (!Array.isArray(batch)) throw new Error('Unreadable sheets op batch');
-            return batch.map(writtenObject);
-        });
-    return [snapshot ? decodeSheetsSnapshot(snapshot) : [], ops];
-}
-
-function writtenObject(op: Op): unknown {
-    if (!isRecord(op) || !Array.isArray(op.path)) throw new Error('Unreadable sheets op');
-    return op.path.reduceRight<unknown>((value, key) => ({ [key]: value }), op.value);
+        return [
+            id,
+            {
+                id,
+                title: typeof title === 'string' ? title : '',
+                description: typeof description === 'string' ? description : '',
+                chatName,
+                attachments,
+                deletedAt,
+            },
+        ];
+    });
+    // fromEntries, so a card id such as `__proto__` stays a card of its own.
+    return Object.fromEntries(entries);
 }
 
 // Every card id under a cell's anchor field, however deep: a cell holds a list, an op that adds one id holds the id.

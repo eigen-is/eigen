@@ -11,8 +11,8 @@ import type { YjsStatePayload } from '../../collab/yjs-loader';
 import { ApiError } from '../../core/errors';
 import { IMPORT_MESSAGES } from '../../import/messages';
 import type { Mount } from '../../mount';
+import type { DocumentReferences } from '../../mount/schema';
 import { MAX_DECOMPRESSED_BYTES } from '../../ooxml/zip';
-import type { DocumentReferences } from '../references';
 import { captureCollabSource } from './collab-source';
 import type {
     BytesPreviewJob,

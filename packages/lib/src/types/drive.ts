@@ -260,7 +260,7 @@ export function stripEigenExtension(name: string): string {
     return name;
 }
 
-type DriveCollabType = DriveTypeDoc | DriveTypeStickies | DriveTypeSlides | DriveTypeSheets | DriveTypeVector;
+export type DriveCollabType = DriveTypeDoc | DriveTypeStickies | DriveTypeSlides | DriveTypeSheets | DriveTypeVector;
 type DriveChatType = DriveTypeChat;
 export type DriveContainerType = DriveTypeFolder | DriveCollabType | DriveChatType;
 

@@ -4,12 +4,12 @@
 // or function name user input could influence.
 
 import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
-import type { ImageDimensions } from '@workspace/lib/types/drive';
+import type { DriveCollabType, ImageDimensions } from '@workspace/lib/types/drive';
 import type { TextPreviewResult } from '@workspace/lib/types/preview';
 import type { SlidePage } from '@workspace/lib/vector';
 import type { YjsStatePayload } from '../../collab/yjs-loader';
 import { ApiError, isOutOfMemory } from '../../core/errors';
-import type { DocumentReferences, ReferencedDocumentType } from '../references';
+import type { DocumentReferences } from '../../mount/schema';
 
 // `pdf-html` is the HTML stage of the PDF export. WeasyPrint stays a subprocess of the main thread, so the
 // transform returns the document it renders from.
@@ -143,7 +143,7 @@ export type SheetsCompactionJob = {
 // The parts each of a list of documents names, such as a document's current state and its versions, in one job.
 export type ReferencesJob = {
     kind: 'references';
-    documents: { documentType: ReferencedDocumentType; source: YjsStatePayload }[];
+    documents: { documentType: DriveCollabType; source: YjsStatePayload }[];
 };
 
 export type DocumentTransformRequest =

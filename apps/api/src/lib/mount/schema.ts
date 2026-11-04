@@ -5,7 +5,6 @@ import type { DriveACL, DrivePathDetails, DrivePathType, DriveVisibility } from 
 import type { FileEventDetailsMap, FileEventType } from '@workspace/lib/types/file-history';
 import { sql } from 'drizzle-orm';
 import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import type { DocumentReferences } from '../document/references';
 
 export const paths = sqliteTable('paths', {
     id: text('id').primaryKey(),
@@ -84,6 +83,10 @@ export const pathWatchers = sqliteTable(
         userIdx: index('idx_path_watchers_user').on(table.userId),
     }),
 );
+
+// What a state of a document names among the document's parts: the files in its media folder and the threads in its
+// chat folder, each sorted.
+export type DocumentReferences = { media: string[]; chat: string[] };
 
 // What each saved version of a document names among the document's parts, as a sweep last read it. The row is the
 // record that the version was read: one that names nothing has empty lists. A row from an older reader counts as no row.
