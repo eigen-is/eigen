@@ -22,7 +22,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/drive';
 import type { ImageSize } from '@workspace/lib/vector';
 import { fitImageSize } from '@workspace/lib/vector';
-import type { Cell, ChartPanelState, WorkbookInstance } from '@workspace/sheet';
+import type { ChartPanelState, Sheet, WorkbookInstance } from '@workspace/sheet';
 import { ChartPanelSections, Workbook } from '@workspace/sheet';
 import {
     CollabDocumentGate,
@@ -44,8 +44,8 @@ import { useFileDropTarget } from '@workspace/ui/hooks/use-file-drop-target';
 import { cn } from '@workspace/ui/lib/utils';
 import { AlertTriangle, Image as ImageIcon } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { anchoredComments, stripCommentCard } from './comment-anchors';
 import { FloatingObjectPanel } from './floating-object-panel';
-import { useActiveComments } from './hooks/use-active-comments';
 import { usePresence } from './hooks/use-presence';
 import { useSheetSearchController } from './hooks/use-search-controller';
 import { useSheet } from './hooks/use-sheet';
@@ -137,11 +137,11 @@ function SheetEditorInner({
     const [addOpen, setAddOpen] = useState(false);
     const [addInitialTitle, setAddInitialTitle] = useState('');
     const [addTargetCell, setAddTargetCell] = useState<{ r: number; c: number } | null>(null);
-    const [flowdata, setFlowdata] = useState<(Cell | null)[][] | undefined>();
-    // Every Workbook onChange sets a new flowdata. The search controller keys on it, so an open search
+    const [sheets, setSheets] = useState<readonly Sheet[]>([]);
+    // Every Workbook onChange sets new sheets. The search controller keys on them, so an open search
     // runs again after each change to the document.
-    const searchController = useSheetSearchController(workbookRef, flowdata, canWrite);
-    const activeComments = useActiveComments(flowdata);
+    const searchController = useSheetSearchController(workbookRef, sheets, canWrite);
+    const activeComments = useMemo(() => anchoredComments(sheets), [sheets]);
     const lifecycle = useCommentLifecycle({
         ownerId,
         mountId: path.mountId,
@@ -396,7 +396,7 @@ function SheetEditorInner({
                                         key={snapshotVersion}
                                         ref={workbookRef}
                                         data={initialData}
-                                        onChange={() => setFlowdata(workbookRef.current?.getFlowdata() ?? undefined)}
+                                        onChange={setSheets}
                                         onOp={handleOp}
                                         showToolbar={true}
                                         showFormulaBar={true}
@@ -435,19 +435,10 @@ function SheetEditorInner({
                                             ...(canWrite
                                                 ? {
                                                       onDeleteComment: (r: number, c: number) => {
-                                                          const fd = workbookRef.current?.getFlowdata();
-                                                          const cell = fd?.[r]?.[c];
-                                                          const cardId = cell?.commentCardIds?.[0];
-                                                          if (cardId && workbookRef.current) {
-                                                              workbookRef.current.setCellFormat(
-                                                                  r,
-                                                                  c,
-                                                                  'commentCardIds',
-                                                                  (cell.commentCardIds ?? []).filter(
-                                                                      (id) => id !== cardId,
-                                                                  ),
-                                                              );
-                                                          }
+                                                          const workbook = workbookRef.current;
+                                                          const cardId =
+                                                              workbook?.getFlowdata()?.[r]?.[c]?.commentCardIds?.[0];
+                                                          if (workbook && cardId) stripCommentCard(workbook, cardId);
                                                       },
                                                   }
                                                 : {}),
@@ -534,20 +525,7 @@ function SheetEditorInner({
                 canWrite={canWrite}
                 commentContextMenu={commentContextMenu}
                 onDelete={(cardId) => {
-                    const fd = workbookRef.current?.getFlowdata();
-                    if (!fd) return;
-                    for (const [r, row] of fd.entries()) {
-                        for (const [c, cell] of (row ?? []).entries()) {
-                            if (cell?.commentCardIds?.includes(cardId)) {
-                                workbookRef.current?.setCellFormat(
-                                    r,
-                                    c,
-                                    'commentCardIds',
-                                    cell.commentCardIds.filter((id) => id !== cardId),
-                                );
-                            }
-                        }
-                    }
+                    if (workbookRef.current) stripCommentCard(workbookRef.current, cardId);
                 }}
             />
         </CollabDocumentGate>

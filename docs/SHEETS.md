@@ -438,7 +438,7 @@ A rejection outranks a prompt, since it is the more urgent message. The card sta
 
 ## Comments are Eigen comment cards
 
-A cell anchors comments through `commentCardIds` on the `Cell`. The context menu, the panel and the card dialogs are the shared components from [COMMENTS.md](COMMENTS.md). Only adding and deleting a cell's anchor stay sheet-specific hooks.
+A cell anchors comments through `commentCardIds` on the `Cell`. The context menu, the panel and the card dialogs are the shared components from [COMMENTS.md](COMMENTS.md). Only adding and deleting a cell's anchor stay sheet-specific hooks. Which cards are in use and the delete both read every sheet (`apps/sheets/src/components/sheets/comment-anchors.ts`), because a card on a tab that is not open is still in use: the pane lists it, and a delete takes it off every cell that holds it, in one undo step. A delete that left the id on another tab would keep the card in the pane.
 
 On mobile the comments pane takes the whole width, so `editor.tsx` hides the workbook instead of unmounting it. `Sheet` keeps a `ResizeObserver` on its container and skips 0×0 boxes, so the canvas re-measures when the workbook shows again. App code may rely on that.
 
