@@ -191,6 +191,24 @@ describe('the media sweep', () => {
         expect(await mediaNames(mount, path.id)).toEqual([]);
     });
 
+    test('Delete history makes a swept document due, and its next sweep removes what only the versions named', async () => {
+        const { path, collab } = await openDoc(mount, M, 'History', [paragraph(figure('a.png')), paragraph()]);
+        await addMedia(mount, path.id, 'a.png');
+        await drive.saveVersion(M, path.id);
+        collab.doc.getXmlFragment('default').delete(0, 1);
+        await close(M, path);
+        await sweepDocument(drive, path);
+        expect(isSweepDue(path)).toBe(false);
+
+        await drive.getCollabDocument(M, path.id);
+        await drive.deleteVersions(M, path.id);
+        expect(isSweepDue(path)).toBe(true);
+        expect(await mediaNames(mount, path.id)).toEqual(['a.png']);
+        await close(M, path);
+        await sweepDocument(drive, path);
+        expect(await mediaNames(mount, path.id)).toEqual([]);
+    });
+
     test('a file under three days old stays', async () => {
         const { path } = await openDoc(mount, M, 'Young', [paragraph()]);
         await addMedia(mount, path.id, 'young.png', { ageHours: 71 });

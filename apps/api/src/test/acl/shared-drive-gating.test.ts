@@ -313,6 +313,7 @@ describe('SharedDrive gating enumeration', () => {
             call: (sd) => sd.permanentlyDelete(mountId, fileId),
         },
         emptyTrash: { gate: 'denies', reason: 'owner-only', call: (sd) => sd.emptyTrash(mountId) },
+        deleteVersions: { gate: 'denies', reason: 'owner-only', call: (sd) => sd.deleteVersions(mountId, docId) },
     };
 
     test('every SharedDrive prototype member is classified', () => {

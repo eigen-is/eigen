@@ -1,8 +1,8 @@
 // The sweep. Once a document's last tab has closed, it deletes the parts of the document that nothing names any more,
 // such as an image deleted before every version that is still kept, or the thread of a deleted comment. A part stays
 // while the current state or a saved version names it, or while it is younger than three days. A linger close starts
-// it, at most once a day per document. A change while it reads waits for the next close, and a failure for the next
-// day, so a sweep can keep a part too long but never deletes one in use.
+// it, once a day per document or sooner after a Delete history. A change while it reads waits for the next close, and
+// a failure for the next day, so a sweep can keep a part too long but never deletes one in use.
 
 import { Database as BunDatabase } from 'bun:sqlite';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -36,6 +36,11 @@ const sweeping = new Set<string>();
 export function isSweepDue(path: DrivePath): boolean {
     const at = sweptAt.get(sweepKey(path));
     return at === undefined || Date.now() - at >= DAY_MS;
+}
+
+// A change that leaves parts only the next sweep can free, such as Delete history, makes the document due at once.
+export function markSweepDue(path: DrivePath): void {
+    sweptAt.delete(sweepKey(path));
 }
 
 // Closes a lingering document and then sweeps it. The hold on the Home comes first, because the close lets go of the
