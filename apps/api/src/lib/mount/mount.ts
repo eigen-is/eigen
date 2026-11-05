@@ -50,6 +50,7 @@ import { paths } from './schema';
 import * as searchIndex from './search-index';
 import * as trash from './trash';
 import { UploadQueue } from './upload-queue';
+import type { VersionTaken } from './version-references';
 
 type LocalDatabaseGetter = <S extends SchemaType>(
     config: DatabaseConfig<S>,
@@ -110,6 +111,8 @@ export class Mount {
     public readonly thumbnailJobs = new Set<Promise<void>>();
     // Aborted at teardown, so no close or Home shutdown waits on a download or an extraction read.
     public readonly downloads = new AbortController();
+    // Called for each version a snapshot takes, so the drive can read what it names.
+    public readonly onVersionTaken?: VersionTaken;
 
     private readonly ownerId: string;
     private readonly baseDir: string;
@@ -130,6 +133,7 @@ export class Mount {
         getLocalDatabase: LocalDatabaseGetter,
         extractContent?: ContentExtractor,
         holdHome?: () => () => void,
+        onVersionTaken?: VersionTaken,
     ) {
         this.ownerId = ownerId;
         this.id = config.id;
@@ -139,6 +143,7 @@ export class Mount {
         this.getLocalDatabase = getLocalDatabase;
         this.extractContent = extractContent;
         this.holdHome = holdHome;
+        this.onVersionTaken = onVersionTaken;
 
         this.storage = createMountStorage(config, this.baseDir);
     }

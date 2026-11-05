@@ -183,6 +183,32 @@ async function changeBeforeDelete(containerId: string, change: () => Promise<voi
     return () => spy.mockRestore();
 }
 
+describe("a version's names", () => {
+    // A job of a version saved just before may still be running when the next sweep starts.
+    const rowOf = async (versionId: string) => {
+        await waitFor(() => getVersionReferences(mount, [versionId]).length === 1, 4_000);
+        return getVersionReferences(mount, [versionId])[0];
+    };
+
+    test('are written when a version is saved, with no sweep', async () => {
+        const { path } = await openDoc(mount, M, 'NamedOnSave', [paragraph(figure('kept.png'))]);
+        const version = await drive.saveVersion(M, path.id);
+        expect((await rowOf(version.id))?.names.media).toEqual(['kept.png']);
+        await close(M, path);
+    });
+
+    test('are written when the close takes its version, with no sweep', async () => {
+        const { path, collab } = await openDoc(mount, M, 'NamedOnClose', [paragraph()]);
+        const added = new Y.XmlElement('figure');
+        added.setAttribute('mediaName', 'closed.png');
+        collab.doc.getXmlFragment('default').insert(0, [added]);
+        await drive.closeCollabDocument(M, path.id);
+        const [versionId] = await versionIds(mount, path.id);
+        if (!versionId) throw new Error('no version');
+        expect((await rowOf(versionId))?.names.media).toEqual(['closed.png']);
+    });
+});
+
 describe('the media sweep', () => {
     test('a file no state names goes, one the current state names stays', async () => {
         const { path } = await openDoc(mount, M, 'Plain', [paragraph(figure('kept.png'))]);

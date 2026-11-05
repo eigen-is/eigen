@@ -1,8 +1,9 @@
 // Deletes the parts of a collab document that nothing names any more, such as an image deleted before every saved
 // version, or the thread of a deleted comment. A part stays while the current state or a saved version names it, or
-// while it is younger than the grace period. A linger close starts a sweep, once a day per document or sooner after a
-// Delete history. A change or a busy transform process while it reads waits for the next close, and a failure for the
-// next day, so a sweep can keep a part too long but never deletes one in use.
+// while it is younger than the grace period. Each version's names are read when it is taken. A linger close starts a
+// sweep, once a day per document or sooner after a Delete history. A change or a busy transform process while it
+// reads waits for the next close, and a failure for the next day, so a sweep can keep a part too long but never
+// deletes one in use.
 
 import { SWEEP_GRACE_MS } from '@workspace/lib/constants/sweep';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -66,6 +67,22 @@ export function sweepAfterClose(drive: Drive, path: DrivePath, close: () => Prom
         })
         .finally(releaseHome);
     return closed;
+}
+
+// Reads what a version names and keeps it as the version's row, so a sweep finds it without a download. Mount calls it
+// for each version it takes, while the version's bytes are still on local disk. It runs in the background, and a
+// failure, such as a busy transform process, only leaves the version for a sweep to read.
+export function nameVersion(mount: Mount, containerId: string, versionId: string): void {
+    readVersionNames(mount, containerId, versionId).catch((error: unknown) => {
+        console.warn(`[sweep] names of version ${versionId}:`, error instanceof Error ? error.message : error);
+    });
+}
+
+async function readVersionNames(mount: Mount, containerId: string, versionId: string): Promise<void> {
+    const container = await mount.getPath(containerId);
+    if (!container || !isCollabType(container.type)) return;
+    const names = await storedReferences(mount, container.type, versionId, 'background');
+    putVersionReferences(mount, { versionPathId: versionId, readerVersion: REFERENCE_READER_VERSION, names });
 }
 
 // Lists first what could go: the old files in media/, the idle threads and the threads that hold an old file. Only
