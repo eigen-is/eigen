@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite';
-import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, jest, test } from 'bun:test';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, unlinkSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
@@ -945,9 +945,16 @@ describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-ti
         await mount.createFile(rootId, 'note.txt', 'text/plain', 5, Buffer.from('hello'));
         await entered;
 
-        (mount.reindexQueue as unknown as { closeTimeoutMs: number }).closeTimeoutMs = 50;
-
-        // Pre-fix: close() awaits the parked drain unboundedly → this never returns (test times out).
-        await mount.closeAllDatabases();
+        // The close waits out its real deadline on fake time. Pre-fix it awaited the parked drain unboundedly, so
+        // this never returned (test times out).
+        jest.useFakeTimers();
+        try {
+            const closed = mount.closeAllDatabases();
+            while (jest.getTimerCount() === 0) await Promise.resolve();
+            jest.advanceTimersByTime(10 * 60_000);
+            await closed;
+        } finally {
+            jest.useRealTimers();
+        }
     }, 5_000);
 });

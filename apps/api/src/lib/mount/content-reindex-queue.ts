@@ -32,8 +32,6 @@ export class ContentReindexQueue {
     private draining: Promise<void> | null = null;
     private retryTimer: ReturnType<typeof setTimeout> | null = null;
     private closing = false;
-    // A field, so tests can shrink REINDEX_CLOSE_TIMEOUT_MS.
-    private closeTimeoutMs = REINDEX_CLOSE_TIMEOUT_MS;
 
     public constructor(deps: { mount: Mount; extract: ContentExtractor; label: string }) {
         this.mount = deps.mount;
@@ -57,8 +55,10 @@ export class ContentReindexQueue {
         }
         if (!this.draining) return;
         this.draining.catch((err) => console.error(`[content-reindex] drain failed for ${this.label} at close:`, err));
-        if (!(await settlesWithin(this.draining, this.closeTimeoutMs))) {
-            console.error(`[content-reindex] close for ${this.label} exceeded ${this.closeTimeoutMs}ms; proceeding`);
+        if (!(await settlesWithin(this.draining, REINDEX_CLOSE_TIMEOUT_MS))) {
+            console.error(
+                `[content-reindex] close for ${this.label} exceeded ${REINDEX_CLOSE_TIMEOUT_MS}ms; proceeding`,
+            );
         }
     }
 
