@@ -6,7 +6,7 @@ category: Files
 tags: [drive, versions, history, restore, docs, sheets, slides, stickies, vector]
 related: [drive/get-started, drive/use-the-trash]
 order: 120
-updated: 2026-11-04
+updated: 2026-11-05
 ---
 
 Eigen keeps a history of saved states for every document, spreadsheet, presentation, board, and drawing you own or can edit. You can browse that history and restore an earlier version at any time.
@@ -41,7 +41,7 @@ A restore brings back the comments that version had, including one you deleted s
 
 To free up the space a file's versions take, you can delete its whole history. Open the file, click **File** in the toolbar, point at **Version history** and click **Delete history…**, the last row below the list, grayed out until there is a version. A dialog says how much space it frees. Click **Delete history** to confirm.
 
-Every earlier version goes, and so do the versions of the file's comments. You can't undo this. Images and comments you deleted from the file are removed once everyone has closed it, except those added or replied to in the last three days.
+Every earlier version goes, and so do the versions of the file's comments. You can't undo this. Images and comments you deleted from the file are removed right away, except those added or replied to in the last three days. If someone else has the file open, their **Undo** can't bring those back.
 
 ## How long versions are kept
 

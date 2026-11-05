@@ -5,7 +5,7 @@ type: how-to
 tags: [docs, versions, history, restore]
 related: [docs/create-and-edit, docs/comments]
 order: 130
-updated: 2026-11-04
+updated: 2026-11-05
 ---
 
 Docs keeps a version history for every document you own or can edit. You can save a snapshot at any point, then browse the list and roll back to an earlier state whenever you need to.
@@ -43,7 +43,7 @@ You can delete a document's whole version history, for example to free up space.
 3. Click **Delete history…**. A dialog says how much space it frees.
 4. Click **Delete history** to confirm.
 
-Every earlier version goes, and so do the versions of the document's comments. You can't undo this. Images and comments you deleted from the document are removed once everyone has closed it, except those added or replied to in the last three days.
+Every earlier version goes, and so do the versions of the document's comments. You can't undo this. Images and comments you deleted from the document are removed right away, except those added or replied to in the last three days. If someone else has the document open, their **Undo** can't bring those back.
 
 ## Who can use version history
 
