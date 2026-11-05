@@ -10,7 +10,8 @@ This codebase values **simplicity, directness, and consistency** over cleverness
 
 - Flat and direct: no service layers, no repository patterns, no dependency injection. Routes call domain classes directly. Domain classes query the database directly with Drizzle
 - Don't extract single-use helpers: a method that handles a complete workflow inline is better than several small methods you have to trace through. Only extract when logic is reused
-- Trust the type system: no defensive null checks on typed data, no fallback defaults for required fields. Validate at system boundaries, and trust internal code everywhere else. A boundary is anything a person or another program wrote: a request body, an uploaded or imported file, a collaborator's edit arriving through Yjs, an external API. That trust only holds while types tell the truth, which is why casts are banned (§ Typing)
+- Trust the type system fully: validate only at a boundary, which is anything a person or another program wrote, such as a request body, an uploaded or imported file, a collaborator's edit arriving through Yjs, inbound mail or an external API. What our own code produced is typed, not checked again: a reply from our own transform child, a message between Homes, a row or file we wrote, an argument from another module. So no shape check, `typeof` guard, null check or fallback default on typed data, and no try/catch to survive a malformed result of our own call. A child or Home that a bad upload compromised already has the filesystem, so re-checking its replies guards nothing. That trust only holds while types tell the truth, which is why casts are banned (§ Typing)
+- No code for tests in production: no option, field, export, timeout knob or state reset that only a test uses. A test drives the public path
 - Consistency over originality: new code must look like the code next to it. Same patterns, same naming, same structure. Don't invent new patterns when existing ones work
 - Fewer lines beat more: removing code is always a good idea when what remains is cleaner and easier to understand. Over-engineering (a flag threaded through layers, a prop every caller passes the same value for, a seam that closes a case that cannot happen) is a broken window: remove it on touch, and don't add it to close a nit
 - Clean code beats more features: when a feature or an edge case can only be covered by a patch (a special case, a second code path, a flag, a cache, a retry), drop the feature or accept the edge case, and say so. The owner would rather ship less than grow a pile of patches. A fix goes to the cause, and when a second fix in one module needs a patch, the module's design is wrong: redesign it
@@ -108,7 +109,8 @@ Before declaring any task complete, review every changed file against this list:
 - Are there any unnecessary abstractions, helpers, wrappers, or indirection?
 - Did you check `packages/ui/src/components/` and `packages/lib/src/` for existing utilities/components before writing new ones? (`cn()`, `formatDate`, `TooltipButton`, `DeleteDialog`, etc.)
 - Are you using theme tokens, not hardcoded colors?
-- Did you avoid adding try-catch, null checks, or fallbacks for cases that can't happen?
+- Did you avoid adding try-catch, null checks, or fallbacks for cases that can't happen, and any check on data our own typed code produced?
+- Does production code carry an option, export or reset that only a test uses?
 - Do new `useQuery` hooks have `enabled` guards and `staleTime`?
 - Does the new code match the patterns and naming of its neighbors?
 - Does a hook, store or class you changed hand out a collection it owns as a mutable type, or take one it never changes as mutable?

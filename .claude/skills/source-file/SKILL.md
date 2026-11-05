@@ -48,7 +48,7 @@ A field or parameter gets a comment only for what its name and type can't say, s
 ## Cleaning up a file
 
 1. Read the file and its siblings. Grep every exported or public member for its callers, tests included. What callers really use decides what can change.
-2. Simplify without changing behaviour: drop dead members, inline a helper with one caller, merge copies, use `??`, `??=`, `Set` and `Map` instead of hand-written versions, replace index juggling with straight code. A behaviour change is its own commit with its own test.
+2. Simplify without changing behaviour: drop dead members, inline a helper with one caller, merge copies, use `??`, `??=`, `Set` and `Map` instead of hand-written versions, replace index juggling with straight code. Drop every check on data our own typed code produced (a reply from our own child, a message between Homes, a row we wrote) and every option, export or reset only a test uses: the types are the contract, and validation lives only at a boundary ([CODE-STANDARDS.md § Code Philosophy](../../../docs/CODE-STANDARDS.md#code-philosophy)). A behaviour change is its own commit with its own test.
 3. Rename what doesn't say what it is: shorthand names, or a concept spelled differently from the rest of the repo. A short name that reads as plain English where it is called, such as `atHome(ownerId)`, stays. A rename updates every caller in the same commit.
 4. Order the file top-down: exports and the entry point first, then helpers in the order they are called. Code that belongs to another module moves there, and the same logic or fact in two files lives in one. Code that exists for another domain moves to that domain's folder; the host keeps at most the call. Keep it flat: no factory, registry or interface layer to make the move.
 5. Split a long file when the split is clean. Past about 400 lines, look for one concern the rest only calls into, and split there if the result reads better. With no clean split, a long file stays whole.
@@ -61,10 +61,10 @@ A field or parameter gets a comment only for what its name and type can't say, s
 
 ## Report
 
-A sweep of more than one file reports one row per file, with a cell for each of steps 2 to 9: what changed, or "nothing" and why in a few words ("no shorthand names", "248 lines, one concern"). An empty cell says why it is empty. "It would bury the change in the diff" is not a reason: a rename, move or split goes in a commit of its own beside the change. Only a step that can't be done in this unit becomes a backlog row. List each patch smell from § Comments step 5 under the table.
+Every file you touch gets every step, a one-line edit or a follow-up fix to a file an earlier commit cleaned included: the bar is the whole file, not your diff. The report has one row per file, with a cell for each of steps 2 to 11: what changed, or "nothing" and why in a few words ("no shorthand names", "248 lines, one concern"). An empty cell says why it is empty. "It would bury the change in the diff" is not a reason: a rename, move or split goes in a commit of its own beside the change, and a comment pass goes in the same commit. Only a step that can't be done in this unit becomes a backlog row. List each patch smell from § Comments step 5 under the table.
 
-| File | 2 simplify | 3 rename | 4 order, move | 5 split | 6 types | 7 visibility | 8 imports | 9 comments |
-|---|---|---|---|---|---|---|---|---|
+| File | 2 simplify | 3 rename | 4 order, move | 5 split | 6 types | 7 visibility | 8 imports | 9 comments | 10 header | 11 neighbours |
+|---|---|---|---|---|---|---|---|---|---|---|
 
 ## Verify
 
