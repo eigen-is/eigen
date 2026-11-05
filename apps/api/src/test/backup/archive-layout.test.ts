@@ -54,3 +54,23 @@ test('verify passes trash roots trashed from a live folder and from inside anoth
     const b = { ...row('b', 'B', 'file', root.id), trashedFrom: inA.id };
     expect(checkArchivedPathRows([root, live, a, inA, b])).toEqual([]);
 });
+
+// A live delete of a folder can leave a trash root trashed from it, and a restore sends that one to the root.
+test('verify passes a trash root whose original folder is gone', () => {
+    const root = row('root', 'Drive', 'folder', null);
+    const orphan = { ...row('orphan', 'Orphan', 'file', root.id), trashedFrom: 'deleted-folder' };
+    expect(checkArchivedPathRows([root, orphan])).toEqual([]);
+});
+
+test('verify names only the trash roots on the loop, not one trashed from inside it', () => {
+    const root = row('root', 'Drive', 'folder', null);
+    const a = { ...row('a', 'A', 'folder', root.id), trashedFrom: 'inB' };
+    const inA = row('inA', 'In A', 'folder', a.id);
+    const b = { ...row('b', 'B', 'folder', root.id), trashedFrom: 'inA' };
+    const inB = row('inB', 'In B', 'folder', b.id);
+    const c = { ...row('c', 'C', 'file', root.id), trashedFrom: inA.id };
+    expect(checkArchivedPathRows([c, root, a, inA, b, inB])).toEqual([
+        'path row a was trashed from inside itself',
+        'path row b was trashed from inside itself',
+    ]);
+});

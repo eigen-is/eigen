@@ -126,70 +126,121 @@ export function managedDbContainer(row: MountPathRow, byId: ReadonlyMap<string, 
 // The rows no path builder can place, by their chain or by a part a path cannot hold: the capture leaves them out of
 // an archive, with what is inside them, and verify refuses an archive with one.
 export function unreachableRows(rows: readonly MountPathRow[]): { orphaned: MountPathRow[]; unusable: MountPathRow[] } {
-    const byId = new Map(rows.map((row) => [row.id, row]));
+    const broken = brokenChains(rows);
     const orphaned: MountPathRow[] = [];
     const unusable: MountPathRow[] = [];
     for (const row of rows) {
         if (unusableParts(row).length > 0) unusable.push(row);
-        else if (brokenChain(row, byId) !== null) orphaned.push(row);
+        else if (broken.get(row.id) !== null) orphaned.push(row);
     }
     return { orphaned, unusable };
 }
 
 // An archived paths table arrived inside a file an admin uploaded, so a row no path can be built for refuses the
 // archive whole, and so does a tree that does not end at the root or a trash root whose delete would wait on itself.
+// Verify runs it on the event loop, so every check is linear in the rows.
 export function checkArchivedPathRows(rows: readonly MountPathRow[]): string[] {
-    const byId = new Map(rows.map((row) => [row.id, row]));
+    const broken = brokenChains(rows);
+    const insideItself = trashedFromInsideItself(rows);
     const failures: string[] = [];
     for (const row of rows) {
         failures.push(...unusableParts(row));
-        const broken = brokenChain(row, byId) ?? brokenTrash(row, byId);
-        if (broken) failures.push(`path row ${row.id} ${broken}`);
+        const chain = broken.get(row.id);
+        if (chain) failures.push(`path row ${row.id} ${chain}`);
+        else if (insideItself.has(row.id)) failures.push(`path row ${row.id} was trashed from inside itself`);
     }
     return failures;
 }
 
-// Where a row's parent chain ends when it does not end at a root row: at a parent the table does not hold, or in a
-// cycle, where `ancestors` stops in silence. Null for a row that reaches the root.
-function brokenChain(row: MountPathRow, byId: ReadonlyMap<string, MountPathRow>): string | null {
-    let top = row;
-    for (const parent of ancestors(row, byId)) top = parent;
-    if (top.parentId === null) return null;
-    return byId.has(top.parentId)
-        ? 'sits in a parent cycle'
-        : `reaches a parent (${top.parentId}) the table does not hold`;
-}
-
-// Where a trash root's original folder fails: a row the table does not hold, or a folder inside the root itself,
-// directly or through the trash roots that hold it in turn. A permanent delete takes along every trash root
-// trashed from inside the item, each under its own lock, so it would then wait on a lock it holds.
-function brokenTrash(row: MountPathRow, byId: ReadonlyMap<string, MountPathRow>): string | null {
-    if (row.trashedFrom === null) return null;
-    if (!byId.has(row.trashedFrom)) return `was trashed from a row (${row.trashedFrom}) the table does not hold`;
-    const seen = new Set<string>();
-    const pending = [row];
-    for (let current = pending.pop(); current; current = pending.pop()) {
-        const from = current.trashedFrom ? byId.get(current.trashedFrom) : undefined;
-        if (!from) continue;
-        for (const holder of [from, ...ancestors(from, byId)]) {
-            if (holder.id === row.id) return 'was trashed from inside itself';
-            if (holder.trashedFrom !== null && !seen.has(holder.id)) {
-                seen.add(holder.id);
-                pending.push(holder);
+// Where each row's parent chain ends when it does not end at a root row: at a parent the table does not hold, or in
+// a cycle. Null for a row that reaches the root. A walk stops at the first row it has a verdict for, and every row
+// it passed shares that verdict.
+function brokenChains(rows: readonly MountPathRow[]): Map<string, string | null> {
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const verdicts = new Map<string, string | null>();
+    for (const row of rows) {
+        const walked = new Set<MountPathRow>();
+        let current = row;
+        let verdict = verdicts.get(row.id);
+        while (verdict === undefined && !walked.has(current)) {
+            walked.add(current);
+            const parent = current.parentId === null ? undefined : byId.get(current.parentId);
+            if (current.parentId === null) verdict = null;
+            else if (!parent) verdict = `reaches a parent (${current.parentId}) the table does not hold`;
+            else {
+                current = parent;
+                verdict = verdicts.get(parent.id);
             }
         }
+        const ends = verdict === undefined ? 'sits in a parent cycle' : verdict;
+        for (const passed of walked) verdicts.set(passed.id, ends);
     }
-    return null;
+    return verdicts;
+}
+
+// The trash roots trashed from inside themselves, whose permanent delete would wait on its own lock. Each row points
+// at its parent and a trash root at its original folder too: a root is inside itself when that folder reaches it back,
+// so both share a strongly connected component (Tarjan's, on a stack of its own, as a deep table would overflow).
+function trashedFromInsideItself(rows: readonly MountPathRow[]): Set<string> {
+    const position = new Map(rows.map((row, at) => [row.id, at]));
+    const targets = (row: MountPathRow): number[] =>
+        [row.parentId, row.trashedFrom].flatMap((id) => {
+            const at = id === null ? undefined : position.get(id);
+            return at === undefined ? [] : [at];
+        });
+    const order = new Int32Array(rows.length).fill(-1);
+    const low = new Int32Array(rows.length);
+    const component = new Int32Array(rows.length).fill(-1);
+    const open = new Int32Array(rows.length);
+    let openSize = 0;
+    let visited = 0;
+    for (let start = 0; start < rows.length; start++) {
+        if (order[start] !== -1) continue;
+        const path: { at: number; next: number[] }[] = [];
+        const visit = (at: number): void => {
+            order[at] = low[at] = visited++;
+            open[openSize++] = at;
+            path.push({ at, next: targets(rows[at]) });
+        };
+        visit(start);
+        while (path.length > 0) {
+            const { at, next } = path[path.length - 1];
+            const to = next.pop();
+            if (to !== undefined) {
+                if (order[to] === -1) visit(to);
+                else if (component[to] === -1) low[at] = Math.min(low[at], order[to]);
+                continue;
+            }
+            path.pop();
+            if (path.length > 0) {
+                const caller = path[path.length - 1].at;
+                low[caller] = Math.min(low[caller], low[at]);
+            }
+            if (low[at] !== order[at]) continue;
+            let member: number;
+            do {
+                member = open[--openSize];
+                component[member] = at;
+            } while (member !== at);
+        }
+    }
+    const inside = new Set<string>();
+    for (const [at, row] of rows.entries()) {
+        const from = row.trashedFrom === null ? undefined : position.get(row.trashedFrom);
+        if (from !== undefined && component[from] === component[at]) inside.add(row.id);
+    }
+    return inside;
 }
 
 // Every path a restore builds is a join of id, name and file: a `..` or a separator in one moves bytes out of the
-// mount, and a reserved name is the trash folder itself on `local`. The one separator a live table holds is a trash root's `file` on a path-based mount, which must be exactly
-// trashPath's key.
+// mount, and a reserved name or file is the trash folder itself on `local`. The one separator a live table holds is
+// a trash root's `file` on a path-based mount, which must be exactly trashPath's key.
 function unusableParts(row: MountPathRow): string[] {
     const failures: string[] = [];
     if (!isUsableName(row.id)) failures.push(`path row "${row.id}" has an unusable id`);
     if (!isUsableName(row.name)) failures.push(`path row ${row.id} has an unusable name "${row.name}"`);
     if (isReservedName(row.name)) failures.push(`path row ${row.id} has a reserved name "${row.name}"`);
+    if (isReservedName(row.file)) failures.push(`path row ${row.id} has a reserved file "${row.file}"`);
     // Empty is how a flat-key mount spells a folder row (Mount.createFolder).
     const trashKey = row.trashedFrom !== null && row.file === trashStorageKey(row.id, row.name);
     if (row.file !== '' && !trashKey && !isUsableName(row.file)) {

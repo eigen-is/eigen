@@ -290,11 +290,12 @@ describe('Backup refuses an archive whose paths table leaves the mount', () => {
         expect(record.failures.join(' ')).toContain(`path row ${localFileId} has a reserved name`);
     });
 
-    test('verify names the trash root whose original folder the table does not hold', async () => {
-        const folder = await hostileArchive(keyMountId, 'trashedFrom', 'no-such-row', keyFileId);
+    // On `local` the disk key is built from `file`, so the row's bytes would land on the trash folder.
+    test('verify names the row whose file the trash folder reserves', async () => {
+        const folder = await hostileArchive(LOCAL_MOUNT_ID, 'file', '.trash', localFileId);
         const record = await verifyFolder(folder);
         expect(record.status).toBe('failed');
-        expect(record.failures.join(' ')).toContain(`path row ${keyFileId} was trashed from a row (no-such-row)`);
+        expect(record.failures.join(' ')).toContain(`path row ${localFileId} has a reserved file`);
     });
 
     // Its permanent delete would wait on its own lock.
