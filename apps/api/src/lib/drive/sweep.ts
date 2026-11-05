@@ -169,6 +169,15 @@ function isBusy(drive: Drive, mount: Mount, containerId: string): boolean {
     );
 }
 
+// Whether someone wrote in a thread since the cutoff: its creation, or the last sync of its data.db, which stamps the
+// row. A write reaches the row only when the database syncs, so a data.db open on the server counts as a write, such
+// as a reply through the Chat app while the document is closed.
+async function isActive(mount: Mount, thread: DrivePath, cutoff: number): Promise<boolean> {
+    const dataDb = await mount.getChildByName(thread.id, CONTAINER_DATA_DB);
+    if (dataDb && mount.documentDbs.has(dataDb.id)) return true;
+    return Math.max(thread.createdAt.getTime(), dataDb?.updatedAt.getTime() ?? 0) > cutoff;
+}
+
 // What a change to the document while the sweep read would move: the data.db row, which every save stamps, and the
 // list of versions, which a save, a prune or a restore changes.
 async function readFence(
@@ -209,13 +218,4 @@ async function storedReferences(
     } finally {
         await mount.cleanupTemp(tempId);
     }
-}
-
-// Whether someone wrote in a thread since the cutoff: its creation, or the last sync of its data.db, which stamps the
-// row. A write reaches the row only when the database syncs, so a data.db open on the server counts as a write, such
-// as a reply through the Chat app while the document is closed.
-async function isActive(mount: Mount, thread: DrivePath, cutoff: number): Promise<boolean> {
-    const dataDb = await mount.getChildByName(thread.id, CONTAINER_DATA_DB);
-    if (dataDb && mount.documentDbs.has(dataDb.id)) return true;
-    return Math.max(thread.createdAt.getTime(), dataDb?.updatedAt.getTime() ?? 0) > cutoff;
 }
