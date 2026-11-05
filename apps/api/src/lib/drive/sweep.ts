@@ -78,7 +78,7 @@ async function sweepParts(
     const files = media
         ? (await mount.listFolder(media.id)).filter((file) => file.type === DRIVE_TYPE_FILE && isCandidate(file))
         : [];
-    const chat = isCollabType(document.type) ? await mount.getChildByName(document.id, CONTAINER_CHAT_FOLDER) : null;
+    const chat = await mount.getChildByName(document.id, CONTAINER_CHAT_FOLDER);
     const threads = chat
         ? (await mount.listFolder(chat.id)).filter((thread) => thread.type === DRIVE_TYPE_CHAT && isCandidate(thread))
         : [];
@@ -93,12 +93,16 @@ async function sweepParts(
     // A kept SVG keeps the files it draws, such as one the grace keeps because its edit has not landed yet.
     const youngFiles = files.filter((file) => !isOld(file)).map((file) => file.name);
     const keptFiles = await withSvgSiblings(mount, files, [...names.media, ...youngFiles]);
-    if (!keptFiles) throw new Error('an SVG could not be read');
     const namedThreads = new Set(names.chat.map(foldName));
     const keptThreads: DrivePath[] = [];
     const idleThreads: DrivePath[] = [];
     for (const thread of threads) {
-        const kept = namedThreads.has(foldName(thread.name)) || (await isActive(mount, thread, cutoff));
+        // A thread nobody names stays while someone wrote in it since the cutoff: its creation, or the last sync of its
+        // data.db, which stamps the row. A reply reaches the row only when the database syncs, so one in the last
+        // seconds before a sweep doesn't count.
+        const dataDb = await mount.getChildByName(thread.id, CONTAINER_DATA_DB);
+        const lastWrite = Math.max(thread.createdAt.getTime(), dataDb?.updatedAt.getTime() ?? 0);
+        const kept = namedThreads.has(foldName(thread.name)) || lastWrite > cutoff;
         (kept ? keptThreads : idleThreads).push(thread);
     }
 
@@ -118,13 +122,6 @@ async function sweepParts(
         );
     }
     for (const thread of keptThreads) await sweepParts(drive, thread, cutoff, written);
-}
-
-// Whether someone wrote in a thread since the cutoff: its creation, or the last sync of its data.db, which stamps the
-// row. A reply reaches the row only when the database syncs, so one in the last seconds before a sweep doesn't count.
-async function isActive(mount: Mount, thread: DrivePath, cutoff: number): Promise<boolean> {
-    const dataDb = await mount.getChildByName(thread.id, CONTAINER_DATA_DB);
-    return Math.max(thread.createdAt.getTime(), dataDb?.updatedAt.getTime() ?? 0) > cutoff;
 }
 
 // The files a thread's messages name, a deleted message's included. An attachment is a file in the thread's media

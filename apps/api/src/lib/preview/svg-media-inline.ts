@@ -73,20 +73,20 @@ export async function inlineSvgMediaRefs(mount: Mount, parentId: string, svgByte
 // The names given, and every sibling that an svg among them draws when it is served, to the depth the inliner reads,
 // folded. A sweep keeps them all, so a kept svg draws no blank image. A name resolves against `files`, the listing of
 // the svgs' folder, by its folded form, which a lookup by name on a bucket misses for a non-ASCII letter. A missing
-// file, or one that is no svg, adds nothing. Null says an svg could not be read. At the last depth, the names an svg
-// holds are kept as well, though the inliner strips them, because keeping more is safe.
+// file, or one that is no svg, adds nothing, and an svg that cannot be read throws. At the last depth, the names an
+// svg holds are kept as well, though the inliner strips them, because keeping more is safe.
 export async function withSvgSiblings(
     mount: Mount,
     files: readonly DrivePath[],
     names: Iterable<string>,
-): Promise<ReadonlySet<string> | null> {
+): Promise<ReadonlySet<string>> {
     const kept = new Set([...names].map(foldName));
     let drawn: ReadonlySet<string> = kept;
     for (let depth = 0; depth <= MAX_SVG_INLINE_DEPTH && drawn.size > 0; depth++) {
         const next = new Set<string>();
         for (const svg of files.filter((file) => file.mimeType === 'image/svg+xml' && drawn.has(foldName(file.name)))) {
             const bytes = await mount.readBytes(svg.id);
-            if (!bytes) return null;
+            if (!bytes) throw new Error(`${svg.id}: the SVG could not be read`);
             for (const ref of listEigenMediaRefs(Buffer.from(bytes).toString('utf8')).map(foldName)) {
                 if (!kept.has(ref)) next.add(ref);
             }
