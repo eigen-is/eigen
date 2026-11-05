@@ -262,6 +262,39 @@ describe('Backup boot', () => {
         expect(existsSync(notes)).toBe(false);
     });
 
+    // A notes folder that cannot be removed, such as with EBUSY, must not stop the server from starting either.
+    test('a notes folder whose removal throws is left for the next boot, and the boot goes on', () => {
+        const id = 'bootrecoverQQQQQQQQQQQQQQQQQQQQQ';
+        const aside = `${id}${PRE_RESTORE_SUFFIX}20260101-000000`;
+        seedFolder(aside, 'the home as it was');
+        const notes = seedRestoringMarker('boot-job-q', id, aside);
+        made.push(join(homeRoot, id));
+        const other = 'bootrecoverRRRRRRRRRRRRRRRRRRRRR';
+        const otherAside = `${other}${PRE_RESTORE_SUFFIX}20260101-000000`;
+        seedFolder(otherAside, 'the other home');
+        seedRestoringMarker('boot-job-r', other, otherAside);
+        made.push(join(homeRoot, other));
+        const rm = nodeFs.rmSync;
+        const rmSpy = spyOn(nodeFs, 'rmSync').mockImplementation((target, options) => {
+            if (target === notes) throw Object.assign(new Error('resource busy'), { code: 'EBUSY' });
+            rm(target, options);
+        });
+        const logged = spyOn(console, 'error').mockImplementation(() => {});
+
+        try {
+            expect(() => recoverInterruptedRestores()).not.toThrow();
+            expect(logged.mock.calls.flat().join('\n')).toContain(notes);
+        } finally {
+            rmSpy.mockRestore();
+            logged.mockRestore();
+        }
+
+        expect(readFileSync(join(homeRoot, id, 'marker'), 'utf8')).toBe('the home as it was');
+        expect(readFileSync(join(homeRoot, other, 'marker'), 'utf8')).toBe('the other home');
+        recoverInterruptedRestores();
+        expect(existsSync(notes)).toBe(false);
+    });
+
     // A safety-copy restore renames the copy into place before its checks, so a kill there leaves a pristine home at
     // the home's path. It goes back under its own name: a `.failed-restore-` one could only be deleted.
     test('a marker of a safety-copy restore parks the copy under its own name and puts the home back', () => {

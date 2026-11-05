@@ -84,8 +84,15 @@ export function recoverInterruptedRestores(): void {
             if (!isRestoreStagingName(name)) continue;
             const restoreDir = path.join(homesDir, name);
             if (!recoverRestore(restoreDir, (marker) => homeBesideNotes(homesDir, marker))) continue;
-            dropRestoringMarker(restoreDir);
-            fs.rmSync(restoreDir, { recursive: true, force: true });
+            // A throw here would stop every boot. The folder is acted on again by the next one, which changes nothing.
+            try {
+                dropRestoringMarker(restoreDir);
+                fs.rmSync(restoreDir, { recursive: true, force: true });
+            } catch (error) {
+                console.error(
+                    `[backup] could not remove ${restoreDir}, the next boot tries again: ${describeError(error)}`,
+                );
+            }
         }
     }
 }
