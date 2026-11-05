@@ -151,8 +151,8 @@ export function DeleteHistoryDialog({
             title="Delete version history?"
             description={
                 `Frees ${formatFileSize(shownSize)}. Earlier versions of this document and its comments can't be ` +
-                `restored after this. Images and comments you deleted are removed once everyone has closed it, ` +
-                `except those added or replied to in the last ${SWEEP_GRACE_DAYS} days.`
+                `restored after this. Images and comments you deleted are removed now, except those added or ` +
+                `replied to in the last ${SWEEP_GRACE_DAYS} days.`
             }
             deleteText="Delete history"
             onDelete={() => deleteVersions.mutateAsync()}

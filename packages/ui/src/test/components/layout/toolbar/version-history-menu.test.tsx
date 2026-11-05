@@ -107,8 +107,8 @@ test('the dialog names the size the menu passed and deletes on its button', asyn
     expect(dialog?.querySelector('h2')?.textContent).toBe('Delete version history?');
     expect(dialog?.querySelector('p')?.textContent).toBe(
         `Frees ${formatFileSize(size)}. Earlier versions of this document and its comments can't be restored after ` +
-            'this. Images and comments you deleted are removed once everyone has closed it, except those added or ' +
-            'replied to in the last 3 days.',
+            'this. Images and comments you deleted are removed now, except those added or replied to in the last 3 ' +
+            'days.',
     );
     const confirm = [...(dialog?.querySelectorAll('button') ?? [])].find(
         (button) => button.textContent === 'Delete history',
