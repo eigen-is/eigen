@@ -282,7 +282,7 @@ describe('Backup across signals', () => {
 
             live = await startApi(dataRoot, backupsDir, 'restore-drain-restart');
             // Nothing for the boot recovery to do — the restore was complete before the process left.
-            expect(live.log()).not.toContain('was interrupted');
+            expect(live.log()).not.toContain('did not finish');
             const homes = readdirSync(join(dataRoot, 'home'));
             expect(homes.filter((name) => name.startsWith(`${admin.id}${PRE_RESTORE_SUFFIX}`)).length).toBe(1);
             expect(homes.filter((name) => name.startsWith(`${admin.id}${FAILED_RESTORE_SUFFIX}`))).toEqual([]);
@@ -395,7 +395,7 @@ describe('Boot recovery in a real boot', () => {
         );
         expect(parked.length).toBe(1);
         expect(readFileSync(join(homeRoot, parked[0], 'marker'), 'utf8')).toBe('half-written');
-        expect(api.log()).toContain(`a restore of ${interrupted} was interrupted`);
+        expect(api.log()).toContain(`a restore of ${interrupted} did not finish`);
     });
 
     test('a restore of a deleted user that died mid-install leaves no half-written home', () => {
@@ -403,7 +403,7 @@ describe('Boot recovery in a real boot', () => {
         const parked = readdirSync(homeRoot).filter((name) => name.startsWith(`${deleted}${FAILED_RESTORE_SUFFIX}`));
         expect(parked.length).toBe(1);
         expect(readFileSync(join(homeRoot, parked[0], 'marker'), 'utf8')).toBe('half-written, no copy');
-        expect(api.log()).toContain(`a restore of ${deleted} was interrupted`);
+        expect(api.log()).toContain(`a restore of ${deleted} did not finish`);
     });
 
     test('a restore that finished is left alone', () => {
@@ -412,6 +412,6 @@ describe('Boot recovery in a real boot', () => {
         expect(readdirSync(homeRoot).filter((name) => name.startsWith(`${finished}${FAILED_RESTORE_SUFFIX}`))).toEqual(
             [],
         );
-        expect(api.log()).not.toContain(`a restore of ${finished} was interrupted`);
+        expect(api.log()).not.toContain(`a restore of ${finished} did not finish`);
     });
 });

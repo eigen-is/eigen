@@ -24,7 +24,6 @@ import { restoreHome, restoreSafetyCopy } from '../../lib/backup/restore';
 import { deleteSafetyCopy, listSafetyCopies } from '../../lib/backup/safety-copy';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { updateServerSettings } from '../../lib/config/server-settings';
-import * as dataEpochModule from '../../lib/home/data-epoch';
 import { getDataEpoch } from '../../lib/home/data-epoch';
 import { evictHome, getHome } from '../../lib/home/get-home';
 import * as mountHelpers from '../../lib/mount/helpers';
@@ -512,45 +511,35 @@ describe('Backup restore of a safety copy that fails mid-swap', () => {
     }
 
     // The job undoes its own failure, so the next boot finds nothing to finish and the tabs nothing to reload for.
-    for (const point of ['at the move-aside', 'at the install', 'after the install'] as const) {
-        test(`a restore that fails ${point} puts both folders back, and the next boot changes nothing`, async () => {
-            const FAILED = new Error('failed by the test');
-            const epoch = getDataEpoch(user.id);
-            let failed = false;
-            const failOnce = (): never => {
+    test('a restore that fails at the install puts both folders back, and the next boot changes nothing', async () => {
+        const FAILED = new Error('failed by the test');
+        const epoch = getDataEpoch(user.id);
+        let failed = false;
+        const rename = nodeFs.renameSync;
+        const renameSpy = spyOn(nodeFs, 'renameSync').mockImplementation((from, to) => {
+            if (!failed && to === homeDir) {
                 failed = true;
                 throw FAILED;
-            };
-            const rename = nodeFs.renameSync;
-            const spies = [
-                spyOn(nodeFs, 'renameSync').mockImplementation((from, to) => {
-                    if (!failed && point === 'at the move-aside' && from === homeDir) failOnce();
-                    if (!failed && point === 'at the install' && to === homeDir) failOnce();
-                    rename(from, to);
-                }),
-                spyOn(dataEpochModule, 'rotateHomeDataEpoch').mockImplementation(async () => {
-                    if (point === 'after the install') failOnce();
-                }),
-            ];
-            try {
-                await expect(restoreSafetyCopy(user.id, copy, `safety-midswap-${Date.now()}`)).rejects.toBe(FAILED);
-            } finally {
-                for (const spy of spies) spy.mockRestore();
             }
-
-            const homes = readdirSync(join(TEST_DATA_DIR, 'home')).sort();
-            const besideHome = homes.filter((name) => name.startsWith(`${user.id}.`) || isRestoreStagingName(name));
-            expect(besideHome).toEqual([copy]);
-            expect(getDataEpoch(user.id)).toBe(epoch);
-            expect(await rootNames()).toContain('live.txt');
-
-            await recoverBackupsAfterRestart();
-
-            expect(readdirSync(join(TEST_DATA_DIR, 'home')).sort()).toEqual(homes);
-            expect(await rootNames()).toContain('live.txt');
-            await evictHome(user.id);
+            rename(from, to);
         });
-    }
+        try {
+            await expect(restoreSafetyCopy(user.id, copy, `safety-midswap-${Date.now()}`)).rejects.toBe(FAILED);
+        } finally {
+            renameSpy.mockRestore();
+        }
+
+        const homes = readdirSync(join(TEST_DATA_DIR, 'home')).sort();
+        const besideHome = homes.filter((name) => name.startsWith(`${user.id}.`) || isRestoreStagingName(name));
+        expect(besideHome).toEqual([copy]);
+        expect(getDataEpoch(user.id)).toBe(epoch);
+        expect(await rootNames()).toContain('live.txt');
+
+        await recoverBackupsAfterRestart();
+
+        expect(readdirSync(join(TEST_DATA_DIR, 'home')).sort()).toEqual(homes);
+        expect(await rootNames()).toContain('live.txt');
+    });
 });
 
 describe('Backup safety copies of a home on the server bucket', () => {

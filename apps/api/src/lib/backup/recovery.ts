@@ -169,8 +169,14 @@ function recoverRestore(notesDir: string, homeOf: (marker: RestoringMarker) => s
         return true;
     } catch (error) {
         keepHomeShut(marker.ownerId);
+        // A restart cannot park the folder in place under a name that is taken, so only the operator can clear it.
+        const parked = path.join(path.dirname(homeDir), marker.parkName);
+        const advice =
+            fs.existsSync(homeDir) && fs.existsSync(parked)
+                ? `${parked} is already there, so move the folder at ${homeDir} aside by hand, then run ./eigen stop, then ./eigen restart`
+                : 'run ./eigen stop, then ./eigen restart';
         console.error(
-            `[backup] could not finish the interrupted restore of ${marker.ownerId}'s home ${homeDir}: ${describeError(error)}. The account answers 503, and its notes stay in ${notesDir} for the next boot: run ./eigen stop, then ./eigen restart`,
+            `[backup] could not finish the interrupted restore of ${marker.ownerId}'s home ${homeDir}: ${describeError(error)}. The account answers 503, and its notes stay in ${notesDir} for the next boot: ${advice}`,
         );
         return false;
     }
@@ -197,16 +203,16 @@ export function putHomeBack(marker: RestoringMarker, homeDir: string): void {
     if (fs.existsSync(homeDir)) {
         fs.renameSync(homeDir, path.join(path.dirname(homeDir), marker.parkName));
         console.error(
-            `[backup] a restore of ${marker.ownerId} was interrupted mid-install: the folder it was installing is ${marker.parkName}`,
+            `[backup] a restore of ${marker.ownerId} did not finish its install: the folder it was installing is ${marker.parkName}`,
         );
     }
     if (!aside) {
-        console.error(`[backup] a restore of ${marker.ownerId} was interrupted: they have no home folder again`);
+        console.error(`[backup] a restore of ${marker.ownerId} did not finish: they have no home folder again`);
         return;
     }
     fs.renameSync(aside, homeDir);
     console.error(
-        `[backup] a restore of ${marker.ownerId} was interrupted: ${marker.preRestoreName} is back in place as the home folder`,
+        `[backup] a restore of ${marker.ownerId} did not finish: ${marker.preRestoreName} is back in place as the home folder`,
     );
 }
 
