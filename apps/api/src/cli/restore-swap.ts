@@ -25,7 +25,7 @@ import { buildBackupStamp, isStringList, parseJson } from '@workspace/lib/valida
 import { describeError } from '../lib/backup/errors';
 import { buildSafetyCopyName, nextFreeTime, STAGING_DIR } from '../lib/backup/paths';
 import { RESTORING_DATA_DIR, RESTORING_DIR } from '../lib/backup/restore-server';
-import { DATA_LEASE_FILE, DATA_LOCK_FILE, liveLeaseHolder, lockDataDir } from '../lib/config/data-lock';
+import { DATA_LOCK_FILE, lockDataDir } from '../lib/config/data-lock';
 import { SERVER_DIR } from '../lib/config/paths';
 import { PIN_KEYS } from '../lib/config/release';
 import { readEnvFile } from './env-file';
@@ -159,9 +159,7 @@ function requireRenamable(ui: Ui, archive: string): void {
     }
 }
 
-// Neither Eigen nor another swap reads or replaces data/ while this one does. The lock only refuses an API it reaches.
-// An API it does not reach, such as one on the host beside the container, is refused by its lease, which the swap
-// only reads.
+// Neither Eigen nor another swap on this kernel reads or replaces data/ while this one does.
 function lockData(ui: Ui): void {
     const lockFile = join(DATA, SERVER_DIR, DATA_LOCK_FILE);
     // Root must not create a lock file the API could not open. Without one, no API ever ran on this data/.
@@ -171,8 +169,6 @@ function lockData(ui: Ui): void {
             'Wait for it to finish, then run ./eigen restore again.',
         );
     }
-    const holder = liveLeaseHolder(join(DATA, SERVER_DIR, DATA_LEASE_FILE), (message) => ui.warn(message, []));
-    if (holder) ui.fail(`data/ is in use by another Eigen API: ${holder}.`, 'Stop it, then run ./eigen restore again.');
 }
 
 // Why root must not swap the staged tree in, or null. It drops the fifos and sockets. The stage writes files and

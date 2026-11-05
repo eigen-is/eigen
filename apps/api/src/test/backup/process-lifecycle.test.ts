@@ -279,8 +279,6 @@ describe('Backup across signals', () => {
             expect(first.proc.exitCode).toBe(0);
             expect(first.log()).toContain('[backup] waiting for 1 running job(s) before shutdown');
             expect(first.log()).toContain('All homes shut down, exiting.');
-            // A clean stop leaves no lease, so neither the next boot nor a restore swap waits on it.
-            expect(existsSync(join(dataRoot, 'server/instance.lease'))).toBe(false);
 
             live = await startApi(dataRoot, backupsDir, 'restore-drain-restart');
             // Nothing for the boot recovery to do — the restore was complete before the process left.
