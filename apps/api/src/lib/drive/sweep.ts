@@ -103,7 +103,8 @@ async function sweepParts(
     }
 
     const unnamedFiles = files.filter((file) => isOld(file) && !keptFiles.has(foldName(file.name)));
-    await Promise.all([...unnamedFiles, ...idleThreads].map((path) => mount.deletePath(path.id)));
+    // One at a time, so a failure deletes nothing more after it.
+    for (const path of [...unnamedFiles, ...idleThreads]) await mount.deletePath(path.id);
     // A row goes once its thread is gone, as one still there would lose its status and its assignee.
     if (chat) {
         await withCommentIndex(drive, document.mountId, document.id, async (index) =>
