@@ -36,8 +36,7 @@ import type { RunOptions, TransformPriority } from './runner';
 import { documentTransformRunner, TRANSFORM_LIMITS } from './runner';
 
 // What a caller still decides, since the limits belong to the job kind and the capture is timed here. `prepMs` is the
-// time the caller spent preparing media on the main thread. It is logged with the job, so a fast transform behind a
-// slow preparation stays visible.
+// time the caller spent preparing media on the main thread, which the job's log line shows.
 type TransformOptions = Omit<RunOptions, 'priority' | 'deadlineMs' | 'admissionCostMs' | 'captureMs'> & {
     priority?: TransformPriority;
 };
@@ -92,9 +91,8 @@ async function runTransformRequest<R extends DocumentTransformRequest>(
         );
     }
     for (const warning of response.warnings) surfaceWarning(warning, request.kind);
-    // The runner settles every kind of job through one wide response, and it has already checked that this result
-    // pairs with this request (resultMatchesRequest). This cast is the one place that mapping is crossed, so every
-    // caller reads its field with no cast.
+    // The runner settles every kind of job through one wide response, and the child answers each kind with its own
+    // result. This cast is the one place that mapping is crossed, so every caller reads its field with no cast.
     return { result: response.result as TransformResultFor<R>, warnings: response.warnings };
 }
 
@@ -130,9 +128,8 @@ function surfaceWarning(warning: TransformWarning, kind: DocumentTransformReques
     }
 }
 
-// These return a job's text, such as a preview body or the text to index, or its bytes, such as an export. The job kind
-// decides which one the child returns and the limits it runs under. An export keeps its warnings, for the summary it
-// answers with.
+// These return a job's text, such as a preview body or the text to index, or its bytes, such as an export. An export
+// keeps its warnings, for the summary it answers with.
 export async function runTransformToPreview(
     mount: Mount,
     drivePath: DrivePath,
@@ -195,9 +192,8 @@ export async function runBytesTransformToText(
     return result.body;
 }
 
-// An import sends the uploaded bytes and returns what the caller commits, with the media it extracted. A workbook comes
-// back as snapshot JSON, which the main thread decodes as text and never parses. A document or a deck comes back as a
-// ready Yjs update. The warnings come back too, for the summary an import answers with.
+// An import returns what the caller commits, the media it extracted and its warnings. A workbook comes back as snapshot
+// JSON the main thread never parses, and a document or a deck as a ready Yjs update.
 export type SheetsImportSnapshot = {
     snapshotJson: string;
     weight: SheetsWeight;
@@ -233,9 +229,8 @@ export async function runImportToSlidesUpdate(
     return { ...result, warnings };
 }
 
-// A workbook's op log folded into its snapshot, in the background. It reads the snapshot and the batches from the live
-// doc in one step, never from data.db, which can lag behind. The signal ends the job wherever it is, queued or running,
-// so the caller bounds the whole wait with it.
+// A workbook's op log folded into its snapshot, read from the live doc in one step, as data.db can lag behind. The
+// signal ends the job queued or running, so the caller bounds the whole wait with it.
 export async function runSheetsCompaction(
     doc: Y.Doc,
     signal: AbortSignal,

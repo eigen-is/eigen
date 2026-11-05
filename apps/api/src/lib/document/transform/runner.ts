@@ -11,7 +11,6 @@ import type {
     ChildAck,
     ChildMediaRequest,
     ChildResponseEnvelope,
-    CountedWarningCode,
     DocumentTransformRequest,
     DocumentTransformResponse,
     ExportMedia,
@@ -19,14 +18,11 @@ import type {
     TransformError,
     TransformWarning,
 } from './protocol';
-import { COUNTED_WARNING_CODES, inputBytesOf, resultBytes, resultMatchesRequest, toTransformError } from './protocol';
+import { inputBytesOf, resultBytes, toTransformError } from './protocol';
 
 export type TransformPriority = 'foreground' | 'background';
 
-// What each operation runs under: `deadlineMs` is the kill deadline that bounds
-// runaways, `admissionCostMs` what the job is expected to cost the queue (~10–20× the
-// worst measured end-to-end time, deliberately decoupled from the deadline, which
-// bounds runaways rather than typical wait).
+// Each kind's kill deadline, which bounds a runaway, and its admission cost, what it is expected to take from the queue.
 export const TRANSFORM_LIMITS: Record<
     DocumentTransformRequest['kind'],
     Pick<RunOptions, 'deadlineMs' | 'admissionCostMs'>
@@ -49,25 +45,17 @@ export const TRANSFORM_LIMITS: Record<
 
 const MAX_ACTIVE_CHILDREN = 1;
 const MAX_QUEUED_JOBS = 16;
-// Background extracts hold no connection and are drop-safe (the contentDirty bit
-// re-queues them), so they may hold only part of the queue: many mounts draining at
-// once must not 503 the previews and exports someone is waiting for.
+// Background work may hold only part of the queue, so a mass reindex can't 503 the jobs someone waits for.
 const MAX_QUEUED_BACKGROUND = 8;
-// A queued request holds its HTTP connection open, so foreground admission is
-// bounded by predicted wait (summed admission costs), not queue length alone.
 const MAX_PREDICTED_WAIT_MS = 120_000;
 const CLOSE_GRACE_MS = 5_000;
 // A killed child stuck in the kernel can't exit, and must not hold the shutdown.
 const KILL_WAIT_MS = 1_000;
-// useExportDocument's error toast shows it word for word, so it stays readable for a person.
+// The client shows it word for word, so it stays readable for a person.
 export const BUSY_MESSAGE = 'The server is busy, please try again in a moment';
 
 // Linux alone takes these limits, as macOS refuses setrlimit for the data segment. $1 is the data segment in KiB, $2
-// the CPU seconds, and the rest is the command. The OOM score makes the kernel kill the child before the API. A refused
-// data limit only warns, so it never causes an outage. The CPU limit is soft: a spinning orphan dies by SIGXCPU, which
-// reads as a crash, not as out of memory. An abort is an expected death here, so the child writes no core. A host
-// that pipes cores to a handler, such as Ubuntu's systemd-coredump, ignores ulimit -c, so the empty dump filter keeps
-// the child's gigabytes of reserved address space out of the pipe, which holds the child's slot until it is read.
+// the CPU seconds, and the rest is the command.
 const LIMITED_COMMAND =
     'echo 1000 > /proc/self/oom_score_adj; echo 0 > /proc/self/coredump_filter; ulimit -d "$1" 2>/dev/null || echo "memory limit not applied" >&2; ulimit -St "$2"; ulimit -c 0; shift 2; exec "$@"';
 // GC and JIT threads spend CPU on every core beside the job's own, so the CPU limit is the deadline on each, plus slack.
@@ -81,10 +69,8 @@ const JIT_RESERVATION_BYTES = '67108864';
 // killer sends SIGKILL.
 const OUT_OF_MEMORY_SIGNALS = new Set<number | NodeJS.Signals>(['SIGABRT', 'SIGSEGV', 'SIGBUS', 'SIGTRAP', 'SIGKILL']);
 
-// captureMs and prepMs are the time the caller spent on the main thread, capturing the source and preparing the
-// media. They are logged per job, because a fast transform after a slow preparation is no real offload. prepareMedia
-// answers an export child that asks for the media its document names, inside the job's deadline. Its signal aborts
-// once the job ends.
+// captureMs and prepMs are the caller's main-thread time before the job, for its log line. prepareMedia answers an
+// export child that asks for the media its document names, and its signal aborts once the job ends.
 export type RunOptions = {
     priority: TransformPriority;
     deadlineMs: number;
@@ -153,64 +139,11 @@ export function limitedCommand(command: string[], deadlineMs: number, memoryLimi
     return ['/bin/sh', '-c', LIMITED_COMMAND, 'sh', String(memoryLimitKiB), String(cpuSeconds), ...command];
 }
 
-// Each arm of the closed warning union carries exactly one payload field; settle()
-// renders them after the job left `active`, so an unknown code or a missing payload
-// has to be refused here rather than throw with nobody left to settle the request.
-// A counted code is in COUNTED_WARNING_CODES; any other arm is keyed here, so a new one is a
-// compile error rather than every success carrying it turning into invalid-response.
-const WARNING_VALIDATORS: Record<
-    Exclude<TransformWarning['code'], CountedWarningCode>,
-    (w: Record<string, unknown>) => boolean
-> = {
-    'recalc-failed': (w) => typeof w['message'] === 'string',
-    'byte-guard-truncated': (w) => typeof w['bytes'] === 'number',
-};
-const COUNTED_CODES = new Set<string>(COUNTED_WARNING_CODES);
-
-function isValidWarning(warning: unknown): boolean {
-    if (!warning || typeof warning !== 'object') return false;
-    const w = warning as Record<string, unknown>;
-    const code = w['code'];
-    if (typeof code === 'string' && COUNTED_CODES.has(code)) return typeof w['count'] === 'number';
-    const validate = typeof code === 'string' && WARNING_VALIDATORS[code as keyof typeof WARNING_VALIDATORS];
-    return validate ? validate(w) : false;
-}
-
-// Full shape check at the trust boundary: a half-valid response (`{ok: true}`
-// with no result, or a result that doesn't match the request kind) must become a
-// structured invalid-response, not a throw inside settle that leaves the
-// requester's promise hanging forever.
-function isValidResponse(response: unknown, request: DocumentTransformRequest): response is DocumentTransformResponse {
-    if (!response || typeof response !== 'object') return false;
-    const r = response as {
-        ok?: unknown;
-        result?: unknown;
-        warnings?: unknown;
-        error?: { code?: unknown; message?: unknown; status?: unknown };
-    };
-    if (r.ok === true) {
-        return Array.isArray(r.warnings) && r.warnings.every(isValidWarning) && resultMatchesRequest(request, r.result);
-    }
-    if (r.ok === false) {
-        // `status` becomes the HTTP status the main thread throws, so only an integer in the error range may cross.
-        const status = r.error?.status;
-        return (
-            typeof r.error?.code === 'string' &&
-            typeof r.error?.message === 'string' &&
-            (status === undefined ||
-                (typeof status === 'number' && Number.isInteger(status) && status >= 400 && status <= 599))
-        );
-    }
-    return false;
-}
-
 // An import has no source document type, so it logs the type it produces.
 function requestType(request: DocumentTransformRequest): string {
     return request.kind === 'import' ? request.targetType : request.documentType;
 }
 
-// Exports log the format they render, imports the format they read; previews and
-// extracts have none.
 function requestFormat(request: DocumentTransformRequest): string {
     if (request.kind === 'export') return request.format;
     if (request.kind === 'import') return request.sourceFormat;
@@ -235,7 +168,7 @@ export class DocumentTransformRunner {
     private readonly memoryLimitKiB = MACHINE_MEMORY_KIB;
     private foreground: Job[] = [];
     private background: Job[] = [];
-    private active = new Map<number, ActiveJob>();
+    private readonly active = new Map<number, ActiveJob>();
     private nextJobId = 1;
     private closing = false;
 
@@ -243,9 +176,7 @@ export class DocumentTransformRunner {
         this.entry = opts.entry ?? fileURLToPath(new URL('./child', import.meta.url));
     }
 
-    // Throws ApiError(503) synchronously when the job cannot be admitted. Callable
-    // ahead of run() so a caller can refuse before paying for an expensive input
-    // (run-transform.ts checks it before capturing the document).
+    // Callable ahead of run(), so a caller can refuse before it pays for an expensive input.
     public assertAdmissible(priority: TransformPriority): void {
         if (this.closing) this.refuse(priority, 'closing');
         if (this.foreground.length + this.background.length >= this.maxQueued) this.refuse(priority, 'queue-full');
@@ -303,8 +234,6 @@ export class DocumentTransformRunner {
         });
     }
 
-    // Server shutdown: stop admission, reject queued work, give active children a
-    // short grace period, then kill them and wait a moment for their ends.
     public async close(): Promise<void> {
         this.closing = true;
         const queued = [...this.foreground, ...this.background];
@@ -360,27 +289,31 @@ export class DocumentTransformRunner {
             clearTimeout(timer);
             prep.abort();
             child?.kill('SIGKILL');
-            const totalMs = Date.now() - startedAt;
-            const outcome = response.ok ? 'success' : response.error.code;
-            const outputBytes = response.ok ? resultBytes(response.result) : 0;
-            const warnings = response.ok && response.warnings.length > 0 ? response.warnings : null;
-            const signal = exited ? child?.signalCode : null;
-            // The child stamps only the transform's own time. The rest of the job is the spawn, the module
-            // evaluation and the messaging, the one-off cost worth watching. It is clamped at 0, because totalMs is
-            // whole milliseconds while the child's stamp is fractional, and -1 already means no stamp.
-            const startupMs = transformMs === undefined ? -1 : Math.max(0, Math.round(totalMs - transformMs));
-            console.log(
-                `[transform] job=${job.id} kind=${job.request.kind} type=${requestType(job.request)} ` +
-                    `format=${requestFormat(job.request)} priority=${job.priority} outcome=${outcome} ` +
-                    `queueDepth=${queueDepth} queueWaitMs=${queueWaitMs} ` +
-                    `captureMs=${job.captureMs?.toFixed(0) ?? -1} prepMs=${prepMs?.toFixed(0) ?? -1} ` +
-                    `inputBytes=${inputBytes} startupMs=${startupMs} ` +
-                    `transformMs=${transformMs?.toFixed(0) ?? -1} totalMs=${totalMs} outputBytes=${outputBytes} ` +
-                    `peakRssBytes=${peakRssBytes ?? -1}` +
-                    (signal ? ` signal=${signal}` : '') +
-                    (warnings ? ` warnings=${warnings.map(formatWarning).join(',')}` : ''),
-            );
             job.resolve(response);
+            // A reply this line can't read, from a bug in the child, must not stop the queue: the caller fails on it.
+            try {
+                const totalMs = Date.now() - startedAt;
+                const outcome = response.ok ? 'success' : response.error.code;
+                const outputBytes = response.ok ? resultBytes(response.result) : 0;
+                const warnings = response.ok && response.warnings.length > 0 ? response.warnings : null;
+                const signal = exited ? child?.signalCode : null;
+                // The child stamps only the transform's own time. The rest is the spawn, the module evaluation and
+                // the messaging. totalMs is whole milliseconds and the stamp fractional, so it is clamped at 0.
+                const startupMs = transformMs === undefined ? -1 : Math.max(0, Math.round(totalMs - transformMs));
+                console.log(
+                    `[transform] job=${job.id} kind=${job.request.kind} type=${requestType(job.request)} ` +
+                        `format=${requestFormat(job.request)} priority=${job.priority} outcome=${outcome} ` +
+                        `queueDepth=${queueDepth} queueWaitMs=${queueWaitMs} ` +
+                        `captureMs=${job.captureMs?.toFixed(0) ?? -1} prepMs=${prepMs?.toFixed(0) ?? -1} ` +
+                        `inputBytes=${inputBytes} startupMs=${startupMs} ` +
+                        `transformMs=${transformMs?.toFixed(0) ?? -1} totalMs=${totalMs} outputBytes=${outputBytes} ` +
+                        `peakRssBytes=${peakRssBytes ?? -1}` +
+                        (signal ? ` signal=${signal}` : '') +
+                        (warnings ? ` warnings=${warnings.map(formatWarning).join(',')}` : ''),
+                );
+            } catch (err) {
+                console.error(`[transform] job=${job.id} reply could not be logged:`, err);
+            }
             this.startNext();
         };
         // Bun delivers every message before the channel closes, which can come after the exit, and the ack decides
@@ -417,9 +350,8 @@ export class DocumentTransformRunner {
         this.active.set(job.id, { kill, settle, admissionCostMs: job.admissionCostMs });
 
         const timer = setTimeout(() => kill('timeout'), job.deadlineMs);
-        // Spawning and sending can throw synchronously, such as a spawn that fails under resource exhaustion or a
-        // DataCloneError on a detached buffer. Unhandled, that holds the only slot until the deadline. It also escapes
-        // into run()'s executor and rejects a promise that must always resolve.
+        // Spawning and sending can throw at once, such as a failed spawn or a DataCloneError on a detached buffer.
+        // Unhandled, that would hold the only slot until the deadline.
         try {
             child = Bun.spawn(limitedCommand([process.execPath, this.entry], job.deadlineMs, this.memoryLimitKiB), {
                 // What the transform graph reads: the data root and mode the eml preview's mail imports resolve
@@ -443,13 +375,19 @@ export class DocumentTransformRunner {
                         void provideMedia(message.mediaNames);
                         return;
                     }
-                    const response = message?.response;
-                    if (!isValidResponse(response, job.request)) {
-                        settle(errorResponse('invalid-response', 'The transform returned a malformed response'));
+                    if (!message?.response) {
+                        settle(errorResponse('invalid-response', 'The transform sent a message that is no reply'));
                         return;
                     }
-                    transformMs = typeof message?.transformMs === 'number' ? message.transformMs : undefined;
-                    peakRssBytes = typeof message?.peakRssBytes === 'number' ? message.peakRssBytes : undefined;
+                    const { response } = message;
+                    // The status becomes the HTTP status the main thread throws, so only an error status may cross.
+                    const status = response.ok ? undefined : response.error.status;
+                    if (status !== undefined && !(Number.isInteger(status) && status >= 400 && status <= 599)) {
+                        settle(errorResponse('invalid-response', 'The transform returned a status that is no error'));
+                        return;
+                    }
+                    transformMs = message.transformMs;
+                    peakRssBytes = message.peakRssBytes;
                     settle(response);
                 },
                 onExit: () => {

@@ -23,7 +23,6 @@ type TestDirective = {
         | 'allocate'
         | 'limits'
         | 'malformed'
-        | 'malformed-ok'
         | 'malformed-warnings'
         | 'echo-buffers'
         | 'document-error'
@@ -33,11 +32,7 @@ type TestDirective = {
         | 'export-echo-media'
         | 'export-ask-twice'
         | 'export-warn'
-        | 'export-malformed'
-        | 'import-ok'
-        | 'import-malformed'
-        | 'import-unweighed'
-        | 'import-doc-malformed-images';
+        | 'import-ok';
     ms?: number;
     // Dies before acknowledging the job, as a child that fails to load does.
     beforeAck?: boolean;
@@ -121,10 +116,6 @@ process.on('message', async (message: ChildRequestEnvelope | ParentMediaReply) =
         case 'malformed':
             send({ nonsense: true });
             return;
-        case 'malformed-ok':
-            // Right discriminant, missing payload — must not hang the requester.
-            send({ jobId, response: { ok: true } });
-            return;
         case 'malformed-warnings':
             // Valid envelope and result, junk inside the warnings array.
             send({ jobId, response: { ok: true, result: { body: '{}' }, warnings: [null] } });
@@ -174,10 +165,6 @@ process.on('message', async (message: ChildRequestEnvelope | ParentMediaReply) =
             send(response);
             return;
         }
-        case 'export-malformed':
-            // Right discriminant, result missing the export payload.
-            send({ jobId, response: { ok: true, result: {}, warnings: [] } });
-            return;
         case 'import-ok': {
             // Echo how many bytes arrived.
             const received = 'data' in request ? request.data.byteLength : -1;
@@ -191,23 +178,6 @@ process.on('message', async (message: ChildRequestEnvelope | ParentMediaReply) =
                 },
             };
             send(response);
-            return;
-        }
-        case 'import-malformed':
-            // Right discriminant, result missing the snapshot payload.
-            send({ jobId, response: { ok: true, result: {}, warnings: [] } });
-            return;
-        case 'import-unweighed': {
-            // A sheets import's snapshot is there, but its weight is no count.
-            const snapshotJson = new ArrayBuffer(2);
-            const weight = { cells: Number.NaN, text: 0 };
-            send({ jobId, response: { ok: true, result: { snapshotJson, weight, images: [] }, warnings: [] } });
-            return;
-        }
-        case 'import-doc-malformed-images': {
-            // A docx import's update is there, but the images array holds junk.
-            const update = new Uint8Array([1, 2]).buffer as ArrayBuffer;
-            send({ jobId, response: { ok: true, result: { update, images: [{}] }, warnings: [] } });
             return;
         }
         case 'document-error': {

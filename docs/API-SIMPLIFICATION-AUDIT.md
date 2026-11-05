@@ -1,6 +1,6 @@
 # API simplification audit
 
-> **TLDR**: An audit of `apps/api` for patches stacked on patches: fixes that kept fixing the corner the previous one created, where one change at the source, or a slightly smaller feature, would have kept the code flat. It found about 50 candidates. Together they remove roughly 3,000 lines of production code, about 5,500 with the dev-only audit scripts, plus several thousand test lines. That is only a few percent of the API, but it sits in exactly the mechanisms that cost data when they go wrong: trash, uploads, restore, drafts and invitations. Most of the piles have one of seven shapes ([§ Patterns](#patterns)). Our own CODE-STANDARDS already forbids all seven, so the gap is enforcement, not the rule. [§ Shortlist](#shortlist) ranks the best fifteen. The rest are listed per area.
+> **TLDR**: An audit of `apps/api` for patches stacked on patches: fixes that kept fixing the corner the previous one created, where one change at the source, or a slightly smaller feature, would have kept the code flat. It found about 50 candidates. Together they remove roughly 3,000 lines of production code, about 5,500 with the dev-only audit scripts, plus several thousand test lines. That is only a few percent of the API, but it sits in exactly the mechanisms that cost data when they go wrong: trash, uploads, restore, drafts and invitations. Most of the piles have one of seven shapes ([§ Patterns](#patterns)). Our own CODE-STANDARDS already forbids all seven, so the gap is enforcement, not the rule. [§ Shortlist](#shortlist) ranks the best of them. The rest are listed per area.
 
 Audited 2026-11-05 at `76071ffda` on `document-lifecycle`. Six reviewers each read one area's code and its git history, and only report accidental complexity, or essential complexity bought for a feature or a precision the owner could drop. Anchors are `apps/api/src/lib/`-relative, except `routes/`, `cli/`, `scripts/`, `test/` and `instance-lock.ts`, which sit directly in `apps/api/src/`, and `eigen`, the launcher at the repo root. Line numbers drift; the function names don't. LOC figures are honest guesses, not measurements. I re-checked a sample of claims against the code (the lease commit run, the transform `settle` order, the sheet-export rates, `selfClaimRank`'s single caller, the test-only calendar methods, the trash map, the two reconciliation functions and the cross-drive sweep); everything else is the reviewer's own verified reading. Treat each finding as a lead to confirm before a fix, not a verdict.
 
@@ -10,7 +10,7 @@ Like ROADMAP and the proposals, this doc holds only open work: strike a finding 
 
 [CODE-STANDARDS.md](CODE-STANDARDS.md) already says: "when a second fix in one module needs a patch, the module's design is wrong: redesign it", "drop the feature or accept the edge case", "no module-level maps, sets or caches", and "no code for data an older build wrote". The git history shows runs of 4 to 10 `fix(...)` commits on one mechanism within days, so the rule was known but not triggered. Seven shapes recur.
 
-1. **Wrong order, then guards for the gap.** A step runs before the fact it depends on is written, and each later fix guards another way into the gap. The cure is to reorder: write the fact first. Examples: the trash closes documents before it marks the row ([M1](#m1)), the transform runner removes a job before the code that can throw ([T1](#t1)), the reindex clears its dirty bit after the extract ([M3](#m3)), and a PUT may start while its predecessor is still on the wire ([M2](#m2)).
+1. **Wrong order, then guards for the gap.** A step runs before the fact it depends on is written, and each later fix guards another way into the gap. The cure is to reorder: write the fact first. Examples: the trash closes documents before it marks the row ([M1](#m1)), the reindex clears its dirty bit after the extract ([M3](#m3)), and a PUT may start while its predecessor is still on the wire ([M2](#m2)).
 2. **A second copy of the truth.** A sidecar, an extra row or a cache beside the real thing, and every reader has to merge the two. Examples: the draft sidecar ([ML1](#ml1)), a stored "cancelled" event row per EXDATE ([C2](#c2)), a contact photo in three forms ([C5](#c5)), preview `.failed` markers next to a compaction strike map next to an extract-text 413 ([T4](#t4)).
 3. **Predicting the cost exactly instead of capping it.** Exchange rates, line estimates and predicted waits, each tuned after a crafted input. Examples: the sheet export's six rates ([X2](#x2)), the runner's admission by predicted wait ([T8](#t8)), the footnote line estimate ([X6](#x6)), the text-box height estimate ([X7](#x7)) and the pptx reader's overlapping counters ([X8](#x8)).
 4. **Precision for a rare race or a rare setup.** Exactly what [the owner's rule](CODE-STANDARDS.md) says to drop: "may forget, must not corrupt". Examples: maildir watchers that match a recreated folder by inode ([ML6](#ml6)), rollback checking data twice ([B4](#b4)), a stop that waits for a running backup ([B3](#b3)), the sheets compaction base for a tab that slept through it ([T2](#t2)).
@@ -28,7 +28,6 @@ The best payoff per unit of risk. **Product** marks a finding that drops or chan
 |---|---------|---------|------|----------|--------------|
 | [M1](#m1) | Trash marks the rows first, then closes documents | ~70 + ~250 test | med | no | nothing |
 | [M9](#m9) | A copy leaves unnamed parts out, instead of sweeping them after | ~80 | med | no | nothing |
-| [T1](#t1) | Drop transform response validation; fix `settle` order | ~120 | low | no | nothing |
 | [ML1](#ml1) | The draft `.eml` is the only copy; drop the sidecar and fast save | ~250 + ~270 test | med | small | Drafts in IMAP clients show no link pills; a large-attachment autosave rewrites the file |
 | [B1](#b1) | Delete old-format readers in backup and the launcher | ~120 | low | small | a restore killed under 0.4.1 is not auto-recovered |
 | [X1](#x1) | Delete the audit scripts' `run`/`compare`/`split` modes | ~2,200 + ~1,000 test | low | no (dev) | an independent Word reader to measure ours against |
@@ -92,11 +91,6 @@ Lost: nothing. The cost stays one background transform per copied document. ~80 
 Judged essential: holders and idle close of document databases, the two copy orders in `versioning/snapshot.ts`, the `SharedDrive` proxy, `refuseDocumentPart`/`refuseVersionsName` (now about 25 compact lines), and `withFreeName`.
 
 ## Transforms, collab, preview, core and storage
-
-<a id="t1"></a>**T1. Transform response validation guards our own child against itself.**
-`document/transform/runner.ts` (`WARNING_VALIDATORS`, `isValidWarning`, `isValidResponse`), `protocol.ts` (`isTransformMedia`, `isDocumentReferences`, `isSheetsWeight`, `resultMatchesRequest`). History: `ae6dc95` added full validation because a half-valid reply threw inside `settle` and left the request hanging. `cc8f17f`, `882eb5e` and `8ae0a53` followed, and every new warning or result shape still needs a validator arm.
-Root cause: `settle` removes the job from `active` and only then calls `resultBytes` and `formatWarning`, which can throw. The child is our own code from the same build, so its replies need no shape check, and a compromised child already has the filesystem.
-Simpler: resolve the job first, wrap the log line in try/catch, and keep only the range check on `error.status`. ~120 LOC, low risk, high confidence.
 
 <a id="t2"></a>**T2. The sheets compaction base, and the chain of fixes around the swap.**
 `collab/collab-document.ts`, `document/sheets.ts` (`stampMissingSheetsBase`, `restampRestoredSheetsBase`), `packages/lib/src/sheets/yjs-state.ts`, the client's `beforeObserverCalls` verdict. History: `44b54bf`, then `a7fb960`, `ce30ed7`, `54ee957`, `32604c2`, `ec2e818` (`skipFinalSnapshot`), `73f770c` and `4192d3b` in four days.
@@ -310,7 +304,7 @@ Judged essential: zip and OPC hardening, the package parse budget, the batched x
 
 ## Suggested order
 
-1. **Pure refactors, no product change, low risk:** T1, M3, ML5, B7, C3, C4, C8, ML3, T3, T5, X8, X9, B1 and M7 (the last two are already required by CODE-STANDARDS). These are a cheap-wins round of small, independent units.
+1. **Pure refactors, no product change, low risk:** M3, ML5, B7, C3, C4, C8, ML3, T3, T5, X8, X9, B1 and M7 (the last two are already required by CODE-STANDARDS). These are a cheap-wins round of small, independent units.
 2. **Reorders with medium risk and the largest risk reduction:** M1, M9, M2, ML1 and C1, each a unit with its own failing test first. X2 and X6, settled by the export ruling, join them.
 3. **Product calls, to put to the owner as one list:** ML2, B3, B4, B6, C2, C6, C7, T2, T6, X3, X5, M5 and X1.
 4. **The lifecycle's loose ends (M4):** the dev-data reset note, the proposal's Goal 1 line, and the call on the canvas comment card's `deletedAt`.
