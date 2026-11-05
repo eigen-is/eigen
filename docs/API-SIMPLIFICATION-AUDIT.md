@@ -2,7 +2,7 @@
 
 > **TLDR**: An audit of `apps/api` for patches stacked on patches: fixes that kept fixing the corner the previous one created, where one change at the source, or a slightly smaller feature, would have kept the code flat. It found about 50 candidates. Together they remove roughly 3,000 lines of production code, about 5,500 with the dev-only audit scripts, plus several thousand test lines. That is only a few percent of the API, but it sits in exactly the mechanisms that cost data when they go wrong: trash, uploads, restore, drafts and invitations. Most of the piles have one of seven shapes ([§ Patterns](#patterns)). Our own CODE-STANDARDS already forbids all seven, so the gap is enforcement, not the rule. [§ Shortlist](#shortlist) ranks the best fifteen. The rest are listed per area.
 
-Audited 2026-11-05 at `76071ffda` on `document-lifecycle`. Six reviewers each read one area's code and its git history, and only report accidental complexity, or essential complexity bought for a feature or a precision the owner could drop. Anchors are `apps/api/src/`-relative unless noted. Line numbers drift; the function names don't. LOC figures are honest guesses, not measurements. I re-checked a sample of claims against the code (the lease commit run, the transform `settle` order, the sheet-export rates, `selfClaimRank`'s single caller, the test-only calendar methods, the trash map, the two reconciliation functions and the cross-drive sweep); everything else is the reviewer's own verified reading. Treat each finding as a lead to confirm before a fix, not a verdict.
+Audited 2026-11-05 at `76071ffda` on `document-lifecycle`. Six reviewers each read one area's code and its git history, and only report accidental complexity, or essential complexity bought for a feature or a precision the owner could drop. Anchors are `apps/api/src/lib/`-relative, except `routes/`, `cli/`, `scripts/`, `test/` and `instance-lock.ts`, which sit directly in `apps/api/src/`, and `eigen`, the launcher at the repo root. Line numbers drift; the function names don't. LOC figures are honest guesses, not measurements. I re-checked a sample of claims against the code (the lease commit run, the transform `settle` order, the sheet-export rates, `selfClaimRank`'s single caller, the test-only calendar methods, the trash map, the two reconciliation functions and the cross-drive sweep); everything else is the reviewer's own verified reading. Treat each finding as a lead to confirm before a fix, not a verdict.
 
 Like ROADMAP and the proposals, this doc holds only open work: strike a finding when it is fixed or ruled out, and delete the doc when it is empty.
 
@@ -27,13 +27,14 @@ The best payoff per unit of risk. **Product** marks a finding that drops or chan
 | # | Finding | Removes | Risk | Product? | What is lost |
 |---|---------|---------|------|----------|--------------|
 | [M1](#m1) | Trash marks the rows first, then closes documents | ~70 + ~250 test | med | no | nothing |
+| [M9](#m9) | A copy leaves unnamed parts out, instead of sweeping them after | ~80 | med | no | nothing |
 | [T1](#t1) | Drop transform response validation; fix `settle` order | ~120 | low | no | nothing |
 | [ML1](#ml1) | The draft `.eml` is the only copy; drop the sidecar and fast save | ~250 + ~270 test | med | small | Drafts in IMAP clients show no link pills; a large-attachment autosave rewrites the file |
 | [B1](#b1) | Delete old-format readers in backup and the launcher | ~120 | low | small | a restore killed under 0.4.1 is not auto-recovered |
 | [X1](#x1) | Delete the audit scripts' `run`/`compare`/`split` modes | ~2,200 + ~1,000 test | low | no (dev) | an independent Word reader to measure ours against |
 | [C1](#c1) | Eigen-to-Eigen invites carry the iMIP body over the relay | ~200 | med-high | no | nothing |
 | [M2](#m2) | Never two PUTs of one key at once; drop orphan repair | ~90 | med | no | one key waits behind a hung PUT |
-| [X2](#x2) | Sheet export: flat caps, not six exchange rates | ~90 + ~300 test | med | small | a workbook of huge distinct PNGs may time out instead of printing with a warning |
+| [X2](#x2) | Sheet export: flat caps, not six exchange rates | ~90 + ~300 test | med | decided | a workbook of huge distinct PNGs may time out instead of printing with a warning |
 | [C2](#c2) | EXDATEs as a list on the master, no cancelled rows | ~150 | med | small | a stale per-occurrence REQUEST after its CANCEL can restore it |
 | [ML2](#ml2) | One message per send, no per-recipient copies | ~60 + most of 565 test | low | yes | a guest types their address on the login page |
 | [ML5](#ml5) | One `reconcileShares` | ~50 | low | no | nothing |
@@ -63,9 +64,8 @@ Simpler: the drain sets `contentDirty = 0` before it extracts. A write during th
 Lost: after a crash mid-extract, the index stays stale until the next write. ~25 LOC, low risk, high confidence.
 
 <a id="m4"></a>**M4. Loose ends of the lifecycle branch.**
-- `drive/drive.ts:734`: a cross-drive copy is swept with grace 0 (`sweepCopy` → `sweepDocument(…, 0)`) after `copyPathAcross` has already created and announced its folders through `to.drive.createFolder`. An image pasted into the fresh copy in those seconds can be deleted. The in-mount copy sweeps before its emit, so it is safe. The simple fix is to sweep a cross-drive copy before anything is announced, or not to sweep it at all.
 - `mount/db-config.ts` went from v9 back to v8. v9 never reached `main`, but a local home already migrated to v9 on this branch now 503s at open, so reset dev data.
-- These docs still describe `version_references` or the close-time sweep: `proposals/PROPOSAL_DOCUMENT_LIFECYCLE.md` (its Goal 1, parts removed with no user action, is now dropped and should say so), `MEDIA-REFERENCES.md`, `DATABASE.md`, `STORAGE.md` and `DOCUMENT-CONTENT-LAYER.md`.
+- `proposals/PROPOSAL_DOCUMENT_LIFECYCLE.md`: check that its Goal 1, parts removed with no user action, says it was dropped. The other docs no longer describe `version_references` or the close-time sweep.
 - The canvas comment card's `deletedAt` mark (`f85396647`) no longer serves the sweep. Its only use now is letting a version restore bring back a deleted canvas comment. Keep it or drop it.
 
 <a id="m5"></a>**M5. Path-keyed `local` storage drives most of the mount's race code (product).**
@@ -80,6 +80,12 @@ Lost: a half-built copy that someone shared within seconds goes for good instead
 
 <a id="m7"></a>**M7. A guard against legacy trash cycles.**
 `mount/trash.ts:263-293` (`seen` set plus a mount-wide permanent-delete lock), from `370f17f59` and `d9323f398`. `targetFolderErrorInTx` now makes a `trashedFrom` cycle impossible, so this guard only protects old data, which CODE-STANDARDS says not to carry. ~12 LOC, low risk.
+
+<a id="m9"></a>**M9. A copy writes every part, then sweeps the ones the document doesn't name.**
+`drive/sweep.ts` (`sweepCopy`, `listWritten`, `writtenIds`, the `written` filter in `sweepParts`), `drive/drive.ts` (`copyPath`, `listCopyWithinLimits`), `mount/copy.ts`. History: `0f611bacc` (the copy shows in the target's tabs before the sweep runs, so the sweep had to learn which parts it wrote, matched by name) and `3e550fe36`.
+Root cause: pattern 1. The copy writes the deleted images and idle comment threads first and deletes them afterwards, so the copy is visible with parts that are about to go. The zombie bytes are also written, uploaded on S3 and charged against the quota: `listCopyWithinLimits` passes `copySize(tree)`, zombies included, to `enforceMountQuota`, so a copy can be refused for bytes it would delete a moment later. A sweep that fails halfway leaves them for good, as a copy has no versions and Delete history is the only other sweep.
+Simpler: the copy listing asks each source document which parts it names (the same `runDocumentReferences` call, on the source, which the copy already flushes) and leaves the others out of the `CopyTree`. Nothing unnamed is written, so `sweepCopy` and the `written` set go, and `sweepParts` serves only Delete history. The owner's ruling (2026-11-05): the cleanup stays automatic on every copy, of a document or of a folder holding documents, with no separate "clean copy" action.
+Lost: nothing. The cost stays one background transform per copied document. ~80 LOC, medium risk (with no grace, a source part may be one whose naming edit hasn't landed yet; check that the copy's flush covers it), high confidence.
 
 **M8. The opt-in `withHomeHeld` wrappers** in `routes/drive.ts` (`c92fa31ab`, `add1d3be8`, `107f5c65c`, `7b104458f`) could become one per-request hold. This is not sized yet.
 
@@ -256,6 +262,8 @@ Judged essential: the shared `lib/dav` (sync-collection, report rows, propfind a
 
 ## Import, export and OOXML
 
+**The owner's ruling on exports (2026-11-05).** An export to PDF or HTML of a doc, sheet or deck may fail on a crafted or very large document, with one plain message such as "Export failed: the document is too big, or it used too much memory". What matters is that the server stays stable, fast and responsive. So an export needs no prediction of its own cost: a flat cap, the runner's deadline and its memory limit are enough, and a timeout or out-of-memory is an accepted outcome, not a bug. This settles X2 and X6, and applies to any other export guard that predicts cost.
+
 Format mapping is essential and large. The three importers already share their budget, loss counter, `importMedia` and `writePackage`, and no pipeline is built three ways. What piled up is mostly round-trip precision and its gate.
 
 <a id="x1"></a>**X1. The audit scripts' importer-measuring modes are leftover scaffolding.**
@@ -295,11 +303,14 @@ Lost: a box taller than its text shrinks to fit in Word. ~50 LOC, low-medium ris
 <a id="x8"></a>**X8. The pptx reader's counters overlap.**
 `import/slides/from-pptx.ts:89-91`, `shapes.ts:156-234`: each walked shape charges `deck.shapes`, `walk.walked` and the work budget, and each element charges `elements` and `weight`. Keep the work budget and the output weight. ~20 LOC, low risk.
 
+<a id="x9"></a>**X9. An export that times out or runs out of memory reads as a server error.**
+`document/transform/run-transform.ts` (`runTransformRequest`): an import out of memory becomes a 413 with a plain message, and so does a search extract, but an export's timeout or out-of-memory throws `TransformFailedError` with the internal text "… transform failed (timeout): Document transform timed out". Per the ruling above, every export kind should answer with one plain message, so the client shows "Export failed: the document is too big, or it used too much memory". Check what status and text the export routes and the client show today before the fix. ~10 LOC, low risk.
+
 Judged essential: zip and OPC hardening, the package parse budget, the batched xlsx grid parser, the chart caps, pptx geometry, and `asOpened`'s bounded `fixTables` net.
 
 ## Suggested order
 
-1. **Pure refactors, no product change, low risk:** T1, M3, ML5, B7, C3, C4, C8, ML3, T3, T5, X8, B1 and M7 (the last two are already required by CODE-STANDARDS). These are a cheap-wins round of small, independent units.
-2. **Reorders with medium risk and the largest risk reduction:** M1, M2, ML1 and C1, each a unit with its own failing test first.
-3. **Product calls, to put to the owner as one list:** ML2, B3, B4, B6, C2, C6, C7, T2, T6, X2, X3, X5, M5 and X1.
-4. **The lifecycle branch's loose ends (M4)** belong to this branch, before it merges.
+1. **Pure refactors, no product change, low risk:** T1, M3, ML5, B7, C3, C4, C8, ML3, T3, T5, X8, X9, B1 and M7 (the last two are already required by CODE-STANDARDS). These are a cheap-wins round of small, independent units.
+2. **Reorders with medium risk and the largest risk reduction:** M1, M9, M2, ML1 and C1, each a unit with its own failing test first. X2 and X6, settled by the export ruling, join them.
+3. **Product calls, to put to the owner as one list:** ML2, B3, B4, B6, C2, C6, C7, T2, T6, X3, X5, M5 and X1.
+4. **The lifecycle's loose ends (M4):** the dev-data reset note, the proposal's Goal 1 line, and the call on the canvas comment card's `deletedAt`.
