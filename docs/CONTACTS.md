@@ -30,7 +30,7 @@ The byte delta is read inside the transaction and applied to the counter after i
 
 The store emits nothing. `putCard`, `deleteCard` and `deleteContact` announce once `writeLock.run` returns, naming the row id the store result carries. Reading the id back after the lock could race a delete and lose the event. `addContact` and `updateContact` announce inside the lock, with the id they already hold. The calendar announces from the same place.
 
-A whole-file import runs inside `withBatchedEvents`, which holds the per-card events and closes on one `contacts:changed`. That event carries no ids, because every contact event invalidates the owner's whole list anyway. It fires from a `finally`, so the cards committed before a failure still reach open tabs. A device sync is one request per card, so nothing server-side spans it. There the client collapses the burst: `handleContactsSSEvent` (`packages/lib/src/core/contacts/sse-handlers.ts`) debounces the list invalidation by 250 ms per owner.
+A whole-file import writes each card through the store, which announces nothing, and sends one `contacts:changed` when it ends. That event carries no ids, because every contact event invalidates the owner's whole list anyway. It fires from a `finally`, so the cards committed before a failure still reach open tabs. Another request's card events go out at once meanwhile. A device sync is one request per card, so nothing server-side spans it. There the client collapses the burst: `handleContactsSSEvent` (`packages/lib/src/core/contacts/sse-handlers.ts`) debounces the list invalidation by 250 ms per owner.
 
 ## Label membership lives in the card's CATEGORIES
 

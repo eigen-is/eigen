@@ -1,7 +1,9 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { rmSync } from 'node:fs';
+import { SSEventType } from '@workspace/lib/types/sse';
 import type { Calendar } from '../../lib/calendar/calendar';
 import { CALENDAR_TEST_ROOT, makeCalendar, storedEvents } from '../calendar-test-helpers';
+import { waitFor } from '../fault-storage-helpers';
 import { vcal } from '../ics-test-helpers';
 
 // What one `.ics` import promises per series: the series that landed stay, the one whose commit failed
@@ -71,5 +73,38 @@ describe('calendar import', () => {
         });
         expect(await titlesOf(calendar, calendarId)).toEqual(['Series 1', 'Series 2', 'Series 3', 'Series 4']);
         expect(await calendar.listResources(calendarId)).toHaveLength(4);
+    });
+
+    test("another request's event is announced while an import runs, and the import announces once at its end", async () => {
+        const { instance: calendar, broadcasts, user } = await makeCalendar();
+        const calendarId = (await calendar.getCalendars())[0].id;
+        broadcasts.length = 0;
+
+        // With the lock held, the import's first series and then the other request queue, so the other event lands mid-import.
+        const gate = Promise.withResolvers<void>();
+        const held = calendar.writeLock.run(() => gate.promise);
+        const imported = calendar.importEvents(calendarId, new TextEncoder().encode(FILE));
+        await waitFor(() => calendar.writeLock.waiting === 1);
+        const other = calendar.putResource(calendarId, 'other.ics', vcal(series('other@other', 'Other request')), {
+            ifMatch: null,
+            ifNoneMatch: '*',
+        });
+        await waitFor(() => calendar.writeLock.waiting === 2);
+        gate.resolve();
+        await held;
+
+        expect((await other).ok).toBe(true);
+        expect(await imported).toEqual({ imported: 4, skipped: 0, failed: 0 });
+        expect(broadcasts).toEqual([
+            { type: SSEventType.CALENDAR_EVENT_CREATED, ownerId: user.id },
+            { type: SSEventType.CALENDAR_EVENTS_CHANGED, ownerId: user.id },
+        ]);
+        expect(await titlesOf(calendar, calendarId)).toEqual([
+            'Other request',
+            'Series 1',
+            'Series 2',
+            'Series 3',
+            'Series 4',
+        ]);
     });
 });

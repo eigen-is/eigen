@@ -3,6 +3,7 @@
 // device sync would, so the same rules and limits apply. Routes for "import" and "export" call it.
 
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
+import { SSEventType } from '@workspace/lib/types/sse';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { and, eq, inArray } from 'drizzle-orm';
 import ICAL from 'ical.js';
@@ -18,9 +19,8 @@ import {
 import { newVCalendar, PRODID, serializeResource, spliceBlocks } from '../ical';
 import { bareName, calAddress, uidOf } from '../ical/ical-parse';
 import type { Calendar } from './calendar';
+import * as davStore from './dav-store';
 import * as schema from './schema';
-
-// Export joins the stored resources into one VCALENDAR; import replays one through the putResource a device sync takes (docs/CALENDAR.md § Import replays each series through putResource, as a device sync does).
 
 // A VTIMEZONE is copied into every series that names it, so an upload well inside its own ceiling can ask for many times its size in stored bytes.
 const ICS_IMPORT_MAX_WRITTEN_BYTES = 8 * ICS_MAX_BYTES;
@@ -109,8 +109,8 @@ export async function importEvents(
     const actor = calendar.home.user.id;
     const result: ImportCountsResult = { imported: 0, skipped: 0, failed: 0 };
     let written = 0;
-    // One list-level event for the whole file instead of one per series.
-    await calendar.withBatchedEvents(async () => {
+    // The store announces nothing, so the file is one event, sent even when a refusal stops it partway.
+    try {
         for (const group of series.values()) {
             // An override with no master has nothing to attach to, and the file goes on without it.
             if (!group.master) {
@@ -136,7 +136,7 @@ export async function importEvents(
             const body = serializeResource(resource);
             let put: PutResourceResult;
             try {
-                put = await calendar.putResource(calendarId, `${crypto.randomUUID()}.ics`, body, {
+                put = await davStore.putResource(calendar, calendarId, `${crypto.randomUUID()}.ics`, body, {
                     ifMatch: null,
                     ifNoneMatch: '*',
                     actor,
@@ -161,7 +161,9 @@ export async function importEvents(
                 result.failed++;
             }
         }
-    });
+    } finally {
+        if (result.imported > 0) calendar.announce(SSEventType.CALENDAR_EVENTS_CHANGED, calendarId);
+    }
     return result;
 }
 

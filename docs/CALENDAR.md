@@ -58,7 +58,7 @@ bun:sqlite already makes a transaction atomic and serial. `Calendar.writeLock` e
 
 Every resource write ends in `Calendar.writeResource`. It takes a `PreparedResource` computed once (`resource-store.ts`), so the bytes the checks judged are the bytes that land. It checks `EVENT_MAX_BYTES` (5 MiB), then the Home's storage budget, then commits. The commit is one transaction: the ctag bump, the blob, a delete-and-reinsert of the resource's `events` rows, and clearing any tombstone at that uri. A throw anywhere leaves the old bytes and the old projection in place. `purgeResource` is the same in reverse.
 
-`Calendar` holds what must be one per Home: the database, the lock, the byte counter and the broadcast batch. The domain logic is plain functions over it in the sibling modules. `Calendar` is the one entry point on purpose: routes and DAV call it, and the sibling modules take it as their first argument.
+`Calendar` holds what must be one per Home: the database, the lock and the byte counter. The domain logic is plain functions over it in the sibling modules. `Calendar` is the one entry point on purpose: routes and DAV call it, and the sibling modules take it as their first argument.
 
 `moveEvent` re-homes a resource between two calendars of one Home in one transaction, so no window shows it in both. A lone occurrence can't be moved, a UID the target holds is a 409, and a uri the target holds becomes a fresh name. `deleteCalendar` deletes the calendar's tombstones itself, since no cascade reaches them and a calendar recreated at that id would inherit them.
 
@@ -154,7 +154,7 @@ Calendar counts against the home data quota with mail and contacts ([QUOTA.md](Q
 
 ## Every write is announced to every Home that sees the calendar
 
-A change broadcasts a `calendar:*` event ([SSE.md](SSE.md)) to the owner's tabs and to each Home the calendar is shared with. A PUT of bytes already stored commits nothing and announces nothing. An import holds its per-resource events and sends one `calendar:events-changed` at the end. The frontend hooks and the SSE handler that invalidates them are in `packages/lib/src/core/calendar/`.
+A change broadcasts a `calendar:*` event ([SSE.md](SSE.md)) to the owner's tabs and to each Home the calendar is shared with. A PUT of bytes already stored commits nothing and announces nothing. An import writes each series through the store, which announces nothing, and sends one `calendar:events-changed` when it ends, even when a refusal stops it partway. Other requests' events go out at once meanwhile. The frontend hooks and the SSE handler that invalidates them are in `packages/lib/src/core/calendar/`.
 
 ## A linked copy is an ordinary resource with the organizer's stamp
 

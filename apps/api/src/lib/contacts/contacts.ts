@@ -15,7 +15,7 @@ import { enforceHomeDataQuota } from '../config/enforcement';
 import { PATHS } from '../config/paths';
 import { getServerSettings } from '../config/server-settings';
 import type { ManagedDatabase, PutResourceResult, ResourcePreconditions } from '../core';
-import { ApiError, BroadcastBatch, computeResourceEtag, LocalFilesystem, newSyncGen } from '../core';
+import { ApiError, computeResourceEtag, LocalFilesystem, newSyncGen } from '../core';
 import type { Home } from '../home';
 import { atHome } from '../home';
 import { pushUserProfile } from '../home/home-relay';
@@ -43,7 +43,7 @@ import { CONTACTS_DB_CONFIG } from './db-config';
 import * as labels from './labels';
 import { dbRowToContact, toData } from './mappers';
 import * as schema from './schema';
-import { buildContactEvent, buildContactsChangedEvent, buildLabelEvent } from './sse-events';
+import { buildContactEvent, buildLabelEvent } from './sse-events';
 import * as transfer from './transfer';
 
 const DEFAULT_LABELS = [
@@ -87,14 +87,10 @@ export class Contacts {
     public cardsBytes = 0;
     public avatarsBytes = 0;
 
-    // Whether card writes are quota-metered — see the assignment in init() for what turns it on.
     private meteredIngest = false;
 
     // Aborted by destruct, so an avatar sweep queued or running then stops before it reads the closed database.
     private readonly teardown = new AbortController();
-
-    // Bulk writes in flight; while any runs, per-card events are held and the last one out closes them.
-    private readonly batch = new BroadcastBatch(() => this.home.broadcast(buildContactsChangedEvent()));
 
     public constructor(home: Home) {
         this.home = home;
@@ -189,13 +185,7 @@ export class Contacts {
     }
 
     public announce(type: Parameters<typeof buildContactEvent>[0], contactId: string): void {
-        if (this.batch.hold()) return;
         this.home.broadcast(buildContactEvent(type, contactId));
-    }
-
-    // A card written by something else inside the window loses nothing: its invalidation is owner-wide too.
-    public async withBatchedEvents<T>(fn: () => Promise<T>): Promise<T> {
-        return this.batch.run(fn);
     }
 
     public emitLabel(type: Parameters<typeof buildLabelEvent>[0], labelId: string): void {

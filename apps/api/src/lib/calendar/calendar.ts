@@ -12,7 +12,6 @@ import type {
     CalendarShare,
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
-import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { and, eq, getTableColumns, isNull, sql } from 'drizzle-orm';
@@ -21,7 +20,7 @@ import { Semaphore } from '../../utils/semaphore';
 import { enforceHomeDataQuota } from '../config/enforcement';
 import { PATHS } from '../config/paths';
 import type { DeleteResourceResult, ManagedDatabase, PutResourceResult, ResourcePreconditions } from '../core';
-import { ApiError, BroadcastBatch, computeResourceEtag, newSyncGen } from '../core';
+import { ApiError, computeResourceEtag, newSyncGen } from '../core';
 import type { Home } from '../home';
 import { atHome } from '../home';
 import { parseResource } from '../ical';
@@ -48,7 +47,7 @@ import {
 import * as schema from './schema';
 import { notifySharedCalendarUsers, propagateCalendarShare } from './share-propagation';
 import * as shares from './shares';
-import { buildCalendarEvent, buildEventsChangedEvent } from './sse-events';
+import { buildCalendarEvent } from './sse-events';
 import { exportEvents, importEvents } from './transfer';
 import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload } from './types';
 
@@ -77,12 +76,6 @@ export class Calendar {
     private eventsBytes = 0;
 
     private meteredIngest = false;
-
-    // Bulk writes in flight; while any runs, per-resource events are held and the last one out closes them.
-    private readonly batch = new BroadcastBatch(() => this.flushHeldAnnouncements());
-
-    // Which calendars the held announcements were for, so the batched event reaches everybody they would.
-    private readonly heldCalendars = new Set<string>();
 
     public constructor(home: Home) {
         this.home = home;
@@ -475,33 +468,12 @@ export class Calendar {
 
     // --- Announcements ---
 
+    // An announcement reaches the owner's own tabs and every Home the calendar is shared with.
     public announce(type: Parameters<typeof buildCalendarEvent>[0], calendarId: string): void {
-        if (this.batch.hold()) {
-            this.heldCalendars.add(calendarId);
-            return;
-        }
-        this.reachReaders([calendarId], buildCalendarEvent(type, this.home.user.id));
-    }
-
-    // The single event a bulk write sends stands for every one it held, so it goes everywhere they would.
-    private flushHeldAnnouncements(): void {
-        const held = [...this.heldCalendars];
-        this.heldCalendars.clear();
-        this.reachReaders(held, buildEventsChangedEvent(this.home.user.id));
-    }
-
-    // An announcement reaches the owner's own tabs and every Home the calendars are shared with.
-    private reachReaders(calendarIds: string[], sseEvent: SSEvent): void {
+        const sseEvent = buildCalendarEvent(type, this.home.user.id);
         this.home.broadcast(sseEvent);
-        for (const calendarId of calendarIds) {
-            const cal = this.calendarById(calendarId);
-            if (cal) notifySharedCalendarUsers(this.home, cal, sseEvent).catch(console.error);
-        }
-    }
-
-    // A bulk write (a whole-file import) tells the tabs once instead of per resource.
-    public withBatchedEvents<T>(fn: () => Promise<T>): Promise<T> {
-        return this.batch.run(fn);
+        const cal = this.calendarById(calendarId);
+        if (cal) notifySharedCalendarUsers(this.home, cal, sseEvent).catch(console.error);
     }
 
     // --- Events (writes — implementation in calendar/events.ts) ---
@@ -528,7 +500,7 @@ export class Calendar {
         return events.moveEvent(this, calendarId, id, targetCalendarId);
     }
 
-    // A whole `.ics` into one calendar of this Home, each series replayed through putResource as a device sync does.
+    // A whole `.ics` into one calendar of this Home, each series written through the store a device sync takes.
     public async importEvents(calendarId: string, bytes: Uint8Array): Promise<ImportCountsResult> {
         return importEvents(this, calendarId, bytes);
     }

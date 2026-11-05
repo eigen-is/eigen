@@ -17,7 +17,9 @@ import {
 } from '../vcard';
 import type { ParsedCard, VCardLine } from '../vcard/types';
 import type { Contacts } from './contacts';
+import * as davStore from './dav-store';
 import * as schema from './schema';
+import { buildContactsChangedEvent } from './sse-events';
 
 // X-EIGEN-ID carries the account's uuid, which no export may hand out.
 const isEigenName = (name: string) => name.startsWith('X-EIGEN-');
@@ -79,8 +81,8 @@ export async function importCards(contacts: Contacts, bytes: Uint8Array): Promis
     }
 
     const result: ImportCountsResult = { imported: 0, skipped: 0, failed: 0 };
-    // One list-level event for the whole file rather than one per card, so a thousand cards make one broadcast.
-    await contacts.withBatchedEvents(async () => {
+    // The store announces nothing, so the file is one event, sent even when a refusal stops it partway.
+    try {
         for (const card of cards) {
             let parsed: ParsedCard;
             let body: string;
@@ -116,7 +118,7 @@ export async function importCards(contacts: Contacts, bytes: Uint8Array): Promis
             // A UID is not a safe filename (Apple's `…:ABPerson`, `urn:uuid:`), so mint one; If-None-Match: * keeps the write a create.
             let put: PutResourceResult;
             try {
-                put = await contacts.putCard(`${crypto.randomUUID()}.vcf`, body, {
+                put = await davStore.putCard(contacts, `${crypto.randomUUID()}.vcf`, body, {
                     ifMatch: null,
                     ifNoneMatch: '*',
                     import: true,
@@ -139,7 +141,9 @@ export async function importCards(contacts: Contacts, bytes: Uint8Array): Promis
                 result.failed++;
             }
         }
-    });
+    } finally {
+        if (result.imported > 0) contacts.home.broadcast(buildContactsChangedEvent());
+    }
     return result;
 }
 

@@ -8,6 +8,7 @@ import { VCARD_IMPORT_MAX_CARDS } from '../../lib/core/transfer';
 import { getHome } from '../../lib/home';
 import { parseVCard, splitVCards } from '../../lib/vcard';
 import { CONTACTS_TEST_ROOT, makeContacts, stageAvatar, validContact } from '../contacts-test-helpers';
+import { waitFor } from '../fault-storage-helpers';
 import { createTestUser, getTestContext } from '../setup';
 
 // The fixtures are built as text, LF-terminated, the way every desktop client writes an export — the
@@ -237,6 +238,38 @@ describe('Contacts import', () => {
         broadcasts.length = 0;
         expect(await contacts.importCards(fileBytes(text))).toEqual({ imported: 0, skipped: 25, failed: 0 });
         expect(broadcasts.length).toBe(0);
+    });
+
+    test("another request's card is announced while an import runs, and the import announces once at its end", async () => {
+        const { instance: contacts, broadcasts } = await makeContacts();
+        const text = Array.from({ length: 3 }, (_, i) =>
+            card30(`During${i} Import`, `during-${i}@example.com`, crypto.randomUUID()),
+        ).join('');
+        broadcasts.length = 0;
+
+        // With the lock held, the import's first card and then the other request queue, so the other card lands mid-import.
+        const gate = Promise.withResolvers<void>();
+        const held = contacts.writeLock.run(() => gate.promise);
+        const imported = contacts.importCards(fileBytes(text));
+        await waitFor(() => contacts.writeLock.waiting === 1);
+        const other = contacts.putCard(
+            `${crypto.randomUUID()}.vcf`,
+            card30('Other Request', 'other@example.com', crypto.randomUUID()),
+            { ifMatch: null, ifNoneMatch: '*' },
+        );
+        await waitFor(() => contacts.writeLock.waiting === 2);
+        gate.resolve();
+        await held;
+
+        const put = await other;
+        if (!put.ok) throw new Error(`the other card was refused: ${put.error}`);
+        expect(await imported).toEqual({ imported: 3, skipped: 0, failed: 0 });
+        expect(broadcasts).toEqual([
+            { type: SSEventType.CONTACT_CREATED, contactId: put.id },
+            { type: SSEventType.CONTACTS_CHANGED },
+        ]);
+        const names = (await contacts.getContacts()).map((c) => c.firstName);
+        expect(names).toEqual(expect.arrayContaining(['During0', 'During1', 'During2', 'Other']));
     });
 
     test('more than VCARD_IMPORT_MAX_CARDS throws 413', async () => {
