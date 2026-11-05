@@ -1,7 +1,7 @@
 // The serve-time inliner for vector SVGs. A stored SVG names each image by its media file, never by its bytes, so a
 // copied container resolves against its own media. An SVG drawn through <img> fetches nothing, so on the way out of
 // the preview, each name becomes a data: URI of the file's bytes, and the font slices its text draws with are
-// embedded too. Callers include the screen preview cache, and a sweep or a copy keeps what the inliner would read.
+// embedded too. Callers include the screen preview cache, and a sweep keeps what the inliner would read.
 
 import { EIGEN_MEDIA_SCHEME, eigenMediaHref, listEigenMediaRefs, stripEigenMediaRefs } from '@workspace/lib/vector';
 import { spliceAfterSvgOpenTag } from '@workspace/lib/xml';

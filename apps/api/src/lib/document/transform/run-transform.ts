@@ -46,7 +46,7 @@ type TransformOptions = Omit<RunOptions, 'priority' | 'deadlineMs' | 'admissionC
 const TOO_LARGE_TO_INDEX = 'Document too large to index';
 
 // The most state a references job sends the transform process, which gets it as a copy. A document past it is not
-// read for its parts, so a copy takes it whole and a sweep keeps all of it.
+// read for its parts, so a sweep keeps all of it.
 export const MAX_REFERENCES_INPUT_BYTES = 200 * 1024 * 1024;
 
 // The failures the same input repeats: a job past its memory or its deadline. A crash may be the install, not the input.
