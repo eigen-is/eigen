@@ -2,7 +2,7 @@
 // its data.db, saves every edit back to it, and relays edits and cursors between the sockets that have it open.
 // Server-side writers, such as an import or a version restore, edit the same Y.Doc, so every editor sees them. Drive
 // opens each document once and closes it a while after the last socket leaves, and it holds its Home while it waits.
-// That close may first fold a workbook's op log into its snapshot, and may start a sweep of the parts nothing names.
+// That close may first fold a workbook's op log into its snapshot, and then starts a sweep of the parts nothing names.
 
 import { restoreYjsDoc } from '@workspace/lib/collab/yjs-utils';
 import { isRecord } from '@workspace/lib/guards';
@@ -20,7 +20,7 @@ import { ApiError } from '../core/errors';
 import { restampRestoredSheetsBase, stampMissingSheetsBase } from '../document/sheets';
 import { compactSheets, sheetsNeedCompaction } from '../document/sheets-compaction';
 import type { Drive } from '../drive';
-import { isSweepDue, sweepAfterClose } from '../drive/sweep';
+import { sweepAfterClose } from '../drive/sweep';
 import {
     CONTAINER_CHAT_FOLDER,
     CONTAINER_COMMENTS_DB,
@@ -387,9 +387,9 @@ export class CollabDocument {
                 }
             }
         }
-        const close = () => this.drive.closeCollabDocument(this.path.mountId, this.path.id, { skipFinalSnapshot });
-        if (!isSweepDue(this.path)) return close();
-        await sweepAfterClose(this.drive, this.path, close);
+        await sweepAfterClose(this.drive, this.path, () =>
+            this.drive.closeCollabDocument(this.path.mountId, this.path.id, { skipFinalSnapshot }),
+        );
     }
 
     private sendSyncStep1(conn: ServerWebSocket<unknown>): void {

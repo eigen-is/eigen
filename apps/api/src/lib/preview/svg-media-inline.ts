@@ -5,10 +5,9 @@
 
 import { EIGEN_MEDIA_SCHEME, eigenMediaHref, listEigenMediaRefs, stripEigenMediaRefs } from '@workspace/lib/vector';
 import { spliceAfterSvgOpenTag } from '@workspace/lib/xml';
-import { Semaphore } from '../../utils/semaphore';
 import { drawnCodePoints, namedFamilies, slicesFaceCss } from '../export/fonts';
 import type { Mount } from '../mount';
-import { RowMemo } from '../mount/helpers';
+import { foldName } from '../mount/names';
 
 // The raw SVG is hostile bytes, and three rails keep it safe:
 //   - A name resolves in the svg's own folder only, through mount.getChildByName. The codec behind listEigenMediaRefs
@@ -36,12 +35,6 @@ const MEDIA_SNIFF = Buffer.from(EIGEN_MEDIA_SCHEME);
 // or this inliner's own cached output does, gets no second block of slices.
 const FONT_FAMILY_SNIFF = Buffer.from('font-family');
 const FONT_FACE_SNIFF = Buffer.from('@font-face');
-
-// How many sibling svgs withSvgSiblings reads at once.
-const SVG_READS = 4;
-
-// The names each sibling svg withSvgSiblings read holds. A media file never changes, so each is read once.
-const svgRefs = new RowMemo<readonly string[]>();
 
 // Thrown when the running output would exceed the ceiling; caught at the top to serve a stripped svg.
 class OutputTooLargeError extends Error {}
@@ -77,36 +70,32 @@ export async function inlineSvgMediaRefs(mount: Mount, parentId: string, svgByte
 }
 
 // The names given, and every sibling that an svg among them draws when it is served, to the depth the inliner reads,
-// so a sweep or a copy keeps what the svg draws. A missing file, or one that is no svg, adds nothing. At the last
-// depth, the names an svg holds are kept as well, though the inliner strips them, because keeping more is safe.
+// folded the way getChildByName finds a file. A sweep keeps them all, so a kept svg draws no blank image. A missing
+// file, or one that is no svg, adds nothing. Null says an svg could not be read. At the last depth, the names an svg
+// holds are kept as well, though the inliner strips them, because keeping more is safe.
 export async function withSvgSiblings(
     mount: Mount,
     parentId: string,
     names: readonly string[],
-): Promise<ReadonlySet<string>> {
-    const kept = new Set(names);
-    const reads = new Semaphore(SVG_READS);
+): Promise<ReadonlySet<string> | null> {
+    const kept = new Set(names.map(foldName));
     let svgs = [...kept];
     for (let depth = 0; depth <= MAX_SVG_INLINE_DEPTH && svgs.length > 0; depth++) {
-        const refs = await Promise.all(svgs.map((name) => reads.run(() => siblingRefs(mount, parentId, name))));
-        svgs = [];
-        for (const ref of refs.flat()) {
-            if (kept.has(ref)) continue;
-            kept.add(ref);
-            svgs.push(ref);
+        const drawn: string[] = [];
+        for (const name of svgs) {
+            const child = await mount.getChildByName(parentId, name);
+            if (child?.type !== 'file' || child.mimeType !== 'image/svg+xml') continue;
+            const bytes = await mount.readBytes(child.id);
+            if (!bytes) return null;
+            for (const ref of listEigenMediaRefs(Buffer.from(bytes).toString('utf8')).map(foldName)) {
+                if (kept.has(ref)) continue;
+                kept.add(ref);
+                drawn.push(ref);
+            }
         }
+        svgs = drawn;
     }
     return kept;
-}
-
-// The names one sibling svg holds.
-async function siblingRefs(mount: Mount, parentId: string, name: string): Promise<readonly string[]> {
-    const child = await mount.getChildByName(parentId, name);
-    if (child?.type !== 'file' || child.mimeType !== 'image/svg+xml') return [];
-    return svgRefs.get(child, async () => {
-        const bytes = await mount.readBytes(child.id);
-        return bytes ? listEigenMediaRefs(Buffer.from(bytes).toString('utf8')) : [];
-    });
 }
 
 async function resolveSvgRefs(

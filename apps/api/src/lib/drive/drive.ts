@@ -102,7 +102,7 @@ import {
 import type * as sharedSchema from './sharedschema';
 import { broadcastFileHistoryUpdated, buildDriveEvent } from './sse-events';
 import { streamFilesToTemp } from './streaming';
-import { markSweepDue, nameVersion } from './sweep';
+import { nameVersion } from './sweep';
 import { deleteFailedCopy, deletePath, permanentlyDelete, restorePath } from './trash';
 import { finalizeUpload, regenerateThumbnailAsync } from './upload';
 
@@ -1284,14 +1284,13 @@ export class Drive {
         return listVersions(this.getMount(mountId), containerId);
     }
 
-    // Delete history. The media and threads that only the versions named go in the document's next sweep, which this
-    // makes due. An open document is never swept, so that sweep runs once its last tab closed.
+    // Delete history. The media and threads that only the versions named go in the sweep after the document's next
+    // close. An open document is never swept, so that sweep runs once its last tab closed.
     public async deleteVersions(mountId: string, containerId: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const container = await mount.getActivePath(containerId);
         if (!isDocumentType(container.type)) throw new ApiError(400, 'Only a document has versions');
         await deleteVersions(mount, containerId);
-        markSweepDue(container);
         if (user) await this.recordFileEvent(mountId, containerId, user, { eventType: 'versions-deleted' });
     }
 
