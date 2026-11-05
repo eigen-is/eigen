@@ -7,7 +7,7 @@ import type { DatabaseConfig } from '../core/managed-database';
 import * as schema from './schema';
 
 // The schema every mount's metadata.db is migrated to.
-const CURRENT_VERSION = 9;
+const CURRENT_VERSION = 8;
 // And the version that gave `pending_uploads` its `isDatabase` column. A restore writes those rows
 // itself, so it refuses an archived metadata.db older than this rather than take the DEFAULT.
 export const PENDING_UPLOAD_KIND_VERSION = 8;
@@ -279,20 +279,6 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
             up: (db) =>
                 // A restore stages plain files too, which the queue must not check for a SQLite header.
                 db.exec(`ALTER TABLE pending_uploads ADD COLUMN isDatabase INTEGER NOT NULL DEFAULT 1;`),
-        },
-        {
-            // What each saved version of a document names. Additive: an existing version has no row yet, and the
-            // sweep reads it the first time it meets it.
-            version: 9,
-            up: (db) =>
-                db.exec(`
-                CREATE TABLE IF NOT EXISTS version_references (
-                    versionPathId TEXT PRIMARY KEY,
-                    readerVersion INTEGER NOT NULL,
-                    names TEXT NOT NULL,
-                    FOREIGN KEY (versionPathId) REFERENCES paths(id) ON DELETE CASCADE
-                );
-            `),
         },
     ],
 };

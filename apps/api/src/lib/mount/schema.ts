@@ -80,17 +80,3 @@ export const pathWatchers = sqliteTable(
         userIdx: index('idx_path_watchers_user').on(table.userId),
     }),
 );
-
-// What a state of a document names among the document's parts: the files in its media folder and the threads in its
-// chat folder, and the comment cards it has in use, each sorted.
-export type DocumentReferences = { media: string[]; chat: string[]; cards: string[] };
-
-// What each saved version of a document names among the document's parts, as a sweep last read it. The row is the
-// record that the version was read: one that names nothing has empty lists. A row from an older reader counts as no row.
-export const versionReferences = sqliteTable('version_references', {
-    versionPathId: text('versionPathId')
-        .primaryKey()
-        .references(() => paths.id, { onDelete: 'cascade' }),
-    readerVersion: integer('readerVersion').notNull(),
-    names: text('names', { mode: 'json' }).notNull().$type<DocumentReferences>(),
-});
