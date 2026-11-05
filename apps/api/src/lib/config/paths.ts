@@ -6,7 +6,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { parseOwnerId } from '@workspace/lib/types/owner';
-import { DATA_LEASE_FILE, DATA_LOCK_FILE } from './data-lock';
+import { DATA_LOCK_FILE } from './data-lock';
 import { isProduction } from './env';
 
 // The layout inside one home folder.
@@ -72,7 +72,6 @@ export const SERVER_FILES = { config: 'config.json', settings: 'settings.json', 
 // Written by the running server, never captured, never restored.
 export const SERVER_RUNTIME_FILES = {
     instanceLock: DATA_LOCK_FILE,
-    instanceLease: DATA_LEASE_FILE,
     controlSocket: 'control.sock',
     setupToken: 'setup-token',
     epoch: 'data-epoch',

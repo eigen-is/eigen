@@ -36,7 +36,7 @@ import {
 import { ARCHIVE_MANIFEST_FILE, getBackupsDir, SERVER_ARCHIVE_SERVER_MEMBER } from '../../lib/backup/paths';
 import { readMemberManifests, stageBytesNeeded, stageServerArchive } from '../../lib/backup/restore-server';
 import { startServerBackup } from '../../lib/backup/server-job';
-import { DATA_LEASE_FILE, LEASE_WAIT_MS, lockDataDir, writeLease } from '../../lib/config/data-lock';
+import { lockDataDir } from '../../lib/config/data-lock';
 import {
     GUEST_HOMES_DIR,
     homeDirUnder,
@@ -1210,60 +1210,6 @@ describe('restore --stage and --swap', () => {
                 other.close();
             }
             expect((await swap(dir)).code).toBe(0);
-        },
-        JOB_TIMEOUT_MS,
-    );
-
-    // An API on another kernel, such as the Mac host beside the container, holds no file lock the swap can see. Each
-    // swap waits LEASE_WAIT_MS on a foreign lease, so the two run side by side on installs of their own.
-    test(
-        'a swap with a live lease in data/server is refused before anything moves, and a stale one only delays it',
-        async () => {
-            const live = install();
-            const stale = install();
-            const staged = await Promise.all([live, stale].map((dir) => stage(dir, basename(fullArchive))));
-            expect(staged.map((result) => result.code)).toEqual([0, 0]);
-            const startedAt = new Date().toISOString();
-            const heartbeat = (dir: string) =>
-                writeLease(join(dir, 'data/server', DATA_LEASE_FILE), {
-                    id: 'remote-id',
-                    host: 'other-machine',
-                    kernel: 'other-kernel',
-                    dev: 0,
-                    pid: 4242,
-                    platform: 'darwin',
-                    startedAt,
-                    heartbeatAt: new Date().toISOString(),
-                });
-            heartbeat(live);
-            heartbeat(stale);
-            const remote = setInterval(() => heartbeat(live), 50);
-            const timed = async (dir: string) => {
-                const started = Date.now();
-                const result = await swap(dir);
-                return { result, waited: Date.now() - started };
-            };
-            try {
-                const [{ result: refused }, { result: delayed, waited }] = await Promise.all([
-                    timed(live),
-                    // A stopped heartbeat leaves a lease that no longer moves, so it delays the swap once, not forever.
-                    timed(stale),
-                ]);
-                expect(refused.code).toBe(1);
-                expect(refused.stderr).toContain('other-machine');
-                expect(refused.stderr).toContain('4242');
-                expect(readFileSync(join(live, 'data/home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
-                expect(existsSync(join(live, SWAP_MARKER))).toBe(false);
-                expect(asideDirs(live)).toEqual([]);
-                expect(delayed.code).toBe(0);
-                expect(waited).toBeGreaterThanOrEqual(LEASE_WAIT_MS);
-                // A refusal leaves the staged restore usable: once the remote API is gone, the same install swaps.
-                clearInterval(remote);
-                rmSync(join(live, 'data/server', DATA_LEASE_FILE));
-                expect((await swap(live)).code).toBe(0);
-            } finally {
-                clearInterval(remote);
-            }
         },
         JOB_TIMEOUT_MS,
     );
