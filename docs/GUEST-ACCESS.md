@@ -25,7 +25,7 @@ The home is on disk rather than in memory so it reuses Drive and NotificationCen
 | No sharing, access requests or mail to collaborators | `requireNonGuest()` on the ACL route, the chat `/invite` route, the drive `access-check`, `request-access` and `email-collaborators`. The File menu and Drive's item menu hide **Email collaborators** from a guest |
 | Read/write per ACL| SharedDrive enforces the entries the owner set             |
 
-A calendar invitation treats a guest like an external address: an iMIP mail and a registry entry, no in-app copy (`invite-propagation.ts`, [CALENDAR.md § The organizer's writes fan out](CALENDAR.md#the-organizers-writes-fan-out-and-only-the-organizers)). A guest answers from their own mail, which reaches the organizer through [inbound iMIP](CALENDAR.md#inbound-imip-acts-only-on-a-sender-our-own-mta-verified). The home relay skips calendar messages for a home without a calendar (`hasCalendar`), reconciliation's included, so no calendar push crashes on a `GuestHome`.
+A calendar invitation treats a guest like an external address: an iMIP mail and a registry entry, no in-app copy (`invite-propagation.ts`, [CALENDAR.md § The organizer's writes fan out](CALENDAR.md#the-organizers-writes-fan-out-and-only-the-organizers)). A guest answers from their own mail, which reaches the organizer through [inbound iMIP](CALENDAR.md#inbound-imip-acts-only-on-a-sender-our-own-mta-verified). The home relay skips calendar messages for a home without a calendar (`hasCalendar`), so no calendar push crashes on a `GuestHome`. Reconciliation skips its calendar pulls for a guest, so a sign-in never scans an owner's calendar.
 
 ## Sign-in is a two-step code flow on custom endpoints
 

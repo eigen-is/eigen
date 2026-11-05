@@ -141,13 +141,13 @@ PK: `(fromUserId, targetIdentifier)`. No share data, just the pair. Reconciliati
 - **Guest signs in**: every successful OTP verification ([GUEST-ACCESS.md](GUEST-ACCESS.md))
 - **Team member added**: `organizationHooks.afterAddTeamMember` on the `organization()` plugin in `apps/api/src/lib/auth/auth.ts`, and the org join itself for the default team, since `addMember` skips that hook ([ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md#every-new-user-joins-the-default-team))
 
-Each trigger calls `reconcileShares(user, target)` (`apps/api/src/lib/share/reconciliation.ts`), where the target is the user's own address or the `team_<id>` they joined. Per source it runs:
+Each trigger calls `reconcileShares(user, teamId?)` (`apps/api/src/lib/share/reconciliation.ts`), which reads the registry for the user's own address, or for the `team_<id>` they joined when it gets a `teamId`. Per source it runs:
 
-1. `pullCalendarShares()`: shared calendar entries, with the strongest permission the user holds by address or through any of their teams. The newcomer has already joined the default team when their address reconciles, so asking by address alone would store a weaker permission than the team gives.
-2. `pullSharedPaths()`: shared drive paths
-3. `pullPendingInvitations()`: calendar invites (creates linked event copies), for the address target only. An invitation names an address, never a team, and an existing user got theirs when it was sent, so a team join pulls none: a pull would bring back an invitation the member had removed.
+1. `pullSharedPaths()`: shared drive paths
+2. `pullCalendarShares()`: shared calendar entries, with the strongest permission the user holds by address or through any of their teams. The newcomer has already joined the default team when their address reconciles, so asking by address alone would store a weaker permission than the team gives.
+3. `pullPendingInvitations()`: calendar invites (creates linked event copies), without a `teamId` only. An invitation names an address, never a team, and an existing user got theirs when it was sent, so a team join pulls none: a pull would bring back an invitation the member had removed.
 
-Every delivery goes through `sendToHome`, which opens the user's home for that one message. So a home that goes idle and closes during a slow pull reopens for the next delivery, and the run holds no Home of its own. The relay drops calendar messages to a home without a calendar (a guest's).
+Every delivery goes through `sendToHome`, which opens the user's home for that one message. So a home that goes idle and closes during a slow pull reopens for the next delivery, and the run holds no Home of its own. A guest's home has no calendar, so a guest runs neither calendar pull: each scans the owner's calendar, and the relay would drop the result.
 
 A source can be a team: a share on a team drive path records `team_<id>` as `fromUserId`. Reconciliation resolves it through the team (`getTeam`), not as a user id, and delivers drive paths only, attributed to the team name, since a team has no calendars or invitations to pull. Without this, a guest granted a team-owned document gets in but never sees it in **Shared with me**, and neither does a user who joins a granted team later.
 

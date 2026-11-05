@@ -277,7 +277,7 @@ describe('Guest Auth', () => {
             const guestUser = await getUserByEmail(guestEmail);
             if (!guestUser) throw new Error('test setup');
 
-            await reconcileShares(guestUser, guestUser.email);
+            await reconcileShares(guestUser);
 
             expect(await getEntriesForTarget(guestEmail)).toContain(ctx.alice.user.id);
         });

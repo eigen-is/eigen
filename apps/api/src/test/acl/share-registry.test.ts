@@ -332,7 +332,7 @@ describe('Share Registry', () => {
             if (!user) throw new Error('newuser missing');
 
             // Call reconciliation again (entries were already consumed, so this is a no-op)
-            await reconcileShares(user, user.email);
+            await reconcileShares(user);
 
             // Sign in to verify
             const { auth } = await import('../../lib/auth/auth');
@@ -437,7 +437,7 @@ describe('Share Registry', () => {
             const { getUserByEmail } = await import('../../lib/user');
             const user = await getUserByEmail(email);
             if (!user) throw new Error('new user missing');
-            await reconcileShares(user, user.email);
+            await reconcileShares(user);
 
             const drivePaths2 = await assertJson<DrivePath[]>(
                 await authedRequest(sessionToken, `/drive/${newUserId}/shared/with-me`),

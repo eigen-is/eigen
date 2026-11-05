@@ -1,12 +1,15 @@
 import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import type { DrivePath } from '@workspace/lib/types';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
+import { requestOtp, verifyOtpAndSignIn } from '../../lib/auth/guest-auth';
 import { getServerConfig } from '../../lib/config/server-config';
 import { evictHome, getHome } from '../../lib/home/get-home';
 import * as relay from '../../lib/home/home-relay';
+import * as mailer from '../../lib/mailer/mailer';
 import { reconcileShares } from '../../lib/share';
 import { addRegistryEntry } from '../../lib/share/registry';
-import { getUserById } from '../../lib/user';
+import { getUserByEmail, getUserById } from '../../lib/user';
 import { addMember, assertJson, authedRequest, createTeam, createTestUser, findOrFail, getTestContext } from '../setup';
 
 describe('share reconciliation', () => {
@@ -118,6 +121,53 @@ describe('share reconciliation', () => {
         expect(invitations).not.toHaveBeenCalled();
     });
 
+    // A guest's home has no calendar, so a calendar pull would scan the owner's calendar for nothing.
+    test('a guest sign-in delivers shared paths and pulls no calendars', async () => {
+        const email = `recon-guest-${crypto.randomUUID()}@external.com`;
+        await aliceCalendar('Shared with a guest', [{ targetId: email, permission: 'read' }]);
+        const root = await assertJson<DrivePath>(
+            await authedRequest(ctx.alice.user.sessionToken, `/drive/${ctx.alice.user.id}/default/root`),
+        );
+        const folderName = `recon-guest-${crypto.randomUUID()}`;
+        const folder = await assertJson<DrivePath>(
+            await authedRequest(ctx.alice.user.sessionToken, `/drive/${ctx.alice.user.id}/default/folder/${root.id}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ folderName }),
+            }),
+        );
+        const acl = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/default/path/${folder.id}/acl`,
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ add: [{ id: email, read: true, write: false }] }),
+            },
+        );
+        expect(acl.status).toBe(200);
+        const sent = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        const calendarShares = spyOn(relay, 'pullCalendarShares');
+        const invitations = spyOn(relay, 'pullPendingInvitations');
+        spies.push(sent, calendarShares, invitations);
+
+        await requestOtp(email, '192.0.2.71');
+        const otp = sent.mock.calls[0]?.[0].text.match(/\b(\d{6})\b/)?.[1];
+        if (!otp) throw new Error('no code in the mail');
+        const signIn = await verifyOtpAndSignIn(email, otp, '192.0.2.71');
+        const sessionToken = signIn.headers.get('set-cookie')?.match(/better-auth\.session_token=([^;]+)/)?.[1];
+        if (!sessionToken) throw new Error('no session cookie');
+        const guest = await getUserByEmail(email);
+        if (!guest) throw new Error('guest missing');
+
+        const shared = await assertJson<DrivePath[]>(
+            await authedRequest(sessionToken, `/drive/${guest.id}/shared/with-me`),
+        );
+        expect(shared.some((path) => path.name === folderName)).toBe(true);
+        expect(calendarShares).not.toHaveBeenCalled();
+        expect(invitations).not.toHaveBeenCalled();
+    });
+
     // Reconciliation waits on pulls from other homes, and the newcomer's home may close meanwhile.
     test('a delivery reopens a home that closed during a slow pull', async () => {
         const stamp = Date.now();
@@ -147,7 +197,7 @@ describe('share reconciliation', () => {
             spyOn(relay, 'pullSharedPaths').mockResolvedValue([]),
         );
 
-        const running = reconcileShares(user, user.email);
+        const running = reconcileShares(user);
         await pulling;
         await evictHome(user.id);
         openGate();

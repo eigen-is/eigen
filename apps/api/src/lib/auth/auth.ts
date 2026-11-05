@@ -99,7 +99,7 @@ export const auth = betterAuth({
                         console.error(`Failed to auto-join new user ${user.id} to default org:`, error);
                     }
                     try {
-                        await reconcileShares(user, user.email);
+                        await reconcileShares(user);
                     } catch (error) {
                         console.error(`Failed to reconcile shares for new user ${user.id}:`, error);
                     }
@@ -206,7 +206,7 @@ export const auth = betterAuth({
             organizationHooks: {
                 afterAddTeamMember: async ({ teamMember }) => {
                     const user = await getUserById(teamMember.userId);
-                    if (user) await reconcileShares(user, teamOwnerId(teamMember.teamId));
+                    if (user) await reconcileShares(user, teamMember.teamId);
                 },
                 // The team row still exists here, and a throw keeps it, as user.delete.before does for a user.
                 // The default team holds the org-wide drive every member joins, and its teardown can't be undone.
@@ -337,7 +337,7 @@ async function ensureDefaultOrgMembership(userId: string): Promise<void> {
     if (!teamId) return;
     // addMember skips afterAddTeamMember.
     try {
-        await reconcileShares(user, teamOwnerId(teamId));
+        await reconcileShares(user, teamId);
     } catch (error) {
         console.error(`Failed to reconcile default team shares for user ${userId}:`, error);
     }

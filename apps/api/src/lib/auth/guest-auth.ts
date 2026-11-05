@@ -123,7 +123,7 @@ export async function verifyOtpAndSignIn(email: string, otp: string, ip: string)
     }
 
     // Every sign-in reconciles, not only the first, so a first reconcile that failed heals at the next sign-in.
-    await reconcileShares(guestUser, guestUser.email);
+    await reconcileShares(guestUser);
 
     return signInWithScopedPassword('guest', guestUser.id, email);
 }
