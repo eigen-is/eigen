@@ -6,7 +6,7 @@ category: Basics
 tags: [drive, files, folders, move, copy, duplicate, organize]
 related: [drive/rename-move-organise, drive/share-a-file]
 order: 75
-updated: 2026-11-04
+updated: 2026-11-05
 ---
 
 Dragging works well for a folder you can see on screen. When the destination is somewhere else, or in another drive, the right-click menu has three options that open a folder picker instead: **Move to…**, **Copy to…**, and **Duplicate**.
@@ -40,7 +40,7 @@ When the copy is done, a message says **1 item copied** (or **3 items copied**, 
 
 If some of the items fail, a message says how many and why, and the **Copy to** dialog stays open with only those items left. Click **Copy here** again to retry them. The ones that already copied are not copied a second time.
 
-Copying a folder copies everything inside it. A folder or a document only needs to fit in the free space of the drive you copy it to, while a single file must also be within the upload size limit. A folder that fails part way leaves nothing half-copied in the folder you picked, and nothing in the Trash. If someone added their own files to the folder while it copied, the folder goes to the Trash instead, so those files can be restored. Copying a document, spreadsheet, presentation, board, or drawing gives you a working file with the same contents, but the copy starts its own version history rather than inheriting the original's. So it leaves behind the images and comments you deleted from the original, which only its earlier versions could bring back. The same goes for **Duplicate**.
+Copying a folder copies everything inside it. A folder or a document only needs to fit in the free space of the drive you copy it to, while a single file must also be within the upload size limit. A folder that fails part way leaves nothing half-copied in the folder you picked, and nothing in the Trash. If someone added their own files to the folder while it copied, the folder goes to the Trash instead, so those files can be restored. Copying a document, spreadsheet, presentation, board, or drawing gives you a working file with the same contents, but the copy starts its own version history rather than inheriting the original's. At first the copy also holds the images and comments you deleted from the original, which only its earlier versions could bring back. Eigen removes them from the copy the first time everyone closes it, three days or more after you copied it. The same goes for **Duplicate**.
 
 ## Duplicate a file in place
 
