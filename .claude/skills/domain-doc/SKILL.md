@@ -44,11 +44,11 @@ What, then why, then where. One idea per section.
 
 ## Length follows the domain
 
-A doc is as long as its domain needs. It gets shorter only by cutting narration, repetition and code tours, never by moving content to another file. For readability:
+A doc is as long as its domain needs. It gets shorter only by cutting narration, repetition, edge cases and code tours, never by moving content to another file. A doc grows with the design, not with the fixes: a fix adds a sentence only when it changes a decision or an invariant, and how the code handles one more case belongs in its test. A section that explains special case after special case describes a patch; report it as one ([REVIEW-STANDARD.md](../../../docs/REVIEW-STANDARD.md), *A patch is a finding*). Most domains fit in a few thousand words; a longer doc is first searched for narration and edge cases. For readability:
 
 - The TLDR is one short paragraph. The introduction under it is as long as the model needs, and no longer.
 - Each section makes one point. A section that makes two becomes two sections of the same doc.
-- Paragraphs stay short enough to read in one go. A paragraph is one line: no hard wraps.
+- Paragraphs stay short enough to read in one go, about five sentences at most. A paragraph is one line: no hard wraps.
 - Sentences are plain and short. Split one that needs a second read.
 
 ## What goes where
