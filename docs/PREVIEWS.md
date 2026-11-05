@@ -95,7 +95,7 @@ A video thumbnail is a frame ffmpeg takes at one second, retried at zero when th
 
 ## A mail part previews through the same renderers
 
-The mail preview routes (`routes/mail.ts`) end in the bytes-in entry points beside the cached ones: `getBytesTextPreview` and its three typed siblings. A part has no version stamp to key a cache on, so nothing is cached server-side. `answerMailPart` builds the ETag from the message and the format tag, stamped only on a produced body. A part decodes with the charset its sender declared. Only an inline forwarded `message/rfc822` is flattened into its parent; a non-inline one is a part of its own, which the `.eml` route previews. Why the routes sit two segments past the part index is in [MAIL.md](MAIL.md).
+The mail preview routes (`routes/mail.ts`) end in the bytes-in entry points beside the cached ones: `getBytesTextPreview` and its three typed siblings. A part has no version stamp to key a cache on, so nothing is cached server-side. `answerMailPart` builds the ETag from the message id, the part index and the format tag, stamped only on a produced body, and a draft's part gets none ([MAIL.md](MAIL.md#a-drafts-part-is-never-stored-and-any-other-part-revalidates-by-its-id)). A part decodes with the charset its sender declared. Only an inline forwarded `message/rfc822` is flattened into its parent; a non-inline one is a part of its own, which the `.eml` route previews. Why the routes sit two segments past the part index is in [MAIL.md](MAIL.md).
 
 ## A `.vcf`, an `.eml` and an `.ics` preview as what they hold
 

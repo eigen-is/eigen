@@ -231,13 +231,8 @@ export class Mail {
         return this.store.getRawMessage(messageId);
     }
 
-    // The index row, which serveMailPart validates its ETag against before it parses anything.
     public messageGetSummary(messageId: string): EmailSummary | undefined {
         return this.store.getSummary(messageId);
-    }
-
-    public messageGetModifiedAt(summary: EmailSummary): Promise<number> {
-        return this.store.getModifiedAt(summary);
     }
 
     public async messageGetAttachment(messageId: string, index: number): Promise<Attachment> {

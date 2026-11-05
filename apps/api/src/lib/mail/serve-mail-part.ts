@@ -1,14 +1,16 @@
+// How a mail route answers with one part of a message: its bytes for the download and embed routes, or the
+// preview a route renders from them. It decides whether the browser may keep the answer. The mail routes
+// that serve parts and their previews call it on every request.
+
 import type { Attachment } from '@workspace/lib/types/mail';
 import { mailAttachmentName } from '@workspace/lib/types/mail';
 import type { ElysiaCustomStatusResponse } from 'elysia';
 import { ApiError, answerRevalidated, contentDisposition, rangeResponse, scriptableInlineHeaders } from '../core';
 import type { Mail } from './mail-domain';
 
-// What a mail route answers for one part, or a 304 answered off the summary row before the .eml is parsed.
-// no-cache: the URL has no version stamp, and a draft save rewrites the message under its id. The row's date has
-// second precision, so the file's mtime is what tells two same-size saves within one second apart.
-// A preview route passes its renderer's format tag, so a payload or sanitizer fix is not answered with a 304
-// on a message that has not changed; the two byte routes serve the part itself and have none.
+// A draft save rewrites the message under its id, so a draft's part is never stored. Any other message never
+// changes under its id, so a 304 is answered before the .eml is read. A preview passes its renderer's format
+// tag, so a renderer fix is not answered with a 304.
 export async function answerMailPart<T>(
     mail: Mail,
     messageId: string,
@@ -20,10 +22,12 @@ export async function answerMailPart<T>(
 ): Promise<T | ElysiaCustomStatusResponse<304>> {
     const summary = mail.messageGetSummary(messageId);
     if (!summary) throw new ApiError(404, `Message '${messageId}' not found`);
-
-    const modifiedAt = await mail.messageGetModifiedAt(summary);
-    const etag = `"${summary.id}-${index}-${modifiedAt}-${summary.size}${format ? `-${format}` : ''}"`;
-    return answerRevalidated(request, set, etag, async () => serve(await mail.messageGetAttachment(messageId, index)));
+    const produce = async () => serve(await mail.messageGetAttachment(messageId, index));
+    if (summary.isDraft) {
+        set.headers['Cache-Control'] = 'no-store';
+        return produce();
+    }
+    return answerRevalidated(request, set, `"${summary.id}-${index}${format ? `-${format}` : ''}"`, produce);
 }
 
 // One response shape for the download and the embed route: the part's own type and name, ranges because

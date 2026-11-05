@@ -1,20 +1,15 @@
-import type { Mock } from 'bun:test';
-import { afterEach, beforeAll, beforeEach, describe, expect, setSystemTime, spyOn, test } from 'bun:test';
-import { renameSync } from 'node:fs';
-import { join } from 'node:path';
+import { beforeAll, describe, expect, setSystemTime, test } from 'bun:test';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { MAILBOX_DRAFTS } from '@workspace/lib/constants/mailboxes';
 import { TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants/preview';
 import { EML_MIME, ICS_MIME } from '@workspace/lib/types/drive';
-import type { EmailDraft, EmailSummary } from '@workspace/lib/types/mail';
+import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getHome } from '../../lib/home';
-import * as mailParse from '../../lib/mail/mail-parse';
-import { boxDir } from '../mail-test-helpers';
 import { assertJson, authedRequest, findOrFail, getTestContext, putDraft, uploadDraftAttachment } from '../setup';
 
 const isWindows = process.platform === 'win32';
@@ -264,7 +259,41 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
         expect(first.headers.get('etag')).not.toBe(second.headers.get('etag'));
     });
 
-    // A draft with one text attachment, its part's URL, and the ETag that part was first served with.
+    const setFlagged = async (flagged: boolean): Promise<void> => {
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/mail/${ctx.alice.user.id}/message/${messageId}/flagged`,
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ flagged }),
+            },
+        );
+        expect(res.status).toBe(200);
+    };
+
+    test('a part keeps its id ETag across a flag change and answers 304 on it', async () => {
+        const token = ctx.alice.user.sessionToken;
+        const first = await authedRequest(token, downloadUrl(2, 'ranged.txt'));
+        expect(first.headers.get('cache-control')).toBe('private, no-cache');
+        expect(first.headers.get('etag')).toBe(`"${messageId}-2"`);
+
+        await setFlagged(true);
+        try {
+            const revalidated = await authedRequest(token, downloadUrl(2, 'ranged.txt'), {
+                headers: { 'if-none-match': `"${messageId}-2"` },
+            });
+            expect(revalidated.status).toBe(304);
+
+            const fresh = await authedRequest(token, downloadUrl(2, 'ranged.txt'));
+            expect(fresh.headers.get('etag')).toBe(`"${messageId}-2"`);
+            expect(await fresh.text()).toBe(RANGED_BODY);
+        } finally {
+            await setFlagged(false);
+        }
+    });
+
+    // A draft with one text attachment, and the URL its part downloads from.
     async function draftWithPart(subject: string, body: string) {
         const token = ctx.alice.user.sessionToken;
         const ownerId = ctx.alice.user.id;
@@ -275,69 +304,60 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
             { subject, text: 'first', html: '<p>first</p>', isDraft: true, mailbox: MAILBOX_DRAFTS },
             { tempAttachmentIds: [upload.tempId] },
         );
-        const partUrl = `/mail/${ownerId}/message/${draft.id}/attachment/0/part.txt`;
-        const before = await authedRequest(token, partUrl);
-        expect(await before.text()).toBe(body);
-        const staleEtag = before.headers.get('etag') ?? '';
-        expect(staleEtag).not.toBe('');
-        return { draft, partUrl, staleEtag };
+        return { draft, partUrl: `/mail/${ownerId}/message/${draft.id}/attachment/0/part.txt` };
     }
 
-    // The draft saved again with `body` as its one attachment, and its text the same length as before.
-    async function rewriteDraft(draft: EmailDraft, body: string): Promise<EmailDraft> {
-        const token = ctx.alice.user.sessionToken;
-        const ownerId = ctx.alice.user.id;
-        const upload = await uploadDraftAttachment(token, ownerId, new File([body], 'a.txt', { type: 'text/plain' }));
-        return putDraft(
-            token,
-            ownerId,
-            { ...draft, text: 'other', html: '<p>other</p>' },
-            { tempAttachmentIds: [upload.tempId], keepAttachmentIndexes: [] },
-        );
-    }
-
-    const revalidate = (partUrl: string, etag: string) =>
-        authedRequest(ctx.alice.user.sessionToken, partUrl, { headers: { 'if-none-match': etag } });
-
-    test('a rewritten draft serves a new ETag for the same part index', async () => {
-        const { draft, partUrl, staleEtag } = await draftWithPart('Rewritten draft', 'AAA');
-        expect((await rewriteDraft(draft, 'BBBBBB')).id).toBe(draft.id);
-
-        const after = await authedRequest(ctx.alice.user.sessionToken, partUrl);
-        expect(await after.text()).toBe('BBBBBB');
-        expect(after.headers.get('etag')).not.toBe(staleEtag);
-
-        const revalidated = await revalidate(partUrl, staleEtag);
-        expect(revalidated.status).toBe(200);
-        expect(await revalidated.text()).toBe('BBBBBB');
+    test('a draft part answers no-store and no ETag on the byte and preview routes', async () => {
+        const { draft } = await draftWithPart('No-store draft', 'AAA');
+        const base = `/mail/${ctx.alice.user.id}/message/${draft.id}/attachment/0`;
+        for (const url of [`${base}/part.txt`, `${base}/embed/part.txt`, `${base}/preview/text`]) {
+            const res = await authedRequest(ctx.alice.user.sessionToken, url);
+            expect(res.status).toBe(200);
+            expect(res.headers.get('cache-control')).toBe('no-store');
+            expect(res.headers.get('etag')).toBeNull();
+        }
     });
 
     // The row's date has second precision, so a rewrite in the same second at the same size moves neither.
-    test('a same-size draft rewrite within one second serves a new ETag', async () => {
+    test('a same-size draft rewrite within one second serves its new bytes', async () => {
         setSystemTime(new Date('2026-09-15T10:00:00.000Z'));
         try {
-            const { draft, partUrl, staleEtag } = await draftWithPart('Same-size draft', 'AAA');
-            const resaved = await rewriteDraft(draft, 'BBB');
+            const token = ctx.alice.user.sessionToken;
+            const ownerId = ctx.alice.user.id;
+            const { draft, partUrl } = await draftWithPart('Same-size draft', 'AAA');
+            expect(await (await authedRequest(token, partUrl)).text()).toBe('AAA');
+
+            const upload = await uploadDraftAttachment(
+                token,
+                ownerId,
+                new File(['BBB'], 'a.txt', { type: 'text/plain' }),
+            );
+            const resaved = await putDraft(
+                token,
+                ownerId,
+                { ...draft, text: 'other', html: '<p>other</p>' },
+                { tempAttachmentIds: [upload.tempId], keepAttachmentIndexes: [] },
+            );
             expect(resaved.size).toBe(draft.size);
             expect(new Date(resaved.date).getTime()).toBe(new Date(draft.date).getTime());
 
-            const revalidated = await revalidate(partUrl, staleEtag);
-            expect(revalidated.status).toBe(200);
-            expect(await revalidated.text()).toBe('BBB');
+            expect(await (await authedRequest(token, partUrl)).text()).toBe('BBB');
         } finally {
             setSystemTime();
         }
     });
 
-    // Dovecot renames a message file on a flag change, and the index learns the new name a moment later.
-    test('a part whose file was just renamed answers as changed, not as an error', async () => {
-        const { draft, partUrl, staleEtag } = await draftWithPart('Renamed draft', 'AAA');
-        const cur = join(boxDir(ctx.alice.user.id, MAILBOX_DRAFTS), 'cur');
-        renameSync(join(cur, draft.filename), join(cur, `${draft.filename}F`));
+    test('the .eml download of a draft answers no-store, and of any other message caches', async () => {
+        const token = ctx.alice.user.sessionToken;
+        const ownerId = ctx.alice.user.id;
+        const { draft } = await draftWithPart('Downloaded draft', 'AAA');
+        const draftRes = await authedRequest(token, `/mail/${ownerId}/message/${draft.id}/download`);
+        expect(draftRes.status).toBe(200);
+        expect(draftRes.headers.get('cache-control')).toBe('no-store');
 
-        const revalidated = await revalidate(partUrl, staleEtag);
-        expect(revalidated.status).toBe(200);
-        expect(await revalidated.text()).toBe('AAA');
+        const received = await authedRequest(token, `/mail/${ownerId}/message/${messageId}/download`);
+        expect(received.status).toBe(200);
+        expect(received.headers.get('cache-control')).toBe('private, max-age=86400');
     });
 
     test('the download route serves a range as 206', async () => {
@@ -763,94 +783,6 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
         test("another user's message is refused with 403", async () => {
             const res = await authedRequest(ctx.bob.user.sessionToken, icsPreviewUrl(0));
             expect(res.status).toBe(403);
-        });
-    });
-
-    describe('the parsed-message cache', () => {
-        let parses: Mock<typeof mailParse.parseEml>;
-        const parsesOf = (id: string): number => parses.mock.calls.filter(([messageId]) => messageId === id).length;
-        const partUrl = (id: string): string => `/mail/${ctx.alice.user.id}/message/${id}/attachment/0/embed/part.txt`;
-        const firstByte = (id: string): Promise<Response> =>
-            authedRequest(ctx.alice.user.sessionToken, partUrl(id), { headers: { range: 'bytes=0-0' } });
-        const deliver = async (subject: string, body: string): Promise<string> => {
-            const boundary = 'att-cache';
-            const eml = [
-                'From: sender@external.com',
-                `To: ${ctx.alice.user.email}`,
-                `Subject: ${subject}`,
-                'MIME-Version: 1.0',
-                `Content-Type: multipart/mixed; boundary="${boundary}"`,
-                '',
-                `--${boundary}`,
-                'Content-Type: text/plain; charset=utf-8',
-                'Content-Disposition: attachment; filename="part.txt"',
-                '',
-                body,
-                `--${boundary}--`,
-            ].join('\r\n');
-            const home = await getHome(ctx.alice.user.id);
-            return home.mail.mailboxDeliver(Buffer.from(eml));
-        };
-
-        beforeEach(() => {
-            parses = spyOn(mailParse, 'parseEml');
-        });
-        afterEach(() => {
-            parses.mockRestore();
-        });
-
-        test('two range requests on one part parse the message once', async () => {
-            const id = await deliver('Seeked video fixture', RANGED_BODY);
-            const before = parsesOf(id);
-
-            const first = await authedRequest(ctx.alice.user.sessionToken, partUrl(id), {
-                headers: { range: 'bytes=0-3' },
-            });
-            expect(await first.text()).toBe('0123');
-            const second = await authedRequest(ctx.alice.user.sessionToken, partUrl(id), {
-                headers: { range: 'bytes=6-9' },
-            });
-            expect(await second.text()).toBe('6789');
-
-            expect(parsesOf(id) - before).toBe(1);
-        });
-
-        test('a rewritten draft parses again and serves its new bytes', async () => {
-            const token = ctx.alice.user.sessionToken;
-            const ownerId = ctx.alice.user.id;
-            const uploadA = await uploadDraftAttachment(token, ownerId, new File(['AAA'], 'a.txt'));
-            const draft = await putDraft(
-                token,
-                ownerId,
-                { subject: 'Cached draft', text: 'first', html: '<p>first</p>', isDraft: true, mailbox: 'Drafts' },
-                { tempAttachmentIds: [uploadA.tempId] },
-            );
-            expect(await (await authedRequest(token, partUrl(draft.id))).text()).toBe('AAA');
-            expect(await (await authedRequest(token, partUrl(draft.id))).text()).toBe('AAA');
-            const before = parsesOf(draft.id);
-
-            const uploadB = await uploadDraftAttachment(token, ownerId, new File(['BBBBBB'], 'b.txt'));
-            await putDraft(
-                token,
-                ownerId,
-                { ...draft, text: 'second', html: '<p>second</p>' },
-                { tempAttachmentIds: [uploadB.tempId], keepAttachmentIndexes: [] },
-            );
-
-            expect(await (await authedRequest(token, partUrl(draft.id))).text()).toBe('BBBBBB');
-            expect(parsesOf(draft.id) - before).toBe(1);
-        });
-
-        test('a ninth message evicts the oldest of the eight cached', async () => {
-            const oldest = await deliver('Cache eviction fixture 0', RANGED_BODY);
-            expect((await firstByte(oldest)).status).toBe(206);
-            for (let i = 1; i <= 8; i++) {
-                expect((await firstByte(await deliver(`Cache eviction fixture ${i}`, RANGED_BODY))).status).toBe(206);
-            }
-            const before = parsesOf(oldest);
-            expect((await firstByte(oldest)).status).toBe(206);
-
-            expect(parsesOf(oldest) - before).toBe(1);
         });
     });
 

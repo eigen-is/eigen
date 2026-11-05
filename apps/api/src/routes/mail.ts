@@ -150,11 +150,14 @@ export const mailRouter = new Elysia({ name: 'mail' })
         async ({ params, user, set }): Promise<ArrayBuffer> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            setCacheHeaders(set, 86400);
+            const mail = await getMailClient(user);
+            // A draft save rewrites the message under its id.
+            if (mail.messageGetSummary(params.id)?.isDraft) set.headers['Cache-Control'] = 'no-store';
+            else setCacheHeaders(set, 86400);
             set.headers['Content-Type'] = EML_MIME;
             set.headers['Content-Transfer-Encoding'] = 'binary';
             set.headers['Content-Disposition'] = contentDisposition('attachment', `${params.id}.eml`);
-            return await (await getMailClient(user)).messageGetFile(params.id);
+            return await mail.messageGetFile(params.id);
         },
         { auth: true },
     )
