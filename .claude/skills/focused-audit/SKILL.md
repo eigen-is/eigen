@@ -5,7 +5,7 @@ description: Use when auditing one area of Eigen (a lib domain, a route group, a
 
 # Focused audit
 
-Audit a layer right before a feature builds on it: its findings are cheapest to fix then, and the feature lands on code that meets the bar. The open areas are listed in [ROADMAP.md § Focused audits](../../../docs/ROADMAP.md#focused-audits); take the one the next feature touches.
+Audit a layer right before a feature builds on it, when its findings are cheapest to fix. The open areas are listed in [ROADMAP.md § Focused audits](../../../docs/ROADMAP.md#focused-audits); take the one the next feature touches.
 
 ## Scope
 
@@ -15,12 +15,12 @@ Start with the risk-seam files, where a bug costs data or access: ACL checks, lo
 
 ## The recipe
 
-1. **Clean up** the area with the [source-file skill](../source-file/SKILL.md), every step of it, held to the [CODE-STANDARDS.md](../../../docs/CODE-STANDARDS.md) bar: renames, top-down order, moves to the right module ([ARCHITECTURE.md](../../../docs/ARCHITECTURE.md)), splits, honest types, visibility and imports, not only headers and comments. The report is the skill's per-file table. Risk findings are reported, not fixed: a cleanup that also changes behavior can't be reviewed as a cleanup.
+1. **Clean up** the area with every step of the [source-file skill](../source-file/SKILL.md), not only headers and comments, held to the [CODE-STANDARDS.md](../../../docs/CODE-STANDARDS.md) bar, with moves to the module [ARCHITECTURE.md](../../../docs/ARCHITECTURE.md) names; the report is the skill's per-file table. Risk findings are reported, not fixed: a cleanup that also changes behavior can't be reviewed as a cleanup.
 2. **A cold review** of the result by an agent that did not do the cleanup, held to [REVIEW-STANDARD.md](../../../docs/REVIEW-STANDARD.md), with the cleanup's risk findings as leads to confirm or reject.
-3. **One fix round.** Each fix starts with a test that fails on the old code. A finding whose fix is a new route, migration, package or design choice goes to the owner first (AGENTS.md § Critical Rules), Every finding ends fixed at its cause, dropped with its feature, or accepted ([REVIEW-STANDARD.md](../../../docs/REVIEW-STANDARD.md), *A rare edge case is not a bug by itself*). Only a fix that has to wait becomes a ROADMAP row; an accepted edge case gets none.
-4. **A scoped re-review** of the fix diff only: fixes bring regressions of their own.
+3. **One fix round.** Each fix starts with a test that fails on the old code. A finding whose fix is a new route, migration, package or design choice goes to the owner first (AGENTS.md § Critical Rules). Every finding ends fixed at its cause, dropped with its feature, or accepted ([REVIEW-STANDARD.md](../../../docs/REVIEW-STANDARD.md), *A rare edge case is not a bug by itself*). Only a fix that has to wait becomes a ROADMAP row; an accepted edge case gets none.
+4. **A scoped re-review** of the fix diff only.
 
-Seats and models follow the [orchestrate skill](../orchestrate/SKILL.md): reviewers run on the strongest model, mechanical seats on the cheapest.
+Seats and models follow the [orchestrate skill](../orchestrate/SKILL.md).
 
 ## Closing
 
