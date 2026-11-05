@@ -163,6 +163,7 @@ Every change merges to `develop`, and a pull request targets it. `main` moves on
 On a tag, `docker/test-release.sh` updates the previous published release to the amd64 candidates and rolls it back, and `docker/test-boot.sh` boots the arm64 candidates. Before it publishes, the workflow checks each candidate's build stamp and takes it by digest, so a candidate another run built is never published. Only when every image is built and both gates pass do the candidates become the `<version>` index, copied to `:latest` unless a newer stable release is out (a prerelease or a backport leaves `:latest` alone). A failed build or gate leaves no partial release.
 
 - A version already published fails the gate: a release is never published twice.
+- In CI, the gate fails when no release before this one is published, unless none is published at all: only the first release has none to update.
 - A release whose `CHANGELOG.md` lists breaking changes under its own `## [<version>]` heading fails too, since `./eigen update` refuses it on every install. Run the workflow on its tag with `breaking: true` to publish it anyway; that run fails if the release lists no breaking change.
 
 A push to `main` runs no gates and publishes `:main`. A newer push waits for a running build and replaces a queued one, so a cancel never leaves `:main` half promoted. In CI arm64 only boots; its update and rollback are proven by the harnesses on an Apple Silicon Mac.
