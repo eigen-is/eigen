@@ -1,7 +1,7 @@
 // Takes a version of a document: a copy of its database saved in the document's versions folder, after which old
-// versions are removed by the retention rules and the mount's onVersionTaken hears of the new one. A save by the user
-// waits for its turn, and the periodic save skips when the document is busy. It can also replace the live database
-// with a copy, which is what a restore uses. The restore code decides which version to bring back.
+// versions are removed by the retention rules. A save by the user waits for its turn, and the periodic save skips
+// when the document is busy. It can also replace the live database with a copy, which is what a restore uses. The
+// restore code decides which version to bring back.
 
 import { constants, Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
@@ -92,8 +92,7 @@ async function takeSnapshot(
     const copy = await mount.getPath(versionPathId);
     if (!copy) throw new ApiError(500, 'Failed to create version snapshot');
 
-    // A shutdown skips the prune and the read of the version's names. A stalled DELETE would use up its budget, the
-    // next snapshot prunes anyway, and a sweep reads a version that has no names yet.
+    // A shutdown skips the prune: a stalled DELETE would use up its budget, and the next snapshot prunes anyway.
     if (getShutdownDrainDeadline() !== null) return copy;
 
     // The new copy stays out of the prune. Retention keeps the newest version of each hour, and a second
@@ -103,8 +102,6 @@ async function takeSnapshot(
         policy,
     );
     for (const item of toPrune) await mount.deletePath(item.id);
-
-    mount.onVersionTaken?.(mount, containerId, copy.id);
     return copy;
 }
 

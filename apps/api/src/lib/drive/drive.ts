@@ -101,7 +101,6 @@ import {
 import type * as sharedSchema from './sharedschema';
 import { broadcastFileHistoryUpdated, buildDriveEvent } from './sse-events';
 import { streamFilesToTemp } from './streaming';
-import { nameVersion } from './sweep';
 import { deleteFailedCopy, deletePath, permanentlyDelete, restorePath } from './trash';
 import { finalizeUpload, regenerateThumbnailAsync } from './upload';
 
@@ -195,8 +194,8 @@ export class Drive {
 
     private async startMount(config: MountConfig): Promise<void> {
         this.home.refuseIfClosing();
-        // The mount gets the text extractor and the reader of a version's names from here, so the document loaders
-        // stay out of the mount code. Its upload queue holds the home while a PUT is on the wire.
+        // The mount gets the text extractor from here, so the document loaders stay out of the mount code. Its upload
+        // queue holds the home while a PUT is on the wire.
         const mount = new Mount(
             this.owner.id,
             this.home.homeDir,
@@ -204,7 +203,6 @@ export class Drive {
             this.home.getLocalDatabase.bind(this.home),
             extractText,
             () => this.home.hold(),
-            nameVersion,
         );
         await mount.init();
         if (this.home.closing) {

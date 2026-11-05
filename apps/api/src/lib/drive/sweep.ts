@@ -1,8 +1,8 @@
 // Deletes the parts of a collab document that nothing names any more, such as an image deleted before every saved
 // version, or the thread of a deleted comment. A part stays while the current state or a saved version names it, or
-// while it is younger than the grace period. Each version's names are read when it is taken, and every linger close
-// starts a sweep that uses them. A sweep that fails, or finds the document changed, deletes nothing, and the next
-// close tries again, so a sweep can keep a part too long but never deletes one in use.
+// while it is younger than the grace period. Every linger close starts a sweep, and the first sweep that needs a
+// version's names reads them and keeps them as the version's row. A sweep that fails, or finds the document changed,
+// deletes nothing, and the next close tries again, so a sweep can keep a part too long but never deletes one in use.
 
 import { SWEEP_GRACE_MS } from '@workspace/lib/constants/sweep';
 import type { DriveCollabType, DrivePath } from '@workspace/lib/types/drive';
@@ -20,19 +20,6 @@ import { getVersionReferences, putVersionReferences } from '../mount/version-ref
 import { withSvgSiblings } from '../preview/svg-media-inline';
 import { listVersions } from '../versioning/list';
 import type { Drive } from './drive';
-
-// Reads what a version names and keeps it as the version's row, so a sweep finds it without a download. Mount calls it
-// for each version it takes, while the version's bytes are still on local disk. It runs in the background, and a
-// failure, such as a busy transform process, only leaves the version for a sweep to read.
-export function nameVersion(mount: Mount, containerId: string, versionId: string): void {
-    const read = async () => {
-        const container = await mount.getPath(containerId);
-        if (container && isCollabType(container.type)) await readVersionNames(mount, container.type, versionId);
-    };
-    read().catch((error: unknown) => {
-        console.warn(`[sweep] names of version ${versionId}:`, error instanceof Error ? error.message : error);
-    });
-}
 
 // Closes a lingering document and then sweeps it. The hold on the Home comes first, because the close lets go of the
 // hold the lingering document kept, and an idle Home would close before the sweep began. It resolves with the close,
@@ -80,7 +67,7 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
     const read = await readFence(mount, container.id);
     if (!read.dataDb) throw new Error(`${container.id}: data.db missing`);
 
-    // A version without a row from the current reader, such as one whose read failed when it was taken, is read now.
+    // A version without a row from the current reader, such as one no sweep has needed yet, is read now.
     const rows = getVersionReferences(
         mount,
         read.versions.map((version) => version.id),
