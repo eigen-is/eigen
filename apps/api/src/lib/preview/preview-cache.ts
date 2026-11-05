@@ -55,10 +55,8 @@ function textCacheName(drivePath: DrivePath, format: string): string {
     return `${drivePath.id}-${drivePath.updatedAt.getTime()}.${format}.json`;
 }
 
-// A version whose job ran out of time or memory will again, and each rerun holds the only transform slot for its
-// deadline, so the failure is remembered beside the body it would have been: empty, named after the cache file. A new
-// version or format is a new name, and pruneOldVersions and the 7-day sweep remove it like any other. A loaded host or
-// a native crash a fix removes fails the same way, so a marker counts for an hour only.
+// A job that ran out of time or memory will again, holding the only transform slot, so an empty marker beside its
+// cache file remembers the failure. A loaded host or a since-fixed crash fails the same way, so it counts for an hour.
 const FAILED_MARKER_MS = 60 * 60 * 1000;
 
 function failedMarker(cacheFile: string): string {
@@ -101,7 +99,7 @@ async function writeCacheFile(cacheFile: string, data: string | Buffer): Promise
 // The generation running for each cache name, so a folder grid of N tiles for one just-added image or
 // just-edited doc starts one job instead of N. A request that joins a job waits at that job's priority.
 const inFlightImages = new Map<string, Promise<Buffer | null>>();
-const inFlightTexts = new Map<string, Promise<CachedText | null>>();
+const inFlightTexts = new Map<string, Promise<PreviewResult | null>>();
 
 function generateOnce<T>(
     inFlight: Map<string, Promise<T | null>>,
@@ -149,16 +147,13 @@ type Served<T> = { value: T; stale: boolean };
 
 // A first miss is foreground work the request waits on, a stale regeneration background work the runner may drop
 // under load. A plain file's generator ignores it.
-type TextPreviewGenerator = (priority: TransformPriority) => Promise<CachedText | null>;
-
-// What a text cache file holds. A caller adds what it serves on top, such as the text preview's mode.
-type CachedText = PreviewResult;
+type TextPreviewGenerator = (priority: TransformPriority) => Promise<PreviewResult | null>;
 
 // The only check this module makes on a file it reads back, so a body the parser rejects counts as a corrupt file.
-type CachedTextParser<T> = (cached: CachedText) => T;
+type CachedTextParser<T> = (cached: PreviewResult) => T;
 
 // The typed previews' payload is the JSON their body holds.
-function bodyOnly(body: string | null): CachedText | null {
+function bodyOnly(body: string | null): PreviewResult | null {
     return body === null ? null : { body };
 }
 
@@ -167,7 +162,7 @@ function bodyOnly(body: string | null): CachedText | null {
 async function readCachedText<T>(cacheFile: string, parse: CachedTextParser<T>): Promise<T | null> {
     if (!fs.existsSync(cacheFile)) return null;
     try {
-        const cached: CachedText = await Bun.file(cacheFile).json();
+        const cached: PreviewResult = await Bun.file(cacheFile).json();
         return parse(cached);
     } catch (err) {
         console.error(`[preview] Discarding unreadable cache file ${cacheFile}:`, err);
@@ -211,9 +206,8 @@ async function getOrCacheText<T>(
             JSON.stringify,
         );
 
-    // Current version missing. If a previous version is cached, serve it immediately and regenerate the current
-    // one in the background. Checked synchronously: a regeneration that landed since the read above has either
-    // its in-flight entry or its finished file to show for it.
+    // A cached previous version is served while the current one regenerates in the background. Checked synchronously,
+    // so a regeneration that landed since the read above shows either its in-flight entry or its finished file.
     const stale = await readNewestStaleText(previewsDir, pathId, cacheName, format, parse);
     if (stale !== null) {
         if (!failed && !fs.existsSync(cacheFile)) generateText('background').catch(() => {});
@@ -249,7 +243,7 @@ async function readNewestStaleText<T>(
 
     for (const { name } of candidates) {
         try {
-            const cached: CachedText = await Bun.file(path.join(previewsDir, name)).json();
+            const cached: PreviewResult = await Bun.file(path.join(previewsDir, name)).json();
             return parse(cached);
         } catch {
             // Pruned between readdir and read, or of a shape the parser refuses — try the next-newest.
@@ -332,7 +326,7 @@ export async function getTextPreview(mount: Mount, drivePath: DrivePath): Promis
     );
 }
 
-async function generateFileTextPreview(mount: Mount, drivePath: DrivePath): Promise<CachedText | null> {
+async function generateFileTextPreview(mount: Mount, drivePath: DrivePath): Promise<PreviewResult | null> {
     const bytes = await mount.readBytes(drivePath.id);
     if (!bytes) return null;
     const preview = await getBytesTextPreview(bytes, drivePath.name, drivePath.mimeType || '');
