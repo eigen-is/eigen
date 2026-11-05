@@ -1550,7 +1550,7 @@ describe('Calendar', () => {
     // recurrenceDate is a wall-clock occurrence key (YYYY-MM-DD), but old FE builds sent the full
     // ISO datetime. The route normalizes to the canonical key at the boundary and rejects the
     // unkeyable — raw stored garbage used to crash CalDAV serving downstream.
-    describe('Regression: recurrenceDate boundary normalization', () => {
+    describe('Regression: recurrenceDate boundary validation', () => {
         const exceptionBody = (recurrenceDate: string, parentEventId: string) => ({
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1564,24 +1564,17 @@ describe('Calendar', () => {
             }),
         });
 
-        test('create exception with a full ISO datetime stores the wall-date key', async () => {
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
-                exceptionBody('2026-03-19T04:00:00.000Z', aliceRecurringEventId),
-            );
-            const event = await assertJson<CalendarEvent>(res);
-            expect(event.recurrenceDate).toBe('2026-03-19');
-        });
-
-        test('create exception with a garbage recurrenceDate returns 400', async () => {
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
-                exceptionBody('garbage', aliceRecurringEventId),
-            );
-            expect(res.status).toBe(400);
-        });
+        test.each(['garbage', '2026-03-19T04:00:00.000Z'])(
+            'create exception on %s returns 400',
+            async (recurrenceDate) => {
+                const res = await authedRequest(
+                    ctx.alice.user.sessionToken,
+                    `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                    exceptionBody(recurrenceDate, aliceRecurringEventId),
+                );
+                expect(res.status).toBe(400);
+            },
+        );
 
         // `Date.parse` reads these as 2 March, 1 March and 1 January, so each would write a second RECURRENCE-ID for that day.
         test.each(['2026-02-30', '2026-03', '2026'])('create exception on %s returns 400', async (recurrenceDate) => {

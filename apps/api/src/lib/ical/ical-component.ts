@@ -337,7 +337,8 @@ function syncVTimezones(resource: ICAL.Component): void {
     for (const vevent of vevents) resource.addSubcomponent(vevent);
 }
 
-type BuildOptions = { master?: CalendarEvent; exclusions?: CalendarEvent[] };
+type Exclusion = { key: string; exclusion: CalendarEvent };
+type BuildOptions = { master?: CalendarEvent; exclusions?: Exclusion[] };
 
 function buildVEvent(event: CalendarEvent, options: BuildOptions = {}): ICAL.Component {
     const vevent = new ICAL.Component('vevent');
@@ -358,13 +359,8 @@ function buildVEvent(event: CalendarEvent, options: BuildOptions = {}): ICAL.Com
     if (event.rrule) vevent.addProperty(rruleProperty(event.rrule));
 
     // A cancelled exception rides as an EXDATE in the master's own DTSTART form, never as a STATUS:CANCELLED override, which Thunderbird omits from its next PUT.
-    const excluded: Array<{ key: string; exclusion: CalendarEvent }> = [];
-    for (const exclusion of options.exclusions ?? []) {
-        const key = exclusion.recurrenceDate;
-        if (!key) continue;
-        excluded.push({ key, exclusion });
-        vevent.addProperty(exdateProperty(event, key, tzid));
-    }
+    const exclusions = options.exclusions ?? [];
+    for (const { key } of exclusions) vevent.addProperty(exdateProperty(event, key, tzid));
 
     // RECURRENCE-ID names the ORIGINAL occurrence in the master's DTSTART form, value type included (RFC 5545 §3.8.4.4): echoing a moved startTime or the override's own all-day toggle matches no occurrence.
     if (event.recurrenceDate) {
@@ -386,7 +382,7 @@ function buildVEvent(event: CalendarEvent, options: BuildOptions = {}): ICAL.Com
     addStamp(vevent, EIGEN.organizerEvent, event.data?.organizerEventId);
     addStamp(vevent, EIGEN.organizerUser, organizer?.userId);
     addStamp(vevent, EIGEN.color, event.data?.color);
-    for (const { key, exclusion } of excluded) {
+    for (const { key, exclusion } of exclusions) {
         vevent.addProperty(exclusionStamp(key, exclusion.id, exclusion.sequence, null));
     }
 
@@ -420,11 +416,17 @@ export function buildResource(events: CalendarEvent[]): ICAL.Component {
 
     for (const group of groups.values()) {
         const master = group[0].recurrenceDate == null ? group[0] : undefined;
-        const exclusions = master ? group.filter((e) => e.recurrenceDate != null && e.status === 'cancelled') : [];
+        const exclusions: Exclusion[] = [];
+        const built: CalendarEvent[] = [];
         for (const event of group) {
-            if (master && event.recurrenceDate != null && event.status === 'cancelled') continue;
-            const options = event === master ? { master, exclusions } : { master };
-            vcalendar.addSubcomponent(buildVEvent(event, options));
+            if (master && event.recurrenceDate != null && event.status === 'cancelled') {
+                exclusions.push({ key: event.recurrenceDate, exclusion: event });
+            } else {
+                built.push(event);
+            }
+        }
+        for (const event of built) {
+            vcalendar.addSubcomponent(buildVEvent(event, event === master ? { master, exclusions } : { master }));
         }
     }
 

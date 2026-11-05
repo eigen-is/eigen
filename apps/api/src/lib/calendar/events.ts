@@ -117,7 +117,6 @@ export async function createEvent(
     input: CreateEventArgs,
     user?: User,
 ): Promise<CalendarEvent> {
-    // An old client names the occurrence with a full ISO datetime, so only its date is kept.
     const recurrenceDate = input.recurrenceDate ? parseRecurrenceKey(input.recurrenceDate) : null;
     if (input.recurrenceDate && !recurrenceDate) throw new ApiError(400, 'Invalid occurrence date');
     const args = { ...input, recurrenceDate };

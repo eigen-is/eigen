@@ -46,29 +46,28 @@ describe('calendar import', () => {
         rmSync(CALENDAR_TEST_ROOT, { recursive: true, force: true });
     });
 
-    test('a write that fails mid-file keeps the series that landed and answers', async () => {
+    test('a write that fails mid-file keeps the series that landed, and a retry finishes the file', async () => {
         const harness = await makeCalendar();
         const calendar = harness.instance;
         const calendarId = (await calendar.getCalendars())[0].id;
 
         const restore = breakNthTransaction(calendar, 3);
-        let result: Awaited<ReturnType<Calendar['importEvents']>>;
         try {
-            result = await calendar.importEvents(calendarId, new TextEncoder().encode(FILE));
+            await expect(calendar.importEvents(calendarId, new TextEncoder().encode(FILE))).rejects.toThrow(
+                'transaction boom',
+            );
         } finally {
             restore();
         }
 
-        // The loop holds no lock of its own, so the failing series is counted and the file goes on.
-        expect(result).toEqual({ imported: 3, skipped: 0, failed: 1 });
-        expect(await titlesOf(calendar, calendarId)).toEqual(['Series 1', 'Series 2', 'Series 4']);
-        expect(await calendar.listResources(calendarId)).toHaveLength(3);
+        expect(await titlesOf(calendar, calendarId)).toEqual(['Series 1', 'Series 2']);
+        expect(await calendar.listResources(calendarId)).toHaveLength(2);
         expect(await calendar.getEventsByUid(UIDS[2])).toHaveLength(0);
 
-        // A retry completes the file: the three that landed skip by UID, the refused one is written.
+        // The two that landed skip by UID, and the rest are written.
         expect(await calendar.importEvents(calendarId, new TextEncoder().encode(FILE))).toEqual({
-            imported: 1,
-            skipped: 3,
+            imported: 2,
+            skipped: 2,
             failed: 0,
         });
         expect(await titlesOf(calendar, calendarId)).toEqual(['Series 1', 'Series 2', 'Series 3', 'Series 4']);

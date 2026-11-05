@@ -4,7 +4,6 @@
 
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { eq } from 'drizzle-orm';
-import type { PutResourceResult } from '../core';
 import { ApiError, decodeUtf8Strict, NOT_A_VCARD_FILE, NOT_UTF8_FILE, VCARD_IMPORT_MAX_CARDS } from '../core';
 import {
     makeLine,
@@ -116,18 +115,11 @@ export async function importCards(contacts: Contacts, bytes: Uint8Array): Promis
             if (!parsed.uid) body = withMintedUid(parsed);
 
             // A UID is not a safe filename (Apple's `…:ABPerson`, `urn:uuid:`), so mint one; If-None-Match: * keeps the write a create.
-            let put: PutResourceResult;
-            try {
-                put = await davStore.putCard(contacts, `${crypto.randomUUID()}.vcf`, body, {
-                    ifMatch: null,
-                    ifNoneMatch: '*',
-                    import: true,
-                });
-            } catch {
-                // One card's write failing is that card's failure; a retry finishes the file.
-                result.failed++;
-                continue;
-            }
+            const put = await davStore.putCard(contacts, `${crypto.randomUUID()}.vcf`, body, {
+                ifMatch: null,
+                ifNoneMatch: '*',
+                import: true,
+            });
             if (put.ok) {
                 result.imported++;
                 for (const email of parsed.email) {

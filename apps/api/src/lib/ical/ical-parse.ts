@@ -276,7 +276,7 @@ type ReadResult = {
 function parseImipMethod(raw: unknown): ImipMethod | undefined {
     if (typeof raw !== 'string') return undefined;
     const upper = raw.toUpperCase();
-    return IMIP_METHODS.includes(upper as ImipMethod) ? (upper as ImipMethod) : undefined;
+    return IMIP_METHODS.find((method) => method === upper);
 }
 
 function stamped({ event, stamps }: ReadEvent): StoredEvent {
@@ -358,9 +358,8 @@ function readResource(comp: ICAL.Component): ReadResult {
             if (stripped || vevent.hasProperty('rdate')) hasUnindexedRecurrence = true;
 
             const rawStatus = (vevent.getFirstPropertyValue('status') || 'CONFIRMED').toString().toLowerCase();
-            const status = (
-                ['confirmed', 'tentative', 'cancelled'].includes(rawStatus) ? rawStatus : 'confirmed'
-            ) as ParsedEvent['status'];
+            const status =
+                (['confirmed', 'tentative', 'cancelled'] as const).find((known) => known === rawStatus) ?? 'confirmed';
 
             const sequence = sequenceOf(vevent);
             const dtstamp = readTimestamp(vevent, 'dtstamp');

@@ -243,7 +243,6 @@ export async function rsvp(
     };
 
     if (scope === 'this' && input.recurrenceDate) {
-        // An old client names the occurrence with a full ISO datetime, so only its date is kept.
         const recurrenceDate = parseRecurrenceKey(input.recurrenceDate);
         if (!recurrenceDate) throw new ApiError(400, 'Invalid recurrenceDate');
         const status = input.remove ? 'declined' : input.status;

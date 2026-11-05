@@ -77,9 +77,8 @@ export class Contacts {
     public home: Home;
     public storage: LocalFilesystem;
 
-    // bun:sqlite makes a transaction atomic and serial by itself, but a write path holds async gaps between
-    // its check and its commit (the quota check, the avatar derivation), and a racing If-Match PUT must lose
-    // inside the lock, not after it.
+    // A transaction alone can't serialize a write that awaits between its check and its commit, such as the
+    // quota check, so a racing If-Match PUT loses inside this lock.
     public writeLock = new Semaphore(1);
 
     // Running totals so size() answers from memory: a SUM per metered write makes an N-card device sync O(N²).
@@ -225,10 +224,8 @@ export class Contacts {
         for (const id of createdLabelIds) this.emitLabel(SSEventType.LABEL_CREATED, id);
     }
 
-    // The one write every card path takes, and it owns the order: both ceilings judge the bytes before `cache`
-    // derives the avatar and before the transaction that stores them, so a refusal leaves neither a row nor a
-    // webp behind. `creditBytes` is the stored card this one replaces, or a rewrite that shrinks a card would
-    // be refused on a quota its own bytes already hold. Returns the avatar URL the projection stored.
+    // Both ceilings judge the bytes before `cache` derives the avatar, so a refusal leaves no row and no webp.
+    // `creditBytes` is the card this one replaces, or a shrinking rewrite would be refused on its own bytes.
     public async writeCard(opts: {
         row: CardProjection & Pick<CardRowInput, 'id' | 'uri' | 'eigenId'>;
         categories: string[];

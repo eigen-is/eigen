@@ -809,41 +809,7 @@ describe('CalDAV round-trip fidelity', () => {
         });
     });
 
-    // Rows written before the route validated recurrenceDate can hold a full ISO datetime or
-    // arbitrary text (the schema accepted any string). App-side expansion truncates to the date
-    // part and treats unparseable keys as inert (calendar.ts getEventsInRange); serving must do
-    // the same — one bad row must never 500 the resource GET or every REPORT touching its UID.
-    describe('legacy recurrenceDate rows', () => {
-        test('an exception keyed by a full ISO datetime serves with the truncated-key RECURRENCE-ID', async () => {
-            const calendar = (await getHome(userId)).calendar;
-            const master = await calendar.createEvent(calendarId, {
-                title: 'Legacy key series',
-                startTime: new Date('2026-06-02T03:00:00Z'), // Jun 1 23:00 America/New_York
-                endTime: new Date('2026-06-02T03:50:00Z'),
-                allDay: false,
-                rrule: 'FREQ=DAILY;COUNT=5',
-                timezone: 'America/New_York',
-                uid: 'legacy-rid@eigen',
-                createByUserId: userId,
-            });
-            await calendar.createEvent(calendarId, {
-                title: 'Legacy key series (moved)',
-                startTime: new Date('2026-06-05T10:00:00Z'),
-                endTime: new Date('2026-06-05T10:50:00Z'),
-                allDay: false,
-                timezone: 'America/New_York',
-                parentEventId: master.id,
-                recurrenceDate: '2026-06-04T03:00:00.000Z', // legacy form: an instant, not a wall date
-                uid: master.uid,
-                createByUserId: userId,
-            });
-
-            const ics = await getIcs(master.uri); // pre-fix: 500 (RRule.between throws on the raw key)
-            // The truncated key '2026-06-04' names the Jun 4 23:00 NY occurrence — the same
-            // instance the app-side expansion substitutes for this row.
-            expect(ics).toContain('RECURRENCE-ID;TZID=America/New_York:20260604T230000');
-        });
-
+    describe('unkeyable recurrenceDate', () => {
         test('an occurrence key the file cannot name is refused at the write boundary', async () => {
             const calendar = (await getHome(userId)).calendar;
             const master = await calendar.createEvent(calendarId, {

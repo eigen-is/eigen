@@ -7,7 +7,6 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { and, eq, inArray } from 'drizzle-orm';
 import ICAL from 'ical.js';
-import type { PutResourceResult } from '../core';
 import {
     ApiError,
     countVEvents,
@@ -134,19 +133,12 @@ export async function importEvents(
 
             // A fresh name every time: a UID is not a safe uri, and If-None-Match: * turns a UID the Home already holds into a skippable conflict.
             const body = serializeResource(resource);
-            let put: PutResourceResult;
-            try {
-                put = await davStore.putResource(calendar, calendarId, `${crypto.randomUUID()}.ics`, body, {
-                    ifMatch: null,
-                    ifNoneMatch: '*',
-                    actor,
-                    import: { organizer: importedOrganizer },
-                });
-            } catch {
-                // One series' write failing is that series' failure; a retry finishes the file.
-                result.failed++;
-                continue;
-            }
+            const put = await davStore.putResource(calendar, calendarId, `${crypto.randomUUID()}.ics`, body, {
+                ifMatch: null,
+                ifNoneMatch: '*',
+                actor,
+                import: { organizer: importedOrganizer },
+            });
             if (put.ok) {
                 result.imported++;
                 written += Buffer.byteLength(body);

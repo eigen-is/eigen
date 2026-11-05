@@ -1,7 +1,7 @@
 // The calendar store as CalDAV sees it: index reads such as a sync delta or a time-range match, the bytes
-// of one resource, and the PUT and DELETE that write them. The protocol handlers and a whole-file import
-// reach it through the Calendar facade. A PUT is judged whole inside the calendar's write lock, its parse
-// included, against the state it overwrites.
+// of one resource, and the PUT and DELETE that write them. Callers such as the CalDAV server and the
+// calendar import use it. A PUT is judged whole inside the calendar's write lock, its parse included,
+// against the state it overwrites.
 
 import { CONTROL_CHARS } from '@workspace/lib/validation';
 import { and, eq, gt, inArray, or } from 'drizzle-orm';
