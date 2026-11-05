@@ -39,7 +39,7 @@ The rules are in [CODE-STANDARDS.md § Code Style](../../../docs/CODE-STANDARDS.
 1. **Does the code say it already?** A name, a type or the next line says what happens. Delete the comment.
 2. **Is it a list or a tour?** Callers, flows, fields one by one, states, "see X". Delete it. The header gives the big picture with examples.
 3. **Is it a design decision?** A reason that holds for the whole mechanism belongs once in the domain doc. Check the doc has it, add it there if not, and delete it here.
-4. **Is it an edge case?** The test that pins it names it. If no test pins it, ask whether the case is worth code at all: a case that only forgets is accepted, and its code goes with the comment.
+4. **Is it an edge case?** The test that pins it names it. If no test pins it, ask whether the case is worth code at all: a rare case that can't crash or block the server, lose data or leak access is accepted, and its code goes with the comment.
 5. **Is it longer than the code it explains?** That is a patch smell. Report it as a finding (a special case to fix at the cause or drop), and don't polish the comment.
 6. **What survives** is a why a careful reader would not guess, such as a unit, an ordering that matters, or a library quirk. Rewrite it in one or two plain sentences, the reason first.
 
