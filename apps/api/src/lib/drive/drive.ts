@@ -1279,7 +1279,8 @@ export class Drive {
         return listVersions(this.getMount(mountId), containerId);
     }
 
-    // Delete history. The media and threads that only the versions named go at once, even while the document is open.
+    // Delete history. The media and threads that only the versions named go at once, even while the document is open,
+    // and so do the files nothing ever named, such as an abandoned upload.
     public async deleteVersions(mountId: string, containerId: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const container = await mount.getActivePath(containerId);
