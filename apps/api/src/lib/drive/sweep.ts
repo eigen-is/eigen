@@ -2,7 +2,7 @@
 // thread of a deleted comment. Nothing runs it on its own: Delete history runs it once the versions are gone, and a
 // copy runs it on each document it copied. Inside each thread it keeps, a file no message names goes too. A part
 // younger than the grace stays, a file by its upload and a thread by its last write, because an upload lands before
-// the edit that names it. A failure is logged and deletes nothing more.
+// the edit that names it. A copy deletes only parts it wrote itself. A failure is logged and deletes nothing more.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_CHAT, DRIVE_TYPE_FILE, DRIVE_TYPE_FOLDER, isCollabType } from '@workspace/lib/types/drive';
@@ -12,37 +12,76 @@ import { captureCollabSource } from '../document/transform/collab-source';
 import { runDocumentReferences } from '../document/transform/run-transform';
 import type { Mount } from '../mount';
 import { CONTAINER_CHAT_FOLDER, CONTAINER_DATA_DB, CONTAINER_MEDIA_FOLDER } from '../mount/container-dbs';
+import type { CopyTree } from '../mount/copy';
 import { foldName } from '../mount/names';
 import { withSvgSiblings } from '../preview/svg-media-inline';
 import type { DriveLike } from './get-drive';
 
 // Runs on an open document as well as a closed one, as both read the same data.db. The grace is how old a part must
-// be to go, which is none for a copy nobody has opened yet.
+// be to go.
 export async function sweepDocument(drive: DriveLike, document: DrivePath, graceMs: number): Promise<void> {
     try {
-        await sweepParts(drive, document, Date.now() - graceMs);
+        await sweepParts(drive, document, Date.now() - graceMs, null);
     } catch (error) {
         console.warn(`[sweep] stopped in ${document.id}:`, error instanceof Error ? error.message : error);
     }
 }
 
-// Sweeps each document a copy made: the copy itself, or each one in a copied folder.
-export async function sweepCopy(drive: DriveLike, copy: DrivePath): Promise<void> {
-    if (copy.type === DRIVE_TYPE_FOLDER) {
+// Sweeps each document a copy made, the copy itself or each one in a copied folder, with no grace. The copy shows in
+// the target's tabs as it lands, so someone may add an image, a comment or a document to it before this runs: only
+// what `tree`, the listing the copy wrote from, names is swept. The copy itself succeeded, so a failure only logs.
+export async function sweepCopy(drive: DriveLike, copy: DrivePath, tree: CopyTree): Promise<void> {
+    try {
         const { mount } = await drive.resolveFile(copy.mountId, copy.id);
-        for (const child of await mount.listFolder(copy.id)) await sweepCopy(drive, child);
-    } else if (copy.type !== DRIVE_TYPE_FILE) {
-        await sweepDocument(drive, copy, 0);
+        if (copy.type === DRIVE_TYPE_FOLDER) {
+            for (const [child, written] of await listWritten(mount, copy, tree)) await sweepCopy(drive, child, written);
+        } else if (copy.type !== DRIVE_TYPE_FILE) {
+            await sweepParts(drive, copy, Date.now(), await writtenIds(mount, copy, tree));
+        }
+    } catch (error) {
+        console.warn(`[sweep] stopped in ${copy.id}:`, error instanceof Error ? error.message : error);
     }
 }
 
-async function sweepParts(drive: DriveLike, document: DrivePath, cutoff: number): Promise<void> {
+// The paths in `folder` that a copy wrote, each with the part of `tree` it was written from, matched by name. A path
+// added since is left out.
+async function listWritten(mount: Mount, folder: DrivePath, tree: CopyTree): Promise<[DrivePath, CopyTree][]> {
+    const written = new Map(tree.children.map((child) => [foldName(child.path.name), child]));
+    return (await mount.listFolder(folder.id)).flatMap((path): [DrivePath, CopyTree][] => {
+        const child = written.get(foldName(path.name));
+        return child ? [[path, child]] : [];
+    });
+}
+
+// The ids of every path below `container` that a copy wrote.
+async function writtenIds(mount: Mount, container: DrivePath, tree: CopyTree): Promise<Set<string>> {
+    const ids = new Set<string>();
+    for (const [path, written] of await listWritten(mount, container, tree)) {
+        ids.add(path.id);
+        if (written.children.length > 0) for (const id of await writtenIds(mount, path, written)) ids.add(id);
+    }
+    return ids;
+}
+
+// A copy passes `written`, the ids of the parts it wrote, and only those may go. Delete history passes null, as any
+// part may go.
+async function sweepParts(
+    drive: DriveLike,
+    document: DrivePath,
+    cutoff: number,
+    written: ReadonlySet<string> | null,
+): Promise<void> {
     const { mount } = await drive.resolveFile(document.mountId, document.id);
+    const isCandidate = (part: DrivePath) => !written || written.has(part.id);
     const isOld = (file: DrivePath) => file.createdAt.getTime() <= cutoff;
     const media = await mount.getChildByName(document.id, CONTAINER_MEDIA_FOLDER);
-    const files = media ? (await mount.listFolder(media.id)).filter((file) => file.type === DRIVE_TYPE_FILE) : [];
+    const files = media
+        ? (await mount.listFolder(media.id)).filter((file) => file.type === DRIVE_TYPE_FILE && isCandidate(file))
+        : [];
     const chat = isCollabType(document.type) ? await mount.getChildByName(document.id, CONTAINER_CHAT_FOLDER) : null;
-    const threads = chat ? (await mount.listFolder(chat.id)).filter((thread) => thread.type === DRIVE_TYPE_CHAT) : [];
+    const threads = chat
+        ? (await mount.listFolder(chat.id)).filter((thread) => thread.type === DRIVE_TYPE_CHAT && isCandidate(thread))
+        : [];
     if (!files.some(isOld) && threads.length === 0) return;
 
     const names = isCollabType(document.type)
@@ -77,7 +116,7 @@ async function sweepParts(drive: DriveLike, document: DrivePath, cutoff: number)
             `[sweep] ${document.id}: deleted ${unnamedFiles.length} files, ${idleThreads.length} threads, ${freed} bytes`,
         );
     }
-    for (const thread of keptThreads) await sweepParts(drive, thread, cutoff);
+    for (const thread of keptThreads) await sweepParts(drive, thread, cutoff, written);
 }
 
 // Whether someone wrote in a thread since the cutoff: its creation, or the last sync of its data.db, which stamps the

@@ -731,7 +731,7 @@ export class Drive {
             }
             const tree = await this.listCopyWithinLimits(mount, srcPathId, to);
             const copiedAcross = await copyPathAcross(this, tree, to, destParentId, name, user);
-            await sweepCopy(to.drive, copiedAcross);
+            await sweepCopy(to.drive, copiedAcross, tree);
             return copiedAcross;
         }
 
@@ -748,7 +748,7 @@ export class Drive {
             (pathId, createdIds) => this.deleteFailedCopy(mountId, pathId, createdIds, user),
             user,
         );
-        await sweepCopy(this, copied);
+        await sweepCopy(this, copied, tree);
         this.emit(
             isContainerType(copied.type) ? SSEventType.DRIVE_FOLDER_CREATED : SSEventType.DRIVE_FILE_CREATED,
             copied,

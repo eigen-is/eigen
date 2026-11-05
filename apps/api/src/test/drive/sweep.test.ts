@@ -410,6 +410,51 @@ describe('a copy', () => {
         expect(await mediaNames(mount, copied.id)).toEqual(['new.png']);
         await close(M, path);
     });
+
+    // The copy shows in the target's tabs as it lands, so its owner may add to it before the cleanup runs.
+    test('keeps an image and a thread added to it before its cleanup runs', async () => {
+        const { path, kept } = await sourceDoc('CopyAdded');
+        let added: DrivePath | undefined;
+        const copyPath = mount.copyPath.bind(mount);
+        const copies = spyOn(mount, 'copyPath').mockImplementation(async (...args) => {
+            const copied = await copyPath(...args);
+            await addMedia(mount, copied.id, 'added.png');
+            added = await addThread(mount, M, copied.id);
+            return copied;
+        });
+        try {
+            const copied = await drive.copyPath(M, path.id, rootId, `${path.name} copy`, home.user);
+            if (!added) throw new Error('nothing added');
+            expect(await mediaNames(mount, copied.id)).toEqual(['added.png', 'kept.png']);
+            expect(await threadNames(mount, copied.id)).toEqual([added.name, kept.name].sort());
+        } finally {
+            copies.mockRestore();
+        }
+        await close(M, path);
+    });
+
+    test('of a folder succeeds when its cleanup fails', async () => {
+        const folder = await drive.createFolder(M, rootId, `CopyCleanupFails-${crypto.randomUUID()}`);
+        let copyId = '';
+        const copyPath = mount.copyPath.bind(mount);
+        const copies = spyOn(mount, 'copyPath').mockImplementation(async (...args) => {
+            const copied = await copyPath(...args);
+            copyId = copied.id;
+            return copied;
+        });
+        const listFolder = mount.listFolder.bind(mount);
+        const lists = spyOn(mount, 'listFolder').mockImplementation(async (id) => {
+            if (id === copyId) throw new Error('listing failed');
+            return listFolder(id);
+        });
+        try {
+            const copied = await drive.copyPath(M, folder.id, rootId, `${folder.name} copy`, home.user);
+            expect(copied.id).toBe(copyId);
+        } finally {
+            copies.mockRestore();
+            lists.mockRestore();
+        }
+    });
 });
 
 describe('the sweep on s3', () => {
