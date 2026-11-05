@@ -3,6 +3,7 @@ export {
     getHome,
     getTeamHome,
     getUserHome,
+    refuseShutHome,
     shutdownAllHomes,
 } from './get-home';
 export { Home } from './home';

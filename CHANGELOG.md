@@ -21,6 +21,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Restoring in Slides and Vector** — restoring an earlier version of a deck or drawing brings back the comments deleted since, as Docs and Sheets do. Their replies stay as they are now
 - **Version history in other tabs** — after a restore or a Delete history, another tab open on the same document shows the new list of versions at once
 - **Pictures cropped in Google Slides** — a picture that Google Slides cropped to fit its box, such as a logo, no longer comes in squashed when you convert or import the deck
+- **Mail apps during a restore** — a mail app that signs in while an account is being restored or deleted is told to try again later, so it can no longer make the restore fail and keep the account offline
 
 ## [0.4.2] - 2026-11-03
 

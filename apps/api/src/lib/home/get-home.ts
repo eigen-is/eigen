@@ -24,10 +24,8 @@ const homeFactories = new Map<string, AsyncSingleton<Home>>();
 // nothing opens the folder while it is being moved aside.
 const restoringHomes = new Set<string>();
 
-// Homes whose owner is being deleted, from the teardown until better-auth has deleted the owner's row.
-// The row and the members' sessions outlive the folder for that moment, and a request in it must not
-// build a new home over the deleted folder. A deletion that fails after the folder is gone keeps the
-// mark until a retry of the delete or a restart. Until then the home answers 404 and a restore of it is refused.
+// Homes whose owner is being deleted, from the teardown until better-auth has deleted the owner's row. The row
+// and the members' sessions outlive the folder, and a request in that window must not build a new home over it.
 const deletingHomes = new Set<string>();
 
 // While shutdownAllHomes runs, openHome refuses every home, so nothing, such as a tab that reconnects its event
@@ -46,8 +44,7 @@ export function loadedHome(ownerId: string): Home | undefined {
 }
 
 // The mark is the lock: a second restore of one home would move a folder aside that the first one is
-// still writing, and whichever finished first would unlock the home for both. A deletion holds no job slot, so its
-// mark is checked here too: a restore in its window would install a folder the deletion is removing.
+// still writing, and whichever finished first would unlock the home for both.
 export function markHomeRestoring(ownerId: string): void {
     if (restoringHomes.has(ownerId)) throw new ApiError(409, 'Restore already in progress');
     if (deletingHomes.has(ownerId)) throw new ApiError(409, 'A deletion of this home is running');
@@ -106,7 +103,7 @@ export async function openHome(ownerId: string): Promise<Home> {
     throw new Error(`openHome: could not obtain a stable home for ${ownerId}`);
 }
 
-function refuseShutHome(ownerId: string): void {
+export function refuseShutHome(ownerId: string): void {
     if (shuttingDown) throw new ApiError(503, 'Eigen is shutting down');
     if (restoringHomes.has(ownerId)) throw new ApiError(503, 'Restore in progress');
     if (deletingHomes.has(ownerId)) throw new ApiError(404, 'Home is being deleted');
