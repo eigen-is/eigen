@@ -14,7 +14,7 @@ This codebase values **simplicity, directness, and consistency** over cleverness
 - Consistency over originality: new code must look like the code next to it. Same patterns, same naming, same structure. Don't invent new patterns when existing ones work
 - Fewer lines beat more: removing code is always a good idea when what remains is cleaner and easier to understand. Over-engineering (a flag threaded through layers, a prop every caller passes the same value for, a seam that closes a case that cannot happen) is a broken window: remove it on touch, and don't add it to close a nit
 - Clean code beats more features: when a feature or an edge case can only be covered by a patch (a special case, a second code path, a flag, a cache, a retry), drop the feature or accept the edge case, and say so. The owner would rather ship less than grow a pile of patches. A fix goes to the cause, and when a second fix in one module needs a patch, the module's design is wrong: redesign it
-- May forget, must not corrupt: precision is for data, access and security. A rare race or input whose worst outcome is a lost undo step, a missed live update, a stale preview or a retry the user makes is accepted, not handled: write the simple rule and add no code for the case. A case that can corrupt or lose saved data, leak access or open a hole is fixed at its cause
+- Not every edge case needs code: a rare case may fail, with an error, a timeout or a retry the user makes, as long as the server stays up and responsive and no stored data is lost. Handle it only when it can crash or block the server, lose or corrupt data, or leak access
 - The file system is the source of truth, then the database. Keep no state in memory that a restart would lose or that can disagree with disk: no module-level maps, sets or caches in the API to save a read, a download or a job; read the file or the row again. Runtime state that only says what this process is doing right now (an open document, a lock, a restore in progress) is the exception. In the frontend, TanStack Query is the only cache
 - No placeholders: no stub method, type, field or flag for later. Code lands with its first real caller
 - No backward compatibility for now: no code for data an older build wrote. This holds until the owner says otherwise, which may be from 0.5.0. A renamed stored key is renamed, not kept beside the new one or dropped on read, and a reader for an old shape is deleted when you pass it, even when that loses data an older build wrote, such as an unreplayed edit
@@ -114,7 +114,7 @@ Before declaring any task complete, review every changed file against this list:
 - Does a hook, store or class you changed hand out a collection it owns as a mutable type, or take one it never changes as mutable?
 - Does every file you changed open with a header comment that is still true?
 - Is every comment you wrote at most two lines, a why the code can't say, and would a colleague understand it on the first read?
-- Did you add code for an edge case whose worst outcome only forgets (a lost undo step, a missed update)? Remove it
+- Did you add code for a rare edge case that can't crash or block the server, lose data or leak access? Remove it
 - Any new `z-index` set above 50? If yes, is it on the documented exceptions or does it have a `// Why:` comment? (See [LAYOUT.md § One z-index scale, and app code sets none](LAYOUT.md#one-z-index-scale-and-app-code-sets-none))
 
 ## Standards Gates
