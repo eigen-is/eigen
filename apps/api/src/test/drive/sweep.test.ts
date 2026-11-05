@@ -318,6 +318,19 @@ describe('the media sweep', () => {
         expect(await mediaNames(mount, path.id)).toEqual(['deep.png', 'inner.svg', 'leaf.png', 'outer.svg']);
     });
 
+    // Such as an SVG pasted a moment ago, whose edit has not reached the server yet.
+    test('an SVG the grace period keeps keeps the old files it draws', async () => {
+        const { path } = await openDoc(mount, M, 'SvgYoung', [paragraph()]);
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg"><image href="${eigenMediaHref('leaf.png')}"/></svg>`;
+        await addMedia(mount, path.id, 'young.svg', { mimeType: 'image/svg+xml', body: svg, ageHours: 1 });
+        await addMedia(mount, path.id, 'leaf.png');
+        await addMedia(mount, path.id, 'loose.png');
+
+        await close(M, path);
+        await sweepDocument(drive, path);
+        expect(await mediaNames(mount, path.id)).toEqual(['leaf.png', 'young.svg']);
+    });
+
     test('a document with no old file and no idle thread is never read', async () => {
         const { path, collab } = await openDoc(mount, M, 'NothingOld', [paragraph(marked('c1'))]);
         await addMedia(mount, path.id, 'young.png', { ageHours: 71 });

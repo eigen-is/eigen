@@ -90,10 +90,12 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
     const versionCards = [...new Set(versionStates.flatMap((names) => names.cards))];
     const currentState = await storedReferences(mount, documentType, read.dataDb.id, versionCards);
     const allNames = foldedNames([...versionStates, currentState]);
-    // A kept SVG keeps the files it draws. The SVGs are read only when an old file is not among the names.
+    // A kept SVG keeps the files it draws, such as one the grace period keeps. The SVGs are read only when an old file
+    // is not among the names.
+    const youngMedia = mediaFiles.filter((file) => !isOld(file)).map((file) => file.name);
     const keptMedia =
         unnamed(oldMedia, allNames.media).length > 0
-            ? await withSvgSiblings(mount, mediaFiles, allNames.media)
+            ? await withSvgSiblings(mount, mediaFiles, [...allNames.media, ...youngMedia])
             : allNames.media;
     // An SVG that could not be read keeps every media file this time, and the threads still go.
     const sweepsMedia = media !== null && keptMedia !== null;
