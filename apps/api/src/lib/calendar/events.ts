@@ -13,7 +13,7 @@ import { ApiError } from '../core';
 import { addExclusion, buildResource, parseResource, patchEvent, putOverride, removeExclusion } from '../ical';
 import type { EventPatch, WriteContext } from '../ical/ical-component';
 import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../ical/recurrence-limits';
-import { storedRecurrenceKey } from '../ical/wall-clock';
+import { parseRecurrenceKey } from '../ical/wall-clock';
 import { sendMail } from '../mailer/mailer';
 import type { User } from '../user';
 import type { Calendar } from './calendar';
@@ -117,12 +117,15 @@ export async function createEvent(
     input: CreateEventArgs,
     user?: User,
 ): Promise<CalendarEvent> {
+    // An old client names the occurrence with a full ISO datetime, so only its date is kept.
+    const recurrenceDate = input.recurrenceDate ? parseRecurrenceKey(input.recurrenceDate) : null;
+    if (input.recurrenceDate && !recurrenceDate) throw new ApiError(400, 'Invalid occurrence date');
+    const args = { ...input, recurrenceDate };
+
     // Who holds the occurrence this write replaces: a cancelled override keeps no guest list of its own.
     const { created, replaced } = await calendar.writeLock.run(async () => {
-        const replaced = input.parentEventId
-            ? exceptionOf(calendar, input.parentEventId, input.recurrenceDate ?? null)
-            : null;
-        return { created: await writeEvent(calendar, calendarId, input), replaced };
+        const replaced = args.parentEventId ? exceptionOf(calendar, args.parentEventId, recurrenceDate) : null;
+        return { created: await writeEvent(calendar, calendarId, args), replaced };
     });
 
     calendar.announce(SSEventType.CALENDAR_EVENT_CREATED, calendarId);
@@ -193,9 +196,7 @@ async function writeOverride(
     const resource = resourceOf(calendar, parent.id);
     if (!resource) throw new ApiError(404, 'Event not found');
     // A RECURRENCE-ID and an EXDATE are both written from this key.
-    if (!input.recurrenceDate || !storedRecurrenceKey(input.recurrenceDate)) {
-        throw new ApiError(400, 'Invalid occurrence date');
-    }
+    if (!input.recurrenceDate) throw new ApiError(400, 'Invalid occurrence date');
 
     const override = eventForResource({
         id: crypto.randomUUID(),
@@ -221,11 +222,9 @@ export function exceptionOf(
     recurrenceDate: string | null,
 ): CalendarEvent | null {
     if (!recurrenceDate) return null;
-    const key = storedRecurrenceKey(recurrenceDate);
-    if (!key) return null;
     const row = calendar
         .joinedEvents()
-        .where(and(eq(schema.events.parentEventId, parentEventId), eq(schema.events.recurrenceDate, key)))
+        .where(and(eq(schema.events.parentEventId, parentEventId), eq(schema.events.recurrenceDate, recurrenceDate)))
         .get();
     return row ? toEvent(row) : null;
 }
@@ -329,11 +328,10 @@ async function patchStoredEvent(
     const endMoved = input.endTime !== undefined && input.endTime.getTime() !== existing.endTime.getTime();
     const allDayMoved = input.allDay !== undefined && input.allDay !== existing.allDay;
 
-    const key = existing.recurrenceDate ? storedRecurrenceKey(existing.recurrenceDate) : null;
     await patchResource(
         calendar,
         resource,
-        key,
+        existing.recurrenceDate,
         {
             title: input.title?.trim(),
             description: input.description,
@@ -401,7 +399,7 @@ async function eraseStoredEvent(calendar: Calendar, calendarId: string, id: stri
         const parent = eventById(calendar, existing.parentEventId)!;
         // Deleting one occurrence writes the master's resource: a cancelled row is the exclusion itself, so deleting it puts the occurrence back.
         await editResource(calendar, resource, (component) => {
-            const key = existing.recurrenceDate ? storedRecurrenceKey(existing.recurrenceDate) : null;
+            const key = existing.recurrenceDate;
             if (!key) return;
             const context = writeContext(actorIsOrganizer(parent));
             if (existing.status === 'cancelled') removeExclusion(component, key, context);

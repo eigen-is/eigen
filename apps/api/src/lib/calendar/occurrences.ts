@@ -1,13 +1,15 @@
+// The occurrences a calendar shows in a time window: single events as stored, each series expanded in memory,
+// and the overrides in place of the occurrences they replace. Readers such as the range routes and a CalDAV
+// time-range REPORT go through getEventsInRange. An override answers from its own times (RFC 4791 § 9.9), so
+// moving one carries it out of the window it was expanded in.
+
 import { occurrenceDateToString } from '@workspace/lib/calendar/calendar-utils';
 import type { CalendarEventOccurrence } from '@workspace/lib/types/calendar';
 import { and, eq, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm';
-import { storedRecurrenceKey } from '../ical/wall-clock';
 import type { Calendar } from './calendar';
 import { toEvent } from './mappers';
 import { expandRecurrence } from './recurrence';
 import * as schema from './schema';
-
-// An override answers from its own times (RFC 4791 § 9.9), so moving one carries it out of the window it was expanded in.
 
 // 5 years bounds rrule iteration against a year-9999 span; clamp rather than reject so a wide CalDAV sync still gets bounded data.
 const MAX_RANGE_SPAN_MS = 5 * 366 * 24 * 60 * 60 * 1000;
@@ -65,12 +67,11 @@ export async function getEventsInRange(
         .map(toEvent);
 
     const replacedByParent = new Map<string, Set<string>>();
-    for (const exception of exceptions) {
-        const dateKey = exception.recurrenceDate ? storedRecurrenceKey(exception.recurrenceDate) : null;
-        if (!dateKey || !exception.parentEventId) continue;
-        const keys = replacedByParent.get(exception.parentEventId) ?? new Set<string>();
-        replacedByParent.set(exception.parentEventId, keys);
-        keys.add(dateKey);
+    for (const { recurrenceDate, parentEventId } of exceptions) {
+        if (!recurrenceDate || !parentEventId) continue;
+        const keys = replacedByParent.get(parentEventId) ?? new Set<string>();
+        replacedByParent.set(parentEventId, keys);
+        keys.add(recurrenceDate);
     }
 
     const results: CalendarEventOccurrence[] = [];
@@ -89,8 +90,7 @@ export async function getEventsInRange(
         if (exception.status === 'cancelled') continue;
         if (exception.startTime > clampedTo || exception.endTime < from) continue;
         // The stored key, not the moved startTime: the FE round-trips occurrenceDate into scope='this' RSVPs.
-        const dateKey = exception.recurrenceDate ? storedRecurrenceKey(exception.recurrenceDate) : null;
-        if (dateKey) results.push({ ...exception, occurrenceDate: dateKey });
+        if (exception.recurrenceDate) results.push({ ...exception, occurrenceDate: exception.recurrenceDate });
     }
 
     results.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());

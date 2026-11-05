@@ -1,4 +1,8 @@
-// `ICAL.Component.toString()` is the only serializer here, so folding, escaping and quoting stay ical.js's problem and an untouched property survives an edit as the client wrote it.
+// Writing iCalendar: building a resource from event rows, editing a stored one in place, such as a patch, an
+// override or an exclusion, re-stamping a CalDAV PUT with Eigen's own lines, and shaping an iMIP message. The
+// calendar store calls it for every write. `ICAL.Component.toString()` is the only serializer, so folding,
+// escaping and quoting stay ical.js's problem and an untouched property survives an edit as the client wrote it.
+
 import { heldAttendees, normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
 import { stripControlChars, stripLineBreaks } from '@workspace/lib/content-line';
 import type { Attendee, CalendarEvent, ImipMethod, Reminder, UpdateEventInput } from '@workspace/lib/types/calendar';
@@ -22,7 +26,7 @@ import {
     utcStampString,
 } from './ical-parse';
 import { buildVTimezone } from './vtimezone';
-import { computeOccurrenceTimes, localToUtc, storedRecurrenceKey, utcToLocal } from './wall-clock';
+import { computeOccurrenceTimes, localToUtc, utcToLocal } from './wall-clock';
 
 export const PRODID = '-//Eigen//CalDAV//EN';
 
@@ -356,18 +360,16 @@ function buildVEvent(event: CalendarEvent, options: BuildOptions = {}): ICAL.Com
     // A cancelled exception rides as an EXDATE in the master's own DTSTART form, never as a STATUS:CANCELLED override, which Thunderbird omits from its next PUT.
     const excluded: Array<{ key: string; exclusion: CalendarEvent }> = [];
     for (const exclusion of options.exclusions ?? []) {
-        const key = exclusion.recurrenceDate ? storedRecurrenceKey(exclusion.recurrenceDate) : null;
-        if (!key) continue; // an unkeyable cancellation cancels nothing (matches expansion)
+        const key = exclusion.recurrenceDate;
+        if (!key) continue;
         excluded.push({ key, exclusion });
         vevent.addProperty(exdateProperty(event, key, tzid));
     }
 
     // RECURRENCE-ID names the ORIGINAL occurrence in the master's DTSTART form, value type included (RFC 5545 §3.8.4.4): echoing a moved startTime or the override's own all-day toggle matches no occurrence.
     if (event.recurrenceDate) {
-        const key = storedRecurrenceKey(event.recurrenceDate);
         const master = options.master ?? event;
-        // An unkeyable value falls back to the exception's own startTime: a possibly-orphaned override beats 500ing the whole resource.
-        const when = key ? occurrenceInstant(master, key) : event.startTime;
+        const when = occurrenceInstant(master, event.recurrenceDate);
         vevent.addProperty(timeProperty('recurrence-id', when, normalizeTimezone(master.timezone), master.allDay));
     }
 
@@ -641,7 +643,7 @@ export function patchEvent(
 
 // An EXDATE left beside a new override would keep the occurrence out of the expansion and project a second, cancelled row for the same key.
 export function putOverride(resource: ICAL.Component, master: CalendarEvent, override: CalendarEvent): void {
-    const key = override.recurrenceDate ? storedRecurrenceKey(override.recurrenceDate) : null;
+    const key = override.recurrenceDate;
     if (!key) throw new Error('putOverride: the override names no occurrence');
     const existing = findVEvent(resource, key);
     if (existing) resource.removeSubcomponent(existing);
@@ -666,7 +668,7 @@ function dropExclusion(vevent: ICAL.Component, recurrenceKey: string): boolean {
         else vevent.removeProperty(prop);
     }
     for (const stamp of vevent.getAllProperties(EIGEN.exdate)) {
-        if (storedRecurrenceKey(String(stamp.getFirstValue() ?? '')) !== recurrenceKey) continue;
+        if (stamp.getFirstValue() !== recurrenceKey) continue;
         vevent.removeProperty(stamp);
         removed = true;
     }
@@ -680,7 +682,7 @@ export function addExclusion(
     exclusion: CalendarEvent,
     ctx: WriteContext,
 ): void {
-    const key = exclusion.recurrenceDate ? storedRecurrenceKey(exclusion.recurrenceDate) : null;
+    const key = exclusion.recurrenceDate;
     if (!key) throw new Error('addExclusion: the exclusion names no occurrence');
     const vevent = masterVEvent(resource);
     if (!vevent) throw new Error('addExclusion: the resource holds no master VEVENT');
@@ -694,7 +696,7 @@ export function addExclusion(
         vevent.addProperty(exdateProperty(master, key, normalizeTimezone(master.timezone)));
     }
     for (const stamp of vevent.getAllProperties(EIGEN.exdate)) {
-        if (storedRecurrenceKey(String(stamp.getFirstValue() ?? '')) === key) vevent.removeProperty(stamp);
+        if (stamp.getFirstValue() === key) vevent.removeProperty(stamp);
     }
     vevent.addProperty(exclusionStamp(key, exclusion.id, exclusion.sequence, clampStamp(ctx.dtstamp, ctx.now)));
     syncVTimezones(resource);

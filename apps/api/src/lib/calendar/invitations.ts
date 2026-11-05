@@ -13,7 +13,7 @@ import { ApiError } from '../core';
 import { isNewerRevision, patchEvent, stampInvitationLink, storedOrganizerAddress, storedRevision } from '../ical';
 import type { EventPatch, Revision } from '../ical/ical-component';
 import type { ParsedEvent } from '../ical/ical-parse';
-import { computeOccurrenceTimes, storedRecurrenceKey, utcToLocal } from '../ical/wall-clock';
+import { computeOccurrenceTimes, parseRecurrenceKey, recurrenceKey, utcToLocal } from '../ical/wall-clock';
 import { sendMail } from '../mailer/mailer';
 import type { User } from '../user';
 import { actorDisplayName } from '../user';
@@ -244,7 +244,7 @@ export async function rsvp(
 
     if (scope === 'this' && input.recurrenceDate) {
         // An old client names the occurrence with a full ISO datetime, so only its date is kept.
-        const recurrenceDate = storedRecurrenceKey(input.recurrenceDate);
+        const recurrenceDate = parseRecurrenceKey(input.recurrenceDate);
         if (!recurrenceDate) throw new ApiError(400, 'Invalid recurrenceDate');
         const status = input.remove ? 'declined' : input.status;
         if (input.remove) {
@@ -256,7 +256,7 @@ export async function rsvp(
         if (isExternalOrganizer) sendRsvpReply(status, recurrenceDate);
         else relayRsvp(status, recurrenceDate);
     } else if (scope === 'this-and-following' && input.remove && input.recurrenceDate) {
-        const recurrenceDate = storedRecurrenceKey(input.recurrenceDate);
+        const recurrenceDate = parseRecurrenceKey(input.recurrenceDate);
         if (!recurrenceDate) throw new ApiError(400, 'Invalid recurrenceDate');
         await removeThisAndFuture(calendar, eventId, recurrenceDate);
         if (isExternalOrganizer) sendRsvpReply('declined');
@@ -476,8 +476,7 @@ function recurrenceKeyForSeries(
 ): string {
     if (!recurrenceInstant || !tz) return recurrenceDate;
     const { year, month, day } = utcToLocal(recurrenceInstant, tz);
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${year}-${pad(month)}-${pad(day)}`;
+    return recurrenceKey(year, month, day);
 }
 
 function inboundUpdatePayload(parsed: ParsedEvent): InvitationUpdatePayload {
@@ -701,11 +700,10 @@ async function updateAttendeeStatus(
         if (!resource) return;
 
         const attendees = withAttendeeStatus(event.data.attendees, email, status);
-        const key = event.recurrenceDate ? storedRecurrenceKey(event.recurrenceDate) : null;
         await events.patchResource(
             calendar,
             resource,
-            key,
+            event.recurrenceDate,
             { data: { ...event.data, attendees } },
             events.writeContext(false),
         );

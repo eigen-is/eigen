@@ -1,10 +1,13 @@
+// Calendar time in a zone's wall clock: converting between an instant and local time, expanding an RRULE in
+// local time, and the `YYYY-MM-DD` key an override, an exclusion or an RSVP names an occurrence by. Callers
+// such as the iCalendar parser, the builder and the calendar store share it. It sits on the format side of
+// the one-way edge, so `calendar` imports `ical`, never the reverse.
+
 // Deep import (not the @workspace/lib/calendar barrel) to keep React out of the API module graph.
 import { normalizeTimezone, occurrenceDateToString } from '@workspace/lib/calendar/calendar-utils';
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import { RRule } from 'rrule';
 import { isOutOfRangeRecurrenceStart, isSubDailyRrule, MAX_OCCURRENCES } from './recurrence-limits';
-
-// On the format side of the one-way edge: `calendar` imports `ical`, never the reverse.
 
 type LocalComponents = { year: number; month: number; day: number; hour: number; minute: number; second: number };
 
@@ -80,9 +83,16 @@ export function wallClockDate(date: Date, tz: string): Date {
     return new Date(Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second));
 }
 
-// Every reader resolves a stored key through this: RRule.between throws on an invalid date.
-export function storedRecurrenceKey(recurrenceDate: string): string | null {
-    const key = recurrenceDate.substring(0, 10);
+// Four digits, or `Date.parse` reads the year as no date; a year outside 0 to 9999 has no key, so a file naming one is refused.
+export function recurrenceKey(year: number, month: number, day: number): string {
+    if (year < 0 || year > 9999) throw new Error(`No recurrence key for year ${year}`);
+    const pad = (n: number, width: number) => String(n).padStart(width, '0');
+    return `${pad(year, 4)}-${pad(month, 2)}-${pad(day, 2)}`;
+}
+
+// A key someone else wrote, where an old client sends a full ISO datetime; one naming no date is null, as RRule.between throws on it.
+export function parseRecurrenceKey(value: string): string | null {
+    const key = value.substring(0, 10);
     return Number.isNaN(Date.parse(`${key}T00:00:00Z`)) ? null : key;
 }
 
@@ -139,12 +149,11 @@ export function computeOccurrenceTimes(
     // Fallback: place dtstart's time-of-day onto the occurrence date
     if (tz) {
         const local = utcToLocal(parent.startTime, tz);
-        const occDateParts = occDate.toISOString().substring(0, 10).split('-');
         const startTime = localToUtc(
             tz,
-            parseInt(occDateParts[0], 10),
-            parseInt(occDateParts[1], 10),
-            parseInt(occDateParts[2], 10),
+            occDate.getUTCFullYear(),
+            occDate.getUTCMonth() + 1,
+            occDate.getUTCDate(),
             local.hour,
             local.minute,
             local.second,

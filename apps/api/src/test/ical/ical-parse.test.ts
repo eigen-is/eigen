@@ -172,6 +172,62 @@ describe('parseIcs over a UTC series in a file that also holds a zoned one', () 
     });
 });
 
+// A key is `YYYY-MM-DD`: a year below 1000 is zero-padded, or `Date.parse` reads the key as no date, and
+// a year past 9999 has no key at all, so its VEVENT is one the parser cannot read.
+describe('parseIcs over a year that is not four digits', () => {
+    const master = (uid: string, tz: string, extra: string[] = []) => [
+        'BEGIN:VEVENT',
+        `UID:${uid}`,
+        `DTSTART;TZID=${tz}:20260302T090000`,
+        `DTEND;TZID=${tz}:20260302T100000`,
+        'RRULE:FREQ=WEEKLY',
+        ...extra,
+        'END:VEVENT',
+    ];
+    const override = (uid: string, recurrenceId: string, start: string) => [
+        'BEGIN:VEVENT',
+        `UID:${uid}`,
+        `RECURRENCE-ID${recurrenceId}`,
+        `DTSTART:${start}`,
+        'END:VEVENT',
+    ];
+
+    test('an exception and an exclusion in year 500 key to a four-digit year in every form', () => {
+        const uid = 'year-500@eigen';
+        const { events, skipped } = parseIcs(
+            vcal([
+                ...master(uid, 'Europe/Amsterdam', [
+                    'EXDATE;VALUE=DATE:05000105',
+                    'EXDATE;TZID=Europe/Amsterdam:05000106T090000',
+                    'EXDATE:05000107T080000Z',
+                ]),
+                ...override(uid, ';VALUE=DATE:05000108', '05000108T090000Z'),
+                ...override(uid, ';TZID=Europe/Amsterdam:05000109T090000', '05000109T090000Z'),
+                ...override(uid, ':05000110T080000Z', '05000110T090000Z'),
+            ]),
+        );
+
+        expect(skipped).toBe(0);
+        const keys = (status: string) =>
+            events.filter((event) => event.status === status && event.recurrenceDate).map((e) => e.recurrenceDate);
+        expect(keys('cancelled')).toEqual(['0500-01-05', '0500-01-06', '0500-01-07']);
+        expect(keys('confirmed')).toEqual(['0500-01-08', '0500-01-09', '0500-01-10']);
+    });
+
+    test('an exception keyed past year 9999 is a VEVENT it cannot read', () => {
+        // 31 December 9999 23:00Z is already 1 January 10000 in the series' zone.
+        const { events, skipped } = parseIcs(
+            vcal([
+                ...master('tokyo@eigen', 'Asia/Tokyo'),
+                ...override('tokyo@eigen', ':99991231T230000Z', '99991231T230000Z'),
+            ]),
+        );
+
+        expect(events).toHaveLength(1);
+        expect(skipped).toBe(1);
+    });
+});
+
 // RFC 5545 §3.6.1 lets an event state its length as a DURATION instead of a DTEND, which Apple and
 // Outlook both emit — an end derived from DTSTART alone turns a three-hour meeting into an hour and a
 // three-day trip into one day.

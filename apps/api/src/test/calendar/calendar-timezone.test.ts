@@ -872,6 +872,68 @@ describe('Calendar Timezone', () => {
             expect(atMoved).toHaveLength(1);
             expect(atMoved[0].title).toBe('Moved via Z-form');
         });
+
+        test('an exception and an exclusion in year 500 are stored, listed and lifted by their key', async () => {
+            const UID = 'year-500@test';
+            const master = [
+                'BEGIN:VEVENT',
+                `UID:${UID}`,
+                'SUMMARY:Daily',
+                'DTSTART;TZID=America/New_York:20260112T090000',
+                'DTEND;TZID=America/New_York:20260112T093000',
+                'RRULE:FREQ=DAILY;COUNT=10',
+                'EXDATE;TZID=America/New_York:05000105T090000',
+                'DTSTAMP:20260101T000000Z',
+                'END:VEVENT',
+            ].join('\r\n');
+            const ancient = [
+                'BEGIN:VEVENT',
+                `UID:${UID}`,
+                'RECURRENCE-ID:05000106T140000Z',
+                'DTSTART:05000106T140000Z',
+                'DTEND:05000106T143000Z',
+                'SUMMARY:Ancient',
+                'DTSTAMP:20260101T000000Z',
+                'END:VEVENT',
+            ].join('\r\n');
+
+            const put = await davPut(
+                ctx.alice.user.email,
+                ctx.alice.user.id,
+                aliceCalendarId,
+                `${UID}.ics`,
+                vcal(master, ancient),
+            );
+            expect([201, 204]).toContain(put.status);
+
+            const home = await getHome(ctx.alice.user.id);
+            const stored = storedEvents(home.calendar, aliceCalendarId).filter((e) => e.uid === UID && e.parentEventId);
+            const cancelled = findOrFail(stored, (e) => e.status === 'cancelled');
+            expect(cancelled.recurrenceDate).toBe('0500-01-05');
+            expect(findOrFail(stored, (e) => e.title === 'Ancient').recurrenceDate).toBe('0500-01-06');
+
+            const occ = await getEvents(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                sec('0500-01-01'),
+                sec('0500-02-01'),
+            );
+            expect(occ.find((e) => e.uid === UID)?.occurrenceDate).toBe('0500-01-06');
+
+            // Deleting the cancelled row puts the occurrence back: its EXDATE goes from the file.
+            const del = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${cancelled.id}`,
+                { method: 'DELETE' },
+            );
+            expect(del.ok).toBe(true);
+            const get = await davRequest('GET', `/dav/calendars/${ctx.alice.user.id}/${aliceCalendarId}/${UID}.ics`, {
+                email: ctx.alice.user.email,
+            });
+            const ics = await get.text();
+            expect(ics).toContain('SUMMARY:Daily');
+            expect(ics).not.toContain('EXDATE');
+        });
     });
 
     // Audit #E: a substituted modified occurrence must render with the exception's STORED
