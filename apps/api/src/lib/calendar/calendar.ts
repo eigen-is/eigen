@@ -68,13 +68,12 @@ export class Calendar {
     public db!: BunSQLiteDatabase<typeof schema>;
     public home: Home;
 
-    // bun:sqlite makes a transaction atomic and serial by itself, but a write path holds async gaps between
-    // its check and its commit (the quota check, an invitation fan-out), and a racing If-Match PUT must lose
-    // inside the lock, not after it.
+    // For the async gaps between a write's check and its commit, such as the quota check, so a racing If-Match
+    // PUT loses inside the lock.
     public writeLock = new Semaphore(1);
 
-    // Running total so size() answers from memory: a SUM per metered write makes an N-event device sync O(N²).
-    // Each delta is read inside the transaction that moves it and applied after: a rollback would otherwise leave it applied.
+    // A running total, since a SUM per metered write makes an N-event device sync O(N²). Each delta is applied
+    // after its commit, so a rollback moves nothing.
     private eventsBytes = 0;
 
     private meteredIngest = false;
@@ -150,10 +149,8 @@ export class Calendar {
             .run();
     }
 
-    // Caller holds the write lock. The one write every resource path takes, and it owns the order: both
-    // ceilings judge the bytes right before the transaction that stores them, so a refusal leaves the
-    // calendar as it was. `creditBytes` is the stored resource this one replaces, or a rewrite that shrinks
-    // a resource would be refused on a quota its own bytes already hold.
+    // Caller holds the write lock. `creditBytes` is the stored resource this one replaces, or a shrinking rewrite
+    // would be refused on a quota its own bytes already hold.
     public async writeResource(opts: {
         calendarId: string;
         uri: string;
@@ -218,7 +215,7 @@ export class Calendar {
         return this.calendarById(id);
     }
 
-    // The sync read behind getCalendarById, for the paths that may not await — a transaction commits at the first one.
+    // Synchronous for the paths that may not await, because a transaction commits at its first await.
     private calendarById(id: string): CalendarItem | null {
         const row = this.calendarRow(id);
         return row ? dbCalendarToCalendarItem(row) : null;

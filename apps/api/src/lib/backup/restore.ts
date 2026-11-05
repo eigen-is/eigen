@@ -54,9 +54,6 @@ type InstallHome = () => Promise<void>;
 // What judging a replacement hands on: the install, and what the restore writes once the home serves again.
 type PreparedHome<Judged> = { install: InstallHome; judged: Judged };
 
-// Replaces one home with the copy inside an artifact: the home as it stands goes aside as `{id}.pre-restore-{ts}`,
-// and a failed install as `{id}.failed-restore-{ts}`. The first load after the restore runs migrations and reseeds
-// each domain's byte counters from the restored rows.
 export async function restoreHome(
     artifactName: string,
     ownerId: string,
@@ -97,9 +94,8 @@ export async function restoreHome(
                 unpackedHome,
                 carried.map((summary) => summary.id),
             );
-            // The rows outside the home folder are judged now too, so an archive of somebody else, or a shares.json
-            // that does not read, is refused before the home is taken. The avatar is read now because the staging
-            // folder is gone by the time it is written.
+            // The rows outside the home folder are judged before the home is taken. The avatar is read now because
+            // the staging folder is gone by the time it is written.
             const judged = {
                 authRows: authRowsToRestore(ownerId, manifest, folder),
                 shares: readShares(folder),
@@ -134,11 +130,7 @@ export async function restoreHome(
     onProgress?.('done', 1, 1);
 }
 
-// Puts a `.pre-restore-` copy back where it came from: the home as it stands becomes a safety copy
-// of its own and the chosen folder takes its place. No file is copied and none is deleted. A remote
-// mount needs no work either, because the copy still points at the objects it was restored away from:
-// materializeMount gives every restore fresh keys. A `.failed-restore-` copy is refused, because it is
-// the folder of a restore that never finished, not a home.
+// A remote mount needs no work: every restore takes fresh keys, so the objects the copy points at are still there.
 export async function restoreSafetyCopy(
     ownerId: string,
     name: string,
@@ -171,9 +163,7 @@ export async function restoreSafetyCopy(
         ownerId,
         homeDir,
         jobId,
-        // Nothing to unpack: the folder is right there. It gets the verdict a restore from an archive ends on, while
-        // the home still serves: SQLite's on the bytes, and this build's on every schema stamp. A copy this server
-        // made passes both, and one carried over from a newer server does not.
+        // Nothing to unpack, but the copy gets the database checks an unpacked archive gets, while the home serves.
         async () => {
             await checkRestoredDatabases(folder, mountIds, containerDatabasesIn(folder, mountIds));
             return { install, judged: null };
@@ -203,9 +193,8 @@ function readShares(folder: string): BackupShare[] {
     return rows;
 }
 
-// The avatar is server data, not home data. Its name comes from the archive and lands in the server-wide avatars
-// folder, so it must be this user's, `{ownerId}.{ext}`. Otherwise a hostile archive could plant a picture for
-// somebody who has none.
+// The name comes from the archive and lands in the server-wide avatars folder, so only `{ownerId}.{ext}` passes, or
+// a hostile archive could plant a picture for somebody who has none.
 async function readAvatars(ownerId: string, folder: string): Promise<RestoredAvatar[]> {
     const avatarDir = path.join(folder, ARCHIVE_AVATAR_DIR);
     if (!fs.existsSync(avatarDir)) return [];
@@ -220,9 +209,7 @@ async function readAvatars(ownerId: string, folder: string): Promise<RestoredAva
     return avatars;
 }
 
-// The moves every restore is made of: judge the replacement while the home still serves, so a refusal costs nobody a
-// page, then take the home and swap its folder for the replacement. A failure puts both folders back, deleting nothing,
-// and the marker written here lets the next boot do the same for a job that died or could not.
+// The replacement is judged while the home still serves, so a refusal costs nobody a page.
 async function replaceHomeFolder<Judged>(
     ownerId: string,
     homeDir: string,
@@ -239,9 +226,6 @@ async function replaceHomeFolder<Judged>(
         // Throws when another restore or a deletion of this home holds it, before anything below runs.
         markHomeRestoring(ownerId);
         try {
-            // Every request to the home meets the 503 from here until the mark clears. Sessions are untouched, so
-            // the user stays signed in. The evict ends the home's event streams and closes its collab sockets with
-            // the retry close, so each tab comes back once the home serves again.
             await evictHome(ownerId);
 
             // Picked now, so the safety copies are dated by the swap, however long the unpack took.
@@ -275,9 +259,7 @@ async function replaceHomeFolder<Judged>(
                         `[backup] could not put ${ownerId}'s home back after a failed restore:`,
                         rollbackError,
                     );
-                    // The job's error is all an admin learns of it, beside a 503 and a second restore refused as running.
-                    // A restart alone leaves a running API as it is, so only a stop first runs the boot that puts the
-                    // home back. A refusal keeps its own status: it is not the server's fault.
+                    // A refusal keeps its own status: it is not the server's fault.
                     throw new ApiError(
                         error instanceof ApiError ? error.status : 500,
                         `${describeError(error)}, and the home could not be put back. The account is shut until Eigen restarts, which puts it back: run ./eigen stop, then ./eigen restart`,

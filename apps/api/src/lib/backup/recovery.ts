@@ -31,10 +31,8 @@ const RESTORING_MARKER = 'restoring.json';
 // Written beside it the moment the install is done, before the mark clears. A marker without this
 // beside it means the process died with a home folder that is somewhere between the two states.
 const RESTORE_COMPLETE_MARKER = 'restore-complete.json';
-// `homeDir` is where the home was when the note was written. `preRestoreName` is null when there was no home folder
-// to move aside (a restore of a deleted user). The marker is still written: the folder the install puts in place is
-// not a home until it is done, and nothing but this says so. `parkName` is what that folder goes aside as: a
-// `.failed-restore-` name for a home from an archive, the copy's own name for a safety copy put back.
+// `preRestoreName` is null for a deleted user, whose restore still needs the note: an unfinished install is not a
+// home. `parkName` is the name that unfinished folder goes aside under.
 type RestoringMarker = { ownerId: string; homeDir: string; preRestoreName: string | null; parkName: string };
 
 // Before the server listens: a request that resolved a home while the recovery was still deciding about it would
@@ -97,9 +95,7 @@ export function recoverInterruptedRestores(): void {
     }
 }
 
-// The home that notes beside the homes speak of: the owner's folder in the homes folder they sit in. The path they
-// were written with must end in that same folder and its homes folder. Its start may differ, so a data folder moved
-// since, such as to another disk, still recovers.
+// The notes' own path need only end in the same home and homes folder, so a data folder moved since still recovers.
 function homeBesideNotes(homesDir: string, marker: RestoringMarker): string | null {
     const homeDir = homeDirUnder(path.dirname(homesDir), marker.ownerId);
     if (path.dirname(homeDir) !== homesDir) return null;
@@ -162,9 +158,8 @@ function closeArchives(): void {
     }
 }
 
-// Undoes the restore whose notes are in `notesDir`, unless it finished. `homeOf` says which home folder the notes may
-// act on, or refuses them. Returns false when a move failed: a throw would stop every boot, so the notes stay for the
-// next one, and the home stays shut until then rather than be served out of place or made anew at its empty path.
+// Returns false when a move failed: a throw would stop every boot, so the notes stay for the next one and the home
+// stays shut until then.
 function recoverRestore(notesDir: string, homeOf: (marker: RestoringMarker) => string | null): boolean {
     const marker = readRestoringMarker(path.join(notesDir, RESTORING_MARKER));
     const homeDir = marker && homeOf(marker);

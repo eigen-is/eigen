@@ -112,9 +112,8 @@ export const auth = betterAuth({
                 },
             },
             delete: {
-                // Every better-auth deletion passes here while the user row still exists, so Eigen's whole
-                // teardown runs here. A member row left behind would break listMembers for the whole org. The
-                // import is lazy because delete-user imports this file directly, so a static import would be a cycle.
+                // Every better-auth deletion passes here while the user row exists, so the whole teardown runs here.
+                // The import is lazy because delete-user imports this file.
                 before: async (deleted) => {
                     const user = await getUserById(deleted.id);
                     if (!user) return;
@@ -165,9 +164,8 @@ export const auth = betterAuth({
         ipAddress: { ipAddressHeaders: ['x-real-ip', 'x-forwarded-for'] },
     },
     rateLimit: {
-        // Eigen sets PRODUCTION=1, not NODE_ENV, so better-auth would never turn this on by itself. The general
-        // limit stays loose, because the server's own limiter handles broad abuse and a low one would throttle
-        // get-session for an office behind one address. The credential endpoints get a hard limit.
+        // On by hand, since better-auth keys it to NODE_ENV and Eigen sets PRODUCTION. Loose but for the credential
+        // endpoints, because a low limit would throttle get-session for an office behind one address.
         enabled: true,
         window: 60,
         max: 1000,
@@ -190,9 +188,7 @@ export const auth = betterAuth({
         }),
         // Only these two roles may be set. A guest's role is written by the guest sign-in alone.
         admin({ roles: { admin: eigenAdminRole, user: userAc } }),
-        // Eigen uses the organization plugin for its data model only, the members, teams and roles, and not for
-        // its invitations, so no sendInvitationEmail is wired. People arrive through the waitlist or an admin. The
-        // user-create hook joins them to the default org and team, and the admin UI adds them to other teams.
+        // For the members, teams and roles only: people arrive through the waitlist or an admin, never its invitations.
         organization({
             // Eigen has one org. A user who could create another would own it and get past requireAdmin.
             // Setup creates the default org as a server call without a session, which this does not block.
@@ -237,9 +233,8 @@ export const auth = betterAuth({
     appName: 'eigen',
     baseURL: process.env['API_URL'],
     basePath: '/auth',
-    // set-user-password revokes no sessions or app passwords, so admins reset through PUT
-    // /settings/user/:userId/password instead. Impersonation would hand an admin any member's session. Eigen
-    // offers no bans: a ban ends the browser sessions, but the app passwords would keep working.
+    // set-user-password revokes no sessions or app passwords, impersonation hands an admin a member's session, and a
+    // ban leaves the app passwords working.
     disabledPaths: ['/admin/set-user-password', '/admin/impersonate-user', '/admin/ban-user', '/admin/unban-user'],
     logger: { disabled: isTest() },
     secret: getAuthSecret(),
@@ -264,9 +259,8 @@ export function getAuthDrizzleDb(): ReturnType<typeof drizzle> {
     return authDrizzleDb;
 }
 
-// Deletes the auth rows that point at a user and that better-auth leaves, such as memberships, 2FA and app
-// passwords. The memberships of users who are already gone go too, so a server that collected such rows from older
-// raw better-auth deletions heals at its next delete.
+// The auth rows better-auth leaves behind, such as memberships, 2FA and app passwords. A membership whose user is
+// gone already goes too.
 export function authDeleteUserReferences(userId: string): void {
     const db = getAuthDrizzleDb();
     const userIds = db.select({ id: authSchema.user.id }).from(authSchema.user);

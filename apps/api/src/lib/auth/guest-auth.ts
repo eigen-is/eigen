@@ -104,9 +104,8 @@ export async function verifyOtpAndSignIn(email: string, otp: string, ip: string)
 
     if (!guestUser) {
         const now = new Date();
-        // A direct insert skips better-auth's user hooks, so a guest joins no org. The id comes from generateId,
-        // which is plain letters and digits: parseOwnerId accepts nothing else, and generateRandomString can give
-        // '_' or '-'.
+        // A direct insert skips better-auth's user hooks, so a guest joins no org. generateId gives only letters and
+        // digits, which parseOwnerId requires.
         db.insert(userTable)
             .values({
                 id: generateId(),
@@ -128,9 +127,7 @@ export async function verifyOtpAndSignIn(email: string, otp: string, ip: string)
     return signInWithScopedPassword('guest', guestUser.id, email);
 }
 
-// Writes a password derived from the scope and the email onto the credential account, then signs in with it and
-// returns the response that carries the session cookie. The password is written on every call, so one that was
-// changed heals, and one visitor cannot lock out the next.
+// The password is written on every call, so one that was changed heals and one visitor cannot lock out the next.
 export async function signInWithScopedPassword(
     scope: 'guest' | 'demo',
     userId: string,

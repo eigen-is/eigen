@@ -1,6 +1,7 @@
 // The sending side of an invitation. When the organizer of an event invites, changes or cancels, this tells each
 // guest: a guest on this server gets the change in their own Home, and an external guest gets an email. A repeating
-// event also sends its changed or removed occurrences. A guest's answer to an organizer on this server goes back the same way.
+// event also sends its changed or removed occurrences. A guest's answer to an organizer on this server goes back
+// the same way. The event writes call it once they commit, such as a save, a delete or an RSVP.
 
 import { heldAttendees } from '@workspace/lib/calendar/calendar-utils';
 import type { Attendee, CalendarEvent } from '@workspace/lib/types/calendar';
@@ -23,7 +24,8 @@ function occurrenceRevision(
     return recurrenceDate ? { recurrenceDate, sequence: event.sequence, dtstamp: event.updatedAt } : undefined;
 }
 
-// Right after the invitation that files the series, and one message per exception row: the guest's ordering guard takes each against the occurrence it names, which their fresh copy holds nothing for.
+// Runs right after the invitation that files the series. Each exception is its own message, so the guest's ordering
+// guard judges it against its own occurrence, of which their fresh copy holds no revision.
 async function sendSeriesExceptions(
     targetUserId: string,
     organizerHome: Home,
@@ -87,7 +89,7 @@ export async function propagateInvitation(
     const removed = oldAttendees.filter((a) => !newEmails.has(a.email.toLowerCase()));
     const existing = newAttendees.filter((a) => oldEmails.has(a.email.toLowerCase()));
 
-    // The acting user organizes. A collaborator writes in the owner's calendar, so the owner already holds the event: nothing is relayed to them, and the answer stays theirs to give.
+    // A collaborator writes in the owner's calendar, so the owner already holds the event and gets no copy.
     const selves = new Set([user.email.toLowerCase(), organizerHome.user.email.toLowerCase()]);
     const organizer = { userId: user.id, email: user.email, name: user.name };
 
@@ -116,7 +118,8 @@ export async function propagateInvitation(
                     timezone: event.timezone,
                     status: event.status,
                     sequence: event.sequence,
-                    // The organizer's own revision, so the attendee can order this message against the next (RFC 5546 § 2.1.5); the fan-out is unordered.
+                    // The organizer's own revision, so the attendee can order this message against the next: the
+                    // fan-out is unordered.
                     dtstamp: event.updatedAt,
                     data: {
                         organizer: { userId: organizerHome.user.id, email: user.email, name: user.name },
@@ -131,7 +134,7 @@ export async function propagateInvitation(
             await sendSeriesExceptions(targetUser.id, organizerHome, organizerEventId, exceptions, event);
             if (getServerSettings().notifications.email.userOnCalendarInvite) {
                 const mail = composeInviteEmail(event, organizer, [attendee], series);
-                // A local recipient already has the event via sendToHome, so the iMIP attachment would fire a second update.
+                // A local recipient has the event from sendToHome, so an iMIP attachment would update it twice.
                 mail.icalEvent = undefined;
                 sendMail(mail).catch((err) => console.error('Failed to send Eigen invite email:', err));
             }
@@ -215,7 +218,7 @@ export async function propagateRsvp(
     });
 }
 
-// `attendees` is who held the event: a cancelled occurrence — an EXDATE with no guest list — cannot state it itself.
+// `attendees` is who held the event, because a cancelled occurrence is an EXDATE with no guest list of its own.
 export async function propagateCancellation(
     organizerHome: Home,
     event: CalendarEvent,
@@ -253,7 +256,8 @@ export async function propagateCancellation(
     }
 }
 
-// The occurrence a linked copy answers for: a copy that IS one occurrence of a series the guest does not hold. An exception answers through the master it hangs on.
+// Set only for a copy that is one occurrence of a series the guest does not hold. An exception answers through the
+// master it hangs on.
 export function answeredOccurrence(event: CalendarEvent): string | undefined {
     return event.parentEventId ? undefined : (event.recurrenceDate ?? undefined);
 }

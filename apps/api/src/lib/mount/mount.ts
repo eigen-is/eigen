@@ -60,9 +60,8 @@ type Tx = Parameters<Parameters<BunSQLiteDatabase<typeof schema>['transaction']>
 
 type FolderLocks = { paths: Map<string, Promise<void>>; tree: RWLock };
 
-// The locks belong to the mount's folder, not to one Mount object. A backup opens its own Mount of a
-// disabled mount, and turning a mount on or giving it new storage builds a new one. Each of them must
-// wait on the same locks as the Mount the drive serves. An entry is small and stays for the process.
+// Keyed by the mount's folder, so every Mount of one folder, such as a backup's or a rebuilt one, waits on the
+// same locks. An entry is small and stays for the process.
 const folderLocks = new Map<string, FolderLocks>();
 
 function locksFor(folder: string): FolderLocks {
@@ -192,11 +191,8 @@ export class Mount {
 
     // ---- Lifecycle ----
 
-    // `passive` opens a mount the home does not serve, for reading only. A backup archives a disabled
-    // mount through this same code and must not turn it back on. So a passive init creates no folders,
-    // writes no root row, and starts no queue, sweep, purge or prune. It does build the upload queue
-    // object, because that answers whether a staged copy is newer than the stored object
-    // (pendingStagedCopy). Only reconcile() uploads, and a passive init never calls it.
+    // `passive` reads a mount the home does not serve, such as a disabled one a backup archives, and changes
+    // nothing on it. Its upload queue only answers pendingStagedCopy, since only reconcile() uploads.
     public async init(opts?: { passive?: boolean }): Promise<void> {
         const passive = opts?.passive === true;
         if (!passive) {
@@ -266,9 +262,8 @@ export class Mount {
         return documentDb.closeAllDatabases(this);
     }
 
-    // A settings change that keeps the storage applies here: the name and the quota. The storage
-    // type and the S3 settings are bound to this.storage and the upload queue when the Mount is
-    // built, so new storage needs a new Mount (Drive.updateMount).
+    // Only the name and the quota change in place. The storage and the upload queue are bound when the Mount is
+    // built, so new storage needs a new Mount.
     public applyConfig(config: MountConfig): void {
         this.config.name = config.name;
         this.config.maxSizeMB = config.maxSizeMB;
@@ -302,10 +297,8 @@ export class Mount {
     private cleanupStaleFiles(dir: string, maxAgeMs: number, preserveLivePathIds = false): void {
         try {
             const cutoff = Date.now() - maxAgeMs;
-            // An open document's working copy sits in tmpDir under its data.db path id (getTempPath).
-            // After a long downtime it is older than maxAgeMs, but crash recovery adopts it only when the
-            // document opens next. So an entry named after a live path id stays, or the sweep would delete
-            // the last unsynced edits. Other temps use random ids that never match a row, so they go.
+            // An entry named after a live path id is a crash temp that only its document's next open adopts,
+            // however old it is, so it stays with its unsynced edits.
             const liveIds = preserveLivePathIds
                 ? new Set(
                       this.db
@@ -524,11 +517,8 @@ export class Mount {
         };
     }
 
-    // The live child with this name, compared the way the unique index compares: SQLite's LOWER(),
-    // which folds ASCII only. A case-insensitive disk such as APFS also treats non-ASCII case pairs as one
-    // file, so on `local` a non-ASCII name is also compared folded (foldName). An ASCII name whose stored
-    // twin is not ASCII still passes, such as strasse beside straße. On `local` the disk check of a create,
-    // rename, move or restore catches those (trash.renameTarget).
+    // Compared as the unique index compares, with SQLite's ASCII-only LOWER(), and on `local` a non-ASCII name
+    // also as the disk folds it.
     private findLiveChild(parentId: string, name: string): typeof paths.$inferSelect | null {
         const row = this.db
             .select()
@@ -680,17 +670,14 @@ export class Mount {
         if (existing && existing.id !== excludeId) throw nameTakenError(name);
     }
 
-    // A create checks its folder before it writes any bytes. A folder that went to the trash while the
-    // create waited is a 404, the same as for a move. On `local` the create then holds the tree lock
-    // shared, so no trash can land before its row is in.
+    // Checked before any byte is written, so a create into a folder trashed while it waited is a 404.
     private assertLiveFolder(id: string, parentId: string): void {
         const error = this.db.transaction((tx) => this.targetFolderErrorInTx(tx, id, parentId));
         if (error) throw error;
     }
 
-    // Two creates can both pass assertUniqueName before either inserts. The unique index then refuses
-    // the second insert, and that becomes a 409. Off `local` no lock keeps a trash or a permanent delete
-    // of the folder away from a create, so the folder is checked again in the transaction of the insert.
+    // Off `local` no lock keeps a trash or delete of the folder away from a create, so the insert checks it again.
+    // A twin that also passed assertUniqueName meets the unique index, which becomes a 409.
     private async insertPathRow(values: typeof paths.$inferInsert): Promise<void> {
         try {
             this.db.transaction((tx) => {
@@ -710,9 +697,8 @@ export class Mount {
         return parentKey ? `${parentKey}/${fileValue}` : fileValue;
     }
 
-    // Runs under the tree lock, right before a create writes. On `local` the disk may fold a name the
-    // table check missed (ſ onto s), and that is a 409. Bytes no row owns, left by a crash, would be
-    // replaced by a write or adopted by a mkdir, so they are moved aside first.
+    // The disk may fold a name the table check missed, such as ſ onto s. Bytes a crash left at the key go aside
+    // first, or the write would replace them and a mkdir adopt them.
     private async claimCreateKey(parentId: string, key: string, id: string, name: string): Promise<void> {
         if (!this.isPathBased || !this.storage.rename) return;
         const occupant = await trash.renameTarget(this, parentId, key);
@@ -736,9 +722,7 @@ export class Mount {
 
     // ---- Renaming, moving and deleting ----
 
-    // A move asks isTargetTrashing whether its target folder is on its way to the trash, which only the
-    // caller knows. It asks in the transaction that writes the row, so no trash begins in between. On
-    // `local` it also asks before the disk rename, so a refused move leaves the bytes where they are.
+    // isTargetTrashing says whether the target folder is on its way to the trash, which only the caller knows.
     public async updatePath(
         pathId: string,
         updates: Partial<Omit<DrivePath, 'id' | 'ownerId' | 'createdAt'>>,
@@ -750,9 +734,8 @@ export class Mount {
         }
         const values: Partial<typeof paths.$inferInsert> = { ...updates };
 
-        // The name a racing rename or move would collide on. A sibling of that name can land between
-        // assertUniqueName's SELECT and the UPDATE, and the unique index then refuses the UPDATE. It
-        // stays empty only when neither the name nor the parent changes, and then the index can't fire.
+        // The name the unique index may refuse the UPDATE on. It stays empty only when neither the name nor the
+        // parent changes, and then the index can't fire.
         let targetName = updates.name ?? '';
 
         // The folder a move takes the row out of. It is read in the transaction that moves the row, so
@@ -767,9 +750,8 @@ export class Mount {
             const targetParentId = updates.parentId;
             try {
                 if (updates.name === undefined && targetParentId === undefined) {
-                    // An ACL goes only onto a live row. A trash can land after the caller checked the
-                    // path, and a new sharee would then get the item, an email included, while it is
-                    // in the trash.
+                    // An ACL goes only onto a live row, so a trash that landed after the caller's check never
+                    // reaches a new sharee.
                     const live = updates.acl !== undefined ? isNull(paths.trashedAt) : undefined;
                     const written = await this.db
                         .update(paths)
@@ -803,9 +785,8 @@ export class Mount {
             if (current) {
                 const targetParent = updates.parentId ?? current.parentId;
                 targetName = updates.name ?? current.name;
-                // A row named `.trash` from before the name rule must not move. At the mount root its
-                // disk rename would land on the real trash folder, so it has to be renamed first. The
-                // check uses targetName, so a move that also renames it away is fine.
+                // A row named `.trash` from before the name rule moves only under a new name: at the mount
+                // root its disk rename would land on the real trash folder.
                 if (updates.parentId !== undefined && isReservedName(targetName)) {
                     throw new ApiError(400, `"${targetName}" is a reserved name`);
                 }
@@ -874,14 +855,11 @@ export class Mount {
         if (!pathEntry) return;
         if (pathEntry.parentId === null) throw new ApiError(400, 'Cannot delete root folder');
 
-        // The cached databases under this subtree close first. A dirty one left open would stage its
-        // dead key again on a later tick, and its temp file and timer would leak. The cancel and the
-        // storage delete below then clear whatever the close flushed.
+        // A dirty database left open under the subtree would stage its dead key again on a later tick.
         await documentDb.closeCachedDbsUnder(this, pathId);
 
-        // The rows go before the bytes, the mirror of a create. After a crash, bytes no row owns are
-        // the safe leftover. A missing key, or no row deleted, means a delete of the same row got
-        // there first.
+        // Rows go before bytes, so a crash leaves only bytes no row owns. A missing key, or no row deleted, means
+        // another delete of the row got there first.
         const deleteDir = this.storage.deleteDir;
         if (pathEntry.type === 'file') {
             await this.withTreeShared(async () => {
@@ -916,10 +894,8 @@ export class Mount {
         await this.invalidateSizesFrom(pathEntry.parentId);
     }
 
-    // Refuses to move a row that is in trash. A trash may have landed while the move waited, and on
-    // `local` the move would carry its bytes out of .trash/. It also refuses a target folder that a trash
-    // began on while the move waited. That trash has closed the open documents in the folder already, and
-    // would close the database of one that moved in now under its editor.
+    // On `local` a trashed row's move would carry its bytes out of .trash/. A target folder whose trash began has
+    // closed its documents already, and would close one moved in now under its editor.
     private assertMovableInTx(
         tx: Tx,
         pathId: string,
@@ -934,10 +910,8 @@ export class Mount {
         if (error) throw error;
     }
 
-    // Why pathId can't go into targetParentId, or null when it can. A move or a restore runs this in the
-    // transaction of its row write, and a restore also runs it to pick its folder. The target must not be in
-    // the row's own subtree. No folder from the target up to the root may be in trash either: that answers
-    // the 404 of a deleted folder, because the folder's permanent delete would take the row with it.
+    // Why pathId can't go into targetParentId, or null. A trashed folder up to the root is a 404 like a deleted one,
+    // because its permanent delete would take the row with it.
     public targetFolderErrorInTx(tx: Tx, pathId: string, targetParentId: string | null): ApiError | null {
         const seen = new Set<string>();
         let current = targetParentId;
@@ -1037,9 +1011,8 @@ export class Mount {
 
     // ---- Storage keys ----
 
-    // With no row, an id key is still the id, so a read of a deleted file finds no object. A name path
-    // with no row is a 404. It must never be the root's empty key, or a create into a deleted folder
-    // would write at the mount root.
+    // With no row an id key is still the id, but a name path is a 404: the root's empty key would let a create
+    // into a deleted folder write at the mount root.
     public async getStorageKey(pathId: string): Promise<string> {
         const storageKey = await this.findStorageKey(pathId);
         if (storageKey !== null) return storageKey;
@@ -1080,10 +1053,7 @@ export class Mount {
         return this.readKey(await this.getStorageKey(pathId));
     }
 
-    // Reads by storage key, for a caller that has the key already, such as a backup that derives every
-    // key from the paths table it holds. It serves the freshest bytes. While an upload is pending, its
-    // staged copy is newer than the stored object, which may not even exist yet. That copy is a
-    // document database on its way to the bucket, or a plain file a home restore staged.
+    // A pending upload's staged copy is newer than the stored object, which may not exist yet, so it is read first.
     public async readKey(storageKey: string): Promise<StorageFile | null> {
         const staged = this.pendingStagedCopy(storageKey);
         if (staged) return Bun.file(staged);
@@ -1101,10 +1071,7 @@ export class Mount {
         return file ? readStorageFile(file, { signal: this.downloads.signal }) : null;
     }
 
-    // The staged copy of a pending upload holds bytes newer than the stored object. This returns its
-    // path, or null when storage is up to date: on a mount with no queue, for a key with nothing staged,
-    // or once the upload landed. It is synchronous, so a caller can copy the file before an await lets
-    // a new enqueue unlink it.
+    // Synchronous, so a caller can copy the staged file before an await lets a new enqueue unlink it.
     public pendingStagedCopy(storageKey: string): string | null {
         const staged = this.uploadQueue?.getPendingStagingPath(storageKey) ?? null;
         return staged && fs.existsSync(staged) ? staged : null;
@@ -1112,9 +1079,7 @@ export class Mount {
 
     // ---- Overwriting ----
 
-    // ifMatch is an If-Match value: one etag, a list of them or `*`. The write happens only when the
-    // file's etag matches it. It answers the row it committed, taken under the lock, so a write that
-    // lands after this one can't hand its etag or updatedAt to this caller.
+    // Answers the row it committed under the lock, so a later write's etag or updatedAt never reaches this caller.
     public async writeFile(
         pathId: string,
         data: Buffer | Uint8Array | ArrayBuffer | BunFile,
@@ -1152,20 +1117,15 @@ export class Mount {
         );
     }
 
-    // Runs before any byte lands, so a trashed file keeps the bytes it was trashed with. It runs under
-    // the path lock every overwrite takes, so of two saves from the same base only the first writes.
-    // And it runs under the tree lock, so on `local` an ancestor's trash can't land between the check
-    // and the write.
+    // Runs under the path and tree locks before any byte lands, so a trashed file keeps the bytes it was trashed
+    // with, and of two saves from one base only the first writes.
     private async assertOverwritable(pathId: string, ifMatch: string | undefined): Promise<void> {
         const etag = computeEtag(await this.getActivePath(pathId));
         if (ifMatch !== undefined && !matchesIfMatch(ifMatch, etag)) throw new StaleWriteError(etag);
     }
 
-    // Runs under the path lock once the bytes landed. deletePath doesn't wait for that lock, so a delete
-    // during the write leaves the new bytes behind, and they go here. Off `local` no lock this holds
-    // stops an ancestor's trash either. The row then still records the new bytes, and the caller gets a 404.
-    // It answers the row as the update stored it, so its etag and updatedAt are what a GET reads: the
-    // column keeps whole seconds, which a Date taken here would not.
+    // deletePath takes no path lock, so a delete during the write leaves new bytes, which go here. The stored row
+    // is answered because its column keeps whole seconds, which a GET's etag reads.
     private async commitOverwrite(pathId: string, storageKey: string, size: number, hash: string): Promise<DrivePath> {
         const row = await this.db
             .select({ name: paths.name, mimeType: paths.mimeType })
@@ -1195,9 +1155,7 @@ export class Mount {
         return path.join(this.tmpDir, pathId.replace(/\//g, '_'));
     }
 
-    // Downloads a stored file to a temp path the caller can open directly, such as a SQLite snapshot
-    // on any backend. tempId must be new for each call (a randomUUID), or two downloads of one file
-    // overwrite each other. The caller removes it with cleanupTemp(tempId).
+    // tempId must be new for each call, such as a randomUUID, or two downloads of one file overwrite each other.
     public async downloadToTemp(pathId: string, tempId: string): Promise<string> {
         // An open document's working copy is the temp path named after its data.db path id. A tempId
         // equal to one would truncate it.
@@ -1242,9 +1200,8 @@ export class Mount {
             size = await this.replaceTempFrom(tempId, this.storage.read(storageKey));
         } catch (err) {
             console.error(`[Mount] download ${storageKey} failed:`, err);
-            // Only the GET body can tell a gone object (410) from an outage (503), and the read's own
-            // failures arrive as ApiErrors. A raw error is local, such as the tmp/ write or rename. It
-            // stays a 500, and its ENOENT does not mean the object is gone.
+            // Only a missing object in the GET body is a 410. A raw error is local, such as the tmp/ write, so
+            // it stays a 500 even as an ENOENT.
             if (isMissingObjectCause(err)) throw storageGone(err.cause);
             throw err;
         }
@@ -1253,9 +1210,7 @@ export class Mount {
         return tempPath;
     }
 
-    // Writes into a side file and renames it on success. A process death mid-read must not leave a
-    // truncated file at the temp path, because the next open would adopt it as crash recovery.
-    // Returns the byte count.
+    // Through a side file, because the next open would adopt a truncated file at the temp path as crash recovery.
     public async replaceTempFrom(tempId: string, source: StorageFile): Promise<number> {
         const sideId = crypto.randomUUID();
         let size: number;
@@ -1311,20 +1266,14 @@ export class Mount {
         }
     }
 
-    // Like withPathLock, but returns null at once when the lock is held. Nothing can take the lock
-    // between the check and the acquire: on a free lock withPathLock skips its wait loop and takes the
-    // lock before its first await.
+    // Null at once when the lock is held. On a free lock withPathLock takes it before its first await, so nothing
+    // can slip in between.
     public async tryWithPathLock<T>(pathId: string, fn: () => Promise<T>): Promise<T | null> {
         if (this.pathLocks.has(pathId)) return null;
         return this.withPathLock(pathId, fn);
     }
 
-    // On `local` a storage key is a name path, so a folder rename changes the keys of everything under
-    // it. A write that derives a key holds the tree lock shared until its row is written. A folder
-    // rename holds it exclusive. Other backends have id keys and take no tree lock. The locks are taken
-    // in one order: the path lock, then the document database slot, then the tree lock. A create's lock
-    // comes right before the tree lock. A holder never takes the tree lock a second time, because a
-    // shared lock inside a shared lock deadlocks once an exclusive one waits.
+    // A holder never takes the tree lock again: a shared lock inside a shared one deadlocks once an exclusive waits.
     public async withTreeShared<T>(fn: () => Promise<T>): Promise<T> {
         return this.isPathBased ? this.treeLock.shared(fn) : fn();
     }
@@ -1333,11 +1282,7 @@ export class Mount {
         return this.isPathBased ? this.treeLock.exclusive(fn) : fn();
     }
 
-    // On `local` two creates of one name in one folder would write to one name path. So a create also
-    // holds a path lock on its folder and its name, folded the way the disk folds it. The second create
-    // then sees the first one's row, or its bytes on disk, and answers 409 before it writes. It is taken
-    // right before the tree lock, and its holder takes no database slot. So a snapshot that holds a slot
-    // can take it without a deadlock.
+    // On `local` two creates of one name would write one name path, so the name is locked, folded as the disk folds.
     private async withCreateLock<T>(parentId: string, name: string, fn: () => Promise<T>): Promise<T> {
         if (!this.isPathBased) return fn();
         return this.withPathLock(`${parentId}/${foldName(name)}`, () => this.withTreeShared(fn));
@@ -1345,9 +1290,7 @@ export class Mount {
 
     // ---- Document databases and versions ----
 
-    // Makes a new document database at a row touchFile created. It refuses when the storage object
-    // exists already. It writes the empty schema to storage before it returns, so a later open finds
-    // it, even after a restart. Nobody holds it, so it closes after a few idle minutes.
+    // Writes the empty schema to storage before it returns, so a later open finds it, even after a restart.
     public async createDatabase<S extends SchemaType>(
         config: DatabaseConfig<S>,
         pathId: string,
@@ -1378,9 +1321,7 @@ export class Mount {
         return documentDb.closeDatabase(this, pathId, opts);
     }
 
-    // Flushes the container's open databases, so a byte copy of its storage holds the pending writes, such as
-    // the Yjs edits in data.db and a new comment's row in comments.db. A database that is closed or missing needs
-    // nothing.
+    // So a byte copy of the container's storage holds the pending writes of its open databases.
     public async flushContainerDb(containerId: string): Promise<void> {
         for (const name of [CONTAINER_DATA_DB, CONTAINER_COMMENTS_DB]) {
             const database = await this.getChildByName(containerId, name);

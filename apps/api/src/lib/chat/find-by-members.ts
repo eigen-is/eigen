@@ -13,9 +13,6 @@ import { getUserById } from '../user';
 
 const MAX_MEMBER_WALKS = 200;
 
-// Standalone chats whose member set exactly equals {caller} ∪ emails — the wizard's
-// open-don't-duplicate lookup. Runs entirely on the caller's Home (no cross-home calls).
-// Semantics + accepted caveats: docs/CHAT.md § Matching compares effective member sets.
 export async function findChatsByMembers(drive: Drive, user: User, emails: readonly string[]): Promise<ChatMatch[]> {
     const target = new Set(emails.map((e) => e.toLowerCase()));
     target.add(user.email.toLowerCase());
@@ -58,10 +55,8 @@ export async function findChatsByMembers(drive: Drive, user: User, emails: reado
         }
     }
 
-    // Every unshared own chat passes the subset screen, so run the walks concurrently — but
-    // capped, newest first: each walk costs a breadcrumb + ACL resolve, and a huge chat history
-    // must not fan out unbounded. A match past the cap is missed (the wizard offers create
-    // instead of open) — accepted caveat, docs/CHAT.md § Matching compares effective member sets.
+    // Every unshared own chat passes the subset screen, so the walks are capped, newest first: each costs a
+    // breadcrumb and an ACL resolve, and a large chat history must not fan out unbounded.
     ownCandidates.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
     const ownMatches = await Promise.all(
         ownCandidates.slice(0, MAX_MEMBER_WALKS).map(async (path): Promise<ChatMatch | null> => {
@@ -93,9 +88,8 @@ function hasTeamEntry(acl: readonly DriveACL[] | null): boolean {
     return acl?.some((e) => parseOwnerId(e.id).type === 'team') ?? false;
 }
 
-// Necessary condition only: the effective set is a superset of the direct ACL, so one stray
-// direct member kills a match. Deliberately no size floor — an inherited-ACL chat carries an
-// empty direct ACL yet must still match once the walk adds the ancestor members.
+// No size floor, because a chat that inherits its ACL has an empty direct one and must still match once the walk
+// adds the ancestor members.
 function directEmailsWithinTarget(acl: readonly DriveACL[] | null, target: ReadonlySet<string>): boolean {
     return (acl ?? []).every((e) => target.has(e.id.toLowerCase()));
 }

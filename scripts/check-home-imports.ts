@@ -4,9 +4,8 @@
 
 import { Glob } from 'bun';
 
-// The `get-*.ts` resolvers are the allowed shape by design: one per domain, the single place a route turns
-// an ownerId into its domain object behind the access check. The rest are pre-existing and pending refactor.
-// Do NOT add new files here — pass Home from the route, or go through the domain's resolver.
+// A `get-*.ts` resolver is the one place a route turns an ownerId into its domain object behind the access check.
+// Add no other file: pass the Home from the route, or go through the domain's resolver.
 const ALLOWED = new Set([
     'get-calendar.ts',
     'enforcement.ts',
@@ -36,7 +35,7 @@ for await (const path of glob.scan('apps/api/src/lib')) {
 
 if (violations.length > 0) {
     console.error(
-        'ERROR: getHome(), openHome() and loadedHome() must not be imported in lib/ (use home-relay or pass Home as parameter)\n',
+        'ERROR: lib/ outside lib/home/ may not name getHome, openHome, loadedHome, getTeamHome or getUserHome (use home-relay or pass Home as a parameter)\n',
     );
     for (const v of violations) console.error(`  ${v}`);
     console.error('\nSee docs/SCALABILITY.md for the home relay pattern.');

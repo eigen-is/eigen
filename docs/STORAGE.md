@@ -53,6 +53,8 @@ Every Drive row lives in the mount's `paths` table (`apps/api/src/lib/mount/sche
 
 An id key never moves, so on `local-key` and `s3` a rename, a move or a trash changes only the row. On `local` the same operations rename files and directories on disk. That difference drives the [tree lock](#on-local-a-key-is-a-name-path-so-renames-lock-the-whole-tree) and the `.trash/` directory ([SOFT-DELETE.md](SOFT-DELETE.md#only-local-moves-bytes-into-trash)).
 
+A name check compares as the unique index on names does, with SQLite's `LOWER()`, which folds ASCII only. A case-insensitive disk such as APFS also treats non-ASCII case pairs as one file, so on `local` a non-ASCII name is compared under `foldName` too (`apps/api/src/lib/mount/names.ts`). An ASCII name whose stored twin is not ASCII, such as `strasse` beside `straße`, still passes the table, and the disk check of the write catches it ([SOFT-DELETE.md](SOFT-DELETE.md#on-local-the-bytes-move-first-and-what-is-on-disk-decides-after-a-crash)).
+
 `read()` returns a `StorageFile`, a lazy `BunFile` or `S3File` that holds no bytes yet. A local file goes into a `Response` as is, which keeps serving zero-copy. An `S3File` goes in as `file.stream()`, since it takes no `ResponseInit` options. Both local backends resolve every key through `resolveWithinBase` (`apps/api/src/lib/core/path-utils.ts`), and `S3Storage` validates key segments, so no key escapes its base.
 
 ## Writes to one row serialize on its path lock
