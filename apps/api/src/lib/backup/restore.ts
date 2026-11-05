@@ -40,7 +40,7 @@ import {
     freeSafetyCopyStamp,
     roomShortfall,
 } from './paths';
-import { wipeRestoreStagingDir, writeRestoreCompleteMarker, writeRestoringMarker } from './recovery';
+import { putHomeBack, wipeRestoreStagingDir, writeRestoreCompleteMarker, writeRestoringMarker } from './recovery';
 import { forgetSafetyCopySize, resolveSafetyCopy } from './safety-copy';
 import { requireVerified, verifyFolder } from './verify';
 
@@ -226,10 +226,8 @@ type InstallHome = () => Promise<void>;
 type PreparedHome<Judged> = { install: InstallHome; judged: Judged };
 
 // The moves every restore is made of: judge the replacement while the home still serves, so a refusal costs nobody a
-// page, then take the home from everyone, put its folder aside, install the replacement, and on a failure put both
-// folders back, deleting nothing. The marker written here is the only note the next boot reads of an interrupted
-// restore, so recoverInterruptedRestores covers every kind, and a rollback that failed too. It hands back what the
-// preparing step judged.
+// page, then take the home and swap its folder for the replacement. A failure puts both folders back, deleting nothing,
+// and the marker written here lets the next boot do the same for a job that died or could not.
 async function replaceHomeFolder<Judged>(
     ownerId: string,
     homeDir: string,
@@ -255,16 +253,15 @@ async function replaceHomeFolder<Judged>(
             const stamp = freeSafetyCopyStamp(homeDir, new Date());
             // There is no home folder to move aside on a restore after the user was deleted.
             const movedAside = fs.existsSync(homeDir) ? buildSafetyCopyName(homeDir, 'pre-restore', stamp) : null;
-            const parked = parkOnFailure(stamp);
-            // Before the move: a process killed from here on leaves the home's path empty or holding a folder the
-            // restore did not finish with. Only this note tells the next boot which, with the name that folder goes
-            // aside under.
-            writeRestoringMarker(restoreDir, {
+            const marker = {
                 ownerId,
                 homeDir,
                 preRestoreName: movedAside && path.basename(movedAside),
-                parkName: path.basename(parked),
-            });
+                parkName: path.basename(parkOnFailure(stamp)),
+            };
+            // Before the move: a process killed from here on leaves the home's path empty or holding a folder the
+            // restore did not finish with, and only this note tells the next boot which.
+            writeRestoringMarker(restoreDir, marker);
             if (movedAside) fs.renameSync(homeDir, movedAside);
 
             try {
@@ -274,10 +271,9 @@ async function replaceHomeFolder<Judged>(
                 await rotateHomeDataEpoch(ownerId);
                 writeRestoreCompleteMarker(restoreDir);
             } catch (error) {
-                // A failure while putting the home back must not hide the one that brought us here.
+                // The boot's own undo, from the same note. A failure in it must not hide the one that brought us here.
                 try {
-                    if (fs.existsSync(homeDir)) fs.renameSync(homeDir, parked);
-                    if (movedAside) fs.renameSync(movedAside, homeDir);
+                    putHomeBack(marker, homeDir);
                 } catch (rollbackError) {
                     homeOutOfPlace = true;
                     console.error(
@@ -296,9 +292,8 @@ async function replaceHomeFolder<Judged>(
                 throw error;
             }
         } finally {
-            // The job is over. A failed install put the home back, or left the notes that let the next boot do it.
-            // A home left out of place stays marked until then: a request would open it at its empty path and make
-            // a new home folder there, which the boot could not park under the name the rollback already took.
+            // A home the rollback left out of place stays shut until the boot puts it back: a request would make a new
+            // home folder at its empty path.
             if (!homeOutOfPlace) clearHomeRestoring(ownerId);
         }
         return judged;

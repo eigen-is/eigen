@@ -14,7 +14,7 @@ Like ROADMAP and the proposals, this doc holds only open work: strike a finding 
 2. **A second copy of the truth.** A sidecar, an extra row or a cache beside the real thing, and every reader has to merge the two. Examples: the draft sidecar ([ML1](#ml1)), a stored "cancelled" event row per EXDATE ([C2](#c2)), a contact photo in three forms ([C5](#c5)), preview `.failed` markers next to a compaction strike map next to an extract-text 413 ([T4](#t4)).
 3. **Predicting the cost exactly instead of capping it.** Exchange rates, line estimates and predicted waits, each tuned after a crafted input. Examples: the sheet export's six rates ([X2](#x2)), the runner's admission by predicted wait ([T8](#t8)), the footnote line estimate ([X6](#x6)), the text-box height estimate ([X7](#x7)) and the pptx reader's overlapping counters ([X8](#x8)).
 4. **Precision for a rare race or a rare setup.** Exactly what [the owner's rule](CODE-STANDARDS.md) says to drop: "may forget, must not corrupt". Examples: maildir watchers that match a recreated folder by inode ([ML6](#ml6)), rollback checking data twice ([B4](#b4)), a stop that waits for a running backup ([B3](#b3)), the sheets compaction base for a tab that slept through it ([T2](#t2)).
-5. **Two paths for one job.** These drift, and every fix lands twice. Examples: the two undos of a failed restore ([B7](#b7)), invitations by relay and by iMIP ([C1](#c1)), the two ways a failed copy is cleaned up ([M6](#m6)), two object-delete loops ([B8](#b8)) and the two PUT judgements in calendar and contacts ([C4](#c4)).
+5. **Two paths for one job.** These drift, and every fix lands twice. Examples: invitations by relay and by iMIP ([C1](#c1)), the two ways a failed copy is cleaned up ([M6](#m6)), two object-delete loops ([B8](#b8)) and the two PUT judgements in calendar and contacts ([C4](#c4)).
 6. **Backward compatibility the standards forbid.** Readers for old archive and launcher formats ([B1](#b1)), and the legacy trash-cycle guard ([M7](#m7)).
 7. **Scaffolding left after its job was done.** The audit scripts' importer-measuring modes ([X1](#x1)), test-only methods ([C8](#c8)) and a closed-one-endpoint-at-a-time deny list ([ML4](#ml4)).
 
@@ -36,7 +36,6 @@ The best payoff per unit of risk. **Product** marks a finding that drops or chan
 | [X2](#x2) | Sheet export: flat caps, not six exchange rates | ~90 + ~300 test | med | decided | a workbook of huge distinct PNGs may time out instead of printing with a warning |
 | [C2](#c2) | EXDATEs as a list on the master, no cancelled rows | ~150 | med | small | a stale per-occurrence REQUEST after its CANCEL can restore it |
 | [ML2](#ml2) | One message per send, no per-recipient copies | ~60 + most of 565 test | low | yes | a guest types their address on the login page |
-| [B7](#b7) | One undo routine for a failed per-home restore | ~25 | low | no | nothing |
 | [C3](#c3) | Imports write the store and announce once | ~50 | low | no | nothing |
 
 ## Mount, drive and versioning
@@ -151,10 +150,6 @@ The owner's ruling (2026-11-05): the lease only guarded the owner's own dev setu
 `backup/restore-server.ts:184-265` (`s3FromArchive`, the level-equality refusal, the `fromFiles` replay), `cli/restore-stage.ts:75`, `cli/restore.ts`, `schedule.ts` (`withS3`), `server-settings.ts:14`.
 Simpler: server archives are always Full, and per-home archives keep Full + S3.
 Lost: a whole-server archive no longer holds the S3 objects, so a damaged bucket relies on bucket versioning or per-home archives. ~70 LOC plus a setting and its UI. Medium risk.
-
-<a id="b7"></a>**B7. Two routines undo a failed per-home restore.**
-`backup/restore.ts:276-297` (the job's own rollback, `homeOutOfPlace`) and `backup/recovery.ts:197-232` (`putHomeBack`, the boot's rollback). `2ac6a6292`, `b47ad441b` and `e4d25df8b` all landed on 2026-11-02, and the "already parked" branch exists only because both routines can run in turn.
-Simpler: the job's catch calls the same `putHomeBack`. ~25 LOC, low risk, high confidence.
 
 <a id="b8"></a>**B8. Overlapping per-home locks, and two object-delete loops.**
 `backup/jobs.ts:31-40` (`heldSlots` plus `inFlight` for one slot) with four entry points. `home/get-home.ts:48-55`, where `markHomeRestoring` doubles as a lock with its own 409. `delete-home.ts`, which checks the slot twice instead of holding it. `backup/safety-copy.ts`: `deleteRemoteObjects` (sequential, reference-counted) beside `deleteBucketObjects` (batched).
@@ -293,7 +288,7 @@ Judged essential: zip and OPC hardening, the package parse budget, the batched x
 
 ## Suggested order
 
-1. **Pure refactors, no product change, low risk:** B7, C3, C4, C8, ML3, T3, T5, X8, X9, B1 and M7 (the last two are already required by CODE-STANDARDS). These are a cheap-wins round of small, independent units.
+1. **Pure refactors, no product change, low risk:** C3, C4, C8, ML3, T3, T5, X8, X9, B1 and M7 (the last two are already required by CODE-STANDARDS). These are a cheap-wins round of small, independent units.
 2. **Reorders with medium risk and the largest risk reduction:** M1, M9, M2, ML1 and C1, each a unit with its own failing test first. X2 and X6, settled by the export ruling, join them.
 3. **Product calls, to put to the owner as one list:** ML2, B3, B4, B6, C2, C6, C7, T2, T6, X3, X5, M5 and X1.
 4. **The lifecycle's loose ends (M4):** the dev-data reset note, the proposal's Goal 1 line, and the call on the canvas comment card's `deletedAt`.

@@ -1,8 +1,8 @@
 // What a restart does about the backup work the last process left behind, before the API listens. A per-home restore
 // killed before its job ended leaves notes beside the home that say whether to finish or undo it; a home they cannot
 // put back stays shut until a later boot does. The staging folders in backups/ are wiped, the archives closed to other
-// users, and a server backup left running is marked failed. The restore writes and removes its notes through here.
-// This module loads the API's jobs and settings, so the stage of ./eigen restore must not import it.
+// users, and a server backup left running is marked failed. A restore writes and removes its notes, and undoes a failed
+// install, through here. This module loads the API's jobs and settings, so ./eigen restore's stage must not import it.
 
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -155,16 +155,9 @@ function closeArchives(): void {
     }
 }
 
-// A restore killed anywhere between the move-aside and the last install step left the home's path
-// empty or holding a folder it had not finished with, and the home's real contents under the
-// `{id}.pre-restore-{ts}` its marker names. The process that knew about it is dead, so nothing else
-// will ever put it back. This does, and logs it as an error. A completion note beside the marker
-// tells a restore that finished from one that did not. A safety copy with no marker is not evidence
-// of anything: nothing deletes them automatically, so a deleted user leaves one behind. `homeOf` says which home
-// folder the marker may act on, or refuses it. Returns false when a move failed, such as a rename with EACCES or
-// EBUSY: that is logged and the notes stay for the next boot, because a throw here would stop the server from
-// starting, again on every boot. The home stays shut until then: a request would open it out of place, or make a
-// new home folder at its empty path.
+// Undoes the restore whose notes are in `notesDir`, unless it finished. `homeOf` says which home folder the notes may
+// act on, or refuses them. Returns false when a move failed: a throw would stop every boot, so the notes stay for the
+// next one, and the home stays shut until then rather than be served out of place or made anew at its empty path.
 function recoverRestore(notesDir: string, homeOf: (marker: RestoringMarker) => string | null): boolean {
     const marker = readRestoringMarker(path.join(notesDir, RESTORING_MARKER));
     const homeDir = marker && homeOf(marker);
@@ -193,35 +186,21 @@ function keepHomeShut(ownerId: string): void {
     }
 }
 
-// The moves that undo an interrupted install of the home at `homeDir`, as its marker describes it.
-function putHomeBack(marker: RestoringMarker, homeDir: string): void {
+// The moves that undo an unfinished install of the home at `homeDir`, as its marker describes it. Each looks at the
+// disk first, so a run that failed partway, such as the job's own, is finished by the next boot's.
+export function putHomeBack(marker: RestoringMarker, homeDir: string): void {
     const aside = marker.preRestoreName && path.join(path.dirname(homeDir), marker.preRestoreName);
-    // The home never went aside, or the restore's own rollback already put it back. Either way the folder in place
-    // is the home, and this must not move it.
+    // The folder in place is the home: it never went aside, or a run before this put it back.
     if (aside && !fs.existsSync(aside)) return;
-    // A folder that is there without the completion note is the one the install put in place:
-    // a home from an archive moved in just before the kill, or a safety copy renamed into place
-    // before its trash was re-dated. It goes aside under the name the marker gives, exactly as a
-    // failure the job itself caught would have left it. Nothing is deleted, whether or not there
-    // is a copy to put back afterwards.
-    const parked = path.join(path.dirname(homeDir), marker.parkName);
-    // A folder already there under that name, such as the one a failed rollback parked, takes no rename on top of
-    // it. Both stay for the operator, because a throw here would stop the server from starting at all.
-    if (fs.existsSync(homeDir) && fs.existsSync(parked)) {
-        console.error(
-            `[backup] a restore of ${marker.ownerId} was interrupted, but ${marker.parkName} is already there: ${path.basename(homeDir)}, ${marker.parkName} and ${marker.preRestoreName ?? 'no safety copy'} are left as they are`,
-        );
-        return;
-    }
+    // A folder in place is one the install had not finished with, so it is not trusted as a home. It is parked, not
+    // deleted.
     if (fs.existsSync(homeDir)) {
-        fs.renameSync(homeDir, parked);
+        fs.renameSync(homeDir, path.join(path.dirname(homeDir), marker.parkName));
         console.error(
             `[backup] a restore of ${marker.ownerId} was interrupted mid-install: the folder it was installing is ${marker.parkName}`,
         );
     }
     if (!aside) {
-        // A restore of a deleted user: there was no home to move aside, so the only thing to do
-        // is refuse to leave the half-written folder standing as one.
         console.error(`[backup] a restore of ${marker.ownerId} was interrupted: they have no home folder again`);
         return;
     }

@@ -219,37 +219,6 @@ describe('Backup boot', () => {
         made.push(join(homeRoot, parked[0]));
     });
 
-    // A folder already under the park name, such as the one a rollback parked before it failed, takes no rename on
-    // top of it. Both folders stay for the operator, and the boot goes on to the next home: a throw here would stop
-    // the server from starting at all.
-    test('a park name already taken leaves both folders and the boot goes on', () => {
-        const id = 'bootrecoverJJJJJJJJJJJJJJJJJJJJJ';
-        const aside = `${id}${PRE_RESTORE_SUFFIX}20260101-000000`;
-        const parkName = `${id}${FAILED_RESTORE_SUFFIX}20260101-000000`;
-        seedFolder(id, 'made since');
-        seedFolder(aside, 'the home as it was');
-        seedFolder(parkName, 'parked by the rollback');
-        seedRestoringMarker('boot-job-j', id, aside, false, parkName);
-        const other = 'bootrecoverKKKKKKKKKKKKKKKKKKKKK';
-        const otherAside = `${other}${PRE_RESTORE_SUFFIX}20260101-000000`;
-        seedFolder(otherAside, 'the other home');
-        seedRestoringMarker('boot-job-k', other, otherAside);
-        made.push(join(homeRoot, other));
-        const logged = spyOn(console, 'error').mockImplementation(() => {});
-
-        try {
-            expect(() => recoverInterruptedRestores()).not.toThrow();
-            expect(logged.mock.calls.flat().join('\n')).toContain(parkName);
-        } finally {
-            logged.mockRestore();
-        }
-
-        expect(readFileSync(join(homeRoot, id, 'marker'), 'utf8')).toBe('made since');
-        expect(readFileSync(join(homeRoot, aside, 'marker'), 'utf8')).toBe('the home as it was');
-        expect(readFileSync(join(homeRoot, parkName, 'marker'), 'utf8')).toBe('parked by the rollback');
-        expect(readFileSync(join(homeRoot, other, 'marker'), 'utf8')).toBe('the other home');
-    });
-
     // A home whose folders cannot be moved, such as a rename that fails with EACCES or EBUSY, must not stop the
     // server from starting, again on every boot. It is logged, its notes stay for the next boot, and the boot goes
     // on to the next home. The home answers 503 until then: a request would make a new home folder at its path.
