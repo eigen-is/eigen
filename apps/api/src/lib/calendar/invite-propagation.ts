@@ -11,7 +11,7 @@ import { sendToHome } from '../home/home-relay';
 import { sendMail } from '../mailer/mailer';
 import { addRegistryEntry } from '../share';
 import type { User } from '../user';
-import { getUserByEmail, isGuest } from '../user/';
+import { getUserByEmail, isGuest } from '../user';
 import { composeCancelEmail, composeInviteEmail } from './imip';
 import { buildCalendarEvent } from './sse-events';
 
@@ -28,7 +28,7 @@ async function sendSeriesExceptions(
     targetUserId: string,
     organizerHome: Home,
     organizerEventId: string,
-    exceptions: CalendarEvent[],
+    exceptions: readonly CalendarEvent[],
     series: CalendarEvent,
 ): Promise<void> {
     for (const exception of exceptions) {
@@ -219,7 +219,7 @@ export async function propagateRsvp(
 export async function propagateCancellation(
     organizerHome: Home,
     event: CalendarEvent,
-    attendees: Attendee[],
+    attendees: readonly Attendee[],
     series?: CalendarEvent,
 ): Promise<void> {
     const occurrence = occurrenceRevision(event, series ? event.recurrenceDate : null);

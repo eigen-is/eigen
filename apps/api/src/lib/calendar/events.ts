@@ -231,7 +231,7 @@ export function exceptionOf(
 }
 
 // Every exception a master holds, overrides and cancellations alike, in the order the file lists them.
-export function exceptionsOf(calendar: Calendar, parentEventId: string): CalendarEvent[] {
+function exceptionsOf(calendar: Calendar, parentEventId: string): CalendarEvent[] {
     return calendar.joinedEvents().where(eq(schema.events.parentEventId, parentEventId)).all().map(toEvent);
 }
 
@@ -369,10 +369,10 @@ export async function deleteEvent(calendar: Calendar, calendarId: string, id: st
         if (!orgUserId || isExternalOwnerId(orgUserId)) {
             const mail = composeRsvpReply(existing, user.email, user.name ?? user.email, 'declined');
             sendMail(mail).catch(console.error);
-        } else {
+        } else if (invitation.organizerEventId) {
             propagateRsvp(
                 orgUserId,
-                invitation.organizerEventId!,
+                invitation.organizerEventId,
                 user.email,
                 'declined',
                 answeredOccurrence(existing),

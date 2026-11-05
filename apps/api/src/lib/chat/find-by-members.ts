@@ -1,18 +1,22 @@
+// Finds the chats whose members are exactly the caller and a given set of addresses, so the new-chat wizard can
+// open a chat that already exists instead of making a second one. The chat route calls it. It reads only the
+// caller's Home: a chat shared with the caller is judged from its mirror row and its owner's user record.
+
 import { parseOwnerId } from '@workspace/lib/types';
 import type { ChatMatch } from '@workspace/lib/types/chat';
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_CHAT } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
 import type { Drive } from '../drive';
-import type { User } from '../user/';
-import { getUserById } from '../user/';
+import type { User } from '../user';
+import { getUserById } from '../user';
 
 const MAX_MEMBER_WALKS = 200;
 
 // Standalone chats whose member set exactly equals {caller} ∪ emails — the wizard's
 // open-don't-duplicate lookup. Runs entirely on the caller's Home (no cross-home calls).
 // Semantics + accepted caveats: docs/CHAT.md § Matching compares effective member sets.
-export async function findChatsByMembers(drive: Drive, user: User, emails: string[]): Promise<ChatMatch[]> {
+export async function findChatsByMembers(drive: Drive, user: User, emails: readonly string[]): Promise<ChatMatch[]> {
     const target = new Set(emails.map((e) => e.toLowerCase()));
     target.add(user.email.toLowerCase());
 
@@ -85,23 +89,23 @@ export async function findChatsByMembers(drive: Drive, user: User, emails: strin
     return matches;
 }
 
-function hasTeamEntry(acl: DriveACL[] | null): boolean {
+function hasTeamEntry(acl: readonly DriveACL[] | null): boolean {
     return acl?.some((e) => parseOwnerId(e.id).type === 'team') ?? false;
 }
 
 // Necessary condition only: the effective set is a superset of the direct ACL, so one stray
 // direct member kills a match. Deliberately no size floor — an inherited-ACL chat carries an
 // empty direct ACL yet must still match once the walk adds the ancestor members.
-function directEmailsWithinTarget(acl: DriveACL[] | null, target: Set<string>): boolean {
+function directEmailsWithinTarget(acl: readonly DriveACL[] | null, target: ReadonlySet<string>): boolean {
     return (acl ?? []).every((e) => target.has(e.id.toLowerCase()));
 }
 
-function aclGrantsWrite(acl: DriveACL[] | null, email: string): boolean {
+function aclGrantsWrite(acl: readonly DriveACL[] | null, email: string): boolean {
     const key = email.toLowerCase();
     return acl?.some((e) => e.id.toLowerCase() === key && e.write) ?? false;
 }
 
-function sameSet(emails: string[], target: Set<string>): boolean {
+function sameSet(emails: readonly string[], target: ReadonlySet<string>): boolean {
     const set = new Set(emails);
     if (set.size !== target.size) return false;
     for (const email of set) {
