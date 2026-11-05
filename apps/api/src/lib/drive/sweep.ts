@@ -33,8 +33,12 @@ export function sweepAfterClose(drive: Drive, path: DrivePath, close: () => Prom
         return close();
     }
     const closed = close();
+    // The caller hears why a close failed. Here it only means there is nothing to sweep.
     closed
-        .then(() => sweepDocument(drive, path))
+        .then(
+            () => sweepDocument(drive, path),
+            () => console.warn(`[sweep] ${path.id} did not close, so it is not swept`),
+        )
         .catch((error: unknown) => {
             console.warn(`[sweep] skipped ${path.id}:`, error instanceof Error ? error.message : error);
         })
@@ -72,50 +76,38 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
         mount,
         read.versions.map((version) => version.id),
     ).filter((row) => row.readerVersion >= REFERENCE_READER_VERSION);
-    const named = rows.map((row) => row.names);
+    const versionStates = rows.map((row) => row.names);
     const known = new Set(rows.map((row) => row.versionPathId));
     for (const version of read.versions) {
-        if (!known.has(version.id)) named.push(await readVersionNames(mount, documentType, version.id));
+        if (!known.has(version.id)) versionStates.push(await readVersionNames(mount, documentType, version.id));
     }
-    const namedBy = (field: 'media' | 'chat') => new Set(named.flatMap((names) => names[field]).map(foldName));
-    const versionMedia = namedBy('media');
-    const versionChat = namedBy('chat');
-    if (
-        oldMedia.every((file) => versionMedia.has(foldName(file.name))) &&
-        idleThreads.every((thread) => versionChat.has(foldName(thread.name)))
-    ) {
-        return;
-    }
+    const versionNames = foldedNames(versionStates);
+    if (unnamed(oldMedia, versionNames.media).length + unnamed(idleThreads, versionNames.chat).length === 0) return;
 
     // A restore brings back a version's anchors but keeps today's cards, so the current state also names what today's
     // card holds for every card a version has in use.
-    const versionCards = [...new Set(named.flatMap((names) => names.cards))];
-    named.push(await storedReferences(mount, documentType, read.dataDb.id, versionCards));
-    const namedMedia = namedBy('media');
-    // A kept SVG keeps the files it draws. The SVGs are read only when an old file is not among the names, and one
-    // that can't be read keeps every file this time.
+    const versionCards = [...new Set(versionStates.flatMap((names) => names.cards))];
+    const currentState = await storedReferences(mount, documentType, read.dataDb.id, versionCards);
+    const allNames = foldedNames([...versionStates, currentState]);
+    // A kept SVG keeps the files it draws. The SVGs are read only when an old file is not among the names.
     const keptMedia =
-        media && oldMedia.some((file) => !namedMedia.has(foldName(file.name)))
-            ? await withSvgSiblings(mount, media.id, [...namedMedia])
-            : namedMedia;
-    const keptThreads = namedBy('chat');
-    const unnamedThreads = idleThreads.filter((thread) => !keptThreads.has(foldName(thread.name)));
+        media && unnamed(oldMedia, allNames.media).length > 0
+            ? await withSvgSiblings(mount, media.id, [...allNames.media])
+            : allNames.media;
+    // An SVG that could not be read keeps every media file this time, and the threads still go.
+    const sweepsMedia = media !== null && keptMedia !== null;
+    const unnamedThreads = unnamed(idleThreads, allNames.chat);
 
     const deleted = await mount.withPathLock(container.id, async () => {
         const row = await mount.getPath(container.id);
         if (!row || row.trashedAt || isBusy(drive, mount, container.id)) return null;
         if ((await readFence(mount, container.id)).fence !== read.fence) return null;
-        const files =
-            media && keptMedia
-                ? (await mount.listFolder(media.id)).filter(
-                      (file) => isOld(file) && !keptMedia.has(foldName(file.name)),
-                  )
-                : [];
+        const files = sweepsMedia ? unnamed((await mount.listFolder(media.id)).filter(isOld), keptMedia) : [];
         // A thread is read again, because since the read someone may have trashed it, moved it or written in it, and
         // then it stays.
         const threads: DrivePath[] = [];
-        for (const unnamed of unnamedThreads) {
-            const thread = await mount.getPath(unnamed.id);
+        for (const idle of unnamedThreads) {
+            const thread = await mount.getPath(idle.id);
             if (!thread || thread.trashedAt || thread.parentId !== chat?.id) continue;
             if (drive.isTrashing(mount.id, thread.id) || (await isActive(mount, thread, cutoff))) continue;
             threads.push(thread);
@@ -205,4 +197,17 @@ async function storedReferences(
     } finally {
         await mount.cleanupTemp(tempId);
     }
+}
+
+// The names some states give, folded the way a file is found, so a name that differs from its file only in case or in
+// Unicode form still keeps it.
+function foldedNames(states: readonly DocumentReferences[]): { media: ReadonlySet<string>; chat: ReadonlySet<string> } {
+    return {
+        media: new Set(states.flatMap((state) => state.media).map(foldName)),
+        chat: new Set(states.flatMap((state) => state.chat).map(foldName)),
+    };
+}
+
+function unnamed(paths: readonly DrivePath[], names: ReadonlySet<string>): DrivePath[] {
+    return paths.filter((path) => !names.has(foldName(path.name)));
 }
