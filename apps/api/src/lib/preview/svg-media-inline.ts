@@ -3,6 +3,7 @@
 // the preview, each name becomes a data: URI of the file's bytes, and the font slices its text draws with are
 // embedded too. Callers include the screen preview cache, and a sweep keeps what the inliner would read.
 
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { EIGEN_MEDIA_SCHEME, eigenMediaHref, listEigenMediaRefs, stripEigenMediaRefs } from '@workspace/lib/vector';
 import { spliceAfterSvgOpenTag } from '@workspace/lib/xml';
 import { drawnCodePoints, namedFamilies, slicesFaceCss } from '../export/fonts';
@@ -70,30 +71,28 @@ export async function inlineSvgMediaRefs(mount: Mount, parentId: string, svgByte
 }
 
 // The names given, and every sibling that an svg among them draws when it is served, to the depth the inliner reads,
-// folded the way getChildByName finds a file. A sweep keeps them all, so a kept svg draws no blank image. A missing
+// folded. A sweep keeps them all, so a kept svg draws no blank image. A name resolves against `files`, the listing of
+// the svgs' folder, by its folded form, which a lookup by name on a bucket misses for a non-ASCII letter. A missing
 // file, or one that is no svg, adds nothing. Null says an svg could not be read. At the last depth, the names an svg
 // holds are kept as well, though the inliner strips them, because keeping more is safe.
 export async function withSvgSiblings(
     mount: Mount,
-    parentId: string,
-    names: readonly string[],
+    files: readonly DrivePath[],
+    names: Iterable<string>,
 ): Promise<ReadonlySet<string> | null> {
-    const kept = new Set(names.map(foldName));
-    let svgs = [...kept];
-    for (let depth = 0; depth <= MAX_SVG_INLINE_DEPTH && svgs.length > 0; depth++) {
-        const drawn: string[] = [];
-        for (const name of svgs) {
-            const child = await mount.getChildByName(parentId, name);
-            if (child?.type !== 'file' || child.mimeType !== 'image/svg+xml') continue;
-            const bytes = await mount.readBytes(child.id);
+    const kept = new Set([...names].map(foldName));
+    let drawn: ReadonlySet<string> = kept;
+    for (let depth = 0; depth <= MAX_SVG_INLINE_DEPTH && drawn.size > 0; depth++) {
+        const next = new Set<string>();
+        for (const svg of files.filter((file) => file.mimeType === 'image/svg+xml' && drawn.has(foldName(file.name)))) {
+            const bytes = await mount.readBytes(svg.id);
             if (!bytes) return null;
             for (const ref of listEigenMediaRefs(Buffer.from(bytes).toString('utf8')).map(foldName)) {
-                if (kept.has(ref)) continue;
-                kept.add(ref);
-                drawn.push(ref);
+                if (!kept.has(ref)) next.add(ref);
             }
         }
-        svgs = drawn;
+        for (const ref of next) kept.add(ref);
+        drawn = next;
     }
     return kept;
 }

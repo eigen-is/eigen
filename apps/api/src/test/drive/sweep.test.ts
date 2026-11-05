@@ -993,6 +993,21 @@ describe('the media sweep on s3', () => {
         }
     });
 
+    // A bucket's lookup by name folds only ASCII case, which misses École.svg for école.svg.
+    test('keeps what a kept SVG named with a non-ASCII letter draws, through an SVG it draws', async () => {
+        const { path } = await openDoc(s3.mount, S3_MOUNT, 'BucketSvg', [paragraph(figure('École.svg'))]);
+        const svg = (name: string) =>
+            `<svg xmlns="http://www.w3.org/2000/svg"><image href="${eigenMediaHref(name)}"/></svg>`;
+        await addMedia(s3.mount, path.id, 'École.svg', { mimeType: 'image/svg+xml', body: svg('Über.svg') });
+        await addMedia(s3.mount, path.id, 'Über.svg', { mimeType: 'image/svg+xml', body: svg('leaf.png') });
+        await addMedia(s3.mount, path.id, 'leaf.png');
+        await addMedia(s3.mount, path.id, 'loose.png');
+
+        await close(S3_MOUNT, path);
+        await sweepDocument(drive, path);
+        expect(await mediaNames(s3.mount, path.id)).toEqual(['leaf.png', 'École.svg', 'Über.svg']);
+    });
+
     test('deletes a thread nothing names, with its row', async () => {
         const { path, collab } = await openDoc(s3.mount, S3_MOUNT, 'BucketThread', [paragraph(marked('c1'))]);
         const kept = await addThread(s3.mount, S3_MOUNT, path.id, { messages: [{ content: 'kept' }] });

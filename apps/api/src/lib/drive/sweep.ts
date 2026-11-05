@@ -59,7 +59,8 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
 
     const media = await mount.getChildByName(container.id, CONTAINER_MEDIA_FOLDER);
     const chat = await mount.getChildByName(container.id, CONTAINER_CHAT_FOLDER);
-    const oldMedia = media ? (await mount.listFolder(media.id)).filter(isOld) : [];
+    const mediaFiles = media ? await mount.listFolder(media.id) : [];
+    const oldMedia = mediaFiles.filter(isOld);
     const idleThreads: DrivePath[] = [];
     for (const thread of chat ? await mount.listFolder(chat.id) : []) {
         if (thread.type === DRIVE_TYPE_CHAT && !(await isActive(mount, thread, cutoff))) idleThreads.push(thread);
@@ -91,8 +92,8 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
     const allNames = foldedNames([...versionStates, currentState]);
     // A kept SVG keeps the files it draws. The SVGs are read only when an old file is not among the names.
     const keptMedia =
-        media && unnamed(oldMedia, allNames.media).length > 0
-            ? await withSvgSiblings(mount, media.id, [...allNames.media])
+        unnamed(oldMedia, allNames.media).length > 0
+            ? await withSvgSiblings(mount, mediaFiles, allNames.media)
             : allNames.media;
     // An SVG that could not be read keeps every media file this time, and the threads still go.
     const sweepsMedia = media !== null && keptMedia !== null;
