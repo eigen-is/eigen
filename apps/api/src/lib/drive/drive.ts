@@ -114,7 +114,7 @@ export type ContentWriteOptions = { user?: User; ifMatch?: string; event?: 'uplo
 // after can't show in either. The caller sends them back, so its next save is checked against its own bytes.
 export type ContentWriteResult = { path: DrivePath; etag: string };
 
-const DOCUMENT_PART_ERROR = "Cannot change a document's databases or versions";
+const DOCUMENT_PART_ERROR = 'Cannot change a part of a document on its own';
 
 export class Drive {
     // A live WebDAV lock holds the home, so only a close for another reason, such as a restore, drops it.
@@ -612,11 +612,10 @@ export class Drive {
         return folder;
     }
 
-    // A document's databases and its versions/ folder, with each version in it, change only with the whole
-    // document. Renamed, moved, trashed or overwritten on its own, a database breaks the document and a
-    // version leaves a gap in its history. A file put into versions/ would list and restore as a version. So
-    // a user write refuses such a path, both as the item it changes and as the folder it writes into. The
-    // server's own writers, such as a snapshot or the sweep, write through Mount and never meet this check.
+    // A document's databases and its versions take no bytes from a write: an overwritten database breaks the
+    // document, and a file put into versions/ would list and restore as a version. So a write refuses such a path,
+    // both as the file it overwrites and as the folder it writes into. The server's own writers, such as a snapshot,
+    // write through Mount and never meet this check.
     private async refuseDocumentPart(mount: Mount, path: DrivePath): Promise<void> {
         let parent: DrivePath | undefined;
         for (const crumb of await mount.getBreadcrumb(path.id)) {
@@ -627,6 +626,15 @@ export class Drive {
             if (isPart) throw new ApiError(400, DOCUMENT_PART_ERROR);
             parent = crumb;
         }
+    }
+
+    // A person never trashes, renames or moves a part of a document, such as a database, a version, a comment thread
+    // or a media file: a part changes only with its whole document. So no thread goes to the trash on its own. Server
+    // code passes no user, such as a chat that trashes a deleted message's attachments.
+    private async refuseInsideDocument(mount: Mount, pathId: string, user: User | undefined): Promise<void> {
+        if (!user) return;
+        const ancestors = (await mount.getBreadcrumb(pathId)).slice(0, -1);
+        if (ancestors.some((crumb) => isDocumentType(crumb.type))) throw new ApiError(400, DOCUMENT_PART_ERROR);
     }
 
     public async updatePathDetails(mountId: string, pathId: string, details: DrivePathDetails): Promise<void> {
@@ -640,7 +648,7 @@ export class Drive {
     public async movePath(mountId: string, pathId: string, targetParentId: string, user?: User): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const path = await mount.getActivePath(pathId);
-        await this.refuseDocumentPart(mount, path);
+        await this.refuseInsideDocument(mount, pathId, user);
         const oldParentId = path.parentId;
 
         const targetParent = await this.getTargetFolder(mount, targetParentId);
@@ -690,8 +698,7 @@ export class Drive {
     public async renamePath(mountId: string, pathId: string, newName: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getActivePath(pathId);
-        await this.refuseDocumentPart(mount, item);
-        if (item.parentId) refuseVersionsName(await mount.getActivePath(item.parentId), newName);
+        await this.refuseInsideDocument(mount, pathId, user);
         const oldName = item.name;
 
         const renamedItem = await mount.updatePath(pathId, { name: newName });
@@ -814,6 +821,7 @@ export class Drive {
     // The trash runs in the path's ACL chain. An ACL change that started first lands first, and the
     // trash then takes it away with the rest. One that comes after finds the path in the trash.
     public async deletePath(mountId: string, pathId: string, user?: User): Promise<void> {
+        await this.refuseInsideDocument(this.getMount(mountId), pathId, user);
         return this.removePath(mountId, pathId, (mount, item) => deletePath(this, mount, item, user));
     }
 
@@ -838,7 +846,6 @@ export class Drive {
         return this.runInOrder(`acl:${mountId}:${pathId}`, async () => {
             const item = await mount.getActivePath(pathId);
             if (item.parentId === null) throw new ApiError(400, 'Cannot trash root folder');
-            await this.refuseDocumentPart(mount, item);
             await this.documents.whileTrashing(mount, item.id, () => remove(mount, item));
             await this.releaseLocksUnder(mountId, item.id);
         });

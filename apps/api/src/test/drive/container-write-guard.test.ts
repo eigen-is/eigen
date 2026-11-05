@@ -14,9 +14,8 @@ import {
     TEST_PNG_BYTES,
 } from '../setup';
 
-// A write collaborator on a shared document must not overwrite, trash, rename or move its databases
-// and saved versions, nor put anything into its versions/ folder. The rest of the document, such as
-// its media/ folder, stays writable.
+// No person trashes, renames or moves a part of a document, nor overwrites its databases and saved versions,
+// nor puts anything into its versions/ folder. A writer still uploads into its media/ folder and starts a thread.
 describe('Container write guard', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
     let mountId: string;
@@ -177,6 +176,71 @@ describe('Container write guard', () => {
         });
     });
 
+    // A thread, a media file or anything else inside a document changes only with the whole document, so no person
+    // trashes, renames or moves one on its own, the owner included. A thread can't then go to the trash without its
+    // document. The server still does, such as a chat that trashes a deleted message's attachments.
+    describe('a part inside a document', () => {
+        function request(token: string, method: string, path: string, body?: Record<string, unknown>) {
+            return authedRequest(token, `/drive/${aliceId()}/${mountId}/${path}`, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: body && JSON.stringify(body),
+            });
+        }
+
+        test('a writer and the owner cannot trash, rename or move a thread, a media file or a folder in it', async () => {
+            const token = ctx.alice.user.sessionToken;
+            const sharedFolder = await drivePost<DrivePath>(token, aliceId(), mountId, `folder/${rootId}`, {
+                folderName: 'inside-guard',
+            });
+            await drivePut(token, aliceId(), mountId, `path/${sharedFolder.id}/acl`, {
+                add: [{ id: ctx.bob.user.email, read: true, write: true }],
+            });
+            const { doc } = await docWithVersion('inside-guard', sharedFolder.id);
+            const children = await containerChildren(doc.id);
+            const chat = findOrFail(children, (c) => c.name === 'chat');
+            const media = findOrFail(children, (c) => c.name === 'media');
+            const thread = await drivePost<DrivePath>(token, aliceId(), mountId, `folder/${chat.id}/create/chat`, {
+                fileName: 'inside-thread',
+            });
+            const threadMedia = findOrFail(await containerChildren(thread.id), (c) => c.name === 'media');
+            const png = () => new File([TEST_PNG_BYTES], 'photo.png', { type: 'image/png' });
+            const items = [
+                thread,
+                media,
+                await driveUpload<DrivePath>(token, aliceId(), mountId, media.id, png()),
+                await driveUpload<DrivePath>(token, aliceId(), mountId, threadMedia.id, png()),
+                await drivePost<DrivePath>(token, aliceId(), mountId, `folder/${doc.id}`, { folderName: 'notes' }),
+            ];
+
+            // A writer who may not write in the document's folders gets a 403 first, and everyone else a 400.
+            const done: string[] = [];
+            for (const item of items) {
+                for (const visitor of [ctx.bob.user, ctx.alice.user]) {
+                    const writes = {
+                        trash: await request(visitor.sessionToken, 'DELETE', `path/${item.id}`),
+                        rename: await request(visitor.sessionToken, 'PUT', `path/${item.id}/rename`, {
+                            newName: `renamed-${item.name}`,
+                        }),
+                        move: await request(visitor.sessionToken, 'PUT', `path/${item.id}/move`, {
+                            targetParentId: sharedFolder.id,
+                        }),
+                    };
+                    for (const [write, res] of Object.entries(writes)) {
+                        if (res.status !== 400 && res.status !== 403) done.push(`${write} ${item.name}: ${res.status}`);
+                    }
+                }
+            }
+            expect(done).toEqual([]);
+            for (const item of items) {
+                const after = await driveGet<DrivePath>(token, aliceId(), mountId, `path/${item.id}`);
+                expect(`${after.name} in ${after.parentId}, trashed ${after.trashedAt}`).toBe(
+                    `${item.name} in ${item.parentId}, trashed null`,
+                );
+            }
+        });
+    });
+
     // The same parts can be renamed, moved or written into through the other routes. A renamed
     // data.db breaks the document, a version moved out leaves a gap in its history, and a file
     // put in versions/ would list and restore as a version. So those routes refuse them too.
@@ -262,7 +326,7 @@ describe('Container write guard', () => {
             const files = parts.filter((part) => part.type === 'file');
             for (const part of files) {
                 await expect(drive.writeFileContent(mountId, part.id, Buffer.from('overwrite'))).rejects.toThrow(
-                    "Cannot change a document's databases or versions",
+                    'Cannot change a part of a document on its own',
                 );
             }
             for (const part of files) {
@@ -449,21 +513,6 @@ describe('Container write guard', () => {
             expect(res.status).toBe(409);
             const names = (await containerChildren(doc.id)).map((child) => child.name).sort();
             expect(names).toEqual(['chat', 'comments.db', 'data.db', 'media']);
-        });
-
-        test("a chat keeps no comments.db, so an item of that name in a chat is a writer's own", async () => {
-            const chat = await drivePost<DrivePath>(
-                ctx.alice.user.sessionToken,
-                aliceId(),
-                mountId,
-                `folder/${sharedFolder.id}/create/chat`,
-                { fileName: 'planted-chat' },
-            );
-            const created = await bobRequest('POST', `folder/${chat.id}`, { folderName: 'comments.db' });
-            expect(created.status).toBe(200);
-            const item: DrivePath = await created.json();
-            const renamed = await bobRequest('PUT', `path/${item.id}/rename`, { newName: 'notes' });
-            expect(renamed.status).toBe(200);
         });
 
         test('a save still makes the versions folder, and a copy to another drive still copies the document', async () => {
