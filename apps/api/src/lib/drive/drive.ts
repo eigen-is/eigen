@@ -90,7 +90,6 @@ import {
 import { CollabRegistry } from './collab-registry';
 import type { CopyTarget } from './copy-across';
 import { copyPathAcross } from './copy-across';
-import { keepRowsOfCopiedThreads, withNamedPartsOnly } from './copy-parts';
 import { LockManager } from './lock-manager';
 import { getSharedDatabase } from './shared';
 import {
@@ -723,9 +722,8 @@ export class Drive {
             if (!user || !(await to.drive.canWrite(to.mountId, destParentId, user))) {
                 throw new ApiError(403, 'No write permission on target folder');
             }
-            return this.copyWithinLimits(mount, srcPathId, to, (tree) =>
-                copyPathAcross(this, tree, to, destParentId, name, user),
-            );
+            const tree = await this.listCopyWithinLimits(mount, srcPathId, to);
+            return copyPathAcross(this, tree, to, destParentId, name, user);
         }
 
         // RFC 4918 asks for a 409 for a folder copied into itself.
@@ -733,15 +731,13 @@ export class Drive {
             throw new ApiError(409, 'Cannot copy a folder into itself or its own descendant');
         }
         refuseVersionsName(await this.getTargetFolder(mount, destParentId), name);
-        const copied = await this.copyWithinLimits(mount, srcPathId, { ownerId: this.owner.id, mountId }, (tree) =>
-            mount.copyPath(
-                tree,
-                destParentId,
-                name,
-                (pathId, createdIds) => this.deleteFailedCopy(mountId, pathId, createdIds, user),
-                user,
-                (copy, src) => keepRowsOfCopiedThreads(this, mountId, copy, src),
-            ),
+        const tree = await this.listCopyWithinLimits(mount, srcPathId, { ownerId: this.owner.id, mountId });
+        const copied = await mount.copyPath(
+            tree,
+            destParentId,
+            name,
+            (pathId, createdIds) => this.deleteFailedCopy(mountId, pathId, createdIds, user),
+            user,
         );
         this.emit(
             isContainerType(copied.type) ? SSEventType.DRIVE_FOLDER_CREATED : SSEventType.DRIVE_FILE_CREATED,
@@ -762,19 +758,17 @@ export class Drive {
         return copied;
     }
 
-    // The copy writes exactly what this lists, so it never copies its own output. A document in it takes only the
-    // parts its current state names. Every copy has to fit the target's free space, and a single file also the
-    // per-file upload cap, the same as an upload.
-    private async copyWithinLimits(
+    // The copy writes exactly what this lists, so it never copies its own output. Every copy has to fit the
+    // target's free space, and a single file also the per-file upload cap, the same as an upload.
+    private async listCopyWithinLimits(
         mount: Mount,
         srcPathId: string,
         limits: { ownerId: string; mountId: string },
-        write: (tree: CopyTree) => Promise<DrivePath>,
-    ): Promise<DrivePath> {
-        const tree = await withNamedPartsOnly(mount, await mount.listCopy(srcPathId));
+    ): Promise<CopyTree> {
+        const tree = await mount.listCopy(srcPathId);
         if (!isContainerType(tree.path.type)) enforceMaxUploadSize(tree.path.size);
         await enforceMountQuota(limits.ownerId, limits.mountId, copySize(tree));
-        return write(tree);
+        return tree;
     }
 
     // Writes a document's open databases to storage, so a byte copy of the container gets its latest state.

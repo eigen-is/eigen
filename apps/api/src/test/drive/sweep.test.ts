@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, jest, spyOn, test } f
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
+import { SWEEP_GRACE_MS } from '@workspace/lib/constants/sweep';
 import { commentCardIdsIn } from '@workspace/lib/docs/eigendoc';
 import type { Sheet, SheetImage } from '@workspace/lib/sheets';
 import { encodeSheetsSnapshot, sheetsOpLog, sheetsStateMap } from '@workspace/lib/sheets';
@@ -843,6 +844,61 @@ describe('the thread sweep', () => {
             trashPath.mockRestore();
         }
         expect((await mount.getPath(thread.id))?.trashedAt).not.toBeNull();
+    });
+});
+
+describe('a copy', () => {
+    test('of an open document holds a comment row and an image added just before', async () => {
+        const { path, collab } = await openDoc(mount, M, 'CopyOpen', [paragraph(marked('c1'))]);
+        const thread = await addThread(mount, M, path.id);
+        addCard(collab.doc, 'c1', { chatName: thread.name });
+        // A post writes the thread's row into comments.db, which stays open and unsynced for a while.
+        await (await drive.getChat(M, thread.id)).postMessage(home.user, 'just before the copy', 'message');
+        await addMedia(mount, path.id, 'new.png', { ageHours: 0 });
+        const added = new Y.XmlElement('figure');
+        added.setAttribute('mediaName', 'new.png');
+        collab.doc.getXmlFragment('default').insert(0, [added]);
+
+        const copied = await drive.copyPath(M, path.id, rootId, `${path.name} copy`, home.user);
+        expect(await commentRows(M, copied.id)).toEqual([thread.name]);
+        const copy = await drive.getCollabDocument(M, copied.id);
+        expect(copy.doc.getXmlFragment('default').toString()).toContain('new.png');
+        await close(M, copied);
+        await close(M, path);
+    });
+
+    test('carries every part, and its first sweep after the grace frees what its state does not name', async () => {
+        const { path, collab } = await openDoc(mount, M, 'CopyAll', [paragraph(figure('kept.png'), marked('c1'))]);
+        await addMedia(mount, path.id, 'kept.png');
+        await addMedia(mount, path.id, 'loose.png');
+        const kept = await addThread(mount, M, path.id);
+        const left = await addThread(mount, M, path.id);
+        addCard(collab.doc, 'c1', { chatName: kept.name });
+        await close(M, path);
+
+        const copied = await drive.copyPath(M, path.id, rootId, `${path.name} copy`, home.user);
+        const threads = [kept.name, left.name].sort();
+        expect(await mediaNames(mount, copied.id)).toEqual(['kept.png', 'loose.png']);
+        expect(await threadNames(mount, copied.id)).toEqual(threads);
+        expect(await commentRows(M, copied.id)).toEqual(threads);
+        // A copied part is new, so the grace spares it.
+        await sweepDocument(drive, copied);
+        expect(await mediaNames(mount, copied.id)).toEqual(['kept.png', 'loose.png']);
+
+        // The content index reads the copy's threads, and a thread open on the server counts as active.
+        await flushContentReindex(drive);
+        const chat = await mount.getChildByName(copied.id, 'chat');
+        for (const thread of chat ? await mount.listFolder(chat.id) : []) await closeThreadDb(mount, thread.id);
+        const clock = spyOn(Date, 'now').mockReturnValue(Date.now() + SWEEP_GRACE_MS + HOUR_MS);
+        try {
+            await sweepDocument(drive, copied);
+        } finally {
+            clock.mockRestore();
+        }
+        expect(await mediaNames(mount, copied.id)).toEqual(['kept.png']);
+        expect(await threadNames(mount, copied.id)).toEqual([kept.name]);
+        expect(await commentRows(M, copied.id)).toEqual([kept.name]);
+        expect(await mediaNames(mount, path.id)).toEqual(['kept.png', 'loose.png']);
     });
 });
 

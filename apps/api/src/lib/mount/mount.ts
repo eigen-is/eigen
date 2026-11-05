@@ -30,7 +30,7 @@ import * as snapshot from '../versioning/snapshot';
 import { CONTAINER_COMMENTS_DB, CONTAINER_DATA_DB } from './container-dbs';
 import type { ContentExtractor } from './content-reindex-queue';
 import { ContentReindexQueue } from './content-reindex-queue';
-import type { CopyTree, DiscardCopy, DocumentCopied } from './copy';
+import type { CopyTree, DiscardCopy } from './copy';
 import * as copy from './copy';
 import { MOUNT_DB_CONFIG } from './db-config';
 import type { DatabaseHold, DocumentDbSlot } from './document-db';
@@ -1047,9 +1047,8 @@ export class Mount {
         name: string,
         discard: DiscardCopy,
         actor?: { id: string; email: string },
-        documentCopied?: DocumentCopied,
     ): Promise<DrivePath> {
-        return copy.copyPath(this, tree, destParentId, name, discard, actor, documentCopied);
+        return copy.copyPath(this, tree, destParentId, name, discard, actor);
     }
 
     // ---- Storage keys ----
