@@ -22,7 +22,7 @@ type TestDirective = {
     beforeAck?: boolean;
     signal?: NodeJS.Signals;
     heap?: 'objects' | 'strings' | 'buffers';
-    mediaNames?: unknown[];
+    mediaNames?: string[];
 };
 
 // The scriptable child reads its script off `test`, the one field a production request
@@ -473,15 +473,12 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
-    test.each([
-        ['a job that offers none', undefined, ['a']],
-        ['names that are not strings', async () => [], [1]],
-    ])('a child that asks for media on %s is an invalid response', async (_, prepareMedia, mediaNames) => {
+    test('a child that asks for media on a job that offers none is an invalid response', async () => {
         const runner = makeRunner();
-        const response = await runner.run(makeExportRequest({ behavior: 'export-echo-media', mediaNames }), {
-            ...EXPORT_OPTIONS,
-            prepareMedia,
-        });
+        const response = await runner.run(
+            makeExportRequest({ behavior: 'export-echo-media', mediaNames: ['a'] }),
+            EXPORT_OPTIONS,
+        );
         expect(errorCode(response)).toBe('invalid-response');
         await runner.close();
     });

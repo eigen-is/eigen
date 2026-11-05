@@ -39,7 +39,7 @@ type TestDirective = {
     signal?: NodeJS.Signals;
     heap?: 'objects' | 'strings' | 'buffers';
     bytes?: number;
-    mediaNames?: unknown[];
+    mediaNames?: string[];
 };
 
 // The three shapes an allocation failure takes under the limit: JSC aborts on objects, segfaults on strings, and throws
@@ -60,7 +60,7 @@ const send = (message: unknown) => process.send?.(message);
 let onMediaReply: ((media: ExportMedia[]) => void) | undefined;
 
 // Asks for media as an export's renderer does, and waits for the runner's reply.
-function askForMedia(jobId: number, mediaNames: unknown[]): Promise<ExportMedia[]> {
+function askForMedia(jobId: number, mediaNames: string[]): Promise<ExportMedia[]> {
     return new Promise((resolve) => {
         onMediaReply = resolve;
         send({ jobId, mediaNames });
