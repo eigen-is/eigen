@@ -65,9 +65,9 @@ A folder's permanent delete first removes every trash root whose `trashedFrom` l
 
 `Drive.emptyTrash` loops `permanentlyDelete` per item, so every item gets the same sharing, SSE and history handling. An item that is gone or no longer in trash by its turn is skipped: a folder's delete took it with it, or a restore got its lock first. A single permanent delete of such an item is a 404. Trashing the mount root is a 400.
 
-## A document's databases and versions go only with the whole document
+## A part of a document goes to the trash only with the whole document
 
-A document's `data.db` and `comments.db`, its `versions/` folder and each version in it are trashed only with the whole document. `Drive.removePath`, which every REST delete passes on an own drive and through `SharedDrive` alike, answers a 400 for any of them, the owner's request included, beside its refusal of the mount root. That is one case of the rule that no user write changes those parts ([STORAGE.md](STORAGE.md#a-user-write-never-changes-a-documents-databases-or-versions)), which also says why. A message's attachment sits in the chat's `media/` folder, so `ChatRoom.deleteMessage` still trashes it.
+A document's parts, such as its databases, its versions, its comment threads and the files in its `media/`, are trashed only with the whole document. A person's trash of one answers 400, the owner's request included, beside the refusal of the mount root ([STORAGE.md](STORAGE.md#a-person-never-trashes-renames-or-moves-a-part-of-a-document)), so no trash root ever sits inside a document. Server code still trashes there: `ChatRoom.deleteMessage` trashes a deleted message's attachments from the chat's `media/` folder.
 
 ## Expired trash is purged only when a Home loads
 
