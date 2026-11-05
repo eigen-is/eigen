@@ -432,7 +432,7 @@ export class MaildirStore implements MailStore {
         // A mailbox with no rows yet is indexed for the first time: what it finds was discovered, not delivered.
         const indexed = dbRecords.length > 0;
 
-        // Batched inserts are the biggest cold-index win (addEmail was ~71% of a 92 s sync of 100k), and `received` waits on the commit.
+        // Inserts are batched because one insert per message dominates a cold index, and `received` waits on the commit.
         const NEW_CHUNK = 250;
         const newEntries = [...diskFiles].filter(([id]) => !dbById.has(id));
         for (let i = 0; i < newEntries.length; i += NEW_CHUNK) {

@@ -4,7 +4,7 @@
 
 import { EML_MAX_BYTES, MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { EML_MIME, isEmlFile } from '@workspace/lib/types/drive';
+import { isEmlFile } from '@workspace/lib/types/drive';
 import type {
     DraftAttachmentUpload,
     Email,
@@ -20,7 +20,7 @@ import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@w
 import type { ElysiaCustomStatusResponse, Static } from 'elysia';
 import { Elysia, t } from 'elysia';
 import { requireLocalhost, requireMailEnabled, requireNonGuest, requireSelf } from '../lib/auth/access';
-import { ApiError, contentDisposition, NOT_AN_EMAIL_FILE, readBoundedBodyBytes, setCacheHeaders } from '../lib/core';
+import { ApiError, NOT_AN_EMAIL_FILE, readBoundedBodyBytes } from '../lib/core';
 import { readImportSourceBytes } from '../lib/drive';
 import {
     attachFromDrive,
@@ -31,7 +31,7 @@ import {
     saveAttachmentsToDrive,
     uploadDraftAttachment,
 } from '../lib/mail/mail';
-import { answerMailPart, serveMailPart } from '../lib/mail/serve-mail-part';
+import { answerMailMessage, answerMailPart, serveMailPart } from '../lib/mail/serve-mail-part';
 import {
     assertEmlPreviewable,
     assertIcsPreviewable,
@@ -102,12 +102,12 @@ export const mailRouter = new Elysia({ name: 'mail' })
         '/mail/deliver/:to',
         async ({ params, body, request, server }): Promise<string> => {
             requireLocalhost(request, server);
-            return await mailboxDeliver(params.to, body as ArrayBuffer);
+            return await mailboxDeliver(params.to, body);
         },
         {
             parse: 'arrayBuffer',
-            // The per-message size cap is Postfix's `message_size_limit` (docker/postfix/main.cf.template).
-            body: t.Any(),
+            // The per-message size cap is Postfix's `message_size_limit`.
+            body: t.ArrayBuffer(),
         },
     )
     // All authenticated mail routes require ownerId === user.id (mail is personal-only, no shared access)
@@ -150,14 +150,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
         async ({ params, user, set }): Promise<ArrayBuffer> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            const mail = await getMailClient(user);
-            // A draft save rewrites the message under its id.
-            if (mail.messageGetSummary(params.id)?.isDraft) set.headers['Cache-Control'] = 'no-store';
-            else setCacheHeaders(set, 86400);
-            set.headers['Content-Type'] = EML_MIME;
-            set.headers['Content-Transfer-Encoding'] = 'binary';
-            set.headers['Content-Disposition'] = contentDisposition('attachment', `${params.id}.eml`);
-            return await mail.messageGetFile(params.id);
+            return await answerMailMessage(await getMailClient(user), params.id, set);
         },
         { auth: true },
     )

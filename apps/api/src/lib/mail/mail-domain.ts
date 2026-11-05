@@ -165,7 +165,7 @@ export class Mail {
 
     // No processInboundImip: an imported file carries no DKIM verdict, so it must never touch the calendar.
     public async messageImport(bytes: Buffer): Promise<ImportMailResult> {
-        // The sync after the append parses the message anyway, so a full parse here is a second one (103 ms vs 0.05 ms on 1.1 MiB).
+        // The sync after the append parses the message anyway, so only the headers are split here.
         let headers: PartHeaders;
         try {
             headers = splitMime(bytes).headers;
