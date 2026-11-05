@@ -465,8 +465,7 @@ describe('document transform (eigensheets preview)', () => {
             expect(stale.status).toBe(200);
             expect(stale.headers.get('cache-control')).toBe('no-store');
             // Wait for the failure itself, or a late regeneration makes the assertion below vacuous.
-            const failed = () =>
-                errorSpy.mock.calls.some(([line]) => String(line).includes('Background regeneration failed'));
+            const failed = () => errorSpy.mock.calls.some(([line]) => String(line).includes('Failed to generate'));
             for (let i = 0; i < 80 && !failed(); i++) await Bun.sleep(50);
             expect(failed()).toBe(true);
 
