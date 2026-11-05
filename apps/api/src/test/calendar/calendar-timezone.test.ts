@@ -934,6 +934,35 @@ describe('Calendar Timezone', () => {
             expect(ics).toContain('SUMMARY:Daily');
             expect(ics).not.toContain('EXDATE');
         });
+
+        // 31 December 9999 23:00Z is already 1 January 10000 in Tokyo, a date no key can name.
+        test.each([
+            ['an exception', 'year-10000-override@test', [], ['RECURRENCE-ID:99991231T230000Z']],
+            ['an exclusion', 'year-10000-exdate@test', ['EXDATE:99991231T230000Z'], []],
+        ])('%s past year 9999 in the series zone is refused and stores nothing', async (_, uid, exdate, rid) => {
+            const vevent = (lines: string[]) =>
+                [
+                    'BEGIN:VEVENT',
+                    `UID:${uid}`,
+                    ...lines,
+                    'DTSTART;TZID=Asia/Tokyo:20260302T090000',
+                    'DTEND;TZID=Asia/Tokyo:20260302T100000',
+                    'DTSTAMP:20260101T000000Z',
+                    'END:VEVENT',
+                ].join('\r\n');
+            const master = vevent(['SUMMARY:Weekly', 'RRULE:FREQ=WEEKLY', ...exdate]);
+            const body = rid.length ? vcal(master, vevent(['SUMMARY:Moved', ...rid])) : vcal(master);
+
+            const put = await davPut(ctx.alice.user.email, ctx.alice.user.id, aliceCalendarId, `${uid}.ics`, body);
+            expect(put.status).toBe(403);
+
+            const home = await getHome(ctx.alice.user.id);
+            expect(storedEvents(home.calendar, aliceCalendarId).filter((e) => e.uid === uid)).toHaveLength(0);
+            const get = await davRequest('GET', `/dav/calendars/${ctx.alice.user.id}/${aliceCalendarId}/${uid}.ics`, {
+                email: ctx.alice.user.email,
+            });
+            expect(get.status).toBe(404);
+        });
     });
 
     // Audit #E: a substituted modified occurrence must render with the exception's STORED

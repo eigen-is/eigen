@@ -1,3 +1,8 @@
+// The calendar store as CalDAV sees it: index reads such as a sync delta or a time-range match, the bytes
+// of one resource, and the PUT and DELETE that write them. The protocol handlers and a whole-file import
+// reach it through the Calendar facade. A PUT is judged whole inside the calendar's write lock, its parse
+// included, against the state it overwrites.
+
 import { CONTROL_CHARS } from '@workspace/lib/validation';
 import { and, eq, gt, inArray, or } from 'drizzle-orm';
 import type ICAL from 'ical.js';
@@ -15,8 +20,6 @@ import {
     sanitizeEventUri,
 } from './resource-store';
 import * as schema from './schema';
-
-// The CalDAV store seam over the Calendar facade. See docs/CALDAV.md § A PUT is judged inside the write lock.
 
 // The size lets a REPORT weigh a row against its byte budget before reading the bytes at all.
 export type ResourceRow = {
@@ -143,45 +146,12 @@ export async function getResource(
 
 // --- Writes ---
 
-// A UID travels into etags and sync deltas, so an unprintable or endless one is refused rather than stored.
-const MAX_UID_LENGTH = 255;
-function isStorableUid(uid: string): boolean {
-    return uid.length <= MAX_UID_LENGTH && !CONTROL_CHARS.test(uid);
-}
-
-// A copy of somebody else's event: the server's own organizer stamp says so, where the ORGANIZER address is the client's to spell.
-function isLinkedCopy(stored: ICAL.Component): boolean {
-    return stored.getAllSubcomponents('vevent').some((vevent) => readStamp(vevent, EIGEN.organizerEvent) !== null);
-}
-
-function adoptAlarms(stored: ICAL.Component, incoming: ICAL.Component): void {
-    const incomingVEvents = incoming.getAllSubcomponents('vevent');
-    const zones = seriesTimezones(incomingVEvents);
-    const byKey = new Map(
-        incomingVEvents.map((v) => [`${uidOf(v)}|${recurrenceKeyOf(v, zones.get(uidOf(v)) ?? null) ?? ''}`, v]),
-    );
-    const storedVEvents = stored.getAllSubcomponents('vevent');
-    const storedZones = seriesTimezones(storedVEvents);
-    for (const vevent of storedVEvents) {
-        const uid = uidOf(vevent);
-        const match = byKey.get(`${uid}|${recurrenceKeyOf(vevent, storedZones.get(uid) ?? null) ?? ''}`);
-        if (!match) continue;
-        vevent.removeAllSubcomponents('valarm');
-        for (const alarm of match.getAllSubcomponents('valarm')) {
-            // The one write path that keeps a client's own subcomponents: its Eigen lines are still untrusted.
-            stripEigenStamps(alarm);
-            vevent.addSubcomponent(alarm);
-        }
-    }
-}
-
 export type PutResourceOptions = ResourcePreconditions & {
     actor?: string | null;
     // Set by a whole-file import alone: it files one UID once per Home, where a device owns only the calendar it syncs.
     import?: { organizer: string | null };
 };
 
-// Preconditions, UID rules, re-stamping and the linked-copy restriction are decided inside the lock, against the state overwritten.
 export async function putResource(
     calendar: Calendar,
     calendarId: string,
@@ -194,23 +164,6 @@ export async function putResource(
 
     // Bounded before any parse, so a hostile payload never reaches the component builder.
     if (Buffer.byteLength(body) > EVENT_MAX_BYTES) return { ok: false, error: 'too-large' };
-
-    // The body says nothing about stored state, so a 5 MiB parse waits for no other writer.
-    let incoming: ICAL.Component;
-    try {
-        incoming = parseResource(body);
-    } catch {
-        return { ok: false, error: 'invalid', reason: 'data', message: 'invalid iCalendar data' };
-    }
-
-    const vevents = incoming.getAllSubcomponents('vevent');
-    if (!vevents.length) return { ok: false, error: 'invalid', reason: 'component', message: 'no VEVENT found' };
-    // One resource is one series: a second UID's overrides would otherwise hang off this master.
-    const uids = new Set(vevents.map(uidOf));
-    if (uids.size > 1) return { ok: false, error: 'invalid', reason: 'object', message: 'one UID per resource' };
-    const uid = [...uids][0];
-    if (!uid) return { ok: false, error: 'invalid', reason: 'data', message: 'UID is required' };
-    if (!isStorableUid(uid)) return { ok: false, error: 'invalid', reason: 'data', message: 'UID is not storable' };
 
     return calendar.writeLock.run(async (): Promise<PutResourceResult> => {
         // Sanitizing an id is not knowing it exists, and a write would otherwise file a resource under nobody's calendar.
@@ -236,6 +189,39 @@ export async function putResource(
             return { ok: false, error: 'precondition' };
         }
 
+        // The stored bytes decide the linked-copy rule, the stamps to carry over and the no-op below.
+        const storedBytes = existing?.ics ?? null;
+        const stored = storedBytes ? parseResource(new TextDecoder().decode(storedBytes)) : null;
+
+        // Keying the body's RECURRENCE-ID or EXDATE throws on a date no key can name, so the parse and the re-stamp share one refusal.
+        let incoming: ICAL.Component;
+        let resource: ICAL.Component;
+        try {
+            incoming = parseResource(body);
+            if (stored && isLinkedCopy(stored)) {
+                adoptAlarms(stored, incoming);
+                resource = stored;
+            } else {
+                // Nothing the body says about an Eigen line is trusted: the stamps come back from the stored resource.
+                restampResource(incoming, stored, {
+                    createByUserId: stored ? undefined : (options.actor ?? undefined),
+                    importedOrganizer: stored ? undefined : (options.import?.organizer ?? undefined),
+                });
+                resource = incoming;
+            }
+        } catch {
+            return { ok: false, error: 'invalid', reason: 'data', message: 'invalid iCalendar data' };
+        }
+
+        const vevents = incoming.getAllSubcomponents('vevent');
+        if (!vevents.length) return { ok: false, error: 'invalid', reason: 'component', message: 'no VEVENT found' };
+        // One resource is one series: a second UID's overrides would otherwise hang off this master.
+        const uids = new Set(vevents.map(uidOf));
+        if (uids.size > 1) return { ok: false, error: 'invalid', reason: 'object', message: 'one UID per resource' };
+        const uid = [...uids][0];
+        if (!uid) return { ok: false, error: 'invalid', reason: 'data', message: 'UID is required' };
+        if (!isStorableUid(uid)) return { ok: false, error: 'invalid', reason: 'data', message: 'UID is not storable' };
+
         // Inside the lock, or two writers of one UID both read "nobody holds it" and the UNIQUE index 500s.
         const holder = calendar.db
             .select({ id: schema.resources.id, uri: schema.resources.uri })
@@ -248,23 +234,6 @@ export async function putResource(
             .get();
         if (holder && holder.id !== existing?.id) return { ok: false, error: 'uid-conflict', conflictUri: holder.uri };
         if (existing && uid !== existing.uid) return { ok: false, error: 'uid-conflict' };
-
-        // The stored bytes decide the linked-copy rule, the stamps to carry over and the no-op below.
-        const storedBytes = existing?.ics ?? null;
-        const stored = storedBytes ? parseResource(new TextDecoder().decode(storedBytes)) : null;
-
-        let resource: ICAL.Component;
-        if (stored && isLinkedCopy(stored)) {
-            adoptAlarms(stored, incoming);
-            resource = stored;
-        } else {
-            // Nothing the body says about an Eigen line is trusted: the stamps come back from the stored resource.
-            restampResource(incoming, stored, {
-                createByUserId: stored ? undefined : (options.actor ?? undefined),
-                importedOrganizer: stored ? undefined : (options.import?.organizer ?? undefined),
-            });
-            resource = incoming;
-        }
 
         // Prepared once here: the write below lands exactly the rows, bytes and hash these refusals judged.
         const prepared = prepareResource(calendarId, resource, existing?.id ?? null);
@@ -317,4 +286,36 @@ export async function deleteResource(
         await calendar.purgeResource(row);
         return { ok: true, id: row.id };
     });
+}
+
+// A UID travels into etags and sync deltas, so an unprintable or endless one is refused rather than stored.
+const MAX_UID_LENGTH = 255;
+function isStorableUid(uid: string): boolean {
+    return uid.length <= MAX_UID_LENGTH && !CONTROL_CHARS.test(uid);
+}
+
+// A copy of somebody else's event: the server's own organizer stamp says so, where the ORGANIZER address is the client's to spell.
+function isLinkedCopy(stored: ICAL.Component): boolean {
+    return stored.getAllSubcomponents('vevent').some((vevent) => readStamp(vevent, EIGEN.organizerEvent) !== null);
+}
+
+function adoptAlarms(stored: ICAL.Component, incoming: ICAL.Component): void {
+    const incomingVEvents = incoming.getAllSubcomponents('vevent');
+    const zones = seriesTimezones(incomingVEvents);
+    const byKey = new Map(
+        incomingVEvents.map((v) => [`${uidOf(v)}|${recurrenceKeyOf(v, zones.get(uidOf(v)) ?? null) ?? ''}`, v]),
+    );
+    const storedVEvents = stored.getAllSubcomponents('vevent');
+    const storedZones = seriesTimezones(storedVEvents);
+    for (const vevent of storedVEvents) {
+        const uid = uidOf(vevent);
+        const match = byKey.get(`${uid}|${recurrenceKeyOf(vevent, storedZones.get(uid) ?? null) ?? ''}`);
+        if (!match) continue;
+        vevent.removeAllSubcomponents('valarm');
+        for (const alarm of match.getAllSubcomponents('valarm')) {
+            // The one write path that keeps a client's own subcomponents: its Eigen lines are still untrusted.
+            stripEigenStamps(alarm);
+            vevent.addSubcomponent(alarm);
+        }
+    }
 }

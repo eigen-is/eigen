@@ -8,9 +8,9 @@ import type { Attendee, EventData, ImipMethod, Reminder } from '@workspace/lib/t
 import { IMIP_METHODS } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
 import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from './recurrence-limits';
-import { localToUtc, parseRecurrenceKey, recurrenceKey, utcToLocal } from './wall-clock';
+import { localToUtc, recurrenceKey, utcToLocal } from './wall-clock';
 
-// One source of truth, because the readers, the builder, the re-stamp and the strip must spell these alike; lowercase because ical.js lowercases names.
+// Lowercase, because ical.js lowercases every name it reads.
 export const EIGEN = {
     eventId: 'x-eigen-event-id',
     createdBy: 'x-eigen-created-by',
@@ -181,11 +181,12 @@ function parseUtcStamp(raw: unknown): Date | null {
     return new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}Z`);
 }
 
-// A stamp whose key, id or sequence will not parse is absent rather than fatal: the body it came from is untrusted.
+// A stranger's file can carry these lines too, so a stamp with no id or sequence is absent rather than fatal;
+// only the stored resource's own stamps, all keyed by Eigen, ever reach a row.
 export function readExclusionStamps(vevent: ICAL.Component): Map<string, ExclusionStamp> {
     const stamps = new Map<string, ExclusionStamp>();
     for (const prop of vevent.getAllProperties(EIGEN.exdate)) {
-        const key = parseRecurrenceKey(String(prop.getFirstValue() ?? ''));
+        const key = String(prop.getFirstValue() ?? '');
         const id = prop.getFirstParameter(EIGEN.eventId);
         const sequence = Number(prop.getFirstParameter(EIGEN.sequence));
         if (!key || !id || !Number.isFinite(sequence)) continue;
@@ -226,7 +227,7 @@ type StoredEvent = ParsedEvent & {
 export type IcsParseResult = {
     method?: ImipMethod;
     events: ParsedEvent[];
-    // One malformed VEVENT does not cost the file the rest of it, so each caller answers for itself: a PUT refuses the payload, a preview drops them, an import fails them.
+    // One malformed VEVENT does not cost the file the rest of it, so each caller decides what a skipped one means.
     skipped: number;
 };
 

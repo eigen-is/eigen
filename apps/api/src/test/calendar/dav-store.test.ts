@@ -172,6 +172,46 @@ describe('putResource', () => {
         expect(stored).not.toContain('forged-by-the-client');
     });
 
+    test('a linked copy refuses a body whose occurrence no key can name, and keeps its bytes', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const calendarId = await defaultCalendarId(harness);
+        await put(calendar, calendarId, 'linked.ics', vcal(event('linked@eigen', 'Linked')));
+        calendar.db
+            .update(schema.resources)
+            .set({
+                ics: sql`CAST(replace(CAST(${schema.resources.ics} AS TEXT), 'SUMMARY:Linked', 'SUMMARY:Linked\r\nX-EIGEN-ORGANIZER-EVENT:organizer-1') AS BLOB)`,
+            })
+            .where(eq(schema.resources.uri, 'linked.ics'))
+            .run();
+        const before = await resourceTextOf(calendar, calendarId, 'linked.ics');
+
+        // 31 December 9999 23:00Z is already 1 January 10000 in Tokyo.
+        const result = await put(
+            calendar,
+            calendarId,
+            'linked.ics',
+            vcal(
+                [
+                    'BEGIN:VEVENT',
+                    'UID:linked@eigen',
+                    'DTSTART;TZID=Asia/Tokyo:20260401T100000',
+                    'RRULE:FREQ=WEEKLY',
+                    'END:VEVENT',
+                ],
+                [
+                    'BEGIN:VEVENT',
+                    'UID:linked@eigen',
+                    'RECURRENCE-ID:99991231T230000Z',
+                    'DTSTART:99991231T230000Z',
+                    'END:VEVENT',
+                ],
+            ),
+        );
+        expect(result).toMatchObject({ ok: false, error: 'invalid' });
+        expect(await resourceTextOf(calendar, calendarId, 'linked.ics')).toBe(before);
+    });
+
     test('a resource with two masters for one UID is refused, where an override-only one stands alone', async () => {
         const harness = await makeCalendar();
         const calendarId = await defaultCalendarId(harness);

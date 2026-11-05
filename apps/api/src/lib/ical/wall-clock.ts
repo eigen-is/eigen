@@ -16,7 +16,7 @@ const intlCache = new Map<string, Intl.DateTimeFormat>();
 function getIntlFormatter(tz: string): Intl.DateTimeFormat {
     let fmt = intlCache.get(tz);
     if (!fmt) {
-        // Degrade a pre-existing poisoned TZID to UTC instead of throwing RangeError (heals already-broken rows).
+        // An unknown zone reads as UTC, where Intl would throw a RangeError.
         const safeZone = normalizeTimezone(tz) ?? 'UTC';
         fmt = new Intl.DateTimeFormat('en-GB', {
             timeZone: safeZone,
@@ -83,17 +83,21 @@ export function wallClockDate(date: Date, tz: string): Date {
     return new Date(Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second));
 }
 
-// Four digits, or `Date.parse` reads the year as no date; a year outside 0 to 9999 has no key, so a file naming one is refused.
+// Four digits, or `Date.parse` reads the year as no date. A year past 9999 has no key, so a CalDAV PUT
+// naming one is refused and a file read skips that VEVENT.
 export function recurrenceKey(year: number, month: number, day: number): string {
-    if (year < 0 || year > 9999) throw new Error(`No recurrence key for year ${year}`);
+    if (year > 9999) throw new Error(`No recurrence key for year ${year}`);
     const pad = (n: number, width: number) => String(n).padStart(width, '0');
     return `${pad(year, 4)}-${pad(month, 2)}-${pad(day, 2)}`;
 }
 
-// A key someone else wrote, where an old client sends a full ISO datetime; one naming no date is null, as RRule.between throws on it.
+// A key someone else wrote, where an old client sends a full ISO datetime. `Date.parse` reads 30 February
+// as 2 March, so only a date that comes back unchanged is a key.
 export function parseRecurrenceKey(value: string): string | null {
     const key = value.substring(0, 10);
-    return Number.isNaN(Date.parse(`${key}T00:00:00Z`)) ? null : key;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return null;
+    const date = new Date(`${key}T00:00:00Z`);
+    return recurrenceKey(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate()) === key ? key : null;
 }
 
 // A zoned rule iterates in wall-clock space and each hit converts back; the window stays in whatever space the caller asked in.

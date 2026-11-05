@@ -1582,6 +1582,17 @@ describe('Calendar', () => {
             );
             expect(res.status).toBe(400);
         });
+
+        // `Date.parse` reads these as 2 March, 1 March and 1 January, so each would write a second RECURRENCE-ID for that day.
+        test.each(['2026-02-30', '2026-03', '2026'])('create exception on %s returns 400', async (recurrenceDate) => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                exceptionBody(recurrenceDate, aliceRecurringEventId),
+            );
+            expect(res.status).toBe(400);
+            expect(await res.text()).toBe('Invalid occurrence date');
+        });
     });
 
     describe('Regression: recurrence DoS bounds (finding 19)', () => {
