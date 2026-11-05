@@ -1,130 +1,89 @@
 # Code Standards
 
-These are the rules for how code in Eigen is written: typing, style, imports, the patterns every hook and route follows, and the checklist a change passes before anyone calls it done. Read them before you write code, whether you are a person or an agent, and expect a reviewer to judge your change against them ([REVIEW-STANDARD.md](REVIEW-STANDARD.md)). The idea behind all of them is that new code looks like the code next to it.
-
-The rules are kept short on purpose. The reasoning and the BAD/GOOD code behind each section live in [CODE-EXAMPLES.md](CODE-EXAMPLES.md), under the same heading, and where files go is in [ARCHITECTURE.md](ARCHITECTURE.md). The rules a machine can count are enforced by Biome and a standards script, as [Standards Gates](#standards-gates) explains.
+How code in Eigen is written, and the bar a reviewer holds every change to ([REVIEW-STANDARD.md](REVIEW-STANDARD.md)). New code looks like the code next to it. Reasons and BAD/GOOD code are in [CODE-EXAMPLES.md](CODE-EXAMPLES.md) under the same headings, where files go is in [ARCHITECTURE.md](ARCHITECTURE.md), and what a machine can count is gated ([§ Standards Gates](#standards-gates)).
 
 ## Code Philosophy
 
-This codebase values **simplicity, directness, and consistency** over cleverness or abstraction. Code should be obvious at a glance. When in doubt, look at what already exists in the same directory and match it exactly.
+Simplicity, directness and consistency over cleverness. When in doubt, match what the same directory does.
 
-- Flat and direct: no service layers, no repository patterns, no dependency injection. Routes call domain classes directly. Domain classes query the database directly with Drizzle
-- Don't extract single-use helpers: a method that handles a complete workflow inline is better than several small methods you have to trace through. Only extract when logic is reused
-- Trust the type system fully: validate only at a boundary, which is anything a person or another program wrote, such as a request body, an uploaded or imported file, a collaborator's edit arriving through Yjs, inbound mail or an external API. What our own code produced is typed, not checked again: a reply from our own transform child, a message between Homes, a row or file we wrote, an argument from another module. So no shape check, `typeof` guard, null check or fallback default on typed data, and no try/catch to survive a malformed result of our own call. A child or Home that a bad upload compromised already has the filesystem, so re-checking its replies guards nothing. That trust only holds while types tell the truth, which is why casts are banned (§ Typing)
+- Flat and direct: no service layers, repository patterns or dependency injection. Routes call domain classes; domain classes query the database with Drizzle
+- No single-use helpers: one method for a whole workflow beats several you must trace. Extract only reused logic
+- Trust the type system fully. Validate only at a boundary, which is anything a person or another program wrote: a request body, an uploaded or imported file, a collaborator's Yjs edit, inbound mail, an external API. What our own code produced is never checked again: a reply from our own transform child, a message between Homes, a row or file we wrote, an argument from another module. So no shape check, `typeof` guard, null check or fallback default on typed data, and no try/catch to survive a malformed result of our own call. This holds only while types tell the truth, which is why casts are banned
 - No code for tests in production: no option, field, export, timeout knob or state reset that only a test uses. A test drives the public path
-- Consistency over originality: new code must look like the code next to it. Same patterns, same naming, same structure. Don't invent new patterns when existing ones work
-- Fewer lines beat more: removing code is always a good idea when what remains is cleaner and easier to understand. Over-engineering (a flag threaded through layers, a prop every caller passes the same value for, a seam that closes a case that cannot happen) is a broken window: remove it on touch, and don't add it to close a nit
-- Clean code beats more features: when a feature or an edge case can only be covered by a patch (a special case, a second code path, a flag, a cache, a retry), drop the feature or accept the edge case, and say so. The owner would rather ship less than grow a pile of patches. A fix goes to the cause, and when a second fix in one module needs a patch, the module's design is wrong: redesign it
-- Not every edge case needs code: a rare case may fail, with an error, a timeout or a retry the user makes, as long as the server stays up and responsive and no stored data is lost. Handle it only when it can crash or block the server, lose or corrupt data, or leak access
-- The file system is the source of truth, then the database. Keep no state in memory that a restart would lose or that can disagree with disk: no module-level maps, sets or caches in the API to save a read, a download or a job; read the file or the row again. Runtime state that only says what this process is doing right now (an open document, a lock, a restore in progress) is the exception. In the frontend, TanStack Query is the only cache
+- Consistency over originality: the neighbours' patterns, naming and structure; no new pattern where one exists
+- Fewer lines beat more: remove code whenever what remains is cleaner. Over-engineering (a flag threaded through layers, a prop every caller passes the same value for, a seam for a case that cannot happen) is a broken window: remove it on touch, never add it to close a nit
+- Clean code beats more features: a feature or edge case that only a patch (a special case, a second code path, a flag, a cache, a retry) can cover is dropped or accepted, and you say so. Fix at the cause; when a second fix in one module needs a patch, redesign the module
+- Not every edge case needs code: a rare case may fail with an error, a timeout or a user's retry while the server stays up and responsive and no stored data is lost. Handle it only when it can crash or block the server, lose or corrupt data, or leak access
+- The file system is the truth, then the database. No memory state a restart would lose or that can disagree with disk: no module-level maps, sets or caches in the API to save a read, a download or a job. State about what this process is doing now (an open document, a lock, a restore) is the exception. In the frontend, TanStack Query is the only cache
 - No placeholders: no stub method, type, field or flag for later. Code lands with its first real caller
-- No backward compatibility for now: no code for data an older build wrote. This holds until the owner says otherwise, which may be from 0.5.0. A renamed stored key is renamed, not kept beside the new one or dropped on read, and a reader for an old shape is deleted when you pass it, even when that loses data an older build wrote, such as an unreplayed edit
-- Fix the root cause, through the framework's own pipeline: a guest session goes through better-auth's API, never a row inserted by hand. Code that routes around a framework is a hack
-- Speed first: independent work runs in parallel (requests, uploads, copies), and heavy work stays off the main thread and the server's event loop. Fix a race where it starts, never by making work wait in line
-- Code that wipes or overwrites data first writes a timestamped copy it can be restored from, and a failed copy stops the wipe; skip it only when there is nothing to lose. A guard alone is not enough: a flag kept in another file than the data it guards can be wrong about that data
+- No backward compatibility for now (until the owner says otherwise, maybe from 0.5.0): no code for data an older build wrote. A renamed stored key is renamed, not kept beside the new one or dropped on read, and a reader for an old shape is deleted when you pass it, even if that loses an older build's data, such as an unreplayed edit
+- Fix the root cause through the framework's own pipeline: a guest session goes through better-auth's API, never a hand-inserted row
+- Speed first: independent work (requests, uploads, copies) runs in parallel; heavy work stays off the main thread and the server's event loop. Fix a race where it starts, never by queueing work
+- Code that wipes or overwrites data first writes a timestamped copy it can restore from, and a failed copy stops the wipe; skip it only when there is nothing to lose. A guard alone is not enough
 
 ## Review Hot Spots
 
-Six slips recur in review here, each with BAD/GOOD code in [CODE-EXAMPLES.md § Review Hot Spots](CODE-EXAMPLES.md#review-hot-spots): over-engineering, unnecessary error handling (try-catch only for fire-and-forget, external integrations and cleanup; never re-wrap `ApiError`), not matching existing patterns, adding code where it doesn't belong, adding unnecessary complexity, reinventing existing code.
+Six slips recur, with BAD/GOOD code in [CODE-EXAMPLES.md § Review Hot Spots](CODE-EXAMPLES.md#review-hot-spots): over-engineering, needless error handling (try/catch only for fire-and-forget, external integrations and cleanup; never re-wrap `ApiError`), not matching existing patterns, code in the wrong place, needless complexity, reinventing existing code.
 
 ## Typing
 
-Types flow end-to-end: Elysia route handler return type → Eden Treaty → hook → component. Don't break the chain. Reasoning per rule: [CODE-EXAMPLES.md § Typing](CODE-EXAMPLES.md#typing).
+Types flow end to end: Elysia handler return type → Eden Treaty → hook → component ([CODE-EXAMPLES.md § Typing](CODE-EXAMPLES.md#typing)).
 
-- No casts and no non-null assertions in new code: no `as Type`, `as any`, `as unknown as` or `!`; `as const` is fine. Narrow with a type guard or `instanceof`, or fix the type at its source (a route handler's return type, a schema, an optional field that is always set). Removing old casts elsewhere doesn't pay for a new one
-- Eden Treaty responses keep their inferred type: add an explicit return type to the backend route handler or domain method, using the shared type from `packages/lib/src/types/`
-- Shared types live in `packages/lib/src/types/[domain].ts`: never redefine one; if it doesn't exist yet, add it there so FE and BE share it. The exception is `@workspace/math`, a leaf package with no dependencies, which owns its own ([ARCHITECTURE.md § Dependency direction](ARCHITECTURE.md#dependency-direction))
+- No casts or non-null assertions in new code: no `as Type`, `as any`, `as unknown as` or `!` (`as const` is fine). Narrow with a type guard or `instanceof`, or fix the type at its source (a handler's return type, a schema, an optional field that is always set). Removing an old cast elsewhere doesn't pay for a new one
+- Eden responses keep their inferred type: the backend handler or domain method gets an explicit return type from `packages/lib/src/types/`
+- Shared types live in `packages/lib/src/types/[domain].ts`, never redefined; a missing one is added there. Only the leaf `@workspace/math` owns its own ([ARCHITECTURE.md § Dependency direction](ARCHITECTURE.md#dependency-direction))
 - `type` over `interface`, except when methods are needed
-- Infer locally, annotate publicly: no annotations where TypeScript infers; always explicit return types on backend route handlers, domain methods, and hooks
-- `import type` for type-only imports, as a statement of its own next to the value import from the same module (`import type { A } from 'x'` and `import { b } from 'x'`), so each import fits on one line
-- Drizzle `.$inferSelect` for DB row types: never redefine column types by hand
-- One type per concept: pass `User` or `DrivePath` even when a function reads two of its fields, never a narrower projection type. Convert a library's narrower shape where it enters. Test fixtures may keep their own
-- Readonly where the holder doesn't let you write: a hook, store or class that hands out a collection it owns types it `ReadonlySet`, `ReadonlyMap` or `readonly T[]`, so a caller changes it only through the API that re-renders or persists. A function takes a collection it doesn't change as readonly too. TypeScript enforces it once the type says so, and no lint rule asks for it, so review does. Apply it to the code you touch, not as a sweep
-- Only `apps/api`'s tsconfig sets `noPropertyAccessFromIndexSignature`; `packages/sheet`'s does not, so an index-signature read that compiles there fails in the API
+- Infer locally, annotate publicly: explicit return types on backend route handlers, domain methods and hooks, none where TypeScript infers
+- `import type` as its own statement beside the value import from the same module, so each import fits on one line
+- Drizzle `.$inferSelect` for row types, never hand-written column types
+- One type per concept: pass `User` or `DrivePath` even when a function reads two fields, never a narrower projection; convert a library's narrower shape where it enters. Test fixtures may keep their own
+- Readonly where the holder doesn't let you write: a collection a hook, store or class owns goes out as `ReadonlySet`, `ReadonlyMap` or `readonly T[]`, and a function takes one it doesn't change as readonly. No lint asks for it, so review does, on code you touch, not as a sweep
+- Only `apps/api`'s tsconfig sets `noPropertyAccessFromIndexSignature`: an index-signature read that compiles in `packages/sheet` fails in the API
 
 ## Code Style
 
-Examples per rule: [CODE-EXAMPLES.md § Code Style](CODE-EXAMPLES.md#code-style).
+Examples: [CODE-EXAMPLES.md § Code Style](CODE-EXAMPLES.md#code-style).
 
-- English everywhere: code, comments, docs, commit messages
-- No JSDoc: code should be self-documenting
-- Every `.ts`/`.tsx` source file, `scripts/` and the `packages/sheet` fork included, opens with a header comment and a blank line: two to five plain lines on what the file does, why it exists, and where it sits in the bigger picture (who calls it, when it runs). It stays true whatever other files do: what other files own (kinds, parts, callers) appears only as examples, never as a complete list. No file paths or doc links, which go stale. Test files, generated files and config files have none, and neither does a barrel that only re-exports, whose path already says what it holds. An older file without one gets it the first time someone changes it
-- Comments are rare. A name says what a thing is; a comment only says why, and only when a careful reader of this repo would not guess it. Most functions, fields and parameters have none, and no comment beats slop: reviewers flag a needless comment the same as dead code
-- A comment is one or two short lines. A reason that needs more is either a design decision, which goes once into the domain doc, or a sign that the code is too complex: simplify the code instead of explaining it
-- Never in a comment: who calls the code or a list of its callers, what the header or the domain doc already says, a tour of fields or states, an edge case (the test that pins it names it), a measurement or incident story, an answer to a reviewer, history, or "see X" chains
-- A comment longer than the code it explains is a patch smell: the code handles a special case. Fix the code, or accept the edge case (§ Code Philosophy) and delete both
-- Write a comment the way you would explain the code to a colleague: whole sentences, plain words a non-native reader gets on the first read, the reason first. No comma-chained clauses and no shorthand only the author can decode
-- Every class member states its access: `public`, `private` or `protected`, the narrowest that compiles
-- Class members in this order: fields, constructor, getters, lifecycle (init, close), then the rest
-- File names are kebab-case (`get-home.ts`); route files follow TanStack Router's naming. Named exports only, no `export default`, except in a config file whose tool requires one (`vite.config.ts`, the Drizzle config). An older file that breaks either is fixed when someone cleans it up
-- Backend errors use `ApiError`: `throw new ApiError(status, message)` for user-facing HTTP errors, never `throw new Error()`; internal invariants (db not open, missing config) may use `throw new Error()`
-- Think about every `await`: a bare async call returns a truthy Promise, so `if (!asyncFn())` is always false. Fire-and-forget has a `.catch()`. Skip the `await` when blocking would hurt response time and failure is acceptable
-- Sanitize user-provided paths: refuse `..`, `/` and control characters before filesystem or header use, and never put raw user input into an HTTP header
-- `for (const x of arr)`, not `arr.forEach` (es-toolkit's `forEach(coll, fn)` excepted). Flip one when you touch it
-- Theme tokens, not colors: `text-muted-foreground`, `bg-muted`, not `text-gray-500`; `selection-handle` for selection UI
-- Use `cn()` for class merging: from `@workspace/ui/lib/utils`, never raw `clsx`/`twMerge` or string concatenation
-- Name for grep-ability; don't shadow libraries: `use*`, `Eigen*`, `*Dialog`, `*Provider`, `invalidate*`, `*Keys`; never reuse a name a dependency owns (`useSearchQuery`, not `useSearch`) or give three helpers one name (`isMobile`)
-- Z-index: app-level components don't set one, and anything above 50 needs a comment. The scale and its rules: [LAYOUT.md § One z-index scale, and app code sets none](LAYOUT.md#one-z-index-scale-and-app-code-sets-none)
+- English everywhere. No JSDoc
+- Every `.ts`/`.tsx` source file, `scripts/` and the `packages/sheet` fork included, opens with a header comment and a blank line: two to five plain lines on what the file does, why it exists and where it sits (who calls it, when it runs). What other files own (kinds, parts, callers) appears only as examples, so it stays true when they change; no file paths or doc links. Test, generated and config files and a re-export-only barrel have none. An older file gets one the first time it changes. How: the [source-file skill](../.claude/skills/source-file/SKILL.md)
+- Comments are rare: one or two short lines with a why a careful reader of this repo would not guess, in plain whole sentences, reason first. Most functions, fields and parameters have none; a needless comment is flagged like dead code. A reason that needs more is a design decision for the domain doc, or code to simplify
+- Never in a comment: callers, what the header or domain doc says, a tour of fields or states, an edge case (its test names it), a measurement or incident, an answer to a reviewer, history, "see X" chains. A comment longer than its code is a patch smell: fix the code, or accept the edge case and delete both
+- Every class member states `public`, `private` or `protected`, the narrowest that compiles, in this order: fields, constructor, getters, lifecycle (init, close), the rest
+- Kebab-case file names; route files follow TanStack Router. Named exports only, except a config file whose tool needs a default (`vite.config.ts`, the Drizzle config). Fix an older file when you clean it up
+- User-facing HTTP errors are `throw new ApiError(status, message)`; `throw new Error()` only for internal invariants (db not open, missing config)
+- Think about every `await`: `if (!asyncFn())` is always false. Fire-and-forget has a `.catch()`; skip the `await` only when blocking hurts response time and failure is acceptable
+- Sanitize user paths: refuse `..`, `/` and control characters before filesystem or header use; never put raw user input in an HTTP header
+- `for (const x of arr)`, not `arr.forEach` (es-toolkit's `forEach(coll, fn)` excepted); flip one when you touch it
+- Theme tokens, not colors (`text-muted-foreground`, not `text-gray-500`; `selection-handle` for selection UI). Merge classes with `cn()` from `@workspace/ui/lib/utils`, never `clsx`, `twMerge` or concatenation
+- Name for grep: `use*`, `Eigen*`, `*Dialog`, `*Provider`, `invalidate*`, `*Keys`. Never reuse a dependency's name (`useSearchQuery`, not `useSearch`) or give three helpers one name (`isMobile`)
+- Z-index: app components set none, and above 50 needs a comment ([LAYOUT.md § One z-index scale, and app code sets none](LAYOUT.md#one-z-index-scale-and-app-code-sets-none))
 
 ### Imports
 
-Workspace imports resolve through each package's `exports` map, with no tsconfig aliases: if a specifier doesn't resolve, export the module from its barrel or give it an exports entry. **Never suffix a workspace specifier with `.ts`/`.tsx`.** Prefer the barrel over a deep import; for types and constants this table beats SHARED-PRIMITIVES.md's *Import from* column ([why](CODE-EXAMPLES.md#imports)). The backend imports lib only through React-free subpaths: [ARCHITECTURE.md § Backend imports of lib](ARCHITECTURE.md#backend-imports-of-lib).
+Workspace imports resolve through each package's `exports` map, never tsconfig aliases: a specifier that doesn't resolve needs a barrel export or an exports entry. **Never suffix a workspace specifier with `.ts`/`.tsx`.** Prefer the barrel to a deep import. Types come from `@workspace/lib/types/<domain>` and constants from `@workspace/lib/constants/<x>`, whatever SHARED-PRIMITIVES.md's *Import from* column says. Every specifier: [CODE-EXAMPLES.md § Imports](CODE-EXAMPLES.md#imports). The backend imports lib only through React-free subpaths ([ARCHITECTURE.md § Backend imports of lib](ARCHITECTURE.md#backend-imports-of-lib)).
 
-| Specifier | What you get |
-|---|---|
-| `@workspace/ui` | Root barrel: the everyday components ([ARCHITECTURE.md § Frontend](ARCHITECTURE.md#frontend), *Everyday UI*), the layout system (app/sidebar/toolbar, not pages), generic leaf primitives |
-| `@workspace/ui/components/[area]` | Area barrel (drive, chat, comments, editor, media, user, …) |
-| `@workspace/ui/components/[leaf]` | Extensionless deep import for a component its barrel doesn't export (`@workspace/ui/components/search/doc-search-provider`) |
-| `@workspace/ui/components/layout/[dir]` | Layout system barrels: `app`, `pages`, `sidebar`, `toolbar` |
-| `@workspace/ui/hooks/[hook]` | Shared DOM/interaction hooks (`@workspace/ui/hooks/use-long-press`) |
-| `@workspace/ui/lib/utils` | `cn()` utility |
-| `@workspace/lib/[domain]` | Domain barrel: hooks, query keys, invalidators |
-| `@workspace/lib/types/[domain]` | Shared FE/BE types |
-| `@workspace/lib/constants/[x]` | Shared constants (`@workspace/lib/constants/stale-time`) |
-| `@workspace/lib/api` | Eden Treaty API client factories |
-| `@workspace/lib/date` | Date formatting (`formatDate`, `formatTime`, `formatTimeAgo`) |
-| `@workspace/lib/validation` | Shared FE/BE validation schemas |
-| `@workspace/math` | The math package's one barrel: the equation tree, its OMML, MathML and LaTeX readers and writers, and the LaTeX command table ([MATH.md](MATH.md)) |
+**User-visible dates are day-month-year**: "5 January 2026", "5 Jan 2026, 14:30", "Mon 5 Jan", never "January 5, 2026". Use `formatDayMonth` / `formatDate` from `@workspace/lib/date` (not `'en-GB'`), and `d MMM yyyy` for hand-built shapes. Every `toLocale*String` on a date passes `'en'`, never `[]` or no locale, or a Dutch browser writes "januari"; fix a sibling that passes `[]` on touch. A plain number's `.toLocaleString()` stays. Other spelling is en-US: fix British spelling on touch.
 
-**User-visible dates are day-month-year**: "5 January 2026", "5 Jan", "5 Jan 2026, 14:30", "Mon 5 Jan", never "January 5, 2026". Format through `formatDayMonth` / `formatDate` in `@workspace/lib/date` (they assemble the order from the `'en'` locale's parts; `'en-GB'` spells a short September "Sept" in browsers), and write hand-built shapes as `d MMM yyyy`. Every `toLocale*String` on a date passes `'en'`, never `[]` or no locale, or a Dutch browser writes "januari" into the English UI; a sibling that passes `[]` is a bug to fix on touch. A plain number's `.toLocaleString()` stays as it is. Spelling everywhere else stays en-US: fix British spelling on touch.
-
-**UI labels are sentence case**: only the first word and proper nouns start with a capital, so "Keep aspect ratio", "Page setup", "Delete event", never "Keep Aspect Ratio". That covers button text, menu items, dialog titles, tabs, field labels, tooltips, placeholders, toasts, empty states and section headings. Proper nouns keep their case: Eigen and its apps used as names (Drive, Docs, Sheets, Slides, Mail, Calendar, Contacts, Chat, Stickies, Vector, Space), other products (Word, Excel, PowerPoint, Google Docs, Thunderbird), protocols and formats (WebDAV, CalDAV, IMAP, S3, PDF, CSV, URL, ID, 2FA) and key names (Enter, Tab, Shift). `bun scripts/check-standards.ts` fails on a capitalized word after the first in a label prop or label element, and `PROPER_NOUNS` in `scripts/sentence-case.ts` is the one list of names that keep their capital. A help-center article quotes a label character for character, so a renamed label changes the articles that bold it in the same commit.
+**UI labels are sentence case**: only the first word and proper nouns start with a capital ("Keep aspect ratio"), in buttons, menu items, dialog titles, tabs, field labels, tooltips, placeholders, toasts, empty states and section headings. `bun scripts/check-standards.ts` fails a capital after the first word in a label prop or element; `PROPER_NOUNS` in `scripts/sentence-case.ts` is the one list of names that keep theirs. Help-center articles quote labels exactly, so a renamed label changes the articles that bold it in the same commit.
 
 ## Key Patterns
 
 Worked examples: [CODE-EXAMPLES.md § Key Patterns](CODE-EXAMPLES.md#key-patterns).
 
-- **Query keys**: hierarchical per domain (`driveKeys.folder(ownerId, mountId, pathId)`) and always including `ownerId`, or personal and team contexts serve each other's stale cache. Every `useQuery` has: `queryKey` from the domain keys, `queryFn` with error checking, an `enabled` guard, an explicit `staleTime`
-- **API client (Eden Treaty)**: `driveApi({ ownerId })({ mountId }).folder({ pathId }).get()`; types flow directly from the Elysia route definitions, no manual type sync
-- **Error handling**: in hooks (`packages/lib/src/core/[domain]/hooks/`), never in app components: every `useMutation` has `onError` using `onMutationError` from `api-error.ts`; apps never add `try/catch` + `toast.error()`. Full pattern: [NOTIFICATIONS.md](NOTIFICATIONS.md)
-- **Invalidation functions**: export `invalidateFoo(queryClient, ...)` next to the query keys; apps call these, never `useQueryClient` + `invalidateQueries()` directly
-- **Timestamps are `Date` end to end**: an `INTEGER` column of Unix seconds with Drizzle `mode: 'timestamp'`, routes that return `Date` (never `.toISOString()`), and shared types that say `Date`, because Eden's reviver turns the ISO string back into one. A path-param time bound stays `t.Numeric()`. `assertJson<T>` in the API tests and a raw `fetch` + `res.json()` skip the reviver, so revive at that seam. The reviver also turns a bare `YYYY-MM-DD` into a `Date`, so date-only payloads go through `plainApi`
+- **Query keys** are hierarchical per domain (`driveKeys.folder(ownerId, mountId, pathId)`) and always include `ownerId`, or personal and team contexts serve each other's stale cache. Every `useQuery` has a `queryKey` from the domain keys, a `queryFn` that checks errors, an `enabled` guard and an explicit `staleTime`
+- **Eden Treaty**: `driveApi({ ownerId })({ mountId }).folder({ pathId }).get()`, typed from the Elysia routes
+- **Errors are handled in hooks**, never app components: every `useMutation` has an `onError` using `onMutationError` from `api-error.ts`; apps add no `try/catch` + `toast.error()` ([NOTIFICATIONS.md](NOTIFICATIONS.md))
+- **Invalidation**: export `invalidateFoo(queryClient, ...)` beside the query keys; apps call it, never `useQueryClient` + `invalidateQueries()`
+- **Timestamps are `Date` end to end**: an `INTEGER` column of Unix seconds with Drizzle `mode: 'timestamp'`, routes that return `Date` (never `.toISOString()`), shared types that say `Date`; Eden's reviver restores it. A path-param time bound stays `t.Numeric()`. `assertJson<T>` in API tests and a raw `fetch` + `res.json()` skip the reviver, so revive there. The reviver also turns a bare `YYYY-MM-DD` into a `Date`, so date-only payloads go through `plainApi`
 
 ## Self-Review Checklist
 
-Before declaring any task complete, review every changed file against this list:
-
-- Did you read 2-3 existing files in the same directory before writing new code?
-- Are hooks in `packages/lib/src/core/[domain]/hooks/`, not in app components?
-- Are there any unnecessary abstractions, helpers, wrappers, or indirection?
-- Did you check `packages/ui/src/components/` and `packages/lib/src/` for existing utilities/components before writing new ones? (`cn()`, `formatDate`, `TooltipButton`, `DeleteDialog`, etc.)
-- Are you using theme tokens, not hardcoded colors?
-- Did you avoid adding try-catch, null checks, or fallbacks for cases that can't happen, and any check on data our own typed code produced?
-- Does production code carry an option, export or reset that only a test uses?
-- Do new `useQuery` hooks have `enabled` guards and `staleTime`?
-- Does the new code match the patterns and naming of its neighbors?
-- Does a hook, store or class you changed hand out a collection it owns as a mutable type, or take one it never changes as mutable?
-- Does every file you changed open with a header comment that is still true?
-- Is every comment you wrote at most two lines, a why the code can't say, and would a colleague understand it on the first read?
-- Did you add code for a rare edge case that can't crash or block the server, lose data or leak access? Remove it
-- Any new `z-index` set above 50? If yes, is it on the documented exceptions or does it have a `// Why:` comment? (See [LAYOUT.md § One z-index scale, and app code sets none](LAYOUT.md#one-z-index-scale-and-app-code-sets-none))
+Before calling a task complete, check every changed file: 2–3 siblings read first; hooks in `packages/lib/src/core/[domain]/hooks/`; no needless abstraction, helper, wrapper or indirection; existing utilities and components reused (`cn()`, `formatDate`, `TooltipButton`, `DeleteDialog`); theme tokens; no try/catch, null check or fallback for a case that can't happen or on data our own typed code produced; no option, export or reset only a test uses; `enabled` and `staleTime` on new `useQuery` hooks; the neighbours' patterns and naming; owned collections handed out readonly, unchanged ones taken readonly; a header comment that is still true; every comment at most two lines, a why the code can't say, clear on first read; no code for a rare edge case that can't crash or block the server, lose data or leak access; a `z-index` above 50 a documented exception or with a `// Why:` comment.
 
 ## Standards Gates
 
-The mechanical rules are enforced, not just documented: Biome carries what it can express, and `bun scripts/check-standards.ts` (part of `bun run check`) counts twenty metrics over `apps/` and `packages/`: thirteen hard zeros and seven ratcheting counts whose allowance in `scripts/standards-baseline.json` can fall but never rise. Casts and `!` are allowed per file, so a new one fails even where the same diff removes another, and a file the baseline doesn't list is allowed none; a `git mv` moves the file's entries by hand in the same commit. Each run rewrites `scripts/standards-baseline.json` when a count fell, counting the working tree: commit it with the change, or reset it if the drop isn't yours, and never leave it dirty in a shared tree. What each metric catches: [CODE-EXAMPLES.md § Standards Gates](CODE-EXAMPLES.md#standards-gates).
+Biome carries what it can express, including `style/useImportType` with `separatedType` and `style/useConsistentMemberAccessibility` with `explicit`. `bun scripts/check-standards.ts`, part of `bun run check`, counts twenty metrics over `apps/` and `packages/`: thirteen hard zeros and seven ratchets whose allowance in `scripts/standards-baseline.json` can fall but never rise. Casts and `!` are allowed per file, so a new one fails even where the same diff removes another, and an unlisted file is allowed none; a `git mv` moves the file's entries by hand in the same commit. Each run rewrites the baseline when a count fell, counting the working tree: commit it with the change, or reset it if the drop isn't yours; never leave it dirty in a shared tree. What each metric catches: [CODE-EXAMPLES.md § Standards Gates](CODE-EXAMPLES.md#standards-gates).
 
-An exported primitive needs a user. Search [SHARED-PRIMITIVES.md](SHARED-PRIMITIVES.md) before you build one, and export one only for a caller outside its file: a function, hook, constant or component the index lists that nothing else imports fails the standards script, and such a type counts against its baseline. One that only tests import is listed but passes, and the props type of a component that is used may stay exported.
+An exported primitive needs a user outside its file: search [SHARED-PRIMITIVES.md](SHARED-PRIMITIVES.md) before building one. A function, hook, constant or component the index lists that nothing else imports fails the script, and such a type counts against its baseline; one only tests import passes, and a used component's props type may stay exported.
 
-Biome also enforces the import and class rules in § Code Style: `style/useImportType` with `separatedType`, and `style/useConsistentMemberAccessibility` with `explicit`.
-
-Never restructure code only to silence a lint rule. Use a lint-clean idiom that reads naturally (`/\p{Cc}/gu` for control characters), else a `biome-ignore` with a one-line reason, and raise its baseline in `scripts/standards-baseline.json` by hand in the same commit. The ratchet stops laziness, not natural code.
+Never restructure code just to silence a lint rule: use a lint-clean idiom that reads naturally (`/\p{Cc}/gu` for control characters), else a `biome-ignore` with a one-line reason and its baseline raised by hand in the same commit.

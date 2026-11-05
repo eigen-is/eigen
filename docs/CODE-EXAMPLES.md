@@ -4,6 +4,14 @@
 
 Open a section here when a rule in CODE-STANDARDS.md is not obvious, or when a review points at one of the hot spots. Each section carries the name of the CODE-STANDARDS.md section it explains. A rule itself changes in CODE-STANDARDS.md, and this file follows it.
 
+## Code Philosophy
+
+The rules are in [CODE-STANDARDS.md § Code Philosophy](CODE-STANDARDS.md#code-philosophy); these are the reasons that are not obvious from them.
+
+- **Our own replies are not re-checked** even from a child process or another Home, because a child or Home that a bad upload compromised already has the filesystem: re-checking its replies guards nothing.
+- **A wipe needs a restorable copy, not only a guard**, because a flag kept in another file than the data it guards can be wrong about that data.
+- **Patches cost more than the features they save**: the owner would rather ship less than grow a pile of special cases, flags and retries. Code that routes around a framework's own pipeline is a hack of the same kind.
+
 ## Review Hot Spots
 
 These six slips recur in review here. Each shows the shape to avoid and the shape this codebase uses.
@@ -178,15 +186,32 @@ The rules are in [CODE-STANDARDS.md § Code Style](CODE-STANDARDS.md#code-style)
 - **Backend errors use `ApiError`**: `throw new ApiError(status, message)` for user-facing HTTP errors, never `throw new Error()`. Exception: internal invariants (db not open, missing config) may use `throw new Error()` since an HTTP status code wouldn't be semantically correct
 - **Theme tokens, not colors**: use `text-muted-foreground`, `bg-muted`, not `text-gray-500`, `bg-blue-50`. Use `selection-handle` token for selection UI (resize handles, bounding boxes)
 - **Use `cn()` for class merging**: import from `@workspace/ui/lib/utils`, never use raw `clsx`/`twMerge` or string concatenation for conditional Tailwind classes
+- **UI labels are sentence case**: the proper nouns that keep their capital are Eigen and its apps used as names (Drive, Docs, Sheets, Slides, Mail, Calendar, Contacts, Chat, Stickies, Vector, Space), other products (Word, Excel, PowerPoint, Google Docs, Thunderbird), protocols and formats (WebDAV, CalDAV, IMAP, S3, PDF, CSV, URL, ID, 2FA) and key names (Enter, Tab, Shift). The gate's list is `PROPER_NOUNS` in `scripts/sentence-case.ts`. User-visible dates go through `formatDayMonth` / `formatDate`, which assemble the day-month order from the `'en'` locale's parts, because `'en-GB'` spells a short September "Sept" in browsers
 - **Name for grep-ability; don't shadow libraries**: use the established prefixes so a whole category is one search away: `use*` (hooks), `Eigen*` (brand components), `*Dialog`, `*Provider`, `invalidate*` (cache helpers), `*Keys` (query-key factories). Don't reuse a name a dependency already owns (our search hook is `useSearchQuery`, not `useSearch`, to stay clear of TanStack Router's `useSearch`), and don't give three different helpers the same name (`isMobile`)
 
 ## Imports
 
-The resolver table is in [CODE-STANDARDS.md § Imports](CODE-STANDARDS.md#imports); this is the reasoning around it.
+The rules are in [CODE-STANDARDS.md § Imports](CODE-STANDARDS.md#imports); this is the resolver table and the reasoning around it.
+
+| Specifier | What you get |
+|---|---|
+| `@workspace/ui` | Root barrel: the everyday components ([ARCHITECTURE.md § Frontend](ARCHITECTURE.md#frontend), *Everyday UI*), the layout system (app/sidebar/toolbar, not pages), generic leaf primitives |
+| `@workspace/ui/components/[area]` | Area barrel (drive, chat, comments, editor, media, user, …) |
+| `@workspace/ui/components/[leaf]` | Extensionless deep import for a component its barrel doesn't export (`@workspace/ui/components/search/doc-search-provider`) |
+| `@workspace/ui/components/layout/[dir]` | Layout system barrels: `app`, `pages`, `sidebar`, `toolbar` |
+| `@workspace/ui/hooks/[hook]` | Shared DOM/interaction hooks (`@workspace/ui/hooks/use-long-press`) |
+| `@workspace/ui/lib/utils` | `cn()` utility |
+| `@workspace/lib/[domain]` | Domain barrel: hooks, query keys, invalidators |
+| `@workspace/lib/types/[domain]` | Shared FE/BE types |
+| `@workspace/lib/constants/[x]` | Shared constants (`@workspace/lib/constants/stale-time`) |
+| `@workspace/lib/api` | Eden Treaty API client factories |
+| `@workspace/lib/date` | Date formatting (`formatDate`, `formatTime`, `formatTimeAgo`) |
+| `@workspace/lib/validation` | Shared FE/BE validation schemas |
+| `@workspace/math` | The math package's one barrel: the equation tree, its OMML, MathML and LaTeX readers and writers, and the LaTeX command table ([MATH.md](MATH.md)) |
 
 Workspace imports resolve through each package's `exports` map (`packages/*/package.json`). There are no tsconfig path aliases for `@workspace/*`. If a specifier doesn't resolve, the module isn't public: export it from its barrel or give it an exports entry, don't reach around the map. **Never suffix a workspace specifier with `.ts`/`.tsx`**: suffixed specifiers don't resolve, and Biome rejects them. An exports-map array target is for tsc only, since Bun takes the first entry, and a `*` in a subpath also matches across `/`.
 
-Prefer the barrel over a deep import when both reach the same primitive. SHARED-PRIMITIVES.md's *Import from* column lists the shortest specifier that resolves each primitive. It is the right default for components, hooks, and utils, but **not** authoritative for types and constants, where it collapses to the aggregate `@workspace/lib/types` / `@workspace/lib/constants`. There the resolver table in CODE-STANDARDS.md wins: import types from `@workspace/lib/types/<domain>` and constants from `@workspace/lib/constants/<x>`; the bare aggregate specifiers are tolerated, not the convention. Backend code imports lib only through the React-free subpaths: see [ARCHITECTURE.md § Backend imports of lib](ARCHITECTURE.md#backend-imports-of-lib).
+Prefer the barrel over a deep import when both reach the same primitive. SHARED-PRIMITIVES.md's *Import from* column lists the shortest specifier that resolves each primitive. It is the right default for components, hooks, and utils, but **not** authoritative for types and constants, where it collapses to the aggregate `@workspace/lib/types` / `@workspace/lib/constants`. There the table above wins: import types from `@workspace/lib/types/<domain>` and constants from `@workspace/lib/constants/<x>`; the bare aggregate specifiers are tolerated, not the convention. Backend code imports lib only through the React-free subpaths: see [ARCHITECTURE.md § Backend imports of lib](ARCHITECTURE.md#backend-imports-of-lib).
 
 ## Key Patterns
 
@@ -230,5 +255,7 @@ Thirteen are hard zeros, and any hit fails: `"use client"` directives, imports r
 - **Capitalized words in UI labels**: a word after the first that starts with a capital fails, in a string given to `label`, `title`, `placeholder`, `tooltipText`, `submitLabel`, `dialogTitle`, `confirmTitle`, `confirmText` or `cancelText` and in the text of `DialogTitle`, `Label`, `FormLabel` and `FieldLabel` ([CODE-STANDARDS.md](CODE-STANDARDS.md), UI labels are sentence case). Proper nouns pass from `PROPER_NOUNS` in `scripts/sentence-case.ts`, grown only from a real hit, and so does any all-caps acronym; the demo seed under `apps/api/src/scripts/demo/` is sample content and is skipped
 
 The other seven ratchet: `as Type` casts, `!` non-null assertions, `interface` declarations (module augmentation excepted, since it only merges through interfaces), `biome-ignore` suppressions, JSDoc blocks, raw Tailwind color utilities, and shared types nothing imports, counted as the primitives above are, where the props type of a used component is not counted. Their allowance lives in `scripts/standards-baseline.json`, so a count can fall but never rise. Casts and `!` are allowed per file, a map from path to count, so a new one fails even when the same diff removes one elsewhere, and a file without an entry is allowed none. A `!` counts after a name, a call or an index, `!=` excepted, so `let x!: T` counts too. The other five keep one total. Every run writes a count that fell into the baseline, so commit `scripts/standards-baseline.json` with the cleanup; the script never raises a baseline. A `git mv` moves a file's cast and `!` entries to its new path by hand in the same commit, or the moved file starts at none. `bun run standards -- --verbose` prints the per-file breakdown.
+
+The ratchet stops laziness, not natural code: a `biome-ignore` with a reason and a hand-raised baseline beats restructuring code only to silence a rule.
 
 The script reads its files from `git ls-files`, so a probe file that tests a gate must be tracked, or the gate never sees it.
