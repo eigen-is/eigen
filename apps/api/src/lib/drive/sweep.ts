@@ -80,7 +80,10 @@ export async function sweepDocument(drive: Drive, container: DrivePath): Promise
     const versionStates = rows.map((row) => row.names);
     const known = new Set(rows.map((row) => row.versionPathId));
     for (const version of read.versions) {
-        if (!known.has(version.id)) versionStates.push(await readVersionNames(mount, documentType, version.id));
+        if (known.has(version.id)) continue;
+        const names = await storedReferences(mount, documentType, version.id);
+        putVersionReferences(mount, { versionPathId: version.id, readerVersion: REFERENCE_READER_VERSION, names });
+        versionStates.push(names);
     }
     const versionNames = foldedNames(versionStates);
     if (unnamed(oldMedia, versionNames.media).length + unnamed(idleThreads, versionNames.chat).length === 0) return;
@@ -172,16 +175,6 @@ async function readFence(
     ]);
     const fence = JSON.stringify([dataDb?.size, dataDb?.updatedAt.getTime(), versions.map((version) => version.id)]);
     return { dataDb, versions, fence };
-}
-
-async function readVersionNames(
-    mount: Mount,
-    documentType: DriveCollabType,
-    versionId: string,
-): Promise<DocumentReferences> {
-    const names = await storedReferences(mount, documentType, versionId);
-    putVersionReferences(mount, { versionPathId: versionId, readerVersion: REFERENCE_READER_VERSION, names });
-    return names;
 }
 
 // The parts one stored state names, such as a version or a closed document's data.db. It is read from a temp copy of
