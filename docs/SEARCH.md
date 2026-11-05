@@ -76,13 +76,13 @@ An `.eml` is not searchable under any of its mimes. Its raw body is headers, bou
 - `copyPath`, because a byte-copied container fires no `onSync`
 - the v6 migration, which marks every existing container and text file
 
-A new row calls `markDirty`. An existing row bumps its generation before the write that sets the bit and calls `kick()` after it.
+A producer calls the queue's `kick()` after the write that sets the bit, since a drain kicked before it could find no dirty row.
 
 ## The queue extracts a path at most once per two minutes
 
 `ContentReindexQueue` (`apps/api/src/lib/mount/content-reindex-queue.ts`) is the read-side twin of the S3 `UploadQueue`: one drain loop per mount, batches of 100, and a timer set for when the earliest capped row comes due, with no process-wide poll. A path re-extracts at most once per `CONTENT_REINDEX_CAP_SECONDS` (120 s). The cap stops a long edit session or a busy chat from re-extracting a big body on every 30-second sync.
 
-A successful extract writes `path_content` and clears the bit, unless a write landed while it ran. A per-path in-memory generation fences the clear, so the newer content keeps the bit and re-extracts after the cap. A failed extract is logged, stamps `contentIndexedAt` and keeps the bit, so a storage hiccup retries after the cap instead of dropping the file from body search. A 410 is the exception: a document whose stored data is gone answers it on every open, so it indexes as empty and a version restore marks it dirty again ([STORAGE.md](STORAGE.md#a-gone-object-answers-410-an-outage-503)). Mount teardown aborts the in-flight read and waits for the extract with a bounded timeout. The drain stops at the abort without stamping the row, and the leftover dirty rows drain on the next mount open.
+The drain clears the bit before it extracts, so a write that lands while the extract runs sets it again and the newer content re-extracts after the cap. A crash mid-extract, or a close that gives up on a hung extract, loses the bit, and that body stays stale in search until the next write. That is accepted, because no stored data is lost. A failed extract is logged, sets the bit back and stamps `contentIndexedAt`, so a storage hiccup retries after the cap instead of dropping the file from body search. A 410 is the exception: a document whose stored data is gone answers it on every open, so it indexes as empty and a version restore marks it dirty again ([STORAGE.md](STORAGE.md#a-gone-object-answers-410-an-outage-503)). Mount teardown aborts the in-flight read and waits for the extract with a bounded timeout. The drain sets the bit back at the abort without stamping the row, and the leftover dirty rows drain on the next mount open.
 
 ## The route is self-only and returns domain types
 

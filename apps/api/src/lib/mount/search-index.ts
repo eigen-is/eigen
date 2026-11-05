@@ -39,8 +39,7 @@ export function getContentDirtyPaths(mount: Mount, reindexCapSeconds: number, li
 }
 
 // When the first changed path that is not due yet becomes due, in epoch ms, or null when nothing changed. A path
-// never indexed is due at once, so a path marked during a turn is never left behind. The queue sets its timer
-// by it instead of polling.
+// never indexed is due at once, so a path marked during a turn is never left behind.
 export function earliestPendingReindexAt(mount: Mount, reindexCapSeconds: number): number | null {
     const row = mount.db.all<{ dueSec: number | null }>(sql`
         SELECT MIN(CASE WHEN contentIndexedAt IS NULL THEN 0 ELSE contentIndexedAt + ${reindexCapSeconds} END) AS dueSec
@@ -55,13 +54,11 @@ export function markContentDirty(mount: Mount, pathId: string): void {
     mount.db.update(paths).set({ contentDirty: 1 }).where(eq(paths.id, pathId)).run();
 }
 
-export function markContentIndexed(mount: Mount, pathId: string): void {
-    mount.db.update(paths).set({ contentDirty: 0, contentIndexedAt: new Date() }).where(eq(paths.id, pathId)).run();
+export function clearContentDirty(mount: Mount, pathId: string): void {
+    mount.db.update(paths).set({ contentDirty: 0 }).where(eq(paths.id, pathId)).run();
 }
 
-// A failed extract stamps the time of the try but keeps the dirty mark. The cap then puts the retry off to a later
-// turn, and the document stays in body search meanwhile.
-export function markContentIndexAttempted(mount: Mount, pathId: string): void {
+export function markContentIndexed(mount: Mount, pathId: string): void {
     mount.db.update(paths).set({ contentIndexedAt: new Date() }).where(eq(paths.id, pathId)).run();
 }
 
@@ -109,13 +106,11 @@ export function searchPaths(mount: Mount, opts: { q: string; limit: number }): D
         .map((r) => mount.toDrivePath(r));
 }
 
-// A document's data.db just synced, so the document's text is read again. Another database in it, such as its
-// comments.db, marks nothing. Only the dirty mark changes, never the name or updatedAt, so the name index is left
-// alone.
+// A document's data.db just synced, so its text is read again, and another database in it marks nothing. Only the
+// dirty mark changes, never the name or updatedAt, so the name index is left alone.
 export async function markContainerContentDirty(mount: Mount, dataDbPathId: string): Promise<void> {
     const dataDb = await mount.getPath(dataDbPathId);
     if (dataDb?.name !== CONTAINER_DATA_DB || !dataDb.parentId) return;
-    mount.reindexQueue?.bumpGeneration(dataDb.parentId);
     markContentDirty(mount, dataDb.parentId);
     mount.reindexQueue?.kick();
 }

@@ -164,7 +164,7 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
         const { single } = await seed(user);
         const mount = await defaultMount(user);
         // Indexed with its old bytes when the database is copied.
-        mount.markContentIndexed(single.id);
+        mount.clearContentDirty(single.id);
         const overwritten = Buffer.from('single, overwritten');
         const { folder } = await captureDuring(user, () => mount.writeFile(single.id, overwritten));
         expect(readFileSync(join(folder, 'home/mounts', M, 'data/zz-single.txt'))).toEqual(overwritten);
@@ -204,7 +204,7 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
         const mount = await defaultMount(user);
         const [first] = await driveGetList(user.sessionToken, user.id, M, `folder/${projects.id}`);
         await mount.db.update(paths).set({ hash: null }).where(eq(paths.id, first!.id));
-        mount.markContentIndexed(first!.id);
+        mount.clearContentDirty(first!.id);
         // Reading the folder caches its size, which the archived metadata.db copy then carries.
         const { size } = (await mount.getPath(projects.id))!;
         const { folder } = await snapshotInto(await getHome(user.id), 'full');

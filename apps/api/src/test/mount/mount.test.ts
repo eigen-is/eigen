@@ -2574,8 +2574,8 @@ describe('content index dirty marks', () => {
     test('overwriting a plaintext file re-marks it contentDirty; a binary overwrite does not', async () => {
         const txt = await mount.createFile(rootId, 'rewrite.txt', 'text/plain', 0, undefined);
         const png = await mount.createFile(rootId, 'rewrite.png', 'image/png', 0, undefined);
-        mount.markContentIndexed(txt);
-        mount.markContentIndexed(png);
+        mount.clearContentDirty(txt);
+        mount.clearContentDirty(png);
 
         await mount.writeFile(txt, Buffer.from('fresh text'));
         await mount.writeFile(png, Buffer.from([137, 80, 78, 71]));
@@ -2588,8 +2588,8 @@ describe('content index dirty marks', () => {
     test('overwriting from a temp file (streaming PUT) follows the same searchable gate', async () => {
         const txt = await mount.createFile(rootId, 'stream.txt', 'text/plain', 0, undefined);
         const png = await mount.createFile(rootId, 'stream.png', 'image/png', 0, undefined);
-        mount.markContentIndexed(txt);
-        mount.markContentIndexed(png);
+        mount.clearContentDirty(txt);
+        mount.clearContentDirty(png);
 
         await Bun.write(mount.getTempPath('overwrite-txt'), 'streamed text');
         await mount.writeFileFromTemp(txt, 'overwrite-txt', 13, 'hash-a');

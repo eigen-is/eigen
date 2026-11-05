@@ -670,7 +670,7 @@ export class Mount {
         });
 
         await this.invalidateSizesFrom(parentId);
-        if (searchable) this.reindexQueue?.markDirty(fileId);
+        if (searchable) this.reindexQueue?.kick();
 
         return fileId;
     }
@@ -1173,7 +1173,6 @@ export class Mount {
             .where(eq(paths.id, pathId))
             .get();
         const searchable = !!row && isSearchableTextFile(row.mimeType, row.name);
-        if (searchable) this.reindexQueue?.bumpGeneration(pathId);
         const committed = await this.db
             .update(paths)
             .set({ size, hash, updatedAt: new Date(), contentDirty: searchable ? 1 : 0 })
@@ -1427,12 +1426,16 @@ export class Mount {
         return searchIndex.earliestPendingReindexAt(this, reindexCapSeconds);
     }
 
-    public markContentIndexed(pathId: string): void {
-        searchIndex.markContentIndexed(this, pathId);
+    public markContentDirty(pathId: string): void {
+        searchIndex.markContentDirty(this, pathId);
     }
 
-    public markContentIndexAttempted(pathId: string): void {
-        searchIndex.markContentIndexAttempted(this, pathId);
+    public clearContentDirty(pathId: string): void {
+        searchIndex.clearContentDirty(this, pathId);
+    }
+
+    public markContentIndexed(pathId: string): void {
+        searchIndex.markContentIndexed(this, pathId);
     }
 
     public searchPaths(opts: { q: string; limit: number }): DrivePath[] {

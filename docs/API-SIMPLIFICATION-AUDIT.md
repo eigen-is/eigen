@@ -10,7 +10,7 @@ Like ROADMAP and the proposals, this doc holds only open work: strike a finding 
 
 [CODE-STANDARDS.md](CODE-STANDARDS.md) already says: "when a second fix in one module needs a patch, the module's design is wrong: redesign it", "drop the feature or accept the edge case", "no module-level maps, sets or caches", and "no code for data an older build wrote". The git history shows runs of 4 to 10 `fix(...)` commits on one mechanism within days, so the rule was known but not triggered. Seven shapes recur.
 
-1. **Wrong order, then guards for the gap.** A step runs before the fact it depends on is written, and each later fix guards another way into the gap. The cure is to reorder: write the fact first. Examples: the trash closes documents before it marks the row ([M1](#m1)), the reindex clears its dirty bit after the extract ([M3](#m3)), and a PUT may start while its predecessor is still on the wire ([M2](#m2)).
+1. **Wrong order, then guards for the gap.** A step runs before the fact it depends on is written, and each later fix guards another way into the gap. The cure is to reorder: write the fact first. Examples: the trash closes documents before it marks the row ([M1](#m1)) and a PUT may start while its predecessor is still on the wire ([M2](#m2)).
 2. **A second copy of the truth.** A sidecar, an extra row or a cache beside the real thing, and every reader has to merge the two. Examples: the draft sidecar ([ML1](#ml1)), a stored "cancelled" event row per EXDATE ([C2](#c2)), a contact photo in three forms ([C5](#c5)), preview `.failed` markers next to a compaction strike map next to an extract-text 413 ([T4](#t4)).
 3. **Predicting the cost exactly instead of capping it.** Exchange rates, line estimates and predicted waits, each tuned after a crafted input. Examples: the sheet export's six rates ([X2](#x2)), the runner's admission by predicted wait ([T8](#t8)), the footnote line estimate ([X6](#x6)), the text-box height estimate ([X7](#x7)) and the pptx reader's overlapping counters ([X8](#x8)).
 4. **Precision for a rare race or a rare setup.** Exactly what [the owner's rule](CODE-STANDARDS.md) says to drop: "may forget, must not corrupt". Examples: maildir watchers that match a recreated folder by inode ([ML6](#ml6)), rollback checking data twice ([B4](#b4)), a stop that waits for a running backup ([B3](#b3)), the sheets compaction base for a tab that slept through it ([T2](#t2)).
@@ -38,7 +38,6 @@ The best payoff per unit of risk. **Product** marks a finding that drops or chan
 | [ML2](#ml2) | One message per send, no per-recipient copies | ~60 + most of 565 test | low | yes | a guest types their address on the login page |
 | [ML5](#ml5) | One `reconcileShares` | ~50 | low | no | nothing |
 | [B7](#b7) | One undo routine for a failed per-home restore | ~25 | low | no | nothing |
-| [M3](#m3) | Reindex clears the dirty bit before extracting | ~25 | low | no | after a crash mid-extract, stale until the next write |
 | [C3](#c3) | Imports write the store and announce once | ~50 | low | no | nothing |
 
 ## Mount, drive and versioning
@@ -56,11 +55,6 @@ History: `b9eb9eccd` → `40b526d06` → `09f9e0ae6` → `6debd112c` ("two revie
 Root cause: after a timeout, the next PUT of a key may start while the old one is still on the wire, and all of the repair code exists to fix the order afterwards.
 Simpler: a `Map<key, Promise>` of unsettled writes. The drain skips a key that still has a write on the wire, and a cancel deletes the object again once that write settles. The semaphore slot is still freed at the timeout.
 Lost: one key's upload waits behind a hung PUT, up to the existing give-up time. ~90 LOC, medium risk (S3 durability), medium-high confidence.
-
-<a id="m3"></a>**M3. The content reindex keeps a generation counter.**
-`mount/content-reindex-queue.ts` (`generations`, `bumpGeneration`), `mount/mount.ts`, `mount/search-index.ts`. History: `ca65036e4` → `004af0d94` ("bump before the write, not after").
-Simpler: the drain sets `contentDirty = 0` before it extracts. A write during the extract sets it again, and a failed extract sets it back.
-Lost: after a crash mid-extract, the index stays stale until the next write. ~25 LOC, low risk, high confidence.
 
 <a id="m4"></a>**M4. Loose ends of the lifecycle branch.**
 - `mount/db-config.ts` went from v9 back to v8. v9 never reached `main`, but a local home already migrated to v9 on this branch now 503s at open, so reset dev data.
@@ -304,7 +298,7 @@ Judged essential: zip and OPC hardening, the package parse budget, the batched x
 
 ## Suggested order
 
-1. **Pure refactors, no product change, low risk:** M3, ML5, B7, C3, C4, C8, ML3, T3, T5, X8, X9, B1 and M7 (the last two are already required by CODE-STANDARDS). These are a cheap-wins round of small, independent units.
+1. **Pure refactors, no product change, low risk:** ML5, B7, C3, C4, C8, ML3, T3, T5, X8, X9, B1 and M7 (the last two are already required by CODE-STANDARDS). These are a cheap-wins round of small, independent units.
 2. **Reorders with medium risk and the largest risk reduction:** M1, M9, M2, ML1 and C1, each a unit with its own failing test first. X2 and X6, settled by the export ruling, join them.
 3. **Product calls, to put to the owner as one list:** ML2, B3, B4, B6, C2, C6, C7, T2, T6, X3, X5, M5 and X1.
 4. **The lifecycle's loose ends (M4):** the dev-data reset note, the proposal's Goal 1 line, and the call on the canvas comment card's `deletedAt`.
