@@ -108,7 +108,10 @@ function buildCanvas(): Y.Doc {
                 : frame,
         ),
         elements: golden.elements.map((el) =>
-            el.id === 'el-1' ? { ...el, commentCardIds: JSON.stringify(['c-anchored', 'c-deleted-anchored']) } : el,
+            // A restore keeps today's cards, so an anchor whose card this state's map lacks may find one after it.
+            el.id === 'el-1'
+                ? { ...el, commentCardIds: JSON.stringify(['c-anchored', 'c-deleted-anchored', 'c-missing']) }
+                : el,
         ),
     };
     const doc = new Y.Doc();
@@ -234,6 +237,7 @@ describe('documentReferences', () => {
             'c-anchored',
             'c-deleted-anchored',
             'c-document',
+            'c-missing',
         ]);
         expect(documentReferences('stickies', buildStickies()).cards).toEqual(['on-board']);
     });

@@ -15,13 +15,13 @@ import type { CommentCard, CommentMapName } from '@workspace/lib/types/comments'
 import { commentMapName } from '@workspace/lib/types/comments';
 import type { DriveCollabType } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_FILE, DRIVE_TYPE_FOLDER, EIGEN_DOC_TYPE_INFO, EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
-import { activeCommentCardIds, readVectorFromDoc } from '@workspace/lib/vector';
+import { activeCommentCardIds, parseIdList, readVectorFromDoc } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import type { DocumentReferences } from '../mount/schema';
 import { mediaNamesIn, sceneMediaNames } from './media';
 
 // Bump it whenever what any reader here finds changes.
-export const REFERENCE_READER_VERSION = 2;
+export const REFERENCE_READER_VERSION = 3;
 
 // The doc's body and its bands, and any other fragment the doc declares.
 const DOC_FRAGMENTS = Object.entries(EIGEN_DOC_TYPE_INFO.doc.yjsRoots)
@@ -54,7 +54,9 @@ export function documentReferences(
         case 'vector': {
             const scene = readVectorFromDoc(doc);
             media = sceneMediaNames(scene);
-            inUse = activeCommentCardIds(scene.elements, cards);
+            // Every anchor counts, such as one whose card this state's map lacks, as a doc's and a sheet's do.
+            const anchored = scene.elements.flatMap((element) => parseIdList(element.commentCardIds));
+            inUse = new Set([...anchored, ...activeCommentCardIds(scene.elements, cards)]);
             break;
         }
         case 'sheets': {
