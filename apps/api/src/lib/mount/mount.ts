@@ -1428,6 +1428,7 @@ export class Mount {
 
     public markContentDirty(pathId: string): void {
         searchIndex.markContentDirty(this, pathId);
+        this.reindexQueue?.kick();
     }
 
     public clearContentDirty(pathId: string): void {

@@ -135,7 +135,6 @@ export async function copyPath(
         folderCopied: (copy, src) => {
             if (src.type === DRIVE_TYPE_FOLDER) return;
             mount.markContentDirty(copy.id);
-            mount.reindexQueue?.kick();
         },
         discard,
     });
