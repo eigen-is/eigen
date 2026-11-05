@@ -1,8 +1,8 @@
 // The one main-thread path every document transform takes. It admits the job, logs its warnings and maps its failures,
 // and for a job that reads a stored document it captures the compressed Yjs blobs first. A caller adds only its job
 // fields and what it does with the result. There is no main-thread fallback. A runner 503 and a controlled document
-// error keep their status. An import or a search extract out of memory is a file too large, and so is a search extract
-// that timed out. Any other failure throws.
+// error keep their status. An import out of memory is a file too large, and so is an export or a search extract that
+// ran out of memory or time. Any other failure throws.
 
 import { readSheetsSnapshotJson, sheetsOpLog } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -42,6 +42,7 @@ type TransformOptions = Omit<RunOptions, 'priority' | 'deadlineMs' | 'admissionC
 };
 
 const TOO_LARGE_TO_INDEX = 'Document too large to index';
+const TOO_LARGE_TO_EXPORT = 'Export failed: the document is too big, or it used too much memory';
 
 // The failures the same input repeats: a job past its memory or its deadline. A crash may be the install, not the input.
 function repeatsForSameInput(code: TransformError['code']): boolean {
@@ -79,9 +80,10 @@ async function runTransformRequest<R extends DocumentTransformRequest>(
         if (response.error.code === 'out-of-memory' && request.kind === 'import') {
             throw new ApiError(413, IMPORT_MESSAGES[request.sourceFormat].tooLarge);
         }
-        // The search extract indexes it as nothing rather than running out, or timing out, again on every drain.
-        if (repeatsForSameInput(response.error.code) && request.kind === 'extract-text') {
-            throw new ApiError(413, TOO_LARGE_TO_INDEX);
+        if (repeatsForSameInput(response.error.code)) {
+            // The search extract indexes it as nothing rather than running out, or timing out, again on every drain.
+            if (request.kind === 'extract-text') throw new ApiError(413, TOO_LARGE_TO_INDEX);
+            if (request.kind === 'export') throw new ApiError(413, TOO_LARGE_TO_EXPORT);
         }
         const what =
             request.kind === 'import' ? `${request.sourceFormat} import` : `${request.documentType} ${request.kind}`;

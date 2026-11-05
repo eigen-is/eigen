@@ -527,25 +527,6 @@ describe('document transform (eigensheets export)', () => {
         expect(sha256(html)).toBe(GOLDEN_EXPORT_PDF_HTML_SHA256);
     }, 120_000);
 
-    // An export has no format to blame, so a child that ran out of memory is the server's failure.
-    test('an export whose child ran out of memory is a 500', async () => {
-        const runSpy = interceptRunOnce('export', async () => ({
-            ok: false as const,
-            error: { code: 'out-of-memory' as const, message: 'Out of memory' },
-        }));
-        const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
-        try {
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${mountId}/file/${golden.path.id}/export/html`,
-            );
-            expect(res.status).toBe(500);
-        } finally {
-            errorSpy.mockRestore();
-            runSpy.mockRestore();
-        }
-    }, 120_000);
-
     test('xlsx export through the Worker returns a parseable workbook', async () => {
         const result = await exportDocument(golden.mount, golden.path, 'xlsx');
         const sheets = xlsxToSheets(result.data);
@@ -1314,7 +1295,10 @@ describe('document transform (eigendoc)', () => {
             encode.mockRestore();
         }
         expect(calls).toBe(1);
-        expect(String(failure)).toContain('eigendoc export transform failed (timeout): Document transform timed out');
+        expect(failure).toMatchObject({
+            status: 413,
+            message: 'Export failed: the document is too big, or it used too much memory',
+        });
     }, 120_000);
 
     test('docx export through the Worker equals the writer on the main thread and matches the pinned golden hash', async () => {
@@ -1652,6 +1636,49 @@ describe('document transform (eigenvector)', () => {
         expect(body).toMatch(/<image[^>]+href="https?:\/\/[^"]+\/file\/[^"]+\/preview"/);
         expect(body).not.toContain('eigen-media:');
     }, 120_000);
+});
+
+describe('document transform (export failure)', () => {
+    test.each([
+        ['doc', ['docx', 'pdf', 'html']],
+        ['sheets', ['xlsx', 'pdf', 'html']],
+        ['slides', ['pptx', 'pdf', 'html']],
+        ['vector', ['pdf']],
+    ] as const)(
+        'a %s export that times out or runs out of memory is a 413 that says so plainly',
+        async (type, formats) => {
+            const created = await drivePost<DrivePath>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                `folder/${rootId}/create/${type}`,
+                { fileName: `${type}-export-failure` },
+            );
+            for (const format of formats) {
+                for (const code of ['timeout', 'out-of-memory'] as const) {
+                    const runSpy = interceptRunOnce('export', async () => ({
+                        ok: false as const,
+                        error: { code, message: 'forced failure' },
+                    }));
+                    try {
+                        const res = await authedRequest(
+                            ctx.alice.user.sessionToken,
+                            `/drive/${ctx.alice.user.id}/${mountId}/file/${created.id}/export/${format}`,
+                        );
+                        expect([format, code, res.status, await res.text()]).toEqual([
+                            format,
+                            code,
+                            413,
+                            'Export failed: the document is too big, or it used too much memory',
+                        ]);
+                    } finally {
+                        runSpy.mockRestore();
+                    }
+                }
+            }
+        },
+        120_000,
+    );
 });
 
 // Recorded from the pre-Worker docx import pipeline (docxToPmJson, then
