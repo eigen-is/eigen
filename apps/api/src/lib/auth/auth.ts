@@ -28,7 +28,7 @@ import {
 import { ApiError } from '../core';
 import { composeOtpEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
-import { reconcileSharesForNewTeamMember, reconcileSharesForNewUser } from '../share';
+import { reconcileShares } from '../share';
 import { getTeamExists } from '../team';
 import { getOrgRole, getUserById, isGuest } from '../user';
 import { ensureAuthSchemaColumns } from './auth-schema-columns';
@@ -99,7 +99,7 @@ export const auth = betterAuth({
                         console.error(`Failed to auto-join new user ${user.id} to default org:`, error);
                     }
                     try {
-                        await reconcileSharesForNewUser(user);
+                        await reconcileShares(user, user.email);
                     } catch (error) {
                         console.error(`Failed to reconcile shares for new user ${user.id}:`, error);
                     }
@@ -205,7 +205,8 @@ export const auth = betterAuth({
             },
             organizationHooks: {
                 afterAddTeamMember: async ({ teamMember }) => {
-                    await reconcileSharesForNewTeamMember(teamMember.userId, teamMember.teamId);
+                    const user = await getUserById(teamMember.userId);
+                    if (user) await reconcileShares(user, teamOwnerId(teamMember.teamId));
                 },
                 // The team row still exists here, and a throw keeps it, as user.delete.before does for a user.
                 // The default team holds the org-wide drive every member joins, and its teardown can't be undone.
@@ -320,7 +321,8 @@ async function ensureDefaultOrgMembership(userId: string): Promise<void> {
     if (membership) return;
 
     // Guests hold accounts and sign in, but never join the org.
-    if (isGuest(await getUserById(userId))) return;
+    const user = await getUserById(userId);
+    if (!user || isGuest(user)) return;
 
     // addMember refuses a team that is gone, org join included, so a deleted default team must not reach it.
     const teamId = defaultTeamId && (await getTeamExists(defaultTeamId)) ? defaultTeamId : undefined;
@@ -335,7 +337,7 @@ async function ensureDefaultOrgMembership(userId: string): Promise<void> {
     if (!teamId) return;
     // addMember skips afterAddTeamMember.
     try {
-        await reconcileSharesForNewTeamMember(userId, teamId);
+        await reconcileShares(user, teamOwnerId(teamId));
     } catch (error) {
         console.error(`Failed to reconcile default team shares for user ${userId}:`, error);
     }

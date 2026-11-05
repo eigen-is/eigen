@@ -1,5 +1,6 @@
-// Enforce that getHome(), openHome() and loadedHome() appear in lib/ only inside lib/home/ and the allowlist below.
-// Lib code must receive Home as a parameter or use relay pull*/sendToHome functions.
+// A check that `bun run check` runs: lib/ code outside lib/home/ and the allowlist below may not name a function
+// that hands out a Home, such as getHome() or openHome(). Lib code receives its Home as a parameter or goes through
+// the relay's pull*/sendToHome functions.
 
 import { Glob } from 'bun';
 
@@ -13,7 +14,6 @@ const ALLOWED = new Set([
     'get-contacts.ts',
     'get-drive.ts',
     'caldav-router.ts',
-    'reconciliation.ts',
 ]);
 
 const glob = new Glob('**/*.ts');
@@ -23,7 +23,7 @@ for await (const path of glob.scan('apps/api/src/lib')) {
     // Bun.Glob yields platform-native separators on Windows — normalize so the basename
     // extraction and the home/ prefix check work regardless of platform.
     const normalized = path.replaceAll('\\', '/');
-    const filename = normalized.split('/').pop()!;
+    const filename = normalized.slice(normalized.lastIndexOf('/') + 1);
     if (normalized.startsWith('home/')) continue;
     if (ALLOWED.has(filename)) continue;
 

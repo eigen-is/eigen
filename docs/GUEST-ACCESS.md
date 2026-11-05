@@ -25,7 +25,7 @@ The home is on disk rather than in memory so it reuses Drive and NotificationCen
 | No sharing, access requests or mail to collaborators | `requireNonGuest()` on the ACL route, the chat `/invite` route, the drive `access-check`, `request-access` and `email-collaborators`. The File menu and Drive's item menu hide **Email collaborators** from a guest |
 | Read/write per ACL| SharedDrive enforces the entries the owner set             |
 
-A calendar invitation treats a guest like an external address: an iMIP mail and a registry entry, no in-app copy (`invite-propagation.ts`, [CALENDAR.md § The organizer's writes fan out](CALENDAR.md#the-organizers-writes-fan-out-and-only-the-organizers)). A guest answers from their own mail, which reaches the organizer through [inbound iMIP](CALENDAR.md#inbound-imip-acts-only-on-a-sender-our-own-mta-verified). The home relay skips calendar messages for a home without a calendar (`hasCalendar`), and reconciliation skips the calendar steps, so no calendar push crashes on a `GuestHome`.
+A calendar invitation treats a guest like an external address: an iMIP mail and a registry entry, no in-app copy (`invite-propagation.ts`, [CALENDAR.md § The organizer's writes fan out](CALENDAR.md#the-organizers-writes-fan-out-and-only-the-organizers)). A guest answers from their own mail, which reaches the organizer through [inbound iMIP](CALENDAR.md#inbound-imip-acts-only-on-a-sender-our-own-mta-verified). The home relay skips calendar messages for a home without a calendar (`hasCalendar`), reconciliation's included, so no calendar push crashes on a `GuestHome`.
 
 ## Sign-in is a two-step code flow on custom endpoints
 
@@ -53,7 +53,7 @@ A wrong guess leaves the code usable. A code gets 10 guesses (`MAX_OTP_GUESSES`)
 
 A successful verify finds or creates the user with `role: 'guest'`. The insert is direct, so it bypasses `databaseHooks`: no org join and no default reconciliation. The guest signs in through `auth.api.signInEmail()` with a password nobody sees, `HMAC-SHA256('guest:{email}', auth secret)`, re-derived and written on every sign-in so a tampered credential heals.
 
-Every successful sign-in, not only the first, calls `reconcileSharesForNewUser()` to seed `shared.db` from the share registry ([ACL.md § Reconciliation](ACL.md#reconciliation)). A failed first reconcile then heals at the next sign-in.
+Every successful sign-in, not only the first, calls `reconcileShares()` for the guest's address to seed `shared.db` from the share registry ([ACL.md § Reconciliation](ACL.md#reconciliation)). A failed first reconcile then heals at the next sign-in.
 
 ## The share registry is a durable record, not a queue
 

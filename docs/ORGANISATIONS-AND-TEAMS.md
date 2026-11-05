@@ -16,7 +16,7 @@ A user has no username field. The "username" an invite or the admin's new-user f
 
 `createOrganization` also makes a team named after the org, the default team, and setup pins its id as `defaultTeamId` in the server config. It is the team every new user joins, because the ACL has no entry for the whole org ([ACL.md](ACL.md)). Renaming the org renames it by that id ([SERVER-SETTINGS.md](SERVER-SETTINGS.md#renaming-the-organization-renames-its-default-team)).
 
-The org join adds the user to the default team in the same `addMember` call, then runs `reconcileSharesForNewTeamMember` itself, because `addMember` skips `afterAddTeamMember`. That delivers what was shared with the team before the user existed. `addMember` refuses a team that is gone before it writes anything, org join included, so the hook first checks that the team still exists: a deleted default team never keeps a user out of the org. Its undo covers only a failure after the member row is written, such as a team member limit. The team join runs only with the org join, so a member an admin later removes from the team stays out.
+The org join adds the user to the default team in the same `addMember` call, then reconciles the team's shares itself (`reconcileShares`), because `addMember` skips `afterAddTeamMember`. That delivers what was shared with the team before the user existed. `addMember` refuses a team that is gone before it writes anything, org join included, so the hook first checks that the team still exists: a deleted default team never keeps a user out of the org. Its undo covers only a failure after the member row is written, such as a team member limit. The team join runs only with the org join, so a member an admin later removes from the team stays out.
 
 An org that predates teams has no default team. A boot with no pinned id looks for it once (`pinDefaultTeam` in `apps/api/src/lib/org/org.ts`): a team in the org with the org's name, created within 5 seconds of the org. Only `createOrganization` makes such a team, since its rows are written in one call and stored to the second. Exactly one match is pinned; none or several pin nothing, and new users then join the org only. Existing members are never added, because a member an admin removed and one never added look the same.
 
@@ -38,7 +38,7 @@ Every org admin also holds better-auth's `user.role: 'admin'`, which lets the ad
 
 ## Teams are flat groups with no roles
 
-A team serves two purposes: an ACL group (share with `team_{id}` instead of emails) and the owner of shared drives. A team member row has no role, so every member is equal. Adding a member runs `reconcileSharesForNewTeamMember`, which delivers the shares already made to the team.
+A team serves two purposes: an ACL group (share with `team_{id}` instead of emails) and the owner of shared drives. A team member row has no role, so every member is equal. Adding a member runs `reconcileShares` for the team, which delivers the shares already made to it.
 
 Team routes (`apps/api/src/routes/team.ts`) use two guards from `apps/api/src/lib/auth/access.ts`. `requireTeamAccess` lets an org admin or owner in without membership and otherwise demands membership of that team; members may read the team's members and settings. `requireTeamAdmin` demands org admin or owner, so only they read the team's mounts, which carry the S3 secret, and change team settings, mounts, calendar and avatar.
 

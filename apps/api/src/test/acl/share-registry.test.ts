@@ -325,14 +325,14 @@ describe('Share Registry', () => {
         });
 
         test('idempotency: reconciliation called twice produces no duplicates', async () => {
-            const { reconcileSharesForNewUser } = await import('../../lib/share');
+            const { reconcileShares } = await import('../../lib/share');
             const { getUserByEmail } = await import('../../lib/user');
 
             const user = await getUserByEmail('newuser@test.eigen.is');
-            expect(user).toBeDefined();
+            if (!user) throw new Error('newuser missing');
 
             // Call reconciliation again (entries were already consumed, so this is a no-op)
-            await reconcileSharesForNewUser(user!);
+            await reconcileShares(user, user.email);
 
             // Sign in to verify
             const { auth } = await import('../../lib/auth/auth');
@@ -345,7 +345,7 @@ describe('Share Registry', () => {
             const sessionToken = match?.[1] || '';
 
             // Drive share should still be exactly 1 (not duplicated)
-            const driveRes = await authedRequest(sessionToken, `/drive/${user!.id}/shared/with-me`);
+            const driveRes = await authedRequest(sessionToken, `/drive/${user.id}/shared/with-me`);
             const drivePaths = await assertJson<DrivePath[]>(driveRes);
             const driveMatches = drivePaths.filter((s) => s.name === 'registry-pending-test');
             expect(driveMatches.length).toBe(1);
@@ -433,10 +433,11 @@ describe('Share Registry', () => {
             findOrFail(drivePaths, (s) => s.name === 'team-source-registry-test');
 
             // Idempotency: a second reconcile produces no duplicate row.
-            const { reconcileSharesForNewUser } = await import('../../lib/share');
+            const { reconcileShares } = await import('../../lib/share');
             const { getUserByEmail } = await import('../../lib/user');
             const user = await getUserByEmail(email);
-            await reconcileSharesForNewUser(user!);
+            if (!user) throw new Error('new user missing');
+            await reconcileShares(user, user.email);
 
             const drivePaths2 = await assertJson<DrivePath[]>(
                 await authedRequest(sessionToken, `/drive/${newUserId}/shared/with-me`),
@@ -497,7 +498,7 @@ describe('Share Registry', () => {
             );
             expect(preShared.some((p) => p.id === folder.id)).toBe(false);
 
-            // Joining fires afterAddTeamMember → reconcileSharesForNewTeamMember.
+            // Joining fires afterAddTeamMember, which reconciles the team's shares.
             await addMember(ctx, targetTeamId, memberId);
 
             const shared = await assertJson<DrivePath[]>(

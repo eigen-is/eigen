@@ -11,7 +11,7 @@ import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core/errors';
 import { composeOtpEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
-import { getEntriesForTarget, reconcileSharesForNewUser } from '../share';
+import { getEntriesForTarget, reconcileShares } from '../share';
 import { GUEST_ROLE, isGuest } from '../user/guest';
 import { getUserByEmail } from '../user/user';
 import { auth, getAuthDrizzleDb } from './auth';
@@ -123,7 +123,7 @@ export async function verifyOtpAndSignIn(email: string, otp: string, ip: string)
     }
 
     // Every sign-in reconciles, not only the first, so a first reconcile that failed heals at the next sign-in.
-    await reconcileSharesForNewUser(guestUser);
+    await reconcileShares(guestUser, guestUser.email);
 
     return signInWithScopedPassword('guest', guestUser.id, email);
 }

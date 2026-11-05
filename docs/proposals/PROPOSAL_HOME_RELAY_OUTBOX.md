@@ -388,9 +388,9 @@ staged uploads).
    the PUT must drain first. `invite-propagation.ts` enqueues per-target rows with
    `fifoKey = organizerEventId`, fixing the create-vs-update ordering hazard; iMIP `sendMail`
    stays as-is at the seam. RSVP and cancellation ride along (same file, same verbs).
-5. **Signup reconciliation — stays.** `reconcileSharesForNewUser` is pull-shaped (reads from
+5. **Signup reconciliation — stays.** `reconcileShares` is pull-shaped (reads from
    sharers' homes into the caller's own home) and can't ride a push queue; it is rare and runs
-   once per signup. The two `sendToHome` calls in `reconcileSharesForNewTeamMember` may be
+   once per signup or team join. Its `sendToHome` calls may be
    switched to enqueues opportunistically. Recorded as reviewed, not migrated.
 6. **Observability surface.** The two admin routes + counts; prune job.
 
