@@ -43,7 +43,7 @@ You can delete a document's whole version history, for example to free up space.
 3. Click **Delete history…**. A dialog says how much space it frees.
 4. Click **Delete history** to confirm.
 
-Every earlier version goes, and so do the versions of the document's comments. You can't undo this. Images and comments you deleted from the document are removed right away, except those added or replied to in the last three days. If someone else has the document open, their **Undo** can't bring those back.
+Every earlier version goes, and so do the versions of the document's comments. You can't undo this. Images and comments you deleted from the document are removed right away, except those added or replied to in the last three days. If removing them fails, the versions are still gone, but those images and comments stay. If someone else has the document open, their **Undo** can't bring those back.
 
 ## Who can use version history
 
