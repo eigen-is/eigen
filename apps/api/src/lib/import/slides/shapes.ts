@@ -132,8 +132,6 @@ type Walk = {
     // A layout's or master's shapes: its placeholders are prompts, never drawn on a slide.
     copied: boolean;
     out: SlideShapes;
-    // The children this walk has walked, which a layout's or master's cached elements charge again on every slide.
-    walked: number;
 };
 
 export function readSlideShapes(deck: DeckWalk, inheritance: SlideInheritance): SlideShapes {
@@ -148,22 +146,21 @@ export function readSlideShapes(deck: DeckWalk, inheritance: SlideInheritance): 
         height: shape.height * deck.scale,
     });
     for (const part of decorationsOf(inheritance)) {
-        const walk: Walk = { deck, inheritance, part, copied: true, out, walked: 0 };
+        const walk: Walk = { deck, inheritance, part, copied: true, out };
         // A slide's clrMapOvr repaints them.
         const key = `${part.path} ${JSON.stringify([...inheritance.theme.colors.map])}`;
         const known = deck.decorations.get(key);
         if (known) {
-            deck.shapes.charge(known.shapes);
-            for (const element of known.elements) push(walk, { ...element });
+            for (const element of known) push(walk, { ...element });
             continue;
         }
         const elements = out.elements.length;
         const tree = spTreeOf(part.root);
         if (tree) readTree(walk, xmlElements(tree), root, 0, undefined);
-        deck.decorations.set(key, { elements: out.elements.slice(elements), shapes: walk.walked });
+        deck.decorations.set(key, out.elements.slice(elements));
     }
     const tree = spTreeOf(inheritance.slide.root);
-    const walk: Walk = { deck, inheritance, part: inheritance.slide, copied: false, out, walked: 0 };
+    const walk: Walk = { deck, inheritance, part: inheritance.slide, copied: false, out };
     if (tree) readTree(walk, xmlElements(tree), root, 0, undefined);
     // A slide without a title keeps the name its cSld gives it, which the writer writes a frame's name to.
     const cSld = childOf(inheritance.slide.root, P_NS, 'cSld');
@@ -174,8 +171,6 @@ export function readSlideShapes(deck: DeckWalk, inheritance: SlideInheritance): 
 function readTree(walk: Walk, shapes: XmlElement[], placeIn: Place, depth: number, group: GroupFill | undefined): void {
     if (depth > MAX_GROUP_DEPTH) throw new ApiError(413, IMPORT_MESSAGES.pptx.tooLarge);
     for (const shape of shapes) {
-        walk.deck.shapes.charge(1);
-        walk.walked++;
         charge(1);
         if (isAlternateContent(shape)) {
             readTree(walk, presentationAlternative(shape), placeIn, depth + 1, group);
@@ -450,7 +445,6 @@ function readGraphicFrame(walk: Walk, shape: XmlElement, { box, xfrm }: Placed, 
         if (drawing && tree) {
             const inDrawing: Walk = { ...walk, part: drawing };
             readTree(inDrawing, xmlElements(tree), inFrame(placeIn, xfrm), depth + 1, undefined);
-            walk.walked = inDrawing.walked;
         }
         // The drawing's shapes are loose on the slide: the canvas has no groups, and nothing lays them out again. A
         // drawing PowerPoint cached empty shows nothing, so the box stands in for it with the graphic's text.

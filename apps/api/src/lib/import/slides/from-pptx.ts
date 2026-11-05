@@ -86,7 +86,6 @@ function readDeck(bytes: Uint8Array, options: PptxOptions): PptxDeck {
         slideWidth: page.slideWidth,
         offset: { x: (frame.width - cx * scale) / 2, y: (frame.height - cy * scale) / 2 },
         slide: { width: cx * scale, height: cy * scale },
-        shapes: budget(MAX_ELEMENTS, IMPORT_MESSAGES.pptx.tooLarge),
         elements: budget(MAX_ELEMENTS, IMPORT_MESSAGES.pptx.tooLarge),
         weight: budget(MAX_PPTX_WEIGHT, IMPORT_MESSAGES.pptx.tooLarge),
         decorations: new Map(),

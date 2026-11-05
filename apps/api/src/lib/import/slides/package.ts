@@ -72,14 +72,11 @@ export type DeckWalk = {
     slideWidth: number;
     offset: { x: number; y: number };
     slide: Frame;
-    // Children walked and elements written, each a budget: a master's shapes count again for every slide.
-    shapes: Budget;
+    // The elements written and the update's weight, charged as each frame and element is written.
     elements: Budget;
-    // The update's weight, charged as each frame and element is written.
     weight: Budget;
-    // A layout's or master's elements and the children walked for them, by part and color map: read once, copied onto
-    // every slide that shows them.
-    decorations: Map<string, { elements: NewVectorElement[]; shapes: number }>;
+    // A layout's or master's elements, by part and color map: read once, copied onto every slide that shows them.
+    decorations: Map<string, NewVectorElement[]>;
     // A picture part's media name, its bytes read the first time a slide shows it; none when they don't read.
     mediaName(part: MediaPart): string | undefined;
     // Counts what the import leaves out or draws simpler, once for the shape of the file it is in (or the background),
