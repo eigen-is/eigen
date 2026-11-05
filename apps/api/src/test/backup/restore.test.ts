@@ -43,7 +43,7 @@ import {
 } from '../../lib/backup/paths';
 import * as recoveryModule from '../../lib/backup/recovery';
 import { recoverBackupsAfterRestart } from '../../lib/backup/recovery';
-import { readShares, restoreHome, restoreSafetyCopy, restoreShares } from '../../lib/backup/restore';
+import { restoreHome, restoreSafetyCopy } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import * as verifyModule from '../../lib/backup/verify';
 import { getAvatarsDir, getDataRoot, PATHS } from '../../lib/config/paths';
@@ -1067,16 +1067,15 @@ describe('Backup restore after the user is deleted', () => {
     });
 
     test('stores a share target from the archive lowercased', async () => {
-        const folder = mkdtempSync(join(TEST_DATA_DIR, 'restore-shares-'));
-        try {
+        const mixedCase = await backup(deleted.id, new Date(Date.now() + 60_000), async (manifest, folder) => {
             writeFileSync(
                 join(folder, ARCHIVE_SHARES_FILE),
                 JSON.stringify([{ targetIdentifier: 'Mixed.Case@External.Test' }]),
             );
-            await restoreShares(deleted.id, readShares(folder));
-        } finally {
-            rmSync(folder, { recursive: true, force: true });
-        }
+            await restateEntry(manifest, folder, ARCHIVE_SHARES_FILE);
+        });
+        await restoreHome(mixedCase, deleted.id, `restore-shares-case-${Date.now()}`);
+        rmSync(join(getBackupsDir(), mixedCase), { force: true });
         const rows = (await getEigenDb())
             .select()
             .from(shareRegistry)

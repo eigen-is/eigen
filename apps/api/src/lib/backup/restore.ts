@@ -44,6 +44,16 @@ import { putHomeBack, wipeRestoreStagingDir, writeRestoreCompleteMarker, writeRe
 import { forgetSafetyCopySize, resolveSafetyCopy } from './safety-copy';
 import { requireVerified, verifyFolder } from './verify';
 
+// One picture from the archive's avatar folder, read into memory while the archive is judged.
+type RestoredAvatar = { name: string; bytes: Uint8Array };
+
+// What a restore does once the home is out of everyone's hands and its folder is aside: put the new
+// folder at `homeDir`. The step that prepared it returns it, so it closes over whatever that step judged.
+type InstallHome = () => Promise<void>;
+
+// What judging a replacement hands on: the install, and what the restore writes once the home serves again.
+type PreparedHome<Judged> = { install: InstallHome; judged: Judged };
+
 // Replaces one home with the copy inside an artifact: the home as it stands goes aside as `{id}.pre-restore-{ts}`,
 // and a failed install as `{id}.failed-restore-{ts}`. The first load after the restore runs migrations and reseeds
 // each domain's byte counters from the restored rows.
@@ -113,8 +123,14 @@ export async function restoreHome(
     // Only once the home is in place, and nothing rolls the folder back for them. Each write inserts only what is
     // missing, so a failure here fails the job with the home restored, and a retry finishes it.
     if (identity.authRows) restoreAuthRows(ownerId, identity.authRows);
-    await restoreShares(ownerId, identity.shares);
-    await restoreAvatars(identity.avatars);
+    for (const row of identity.shares) await addRegistryEntry(ownerId, row.targetIdentifier);
+    // An avatar goes back only where the server has none, so a picture the user changed after the backup is not
+    // quietly reverted.
+    for (const avatar of identity.avatars) {
+        const target = path.join(getAvatarsDir(), avatar.name);
+        if (fs.existsSync(target)) continue;
+        await Bun.write(target, avatar.bytes);
+    }
     onProgress?.('done', 1, 1);
 }
 
@@ -132,7 +148,11 @@ export async function restoreSafetyCopy(
     const { folder, homeDir, kind } = await resolveSafetyCopy(ownerId, name);
     if (kind !== 'pre-restore') throw new ApiError(400, `${name} is not a pre-restore copy of this home`);
     if (!fs.existsSync(folder)) throw new ApiError(404, `${name} is not beside this home`);
-    await requireOwnerExists(ownerId);
+    // A safety copy of a home whose owner is gone is a delete candidate, not a restore: the folder on its own leaves a
+    // home nobody can sign in to. Restoring a deleted user goes through an artifact, which carries their auth rows.
+    const owner = parseOwnerId(ownerId);
+    const found = owner.type === 'team' ? await getTeam(owner.id) : await getUserById(owner.id);
+    if (!found) throw new ApiError(404, `${ownerId} no longer exists`);
     const mountIds = mountIdsIn(folder);
 
     const install: InstallHome = async () => {
@@ -175,17 +195,12 @@ function redateRestoredTrash(ownerId: string, homeDir: string, mountIds: readonl
 }
 
 // The share-registry rows the archive holds: none for a team, which has no shares.json.
-export function readShares(folder: string): BackupShare[] {
+function readShares(folder: string): BackupShare[] {
     const sharesPath = path.join(folder, ARCHIVE_SHARES_FILE);
     if (!fs.existsSync(sharesPath)) return [];
     const rows = parseBackupShares(fs.readFileSync(sharesPath, 'utf8'));
     if (!rows) throw new ApiError(400, `${ARCHIVE_SHARES_FILE} is not a set of share-registry rows`);
     return rows;
-}
-
-// Inserts only the missing rows: a registry row that is already there describes a live share.
-export async function restoreShares(ownerId: string, rows: readonly BackupShare[]): Promise<void> {
-    for (const row of rows) await addRegistryEntry(ownerId, row.targetIdentifier);
 }
 
 // The avatar is server data, not home data. Its name comes from the archive and lands in the server-wide avatars
@@ -204,26 +219,6 @@ async function readAvatars(ownerId: string, folder: string): Promise<RestoredAva
     }
     return avatars;
 }
-
-// An avatar goes back only where the server has none, so a picture the user changed after the backup is not quietly
-// reverted.
-async function restoreAvatars(avatars: readonly RestoredAvatar[]): Promise<void> {
-    for (const avatar of avatars) {
-        const target = path.join(getAvatarsDir(), avatar.name);
-        if (fs.existsSync(target)) continue;
-        await Bun.write(target, avatar.bytes);
-    }
-}
-
-// One picture from the archive's avatar folder, read into memory while the archive is judged.
-type RestoredAvatar = { name: string; bytes: Uint8Array };
-
-// What a restore does once the home is out of everyone's hands and its folder is aside: put the new
-// folder at `homeDir`. The step that prepared it returns it, so it closes over whatever that step judged.
-type InstallHome = () => Promise<void>;
-
-// What judging a replacement hands on: the install, and what the restore writes once the home serves again.
-type PreparedHome<Judged> = { install: InstallHome; judged: Judged };
 
 // The moves every restore is made of: judge the replacement while the home still serves, so a refusal costs nobody a
 // page, then take the home and swap its folder for the replacement. A failure puts both folders back, deleting nothing,
@@ -306,13 +301,4 @@ async function replaceHomeFolder<Judged>(
             console.error(`[backup] could not clear the staging folder of job ${jobId}:`, error);
         }
     }
-}
-
-// A safety copy of a home whose owner is gone is a delete candidate, not a restore: the folder on
-// its own leaves a home nobody can sign in to. Restoring a deleted user goes through an artifact,
-// which carries their auth rows with it.
-async function requireOwnerExists(ownerId: string): Promise<void> {
-    const owner = parseOwnerId(ownerId);
-    const found = owner.type === 'team' ? await getTeam(owner.id) : await getUserById(owner.id);
-    if (!found) throw new ApiError(404, `${ownerId} no longer exists`);
 }
