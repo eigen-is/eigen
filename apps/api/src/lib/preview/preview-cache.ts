@@ -98,25 +98,25 @@ async function writeCacheFile(cacheFile: string, data: string | Buffer): Promise
     }
 }
 
-// The generation running for each cache name, whatever its kind, so a folder grid of N tiles for one just-added
-// image or just-edited doc starts one job instead of N. A request that joins a job waits at that job's priority.
-const inFlight = new Map<string, Promise<Buffer | CachedText | null>>();
+// The generation running for each cache name, so a folder grid of N tiles for one just-added image or
+// just-edited doc starts one job instead of N. A request that joins a job waits at that job's priority.
+const inFlightImages = new Map<string, Promise<Buffer | null>>();
+const inFlightTexts = new Map<string, Promise<CachedText | null>>();
 
-function generateOnce(
+function generateOnce<T>(
+    inFlight: Map<string, Promise<T | null>>,
     previewsDir: string,
     pathId: string,
     cacheName: string,
-    generate: () => Promise<Buffer | CachedText | null>,
-): Promise<Buffer | CachedText | null> {
+    generate: () => Promise<T | null>,
+    serialize: (result: T) => Buffer | string,
+): Promise<T | null> {
     const existing = inFlight.get(cacheName);
     if (existing) return existing;
     const task = (async () => {
         const result = await generate();
         if (result === null) return null;
-        await writeCacheFile(
-            path.join(previewsDir, cacheName),
-            Buffer.isBuffer(result) ? result : JSON.stringify(result),
-        );
+        await writeCacheFile(path.join(previewsDir, cacheName), serialize(result));
         pruneOldVersions(previewsDir, pathId, cacheName).catch(() => {});
         return result;
     })().finally(() => inFlight.delete(cacheName));
@@ -140,8 +140,8 @@ async function getOrCacheImage(
         }
     }
 
-    const data = await generateOnce(previewsDir, pathId, cacheName, generate);
-    return Buffer.isBuffer(data) ? { type: 'image', data, contentType } : null;
+    const data = await generateOnce(inFlightImages, previewsDir, pathId, cacheName, generate, (bytes) => bytes);
+    return data === null ? null : { type: 'image', data, contentType };
 }
 
 // A stale value is an earlier version's, served while the current one regenerates.
@@ -190,19 +190,26 @@ async function getOrCacheText<T>(
     if (current !== null) return { value: current, stale: false };
     const failed = failedRecently(cacheFile);
     const generateText = (priority: TransformPriority) =>
-        generateOnce(previewsDir, pathId, cacheName, async () => {
-            try {
-                const result = await generate(priority);
-                return result?.body ? result : null;
-            } catch (err) {
-                // Overload is not "no preview", and neither is a file the renderer refused: a controlled
-                // status reaches the client instead of being cached as a 404.
-                if (err instanceof ApiError) throw err;
-                console.error(`[preview] Failed to generate ${format} preview for ${pathId}:`, err);
-                await rememberIfRepeatable(cacheFile, err);
-                return null;
-            }
-        });
+        generateOnce(
+            inFlightTexts,
+            previewsDir,
+            pathId,
+            cacheName,
+            async () => {
+                try {
+                    const result = await generate(priority);
+                    return result?.body ? result : null;
+                } catch (err) {
+                    // Overload is not "no preview", and neither is a file the renderer refused: a controlled
+                    // status reaches the client instead of being cached as a 404.
+                    if (err instanceof ApiError) throw err;
+                    console.error(`[preview] Failed to generate ${format} preview for ${pathId}:`, err);
+                    await rememberIfRepeatable(cacheFile, err);
+                    return null;
+                }
+            },
+            JSON.stringify,
+        );
 
     // Current version missing. If a previous version is cached, serve it immediately and regenerate the current
     // one in the background. Checked synchronously: a regeneration that landed since the read above has either
@@ -220,7 +227,7 @@ async function getOrCacheText<T>(
     if (landed !== null) return { value: landed, stale: false };
 
     const generated = await generateText('foreground');
-    return generated === null || Buffer.isBuffer(generated) ? null : { value: parse(generated), stale: false };
+    return generated === null ? null : { value: parse(generated), stale: false };
 }
 
 async function readNewestStaleText<T>(
