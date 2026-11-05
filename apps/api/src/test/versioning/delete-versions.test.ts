@@ -2,11 +2,9 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { getServerConfig } from '../../lib/config/server-config';
-import { REFERENCE_READER_VERSION } from '../../lib/document/references';
 import type { Drive } from '../../lib/drive/drive';
 import { getHome } from '../../lib/home/get-home';
 import type { Mount } from '../../lib/mount/mount';
-import { getVersionReferences, putVersionReferences } from '../../lib/mount/version-references';
 import { getUserById } from '../../lib/user';
 import {
     addMember,
@@ -83,22 +81,15 @@ describe('DELETE .../file/:pathId/versions', () => {
         return authedRequest(token, `/drive/${ownerId}/${mountId}/file/${pathId}/versions`, { method: 'DELETE' });
     }
 
-    test('the owner deletes every version of the document and of its threads, and their rows', async () => {
+    test('the owner deletes every version of the document and of its threads', async () => {
         const owner = ctx.alice.user;
         const { doc, thread, mount } = await docWithHistory(owner.id, aliceMountId, aliceRootId);
-        const ids = [...(await versionIds(mount, doc.id)), ...(await versionIds(mount, thread.id))];
-        const names = { media: ['a.png'], chat: [], cards: [] };
-        for (const versionPathId of ids) {
-            putVersionReferences(mount, { versionPathId, readerVersion: REFERENCE_READER_VERSION, names });
-        }
-        expect(getVersionReferences(mount, ids)).toHaveLength(3);
 
         const res = await deleteVersions(owner.sessionToken, owner.id, aliceMountId, doc.id);
         expect(res.status).toBe(200);
         expect(await res.json()).toEqual({ success: true });
         expect(await versionIds(mount, doc.id)).toEqual([]);
         expect(await versionIds(mount, thread.id)).toEqual([]);
-        expect(getVersionReferences(mount, ids)).toEqual([]);
         const list = await authedRequest(
             owner.sessionToken,
             `/drive/${owner.id}/${aliceMountId}/file/${doc.id}/versions`,

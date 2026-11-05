@@ -1,7 +1,6 @@
 // Deletes a document's version history: its versions folder and that of each comment thread in its chat folder. Drive
 // calls it for Delete history. Each folder goes under the path lock of the container it belongs to, the lock a
-// snapshot of that container takes, so no version is written into a folder while it goes. A version's row in
-// version_references goes with the version's row. A thread in the trash hangs elsewhere and keeps its versions.
+// snapshot of that container takes, so no version is written into a folder while it goes.
 
 import { DRIVE_TYPE_CHAT } from '@workspace/lib/types/drive';
 import { CONTAINER_CHAT_FOLDER } from '../mount/container-dbs';

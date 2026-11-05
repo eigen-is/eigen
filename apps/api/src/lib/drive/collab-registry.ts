@@ -1,7 +1,6 @@
 // The collab documents that are open in one Drive, such as docs that someone edits right now. It opens
 // each document once, however many people connect, and closes it again. When sharing changes, it
-// closes the connections of people who may no longer read. It also marks the documents a trash or a
-// version restore works on, so an open or a sweep keeps away from them meanwhile.
+// closes the connections of people who may no longer read.
 
 import { isCollabType, isContainerType } from '@workspace/lib/types/drive';
 import { createAsyncSingleton } from '../../utils/singleton';
@@ -22,10 +21,6 @@ export class CollabRegistry {
     // databases before it marks them trashed, so a document opened in between would lose its edits. A
     // key counts the trashes that guard it, because two trashes of nested paths can overlap.
     private readonly trashing = new Map<string, number>();
-    // The keys of a document a version restore puts back. The restore works in steps, and a sweep that read
-    // the document before it ends would miss the names the old state brings back. Two restores of one document can
-    // overlap too, so a key counts them as well.
-    private readonly restoring = new Map<string, number>();
 
     public constructor(private readonly ownerId: string) {}
 
@@ -90,15 +85,16 @@ export class CollabRegistry {
     // in after the keys are read isn't refused, so the trash closes it itself.
     public async whileTrashing(mount: Mount, pathId: string, trash: () => Promise<void>): Promise<void> {
         const keys = [pathId, ...mount.collectDescendantIds(pathId)].map((id) => this.key(mount.id, id));
-        await whileCounted(this.trashing, keys, trash);
-    }
-
-    public isRestoring(mountId: string, pathId: string): boolean {
-        return this.restoring.has(this.key(mountId, pathId));
-    }
-
-    public async whileRestoring(mountId: string, pathId: string, restore: () => Promise<void>): Promise<void> {
-        await whileCounted(this.restoring, [this.key(mountId, pathId)], restore);
+        for (const key of keys) this.trashing.set(key, (this.trashing.get(key) ?? 0) + 1);
+        try {
+            await trash();
+        } finally {
+            for (const key of keys) {
+                const count = this.trashing.get(key) ?? 0;
+                if (count > 1) this.trashing.set(key, count - 1);
+                else this.trashing.delete(key);
+            }
+        }
     }
 
     // Checks read access again for every open document at or below the path. Read access comes from
@@ -158,23 +154,5 @@ export class CollabRegistry {
 
     private key(mountId: string, pathId: string): string {
         return `${this.ownerId}.${mountId}.${pathId}`;
-    }
-}
-
-// Counts each key up while `run` runs, and drops a key once no run holds it any more.
-async function whileCounted(
-    counts: Map<string, number>,
-    keys: readonly string[],
-    run: () => Promise<void>,
-): Promise<void> {
-    for (const key of keys) counts.set(key, (counts.get(key) ?? 0) + 1);
-    try {
-        await run();
-    } finally {
-        for (const key of keys) {
-            const count = counts.get(key) ?? 0;
-            if (count > 1) counts.set(key, count - 1);
-            else counts.delete(key);
-        }
     }
 }

@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import type { Op, Sheet, SheetImage } from '@workspace/lib/sheets';
 import { encodeSheetsSnapshot, writeSheetsSnapshot } from '@workspace/lib/sheets';
 import { DRIVE_MIME_DOC, DRIVE_TYPE_DOC } from '@workspace/lib/types/drive';
@@ -8,16 +8,9 @@ import { serializeBackgroundFill } from '@workspace/lib/vector';
 import { writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
 import type { YjsStatePayload } from '../../lib/collab/yjs-loader';
-import { ApiError } from '../../lib/core/errors';
 import { documentReferences } from '../../lib/document/references';
 import { toTransferableBuffer } from '../../lib/document/transform/protocol';
-import {
-    MAX_REFERENCES_INPUT_BYTES,
-    runDocumentReferences,
-    TransformFailedError,
-} from '../../lib/document/transform/run-transform';
-import { documentTransformRunner } from '../../lib/document/transform/runner';
-import type { DocumentReferences } from '../../lib/mount/schema';
+import { runDocumentReferences, TransformFailedError } from '../../lib/document/transform/run-transform';
 import {
     buildGoldenDeckScene,
     GOLDEN_MEDIA_NAME,
@@ -51,11 +44,6 @@ function addCard(
     for (const [field, value] of Object.entries(fields)) card.set(field, value);
     doc.getMap(mapName).set(id, card);
 }
-
-const sorted = (references: DocumentReferences): Pick<DocumentReferences, 'media' | 'chat'> => ({
-    media: [...references.media].sort(),
-    chat: [...references.chat].sort(),
-});
 
 const paragraph = (...content: object[]) => ({ type: 'paragraph', content });
 const figure = (mediaName: string, commentCardId: string | null = null) => ({
@@ -108,7 +96,6 @@ function buildCanvas(): Y.Doc {
                 : frame,
         ),
         elements: golden.elements.map((el) =>
-            // A restore keeps today's cards, so an anchor whose card this state's map lacks may find one after it.
             el.id === 'el-1'
                 ? { ...el, commentCardIds: JSON.stringify(['c-anchored', 'c-deleted-anchored', 'c-missing']) }
                 : el,
@@ -192,7 +179,7 @@ function buildStickies(): Y.Doc {
 
 describe('documentReferences', () => {
     test('a doc names the figures of its body and every band, and the threads and files of the cards it anchors', () => {
-        expect(sorted(documentReferences('doc', buildDoc()))).toEqual({
+        expect(documentReferences('doc', buildDoc())).toEqual({
             media: ['body.png', 'card.pdf', 'first-footer.png', 'header.png'],
             chat: [
                 'thread-c-band',
@@ -208,7 +195,7 @@ describe('documentReferences', () => {
     test.each(['slides', 'vector'] as const)(
         '%s names its images, frame pictures and the cards it anchors or has not deleted',
         (type) => {
-            expect(sorted(documentReferences(type, buildCanvas()))).toEqual({
+            expect(documentReferences(type, buildCanvas())).toEqual({
                 media: ['anchored.pdf', 'background.png', GOLDEN_MEDIA_NAME],
                 chat: ['thread-anchored', 'thread-deleted-anchored', 'thread-document'],
             });
@@ -216,37 +203,17 @@ describe('documentReferences', () => {
     );
 
     test('a workbook names the images and cell comments of every tab, in its snapshot and in its pending ops', () => {
-        expect(sorted(documentReferences('sheets', buildSheets()))).toEqual({
+        expect(documentReferences('sheets', buildSheets())).toEqual({
             media: ['added-sheet.png', 'cell.pdf', 'op.png', 'renamed.png', 'snapshot.png', 'tab-two.png'],
             chat: ['thread-c-added-sheet', 'thread-c-op', 'thread-c-op-index', 'thread-c-snapshot', 'thread-c-tab-two'],
         });
     });
 
     test('a board names the threads and files of the cards on it', () => {
-        expect(sorted(documentReferences('stickies', buildStickies()))).toEqual({
+        expect(documentReferences('stickies', buildStickies())).toEqual({
             media: ['note.pdf'],
             chat: ['thread-on-board'],
         });
-    });
-
-    test('a state lists the cards it has in use', () => {
-        expect(documentReferences('doc', buildDoc()).cards).toEqual(
-            ['c-band', 'c-box', 'c-chart', 'c-equation', 'c-figure', 'c-mark'].sort(),
-        );
-        expect(documentReferences('vector', buildCanvas()).cards).toEqual([
-            'c-anchored',
-            'c-deleted-anchored',
-            'c-document',
-            'c-missing',
-        ]);
-        expect(documentReferences('stickies', buildStickies()).cards).toEqual(['on-board']);
-    });
-
-    test("a card a saved version has in use names today's thread and files, though the state does not anchor it", () => {
-        const references = documentReferences('doc', buildDoc(), ['c-loose', 'c-gone']);
-        expect(references.media).toContain('loose.pdf');
-        expect(references.chat).toContain('thread-loose');
-        expect(references.cards).not.toContain('c-loose');
     });
 
     test('a doc names the figure and the comment of a footnote', () => {
@@ -264,7 +231,7 @@ describe('documentReferences', () => {
         };
         seedEigendoc(doc, { type: 'doc', content: [paragraph({ type: 'text', text: 'Body' }, note)] });
         addCard(doc, 'comments', 'c-note', { chatName: 'thread-note' });
-        expect(sorted(documentReferences('doc', doc))).toEqual({ media: ['note.png'], chat: ['thread-note'] });
+        expect(documentReferences('doc', doc)).toEqual({ media: ['note.png'], chat: ['thread-note'] });
     });
 
     test('a pending op that writes a whole cell or a whole row names its comments, and a remove names nothing', () => {
@@ -278,7 +245,7 @@ describe('documentReferences', () => {
         ];
         for (const batch of batches) doc.getArray<Op[]>('ops').push([batch]);
         for (const id of ['c-cell', 'c-row']) addCard(doc, 'comments', id, { chatName: `thread-${id}` });
-        expect(sorted(documentReferences('sheets', doc))).toEqual({
+        expect(documentReferences('sheets', doc)).toEqual({
             media: [],
             chat: ['thread-c-cell', 'thread-c-row'],
         });
@@ -293,7 +260,7 @@ describe('documentReferences', () => {
             ],
         });
         addCard(doc, 'comments', '__proto__', { chatName: 'thread-proto', attachments: ['proto.pdf'] });
-        expect(sorted(documentReferences('doc', doc))).toEqual({ media: ['proto.pdf'], chat: ['thread-proto'] });
+        expect(documentReferences('doc', doc)).toEqual({ media: ['proto.pdf'], chat: ['thread-proto'] });
     });
 
     test('a card it cannot read throws, so a sweep keeps every thread', () => {
@@ -302,7 +269,7 @@ describe('documentReferences', () => {
         expect(() => documentReferences('doc', doc)).toThrow();
     });
 
-    // Reading the mark as no mark only keeps more, where a throw would fail the document's sweep every day.
+    // Reading the mark as no mark only keeps more, where a throw would stop every sweep of the document.
     test('a deleted mark that is no time reads as not deleted', () => {
         const doc = buildCanvas();
         addCard(doc, 'comments', 'c-odd', { chatName: 'thread-odd', attachments: ['odd.pdf'] });
@@ -344,12 +311,8 @@ describe('runDocumentReferences', () => {
             ['stickies', buildStickies],
             ['doc', buildDoc],
         ] as const) {
-            const versionCards = ['c-loose'];
-            const references = await runDocumentReferences(
-                { documentType, source: payloadOf(build()), versionCards },
-                {},
-            );
-            expect(references).toEqual(documentReferences(documentType, build(), versionCards));
+            const references = await runDocumentReferences({ documentType, source: payloadOf(build()) }, {});
+            expect(references).toEqual(documentReferences(documentType, build()));
         }
     });
 
@@ -361,21 +324,5 @@ describe('runDocumentReferences', () => {
         await expect(runDocumentReferences({ documentType: 'doc', source: corrupt }, {})).rejects.toBeInstanceOf(
             TransformFailedError,
         );
-    });
-
-    test('documents past the copy cap are refused before a child runs', async () => {
-        const run = spyOn(documentTransformRunner, 'run');
-        try {
-            const huge: YjsStatePayload = {
-                snapshot: null,
-                updates: [{ id: 1, data: new ArrayBuffer(MAX_REFERENCES_INPUT_BYTES + 1) }],
-            };
-            const refused = runDocumentReferences({ documentType: 'doc', source: huge }, {});
-            await expect(refused).rejects.toBeInstanceOf(ApiError);
-            await expect(refused).rejects.toMatchObject({ status: 413 });
-            expect(run).not.toHaveBeenCalled();
-        } finally {
-            run.mockRestore();
-        }
     });
 });

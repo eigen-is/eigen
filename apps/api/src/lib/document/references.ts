@@ -1,8 +1,8 @@
-// What a state of a collab document, such as its current state or a saved version, names among its own parts: the
-// files in its media folder, the threads in its chat folder and the comment cards it has in use. A sweep deletes the
-// parts nothing names, so a missed name deletes a part in use, and each reader errs on the side of more names. The
-// canvas and the board drop what their editors drop. A workbook it can't decode and a card in a shape no editor writes
-// throw, which the sweep takes as "delete nothing". The references job runs this in the transform process.
+// What a collab document's state names among its own parts: the files in its media folder and the threads in its
+// chat folder. The sweep deletes the parts its current state does not name, so a missed name deletes a part in use,
+// and each reader errs on the side of more names. The canvas and the board drop what their editors drop. A workbook
+// it can't decode and a card in a shape no editor writes throw, which the sweep takes as "delete nothing". The
+// references job runs this in the transform process.
 
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { boardCardIds, getItemMapRoot } from '@workspace/lib/collab/yjs-utils';
@@ -15,13 +15,12 @@ import type { CommentCard, CommentMapName } from '@workspace/lib/types/comments'
 import { commentMapName } from '@workspace/lib/types/comments';
 import type { DriveCollabType } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_FILE, DRIVE_TYPE_FOLDER, EIGEN_DOC_TYPE_INFO, EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
-import { activeCommentCardIds, parseIdList, readVectorFromDoc } from '@workspace/lib/vector';
+import { activeCommentCardIds, readVectorFromDoc } from '@workspace/lib/vector';
 import * as Y from 'yjs';
-import type { DocumentReferences } from '../mount/schema';
 import { mediaNamesIn, sceneMediaNames } from './media';
 
-// Bump it whenever what any reader here finds changes.
-export const REFERENCE_READER_VERSION = 3;
+// The names a state gives, each list sorted.
+export type DocumentReferences = { media: string[]; chat: string[] };
 
 // The doc's body and its bands, and any other fragment the doc declares.
 const DOC_FRAGMENTS = Object.entries(EIGEN_DOC_TYPE_INFO.doc.yjsRoots)
@@ -33,13 +32,8 @@ const CELL_ANCHOR = 'commentCardIds' satisfies keyof Cell;
 
 // Only a card in use names its thread and its files, such as a card the content anchors, or on a canvas a card nobody
 // deleted. The rules a client shares live in lib beside it, such as the canvas's and the board's. An attachment that is
-// a Drive reference names a document elsewhere, not a file in media/. A restore brings back a version's anchors but
-// keeps today's cards, so the cards a saved version has in use name their thread and their files here as well.
-export function documentReferences(
-    type: DriveCollabType,
-    doc: Y.Doc,
-    versionCards: readonly string[] = [],
-): DocumentReferences {
+// a Drive reference names a document elsewhere, not a file in media/.
+export function documentReferences(type: DriveCollabType, doc: Y.Doc): DocumentReferences {
     const cards = readCards(doc, commentMapName(type));
     let media: Set<string>;
     let inUse: Set<string>;
@@ -54,9 +48,7 @@ export function documentReferences(
         case 'vector': {
             const scene = readVectorFromDoc(doc);
             media = sceneMediaNames(scene);
-            // Every anchor counts, such as one whose card this state's map lacks, as a doc's and a sheet's do.
-            const anchored = scene.elements.flatMap((element) => parseIdList(element.commentCardIds));
-            inUse = new Set([...anchored, ...activeCommentCardIds(scene.elements, cards)]);
+            inUse = activeCommentCardIds(scene.elements, cards);
             break;
         }
         case 'sheets': {
@@ -84,16 +76,15 @@ export function documentReferences(
             inUse = boardCardIds(doc);
             break;
     }
-    const named = new Set([...inUse, ...versionCards]);
     const chat = new Set<string>();
     for (const card of Object.values(cards)) {
-        if (!named.has(card.id)) continue;
+        if (!inUse.has(card.id)) continue;
         if (card.chatName) chat.add(card.chatName);
         for (const attachment of card.attachments ?? []) {
             if (typeof attachment === 'string') media.add(attachment);
         }
     }
-    return { media: [...media].sort(), chat: [...chat].sort(), cards: [...inUse].sort() };
+    return { media: [...media].sort(), chat: [...chat].sort() };
 }
 
 // Two card readers exist on purpose. The client's readCards is lenient: it drops a field it cannot read and sanitizes

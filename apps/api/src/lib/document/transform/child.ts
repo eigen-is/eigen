@@ -192,7 +192,7 @@ async function handleRequest(jobId: number, request: DocumentTransformRequest): 
     if (request.kind === 'references') {
         if (blobsSkipped > 0) throw new Error(`${request.documentType}: ${blobsSkipped} unreadable Yjs blobs`);
         const { documentReferences } = await import('../references');
-        const references = documentReferences(request.documentType, doc, request.versionCards);
+        const references = documentReferences(request.documentType, doc);
         return { ok: true, result: { references }, warnings: [] };
     }
 

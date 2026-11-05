@@ -10,7 +10,7 @@ import type { TextPreviewResult } from '@workspace/lib/types/preview';
 import type { SlidePage } from '@workspace/lib/vector';
 import type { YjsStatePayload } from '../../collab/yjs-loader';
 import { ApiError, isOutOfMemory } from '../../core/errors';
-import type { DocumentReferences } from '../../mount/schema';
+import type { DocumentReferences } from '../references';
 
 // `pdf-html` is the HTML stage of the PDF export. WeasyPrint stays a subprocess of the main thread, so the
 // transform returns the document it renders from.
@@ -141,14 +141,8 @@ export type SheetsCompactionJob = {
     batches: string;
 };
 
-// The parts one document's state names. `versionCards` are the cards a saved version has in use, whose thread and
-// files the current state's cards name too.
-export type ReferencesJob = {
-    kind: 'references';
-    documentType: DriveCollabType;
-    source: YjsStatePayload;
-    versionCards?: readonly string[];
-};
+// The parts one document's state names.
+export type ReferencesJob = { kind: 'references'; documentType: DriveCollabType; source: YjsStatePayload };
 
 export type DocumentTransformRequest =
     | (CollabTransformJob & { source: YjsStatePayload })
@@ -356,9 +350,7 @@ function isStringList(value: unknown): boolean {
 }
 
 function isDocumentReferences(value: unknown): boolean {
-    return (
-        isRecord(value) && isStringList(value['media']) && isStringList(value['chat']) && isStringList(value['cards'])
-    );
+    return isRecord(value) && isStringList(value['media']) && isStringList(value['chat']);
 }
 
 // A weight that is no count would slip past the caps it is compared against.

@@ -4,6 +4,7 @@
 // getSharedDrive, which checks access. The few owner-only routes check the owner themselves. Other
 // public methods serve server code, such as chat, collab and the home relay.
 
+import { SWEEP_GRACE_MS } from '@workspace/lib/constants/sweep';
 import { CHATS_FOLDER_NAME } from '@workspace/lib/types/chat';
 import type {
     DriveACL,
@@ -101,6 +102,7 @@ import {
 import type * as sharedSchema from './sharedschema';
 import { broadcastFileHistoryUpdated, buildDriveEvent } from './sse-events';
 import { streamFilesToTemp } from './streaming';
+import { sweepCopy, sweepDocument } from './sweep';
 import { deleteFailedCopy, deletePath, permanentlyDelete, restorePath } from './trash';
 import { finalizeUpload, regenerateThumbnailAsync } from './upload';
 
@@ -721,7 +723,9 @@ export class Drive {
                 throw new ApiError(403, 'No write permission on target folder');
             }
             const tree = await this.listCopyWithinLimits(mount, srcPathId, to);
-            return copyPathAcross(this, tree, to, destParentId, name, user);
+            const copiedAcross = await copyPathAcross(this, tree, to, destParentId, name, user);
+            await sweepCopy(to.drive, copiedAcross);
+            return copiedAcross;
         }
 
         // RFC 4918 asks for a 409 for a folder copied into itself.
@@ -737,6 +741,7 @@ export class Drive {
             (pathId, createdIds) => this.deleteFailedCopy(mountId, pathId, createdIds, user),
             user,
         );
+        await sweepCopy(this, copied);
         this.emit(
             isContainerType(copied.type) ? SSEventType.DRIVE_FOLDER_CREATED : SSEventType.DRIVE_FILE_CREATED,
             copied,
@@ -1251,15 +1256,6 @@ export class Drive {
         return this.documents.has(mountId, pathId);
     }
 
-    // Whether the path is on its way to the trash, on its own or with a folder above it.
-    public isTrashing(mountId: string, pathId: string): boolean {
-        return this.documents.isTrashing(this.getMount(mountId), pathId);
-    }
-
-    public isRestoring(mountId: string, pathId: string): boolean {
-        return this.documents.isRestoring(mountId, pathId);
-    }
-
     public async closeCollabDocument(
         mountId: string,
         pathId: string,
@@ -1276,13 +1272,13 @@ export class Drive {
         return listVersions(this.getMount(mountId), containerId);
     }
 
-    // Delete history. The media and threads that only the versions named go in the sweep after the document's next
-    // close. An open document is never swept, so that sweep runs once its last tab closed.
+    // Delete history. The media and threads that only the versions named go at once, even while the document is open.
     public async deleteVersions(mountId: string, containerId: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const container = await mount.getActivePath(containerId);
         if (!isDocumentType(container.type)) throw new ApiError(400, 'Only a document has versions');
         await deleteVersions(mount, containerId);
+        await sweepDocument(this, container, SWEEP_GRACE_MS);
         if (user) await this.recordFileEvent(mountId, containerId, user, { eventType: 'versions-deleted' });
     }
 
@@ -1295,9 +1291,7 @@ export class Drive {
         const mount = this.getMount(mountId);
         const container = await mount.getPath(containerId);
         if (!container) throw new ApiError(404, `Container ${containerId} not found`);
-        await this.documents.whileRestoring(mountId, containerId, () =>
-            restoreContainer(this, mount, container, snapshotName),
-        );
+        await restoreContainer(this, mount, container, snapshotName);
         if (user) {
             await this.recordFileEvent(mountId, containerId, user, {
                 eventType: 'version-restored',

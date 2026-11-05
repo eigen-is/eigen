@@ -700,7 +700,7 @@ describe('CommentIndex.assign', () => {
     });
 });
 
-// The sweep drops the rows of the threads it deleted, and of any thread gone before it.
+// The sweep drops the rows of the threads that are gone.
 describe('CommentIndex.deleteRowsWithoutThread', () => {
     function makeIndex(): { index: CommentIndex; raw: Database } {
         const raw = new Database(':memory:');

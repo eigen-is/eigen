@@ -1,6 +1,6 @@
 // Reads the Yjs state stored in a data.db: the newest snapshot and the updates after it. A live
 // document loads through it when it opens, and readers such as the document transforms capture it to
-// work off the main thread. The FromFile readers read a data.db nobody serves, such as a saved version.
+// work off the main thread. readYjsStateFromFile reads a data.db nobody serves, such as a saved version.
 
 import { Database as BunDatabase } from 'bun:sqlite';
 import { asc, desc, gt } from 'drizzle-orm';
@@ -110,31 +110,26 @@ export function loadYjsState(
 }
 
 // Reads a data.db that nobody serves, such as a saved version or a document's data.db in a backup
-// archive, and returns its stored state, still compressed. It opens the SQLite file directly, so the
-// open runs no migrations on a copy that must not change.
+// archive, and returns its Yjs state as one update. It opens the SQLite file directly, so the open runs
+// no migrations on a copy that must not change. Unlike a live load, a corrupt blob here throws. Skipping
+// it would let a restore succeed into a half-empty document.
 //
 // Nothing writes to the handle, but it opens read-write by default. bun:sqlite sometimes fails to open
 // a freshly copied data.db read-only (SQLITE_CANTOPEN), and a version restore hands it just that.
 // `readonly` is for the backup verify, which must not touch the databases at all. An open alone can
 // leave a journal beside a file whose bytes the verify just hashed.
-export function readYjsStatePayloadFromFile(localPath: string, options?: { readonly?: boolean }): YjsStatePayload {
+export function readYjsStateFromFile(localPath: string, options?: { label?: string; readonly?: boolean }): Uint8Array {
     // `{ readonly: false }` is not the same as no options: bun:sqlite then builds flags with neither
     // READONLY nor READWRITE and refuses the open.
     const rawDb = options?.readonly ? new BunDatabase(localPath, { readonly: true }) : new BunDatabase(localPath);
     try {
-        return readPayload(drizzle(rawDb, { schema }));
+        const doc = new Y.Doc();
+        const { blobsSkipped } = materializeYjsState(readPayload(drizzle(rawDb, { schema })), doc, options?.label);
+        if (blobsSkipped > 0) {
+            throw new ApiError(422, `Snapshot is corrupted (${blobsSkipped} unreadable Yjs blobs); restore aborted`);
+        }
+        return Y.encodeStateAsUpdate(doc);
     } finally {
         rawDb.close();
     }
-}
-
-// The same file's state as one update. Unlike a live load, a corrupt blob here throws. Skipping it
-// would let a restore succeed into a half-empty document.
-export function readYjsStateFromFile(localPath: string, options?: { label?: string; readonly?: boolean }): Uint8Array {
-    const doc = new Y.Doc();
-    const { blobsSkipped } = materializeYjsState(readYjsStatePayloadFromFile(localPath, options), doc, options?.label);
-    if (blobsSkipped > 0) {
-        throw new ApiError(422, `Snapshot is corrupted (${blobsSkipped} unreadable Yjs blobs); restore aborted`);
-    }
-    return Y.encodeStateAsUpdate(doc);
 }

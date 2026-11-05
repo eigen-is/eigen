@@ -11,7 +11,7 @@ import type { YjsStatePayload } from '../../collab/yjs-loader';
 import { ApiError } from '../../core/errors';
 import { IMPORT_MESSAGES } from '../../import/messages';
 import type { Mount } from '../../mount';
-import type { DocumentReferences } from '../../mount/schema';
+import type { DocumentReferences } from '../references';
 import { captureCollabSource } from './collab-source';
 import type {
     BytesPreviewJob,
@@ -32,7 +32,6 @@ import type {
     TransformResultFor,
     TransformWarning,
 } from './protocol';
-import { inputBytesOf } from './protocol';
 import type { RunOptions, TransformPriority } from './runner';
 import { documentTransformRunner, TRANSFORM_LIMITS } from './runner';
 
@@ -44,10 +43,6 @@ type TransformOptions = Omit<RunOptions, 'priority' | 'deadlineMs' | 'admissionC
 };
 
 const TOO_LARGE_TO_INDEX = 'Document too large to index';
-
-// The most state a references job sends the transform process, which gets it as a copy. A document past it is not
-// read for its parts, so a sweep keeps all of it.
-export const MAX_REFERENCES_INPUT_BYTES = 200 * 1024 * 1024;
 
 // The failures the same input repeats: a job past its memory or its deadline. A crash may be the install, not the input.
 function repeatsForSameInput(code: TransformError['code']): boolean {
@@ -259,10 +254,6 @@ export async function runDocumentReferences(
     document: Omit<ReferencesJob, 'kind'>,
     opts: TransformOptions,
 ): Promise<DocumentReferences> {
-    const request: ReferencesJob = { kind: 'references', ...document };
-    if (inputBytesOf(request) > MAX_REFERENCES_INPUT_BYTES) {
-        throw new ApiError(413, 'Too large to read its references');
-    }
-    const { result } = await runTransformRequest(request, opts);
+    const { result } = await runTransformRequest({ kind: 'references', ...document }, opts);
     return result.references;
 }

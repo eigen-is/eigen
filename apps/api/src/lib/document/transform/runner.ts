@@ -42,7 +42,7 @@ export const TRANSFORM_LIMITS: Record<
     // A workbook's log folded at its close: a decode, a replay and an encode, less than an export does. It runs in the
     // background and holds the one child, so it gets a preview's cost and room for a large workbook.
     compact: { deadlineMs: 60_000, admissionCostMs: 15_000 },
-    // A read of what a document's state names, such as a version before a sweep. It is a materialize and a walk,
+    // A read of what a document's current state names, before a sweep. It is a materialize and a walk,
     // so it gets a compaction's limits.
     references: { deadlineMs: 60_000, admissionCostMs: 15_000 },
 };
