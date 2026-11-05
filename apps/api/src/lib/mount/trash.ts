@@ -12,7 +12,7 @@ import { folderIn, withFreeName } from '../drive/naming';
 import { closeCachedDbsUnder } from './document-db';
 import { renameThenWriteRow, rethrowPathWriteError } from './helpers';
 import type { Mount } from './mount';
-import { isReservedName, trashStorageKey } from './names';
+import { trashStorageKey } from './names';
 import { paths } from './schema';
 
 export async function trashPath(mount: Mount, pathId: string): Promise<DrivePath> {
@@ -116,14 +116,8 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
                 ? root.id
                 : trashedFrom;
 
-            // A row named `.trash` from before the name rule counts as taken too, because restoring it under
-            // that name would alias the real trash folder. The row is still trashed, so it never matches itself.
-            const folder = {
-                ...folderIn(mount, targetParentId),
-                isTaken: (name: string) => isReservedName(name) || mount.hasLiveChild(targetParentId, name),
-            };
             const now = new Date();
-            await withFreeName(folder, row.name, async (restoreName) => {
+            await withFreeName(folderIn(mount, targetParentId), row.name, async (restoreName) => {
                 // Off `local` no lock keeps a trash of the target folder out, so the check shares the
                 // transaction of the row write.
                 const writeRow = async (): Promise<void> => {
@@ -283,15 +277,7 @@ export async function purgeTrash(mount: Mount, maxAgeDays: number): Promise<void
 
 // Runs under the item's path lock, which trash and restore take too, and reads the row inside it. So a
 // restore that got the lock first is never undone. It returns false when the item is gone or not in trash.
-// A legacy trashedFrom can point back into the folder being deleted. Path locks are not reentrant, so the
-// delete skips every item it has already taken on (`seen`). Two deletes of trash roots that point into
-// each other would each hold one root and wait on the other, so a mount runs one delete at a time.
 export async function permanentlyDeleteFromTrash(mount: Mount, pathId: string): Promise<boolean> {
-    return mount.withPathLock('trash/permanent-delete', () => deleteTrashRoot(mount, pathId, new Set()));
-}
-
-async function deleteTrashRoot(mount: Mount, pathId: string, seen: Set<string>): Promise<boolean> {
-    seen.add(pathId);
     return mount.withPathLock(pathId, async () => {
         const row = await mount.db
             .select({ type: paths.type, trashedAt: paths.trashedAt })
@@ -303,7 +289,7 @@ async function deleteTrashRoot(mount: Mount, pathId: string, seen: Set<string>):
         if (row.type !== 'file') {
             // Each one is a trash root of its own, so a restore may race it too.
             for (const orphan of trashRootsFrom(mount, pathId)) {
-                if (!seen.has(orphan.id)) await deleteTrashRoot(mount, orphan.id, seen);
+                await permanentlyDeleteFromTrash(mount, orphan.id);
             }
         }
 
@@ -315,16 +301,15 @@ async function deleteTrashRoot(mount: Mount, pathId: string, seen: Set<string>):
 // The trash roots a folder's permanent delete takes with it: the items trashed on their own from inside
 // the folder, and from inside those in turn. Drive reads them before the delete to tell their watchers.
 export async function listTrashRootsInside(mount: Mount, folderId: string): Promise<DrivePath[]> {
-    const found = new Map<string, DrivePath>();
+    const found: DrivePath[] = [];
     const collect = (id: string): void => {
         for (const row of trashRootsFrom(mount, id)) {
-            if (row.id === folderId || found.has(row.id)) continue;
-            found.set(row.id, mount.toDrivePath(row));
+            found.push(mount.toDrivePath(row));
             collect(row.id);
         }
     };
     collect(folderId);
-    return [...found.values()];
+    return found;
 }
 
 // The trash roots whose original folder is the path or lies under it. They hang under the mount root,

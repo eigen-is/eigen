@@ -6,8 +6,8 @@ import { CONTROL_CHARS } from '@workspace/lib/validation';
 import { ApiError } from '../core/errors';
 
 // On a `local` mount the trash is the folder `.trash`, and every name the disk folds onto it would be
-// that folder. The rule holds on every mount, so an item can always move to another one. A move checks
-// it too, because a row can carry the name from before the rule.
+// that folder. The rule holds on every mount, so an item can always move to another one, and a backup
+// verify holds an archived paths table to it as well.
 export function isReservedName(name: string): boolean {
     return foldName(name) === '.trash';
 }

@@ -15,7 +15,7 @@ import type { DatabaseConfig, SchemaType } from '../core/managed-database';
 import { SHARED_DB_CONFIG } from '../drive/db-config';
 import { MAIL_DB_CONFIG } from '../mail/db-config';
 import { CONTAINER_COMMENTS_DB, CONTAINER_DATA_DB, isContainerDatabase } from '../mount/container-dbs';
-import { isUsableName, trashStorageKey } from '../mount/names';
+import { isReservedName, isUsableName, trashStorageKey } from '../mount/names';
 import { paths } from '../mount/schema';
 import { NOTIFICATION_CENTER_DB_CONFIG } from '../notification-center/db-config';
 import { isVersionsName } from '../versioning/versions-folder';
@@ -137,13 +137,13 @@ export function unreachableRows(rows: readonly MountPathRow[]): { orphaned: Moun
 }
 
 // An archived paths table arrived inside a file an admin uploaded, so a row no path can be built for refuses the
-// archive whole, and so does a tree that does not end at the root.
+// archive whole, and so does a tree that does not end at the root or a trash root whose delete would wait on itself.
 export function checkArchivedPathRows(rows: readonly MountPathRow[]): string[] {
     const byId = new Map(rows.map((row) => [row.id, row]));
     const failures: string[] = [];
     for (const row of rows) {
         failures.push(...unusableParts(row));
-        const broken = brokenChain(row, byId);
+        const broken = brokenChain(row, byId) ?? brokenTrash(row, byId);
         if (broken) failures.push(`path row ${row.id} ${broken}`);
     }
     return failures;
@@ -160,13 +160,36 @@ function brokenChain(row: MountPathRow, byId: ReadonlyMap<string, MountPathRow>)
         : `reaches a parent (${top.parentId}) the table does not hold`;
 }
 
+// Where a trash root's original folder fails: a row the table does not hold, or a folder inside the root itself,
+// directly or through the trash roots that hold it in turn. A permanent delete takes along every trash root
+// trashed from inside the item, each under its own lock, so it would then wait on a lock it holds.
+function brokenTrash(row: MountPathRow, byId: ReadonlyMap<string, MountPathRow>): string | null {
+    if (row.trashedFrom === null) return null;
+    if (!byId.has(row.trashedFrom)) return `was trashed from a row (${row.trashedFrom}) the table does not hold`;
+    const seen = new Set<string>();
+    const pending = [row];
+    for (let current = pending.pop(); current; current = pending.pop()) {
+        const from = current.trashedFrom ? byId.get(current.trashedFrom) : undefined;
+        if (!from) continue;
+        for (const holder of [from, ...ancestors(from, byId)]) {
+            if (holder.id === row.id) return 'was trashed from inside itself';
+            if (holder.trashedFrom !== null && !seen.has(holder.id)) {
+                seen.add(holder.id);
+                pending.push(holder);
+            }
+        }
+    }
+    return null;
+}
+
 // Every path a restore builds is a join of id, name and file: a `..` or a separator in one moves bytes out of the
-// mount. The one separator a live table holds is a trash root's `file` on a path-based mount, which must be exactly
+// mount, and a reserved name is the trash folder itself on `local`. The one separator a live table holds is a trash root's `file` on a path-based mount, which must be exactly
 // trashPath's key.
 function unusableParts(row: MountPathRow): string[] {
     const failures: string[] = [];
     if (!isUsableName(row.id)) failures.push(`path row "${row.id}" has an unusable id`);
     if (!isUsableName(row.name)) failures.push(`path row ${row.id} has an unusable name "${row.name}"`);
+    if (isReservedName(row.name)) failures.push(`path row ${row.id} has a reserved name "${row.name}"`);
     // Empty is how a flat-key mount spells a folder row (Mount.createFolder).
     const trashKey = row.trashedFrom !== null && row.file === trashStorageKey(row.id, row.name);
     if (row.file !== '' && !trashKey && !isUsableName(row.file)) {

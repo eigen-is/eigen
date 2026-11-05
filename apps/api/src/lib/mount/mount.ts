@@ -44,7 +44,7 @@ import {
     renameThenWriteRow,
     rethrowPathWriteError,
 } from './helpers';
-import { buildStorageKey, foldName, isReservedName, trashStorageKey, validateName } from './names';
+import { buildStorageKey, foldName, trashStorageKey, validateName } from './names';
 import type * as schema from './schema';
 import { paths } from './schema';
 import * as searchIndex from './search-index';
@@ -785,11 +785,6 @@ export class Mount {
             if (current) {
                 const targetParent = updates.parentId ?? current.parentId;
                 targetName = updates.name ?? current.name;
-                // A row named `.trash` from before the name rule moves only under a new name: at the mount
-                // root its disk rename would land on the real trash folder.
-                if (updates.parentId !== undefined && isReservedName(targetName)) {
-                    throw new ApiError(400, `"${targetName}" is a reserved name`);
-                }
                 if (targetParent) {
                     this.assertUniqueName(targetParent, targetName, pathId);
                 }
@@ -913,14 +908,11 @@ export class Mount {
     // Why pathId can't go into targetParentId, or null. A trashed folder up to the root is a 404 like a deleted one,
     // because its permanent delete would take the row with it.
     public targetFolderErrorInTx(tx: Tx, pathId: string, targetParentId: string | null): ApiError | null {
-        const seen = new Set<string>();
         let current = targetParentId;
         while (current) {
             if (current === pathId) {
                 return new ApiError(400, 'Cannot move a folder into itself or its own descendant');
             }
-            if (seen.has(current)) throw treeCycleError(current);
-            seen.add(current);
             const row = tx
                 .select({ parentId: paths.parentId, trashedAt: paths.trashedAt })
                 .from(paths)

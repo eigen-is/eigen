@@ -177,7 +177,12 @@ describe('Backup refuses an archive whose paths table leaves the mount', () => {
 
     // The attacker's own archive with one `paths` row doctored, its manifest entry restated so
     // verify's transport stage passes and the row itself is what has to be caught.
-    async function hostileArchive(mountId: string, column: 'file' | 'name' | 'id', value: string, rowId: string) {
+    async function hostileArchive(
+        mountId: string,
+        column: 'file' | 'name' | 'id' | 'trashedFrom',
+        value: string,
+        rowId: string,
+    ) {
         const staging = mkdtempSync(join(TEST_DATA_DIR, 'traversal-rows-'));
         const manifest = await snapshotHome(await getHome(owner.id), staging);
         const hostileFolder = join(staging, buildHomeFolderName(owner.id));
@@ -275,6 +280,29 @@ describe('Backup refuses an archive whose paths table leaves the mount', () => {
         const record = await verifyFolder(folder);
         expect(record.status).toBe('failed');
         expect(record.failures.join(' ')).toContain('unusable id');
+    });
+
+    // On `local` a row named `.trash` would be the trash folder itself.
+    test('verify names the row whose name the trash folder reserves', async () => {
+        const folder = await hostileArchive(LOCAL_MOUNT_ID, 'name', '.Trash', localFileId);
+        const record = await verifyFolder(folder);
+        expect(record.status).toBe('failed');
+        expect(record.failures.join(' ')).toContain(`path row ${localFileId} has a reserved name`);
+    });
+
+    test('verify names the trash root whose original folder the table does not hold', async () => {
+        const folder = await hostileArchive(keyMountId, 'trashedFrom', 'no-such-row', keyFileId);
+        const record = await verifyFolder(folder);
+        expect(record.status).toBe('failed');
+        expect(record.failures.join(' ')).toContain(`path row ${keyFileId} was trashed from a row (no-such-row)`);
+    });
+
+    // Its permanent delete would wait on its own lock.
+    test('verify names the trash root that was trashed from inside itself', async () => {
+        const folder = await hostileArchive(keyMountId, 'trashedFrom', keyFileId, keyFileId);
+        const record = await verifyFolder(folder);
+        expect(record.status).toBe('failed');
+        expect(record.failures.join(' ')).toContain(`path row ${keyFileId} was trashed from inside itself`);
     });
 
     test('a restore of one throws and the file outside the home is untouched', async () => {
