@@ -21,6 +21,7 @@ import {
     putResource,
     resourceTextOf,
     storedBytes,
+    storedEvents,
     vevent,
 } from '../calendar-test-helpers';
 import { vcal } from '../ics-test-helpers';
@@ -1863,7 +1864,7 @@ describe('Calendar invite email to Eigen user', () => {
     const bobHoldsInvite = async (title: string): Promise<boolean> => {
         const home = await getHome(testCtx.bob.user.id);
         const calendars = await home.calendar.getCalendars();
-        const rows = await Promise.all(calendars.map((c) => home.calendar.getRawEvents(c.id)));
+        const rows = calendars.map((c) => storedEvents(home.calendar, c.id));
         return rows.flat().some((e) => e.title === title);
     };
 
@@ -1983,7 +1984,7 @@ describe('Calendar occurrence timezone consistency (audit #24)', () => {
         await assertJson(await rsvp('tentative')); // updates it via the etag-omitting branch
 
         const home = await getHome(testCtx.bob.user.id);
-        const exc = (await home.calendar.getRawEvents(bobCalId)).find((e) => e.parentEventId === linkedId);
+        const exc = storedEvents(home.calendar, bobCalId).find((e) => e.parentEventId === linkedId);
         expect(exc).toBeDefined();
         expect(exc!.timezone).toBe(NY); // exception now inherits the parent's timezone
     });
@@ -2006,7 +2007,7 @@ describe('Calendar occurrence timezone consistency (audit #24)', () => {
             ),
         );
         const home = await getHome(testCtx.bob.user.id);
-        const row = (await home.calendar.getRawEvents(bobCalId)).find((e) => e.id === linkedId);
+        const row = storedEvents(home.calendar, bobCalId).find((e) => e.id === linkedId);
         expect(row).toBeDefined();
         expect(row!.timezone).toBe(NY);
     });
@@ -2135,9 +2136,9 @@ describe('Event move across calendars (finding #1)', () => {
         expect(moveRes.status).toBe(200);
 
         const home = await getHome(ctx.alice.user.id);
-        const sourceRows = (await home.calendar.getRawEvents(sourceCalId)).filter((e) => e.uid === parent.uid);
+        const sourceRows = storedEvents(home.calendar, sourceCalId).filter((e) => e.uid === parent.uid);
         expect(sourceRows.length).toBe(0);
-        const targetRows = (await home.calendar.getRawEvents(targetCalId)).filter((e) => e.uid === parent.uid);
+        const targetRows = storedEvents(home.calendar, targetCalId).filter((e) => e.uid === parent.uid);
         expect(targetRows.length).toBe(2); // master + its exception child
         expect(targetRows.some((e) => e.id === exception.id && e.parentEventId === parent.id)).toBe(true);
 
@@ -2704,7 +2705,7 @@ describe('the calendar byte counter', () => {
             harness.instance.receiveAttendeeStatus(created.id, 'two@test.local', 'declined'),
         ]);
 
-        const stored = (await harness.instance.getRawEvents(calendarId))[0];
+        const stored = storedEvents(harness.instance, calendarId)[0];
         expect(stored.data?.attendees?.map((a) => a.status).sort()).toEqual(['accepted', 'declined']);
         expect(await harness.instance.size()).toBe(storedBytes(harness.instance));
     });

@@ -9,6 +9,7 @@ import type { CalendarEvent, CalendarEventOccurrence } from '@workspace/lib/type
 import type ICAL from 'ical.js';
 import { getHome } from '../../lib/home';
 import { parseIcs, parseResource, serializeEventForImip } from '../../lib/ical';
+import { storedEvents } from '../calendar-test-helpers';
 import { basicAuth, davRequest } from '../dav-test-helpers';
 import { app, assertJson, authedRequest, eventually, findOrFail, getTestContext } from '../setup';
 
@@ -166,10 +167,7 @@ describe('CalDAV round-trip fidelity', () => {
             const before = snapshot(veventOf(await getIcs('rt-kitchen.ics')));
 
             const home = await getHome(userId);
-            const stored = findOrFail(
-                await home.calendar.getRawEvents(calendarId),
-                (e) => e.uid === 'rt-kitchen@client',
-            );
+            const stored = findOrFail(storedEvents(home.calendar, calendarId), (e) => e.uid === 'rt-kitchen@client');
             const res = await authedRequest(
                 ctx.alice.user.sessionToken,
                 `/calendar/${userId}/calendars/${calendarId}/events/${stored.id}`,
@@ -232,7 +230,7 @@ describe('CalDAV round-trip fidelity', () => {
 
         async function storedRow(uid: string): Promise<CalendarEvent> {
             const home = await getHome(userId);
-            return findOrFail(await home.calendar.getRawEvents(calendarId), (e) => e.uid === uid);
+            return findOrFail(storedEvents(home.calendar, calendarId), (e) => e.uid === uid);
         }
 
         // A form save: the title beside the times it rendered, labelled with the browser's zone.
@@ -1115,7 +1113,11 @@ describe('CalDAV round-trip fidelity', () => {
             );
             expect(res.status).toBe(201);
 
-            const stored = (await (await getHome(userId)).calendar.getEventByUri(calendarId, uri))!;
+            const home = await getHome(userId);
+            const stored = findOrFail(
+                storedEvents(home.calendar, calendarId),
+                (e) => e.uri === uri && !e.parentEventId,
+            );
             expect(stored.data?.organizer?.userId).toBe('');
             expect(stored.data?.organizerEventId).toBeUndefined();
             expect(stored.data?.color).toBeUndefined();

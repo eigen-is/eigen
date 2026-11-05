@@ -5,8 +5,9 @@ import { EVENT_MAX_BYTES } from '../../lib/calendar/resource-store';
 import { ApiError } from '../../lib/core';
 import { REPORT_DATA_BUDGET_BYTES } from '../../lib/dav/report-row';
 import { getHome } from '../../lib/home/get-home';
+import { storedEvents } from '../calendar-test-helpers';
 import { davRequest } from '../dav-test-helpers';
-import { app, createTestUser, getTestContext } from '../setup';
+import { app, createTestUser, findOrFail, getTestContext } from '../setup';
 
 describe('CalDAV', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -804,8 +805,12 @@ describe('CalDAV', () => {
         expect(body).toContain('SubDaily PUT');
         // The stored resource is the client's, rule included — the index is what drops it.
         expect(body).toContain('RRULE:FREQ=SECONDLY');
-        const stored = await (await getHome(userId)).calendar.getEventByUri(defaultCalendarId, 'caldav-subdaily-1.ics');
-        expect(stored!.rrule).toBeNull();
+        const home = await getHome(userId);
+        const stored = findOrFail(
+            storedEvents(home.calendar, defaultCalendarId),
+            (e) => e.uri === 'caldav-subdaily-1.ics',
+        );
+        expect(stored.rrule).toBeNull();
     });
 
     test('a REPORT body over 1 MiB is 413 before parsing', async () => {

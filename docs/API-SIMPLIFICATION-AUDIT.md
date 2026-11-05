@@ -16,7 +16,7 @@ Like ROADMAP and the proposals, this doc holds only open work: strike a finding 
 4. **Precision for a rare race or a rare setup.** Exactly what [the owner's rule](CODE-STANDARDS.md) says to drop: "may forget, must not corrupt". Examples: maildir watchers that match a recreated folder by inode ([ML6](#ml6)), rollback checking data twice ([B4](#b4)), a stop that waits for a running backup ([B3](#b3)), the sheets compaction base for a tab that slept through it ([T2](#t2)).
 5. **Two paths for one job.** These drift, and every fix lands twice. Examples: invitations by relay and by iMIP ([C1](#c1)), the two ways a failed copy is cleaned up ([M6](#m6)), two object-delete loops ([B8](#b8)) and the two PUT judgements in calendar and contacts ([C4](#c4)).
 6. **Backward compatibility the standards forbid.** Readers for old archive and launcher formats ([B1](#b1)), and the legacy trash-cycle guard ([M7](#m7)).
-7. **Scaffolding left after its job was done.** The audit scripts' importer-measuring modes ([X1](#x1)), test-only methods ([C8](#c8)) and a closed-one-endpoint-at-a-time deny list ([ML4](#ml4)).
+7. **Scaffolding left after its job was done.** The audit scripts' importer-measuring modes ([X1](#x1)) and a closed-one-endpoint-at-a-time deny list ([ML4](#ml4)).
 
 A cheap tripwire would catch the next pile early. When a review sees the third `fix(x)` on one mechanism within a week, it stops and asks which of the seven shapes this is, before a fourth patch lands.
 
@@ -228,14 +228,6 @@ Simpler: a guest declines the whole series or one occurrence. ~35 LOC plus a UI 
 Simpler: such an invite files as a plain, unlinked event.
 Lost: that event no longer gives way to the series, and its RSVP no longer reaches the organizer's override. ~60 LOC + ~400 test. Medium risk.
 
-<a id="c8"></a>**C8. Dead and defensive code.**
-- `getEventByUri` and `getRawEvents` (`calendar/calendar.ts:442-454`) are called only from tests.
-- `propagateDecline` is a pass-through.
-- `storedRecurrenceKey` is re-applied to index rows that the projection already writes canonically (`818976b3d` predates files-as-truth). Keep it only on input.
-- A shared calendar's cached `permission` is resolved again on every list.
-
-~35 LOC, low risk.
-
 Judged essential: the shared `lib/dav` (sync-collection, report rows, propfind and the multiget resolver remove real CalDAV and CardDAV duplication), file-as-truth with `rebuildProjection`, wall-clock recurrence keys, SEQUENCE-then-DTSTAMP ordering, DKIM sender binding, and the 6-line Thunderbird ctag bump.
 
 ## Import, export and OOXML
@@ -288,7 +280,7 @@ Judged essential: zip and OPC hardening, the package parse budget, the batched x
 
 ## Suggested order
 
-1. **Pure refactors, no product change, low risk:** C3, C4, C8, ML3, T3, T5, X8, X9, B1 and M7 (the last two are already required by CODE-STANDARDS). These are a cheap-wins round of small, independent units.
+1. **Pure refactors, no product change, low risk:** C3, C4, ML3, T3, T5, X8, X9, B1 and M7 (the last two are already required by CODE-STANDARDS). These are a cheap-wins round of small, independent units.
 2. **Reorders with medium risk and the largest risk reduction:** M1, M9, M2, ML1 and C1, each a unit with its own failing test first. X2 and X6, settled by the export ruling, join them.
 3. **Product calls, to put to the owner as one list:** ML2, B3, B4, B6, C2, C6, C7, T2, T6, X3, X5, M5 and X1.
 4. **The lifecycle's loose ends (M4):** the dev-data reset note, the proposal's Goal 1 line, and the call on the canvas comment card's `deletedAt`.

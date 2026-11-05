@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { rmSync } from 'node:fs';
 import type { Calendar } from '../../lib/calendar/calendar';
-import { CALENDAR_TEST_ROOT, makeCalendar } from '../calendar-test-helpers';
+import { CALENDAR_TEST_ROOT, makeCalendar, storedEvents } from '../calendar-test-helpers';
 import { vcal } from '../ics-test-helpers';
 
 // What one `.ics` import promises per series: the series that landed stay, the one whose commit failed
@@ -20,7 +20,9 @@ const UIDS = ['import-1@other', 'import-2@other', 'import-3@other', 'import-4@ot
 const FILE = vcal(...UIDS.map((uid, index) => series(uid, `Series ${index + 1}`)));
 
 const titlesOf = async (calendar: Calendar, calendarId: string): Promise<string[]> =>
-    (await calendar.getRawEvents(calendarId)).map((event) => event.title).sort();
+    storedEvents(calendar, calendarId)
+        .map((event) => event.title)
+        .sort();
 
 // The one failure a blob write has left: the transaction carrying the third series does not commit.
 function breakNthTransaction(calendar: Calendar, nth: number): () => void {

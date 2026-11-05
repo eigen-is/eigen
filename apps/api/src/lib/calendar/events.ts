@@ -20,7 +20,7 @@ import type { Calendar } from './calendar';
 import * as davStore from './dav-store';
 import { eventForResource, validateEventInput } from './event-input';
 import { composeRsvpReply } from './imip';
-import { answeredOccurrence, propagateCancellation, propagateDecline, propagateInvitation } from './invite-propagation';
+import { answeredOccurrence, propagateCancellation, propagateInvitation, propagateRsvp } from './invite-propagation';
 import { toEvent } from './mappers';
 import { prepareResource, resourceBytes } from './resource-store';
 import * as schema from './schema';
@@ -163,7 +163,7 @@ export async function writeEvent(
     // A resource under a calendar nobody owns any more would dangle on its foreign key.
     if (!calendar.calendarRow(calendarId)) throw new ApiError(404, 'Calendar not found');
     validateEventInput(input);
-    if (input.parentEventId) return writeOverride(calendar, calendarId, input);
+    if (input.parentEventId) return writeOverride(calendar, calendarId, input.parentEventId, input);
 
     // Eigen mints every name it writes: a UID is its author's string and may carry `/`, `..` or quotes.
     const uri = `${crypto.randomUUID()}.ics`;
@@ -180,8 +180,13 @@ export async function writeEvent(
 }
 
 // An exception is one VEVENT inside its master's file; a cancellation rides as an EXDATE plus its stamp.
-async function writeOverride(calendar: Calendar, calendarId: string, input: CreateEventArgs): Promise<CalendarEvent> {
-    const parent = eventById(calendar, input.parentEventId!);
+async function writeOverride(
+    calendar: Calendar,
+    calendarId: string,
+    parentEventId: string,
+    input: CreateEventArgs,
+): Promise<CalendarEvent> {
+    const parent = eventById(calendar, parentEventId);
     if (!parent || parent.calendarId !== calendarId || parent.parentEventId) {
         throw new ApiError(404, 'Event not found');
     }
@@ -358,16 +363,20 @@ export async function deleteEvent(calendar: Calendar, calendarId: string, id: st
     const held = existing.status === 'cancelled' ? [] : heldAttendees(existing, series);
     // Only an attendee has an RSVP to give: any client can hang an ORGANIZER on an event.
     const declining = user && held.some((a) => a.email.toLowerCase() === user.email.toLowerCase());
-    if (user && declining && invitation?.organizer) {
+    if (declining && invitation?.organizer) {
         const orgUserId = invitation.organizer.userId;
         // An organizer known by address only has no Eigen id to relay to, so the decline goes as a REPLY.
         if (!orgUserId || isExternalOwnerId(orgUserId)) {
             const mail = composeRsvpReply(existing, user.email, user.name ?? user.email, 'declined');
             sendMail(mail).catch(console.error);
         } else {
-            propagateDecline(orgUserId, invitation.organizerEventId!, user.email, answeredOccurrence(existing)).catch(
-                console.error,
-            );
+            propagateRsvp(
+                orgUserId,
+                invitation.organizerEventId!,
+                user.email,
+                'declined',
+                answeredOccurrence(existing),
+            ).catch(console.error);
         }
     } else if (!invitation && held.length) {
         // An event with no foreign organizer makes this user its organizer, and an organizer's delete cancels.

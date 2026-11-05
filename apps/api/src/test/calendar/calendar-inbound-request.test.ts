@@ -6,7 +6,7 @@ import * as schema from '../../lib/calendar/schema';
 import type { ReceiveInvitationPayload } from '../../lib/calendar/types';
 import { parseIcs } from '../../lib/ical';
 import type { ParsedEvent } from '../../lib/ical/ical-parse';
-import { CALENDAR_TEST_ROOT, makeCalendar } from '../calendar-test-helpers';
+import { CALENDAR_TEST_ROOT, makeCalendar, storedEvents } from '../calendar-test-helpers';
 import type { TestHome } from '../home-test-helpers';
 import { vcal } from '../ics-test-helpers';
 
@@ -77,7 +77,7 @@ describe('inbound iMIP REQUEST', () => {
 
     test('the organizer a stored event names adopts it in place', async () => {
         const { calendar, id } = await harnessWith(stored(ORG));
-        const before = (await calendar.getRawEvents(id))[0];
+        const before = storedEvents(calendar, id)[0];
 
         await calendar.receiveImipRequest(parsedOf(request()), ORG);
 

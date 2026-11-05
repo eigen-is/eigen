@@ -14,6 +14,7 @@ import { ICS_IMPORT_MAX_EVENTS } from '../../lib/core/transfer';
 import { getHome } from '../../lib/home';
 import { parseResource } from '../../lib/ical';
 import type { OutboundMail } from '../../lib/mailer/mailer';
+import { storedEvents } from '../calendar-test-helpers';
 import { basicAuth, DAV_PASSWORD } from '../dav-test-helpers';
 import { vcal } from '../ics-test-helpers';
 import type { TestUser } from '../setup';
@@ -803,7 +804,7 @@ describe('Calendar transfer routes', () => {
 
         const home = await getHome(alice.id);
         const rowsOf = async (calId: string) =>
-            (await home.calendar.getRawEvents(calId))
+            storedEvents(home.calendar, calId)
                 .filter((e) => e.uid === uid && e.recurrenceDate)
                 .map((e) => e.title)
                 .sort();

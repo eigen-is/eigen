@@ -1,6 +1,6 @@
-// The calendar part of a user's Home: calendars and their events in one SQLite database. Each event is stored as the
-// iCalendar file it came from, and every other column is read from that file. The class is the one door for the REST
-// routes, the CalDAV server and the invitation code. It also checks names and colors.
+// The calendar part of a Home: calendars and their events in one SQLite database. Each event is stored as the
+// iCalendar file it came from, and every other column is read from that file. The class is the one door to that data
+// for callers such as the REST routes, the CalDAV server and the invitation code. It also checks names and colors.
 
 import { CALENDAR_NAME_MAX_LENGTH, DEFAULT_CALENDAR_COLOR } from '@workspace/lib/constants/calendar';
 import { EIGEN_ACCENT_COLORS_SHUFFLED, isHexColor } from '@workspace/lib/constants/colors';
@@ -20,9 +20,8 @@ import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { Semaphore } from '../../utils/semaphore';
 import { enforceHomeDataQuota } from '../config/enforcement';
 import { PATHS } from '../config/paths';
-import type { PutResourceResult } from '../core';
-import { ApiError, BroadcastBatch, computeResourceEtag, newSyncGen, normalizeResourceUri } from '../core';
-import type { DeleteResourceResult, ManagedDatabase, ResourcePreconditions } from '../core/';
+import type { DeleteResourceResult, ManagedDatabase, PutResourceResult, ResourcePreconditions } from '../core';
+import { ApiError, BroadcastBatch, computeResourceEtag, newSyncGen } from '../core';
 import type { Home } from '../home';
 import { atHome } from '../home';
 import { parseResource } from '../ical';
@@ -51,7 +50,6 @@ import { notifySharedCalendarUsers, propagateCalendarShare } from './share-propa
 import * as shares from './shares';
 import { buildCalendarEvent, buildEventsChangedEvent } from './sse-events';
 import { exportEvents, importEvents } from './transfer';
-
 import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload } from './types';
 
 // The one rule for what a calendar may be called and colored: REST, MKCALENDAR and PROPPATCH all land here.
@@ -79,7 +77,6 @@ export class Calendar {
     // Each delta is read inside the transaction that moves it and applied after: a rollback would otherwise leave it applied.
     private eventsBytes = 0;
 
-    // Whether resource writes are quota-metered — see the assignment in init() for what turns it on.
     private meteredIngest = false;
 
     // Bulk writes in flight; while any runs, per-resource events are held and the last one out closes them.
@@ -439,20 +436,6 @@ export class Calendar {
         return this.joinedEvents().where(eq(schema.events.uid, uid)).all().map(toEvent);
     }
 
-    public async getEventByUri(calendarId: string, uri: string): Promise<CalendarEvent | null> {
-        const row = this.joinedEvents()
-            .where(
-                and(eq(schema.resources.calendarId, calendarId), eq(schema.resources.uri, normalizeResourceUri(uri))),
-            )
-            .all()
-            .find((joined) => joined.events.parentEventId === null);
-        return row ? toEvent(row) : null;
-    }
-
-    public async getRawEvents(calendarId: string): Promise<CalendarEvent[]> {
-        return this.joinedEvents().where(eq(schema.events.calendarId, calendarId)).all().map(toEvent);
-    }
-
     public async getEventsInRange(from: Date, to: Date, calendarId?: string): Promise<CalendarEventOccurrence[]> {
         return occurrences.getEventsInRange(this, from, to, calendarId);
     }
@@ -548,7 +531,7 @@ export class Calendar {
         return events.moveEvent(this, calendarId, id, targetCalendarId);
     }
 
-    // A whole `.ics` into one calendar of this Home (docs/CALENDAR.md § Import replays each series through putResource, as a device sync does).
+    // A whole `.ics` into one calendar of this Home, each series replayed through putResource as a device sync does.
     public async importEvents(calendarId: string, bytes: Uint8Array): Promise<ImportCountsResult> {
         return importEvents(this, calendarId, bytes);
     }

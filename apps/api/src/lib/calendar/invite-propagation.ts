@@ -1,6 +1,6 @@
-// The sending side of an invitation. When the organizer of an event invites, changes, cancels or declines, this
-// tells each guest: a guest on this server gets the change in their own Home, and an external guest gets an email.
-// A repeating event also sends its changed or removed occurrences.
+// The sending side of an invitation. When the organizer of an event invites, changes or cancels, this tells each
+// guest: a guest on this server gets the change in their own Home, and an external guest gets an email. A repeating
+// event also sends its changed or removed occurrences. A guest's answer to an organizer on this server goes back the same way.
 
 import { heldAttendees } from '@workspace/lib/calendar/calendar-utils';
 import type { Attendee, CalendarEvent } from '@workspace/lib/types/calendar';
@@ -67,7 +67,8 @@ async function sendSeriesExceptions(
     }
 }
 
-// `series` set means `event` is one occurrence: the messages name the series id plus the occurrence key, the shape an iMIP REQUEST with a RECURRENCE-ID has (docs/CALENDAR.md § An occurrence message names the series). `exceptions` are the series' own, sent to every added guest and in every external update, so a moved occurrence does not render at its original slot and a deleted one does not render at all.
+// `series` set means `event` is one occurrence, and the messages name the series id plus the occurrence key.
+// The series' `exceptions` go to every added guest and every external update, or a guest's copy shows them unmoved.
 export async function propagateInvitation(
     organizerHome: Home,
     event: CalendarEvent,
@@ -88,6 +89,7 @@ export async function propagateInvitation(
 
     // The acting user organizes. A collaborator writes in the owner's calendar, so the owner already holds the event: nothing is relayed to them, and the answer stays theirs to give.
     const selves = new Set([user.email.toLowerCase(), organizerHome.user.email.toLowerCase()]);
+    const organizer = { userId: user.id, email: user.email, name: user.name };
 
     for (const attendee of added) {
         if (selves.has(attendee.email.toLowerCase())) continue;
@@ -95,8 +97,6 @@ export async function propagateInvitation(
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || isGuest(targetUser)) {
                 await addRegistryEntry(organizerHome.user.id, attendee.email);
-                // Send iMIP invite email to external attendee
-                const organizer = { userId: user.id, email: user.email, name: user.name };
                 const mail = composeInviteEmail(event, organizer, [attendee], series, exceptions);
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP invite:', err));
                 continue;
@@ -130,7 +130,6 @@ export async function propagateInvitation(
             });
             await sendSeriesExceptions(targetUser.id, organizerHome, organizerEventId, exceptions, event);
             if (getServerSettings().notifications.email.userOnCalendarInvite) {
-                const organizer = { userId: user.id, email: user.email, name: user.name };
                 const mail = composeInviteEmail(event, organizer, [attendee], series);
                 // A local recipient already has the event via sendToHome, so the iMIP attachment would fire a second update.
                 mail.icalEvent = undefined;
@@ -146,7 +145,6 @@ export async function propagateInvitation(
         try {
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || isGuest(targetUser)) {
-                const organizer = { userId: user.id, email: user.email, name: user.name };
                 const mail = composeCancelEmail(event, organizer, [attendee], series);
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP cancel:', err));
                 continue;
@@ -167,7 +165,6 @@ export async function propagateInvitation(
         try {
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || isGuest(targetUser)) {
-                const organizer = { userId: user.id, email: user.email, name: user.name };
                 const mail = composeInviteEmail(event, organizer, [attendee], series, exceptions, true);
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP update:', err));
                 continue;
@@ -254,15 +251,6 @@ export async function propagateCancellation(
             console.error('Failed to propagate cancellation:', error);
         }
     }
-}
-
-export async function propagateDecline(
-    organizerUserId: string,
-    organizerEventId: string,
-    attendeeEmail: string,
-    recurrenceDate?: string,
-): Promise<void> {
-    await propagateRsvp(organizerUserId, organizerEventId, attendeeEmail, 'declined', recurrenceDate);
 }
 
 // The occurrence a linked copy answers for: a copy that IS one occurrence of a series the guest does not hold. An exception answers through the master it hangs on.

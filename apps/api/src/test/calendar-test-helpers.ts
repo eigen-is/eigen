@@ -1,6 +1,8 @@
 import { join } from 'node:path';
+import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import { and, eq, sql } from 'drizzle-orm';
 import { Calendar } from '../lib/calendar/calendar';
+import { toEvent } from '../lib/calendar/mappers';
 import * as schema from '../lib/calendar/schema';
 import type { TestHome } from './home-test-helpers';
 import { makeTestHome } from './home-test-helpers';
@@ -20,6 +22,10 @@ export async function resourceTextOf(calendar: Calendar, calendarId: string, uri
     if (!resource) throw new Error(`no resource stored at ${calendarId}/${uri}`);
     return new TextDecoder().decode(resource.bytes);
 }
+
+// Every row the projection holds for one calendar, overrides and cancelled occurrences included.
+export const storedEvents = (calendar: Calendar, calendarId: string): CalendarEvent[] =>
+    calendar.joinedEvents().where(eq(schema.events.calendarId, calendarId)).all().map(toEvent);
 
 // One VEVENT's lines, the body a store test PUTs.
 export const vevent = (uid: string, summary: string, extra: string[] = []): string[] => [

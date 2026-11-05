@@ -4,7 +4,7 @@ import { eq, sql } from 'drizzle-orm';
 import type { Calendar } from '../../lib/calendar/calendar';
 import { EVENT_MAX_BYTES } from '../../lib/calendar/resource-store';
 import * as schema from '../../lib/calendar/schema';
-import { CALENDAR_TEST_ROOT, makeCalendar, resourceTextOf } from '../calendar-test-helpers';
+import { CALENDAR_TEST_ROOT, makeCalendar, resourceTextOf, storedEvents } from '../calendar-test-helpers';
 import type { TestHome } from '../home-test-helpers';
 import { vcal } from '../ics-test-helpers';
 
@@ -192,7 +192,7 @@ describe('putResource', () => {
             ]),
         );
         expect(result.ok).toBe(true);
-        const detached = (await harness.instance.getRawEvents(calendarId)).find((r) => r.uid === 'detached@eigen')!;
+        const detached = storedEvents(harness.instance, calendarId).find((r) => r.uid === 'detached@eigen')!;
         expect(detached.recurrenceDate).toBe('2026-04-08');
         expect(detached.parentEventId).toBeNull();
 
@@ -227,7 +227,7 @@ describe('an override names its parent', () => {
         const source = await defaultCalendarId(harness);
         const other = (await harness.instance.createCalendar({ name: 'Other', color: '#2563eb' })).id;
         await put(harness.instance, source, 'series.ics', recurring('parented@eigen'));
-        const parent = (await harness.instance.getRawEvents(source))[0];
+        const parent = storedEvents(harness.instance, source)[0];
 
         await expect(
             harness.instance.createEvent(other, {
@@ -246,7 +246,7 @@ describe('an override names its parent', () => {
         const harness = await makeCalendar();
         const calendarId = await defaultCalendarId(harness);
         await put(harness.instance, calendarId, 'series.ics', recurring('override-twice@eigen'));
-        const parent = (await harness.instance.getRawEvents(calendarId))[0];
+        const parent = storedEvents(harness.instance, calendarId)[0];
         const override = (title: string) =>
             harness.instance.createEvent(calendarId, {
                 title,
@@ -260,7 +260,7 @@ describe('an override names its parent', () => {
         await override('First take');
         await override('Second take');
 
-        const exceptions = (await harness.instance.getRawEvents(calendarId)).filter((e) => e.parentEventId);
+        const exceptions = storedEvents(harness.instance, calendarId).filter((e) => e.parentEventId);
         expect(exceptions.map((e) => e.title)).toEqual(['Second take']);
         expect(await harness.instance.listResources(calendarId)).toHaveLength(1);
     });
