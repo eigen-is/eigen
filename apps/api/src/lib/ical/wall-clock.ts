@@ -4,7 +4,7 @@
 // the one-way edge, so `calendar` imports `ical`, never the reverse.
 
 // Deep import (not the @workspace/lib/calendar barrel) to keep React out of the API module graph.
-import { normalizeTimezone, occurrenceDateToString } from '@workspace/lib/calendar/calendar-utils';
+import { occurrenceDateToString } from '@workspace/lib/calendar/calendar-utils';
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import { RRule } from 'rrule';
 import { isOutOfRangeRecurrenceStart, isSubDailyRrule, MAX_OCCURRENCES } from './recurrence-limits';
@@ -16,10 +16,8 @@ const intlCache = new Map<string, Intl.DateTimeFormat>();
 function getIntlFormatter(tz: string): Intl.DateTimeFormat {
     let fmt = intlCache.get(tz);
     if (!fmt) {
-        // An unknown zone reads as UTC, where Intl would throw a RangeError.
-        const safeZone = normalizeTimezone(tz) ?? 'UTC';
         fmt = new Intl.DateTimeFormat('en-GB', {
-            timeZone: safeZone,
+            timeZone: tz,
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
