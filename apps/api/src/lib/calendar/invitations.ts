@@ -506,15 +506,14 @@ async function applyInvitationUpdate(
     if (!resource) return false;
     const component = events.storedComponent(calendar, resource);
     // A copy that is one occurrence of a series this Home does not hold is keyed by its RECURRENCE-ID.
-    const key = linked.recurrenceDate;
-    if (!isNewerRevision(payload, storedRevision(component, key))) return false;
+    if (!isNewerRevision(payload, storedRevision(component, linked.recurrenceDate))) return false;
 
     // Never extend the rrule past what the guest has: they may have shortened it on purpose.
     const rrule = constrainRRule(payload.rrule, linked.rrule);
     // A redelivery changes nothing, so it bumps no ctag and sends no second notice.
     const changed = patchEvent(
         component,
-        key,
+        linked.recurrenceDate,
         invitationPatch(linked, payload, rrule),
         events.writeContext(false, payload.dtstamp),
     );
