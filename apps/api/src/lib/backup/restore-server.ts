@@ -21,7 +21,7 @@ import {
     unpackBound,
     withUnpackSlack,
 } from './archive';
-import { flatStorageKey, readMountPathRows, rowArchivePath } from './archive-layout';
+import { archivePaths, flatStorageKey, readMountPathRows } from './archive-layout';
 import { describeError } from './errors';
 import type { VersionedDatabase } from './materialize-mount';
 import { checkRestoredDatabases, materializeMount, movePath, openToCheck, redateTrash } from './materialize-mount';
@@ -230,7 +230,7 @@ function replayPendingUploads(mountDir: string, liveMountDir: string, fromFiles:
     const db = new Database(path.join(mountDir, PATHS.DRIVE.METADATA_DB), { readwrite: true, create: false });
     try {
         const rows = fromFiles ? readMountPathRows(db) : [];
-        const byId = new Map(rows.map((row) => [row.id, row]));
+        const archivePath = archivePaths(rows);
         const byKey = new Map(rows.filter((row) => row.type === 'file').map((row) => [flatStorageKey(row), row]));
         const pending = db
             .query<{ storageKey: string; stagingPath: string }, []>(
@@ -247,7 +247,7 @@ function replayPendingUploads(mountDir: string, liveMountDir: string, fromFiles:
                 continue;
             }
             const row = byKey.get(storageKey);
-            const source = fromFiles ? row && resolveInside(dataDir, rowArchivePath(row, byId)) : staged;
+            const source = fromFiles ? row && resolveInside(dataDir, archivePath(row)) : staged;
             if (!source || !isUsableName(name) || !fs.existsSync(source)) {
                 notReplayed.missing++;
                 continue;

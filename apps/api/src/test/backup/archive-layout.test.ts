@@ -40,10 +40,7 @@ test('verify refuses two trash roots that were each trashed from inside the othe
     const inA = row('inA', 'In A', 'folder', a.id);
     const b = { ...row('b', 'B', 'folder', root.id), trashedFrom: 'inA' };
     const inB = row('inB', 'In B', 'folder', b.id);
-    expect(checkArchivedPathRows([root, a, inA, b, inB])).toEqual([
-        'path row a was trashed from inside itself',
-        'path row b was trashed from inside itself',
-    ]);
+    expect(checkArchivedPathRows([root, a, inA, b, inB])).toEqual(['path row a was trashed from inside itself']);
 });
 
 test('verify passes trash roots trashed from a live folder and from inside another trash root', () => {
@@ -62,15 +59,18 @@ test('verify passes a trash root whose original folder is gone', () => {
     expect(checkArchivedPathRows([root, orphan])).toEqual([]);
 });
 
-test('verify names only the trash roots on the loop, not one trashed from inside it', () => {
+// C is trashed from inside the loop but is not on it, so the refusal never names it.
+test('verify refuses a loop of trash roots by a root on it, and passes the tree once the loop is broken', () => {
     const root = row('root', 'Drive', 'folder', null);
+    const live = row('live', 'Live', 'folder', root.id);
     const a = { ...row('a', 'A', 'folder', root.id), trashedFrom: 'inB' };
     const inA = row('inA', 'In A', 'folder', a.id);
-    const b = { ...row('b', 'B', 'folder', root.id), trashedFrom: 'inA' };
-    const inB = row('inB', 'In B', 'folder', b.id);
+    const inB = row('inB', 'In B', 'folder', 'b');
     const c = { ...row('c', 'C', 'file', root.id), trashedFrom: inA.id };
-    expect(checkArchivedPathRows([c, root, a, inA, b, inB])).toEqual([
+    const looped = { ...row('b', 'B', 'folder', root.id), trashedFrom: inA.id };
+    expect(checkArchivedPathRows([c, root, live, a, inA, looped, inB])).toEqual([
         'path row a was trashed from inside itself',
-        'path row b was trashed from inside itself',
     ]);
+    const unlooped = { ...looped, trashedFrom: live.id };
+    expect(checkArchivedPathRows([c, root, live, a, inA, unlooped, inB])).toEqual([]);
 });

@@ -1,6 +1,7 @@
 // What a home archive holds, read without a live home: the home databases, and a mount's paths table turned into
-// archive paths and storage keys. The backup steps share it, such as capture, verify and restore. Nothing it
-// imports opens a file, so ./eigen restore can stage an archive with it while the API runs on the same data/.
+// archive paths and storage keys, with the checks an uploaded table must pass first. The backup steps share it, such
+// as capture, verify and restore. Nothing it imports opens a file, so ./eigen restore can stage an archive with it
+// while the API runs on the same data/.
 
 import type { Database } from 'bun:sqlite';
 import type { DrivePathType } from '@workspace/lib/types/drive';
@@ -76,19 +77,30 @@ export function readMountPathRows(db: Database): MountPathRow[] {
     return db.query<MountPathRow, []>(`SELECT ${columns} FROM paths`).all();
 }
 
-// Where a row's bytes go inside the archive: the storage key it would have on a `local` mount. That
-// is the name chain from the root, with a trash root at `.trash/{id}.{ext}` as trashPath spells it.
-// Deriving it from metadata.db instead of the mount's own keys is what makes the archive
-// storage-independent: local-key and s3 mounts store flat keys, and restore re-derives whichever
-// shape the target mount needs.
-export function rowArchivePath(row: MountPathRow, byId: ReadonlyMap<string, MountPathRow>): string {
-    const segment = (r: MountPathRow) => (r.trashedFrom ? trashStorageKey(r.id, r.name) : r.name);
-    const segments = [segment(row)];
-    for (const parent of ancestors(row, byId)) {
-        if (parent.parentId === null) break; // the mount root contributes no segment
-        segments.unshift(segment(parent));
-    }
-    return segments.join('/');
+// Where each row's bytes go inside the archive: the storage key it would have on a `local` mount. That is the name
+// chain from the root, with a trash root at `.trash/{id}.{ext}` as trashPath spells it. Deriving it from metadata.db
+// instead of the mount's own keys is what makes the archive storage-independent: local-key and s3 mounts store flat
+// keys, and restore re-derives whichever shape the target mount needs. Each folder's path is built once.
+export function archivePaths(rows: readonly MountPathRow[]): (row: MountPathRow) => string {
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const built = new Map<string, string>();
+    const segment = (row: MountPathRow) => (row.trashedFrom ? trashStorageKey(row.id, row.name) : row.name);
+    return (row) => {
+        const unbuilt: MountPathRow[] = [];
+        let top: MountPathRow | undefined = row;
+        // Marked before its path is known, so a walk ends on a parent cycle too. The root contributes no segment.
+        while (top && top.parentId !== null && !built.has(top.id)) {
+            built.set(top.id, '');
+            unbuilt.push(top);
+            top = byId.get(top.parentId);
+        }
+        let prefix = top ? (built.get(top.id) ?? '') : '';
+        for (const passed of unbuilt.reverse()) {
+            prefix = prefix ? `${prefix}/${segment(passed)}` : segment(passed);
+            built.set(passed.id, prefix);
+        }
+        return prefix;
+    };
 }
 
 // What a flat-key backend (`local-key`, `s3`) stores a row's object under: `file`, falling back to
@@ -103,9 +115,13 @@ export function flatStorageKey(row: Pick<MountPathRow, 'id' | 'file'>): string {
 export function storageKeyOf(row: MountPathRow, byId: ReadonlyMap<string, MountPathRow>, isPathBased: boolean): string {
     if (!isPathBased) return flatStorageKey(row);
     const segments = row.file ? [row.file] : [];
-    for (const parent of ancestors(row, byId)) {
-        if (parent.parentId === null) break;
+    // A walk that meets a row twice stops, as a parent cycle would otherwise spin forever on an untrusted table.
+    const seen = new Set<string>([row.id]);
+    let parent = row.parentId === null ? undefined : byId.get(row.parentId);
+    while (parent && parent.parentId !== null && !seen.has(parent.id)) {
+        seen.add(parent.id);
         if (parent.file) segments.unshift(parent.file);
+        parent = byId.get(parent.parentId);
     }
     return segments.join('/');
 }
@@ -141,14 +157,14 @@ export function unreachableRows(rows: readonly MountPathRow[]): { orphaned: Moun
 // Verify runs it on the event loop, so every check is linear in the rows.
 export function checkArchivedPathRows(rows: readonly MountPathRow[]): string[] {
     const broken = brokenChains(rows);
-    const insideItself = trashedFromInsideItself(rows);
     const failures: string[] = [];
     for (const row of rows) {
         failures.push(...unusableParts(row));
         const chain = broken.get(row.id);
         if (chain) failures.push(`path row ${row.id} ${chain}`);
-        else if (insideItself.has(row.id)) failures.push(`path row ${row.id} was trashed from inside itself`);
     }
+    const looped = failures.length === 0 && trashedFromInsideItself(rows);
+    if (looped) failures.push(`path row ${looped.id} was trashed from inside itself`);
     return failures;
 }
 
@@ -178,58 +194,39 @@ function brokenChains(rows: readonly MountPathRow[]): Map<string, string | null>
     return verdicts;
 }
 
-// The trash roots trashed from inside themselves, whose permanent delete would wait on its own lock. Each row points
-// at its parent and a trash root at its original folder too: a root is inside itself when that folder reaches it back,
-// so both share a strongly connected component (Tarjan's, on a stack of its own, as a deep table would overflow).
-function trashedFromInsideItself(rows: readonly MountPathRow[]): Set<string> {
+// A trash root trashed from inside itself, directly or through other trash roots, whose permanent delete would wait on
+// its own lock. A row links to its parent, and a trash root to its original folder too. Once every parent chain ends
+// at the root, a loop among those links runs through such a root, and a depth-first walk on a stack of its own finds
+// one: a row's complement on the stack marks it done once everything it links to is.
+function trashedFromInsideItself(rows: readonly MountPathRow[]): MountPathRow | undefined {
     const position = new Map(rows.map((row, at) => [row.id, at]));
-    const targets = (row: MountPathRow): number[] =>
-        [row.parentId, row.trashedFrom].flatMap((id) => {
-            const at = id === null ? undefined : position.get(id);
-            return at === undefined ? [] : [at];
-        });
-    const order = new Int32Array(rows.length).fill(-1);
-    const low = new Int32Array(rows.length);
-    const component = new Int32Array(rows.length).fill(-1);
-    const open = new Int32Array(rows.length);
-    let openSize = 0;
-    let visited = 0;
+    // 0 unseen, 1 on the walk, 2 done.
+    const state = new Uint8Array(rows.length);
+    const walk: number[] = [];
     for (let start = 0; start < rows.length; start++) {
-        if (order[start] !== -1) continue;
-        const path: { at: number; next: number[] }[] = [];
-        const visit = (at: number): void => {
-            order[at] = low[at] = visited++;
-            open[openSize++] = at;
-            path.push({ at, next: targets(rows[at]) });
-        };
-        visit(start);
-        while (path.length > 0) {
-            const { at, next } = path[path.length - 1];
-            const to = next.pop();
-            if (to !== undefined) {
-                if (order[to] === -1) visit(to);
-                else if (component[to] === -1) low[at] = Math.min(low[at], order[to]);
+        const stack = [start];
+        for (let at = stack.pop(); at !== undefined; at = stack.pop()) {
+            if (at < 0) {
+                state[~at] = 2;
+                walk.pop();
                 continue;
             }
-            path.pop();
-            if (path.length > 0) {
-                const caller = path[path.length - 1].at;
-                low[caller] = Math.min(low[caller], low[at]);
+            if (state[at] !== 0) continue;
+            state[at] = 1;
+            walk.push(at);
+            stack.push(~at);
+            for (const id of [rows[at].parentId, rows[at].trashedFrom]) {
+                const to = id === null ? undefined : position.get(id);
+                if (to === undefined) continue;
+                if (state[to] === 0) stack.push(to);
+                else if (state[to] === 1) {
+                    const loop = walk.slice(walk.indexOf(to)).map((onLoop) => rows[onLoop]);
+                    return loop.find((row, step) => row.trashedFrom === loop[(step + 1) % loop.length].id);
+                }
             }
-            if (low[at] !== order[at]) continue;
-            let member: number;
-            do {
-                member = open[--openSize];
-                component[member] = at;
-            } while (member !== at);
         }
     }
-    const inside = new Set<string>();
-    for (const [at, row] of rows.entries()) {
-        const from = row.trashedFrom === null ? undefined : position.get(row.trashedFrom);
-        if (from !== undefined && component[from] === component[at]) inside.add(row.id);
-    }
-    return inside;
+    return undefined;
 }
 
 // Every path a restore builds is a join of id, name and file: a `..` or a separator in one moves bytes out of the
@@ -254,6 +251,7 @@ function unusableParts(row: MountPathRow): string[] {
 // all, and opening it is not verify's business.
 export function listManagedDatabases(rows: readonly MountPathRow[]): ManagedArchiveDatabase[] {
     const byId = new Map(rows.map((row) => [row.id, row]));
+    const archivePath = archivePaths(rows);
     const found: ManagedArchiveDatabase[] = [];
     for (const row of rows) {
         if (row.type !== 'file') continue;
@@ -262,7 +260,7 @@ export function listManagedDatabases(rows: readonly MountPathRow[]): ManagedArch
         // The container is the parent of a live data.db and the grandparent of a version snapshot.
         const isContainerData = container.id === row.parentId && row.name === CONTAINER_DATA_DB;
         found.push({
-            path: rowArchivePath(row, byId),
+            path: archivePath(row),
             isContainerData,
             containerType: container.type,
             config: configOf(row.name, container.type),
@@ -278,16 +276,4 @@ export function listManagedDatabases(rows: readonly MountPathRow[]): ManagedArch
 function configOf(name: string, containerType: DrivePathType): DatabaseConfig<SchemaType> {
     if (name === CONTAINER_COMMENTS_DB) return COMMENT_INDEX_DB_CONFIG;
     return isCollabType(containerType) ? COLLAB_DB_CONFIG : CHAT_ROOM_DB_CONFIG;
-}
-
-// Ancestors of `row`, nearest first. Guarded against a corrupt parentId cycle, which would
-// otherwise spin forever on a table the backup does not get to trust.
-function* ancestors(row: MountPathRow, byId: ReadonlyMap<string, MountPathRow>): Generator<MountPathRow> {
-    const seen = new Set<string>([row.id]);
-    let current = row.parentId ? byId.get(row.parentId) : undefined;
-    while (current && !seen.has(current.id)) {
-        seen.add(current.id);
-        yield current;
-        current = current.parentId ? byId.get(current.parentId) : undefined;
-    }
 }

@@ -17,13 +17,7 @@ import { buildStorageKey } from '../mount/names';
 import { paths, pendingUploads } from '../mount/schema';
 import { errnoOf } from '../storage/deadline';
 import type { MountPathRow } from './archive-layout';
-import {
-    HOME_DATABASES,
-    listManagedDatabases,
-    readMountPathRows,
-    rowArchivePath,
-    storageKeyOf,
-} from './archive-layout';
+import { archivePaths, HOME_DATABASES, listManagedDatabases, readMountPathRows, storageKeyOf } from './archive-layout';
 import { describeError } from './errors';
 import { requireMountDir, resolveInside } from './paths';
 
@@ -60,6 +54,7 @@ export async function materializeMount(
         const orm = drizzle(db);
         const rows = readMountPathRows(db);
         const byId = new Map(rows.map((row) => [row.id, row]));
+        const archivePath = archivePaths(rows);
         const managed = listManagedDatabases(rows);
         const inData = (relPath: string): string => inMountData(dataDir, summary.id, relPath);
         // Every pending row names a staged copy on the source server that the archive does not carry.
@@ -79,7 +74,7 @@ export async function materializeMount(
         const now = Date.now();
         const managedPaths = new Set(managed.map((entry) => entry.path));
         const placeFile = (row: MountPathRow): void => {
-            const archived = rowArchivePath(row, byId);
+            const archived = archivePath(row);
             const source = inData(archived);
             // A bucket's objects did not move aside with the folder: every row gets a fresh key, even one with
             // no bytes, so no upload lands on an object the `.pre-restore-` copy still names.

@@ -581,6 +581,30 @@ describe('Backup pack and verify', () => {
         PACK_TIMEOUT_MS,
     );
 
+    // A hostile table can be deep enough that building its paths holds the event loop, so the size check never runs.
+    test(
+        'a paths table that fails its row checks is refused before a path is built from it',
+        async () => {
+            const dir = await extractFresh('extract-row-refused-');
+            const folder = join(dir, folderName);
+            const relMetadata = `home/mounts/${mountId}/metadata.db`;
+            const db = new Database(join(folder, relMetadata));
+            try {
+                db.run("UPDATE paths SET size = 1 WHERE name = 'café ünïcode.png'");
+                db.run("UPDATE paths SET trashedFrom = id WHERE name LIKE 'long-name-%'");
+            } finally {
+                db.close();
+            }
+            await restateManifestEntry(folder, relMetadata);
+
+            const record = await verifyFolder(folder);
+            expect(record.status).toBe('failed');
+            expect(record.failures.join(' ')).toContain('was trashed from inside itself');
+            expect(record.warnings).toBeUndefined();
+        },
+        PACK_TIMEOUT_MS,
+    );
+
     test(
         'a sidecar that is not one reads as none, and an artifact that is not one is an error',
         async () => {

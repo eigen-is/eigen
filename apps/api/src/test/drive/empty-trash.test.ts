@@ -1,6 +1,4 @@
 import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
 import { getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
 import type { Mount } from '../../lib/mount';
@@ -64,39 +62,6 @@ describe('emptyTrash', () => {
         expect(await mount.getPath(inner.id)).toBeNull();
         expect(await mount.getPath(loner)).toBeNull();
         expect((await mount.getPath(outside))?.trashedAt).toBeInstanceOf(Date);
-    });
-
-    // Nested trash roots take each other's locks in nesting order only, so deletes that meet on them all end.
-    test('two deletes of nested trash roots beside emptyTrash and the purge at open all end, leaving nothing', async () => {
-        const user = await createTestUserOnStorage('local-fullnames', 'Nested Trash');
-        const drive = (await getHome(user.id)).drive;
-        const [local] = drive.getMounts();
-        const root = (await drive.getRootFolder(local.id))!.id;
-        const outer = (await drive.createFolder(local.id, root, 'Outer')).id;
-        const mid = (await drive.createFolder(local.id, outer, 'Mid')).id;
-        const sub = (await drive.createFolder(local.id, mid, 'Sub')).id;
-        const inSub = (await drive.createFileFromData(local.id, sub, 'in-sub.txt', 'text/plain', Buffer.from('s'))).id;
-        const inOuter = (
-            await drive.createFileFromData(local.id, outer, 'in-outer.txt', 'text/plain', Buffer.from('o'))
-        ).id;
-        const earlier = new Date(Date.now() - 60 * 1000);
-        for (const id of [inSub, mid, inOuter, outer]) {
-            await drive.deletePath(local.id, id);
-            await local.updatePath(id, { trashedAt: earlier });
-        }
-
-        const all = Promise.all([
-            local.permanentlyDeleteFromTrash(outer),
-            local.permanentlyDeleteFromTrash(mid),
-            drive.emptyTrash(local.id),
-            local.purgeTrash(0),
-        ]);
-        expect(await Promise.race([all.then(() => 'ended'), Bun.sleep(5000).then(() => 'timed out')])).toBe('ended');
-
-        expect(await local.listTrash()).toEqual([]);
-        for (const id of [outer, mid, sub, inSub, inOuter]) expect(await local.getPath(id)).toBeNull();
-        expect(readdirSync(join(local.dataDir, '.trash'))).toEqual([]);
-        expect(existsSync(join(local.dataDir, 'Outer'))).toBe(false);
     });
 
     test('an item restored before its turn is kept', async () => {

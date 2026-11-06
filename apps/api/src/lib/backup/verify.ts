@@ -16,12 +16,12 @@ import { PATHS, SERVER_DATABASES } from '../config/paths';
 import { ApiError } from '../core/errors';
 import { hashFile } from '../storage/deadline';
 import {
+    archivePaths,
     checkArchivedPathRows,
     HOME_DATABASE_PATHS,
     listManagedDatabases,
     managedDbContainer,
     readMountPathRows,
-    rowArchivePath,
 } from './archive-layout';
 import { describeError } from './errors';
 import { DATABASES_PER_YIELD } from './materialize-mount';
@@ -121,17 +121,20 @@ function listArchiveDatabases(
             const db = new Database(metadata, { readonly: true });
             try {
                 const rows = readMountPathRows(db);
-                // Before a path is derived from them: every path a restore builds is a join of these
-                // rows' two name columns, and the table came in inside a file somebody uploaded.
-                for (const failure of checkArchivedPathRows(rows)) fail(`${relMetadata}: ${failure}`);
+                // Before a path is derived from them, and none is once one fails: every path a restore builds is a
+                // join of these rows' name columns, and the table came in inside a file somebody uploaded.
+                const refusals = checkArchivedPathRows(rows);
+                for (const failure of refusals) fail(`${relMetadata}: ${failure}`);
+                if (refusals.length > 0) continue;
                 // A restore serves a plain file's size and ETag from its row, so the row describes the bytes the
                 // manifest lists for it. Eigen's own databases are copies, and a row with no file has nothing to match.
                 // A warning, not a failure: an archive written before captures rewrote the row must still restore.
                 const byId = new Map(rows.map((row) => [row.id, row]));
+                const archivePath = archivePaths(rows);
                 for (const row of rows) {
                     if (row.type !== 'file' || managedDbContainer(row, byId)) continue;
                     const file = entries.get(
-                        archiveMountPath(entry.name, `${PATHS.DRIVE.DATA_DIR}/${rowArchivePath(row, byId)}`),
+                        archiveMountPath(entry.name, `${PATHS.DRIVE.DATA_DIR}/${archivePath(row)}`),
                     );
                     if (!file) continue;
                     if (row.size !== file.bytes) {
