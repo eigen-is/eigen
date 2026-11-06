@@ -111,9 +111,9 @@ export async function importEvents(
     // The store announces nothing, so the file is one event, sent even when a refusal stops it partway.
     try {
         for (const group of series.values()) {
-            // An override with no master has nothing to attach to, and the file goes on without it.
+            // Overrides with no master have nothing to attach to, and the file goes on without their series.
             if (!group.master) {
-                result.failed += group.overrides.length;
+                result.failed++;
                 continue;
             }
             const importedOrganizer = dropScheduling(group.master);

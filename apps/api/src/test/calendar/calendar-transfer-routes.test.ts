@@ -712,9 +712,9 @@ describe('Calendar transfer routes', () => {
         expect(listed.some((e) => e.title === 'Unusable')).toBe(false);
     });
 
-    // A whole file used to be "not a calendar" over one VEVENT the parser could not read. Both members it
-    // cannot write are counted as failures, and the readable event still lands.
-    test('a VEVENT with no start and an override with no master fail while the rest of the file imports', async () => {
+    // A file is not refused over one VEVENT the parser cannot read. Each series it cannot write counts as
+    // one failure, however many VEVENTs spell it, and the readable event still lands.
+    test('a VEVENT with no start and overrides with no master fail once each while the rest of the file imports', async () => {
         const stamp = crypto.randomUUID();
         const file = vcal(
             vevent(`readable-${stamp}@other`, 'Readable', '20260411T090000Z', '20260411T100000Z'),
@@ -726,6 +726,15 @@ describe('Calendar transfer routes', () => {
                 'DTSTART:20260411T120000Z',
                 'DTEND:20260411T130000Z',
                 'SUMMARY:Override of a series this file does not hold',
+                'END:VEVENT',
+            ],
+            [
+                'BEGIN:VEVENT',
+                `UID:orphan-${stamp}@other`,
+                'RECURRENCE-ID:20260418T110000Z',
+                'DTSTART:20260418T120000Z',
+                'DTEND:20260418T130000Z',
+                'SUMMARY:Another override of that series',
                 'END:VEVENT',
             ],
         );
