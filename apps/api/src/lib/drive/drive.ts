@@ -1184,8 +1184,6 @@ export class Drive {
 
     // ---- Chats and comments ----
 
-    // A trashed chat is refused. Opening it would create a new data.db inside it, and that one would
-    // take the trashed one's name and block the restore.
     public async getChat(mountId: string, chatId: string): Promise<ChatRoom> {
         const path = await this.getMount(mountId).getActivePath(chatId);
         if (path.type !== DRIVE_TYPE_CHAT) {
@@ -1435,12 +1433,6 @@ export class Drive {
             }
             throw err;
         }
-    }
-
-    // A ChatRoom is built fresh for every request. This lock keeps two of them from both creating the
-    // chat's data.db.
-    public async withPathLock<T>(mountId: string, pathId: string, fn: () => Promise<T>): Promise<T> {
-        return this.getMount(mountId).withPathLock(pathId, fn);
     }
 
     // ---- Open tabs ----
