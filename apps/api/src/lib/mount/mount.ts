@@ -44,7 +44,7 @@ import {
     renameThenWriteRow,
     rethrowPathWriteError,
 } from './helpers';
-import { buildStorageKey, foldName, trashStorageKey, validateName } from './names';
+import { buildStorageKey, foldName, MAX_FOLDER_DEPTH, trashStorageKey, validateName } from './names';
 import type * as schema from './schema';
 import { paths } from './schema';
 import * as searchIndex from './search-index';
@@ -893,12 +893,25 @@ export class Mount {
     }
 
     // Why pathId can't go into targetParentId, or null. A trashed folder up to the root is a 404 like a deleted one,
-    // because its permanent delete would take the row with it.
+    // because its permanent delete would take the row with it. Depth counts from the deepest row under pathId,
+    // which for a new row is the row itself.
     public targetFolderErrorInTx(tx: Tx, pathId: string, targetParentId: string | null): ApiError | null {
+        let [{ depth }] = tx.all<{ depth: number }>(sql`
+            WITH RECURSIVE below(id, level) AS (
+                SELECT ${pathId}, 0
+                UNION ALL
+                SELECT p.id, b.level + 1 FROM paths p JOIN below b ON p.parentId = b.id
+                    WHERE b.level < ${MAX_FOLDER_DEPTH}
+            )
+            SELECT MAX(level) AS depth FROM below
+        `);
         let current = targetParentId;
         while (current) {
             if (current === pathId) {
                 return new ApiError(400, 'Cannot move a folder into itself or its own descendant');
+            }
+            if (++depth > MAX_FOLDER_DEPTH) {
+                return new ApiError(400, `Folders can be nested at most ${MAX_FOLDER_DEPTH} levels deep`);
             }
             const row = tx
                 .select({ parentId: paths.parentId, trashedAt: paths.trashedAt })

@@ -74,3 +74,14 @@ test('verify refuses a loop of trash roots by a root on it, and passes the tree 
     const unlooped = { ...looped, trashedFrom: live.id };
     expect(checkArchivedPathRows([c, root, live, a, inA, unlooped, inB])).toEqual([]);
 });
+
+// Verify and restore walk every row's ancestors, so a table deeper than a live drive allows is refused, whichever
+// end of the chain the walk starts from.
+test('verify refuses a row 257 levels deep and passes a chain 256 deep', () => {
+    const chain = [row('root', 'Drive', 'folder', null)];
+    for (let depth = 1; depth <= 257; depth++) chain.push(row(`f${depth}`, `F${depth}`, 'folder', chain[depth - 1].id));
+    const refusal = ['path row f257 sits 257 levels deep, past the 256 a drive allows'];
+    expect(checkArchivedPathRows(chain.slice(0, 257))).toEqual([]);
+    expect(checkArchivedPathRows(chain)).toEqual(refusal);
+    expect(checkArchivedPathRows(chain.toReversed())).toEqual(refusal);
+});

@@ -16,7 +16,7 @@ import type { DatabaseConfig, SchemaType } from '../core/managed-database';
 import { SHARED_DB_CONFIG } from '../drive/db-config';
 import { MAIL_DB_CONFIG } from '../mail/db-config';
 import { CONTAINER_COMMENTS_DB, CONTAINER_DATA_DB, isContainerDatabase } from '../mount/container-dbs';
-import { isReservedName, isUsableName, trashStorageKey } from '../mount/names';
+import { isReservedName, isUsableName, MAX_FOLDER_DEPTH, trashStorageKey } from '../mount/names';
 import { paths } from '../mount/schema';
 import { NOTIFICATION_CENTER_DB_CONFIG } from '../notification-center/db-config';
 import { isVersionsName } from '../versioning/versions-folder';
@@ -142,54 +142,59 @@ export function managedDbContainer(row: MountPathRow, byId: ReadonlyMap<string, 
 // The rows no path builder can place, by their chain or by a part a path cannot hold: the capture leaves them out of
 // an archive, with what is inside them, and verify refuses an archive with one.
 export function unreachableRows(rows: readonly MountPathRow[]): { orphaned: MountPathRow[]; unusable: MountPathRow[] } {
-    const broken = brokenChains(rows);
+    const chains = parentChains(rows);
     const orphaned: MountPathRow[] = [];
     const unusable: MountPathRow[] = [];
     for (const row of rows) {
         if (unusableParts(row).length > 0) unusable.push(row);
-        else if (broken.get(row.id) !== null) orphaned.push(row);
+        else if (typeof chains.get(row.id) === 'string') orphaned.push(row);
     }
     return { orphaned, unusable };
 }
 
 // An archived paths table arrived inside a file an admin uploaded, so a row no path can be built for refuses the
-// archive whole, and so does a tree that does not end at the root or a trash root whose delete would wait on itself.
-// Verify runs it on the event loop, so every check is linear in the rows.
+// archive whole, and so do a tree that does not end at the root or sits deeper than a live drive allows, and a trash
+// root whose delete would wait on itself. Verify runs it on the event loop, so every check is linear in the rows.
 export function checkArchivedPathRows(rows: readonly MountPathRow[]): string[] {
-    const broken = brokenChains(rows);
+    const chains = parentChains(rows);
     const failures: string[] = [];
     for (const row of rows) {
         failures.push(...unusableParts(row));
-        const chain = broken.get(row.id);
-        if (chain) failures.push(`path row ${row.id} ${chain}`);
+        const chain = chains.get(row.id);
+        if (typeof chain === 'string') failures.push(`path row ${row.id} ${chain}`);
+        else if (chain !== undefined && chain > MAX_FOLDER_DEPTH) {
+            failures.push(`path row ${row.id} sits ${chain} levels deep, past the ${MAX_FOLDER_DEPTH} a drive allows`);
+        }
     }
     const looped = failures.length === 0 && trashedFromInsideItself(rows);
     if (looped) failures.push(`path row ${looped.id} was trashed from inside itself`);
     return failures;
 }
 
-// Where each row's parent chain ends when it does not end at a root row: at a parent the table does not hold, or in
-// a cycle. Null for a row that reaches the root. A walk stops at the first row it has a verdict for, and every row
-// it passed shares that verdict.
-function brokenChains(rows: readonly MountPathRow[]): Map<string, string | null> {
+// Each row's depth below the root, the root's 0, or where its parent chain ends when it does not reach the root: at
+// a parent the table does not hold, or in a cycle. A walk stops at the first row it has a verdict for, and the rows
+// it passed take theirs from it.
+function parentChains(rows: readonly MountPathRow[]): Map<string, string | number> {
     const byId = new Map(rows.map((row) => [row.id, row]));
-    const verdicts = new Map<string, string | null>();
+    const verdicts = new Map<string, string | number>();
     for (const row of rows) {
         const walked = new Set<MountPathRow>();
         let current = row;
+        // The verdict of the row above the last one walked, so the root's missing parent sits at -1.
         let verdict = verdicts.get(row.id);
         while (verdict === undefined && !walked.has(current)) {
             walked.add(current);
             const parent = current.parentId === null ? undefined : byId.get(current.parentId);
-            if (current.parentId === null) verdict = null;
+            if (current.parentId === null) verdict = -1;
             else if (!parent) verdict = `reaches a parent (${current.parentId}) the table does not hold`;
             else {
                 current = parent;
                 verdict = verdicts.get(parent.id);
             }
         }
-        const ends = verdict === undefined ? 'sits in a parent cycle' : verdict;
-        for (const passed of walked) verdicts.set(passed.id, ends);
+        const ends = verdict ?? 'sits in a parent cycle';
+        let below = walked.size;
+        for (const passed of walked) verdicts.set(passed.id, typeof ends === 'number' ? ends + below-- : ends);
     }
     return verdicts;
 }

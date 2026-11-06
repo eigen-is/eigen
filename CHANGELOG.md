@@ -13,6 +13,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **GIFs stand still in lists** — in Drive's grid, on Stickies card covers and in the slide list of Slides, an animated GIF or WebP shows its first frame. It still plays in a file's details in Drive, in Quick preview, on the slide itself and in present mode. A deck full of GIFs opens faster, because the slide list loads small stills instead of every animation. Pictures uploaded before this keep playing in lists until the file changes
 - **Deleted comments** — a link, notification, activity entry or search result for a deleted comment opens it as "This comment was deleted" under its grayed title, with nothing to reply to, resolve or assign
 - **Copies in Drive** — a copy or Duplicate of a document leaves out the images and comments deleted from the original
+- **Folder depth in Drive** — folders nest at most 256 levels deep, in Drive and over WebDAV. A deeper tree you already have stays readable, but a backup of it fails until you move its deepest folders higher
 - **Comments in Sheets** — the comments pane lists the comments on every tab, with the tab's name, such as Sheet2 · B2. Deleting a comment removes it from every cell it sits on, and a duplicated tab starts without comments
 - **Default drive size reaches existing users** — raising **Default mount (MB)** in Admin's server settings now gives every user's drive the new size at once, not only users who sign in for the first time. Lowering it shrinks no one's drive
 

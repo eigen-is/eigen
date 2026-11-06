@@ -1,6 +1,6 @@
-// The rules a name in a mount's paths table keeps, and the storage key a flat-key backend derives from
-// one. Mount checks every new name with them, and a backup restore reads archived paths tables with them
-// while the API runs, so no import here opens anything.
+// The rules a name in a mount's paths table keeps, how deep a row may sit, and the storage key a flat-key
+// backend derives from a name. Mount checks every new row with them, and a backup restore reads archived
+// paths tables with them while the API runs, so no import here opens anything.
 
 import { CONTROL_CHARS } from '@workspace/lib/validation';
 import { ApiError } from '../core/errors';
@@ -26,6 +26,10 @@ export function foldName(name: string): string {
 
 // Filesystem ENAMETOOLONG is a byte limit, not a character limit.
 export const MAX_NAME_BYTES = 255;
+
+// The most levels a row sits below its mount's root. Verify and restore walk every row's ancestors on the
+// event loop, so a deeper tree would hold the API.
+export const MAX_FOLDER_DEPTH = 256;
 
 // One path segment and nothing else, answered without throwing: an archived paths table is held to
 // the rule validateName writes live rows by, and a row that came in inside an uploaded archive has
