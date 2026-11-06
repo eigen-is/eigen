@@ -134,9 +134,7 @@ describe('usePrintPdf', () => {
 
         expect(tab?.closed).toBe(true);
         expect(fallbacks).toBe(1);
-        expect(toasts).toEqual([
-            'info: Printing without headers and footers. The PDF failed: WeasyPrint 68 or later is not installed (501)',
-        ]);
+        expect(toasts).toEqual(['info: Printing without headers and footers. WeasyPrint 68 or later is not installed']);
     });
 
     test('a request that never reaches the server falls back too', async () => {
@@ -148,7 +146,7 @@ describe('usePrintPdf', () => {
 
         expect(tab?.closed).toBe(true);
         expect(fallbacks).toBe(1);
-        expect(toasts).toEqual(['info: Printing without headers and footers. The PDF failed: Failed to fetch']);
+        expect(toasts).toEqual(['info: Printing without headers and footers. Failed to fetch']);
     });
 
     test('offline or with unsynced edits it prints in the browser and opens no tab', async () => {

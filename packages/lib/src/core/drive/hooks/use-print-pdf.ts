@@ -4,7 +4,7 @@
 import { getDriveExportUrl } from '@workspace/lib/api';
 import { useCallback } from 'react';
 import { toast } from 'sonner';
-import { AppError, getErrorMessage } from '../../api-error';
+import { AppError } from '../../api-error';
 import { toastExportSummary } from './use-export-document';
 
 // A tab that navigated away runs no listener of ours, so its closing is polled. The blob URL lives until then,
@@ -48,7 +48,8 @@ export function usePrintPdf(fallback: () => void): {
                 }, TAB_CLOSED_POLL_MS);
             } catch (error) {
                 tab.close();
-                printWithoutBands(fallback, `The PDF failed: ${getErrorMessage(error)}`);
+                // The server's message already says the export failed, so it stands alone, without its status.
+                printWithoutBands(fallback, error instanceof Error ? error.message : String(error));
             }
         },
         [fallback],
