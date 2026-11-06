@@ -6,6 +6,7 @@ import {
     isInvitationFromOthers,
     isSeriesOccurrence,
     normalizeTimezone,
+    occurrenceDateToString,
     rruleToText,
     seriesEditFromOccurrence,
     viewerTimeZone,
@@ -163,6 +164,14 @@ describe('formatEventWhen', () => {
         expect(formatEventWhen(start, end, false, 'Not/A_Zone', 'Europe/Amsterdam')).toBe(
             formatEventWhen(start, end, false, null, 'Europe/Amsterdam'),
         );
+    });
+});
+
+describe('occurrenceDateToString', () => {
+    test('pads the year to four digits, as a recurrence key does', () => {
+        const date = new Date(Date.UTC(2000, 2, 7));
+        date.setUTCFullYear(500);
+        expect(occurrenceDateToString(date)).toBe('0500-03-07');
     });
 });
 

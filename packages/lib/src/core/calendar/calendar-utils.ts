@@ -211,18 +211,16 @@ export function getInviteStatus(event: CalendarEventOccurrence, userEmail?: stri
 
 export const WEEKDAY_HEADERS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
-export function parseOccurrenceDate(value: unknown): Date {
-    if (value instanceof Date) return value;
-    const str = String(value);
-    if (str.length === 10) return new Date(`${str}T00:00:00Z`);
-    return new Date(str);
+// Eden's reviver turns an occurrence's YYYY-MM-DD into a Date, so the string its type promises can arrive as one.
+export function parseOccurrenceDate(value: Date | string): Date {
+    if (typeof value !== 'string') return value;
+    return new Date(`${value}T00:00:00Z`);
 }
 
-export function occurrenceDateToString(value: unknown): string {
-    if (value instanceof Date) {
-        return `${value.getUTCFullYear()}-${String(value.getUTCMonth() + 1).padStart(2, '0')}-${String(value.getUTCDate()).padStart(2, '0')}`;
-    }
-    return String(value).substring(0, 10);
+export function occurrenceDateToString(value: Date | string): string {
+    if (typeof value === 'string') return value;
+    const pad = (n: number, width: number) => String(n).padStart(width, '0');
+    return `${pad(value.getUTCFullYear(), 4)}-${pad(value.getUTCMonth() + 1, 2)}-${pad(value.getUTCDate(), 2)}`;
 }
 
 // rrule spells ordinals by a lookup that stops at the 31st, so a day of the year comes out as "131th".
