@@ -82,7 +82,7 @@ A written `DTEND` removes the `DURATION` that stated the length before it, since
 
 Without a VTIMEZONE, strict parsers (ical.js included) read a TZID's wall times as floating (RFC 5545 §3.6.5). `vtimezone.ts` builds one from `Intl` offset data. A zone with a regular DST rule compresses to two open-ended RRULE observances, and an irregular one gets one observance per transition.
 
-A definition a property still names is the client's own and is never rewritten. One nothing references any more is dropped. New blocks go in front of the VEVENTs, because a client reads the file top to bottom and a TZID met before its definition is floating to it. `apps/api/src/test/ical/vtimezone.test.ts` checks the generator against `Intl`.
+A definition a property still names is the client's own and is never rewritten. One nothing references any more is dropped. A TZID that is no IANA name, such as Outlook's `W. Europe Standard Time`, gets no block when the file defines none: the parser already maps it ([§ A time resolves through Intl](#a-time-resolves-through-intl-before-the-files-own-vtimezone)), and a block under the client's name would state Eigen's rules as theirs. New blocks go in front of the VEVENTs, because a client reads the file top to bottom and a TZID met before its definition is floating to it. `apps/api/src/test/ical/vtimezone.test.ts` checks the generator against `Intl`.
 
 ## Two readers, one trust rule
 

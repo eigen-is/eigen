@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { getHome } from '../../lib/home';
+import { parseIcs } from '../../lib/ical';
 import { storedEvents } from '../calendar-test-helpers';
 import { davRequest } from '../dav-test-helpers';
 import { assertJson, authedRequest, eventually, findOrFail, getTestContext } from '../setup';
@@ -1067,6 +1068,107 @@ describe('Calendar Timezone', () => {
 
             expect(occurrences).toHaveLength(8);
             expect(occurrences.map((e) => berlin.format(new Date(e.startTime)))).toEqual(Array(8).fill('10:00'));
+        });
+
+        test('an edit keeps a Windows TZID the file defines no VTIMEZONE for, and adds none for it', async () => {
+            const uid = 'outlook-windows-no-vtimezone@test';
+            const ics = [
+                'BEGIN:VCALENDAR',
+                'VERSION:2.0',
+                'PRODID:-//Microsoft Corporation//Outlook 16.0 MIMEDIR//EN',
+                'BEGIN:VEVENT',
+                `UID:${uid}`,
+                'SUMMARY:Berlin Sync',
+                'DTSTART;TZID="W. Europe Standard Time":20260302T100000',
+                'DTEND;TZID="W. Europe Standard Time":20260302T103000',
+                'RRULE:FREQ=WEEKLY;COUNT=8',
+                'EXDATE;TZID="W. Europe Standard Time":20260316T100000',
+                'DTSTAMP:20260101T000000Z',
+                'END:VEVENT',
+                'END:VCALENDAR',
+            ].join('\r\n');
+            const href = `/dav/calendars/${ctx.alice.user.id}/${aliceCalendarId}/${uid}.ics`;
+            const put = await davRequest('PUT', href, {
+                email: ctx.alice.user.email,
+                headers: { 'Content-Type': 'text/calendar' },
+                body: ics,
+            });
+            expect(put.status).toBe(201);
+
+            const home = await getHome(ctx.alice.user.id);
+            const master = findOrFail(
+                storedEvents(home.calendar, aliceCalendarId),
+                (e) => e.uid === uid && !e.parentEventId,
+            );
+            expect(master.timezone).toBe('Europe/Berlin');
+            const eventsUrl = `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`;
+            const send = (method: 'PUT' | 'POST', path: string, body: Record<string, unknown>) =>
+                authedRequest(ctx.alice.user.sessionToken, `${eventsUrl}${path}`, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+
+            // Moving the series to 11:00 Berlin rewrites DTSTART and DTEND; the EXDATE keeps the Windows name.
+            const patched = await send('PUT', `/${master.id}`, {
+                startTime: new Date('2026-03-02T10:00:00Z'),
+                endTime: new Date('2026-03-02T10:30:00Z'),
+                timezone: 'Europe/Berlin',
+            });
+            expect(patched.status).toBe(200);
+            const excluded = await send('POST', '', {
+                title: 'Berlin Sync',
+                startTime: new Date('2026-03-09T10:00:00Z'),
+                endTime: new Date('2026-03-09T10:30:00Z'),
+                allDay: false,
+                parentEventId: master.id,
+                recurrenceDate: '2026-03-09',
+                status: 'cancelled',
+            });
+            expect(excluded.status).toBe(200);
+            const overridden = await send('POST', '', {
+                title: 'Berlin Sync (moved)',
+                startTime: new Date('2026-04-06T12:00:00Z'),
+                endTime: new Date('2026-04-06T12:30:00Z'),
+                allDay: false,
+                timezone: 'Europe/Berlin',
+                parentEventId: master.id,
+                recurrenceDate: '2026-04-06',
+            });
+            expect(overridden.status).toBe(200);
+
+            const stored = await (await davRequest('GET', href, { email: ctx.alice.user.email })).text();
+            expect(stored).toContain('EXDATE;TZID=W. Europe Standard Time:20260316T100000');
+            expect(stored).not.toContain('TZID:W. Europe Standard Time');
+            const parsed = parseIcs(stored).events.map((e) => `${e.recurrenceDate ?? 'master'} ${e.status}`);
+            expect(parsed.sort()).toEqual([
+                '2026-03-09 cancelled',
+                '2026-03-16 cancelled',
+                '2026-04-06 confirmed',
+                'master confirmed',
+            ]);
+
+            const berlin = new Intl.DateTimeFormat('en-GB', {
+                timeZone: 'Europe/Berlin',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+            });
+            const from = Math.floor(new Date('2026-03-01T00:00:00Z').getTime() / 1000);
+            const to = Math.floor(new Date('2026-05-01T00:00:00Z').getTime() / 1000);
+            const occurrences = (await getEvents(ctx.alice.user.sessionToken, ctx.alice.user.id, from, to)).filter(
+                (e) => e.uid === uid,
+            );
+            expect(occurrences.map((e) => `${e.title} ${berlin.format(new Date(e.startTime))}`)).toEqual([
+                'Berlin Sync 02/03, 11:00',
+                'Berlin Sync 23/03, 11:00',
+                'Berlin Sync 30/03, 11:00',
+                'Berlin Sync (moved) 06/04, 14:00',
+                'Berlin Sync 13/04, 11:00',
+                'Berlin Sync 20/04, 11:00',
+            ]);
         });
     });
 });

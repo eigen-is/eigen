@@ -303,7 +303,7 @@ function vtimezoneComponents(events: CalendarEvent[]): ICAL.Component[] {
     return [...tzids].map((tzid) => vtimezoneComponent(tzid, minYear, maxYear));
 }
 
-// A referenced VTIMEZONE is the client's own definition and is never rewritten; an unreferenced one goes, and a referenced zone the file leaves undefined gets Eigen's.
+// A referenced VTIMEZONE is the client's own definition and is never rewritten; an unreferenced one goes, and a referenced IANA zone the file leaves undefined gets Eigen's.
 function syncVTimezones(resource: ICAL.Component): void {
     const vevents = resource.getAllSubcomponents('vevent');
     const referenced = new Set<string>();
@@ -329,7 +329,7 @@ function syncVTimezones(resource: ICAL.Component): void {
     if (!years.length) return;
 
     const { minYear, maxYear } = timezoneHorizon(years, hasRrule);
-    const added = [...referenced].filter((tzid) => normalizeTimezone(tzid));
+    const added = [...referenced].filter((tzid) => normalizeTimezone(tzid) === tzid);
     if (!added.length) return;
 
     // A client reads top to bottom, so a TZID met before its definition is floating to it: new blocks go in front and re-adding the VEVENTs moves them behind.
