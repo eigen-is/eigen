@@ -173,7 +173,7 @@ export class Contacts {
         }
     }
 
-    // --- Seams used by contacts/*.ts ---
+    // --- Seams for the contacts' own modules ---
 
     // Init and every avatar upload start a sweep without waiting for it. A sweep that the close stopped is no
     // failure, so it logs nothing.
@@ -495,7 +495,7 @@ export class Contacts {
         if (deleted) this.announce(SSEventType.CONTACT_DELETED, deleted);
     }
 
-    // --- Label facade — implementation in contacts/labels.ts ---
+    // --- Labels ---
 
     public async getLabels(): Promise<Label[]> {
         return labels.getLabels(this);
@@ -547,7 +547,7 @@ export class Contacts {
         return rows.map((row) => dbRowToContact(row, labelsByContact.get(row.id) ?? []));
     }
 
-    // --- Avatar facade — implementation in contacts/avatars.ts ---
+    // --- Avatars ---
 
     public async uploadAvatar(file: File): Promise<string> {
         return avatars.uploadAvatar(this, file);
@@ -610,7 +610,7 @@ export class Contacts {
         return this.getContactById(addedId);
     }
 
-    // --- CardDAV store facade — implementation in contacts/dav-store.ts ---
+    // --- CardDAV store ---
 
     public async getBook(): Promise<CardBook> {
         return davStore.getBook(this);
@@ -652,7 +652,7 @@ export class Contacts {
         return result;
     }
 
-    // --- vCard transfer facade — implementation in contacts/transfer.ts ---
+    // --- vCard transfer ---
 
     public async exportCards(ids?: string[]): Promise<string> {
         return transfer.exportCards(this, ids);

@@ -114,7 +114,7 @@ export class Calendar {
         }
     }
 
-    // --- Seams used by calendar/*.ts ---
+    // --- Seams for the calendar's own modules ---
 
     public calendarRow(id: string): typeof schema.calendars.$inferSelect | null {
         return this.db.select().from(schema.calendars).where(eq(schema.calendars.id, id)).get() ?? null;
@@ -343,7 +343,7 @@ export class Calendar {
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_DELETED, this.home.user.id));
     }
 
-    // --- Resources (the DAV store facade — implementation in calendar/dav-store.ts) ---
+    // --- Resources ---
 
     public async listResources(calendarId: string): Promise<ResourceRow[]> {
         return davStore.listResources(this, calendarId);
@@ -476,7 +476,7 @@ export class Calendar {
         if (cal) notifySharedCalendarUsers(this.home, cal, sseEvent).catch(console.error);
     }
 
-    // --- Events (writes — implementation in calendar/events.ts) ---
+    // --- Events (writes) ---
 
     public async createEvent(calendarId: string, input: CreateEventArgs, user?: User): Promise<CalendarEvent> {
         return events.createEvent(this, calendarId, input, user);
@@ -510,7 +510,7 @@ export class Calendar {
         return exportEvents(this, calendarId, ids);
     }
 
-    // --- Shared calendars (implementation in calendar/shares.ts) ---
+    // --- Shared calendars ---
 
     public async getSharedCalendars(): Promise<SharedCalendar[]> {
         return shares.getSharedCalendars(this);
@@ -575,7 +575,7 @@ export class Calendar {
         return shares.checkPermission(this, calendarId, userEmail, teamIds);
     }
 
-    // --- Invitations (implementation in calendar/invitations.ts) ---
+    // --- Invitations ---
 
     public async receiveInvitation(payload: ReceiveInvitationPayload): Promise<string | null> {
         return invitations.receiveInvitation(this, payload);
