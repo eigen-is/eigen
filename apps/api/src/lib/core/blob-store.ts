@@ -1,9 +1,11 @@
 // What the DAV stores share, such as the calendar's and the contacts': each row keeps the bytes a client wrote as
 // the truth, and every other column is a projection rebuilt from them. Here live the resource name rule, the etag,
-// the sync generation, a store's size for a Home nobody booted, and the results a PUT or a DELETE answers with.
+// the precondition check, the sync generation, a store's size for a Home nobody booted, and the results a PUT or a
+// DELETE answers with.
 
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
+import { matchesIfMatch, matchesIfNoneMatch } from './http';
 import { isSafePathSegment } from './path-utils';
 
 // macOS clients send the same name in NFD form in a URL, so one resource would otherwise answer under two spellings.
@@ -49,8 +51,17 @@ export function readBlobTableSize(dbPath: string, table: string, column: string,
     }
 }
 
-// The two conditional headers both DAV write paths evaluate inside their write lock.
+// The two conditional headers both DAV write paths evaluate.
 export type ResourcePreconditions = { ifMatch: string | null; ifNoneMatch: string | null };
+
+// Judged inside the write lock against the row a PUT overwrites, so the loser of two racing If-Match PUTs sees the winner's etag.
+export function failsPreconditions(pre: ResourcePreconditions, storedEtag: string | undefined): boolean {
+    const current = storedEtag === undefined ? null : `"${storedEtag}"`;
+    return (
+        (pre.ifNoneMatch !== null && matchesIfNoneMatch(pre.ifNoneMatch, current)) ||
+        (pre.ifMatch !== null && !matchesIfMatch(pre.ifMatch, current))
+    );
+}
 
 export function computeResourceEtag(bytes: Uint8Array): string {
     return new Bun.CryptoHasher('sha256').update(bytes).digest('hex');
@@ -61,8 +72,9 @@ export type InvalidReason = 'data' | 'object' | 'component';
 
 // A client-caused failure is a value, not a throw; a null etag is a write not stored verbatim, which has no validator to hand back (RFC 4791 § 5.3.4).
 // The id is the row the write landed on, read inside the lock: a facade announcing from it cannot lose the event to a racing delete.
+// An unchanged PUT sent the bytes already stored, so it committed nothing and there is nothing to announce.
 export type PutResourceResult =
-    | { ok: true; id: string; etag: string | null; created: boolean }
+    | { ok: true; id: string; etag: string | null; created: boolean; unchanged: boolean }
     | {
           ok: false;
           error: 'precondition' | 'uid-conflict' | 'invalid' | 'no-collection' | 'too-large' | 'quota';

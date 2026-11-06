@@ -110,17 +110,19 @@ describe('putResource', () => {
         expect(await resourceTextOf(harness.instance, calendarId, 'Case-Fold.ics')).toContain('SUMMARY:First');
     });
 
-    test('a PUT of what is already stored bumps no ctag', async () => {
+    test('a PUT of what is already stored bumps no ctag and announces nothing', async () => {
         const harness = await makeCalendar();
         const calendarId = await defaultCalendarId(harness);
         await put(harness.instance, calendarId, 'same.ics', vcal(event('same@eigen', 'Same')));
         const stored = await resourceTextOf(harness.instance, calendarId, 'same.ics');
         const ctag = (await harness.instance.getCollection(calendarId))!.ctag;
+        harness.broadcasts.length = 0;
 
         const result = await put(harness.instance, calendarId, 'same.ics', stored);
 
-        expect(result).toMatchObject({ ok: true, created: false });
+        expect(result).toMatchObject({ ok: true, created: false, unchanged: true });
         expect((await harness.instance.getCollection(calendarId))!.ctag).toBe(ctag);
+        expect(harness.broadcasts).toEqual([]);
     });
 
     test('a put answers with the id of the row it landed on, a rewrite included', async () => {
@@ -132,7 +134,7 @@ describe('putResource', () => {
         const rewritten = await put(harness.instance, calendarId, 'landed.ics', vcal(event('landed@eigen', 'Again')));
 
         expect(created).toMatchObject({ ok: true, id: stored.id, created: true });
-        expect(rewritten).toMatchObject({ ok: true, id: stored.id, created: false });
+        expect(rewritten).toMatchObject({ ok: true, id: stored.id, created: false, unchanged: false });
     });
 
     test('a linked copy takes the alarms a client sends, never the Eigen lines inside them', async () => {

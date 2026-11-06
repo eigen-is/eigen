@@ -7,7 +7,7 @@ import { CONTROL_CHARS } from '@workspace/lib/validation';
 import { and, eq, gt, inArray, or } from 'drizzle-orm';
 import type ICAL from 'ical.js';
 import type { DeleteResourceResult, PutResourceResult, ResourcePreconditions } from '../core';
-import { ApiError, computeResourceEtag, matchesIfMatch, matchesIfNoneMatch, normalizeResourceUri } from '../core';
+import { ApiError, failsPreconditions, matchesIfMatch, normalizeResourceUri } from '../core';
 import { parseResource, restampResource, stripEigenStamps } from '../ical';
 import { EIGEN, readStamp, recurrenceKeyOf, seriesTimezones, uidOf } from '../ical/ical-parse';
 import type { Calendar } from './calendar';
@@ -169,7 +169,6 @@ export async function putResource(
         // Sanitizing an id is not knowing it exists, and a write would otherwise file a resource under nobody's calendar.
         if (!calendar.calendarRow(calendarId)) return { ok: false, error: 'no-collection' };
 
-        // Two racing If-Match PUTs serialize through the lock, so the loser sees the winner's new etag here.
         const existing = calendar.db
             .select({
                 id: schema.resources.id,
@@ -181,17 +180,10 @@ export async function putResource(
             .from(schema.resources)
             .where(atUri(calendarId, uri))
             .get();
-        const currentEtag = existing ? `"${existing.etag}"` : null;
-        if (options.ifNoneMatch !== null && matchesIfNoneMatch(options.ifNoneMatch, currentEtag)) {
-            return { ok: false, error: 'precondition' };
-        }
-        if (options.ifMatch !== null && !matchesIfMatch(options.ifMatch, currentEtag)) {
-            return { ok: false, error: 'precondition' };
-        }
+        if (failsPreconditions(options, existing?.etag)) return { ok: false, error: 'precondition' };
 
-        // The stored bytes decide the linked-copy rule, the stamps to carry over and the no-op below.
-        const storedBytes = existing?.ics ?? null;
-        const stored = storedBytes ? parseResource(new TextDecoder().decode(storedBytes)) : null;
+        // The stored resource decides the linked-copy rule and the stamps to carry over.
+        const stored = existing ? parseResource(new TextDecoder().decode(existing.ics)) : null;
 
         // Keying the body's RECURRENCE-ID or EXDATE throws on a date no key can name, so the parse and the re-stamp share one refusal.
         let incoming: ICAL.Component;
@@ -249,9 +241,9 @@ export async function putResource(
         // A client whose bytes are not what got stored has nothing to attach a validator to (RFC 4791 § 5.3.4).
         const validator = prepared.text === body ? prepared.etag : null;
 
-        // Judged on the bytes, never the row: rewriting an unchanged resource bumps the ctag and resyncs every client for nothing.
-        if (storedBytes && prepared.etag === computeResourceEtag(storedBytes)) {
-            return { ok: true, id: prepared.id, etag: validator, created: false };
+        // Judged on the bytes by their hash: rewriting an unchanged resource bumps the ctag and resyncs every client for nothing.
+        if (existing && prepared.etag === existing.etag) {
+            return { ok: true, id: prepared.id, etag: validator, created: false, unchanged: true };
         }
 
         // Size and quota are only known once the stamps and stored alarms decided the bytes, so both map to protocol errors here, not a 500.
@@ -266,7 +258,7 @@ export async function putResource(
             throw e;
         }
 
-        return { ok: true, id: prepared.id, etag: validator, created: !existing };
+        return { ok: true, id: prepared.id, etag: validator, created: !existing, unchanged: false };
     });
 }
 

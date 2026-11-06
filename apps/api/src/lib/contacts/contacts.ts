@@ -602,12 +602,7 @@ export class Contacts {
     }
 
     public async getMe(): Promise<Contact | null> {
-        const found = this.selfRow();
-        if (found) {
-            return this.getContactById(found.id);
-        }
-        const addedId = await this.addYourself();
-        return this.getContactById(addedId);
+        return this.getContactById(this.selfRow()?.id ?? (await this.addYourself()));
     }
 
     // --- CardDAV store ---
@@ -639,7 +634,7 @@ export class Contacts {
     public async putCard(uri: string, body: string, options: PutCardOptions): Promise<PutResourceResult> {
         const result = await davStore.putCard(this, uri, body, options);
         // Told once the write lock is released, from the id the write read inside it: a re-read could lose a racing delete.
-        if (result.ok) {
+        if (result.ok && !result.unchanged) {
             this.announce(result.created ? SSEventType.CONTACT_CREATED : SSEventType.CONTACT_UPDATED, result.id);
         }
         return result;

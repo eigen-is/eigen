@@ -56,6 +56,7 @@ describe('putCard — create and read', () => {
             id: rowByUri(contacts.db, uri)!.id,
             etag: computeResourceEtag(new TextEncoder().encode(body)),
             created: true,
+            unchanged: false,
         });
     });
 
@@ -347,6 +348,28 @@ describe('putCard — announcements', () => {
         await put(contacts, uri, card({ uid }));
 
         expect(broadcasts).toEqual([{ type: SSEventType.CONTACT_CREATED, contactId: rowByUri(contacts.db, uri)!.id }]);
+    });
+
+    test('a PUT of what is already stored commits nothing and announces nothing', async () => {
+        const { instance: contacts, broadcasts } = await makeContacts();
+        const uid = crypto.randomUUID();
+        const uri = `${uid}.vcf`;
+        const body = card({ uid });
+        await put(contacts, uri, body);
+        const ctag = (await contacts.getBook()).ctag;
+        broadcasts.length = 0;
+
+        const again = await put(contacts, uri, body);
+
+        expect(again).toEqual({
+            ok: true,
+            id: rowByUri(contacts.db, uri)!.id,
+            etag: computeResourceEtag(new TextEncoder().encode(body)),
+            created: false,
+            unchanged: true,
+        });
+        expect((await contacts.getBook()).ctag).toBe(ctag);
+        expect(broadcasts).toEqual([]);
     });
 
     test('a create whose delete is already queued behind it still announces both', async () => {

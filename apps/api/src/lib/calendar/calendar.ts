@@ -262,14 +262,6 @@ export class Calendar {
         return created;
     }
 
-    private calendarCtag(calendarId: string): number | undefined {
-        return this.db
-            .select({ ctag: schema.calendars.ctag })
-            .from(schema.calendars)
-            .where(eq(schema.calendars.id, calendarId))
-            .get()?.ctag;
-    }
-
     private calendarIdTaken(id: string): boolean {
         return !!this.db
             .select({ id: schema.calendars.id })
@@ -297,8 +289,8 @@ export class Calendar {
             .update(schema.calendars)
             .set({
                 name: input.name !== undefined ? input.name.trim() : existing.name,
-                color: input.color !== undefined ? input.color : existing.color,
-                visible: input.visible !== undefined ? input.visible : existing.visible,
+                color: input.color ?? existing.color,
+                visible: input.visible ?? existing.visible,
                 shares: input.shares !== undefined ? input.shares : existing.shares,
                 updatedAt: sql`unixepoch()`,
             })
@@ -375,10 +367,8 @@ export class Calendar {
         body: string,
         options: PutResourceOptions,
     ): Promise<PutResourceResult> {
-        const ctagBefore = this.calendarCtag(calendarId);
         const result = await davStore.putResource(this, calendarId, uri, body, options);
-        // A PUT of what is already stored commits nothing, so there is nothing to tell the clients about.
-        if (result.ok && this.calendarCtag(calendarId) !== ctagBefore) {
+        if (result.ok && !result.unchanged) {
             this.announce(
                 result.created ? SSEventType.CALENDAR_EVENT_CREATED : SSEventType.CALENDAR_EVENT_UPDATED,
                 calendarId,

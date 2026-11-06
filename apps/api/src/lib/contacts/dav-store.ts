@@ -1,11 +1,11 @@
 // The storage side of the CardDAV protocol for one address book. It lists, reads, writes and
 // deletes cards by their uri, and reports what changed since a sync token such as a ctag. A write
-// checks the client's preconditions and keeps the card's search index and photo in step. The
-// CardDAV server and the contact import call it.
+// checks the client's preconditions, skips bytes already stored, and keeps the card's search index
+// and photo in step. The CardDAV server and the contact import call it.
 
 import { eq, gt } from 'drizzle-orm';
 import type { DeleteResourceResult, PutResourceResult, ResourcePreconditions } from '../core';
-import { ApiError, matchesIfMatch, matchesIfNoneMatch, normalizeResourceUri } from '../core';
+import { ApiError, failsPreconditions, matchesIfMatch, normalizeResourceUri } from '../core';
 import { pushUserProfile } from '../home/home-relay';
 import { mergeVCard, parseVCard, transcodeTo30 } from '../vcard';
 import type { ParsedCard } from '../vcard/types';
@@ -14,20 +14,19 @@ import { avatarNameOf, CARD_MAX_BYTES, cardBytes, PURGED_CARD, prepareCard, sani
 import type { Contacts } from './contacts';
 import * as schema from './schema';
 
-// The CardDAV store seam over the Contacts facade. See docs/CARDDAV.md § A PUT parses before the lock and decides inside it.
-
 // The size lets a REPORT weigh a row against its byte budget before reading the bytes at all; the id is what
 // an announcement names.
 export type CardRow = { id: string; uri: string; etag: string; size: number };
 
-// A whole-file import never claims the self-link: nobody inspects an imported card one by one.
-export type PutCardOptions = ResourcePreconditions & { import?: boolean };
 const CARD_ROW = {
     id: schema.contacts.id,
     uri: schema.contacts.uri,
     etag: schema.contacts.etag,
     size: cardBytes,
 };
+
+// A whole-file import never claims the self-link: nobody inspects an imported card one by one.
+export type PutCardOptions = ResourcePreconditions & { import?: boolean };
 
 // ctag advances on each change, syncGen rotates on a recreated book so stale sync tokens are refused.
 export type CardBook = { ctag: number; syncGen: number };
@@ -38,12 +37,11 @@ export type DeleteCardResult = DeleteResourceResult | { ok: false; error: 'self-
 const atUri = (uri: string) => eq(schema.contacts.uri, normalizeResourceUri(uri));
 
 export async function getBook(contacts: Contacts): Promise<CardBook> {
-    const book = contacts.db
+    return contacts.db
         .select({ ctag: schema.book.ctag, syncGen: schema.book.syncGen })
         .from(schema.book)
         .where(eq(schema.book.id, 1))
         .get()!;
-    return { ctag: book.ctag, syncGen: book.syncGen };
 }
 
 // Every resource in the book — group cards included, since DAV serves the whole book (the app list hides them).
@@ -80,13 +78,11 @@ export function getCardMeta(contacts: Contacts, uri: string): CardRow | null {
     return contacts.db.select(CARD_ROW).from(schema.contacts).where(atUri(uri)).get() ?? null;
 }
 
-// Self-link claim, highest wins: 3 incumbent, 2 the card asserts our X-EIGEN-ID, 1 owner-email only, 0 a foreign X-EIGEN-ID.
-function selfClaimRank(contacts: Contacts, parsed: ParsedCard, incumbentEigenId: string | undefined): 0 | 1 | 2 | 3 {
-    if (incumbentEigenId === contacts.home.user.id) return 3;
-    if (parsed.eigenId === contacts.home.user.id) return 2;
+// A new card is the owner's own when it asserts our X-EIGEN-ID, or carries the owner's email and no X-EIGEN-ID at all.
+function claimsSelf(contacts: Contacts, parsed: ParsedCard): boolean {
+    if (parsed.eigenId) return parsed.eigenId === contacts.home.user.id;
     const ownerEmail = contacts.home.user.email.toLowerCase();
-    if (!parsed.eigenId && parsed.email.some((e) => e.toLowerCase() === ownerEmail)) return 1;
-    return 0;
+    return parsed.email.some((e) => e.toLowerCase() === ownerEmail);
 }
 
 // An update keeps the row's link, and a restored X-EIGEN-ID keeps the stored bytes and the row agreeing.
@@ -102,7 +98,7 @@ function resolveSelfLinkOnPut(
     if (existing) {
         eigenId = existing.eigenId;
     } else {
-        const claim = !imported && selfClaimRank(contacts, parsed, undefined) >= 1;
+        const claim = !imported && claimsSelf(contacts, parsed);
         const heldElsewhere = !!contacts.db
             .select({ id: schema.contacts.id })
             .from(schema.contacts)
@@ -128,8 +124,7 @@ export async function putCard(
     // Bounded before any parse, so a hostile multi-MiB payload never reaches the AST unfolder.
     if (Buffer.byteLength(body) > CARD_MAX_BYTES) return { ok: false, error: 'too-large' };
 
-    // The body says nothing about stored state, so a 5 MiB parse waits for no other writer. The book is
-    // stored as 3.0, and anything that isn't one well-formed vCard is a client error, not a 500.
+    // The book is stored as 3.0, and anything that isn't one well-formed vCard is a client error, not a 500.
     let parsed: ParsedCard;
     let stored: string;
     try {
@@ -142,7 +137,6 @@ export async function putCard(
     if (!uid) return { ok: false, error: 'invalid', message: 'UID is required' };
 
     return contacts.writeLock.run(async (): Promise<PutResourceResult> => {
-        // Two racing If-Match PUTs serialize through the lock, so the loser sees the winner's new etag here.
         const existing = contacts.db
             .select({
                 id: schema.contacts.id,
@@ -154,13 +148,7 @@ export async function putCard(
             .from(schema.contacts)
             .where(atUri(uri))
             .get();
-        const currentEtag = existing ? `"${existing.etag}"` : null;
-        if (options.ifNoneMatch !== null && matchesIfNoneMatch(options.ifNoneMatch, currentEtag)) {
-            return { ok: false, error: 'precondition' };
-        }
-        if (options.ifMatch !== null && !matchesIfMatch(options.ifMatch, currentEtag)) {
-            return { ok: false, error: 'precondition' };
-        }
+        if (failsPreconditions(options, existing?.etag)) return { ok: false, error: 'precondition' };
 
         // A UID another resource owns is a conflict the client can act on, not a raw 500 on the UNIQUE index.
         const holder = contacts.db
@@ -168,9 +156,7 @@ export async function putCard(
             .from(schema.contacts)
             .where(eq(schema.contacts.uid, uid))
             .get();
-        if (holder && holder.id !== existing?.id) {
-            return { ok: false, error: 'uid-conflict', conflictUri: holder.uri };
-        }
+        if (holder && holder.id !== existing?.id) return { ok: false, error: 'uid-conflict', conflictUri: holder.uri };
         if (existing && uid !== existing.uid) return { ok: false, error: 'uid-conflict' };
 
         // Before the quota check, so the meter and the stored etag both hash the exact bytes stored.
@@ -181,19 +167,20 @@ export async function putCard(
             existing,
             !!options.import,
         );
-        // A body the server rewrote is not the client's revision, so no validator goes back and the client re-reads (RFC 4918 § 9.7.2).
-        const verbatim = stored === body && !merged;
-
         const id = existing?.id ?? crypto.randomUUID();
-        const isSelf = eigenId === contacts.home.user.id;
-
-        // The avatar URL writeCard derived and stored, after both ceilings passed.
-        let projectionAvatar: string;
         const projection = prepareCard(bytes, parsed, '', uid);
-        // The stored bytes credit the card this one replaces; a raised 413/507 maps to a typed result.
+        // A body the server rewrote is not the client's revision, so no validator goes back and the client re-reads (RFC 4918 § 9.7.2).
+        const etag = stored === body && !merged ? projection.etag : null;
+
+        // Judged on the bytes by their hash: rewriting an unchanged card bumps the ctag and resyncs every client for nothing.
+        if (existing && projection.etag === existing.etag) {
+            return { ok: true, id, etag, created: false, unchanged: true };
+        }
+
+        let avatarUrl: string;
         try {
             // sanitizeCardUri already accepted this spelling, so the stored uri is the NFC one.
-            projectionAvatar = await contacts.writeCard({
+            avatarUrl = await contacts.writeCard({
                 row: { id, uri, eigenId, ...projection },
                 categories: parsed.categories,
                 creditBytes: existing?.size ?? 0,
@@ -207,10 +194,10 @@ export async function putCard(
         }
 
         // A self-card PUT renames the user org-wide; a DAV PUT stages no avatar, so the pushed bytes are the derived webp cache.
-        if (isSelf) {
+        if (eigenId === contacts.home.user.id) {
             let avatarWebP: Buffer | null = null;
-            if (projectionAvatar) {
-                const data = await downloadAvatar(contacts, avatarNameOf(projectionAvatar));
+            if (avatarUrl) {
+                const data = await downloadAvatar(contacts, avatarNameOf(avatarUrl));
                 if (data) avatarWebP = Buffer.from(data);
             }
             try {
@@ -224,7 +211,7 @@ export async function putCard(
             }
         }
 
-        return { ok: true, id, etag: verbatim ? projection.etag : null, created: !existing };
+        return { ok: true, id, etag, created: !existing, unchanged: false };
     });
 }
 
@@ -239,7 +226,7 @@ export async function deleteCard(
         if (!row) return { ok: false, error: 'not-found' };
         // Self before etag, mirroring deleteContact: your own card cannot be removed regardless of token.
         if (row.eigenId === contacts.home.user.id) {
-            // Thunderbird drops the card from its view and ignores the 403, so bump the ctag: the next delta lists it and that client re-downloads it.
+            // Thunderbird drops the card from its view and ignores the 403: the next delta lists it again.
             contacts.db.transaction((tx) => {
                 const ctag = contacts.bumpCtag(tx);
                 tx.update(schema.contacts).set({ cardCtag: ctag }).where(eq(schema.contacts.id, row.id)).run();
