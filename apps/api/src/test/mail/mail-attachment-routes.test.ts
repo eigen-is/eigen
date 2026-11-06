@@ -347,17 +347,24 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
         }
     });
 
-    test('the .eml download of a draft answers no-store, and of any other message caches', async () => {
+    test('the .eml download of a draft answers no-store, and of any other message revalidates', async () => {
         const token = ctx.alice.user.sessionToken;
         const ownerId = ctx.alice.user.id;
         const { draft } = await draftWithPart('Downloaded draft', 'AAA');
         const draftRes = await authedRequest(token, `/mail/${ownerId}/message/${draft.id}/download`);
         expect(draftRes.status).toBe(200);
         expect(draftRes.headers.get('cache-control')).toBe('no-store');
+        expect(draftRes.headers.get('etag')).toBeNull();
 
-        const received = await authedRequest(token, `/mail/${ownerId}/message/${messageId}/download`);
+        const downloadUrl = `/mail/${ownerId}/message/${messageId}/download`;
+        const received = await authedRequest(token, downloadUrl);
         expect(received.status).toBe(200);
-        expect(received.headers.get('cache-control')).toBe('private, max-age=86400');
+        expect(received.headers.get('cache-control')).toBe('private, no-cache');
+        expect(received.headers.get('etag')).toBe(`"${messageId}"`);
+
+        const revalidated = await authedRequest(token, downloadUrl, { headers: { 'if-none-match': `"${messageId}"` } });
+        expect(revalidated.status).toBe(304);
+        expect(await revalidated.text()).toBe('');
     });
 
     test('the download route serves a range as 206', async () => {

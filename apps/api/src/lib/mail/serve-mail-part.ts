@@ -6,30 +6,26 @@ import { EML_MIME } from '@workspace/lib/types/drive';
 import type { Attachment, EmailSummary } from '@workspace/lib/types/mail';
 import { mailAttachmentName } from '@workspace/lib/types/mail';
 import type { ElysiaCustomStatusResponse } from 'elysia';
-import {
-    ApiError,
-    answerRevalidated,
-    contentDisposition,
-    rangeResponse,
-    scriptableInlineHeaders,
-    setCacheHeaders,
-} from '../core';
+import { ApiError, answerRevalidated, contentDisposition, rangeResponse, scriptableInlineHeaders } from '../core';
 import type { Mail } from './mail-domain';
 
+// A message other than a draft never changes under its id, so a 304 is answered before the .eml is read.
 export async function answerMailMessage(
     mail: Mail,
     messageId: string,
+    request: Request,
     set: { headers: Record<string, string | number> },
-): Promise<ArrayBuffer> {
-    if (!servedSummary(mail, messageId, set).isDraft) setCacheHeaders(set, 86400);
+): Promise<ArrayBuffer | ElysiaCustomStatusResponse<304>> {
+    const summary = servedSummary(mail, messageId, set);
     set.headers['Content-Type'] = EML_MIME;
     set.headers['Content-Transfer-Encoding'] = 'binary';
     set.headers['Content-Disposition'] = contentDisposition('attachment', `${messageId}.eml`);
-    return mail.messageGetFile(messageId);
+    const produce = () => mail.messageGetFile(messageId);
+    if (summary.isDraft) return produce();
+    return answerRevalidated(request, set, `"${summary.id}"`, produce);
 }
 
-// A message other than a draft never changes under its id, so a 304 is answered before the .eml is read. A
-// preview passes its renderer's format tag, so a renderer fix is not answered with a 304.
+// A preview passes its renderer's format tag, so a renderer fix is not answered with a 304.
 export async function answerMailPart<T>(
     mail: Mail,
     messageId: string,

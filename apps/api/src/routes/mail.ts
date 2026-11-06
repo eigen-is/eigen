@@ -147,10 +147,10 @@ export const mailRouter = new Elysia({ name: 'mail' })
     )
     .get(
         '/mail/:ownerId/message/:id/download',
-        async ({ params, user, set }): Promise<ArrayBuffer> => {
+        async ({ params, request, user, set }): Promise<ArrayBuffer | ElysiaCustomStatusResponse<304>> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            return await answerMailMessage(await getMailClient(user), params.id, set);
+            return await answerMailMessage(await getMailClient(user), params.id, request, set);
         },
         { auth: true },
     )
