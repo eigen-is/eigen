@@ -8,8 +8,6 @@ import {
     readdirSync,
     readFileSync,
     rmSync,
-    statSync,
-    symlinkSync,
     writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
@@ -19,15 +17,7 @@ import { createZstdCompress } from 'node:zlib';
 import type { BackupManifest } from '@workspace/lib/types/backup';
 import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import * as archiveModule from '../../lib/backup/archive';
-import {
-    buildArtifactName,
-    buildRestoreStagingDir,
-    buildServerArchiveName,
-    getBackupsDir,
-    serverSidecarPath,
-    sidecarPath,
-    wipeBackupStaging,
-} from '../../lib/backup/paths';
+import { buildArtifactName, buildRestoreStagingDir, getBackupsDir, wipeBackupStaging } from '../../lib/backup/paths';
 import * as recoveryModule from '../../lib/backup/recovery';
 import {
     recoverBackupsAfterRestart,
@@ -59,16 +49,15 @@ describe('Backup boot', () => {
     // What a restore writes before it moves a home aside, in the folder its job staged beside the home — and,
     // when the install got all the way through, the note it writes beside it. `preRestoreName` is
     // null for a restore of a deleted user: there was no home folder to move aside. `parkName` is a
-    // `.failed-restore-` name unless a safety-copy restore gives its copy's own. `dir` is where a build up to 0.4.1
-    // kept them when given.
+    // `.failed-restore-` name unless a safety-copy restore gives its copy's own.
     function seedRestoringMarker(
         jobId: string,
         homeName: string,
         preRestoreName: string | null,
         complete = false,
         parkName = `${homeName}${FAILED_RESTORE_SUFFIX}20261231-235959`,
-        dir = buildRestoreStagingDir(join(homeRoot, homeName), jobId),
     ): string {
+        const dir = buildRestoreStagingDir(join(homeRoot, homeName), jobId);
         mkdirSync(dir, { recursive: true });
         writeFileSync(
             join(dir, 'restoring.json'),
@@ -115,41 +104,6 @@ describe('Backup boot', () => {
             if (previous === undefined) delete process.env['EIGEN_BACKUPS_DIR'];
             else process.env['EIGEN_BACKUPS_DIR'] = previous;
             rmSync(dir, { recursive: true, force: true });
-        }
-    });
-
-    // A build before 0.4.1 wrote a home archive and its sidecar with the umask's mode, and one before 0.4.2 a server
-    // archive's sidecar.
-    test('the boot closes the archives and sidecars an older build left readable', async () => {
-        const dir = join(TEST_DATA_DIR, 'backups-modes');
-        const at = new Date('2026-10-01T12:00:00Z');
-        const archive = join(dir, buildArtifactName('bootmodesAAAAAAAAAAAAAAAAAAAAAAA', at));
-        // A sidecar whose archive is gone still names every file of the home.
-        const orphanSidecar = sidecarPath(join(dir, buildArtifactName('bootmodesBBBBBBBBBBBBBBBBBBBBBBB', at)));
-        const serverSidecar = serverSidecarPath(join(dir, buildServerArchiveName('manual', 'full', at)));
-        // A symlink named as an archive, to a file outside the backups folder that is not the server's to close.
-        const elsewhere = join(TEST_DATA_DIR, 'backups-modes-elsewhere');
-        const linked = join(dir, buildArtifactName('bootmodesCCCCCCCCCCCCCCCCCCCCCCC', at));
-        mkdirSync(dir, { recursive: true });
-        for (const file of [archive, sidecarPath(archive), orphanSidecar, serverSidecar, elsewhere]) {
-            writeFileSync(file, '{}');
-            chmodSync(file, 0o644);
-        }
-        symlinkSync(elsewhere, linked);
-        const previous = process.env['EIGEN_BACKUPS_DIR'];
-        process.env['EIGEN_BACKUPS_DIR'] = dir;
-        try {
-            await recoverBackupsAfterRestart();
-            const modeOf = (file: string) => statSync(file).mode & 0o777;
-            expect([archive, sidecarPath(archive), orphanSidecar, serverSidecar].map(modeOf)).toEqual([
-                0o600, 0o600, 0o600, 0o600,
-            ]);
-            expect(modeOf(elsewhere)).toBe(0o644);
-        } finally {
-            if (previous === undefined) delete process.env['EIGEN_BACKUPS_DIR'];
-            else process.env['EIGEN_BACKUPS_DIR'] = previous;
-            rmSync(dir, { recursive: true, force: true });
-            rmSync(elsewhere, { force: true });
         }
     });
 
@@ -442,31 +396,6 @@ describe('Backup boot', () => {
         expect(readFileSync(join(homeRoot, aside, 'marker'), 'utf8')).toBe('the home as it was');
     });
 
-    // The notes an older build kept in the backups folder name the home by its full path, so it must be in data/.
-    test('older notes that name a home outside the data folder are refused', async () => {
-        const id = 'bootoutsideAAAAAAAAAAAAAAAAAAAAA';
-        const elsewhere = join(TEST_DATA_DIR, 'elsewhere', 'home');
-        const aside = `${id}${PRE_RESTORE_SUFFIX}20260909-000000`;
-        mkdirSync(join(elsewhere, aside), { recursive: true });
-        made.push(join(TEST_DATA_DIR, 'elsewhere'));
-        const dir = join(getBackupsDir(), '.staging', 'boot-job-outside');
-        mkdirSync(dir, { recursive: true });
-        writeFileSync(
-            join(dir, 'restoring.json'),
-            JSON.stringify({
-                ownerId: id,
-                homeDir: join(elsewhere, id),
-                preRestoreName: aside,
-                parkName: `${id}${FAILED_RESTORE_SUFFIX}20260909-000000`,
-            }),
-        );
-
-        await recoverBackupsAfterRestart();
-
-        expect(existsSync(join(elsewhere, id))).toBe(false);
-        expect(existsSync(join(elsewhere, aside))).toBe(true);
-    });
-
     // An archive's own top-level files land where the restore unpacks it. A `restoring.json` among them must not be
     // read as the job's note by the boot after a kill in the unpack, or it moves another user's home aside.
     test("an archive's own restoring.json is not read as the job's note at boot", async () => {
@@ -557,70 +486,6 @@ describe('Backup boot', () => {
         expect(existsSync(join(homeRoot, aside))).toBe(false);
         expect(existsSync(staged)).toBe(false);
         expect(readdirSync(homeRoot).filter((name) => name.startsWith(`${id}${FAILED_RESTORE_SUFFIX}`))).toEqual([]);
-    });
-
-    // A build up to 0.4.1 kept the notes in backups/.staging. One release still reads them, so an upgrade right after a
-    // killed restore recovers it.
-    test('the notes an older build kept in the backups folder are still read', async () => {
-        const id = 'bootrecoverMMMMMMMMMMMMMMMMMMMMM';
-        const aside = `${id}${PRE_RESTORE_SUFFIX}20260505-000000`;
-        seedFolder(id, 'half-written');
-        seedFolder(aside, 'the home as it was');
-        const parkName = `${id}${FAILED_RESTORE_SUFFIX}20260505-000000`;
-        seedRestoringMarker('boot-job-m', id, aside, false, parkName, join(getBackupsDir(), '.staging', 'boot-job-m'));
-        made.push(join(homeRoot, parkName));
-
-        await recoverBackupsAfterRestart();
-
-        expect(readFileSync(join(homeRoot, id, 'marker'), 'utf8')).toBe('the home as it was');
-        expect(readFileSync(join(homeRoot, parkName, 'marker'), 'utf8')).toBe('half-written');
-        expect(existsSync(join(getBackupsDir(), '.staging'))).toBe(false);
-    });
-
-    // An older build's notes whose rename throws stay too, so the backups folder's staging is not wiped over them,
-    // and the home answers 503 until a later boot puts it back.
-    test('the notes an older build kept stay when their rename throws, and the home stays shut', async () => {
-        const id = 'bootrecoverQQQQQQQQQQQQQQQQQQQQQ';
-        const aside = `${id}${PRE_RESTORE_SUFFIX}20260606-000000`;
-        seedFolder(id, 'half-written');
-        seedFolder(aside, 'the home as it was');
-        const parkName = `${id}${FAILED_RESTORE_SUFFIX}20260606-000000`;
-        const notes = seedRestoringMarker(
-            'boot-job-q',
-            id,
-            aside,
-            false,
-            parkName,
-            join(getBackupsDir(), '.staging', 'boot-job-q'),
-        );
-        made.push(join(homeRoot, parkName));
-        const rename = nodeFs.renameSync;
-        const renameSpy = spyOn(nodeFs, 'renameSync').mockImplementation((from, to) => {
-            if (to === join(homeRoot, id)) throw Object.assign(new Error('device busy'), { code: 'EBUSY' });
-            rename(from, to);
-        });
-        const logged = spyOn(console, 'error').mockImplementation(() => {});
-
-        try {
-            await recoverBackupsAfterRestart();
-            const said = logged.mock.calls.flat().join('\n');
-            expect(said).toContain(join(homeRoot, id));
-            expect(said).toContain(notes);
-            expect(said).toContain('./eigen stop, then ./eigen restart');
-        } finally {
-            renameSpy.mockRestore();
-            logged.mockRestore();
-        }
-
-        expect(existsSync(join(notes, 'restoring.json'))).toBe(true);
-        expect(readFileSync(join(homeRoot, aside, 'marker'), 'utf8')).toBe('the home as it was');
-        await expect(openHome(id)).rejects.toThrow('Restore in progress');
-        // The next boot, whose rename works, puts the home back. It starts with no home marked.
-        clearHomeRestoring(id);
-        await recoverBackupsAfterRestart();
-        expect(readFileSync(join(homeRoot, id, 'marker'), 'utf8')).toBe('the home as it was');
-        expect(readFileSync(join(homeRoot, parkName, 'marker'), 'utf8')).toBe('half-written');
-        expect(existsSync(join(getBackupsDir(), '.staging'))).toBe(false);
     });
 });
 

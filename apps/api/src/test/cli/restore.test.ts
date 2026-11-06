@@ -611,7 +611,7 @@ describe('restore --stage and --swap', () => {
     );
 
     test(
-        'a Light archive of 0.4.1, which this version cannot read, is refused like any other unreadable archive',
+        'an archive named with a level this version does not have is refused like any other unreadable archive',
         async () => {
             const dir = install();
             const light = join(scratch('restore-light-'), 'server-pre-update-light-20260930-020304.tar');
@@ -712,9 +712,9 @@ describe('restore --stage and --swap', () => {
         JOB_TIMEOUT_MS,
     );
 
-    // rewrittenMember writes the modes builds up to 0.4.1 packed: 0755 folders and 0644 files.
+    // rewrittenMember writes 0755 folders and 0644 files.
     test(
-        "an older archive's 0644 files and 0755 folders stage for the API's user alone",
+        "an archive's 0644 files and 0755 folders stage for the API's user alone",
         async () => {
             const dir = install();
             const member = await rewrittenMember(fullArchive, alice.id, (entries) => entries);
@@ -1111,7 +1111,7 @@ describe('restore --stage and --swap', () => {
             for (const name of inner) {
                 const unpacked = await readArtifactManifest(members.get(name)!);
                 declared += declaredUnpackBytes(unpacked);
-                entries += unpacked.entries.length + (unpacked.counts.dirs ?? 0);
+                entries += unpacked.entries.length + unpacked.counts.dirs;
             }
             const copied = manifest.entries.filter((entry) => !inner.includes(entry.path));
             declared += copied.reduce((sum, entry) => sum + entry.bytes, 0);
@@ -1210,19 +1210,6 @@ describe('restore --stage and --swap', () => {
                 other.close();
             }
             expect((await swap(dir)).code).toBe(0);
-        },
-        JOB_TIMEOUT_MS,
-    );
-
-    test(
-        'a swap clears backups/.staging, whose per-home restore notes describe the data/ that went aside',
-        async () => {
-            const dir = install();
-            const note = join(dir, 'backups/.staging/job/restoring.json');
-            mkdirSync(dirname(note), { recursive: true });
-            writeFileSync(note, '{}');
-            await stageAndSwap(dir, basename(fullArchive));
-            expect(existsSync(join(dir, 'backups/.staging'))).toBe(false);
         },
         JOB_TIMEOUT_MS,
     );
@@ -1407,7 +1394,7 @@ describe('restore --check-data, which a rollback runs first with the build it go
             expect((await restoreCli(dir, sinceArgs)).code).toBe(0);
 
             // An unpack writes each file's mtime back from the archive, so only the file's ctime is new.
-            await archiveModule.extractArtifact(archive, join(homes, 'u2'), { maxBytes: 1e9, chargeFolders: true });
+            await archiveModule.extractArtifact(archive, join(homes, 'u2'), 1e9);
             expect(statSync(join(homes, 'u2', PATHS.MAIL.DB)).mtimeMs).toBeLessThan(since);
             const unpacked = await restoreCli(dir, sinceArgs);
             expect(unpacked.code).toBe(CANNOT_OPEN);

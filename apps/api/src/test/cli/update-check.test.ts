@@ -143,16 +143,6 @@ describe('update-check', () => {
         }
     });
 
-    test('--level prints level=full whatever changed, for the launcher of 0.4.1 and before', async () => {
-        for (const from of ['0.1.1', version]) {
-            expect(await eigen('update-check', '--from', from, '--level')).toEqual({
-                stdout: 'level=full\n',
-                stderr: '',
-                code: 0,
-            });
-        }
-    });
-
     test('refuses a --from that is no version, and a missing one', async () => {
         expect((await eigen('update-check', '--from', 'latest')).stderr).toContain('■  --from takes a version');
         expect((await eigen('update-check')).stderr).toContain('■  --from takes a version');

@@ -12,7 +12,7 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api';
 import { admin, organization, twoFactor } from 'better-auth/plugins';
 import { defaultAc, userAc } from 'better-auth/plugins/admin/access';
-import { and, eq, notInArray, or } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import * as authSchema from '../../../auth-schema';
 import { isProduction, isTest } from '../config/env';
@@ -259,17 +259,11 @@ export function getAuthDrizzleDb(): ReturnType<typeof drizzle> {
     return authDrizzleDb;
 }
 
-// The auth rows better-auth leaves behind, such as memberships, 2FA and app passwords. A membership whose user is
-// gone already goes too.
+// The auth rows better-auth leaves behind, such as memberships, 2FA and app passwords.
 export function authDeleteUserReferences(userId: string): void {
     const db = getAuthDrizzleDb();
-    const userIds = db.select({ id: authSchema.user.id }).from(authSchema.user);
-    db.delete(authSchema.member)
-        .where(or(eq(authSchema.member.userId, userId), notInArray(authSchema.member.userId, userIds)))
-        .run();
-    db.delete(authSchema.teamMember)
-        .where(or(eq(authSchema.teamMember.userId, userId), notInArray(authSchema.teamMember.userId, userIds)))
-        .run();
+    db.delete(authSchema.member).where(eq(authSchema.member.userId, userId)).run();
+    db.delete(authSchema.teamMember).where(eq(authSchema.teamMember.userId, userId)).run();
     db.delete(authSchema.twoFactor).where(eq(authSchema.twoFactor.userId, userId)).run();
     db.delete(authSchema.apikey).where(eq(authSchema.apikey.referenceId, userId)).run();
 }

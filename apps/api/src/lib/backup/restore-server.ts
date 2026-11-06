@@ -11,7 +11,7 @@ import { BACKUP_OWNER_ID, buildBackupStamp, parseBackupManifest } from '@workspa
 import { getDataRoot, homeDirUnder, ORG_HOMES_DIR, PATHS, SERVER_DIR, SERVER_RUNTIME_FILES } from '../config/paths';
 import { ApiError } from '../core/errors';
 import { isUsableName } from '../mount/names';
-import type { HashedArchiveMember, UnpackBound } from './archive';
+import type { HashedArchiveMember } from './archive';
 import {
     copyArchiveMember,
     declaredUnpackBytes,
@@ -59,7 +59,7 @@ type StageContext = {
     s3FromArchive: boolean;
     stamp: string;
     now: number;
-    boundOf: (member: HashedArchiveMember) => Promise<UnpackBound>;
+    boundOf: (member: HashedArchiveMember) => Promise<number>;
 };
 
 // The manifest of each archive inside a server archive, the server member's and every home's, by member name. Each
@@ -238,24 +238,19 @@ function replayPendingUploads(mountDir: string, liveMountDir: string, fromFiles:
             )
             .all();
         for (const { storageKey, stagingPath } of pending) {
-            // A legacy row holds an absolute path on the server that made it; it gets the name the file lands under.
-            const name = path.basename(stagingPath);
-            const staged = path.join(stagingDir, name);
+            const staged = path.join(stagingDir, stagingPath);
             if (uploaded?.has(storageKey)) {
-                if (!fromFiles && isUsableName(name)) fs.rmSync(staged, { force: true });
+                if (!fromFiles && isUsableName(stagingPath)) fs.rmSync(staged, { force: true });
                 notReplayed.settled++;
                 continue;
             }
             const row = byKey.get(storageKey);
             const source = fromFiles ? row && resolveInside(dataDir, archivePath(row)) : staged;
-            if (!source || !isUsableName(name) || !fs.existsSync(source)) {
+            if (!source || !isUsableName(stagingPath) || !fs.existsSync(source)) {
                 notReplayed.missing++;
                 continue;
             }
             if (fromFiles) movePath(source, staged);
-            if (name !== stagingPath) {
-                db.run('UPDATE pending_uploads SET stagingPath = ? WHERE storageKey = ?', [name, storageKey]);
-            }
         }
     } finally {
         db.close();

@@ -29,9 +29,9 @@ export type BackupManifest = {
     appVersion: string;
     server: { domain: string; orgId: string };
     // databases and files are disjoint, so entries.length === databases + files. `dirs` is every folder entry the
-    // archive holds, its root folder included. An archive written before the count existed has none.
-    counts: { databases: number; files: number; bytes: number; dirs?: number };
-    // Absent in an archive written before levels existed, which was complete.
+    // archive holds, its root folder included.
+    counts: { databases: number; files: number; bytes: number; dirs: number };
+    // Absent means the archive is complete.
     level?: BackupLevel;
     // `skipped` is set only for a mount the home has turned off whose storage could not be read: it
     // carries the reason, holds no files, and a restore leaves it disabled and absent. An enabled
@@ -107,8 +107,6 @@ export type BackupVerifyRecord = {
     checkedAt?: Date;
     // Human-readable, one per failed check.
     failures: string[];
-    // What verifies but is not as it should be, one line each; absent when there is none.
-    warnings?: string[];
 };
 
 // The last upload of an archive to the backup bucket. `key` is the object's, prefix and server folder included.

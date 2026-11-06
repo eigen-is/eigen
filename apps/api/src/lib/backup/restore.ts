@@ -73,7 +73,7 @@ export async function restoreHome(
             // Refused before a byte is written. The unpack stops at the same bound, so an archive that holds more than
             // it declares takes no more of the disk the homes share than the room check found free.
             const bound = unpackBound(await readDeclaredManifest(artifactPath));
-            const shortfall = roomShortfall(`Restoring ${artifactName}`, bound.maxBytes, getDataRoot(), 'data/');
+            const shortfall = roomShortfall(`Restoring ${artifactName}`, bound, getDataRoot(), 'data/');
             if (shortfall) throw new ApiError(507, shortfall);
             onProgress?.('extract', 0, 1);
             await extractArtifact(artifactPath, unpackDir, bound);

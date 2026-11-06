@@ -12,7 +12,7 @@ import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { PATHS } from '../config/paths';
 import { ApiError } from '../core/errors';
 import type { DatabaseConfig, SchemaType } from '../core/managed-database';
-import { MOUNT_DB_CONFIG, PENDING_UPLOAD_KIND_VERSION } from '../mount/db-config';
+import { MOUNT_DB_CONFIG } from '../mount/db-config';
 import { buildStorageKey } from '../mount/names';
 import { paths, pendingUploads } from '../mount/schema';
 import { errnoOf } from '../storage/deadline';
@@ -43,7 +43,7 @@ export async function materializeMount(
     summary: BackupManifest['mounts'][number],
     stamp: string,
 ): Promise<VersionedDatabase[]> {
-    const metadataPath = requireMaterializable(homeDir, summary);
+    const metadataPath = requireMetadataDb(homeDir, summary);
     const mountDir = requireMountDir(homeDir, summary.id);
     const dataDir = path.join(mountDir, PATHS.DRIVE.DATA_DIR);
     const isPathBased = summary.storageType === 'local';
@@ -140,7 +140,7 @@ export async function checkUnpackedHome(homeDir: string, mounts: BackupManifest[
     const containerDatabases: VersionedDatabase[] = [];
     for (const summary of mounts) {
         const dataDir = path.join(requireMountDir(homeDir, summary.id), PATHS.DRIVE.DATA_DIR);
-        const db = openToCheck(requireMaterializable(homeDir, summary));
+        const db = openToCheck(requireMetadataDb(homeDir, summary));
         try {
             for (const entry of listManagedDatabases(readMountPathRows(db))) {
                 containerDatabases.push({
@@ -298,22 +298,11 @@ export function openToCheck(filePath: string): Database {
     return db;
 }
 
-// The metadata.db of a mount the archive promises, refused when materializeMount could not restore from it.
-function requireMaterializable(homeDir: string, summary: BackupManifest['mounts'][number]): string {
+// The metadata.db of a mount the archive promises, refused when the archive carries none.
+function requireMetadataDb(homeDir: string, summary: BackupManifest['mounts'][number]): string {
     const metadataPath = path.join(requireMountDir(homeDir, summary.id), PATHS.DRIVE.METADATA_DB);
     if (!fs.existsSync(metadataPath)) {
         throw new ApiError(400, `The archive promises mount ${summary.id} but carries no metadata.db for it`);
-    }
-    if (summary.storageType !== 's3') return metadataPath;
-    // The pending rows materializeMount writes need the `isDatabase` column: without it every restored file would
-    // later be dropped as a corrupt staged copy.
-    const metadataVersion = readStamp(metadataPath);
-    if (metadataVersion < PENDING_UPLOAD_KIND_VERSION) {
-        throw new ApiError(
-            400,
-            `Mount ${summary.id} was archived at metadata schema v${metadataVersion}, too old to restore ` +
-                `(v${PENDING_UPLOAD_KIND_VERSION} or newer needed)`,
-        );
     }
     return metadataPath;
 }
@@ -333,17 +322,6 @@ function readToJudge(filePath: string, read: (db: Database) => string): string {
     } finally {
         db?.close();
     }
-}
-
-// The schema stamp of a database that is there. One SQLite cannot read is refused by name.
-function readStamp(filePath: string): number {
-    let version = 0;
-    const verdict = readToJudge(filePath, (db) => {
-        version = readSchemaVersion(db);
-        return 'ok';
-    });
-    if (verdict !== 'ok') throw new UnopenableDatabaseError(500, `${filePath} does not open: ${verdict}`);
-    return version;
 }
 
 function readQuickCheck(db: Database): string {

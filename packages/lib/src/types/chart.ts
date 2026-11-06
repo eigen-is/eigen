@@ -82,9 +82,9 @@ export type RangeChartSeries = { id: string; name: string | CellRangeRef; values
 export type InlineChartData = { source: 'inline'; categories: string[]; series: InlineChartSeries[] };
 export type RangeChartData = { source: 'range'; categories: CellRangeRef | null; series: RangeChartSeries[] };
 
-// The spec's eight parts, each a record, so a later option nests in one and an older build keeps it. fontFamily is an
-// EIGEN_FONTS name every label draws in. axes holds the axes this build draws, the ids' first pair, series a style per
-// series id in data, points the styled points by series id and index.
+// The spec's eight parts, each a record, so a new option nests in one and a tab that does not know it keeps it.
+// fontFamily is an EIGEN_FONTS name every label draws in. axes holds the axes this build draws, the ids' first pair,
+// series a style per series id in data, points the styled points by series id and index.
 export type ChartSpec = {
     chart: { type: ChartType; blanks: ChartBlanks; fontFamily: string };
     title: { text: string };

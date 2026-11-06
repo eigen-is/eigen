@@ -865,10 +865,6 @@ describe('Backup restoreHome', () => {
 });
 
 describe('Backup restore refuses an archive this server cannot open', () => {
-    // A remote mount, for the gate that only remote mounts meet. Its fake bucket sits outside the
-    // home, the way createHomeFaultMount wants it.
-    const S3_MOUNT_ID = 'restore-schema-s3';
-    const S3_BACKING = join(TEST_DATA_DIR, 'restore-schema-backing');
     let user: TestUser;
     let mountId: string;
     let rootId: string;
@@ -931,47 +927,6 @@ describe('Backup restore refuses an archive this server cannot open', () => {
 
         await expectNotTaken(user.id, before);
         rmSync(join(getBackupsDir(), artifact), { force: true });
-    });
-
-    test('an s3 mount archived before pending_uploads carried its kind is refused before the home is taken', async () => {
-        const names = await rootNames(user.sessionToken, user.id, mountId, rootId);
-        // A restore writes the pending rows of a REMOTE mount itself, naming the isDatabase column;
-        // on an older metadata.db that column does not exist, and taking its DEFAULT would let the
-        // queue drop every restored plain file as corrupt. A local mount gets no such rows, so the
-        // same archive is fine for it.
-        const home = await getHome(user.id);
-        const { mount } = createHomeFaultMount(home, S3_MOUNT_ID, S3_BACKING);
-        await mount.init();
-        registerFaultMount(home.drive, mount);
-        try {
-            const remoteRoot = await assertJson<DrivePath>(
-                await authedRequest(user.sessionToken, `/drive/${user.id}/${S3_MOUNT_ID}/root`),
-            );
-            await driveUpload(
-                user.sessionToken,
-                user.id,
-                S3_MOUNT_ID,
-                remoteRoot.id,
-                new File([TEST_PNG_BYTES], 'remote.png', { type: 'image/png' }),
-            );
-            await mount.uploadQueue?.drain({ flushNow: true });
-            const artifact = await backup(user.id, new Date(Date.now() + 60_000), (manifest, folder) =>
-                stampSchemaVersion(manifest, folder, `home/mounts/${S3_MOUNT_ID}/metadata.db`, 7),
-            );
-            const before = await untakenState(user.id);
-
-            await expect(restoreHome(artifact, user.id, `restore-older-${Date.now()}`)).rejects.toThrow(
-                /too old to restore/,
-            );
-
-            await expectNotTaken(user.id, before);
-            expect(await rootNames(user.sessionToken, user.id, mountId, rootId)).toEqual(names);
-            rmSync(join(getBackupsDir(), artifact), { force: true });
-        } finally {
-            unregisterFaultMount(home.drive, S3_MOUNT_ID);
-            await mount.closeAllDatabases().catch(() => {});
-            rmSync(S3_BACKING, { recursive: true, force: true });
-        }
     });
 
     test('a deleted user is not re-created by an archive that fails the check', async () => {
@@ -1889,9 +1844,9 @@ describe('Backup restore of one home judges, then takes the home', () => {
         }
 
         // The bound the unpack stops at, which counts the manifest and an allowance for every entry beside the bytes.
-        expect(checked).toEqual({ needed: archiveModule.unpackBound(manifest).maxBytes, dir: getDataRoot() });
+        expect(checked).toEqual({ needed: archiveModule.unpackBound(manifest), dir: getDataRoot() });
         const manifestBytes = Buffer.byteLength(archiveModule.serializeManifest(manifest));
-        const entries = manifest.entries.length + (manifest.counts.dirs ?? 0);
+        const entries = manifest.entries.length + manifest.counts.dirs;
         expect(manifest.counts.dirs).toBeGreaterThan(0);
         expect(checked?.needed).toBeGreaterThan(
             manifest.counts.bytes + manifestBytes + archiveModule.ENTRY_ALLOWANCE_BYTES * entries,
@@ -1899,18 +1854,6 @@ describe('Backup restore of one home judges, then takes the home', () => {
         expect(extracted).toBe(0);
         await expectNotTaken(user.id, before);
         rmSync(join(getBackupsDir(), artifact), { force: true });
-    });
-
-    // An older build's manifest counts no folders, and its unpack charges none, so its archive restores as it did.
-    test('an archive whose manifest counts no folders restores', async () => {
-        const artifact = await backup(user.id, new Date(Date.now() + 96_000), (manifest) => {
-            delete manifest.counts.dirs;
-        });
-        expect((await readArtifactManifest(join(getBackupsDir(), artifact))).counts.dirs).toBeUndefined();
-        await restoreHome(artifact, user.id, `restore-uncounted-${Date.now()}`);
-        expect(await rootNames(user.sessionToken, user.id, mountId, rootId)).toContain('kept.txt');
-        rmSync(join(getBackupsDir(), artifact), { force: true });
-        removeSafetyCopies(user.id);
     });
 
     test('an archive whose files pass the bytes it declares is refused mid-unpack, and leaves nothing behind', async () => {

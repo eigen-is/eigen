@@ -37,8 +37,8 @@ import {
 // Stage 3 samples rather than decodes everything: the ten heaviest documents plus ten of the rest.
 const SAMPLE_LARGEST = 10;
 const SAMPLE_REST = 10;
-// A wrecked archive can fail on every entry, and an old one can warn on every row. The record is a sidecar and an
-// SSE payload, not a log, so it keeps this many lines.
+// A wrecked archive can fail on every entry. The record is a sidecar and an SSE payload, not a log, so it keeps this
+// many lines.
 const MAX_LINES = 100;
 // How many failures a one-line message quotes. The record carries the whole list.
 const FAILURES_IN_MESSAGE = 3;
@@ -47,8 +47,8 @@ export function describeFailures(verify: Pick<BackupVerifyRecord, 'failures'>): 
     return verify.failures.slice(0, FAILURES_IN_MESSAGE).join('; ');
 }
 
-// Failures or warnings, the first MAX_LINES of them and a count of the rest.
-function cappedLines(noun: string): { add: (message: string) => void; lines: () => string[] } {
+// The failures, the first MAX_LINES of them and a count of the rest.
+function cappedFailures(): { add: (message: string) => void; lines: () => string[] } {
     const kept: string[] = [];
     let suppressed = 0;
     return {
@@ -56,7 +56,7 @@ function cappedLines(noun: string): { add: (message: string) => void; lines: () 
             if (kept.length < MAX_LINES) kept.push(message);
             else suppressed++;
         },
-        lines: () => (suppressed > 0 ? [...kept, `…and ${suppressed} more ${noun}`] : kept),
+        lines: () => (suppressed > 0 ? [...kept, `…and ${suppressed} more failures`] : kept),
     };
 }
 
@@ -92,7 +92,6 @@ function listArchiveDatabases(
     root: string,
     entries: ReadonlyMap<string, BackupEntry>,
     fail: (message: string) => void,
-    warn: (message: string) => void,
 ): ArchiveDatabase[] {
     const found: ArchiveDatabase[] = [];
     // A home folder holds the first, the server member the second; neither holds the other's.
@@ -128,7 +127,6 @@ function listArchiveDatabases(
                 if (refusals.length > 0) continue;
                 // A restore serves a plain file's size and ETag from its row, so the row describes the bytes the
                 // manifest lists for it. Eigen's own databases are copies, and a row with no file has nothing to match.
-                // A warning, not a failure: an archive written before captures rewrote the row must still restore.
                 const byId = new Map(rows.map((row) => [row.id, row]));
                 const archivePath = archivePaths(rows);
                 for (const row of rows) {
@@ -138,9 +136,9 @@ function listArchiveDatabases(
                     );
                     if (!file) continue;
                     if (row.size !== file.bytes) {
-                        warn(`${file.path}: ${file.bytes} bytes, its row says ${row.size}`);
+                        fail(`${file.path}: ${file.bytes} bytes, its row says ${row.size}`);
                     } else if (row.hash !== null && row.hash !== file.sha256) {
-                        warn(`${file.path}: sha256 does not match its row`);
+                        fail(`${file.path}: sha256 does not match its row`);
                     }
                 }
                 for (const managed of listManagedDatabases(rows)) {
@@ -202,8 +200,7 @@ export async function verifyFolder(dir: string, onProgress?: BackupProgress): Pr
     // Every path below is compared against this, so the folder's own real path is the baseline.
     const root = fs.realpathSync(dir);
 
-    const failures = cappedLines('failures');
-    const warnings = cappedLines('warnings');
+    const failures = cappedFailures();
     const fail = failures.add;
 
     // Stage 1, transport: the manifest and the folder describe the same set of bytes.
@@ -227,16 +224,7 @@ export async function verifyFolder(dir: string, onProgress?: BackupProgress): Pr
 
     // Stage 2, structure: SQLite's own verdict on every database the archive owns. A file already
     // reported missing by stage 1 is skipped rather than reported twice.
-    const databases = listArchiveDatabases(
-        root,
-        new Map(manifest.entries.map((entry) => [entry.path, entry])),
-        fail,
-        // Logged too: a server backup or a restore keeps no sidecar, only the status.
-        (message) => {
-            console.warn(`[backup] ${message}`);
-            warnings.add(message);
-        },
-    );
+    const databases = listArchiveDatabases(root, new Map(manifest.entries.map((entry) => [entry.path, entry])), fail);
     for (const [index, database] of databases.entries()) {
         // Each check blocks the thread, and a restore runs this in the API.
         if (index > 0 && index % DATABASES_PER_YIELD === 0) await new Promise(setImmediate);
@@ -275,8 +263,8 @@ export async function verifyFolder(dir: string, onProgress?: BackupProgress): Pr
             // A document nobody has typed in holds no blobs at all, and a backup of one must not come
             // out failed. With blobs present, every one of them has to decode (the loader throws
             // otherwise) into a document that has shared types. Which types, and what is in them, is
-            // not verify's business: a document written by an older app version keeps its content
-            // under names this build no longer knows, and that is not corruption.
+            // not verify's business: a document may keep content under names this build does not know,
+            // and that is not corruption.
             if (countYjsBlobs(target.abs) > 0) {
                 const doc = new Y.Doc();
                 Y.applyUpdate(doc, readYjsStateFromFile(target.abs, { readonly: true }));
@@ -289,13 +277,7 @@ export async function verifyFolder(dir: string, onProgress?: BackupProgress): Pr
     }
 
     const failed = failures.lines();
-    const warned = warnings.lines();
-    return {
-        status: failed.length === 0 ? 'verified' : 'failed',
-        checkedAt,
-        failures: failed,
-        ...(warned.length > 0 && { warnings: warned }),
-    };
+    return { status: failed.length === 0 ? 'verified' : 'failed', checkedAt, failures: failed };
 }
 
 // How a file differs from its manifest entry, or null. A null sha256 checks the size alone, for a reader that has

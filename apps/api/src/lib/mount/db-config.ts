@@ -8,9 +8,6 @@ import * as schema from './schema';
 
 // The schema every mount's metadata.db is migrated to.
 const CURRENT_VERSION = 8;
-// And the version that gave `pending_uploads` its `isDatabase` column. A restore writes those rows
-// itself, so it refuses an archived metadata.db older than this rather than take the DEFAULT.
-export const PENDING_UPLOAD_KIND_VERSION = 8;
 
 export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'mount-metadata',
@@ -275,7 +272,7 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
             },
         },
         {
-            version: PENDING_UPLOAD_KIND_VERSION,
+            version: 8,
             up: (db) =>
                 // A restore stages plain files too, which the queue must not check for a SQLite header.
                 db.exec(`ALTER TABLE pending_uploads ADD COLUMN isDatabase INTEGER NOT NULL DEFAULT 1;`),

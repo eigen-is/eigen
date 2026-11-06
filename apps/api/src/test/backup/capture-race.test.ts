@@ -176,7 +176,7 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
         expect((await verifyFolder(folder)).status).toBe('verified');
     });
 
-    test('an archive whose file row does not describe its bytes verifies with a warning, as older archives do', async () => {
+    test('an archive whose file row does not describe its bytes fails verify', async () => {
         const user = await raceUser('local-fullnames');
         const { single } = await seed(user);
         const { manifest, folder } = await snapshotInto(await getHome(user.id), 'full');
@@ -193,9 +193,10 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
         entry.bytes = metadata.byteLength;
         entry.sha256 = new Bun.CryptoHasher('sha256').update(metadata).digest('hex');
         writeFileSync(join(folder, 'manifest.json'), JSON.stringify(manifest, null, 2));
-        const record = await verifyFolder(folder);
-        expect(record.status).toBe('verified');
-        expect(record.warnings).toEqual([`home/mounts/${M}/data/zz-single.txt: 6 bytes, its row says 1`]);
+        expect(await verifyFolder(folder)).toMatchObject({
+            status: 'failed',
+            failures: [`home/mounts/${M}/data/zz-single.txt: 6 bytes, its row says 1`],
+        });
     });
 
     test('a file row with no hash on record and its folder sizes are archived as they are', async () => {

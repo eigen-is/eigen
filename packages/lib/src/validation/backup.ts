@@ -105,7 +105,8 @@ function isCounts(value: unknown): value is BackupManifest['counts'] {
         typeof value.files === 'number' &&
         'bytes' in value &&
         typeof value.bytes === 'number' &&
-        (!('dirs' in value) || typeof value.dirs === 'number')
+        'dirs' in value &&
+        typeof value.dirs === 'number'
     );
 }
 
@@ -243,12 +244,7 @@ function parseVerifyRecord(verify: unknown): BackupVerifyRecord | null {
     if (!status || !('failures' in verify) || !Array.isArray(verify.failures)) return null;
     if (verify.failures.some((failure) => typeof failure !== 'string')) return null;
     const checkedAt = 'checkedAt' in verify ? reviveDate(verify.checkedAt) : undefined;
-    const record: BackupVerifyRecord = { status, checkedAt, failures: verify.failures };
-    // Advisory, so a list this build cannot read costs the record nothing.
-    if ('warnings' in verify && isStringList(verify.warnings) && verify.warnings.length > 0) {
-        record.warnings = verify.warnings;
-    }
-    return record;
+    return { status, checkedAt, failures: verify.failures };
 }
 
 // The sidecar written next to an artifact: the same manifest plus the verify record.

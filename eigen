@@ -314,9 +314,7 @@ step() {
     step_running=$1 step_done=$2 step_failed=$3
     shift 3
     code=0
-    # A step may print a secret, so its log is made anew for the operator alone: a truncating write keeps the mode
-    # of a log an older launcher left readable by every user.
-    rm -f "$LOG"
+    # A step may print a secret, so its log is the operator's alone.
     (umask 077 && : >"$LOG")
     if [ -t 1 ]; then
         set -m
@@ -644,23 +642,10 @@ stop() {
 }
 
 # running_backup: what the running API says runs of a server backup, such as "the server backup <archive>", on one
-# line, or nothing. It fails when the API does not answer. The new launcher stops the old API in an update, and an API
-# of 0.4.1 or before refuses --running (exit 2). For it the records in backups/ are read, as its own launcher did: one
-# says running at the top, or for its upload a level deeper, and one that has said so for over a day lost its end.
-# Drop the fallback when update_apply's floor, a launcher older than 0.3.1, rises past 0.4.1: then no update stops such
-# an API.
+# line, or nothing. It fails when the API does not answer, and then prints nothing.
 running_backup() {
-    asked=0
-    running=$(api_cli status --running </dev/null 2>/dev/null) || asked=$?
-    case $asked in
-        0) printf '%s\n' "$running" ;;
-        2)
-            find backups -maxdepth 1 -name 'server-*.json' ! -mmin +1440 -exec grep -HE '^  (  )?"state": "running"' {} + \
-                2>/dev/null | sed -n -e '1s|^backups/\(.*\)\.json:    .*|the upload of \1|p' \
-                -e '1s|^backups/\(.*\)\.json:  .*|the server backup \1|p'
-            ;;
-        *) return 1 ;;
-    esac
+    running=$(api_cli status --running </dev/null 2>/dev/null) || return 1
+    printf '%s\n' "$running"
 }
 
 # ask_backup <tries>: running_backup, asked again 2 s later while the API does not answer, <tries> times in all. One

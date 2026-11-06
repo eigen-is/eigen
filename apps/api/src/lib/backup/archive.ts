@@ -193,15 +193,10 @@ export async function copyArchiveMember(member: ArchiveMemberLocation, destPath:
 // What the disk spends on one entry beyond its bytes, such as a block a small file rounds up to, or a folder's own
 // block. A million empty files or folders declare no bytes and still take gigabytes, so every entry is charged it.
 export const ENTRY_ALLOWANCE_BYTES = 4096;
-// What a restore's room check and its unpack allow beyond what the manifest declares: a tenth more, which also covers
-// the folders of an archive written before its manifest counted them, and a fixed reserve, so a small home is not
-// unpacked onto the disk's last free bytes.
+// What a restore's room check and its unpack allow beyond what the manifest declares: a tenth more, and a fixed
+// reserve, so a small home is not unpacked onto the disk's last free bytes.
 const UNPACK_SLACK = 1.1;
 const UNPACK_RESERVE_BYTES = 64 * 1024 * 1024;
-
-// The most an unpack may write, and whether its folder entries count toward it. They count once the manifest counts
-// them. An archive written before `counts.dirs` declares no folders, so its unpack does not charge them either.
-export type UnpackBound = { maxBytes: number; chargeFolders: boolean };
 
 // The text of an archive's manifest.json. The snapshots write it, and declaredUnpackBytes measures it.
 export function serializeManifest(manifest: BackupManifest): string {
@@ -220,16 +215,13 @@ export function countPackedFolders(dir: string): number {
 // of the manifest itself, and an allowance for each of them and for every folder the manifest counts.
 export function declaredUnpackBytes(manifest: BackupManifest): number {
     const manifestBytes = Buffer.byteLength(serializeManifest(manifest));
-    const entries = manifest.entries.length + 1 + (manifest.counts.dirs ?? 0);
+    const entries = manifest.entries.length + 1 + manifest.counts.dirs;
     return manifest.counts.bytes + manifestBytes + entries * ENTRY_ALLOWANCE_BYTES;
 }
 
 // The most an unpack of the archive may write. A restore checks the disk for it first, and every unpack stops there.
-export function unpackBound(manifest: BackupManifest): UnpackBound {
-    return {
-        maxBytes: withUnpackSlack(declaredUnpackBytes(manifest)),
-        chargeFolders: manifest.counts.dirs !== undefined,
-    };
+export function unpackBound(manifest: BackupManifest): number {
+    return withUnpackSlack(declaredUnpackBytes(manifest));
 }
 
 // Declared bytes with the slack and the reserve on top. A whole-server stage adds them once over all its members.
@@ -241,11 +233,11 @@ export function withUnpackSlack(bytes: number): number {
 type ArtifactSource = string | ArchiveMemberLocation;
 
 // Unpacks an artifact into `targetDir`. Every folder it makes is 0700 and every file 0600, whatever the header
-// says. Only the API's user reads a restored home, so an older archive with 0644 files restores as private as a
-// new one. A crafted archive cannot ask for a setuid bit, which root would then move into data/. It cannot ask
+// says. Only the API's user reads a restored home, so an archive packed elsewhere with 0644 files restores as private
+// as one of ours. A crafted archive cannot ask for a setuid bit, which root would then move into data/. It cannot ask
 // for a folder that its own extract cannot enter either. It refuses an archive whose entries add up to more than
-// `bound`, each with its ENTRY_ALLOWANCE_BYTES, before it writes the entry that would pass it.
-export async function extractArtifact(source: ArtifactSource, targetDir: string, bound: UnpackBound): Promise<void> {
+// `maxBytes`, each with its ENTRY_ALLOWANCE_BYTES, before it writes the entry that would pass it.
+export async function extractArtifact(source: ArtifactSource, targetDir: string, maxBytes: number): Promise<void> {
     const makeFolder = (folder: string) => fs.mkdirSync(folder, { recursive: true, mode: ARCHIVE_FOLDER_MODE });
     // The outermost folder this call made, or undefined when `targetDir` was there already.
     const made = makeFolder(targetDir);
@@ -253,15 +245,14 @@ export async function extractArtifact(source: ArtifactSource, targetDir: string,
     try {
         for await (const entry of tarEntries(artifactBytes(source))) {
             const target = path.join(targetDir, entry.path);
-            const isFolder = entry.typeflag === DIRECTORY_TYPEFLAG;
-            bytes += entry.size + (isFolder && !bound.chargeFolders ? 0 : ENTRY_ALLOWANCE_BYTES);
-            if (bytes > bound.maxBytes) {
+            bytes += entry.size + ENTRY_ALLOWANCE_BYTES;
+            if (bytes > maxBytes) {
                 throw new ApiError(
                     400,
-                    `The archive unpacks past ${formatFileSize(bound.maxBytes)}, more than its manifest declares`,
+                    `The archive unpacks past ${formatFileSize(maxBytes)}, more than its manifest declares`,
                 );
             }
-            if (isFolder) {
+            if (entry.typeflag === DIRECTORY_TYPEFLAG) {
                 makeFolder(target);
                 continue;
             }
