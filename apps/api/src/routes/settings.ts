@@ -2,6 +2,7 @@
 // configuration, the server status, the list of users and guests with their roles and teams, and a
 // user's deletion or password reset. Every route needs an admin or the owner.
 
+import { BACKUP_KEEP_MAX } from '@workspace/lib/constants/backup';
 import { UPLOAD_CAP_MAX_MB } from '@workspace/lib/constants/mount';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
 import type { S3Config } from '@workspace/lib/types/mount';
@@ -34,14 +35,46 @@ import { deleteUserCompletely } from '../lib/user/delete-user';
 import { resetUserPassword } from '../lib/user/reset-password';
 import { betterAuth } from './auth';
 import {
-    backupSettingsBody,
     optionalEnum,
     s3ConfigBody,
+    s3DestinationBody,
     s3HardenBody,
     senderAddressSchema,
     senderNameSchema,
     toS3Config,
 } from './shared-schemas';
+
+// t.Integer is a union with a numeric string, whose default 422 dumps both branches; `error` replaces it.
+const backupKeepSchema = t.Integer({
+    minimum: 1,
+    maximum: BACKUP_KEEP_MAX,
+    error: `Backups to keep must be a whole number from 1 to ${BACKUP_KEEP_MAX}`,
+});
+
+// The owner's backup settings in a save of the server settings: the schedule and the bucket.
+const backupSettingsBody = t.Object({
+    schedule: t.Optional(
+        t.Object({
+            enabled: t.Optional(t.Boolean()),
+            hourUtc: t.Optional(
+                t.Integer({
+                    minimum: 0,
+                    maximum: 23,
+                    error: 'The backup hour must be a whole number from 0 to 23',
+                }),
+            ),
+            withS3: t.Optional(t.Boolean()),
+            keep: t.Optional(backupKeepSchema),
+        }),
+    ),
+    upload: t.Optional(
+        t.Object({
+            enabled: t.Optional(t.Boolean()),
+            s3: t.Optional(s3DestinationBody),
+            keep: t.Optional(backupKeepSchema),
+        }),
+    ),
+});
 
 // Who appears on the admin Users page: everyone except guests, orphans included.
 // `ne(user.role, GUEST_ROLE)` alone excludes NULL-role orphans in SQLite, so OR in isNull.
