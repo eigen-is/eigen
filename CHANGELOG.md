@@ -25,6 +25,14 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Pictures cropped in Google Slides** — a picture that Google Slides cropped to fit its box, such as a logo, no longer comes in squashed when you convert or import the deck
 - **Downloads that fail** — downloading or printing a document from Docs, Sheets, Slides or Vector that is too big to export says "Export failed: the document is too big, or it used too much memory" instead of "Internal server error"
 - **Mail apps during a restore** — a mail app that signs in while an account is being restored or deleted is told to try again later, so it can no longer make the restore fail and keep the account offline
+- **Sending in Chat and comments** — a send that fails keeps its text and files, and a slash command such as /help leaves your attachments waiting. Send stays off until the room has loaded, so a message can't go out without its files
+- **Changing room in Chat** — what you were about to send is cleared when you change room, so it can't go to the wrong one
+- **Two people editing in Calendar** — editing, moving or deleting an event someone else just changed is refused instead of overwriting their change
+- **A refused Save** — in Calendar, Contacts and Personal info in Space, a Save refused because the item changed elsewhere keeps what you typed and takes the other fields from the server
+- **Removing someone with a document open** — removing someone from a team or an organization, or deleting their account, cuts them off from the documents they have open at once
+- **Shared with me** — items of a deleted person or team no longer show
+- **Restoring a deleted account or team** — a restore of a deleted team, or of a deleted user whose address another account now holds, is refused before it changes anything. A restore that fails no longer reloads open tabs, so they keep their unsaved edits
+- **Deleting during an upload** — on local storage, deleting a file while an upload of the same name runs no longer loses the new file
 
 ## [0.4.2] - 2026-11-03
 
