@@ -22,7 +22,7 @@ import type {
     EigenClipboardTextItem,
 } from '@workspace/lib/types/clipboard';
 import { isTypingTarget } from '@workspace/ui/hooks/is-typing-target';
-import { cloneDeep, isEqual } from 'es-toolkit/compat';
+import { isEqual } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import { enablePatches, produce, produceWithPatches } from 'immer';
 import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
@@ -170,10 +170,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         }, []);
 
         // biome-ignore lint/correctness/useExhaustiveDependencies: the deps are the props' values, spread, which biome can't read
-        const mergedSettings = useMemo(
-            () => Object.assign(cloneDeep(defaultSettings), props),
-            [...Object.values(props)],
-        );
+        const mergedSettings = useMemo(() => ({ ...defaultSettings, ...props }), [...Object.values(props)]);
 
         // The formula map is built once the sheet has loaded, off the interaction path, so the first edit on a large
         // workbook doesn't wait seconds for it.
@@ -345,8 +342,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         useEffect(() => {
             setContextWithProduce(
                 (draftCtx) => {
-                    draftCtx.defaultcolumnNum = mergedSettings.column;
-                    draftCtx.defaultrowNum = mergedSettings.row;
                     // Only a load or newly created sheet data needs the view here; a switch derives its own.
                     let viewStale = false;
                     if (draftCtx.sheets.length === 0) {
@@ -372,9 +367,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         // The list of formula cells is seeded without computing them. An imported or stored sheet
                         // carries its computed values, and an edit computes the formulas it affects.
                         api.seedCalcChain(draftCtx);
-                    }
-                    if (mergedSettings.devicePixelRatio > 0) {
-                        draftCtx.devicePixelRatio = mergedSettings.devicePixelRatio;
                     }
                     draftCtx.allowEdit = mergedSettings.allowEdit;
                     draftCtx.hooks = mergedSettings.hooks;
@@ -404,17 +396,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     }
                     // A sheet with no stored selection gets its first one when the grid overlay mounts.
 
-                    draftCtx.currency = mergedSettings.currency || '€';
-
-                    draftCtx.rowHeaderWidth = mergedSettings.rowHeaderWidth;
-                    draftCtx.columnHeaderHeight = mergedSettings.columnHeaderHeight;
-
-                    if (sheet.addRows != null) {
-                        draftCtx.addDefaultRows = Number(sheet.addRows);
-                    } else {
-                        draftCtx.addDefaultRows = mergedSettings.addRows;
-                    }
-
                     if (viewStale) applySheetView(draftCtx);
                 },
                 { noHistory: true },
@@ -423,16 +404,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             context.currentSheetId,
             context.sheets.length,
             originalData,
-            mergedSettings.column,
-            mergedSettings.row,
-            mergedSettings.devicePixelRatio,
             mergedSettings.allowEdit,
             mergedSettings.hooks,
             setContextWithProduce,
-            mergedSettings.rowHeaderWidth,
-            mergedSettings.columnHeaderHeight,
-            mergedSettings.addRows,
-            mergedSettings.currency,
         ]);
 
         const onKeyDown = useCallback(
@@ -724,17 +698,15 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             </ul>
                         </section>
                         <div className="w-full">
-                            {mergedSettings.showToolbar && (
-                                <WorkbookMenuBar
-                                    ref={menuBar}
-                                    leftItems={toolbarLeftItems}
-                                    rightItems={toolbarRightItems}
-                                />
-                            )}
-                            {mergedSettings.showFormulaBar && <FxEditor />}
+                            <WorkbookMenuBar
+                                ref={menuBar}
+                                leftItems={toolbarLeftItems}
+                                rightItems={toolbarRightItems}
+                            />
+                            <FxEditor />
                         </div>
                         <Sheet sheet={sheet} />
-                        {mergedSettings.showSheetTabs && <SheetTab />}
+                        <SheetTab />
                         <FilterMenu />
                     </div>
                 </ModalProvider>

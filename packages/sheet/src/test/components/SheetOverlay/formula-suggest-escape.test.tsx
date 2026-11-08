@@ -42,7 +42,7 @@ async function mount() {
         root.render(
             createElement(DocSearchProvider, {
                 controller,
-                children: createElement(Workbook, { ref: workbook, data, showFormulaBar: false, hooks: {} }),
+                children: createElement(Workbook, { ref: workbook, data, hooks: {} }),
             }),
         );
     });

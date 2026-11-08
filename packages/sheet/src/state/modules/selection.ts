@@ -96,7 +96,6 @@ export function scrollToHighlightCell(ctx: Context, r: number, c: number) {
     }
 }
 
-// Formula function: selection highlight box
 export function seletedHighlistByindex(ctx: Context, r1: number, r2: number, c1: number, c2: number) {
     const row = ctx.visibledatarow[r2];
     const row_pre = r1 - 1 === -1 ? 0 : ctx.visibledatarow[r1 - 1];
@@ -394,7 +393,6 @@ export function colHasMerged(ctx: Context, c: number, r1: number, r2: number) {
     return hasMerged;
 }
 
-// Get merged cell info
 export function getRowMerge(ctx: Context, rIndex: number, c1: number, c2: number) {
     const flowData = getFlowdata(ctx);
     if (isNil(flowData)) return [null, null];
@@ -498,14 +496,9 @@ export function getColMerge(ctx: Context, cIndex: number, r1: number, r2: number
     return [str, end];
 }
 
-// Merge-aware walk shared by both moveHighlightCell targets. Advances the focused
-// cell by `index` along `postion`, resolving merged-cell spans on both the source
-// and the destination. All fields are pixel/index coordinates, populated from a
-// mergeBorder() tuple or from visibledata{row,column} lookups; returns null on the
-// shared nil failure (same console message both callers logged). The one true
-// difference between the targets: when the destination is NOT a merged cell, the
-// selection target keys the new range off the clamped cursor (curR/curC) while the
-// formula target keys it off the moved anchor (moveX/moveY) — `indexFromMove`.
+// Advances the focused cell by `index` along `postion`, across merges on both ends. When the destination is not a
+// merge, the selection keys its new range off the clamped cursor and a formula range off the moved anchor, which
+// `indexFromMove` selects.
 type HighlightCellWalk = {
     row: number | undefined;
     row_pre: number | undefined;
@@ -544,7 +537,6 @@ function computeMoveHighlightCell(
         curC = last.column_focus;
     }
 
-    // Whether the focused cell is a merged cell
     const margeset = mergeBorder(ctx, flowdata, curR, curC);
     if (margeset) {
         const str_r = margeset.row[2];
@@ -603,7 +595,6 @@ function computeMoveHighlightCell(
         moveY = curC;
     }
 
-    // Whether the next cell to move to is a merged cell
     const margeset2 = mergeBorder(ctx, flowdata, curR, curC);
     if (margeset2) {
         const [row_pre, row, row_index, row_index_ed] = margeset2.row;
@@ -746,9 +737,7 @@ export function moveHighlightRange(
         const datarowlen = flowData.length;
         const datacolumnlen = flowData[0].length;
         if (postion === 'down') {
-            // Selection changes vertically
             if (rowHasMerged(ctx, rf, curC, endC)) {
-                // The row containing the focused cell has merged cells
                 const rfMerge = getRowMerge(ctx, rf, curC, endC);
                 const rf_str = rfMerge[0];
                 const rf_end = rfMerge[1];
@@ -1237,10 +1226,7 @@ export function copy(ctx: Context, { cut = false }: { cut?: boolean } = {}) {
     };
 
     const clipboard = rangeValueToClipboard(ctx, ctx.currentSheetId, ranges, { cut });
-    if (clipboard) {
-        ctx.iscopyself = true;
-        setPendingCopy(clipboard.html, clipboard.text, clipboard.cellText);
-    }
+    if (clipboard) setPendingCopy(clipboard.html, clipboard.text, clipboard.cellText);
 }
 
 export function deleteSelectedCellText(ctx: Context): string {
@@ -1298,9 +1284,6 @@ export function deleteSelectedCellText(ctx: Context): string {
     return 'success';
 }
 
-// Whether selections overlap. Accepts the editor `Selection[]` (default) or a
-// `Range` (SingleRange[]); both share the `{row, column}` rectangle the test
-// needs.
 export function selectIsOverlap(ctx: Context, range?: Range | SheetType['selections']) {
     const ranges = cloneDeep(range ?? ctx.selections) ?? [];
 
@@ -1358,7 +1341,6 @@ export function calcSelectionInfo(ctx: Context) {
         const data = getDataBySelectionNoCopy(ctx, selection[s]);
         for (let r = 0; r < data.length; r += 1) {
             for (let c = 0; c < data[0].length; c += 1) {
-                // Prevent the selection length from exceeding data bounds
                 if (r >= data.length || c >= data[0].length) break;
                 const cell = data[r][c];
                 const ct = cell?.ct?.t;

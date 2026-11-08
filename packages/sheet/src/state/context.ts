@@ -9,7 +9,6 @@ import {
     SHEET_ROW_HEADER_WIDTH,
 } from '@workspace/lib/sheets';
 import { isNil, sortBy } from 'es-toolkit/compat';
-import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../engine/defaults';
 import type { Cell, CellMatrix } from '../engine/types';
 import { FormulaCache } from './modules';
 import type { CellGlyph } from './modules/cell-glyph';
@@ -30,9 +29,9 @@ import type {
 } from './types';
 import { getSheetIndex, sheetOrder } from './utils';
 
-interface MutableRefObject<T> {
+type MutableRefObject<T> = {
     current: T;
-}
+};
 
 export type FunctionCandidate = {
     n: string;
@@ -50,16 +49,10 @@ type RefValues = {
 
 export type Context = {
     sheets: Sheet[];
-    defaultcolumnNum: number;
-    defaultrowNum: number;
-    addDefaultRows: number;
-    fullscreenmode: boolean;
     devicePixelRatio: number;
-    // The selected image or chart on the current sheet.
     activeObject?: FloatingRef;
     presences?: Presence[];
-    // Transient find highlight state (UI-only, never persisted/synced — like
-    // formulaRangeHighlight; filterPatch drops non-sheets[*] patches).
+    // The find highlights. They live only here, because an op carries only what is under sheets.
     searchHighlights?: SearchHighlight[];
     searchActive?: SearchHighlight | null;
     linkCard?: LinkCardProps;
@@ -68,8 +61,6 @@ export type Context = {
     // A notice for the overlay to show, such as why a protected sheet refused an edit. A write sets it, and the
     // overlay opens the notice and clears it.
     warnDialog?: string;
-    currency?: string;
-    // Whether a list cell's drop-down is open.
     validationListOpen?: boolean;
 
     filterContextMenu?: {
@@ -84,7 +75,6 @@ export type Context = {
     };
 
     currentSheetId: string;
-    calculateSheetId: string;
 
     visibledatarow: number[];
     visibledatacolumn: number[];
@@ -98,7 +88,6 @@ export type Context = {
     calculatebarHeight: number;
     rowHeaderWidth: number;
     columnHeaderHeight: number;
-    cellMainSrollBarSize: number;
     tableContentSize: number[];
 
     defaultcollen: number;
@@ -107,10 +96,8 @@ export type Context = {
     scrollLeft: number;
     scrollTop: number;
 
-    // Explicit programmatic-scroll intent (selection-follow, freeze reset,
-    // sheet-switch restore), distinct from scrollLeft/scrollTop which is the
-    // live-position mirror that syncScroll updates every recipe for hit-testing.
-    // A fresh object per request lets the apply effect fire only when set.
+    // A scroll the code asks for, such as following the selection. scrollLeft and scrollTop only mirror the live
+    // position, so a fresh object here is what tells the effect to scroll.
     scrollRequest?: { left?: number; top?: number };
 
     sheetScrollRecord: Record<
@@ -136,25 +123,20 @@ export type Context = {
     copyState?: {
         dataSheetId: string;
         copyRange: { row: number[]; column: number[] }[];
-    }; // copy/paste
+    };
     pasteIsCut: boolean;
 
-    filterchage: boolean; // filter
     filterOptions?: FilterOptions;
     filterRange?: { row: number[]; column: number[] } | undefined;
     filter: Record<string, FilterEntry>;
-    // Transient hover column for the canvas-drawn filter buttons.
     filterButtonHover?: number;
-    // Transient hover for the painted cell glyphs (list chevron, tick box, corner marks).
     cellGlyphHover?: CellGlyph;
 
-    sheetTabDragging: boolean;
-    sheetTabDragData: unknown[];
     scrolling: boolean;
 
     currentSheetIsPivot: boolean;
 
-    rowsSelected: boolean; // row/column header related parameters
+    rowsSelected: boolean;
     colsSelected: boolean;
     rowsResizing: boolean;
     rowsResizeStart: number[];
@@ -168,18 +150,10 @@ export type Context = {
     shiftKeyDown: boolean;
     shiftAnchor: Selection | undefined;
 
-    iscopyself: boolean;
-
-    orderbyindex: number; // sort index
-
-    modalDragging: boolean; // modal drag
-    modalDragXY: number[];
-    modalDragTarget: unknown;
-
-    cellSelectMoving: boolean; // selection drag-replace
+    cellSelectMoving: boolean;
     cellSelectMoveIndex: number[];
 
-    cellSelectExtending: boolean; // selection fill-down
+    cellSelectExtending: boolean;
     cellSelectExtendIndex: number[];
 
     showGridLines: boolean;
@@ -188,7 +162,6 @@ export type Context = {
     formatPainterOn: boolean;
     formatPainterOnce: boolean;
 
-    // default cell
     defaultCell: Cell;
 
     groupValuesRefreshData: {
@@ -200,10 +173,8 @@ export type Context = {
     }[];
     formulaCache: FormulaCache;
     hooks: Hooks;
-    // in read-only mode, force-highlight cells referenced by formulas
-    forceFormulaRef?: boolean;
 
-    sheetFocused: boolean; // property to track sheet focus for keyboard navigation
+    sheetFocused: boolean;
 
     getRefs: () => RefValues;
 };
@@ -211,16 +182,10 @@ export type Context = {
 export function defaultContext(refs: RefValues): Context {
     return {
         sheets: [],
-        defaultcolumnNum: DEFAULT_SHEET_COLUMN_COUNT,
-        defaultrowNum: DEFAULT_SHEET_ROW_COUNT,
-        addDefaultRows: 50,
-        fullscreenmode: true,
-        devicePixelRatio: (typeof globalThis !== 'undefined' ? globalThis : window).devicePixelRatio,
+        devicePixelRatio: globalThis.devicePixelRatio,
 
         currentSheetId: '',
-        calculateSheetId: '',
         warnDialog: undefined,
-        currency: '€',
         rangePickerOpen: false,
 
         validationListOpen: false,
@@ -237,7 +202,6 @@ export function defaultContext(refs: RefValues): Context {
         calculatebarHeight: 29,
         rowHeaderWidth: SHEET_ROW_HEADER_WIDTH,
         columnHeaderHeight: SHEET_COLUMN_HEADER_HEIGHT,
-        cellMainSrollBarSize: 12,
         tableContentSize: [0, 0],
 
         defaultcollen: SHEET_DEFAULT_COL_WIDTH,
@@ -257,19 +221,16 @@ export function defaultContext(refs: RefValues): Context {
         functionCandidates: [],
         functionHint: null,
 
-        copyState: undefined, // copy/paste
+        copyState: undefined,
         pasteIsCut: false,
 
-        filterchage: true, // filter
         filter: {},
 
-        sheetTabDragging: false,
-        sheetTabDragData: [],
         scrolling: false,
 
         currentSheetIsPivot: false,
 
-        rowsSelected: false, // row/column header related parameters
+        rowsSelected: false,
         colsSelected: false,
         rowsResizing: false,
         rowsResizeStart: [],
@@ -283,18 +244,10 @@ export function defaultContext(refs: RefValues): Context {
         shiftKeyDown: false,
         shiftAnchor: undefined,
 
-        iscopyself: true,
-
-        orderbyindex: 0, // sort index
-
-        modalDragging: false, // modal drag
-        modalDragXY: [0, 0],
-        modalDragTarget: null,
-
-        cellSelectMoving: false, // selection drag-replace
+        cellSelectMoving: false,
         cellSelectMoveIndex: [],
 
-        cellSelectExtending: false, // selection fill-down
+        cellSelectExtending: false,
         cellSelectExtendIndex: [],
 
         showGridLines: true,
@@ -305,7 +258,6 @@ export function defaultContext(refs: RefValues): Context {
 
         sheetFocused: true,
 
-        // default cell
         defaultCell: {
             bl: 0,
             ct: { fa: 'General', t: 'n' },
@@ -320,7 +272,8 @@ export function defaultContext(refs: RefValues): Context {
         },
 
         groupValuesRefreshData: [],
-        formulaCache: new FormulaCache(), // class will not be frozen by immer, can be mutated at any time.
+        // Immer doesn't freeze a class, so this stays mutable inside and outside a recipe.
+        formulaCache: new FormulaCache(),
         hooks: {},
 
         getRefs: () => refs,

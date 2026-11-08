@@ -36,8 +36,6 @@ async function mount() {
                 children: createElement(Workbook, {
                     ref: workbook,
                     data,
-                    showToolbar: true,
-                    showFormulaBar: false,
                     hooks: {},
                 }),
             }),

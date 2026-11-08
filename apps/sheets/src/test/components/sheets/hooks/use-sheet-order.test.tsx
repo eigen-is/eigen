@@ -133,8 +133,6 @@ async function openTab(from: YDoc, clientID: number) {
             ref: workbookRef,
             data: initialData,
             onOp: handleOp,
-            showToolbar: false,
-            showFormulaBar: false,
         });
     }
     const container = document.createElement('div');
@@ -468,6 +466,7 @@ for (const peerID of [1, 2000]) {
     });
 }
 
+// 220 batches each render the whole workbook, toolbar included, which a loaded machine takes past the 5 s default.
 test('a batch that lands before the oldest anchor the tab keeps loads the grid again', async () => {
     const s = server();
     const tab = await openTab(s, 50);
@@ -490,7 +489,7 @@ test('a batch that lands before the oldest anchor the tab keeps loads the grid a
     expect(tab.seen.version).toBe(1);
     expect(tab.cell(0, 0)?.v).toBe('online 219');
     expectJoined(tab);
-});
+}, 30_000);
 
 // The sheet tab whose label reads `name`.
 const sheetTab = (name: string) =>

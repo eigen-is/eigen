@@ -4,7 +4,7 @@
 // dropCell C3, selection C4, tokenizer C5) can be gated on them. They assert on
 // observable output in the resulting Context, never on internal call sequences.
 //
-// Entry point: handlePasteByClick(ctx, clipboardData, triggerType?). It is the
+// Entry point: handlePasteByClick(ctx, clipboardData). It is the
 // headless-drivable door into the pipeline (handlePaste needs a live ClipboardEvent
 // + DOM). When ctx.copyState is set it routes to the internal copy/cut handlers;
 // otherwise a plain string goes to the plain-text / formula-string handlers.

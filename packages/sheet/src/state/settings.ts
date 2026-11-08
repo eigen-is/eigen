@@ -1,18 +1,14 @@
-// What a host passes the Workbook: the sheets, what the editor may do, and the hooks it calls back on an
-// edit, a comment or a chart, with the defaults for every setting it leaves out.
+// What a host passes the Workbook: the sheets, whether the person may edit, and the hooks it calls back on a
+// selection, a comment or a chart, with the defaults for what it leaves out.
 
 import type { useCommentLifecycle } from '@workspace/lib/comments';
 import type { Sheet as LibSheet, SheetChart, SheetFloatingItem } from '@workspace/lib/sheets';
-import { SHEET_COLUMN_HEADER_HEIGHT, SHEET_ROW_HEADER_WIDTH } from '@workspace/lib/sheets';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../engine/defaults';
-import type { Selection, SheetConfig } from './types';
+import type { Selection } from './types';
 
-// Returned by the `getCommentInfo` hook for menu rendering (card/entry) and
-// canvas rendering (indicatorColor for the cell-corner triangle).
 export type CommentInfo = {
     card: CommentCard;
     entry: CommentEntry | undefined;
@@ -41,65 +37,29 @@ export type Hooks = {
     resolveImageUrl?: (mediaName: string) => string | null;
     // The media resolver's isMediaMissing: such an image draws as missing.
     isImageMissing?: (mediaName: string) => boolean;
-    // Resolve a floating image's mediaName to its portable DrivePath, so an image copy can carry a
-    // cross-mount source path. `undefined` when the media isn't resolvable yet (a
-    // still-pending upload) — the copy then falls through to the pending-cell path.
+    // Undefined for an upload still pending, whose copy then carries no source path.
     resolveImagePath?: (mediaName: string) => DrivePath | undefined;
-    // Insert a pasted eigen image item as a floating image at its TYPED size (never fit-to-pane),
-    // handling the cross-mount re-upload + pending→real mediaName swap app-side.
     onPasteEigenImage?: (item: EigenClipboardImageItem) => void;
-    // Paste of an OS image file (no eigen payload) — the app runs its fit-to-pane insert + upload
-    // (the same path as the Insert menu and OS-file drop).
     onPasteImageFile?: (file: File) => void;
-    // Paste of a vector SVG whose images are name-referenced (eigen-media:) — the app materializes
-    // each image into its media/ (re-uploading cross-container) and rewrites the svg's refs before
-    // inserting it as one floating image. `imageItems` is the re-upload
-    // manifest; a pasted svg with no image items rides onPasteImageFile instead.
+    // A pasted svg with no image items comes through onPasteImageFile instead.
     onPasteSvgFile?: (svg: string, imageItems: EigenClipboardImageItem[]) => void;
-    // Fired whenever the selected image or chart changes (selected, deselected, or its record written),
-    // so the app can mount and refresh its properties panel. `null` when nothing is selected. The item
-    // is one reference per record, so the app's setState bails while nothing changed.
+    // The item is one reference per record, so the app's setState bails while nothing changed.
     onActiveObjectChange?: (item: SheetFloatingItem | null) => void;
-    // Fired when a chart is selected or deselected and while it is selected, as the chart or the sheet names
-    // change, so the app can show the chart's sections in its panel.
     onChartPanelChange?: (panel: ChartPanelState | null) => void;
 };
 
 export type Settings = {
-    column?: number;
-    row?: number;
-    addRows?: number;
     allowEdit?: boolean;
-    showToolbar?: boolean;
-    showFormulaBar?: boolean;
-    showSheetTabs?: boolean;
     // The stored sheets the Workbook mounts on. A sheet without an id gets one there.
     data: LibSheet[];
-    config?: SheetConfig;
-    devicePixelRatio?: number;
-    rowHeaderWidth?: number;
-    columnHeaderHeight?: number;
     hooks?: Hooks;
-    currency?: string;
-    // Keep aspect ratio for the selected image's or chart's corner grips. The app owns it (via
-    // `useAspectLock`) so the same ON/OFF drives both the grips and the panel checkbox; never stored.
+    // Keep aspect ratio for the selected object's corner grips. The app owns it, so its panel checkbox shows the same.
     aspectLocked?: boolean;
 };
 
 export const defaultSettings: Required<Settings> = {
-    column: DEFAULT_SHEET_COLUMN_COUNT, // default number of columns for an empty sheet
-    row: DEFAULT_SHEET_ROW_COUNT, // default number of rows for an empty sheet
-    addRows: 50, // It will add the rows when we click on add row button
-    showToolbar: true, // whether to show the toolbar
-    showFormulaBar: true, // whether to show the formula bar
-    showSheetTabs: true, // whether to show the sheet tab area at the bottom
-    data: [], // client-side sheet data [sheet1, sheet2, sheet3]
-    config: {}, // settings for row height, column width, merged cells, formulas, etc.
-    devicePixelRatio: 0, // device pixel ratio; higher value gives sharper rendering, 0 means auto
-    allowEdit: true, // whether to allow editing in the frontend
-    rowHeaderWidth: SHEET_ROW_HEADER_WIDTH,
-    columnHeaderHeight: SHEET_COLUMN_HEADER_HEIGHT,
+    data: [],
+    allowEdit: true,
     hooks: {},
-    currency: '€',
     aspectLocked: false,
 };

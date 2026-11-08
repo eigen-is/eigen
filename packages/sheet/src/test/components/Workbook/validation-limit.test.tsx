@@ -49,7 +49,7 @@ async function key(target: HTMLElement, init: KeyboardEventInit) {
     });
 }
 
-async function mount(sheet: Partial<Sheet>, showToolbar = false) {
+async function mount(sheet: Partial<Sheet>) {
     document.execCommand = () => true;
     const container = document.createElement('div');
     document.body.append(container);
@@ -62,8 +62,6 @@ async function mount(sheet: Partial<Sheet>, showToolbar = false) {
             createElement(Workbook, {
                 ref: workbook,
                 data,
-                showToolbar,
-                showFormulaBar: false,
                 onOp: (ops: Op[]) => batches.push(ops),
             }),
         );
@@ -168,18 +166,15 @@ describe('a refused mouse-up ends its drag', () => {
         },
     };
 
-    async function mountCapped(showToolbar = false) {
+    async function mountCapped() {
         HTMLElement.prototype.getBoundingClientRect = () => new DOMRect(0, 0, 1600, 900);
-        const mounted = await mount(
-            {
-                celldata: [
-                    { r: 1, c: 3, v: { v: 'x', m: 'x' } },
-                    { r: 0, c: 11, v: { v: 'y', m: 'y', bl: 1 } },
-                ],
-                dataValidations: capped,
-            },
-            showToolbar,
-        );
+        const mounted = await mount({
+            celldata: [
+                { r: 1, c: 3, v: { v: 'x', m: 'x' } },
+                { r: 0, c: 11, v: { v: 'y', m: 'y', bl: 1 } },
+            ],
+            dataValidations: capped,
+        });
         return { ...mounted, sheet: () => mounted.api().getAllSheets()[0] };
     }
 
@@ -240,7 +235,7 @@ describe('a refused mouse-up ends its drag', () => {
     });
 
     test('a one-shot format painter', async () => {
-        const { container, api, batches, sheet } = await mountCapped(true);
+        const { container, api, batches, sheet } = await mountCapped();
         await act(async () => api().setSelection([{ row: [0, 0], column: [11, 11] }]));
         const edit = [...container.querySelectorAll<HTMLElement>('button[aria-haspopup="menu"]')].find(
             (button) => button.textContent?.trim() === 'Edit',

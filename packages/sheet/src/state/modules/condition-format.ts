@@ -179,9 +179,7 @@ export function getComputeMap(ctx: Context): ComputeMap | null {
         }
     }
 
-    // Formula rules evaluate through the engine directly, as the HTML export does. execfunction would set
-    // ctx.calculateSheetId, which throws on the frozen context a paint reads, and would add every rule's formula to the
-    // sheet's calc chain.
+    // A paint reads a frozen context, so formula rules evaluate through the engine directly, as the HTML export does.
     const computeMap = evaluateConditionalFormat(ruleArr, data, {
         evaluateFormula: createCfFormulaEvaluator(
             ctx.formulaCache.engine,

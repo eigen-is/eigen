@@ -54,11 +54,10 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
             return;
         }
 
-        const d = getFlowdata(ctx); // fetch data
+        const d = getFlowdata(ctx);
         if (!d) return;
 
-        // Seeded only once the paste is certain: every config write is syncable now that the
-        // mirror is gone, so seeding above the guard would ship an op for a paste that never ran.
+        // Seeded only once the paste is certain, because a config write ships an op.
         const cfg = (getSheet(ctx).config ??= {});
         cfg.merge ??= {};
         cfg.borderInfo ??= {};
@@ -152,7 +151,7 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
             dataChe.push(che[i].split('\t'));
         }
 
-        const d = getFlowdata(ctx); // fetch data
+        const d = getFlowdata(ctx);
         if (!d) return;
 
         const last = ctx.selections?.[ctx.selections.length - 1];
@@ -302,8 +301,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyState: Context['copyState']) 
 
     if (!copyState) return;
 
-    // Live resolver, hoisted: one per paste instead of one snapshot per pasted
-    // formula, and each evaluation sees the cells pasted before it.
+    // One live resolver per paste, so each evaluation sees the cells pasted before it.
     const resolver = createContextResolver(ctx);
 
     const copySheetId = copyState.dataSheetId;
@@ -683,10 +681,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
 
                 ctx.formulaRangeSelections = [];
                 pasteHandler(ctx, data, borderInfo);
-            }
-            // the copied content is an image file — hand it to the app's fit-to-pane insert + upload
-            // (the Insert-menu / OS-drop path); the engine carries no upload seam of its own (U5c).
-            else if (clipboardData.files.length === 1 && clipboardData.files[0].type.indexOf('image') > -1) {
+            } else if (clipboardData.files.length === 1 && clipboardData.files[0].type.indexOf('image') > -1) {
                 ctx.hooks.onPasteImageFile?.(clipboardData.files[0]);
             } else {
                 txtdata = clipboardData.getData('text/plain');
@@ -702,11 +697,10 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
     }
 }
 
-export function handlePasteByClick(ctx: Context, clipboardData: string, triggerType?: string) {
+export function handlePasteByClick(ctx: Context, clipboardData: string) {
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
 
-    // If we have an internal copy/cut save, use that
     if (ctx.copyState?.copyRange != null && ctx.copyState.copyRange.length > 0) {
         if (ctx.pasteIsCut) {
             ctx.pasteIsCut = false;
@@ -714,7 +708,7 @@ export function handlePasteByClick(ctx: Context, clipboardData: string, triggerT
         } else {
             pasteHandlerOfCopyPaste(ctx, ctx.copyState);
         }
-    } else if (clipboardData && triggerType !== 'btn') {
+    } else if (clipboardData) {
         const isExcelFormula = clipboardData.startsWith('=');
         if (isExcelFormula) {
             handleFormulaStringPaste(ctx, clipboardData);

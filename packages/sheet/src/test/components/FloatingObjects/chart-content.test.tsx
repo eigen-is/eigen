@@ -90,8 +90,6 @@ async function mount(allowEdit = true, look: Partial<ChartLook> = {}) {
                 ref: workbook,
                 data,
                 allowEdit,
-                showToolbar: false,
-                showFormulaBar: false,
                 hooks: { onChartPanelChange: (panel) => panels.push(panel) },
             }),
         );

@@ -50,7 +50,7 @@ async function mountWorkbook(): Promise<WorkbookInstance> {
     const root = createRoot(container);
     const ref = createRef<WorkbookInstance>();
     await act(async () => {
-        root.render(createElement(Workbook, { ref, data: sheets(), showToolbar: false, showFormulaBar: false }));
+        root.render(createElement(Workbook, { ref, data: sheets() }));
     });
     cleanup = async () => {
         await act(async () => root.unmount());

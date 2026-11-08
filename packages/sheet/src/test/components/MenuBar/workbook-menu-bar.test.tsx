@@ -33,8 +33,6 @@ async function mountWorkbook() {
         root.render(
             createElement(Workbook, {
                 data,
-                showToolbar: true,
-                showFormulaBar: false,
                 hooks: {},
                 toolbarLeftItems: createElement(AppBarMenu, {
                     label: 'File',

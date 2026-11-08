@@ -37,8 +37,6 @@ async function mount(onOp: (ops: Op[]) => void) {
                         config: {},
                     },
                 ],
-                showToolbar: false,
-                showFormulaBar: false,
                 onOp,
             }),
         );

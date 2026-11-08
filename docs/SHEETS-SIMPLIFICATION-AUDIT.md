@@ -31,7 +31,7 @@ The API audit's six patterns all show up here. Read across the six areas, though
 2. **Facts stored twice inside the workbook.** `calcChain` beside the cells' `f` ([E1](#e1)), `cell.mc` beside `config.merge` ([D9](#d9)), `cell.hl` beside `sheet.hyperlink` ([F2](#f2)), `ctx.filter` beside `sheet.filter` ([D7](#d7)), the freeze and pixel boxes beside the indices ([R1](#r1), [R9](#r9)), `ctx.copyState` beside the clipboard ([D1](#d1)), `ctx.rangePickerOpen` beside the dialog slot ([R5](#r5)). Every writer has to keep the two in step, and each one that didn't is a fix in the log.
 3. **Two paths for one job.** The editor's batch applier beside the engine's replay ([S2](#s2)), writers doing their own formula bookkeeping beside the patch-derived recompute that undo already uses ([E7](#e7)), sort and fill outside `carryCells` ([D2](#d2)), two hand-written formula walkers ([E3](#e3)), ⌘V beside menu Paste ([D1](#d1)), four ways to turn a pointer into a cell ([R3](#r3)), eight commit paths of which two measure the row ([R2](#r2)), and row and column handlers written twice ([R9](#r9)).
 4. **Structural undo across peers.** Undoing your own row, column or sheet op after a peer edited since needs a three-way merge, trial runs, a refusal path and half the shifter ([U2](#u2)). The refusal path guards a sheet that turned read-only, which no UI or import can make. The owner accepted the smaller undo.
-5. **Fork scaffolding.** Sheet protection, read-only rows, alternate formats, pivot remnants, icon rules ([F1](#f1)), fill modes no menu can choose and Chinese numeral series ([D4](#d4)), dead context fields and settings ([R4](#r4), [E6](#e6)). Each is still checked on edits, and at least one got a fix (`b6ecee4d3`, protection checked before a delete, for a protection nobody can switch on).
+5. **Fork scaffolding.** Sheet protection, read-only rows, alternate formats, pivot remnants, icon rules ([F1](#f1)), fill modes no menu can choose and Chinese numeral series ([D4](#d4)), dead formula state ([E6](#e6)). Each is still checked on edits, and at least one got a fix (`b6ecee4d3`, protection checked before a delete, for a protection nobody can switch on).
 
 The API audit's tripwire applies here unchanged: at the third `fix(x)` on one mechanism within a week, stop and ask which root it is before a fourth patch lands.
 
@@ -210,7 +210,7 @@ Lost: nothing. ~50 LOC + ~60 test, low-medium risk, medium-high confidence.
 `FormulaCache.execFunctionExist`, `pendingChangedCells`, `execFunctionGlobalData`, `ctx.groupValuesRefreshData`; flushed by `triggerGroupValuesRefresh` (`Workbook/index.tsx`), with a paint guard in `Sheet/index.tsx` and manual `= null` resets in `paste.ts` (twice), `history.ts`, `toolbar.ts`, `refresh.ts` and `cell.ts`.
 History: inherited; touched by `77ef9d2ac`, `4d90409ff`, `6890d5b29`.
 Root cause: roots 2 and 5. The engine reads the overlay before the cell, so one missed clear shadows a cell with a stale value.
-Simpler: `execFunctionGroup(ctx, changedCells)` takes its cells as an argument, keeps the overlay local, and writes changed values at its end. The staging, the trailer and the paint guard go (the guard is dead already, see [R4](#r4)).
+Simpler: `execFunctionGroup(ctx, changedCells)` takes its cells as an argument, keeps the overlay local, and writes changed values at its end. The staging, the trailer and the paint guard go .
 Lost: nothing. ~80 LOC + ~40 test, low-medium risk, medium-high confidence. [E7](#e7) makes most of it moot.
 
 <a id="e6"></a>**E6. Fork scaffolding in formula state.**
@@ -318,14 +318,6 @@ History: `a3f0dd9b9` ("mousedown measured from the header while mouseup measures
 Root cause: root 3. No function owns "where on the sheet is this pointer".
 Simpler: `sheetPoint(ctx, e, cellArea)` → `{ viewX, viewY, x, y, inside, pane }` from the cell area's rect, the live scroll and `freezeOf(ctx)`. `mousePosition` and the bar-height constants go.
 Lost: nothing; two bugs go. ~80 LOC, low-medium risk, high confidence.
-
-<a id="r4"></a>**R4. Fork leftovers: dead context fields, settings no host sets, and a text-measure path only tests reach.**
-- Context fields written but never read, or never set: `modalDragging`, `modalDragXY`, `modalDragTarget`, `sheetTabDragging`, `sheetTabDragData`, `filterchage`, `orderbyindex`, `iscopyself`, `calculateSheetId` (its write throws on a frozen context, says a comment in `condition-format.ts`), `fullscreenmode`, `cellMainSrollBarSize`, `forceFormulaRef` (its `InputBox` branch runs a no-op `setContext` on every render for a viewer) and `currentSheetIsPivot`.
-- Settings: the one host passes `showToolbar`, `showFormulaBar` and `showSheetTabs` as their defaults; nobody passes `column`, `row`, `addRows`, `config` (never read), `devicePixelRatio`, `rowHeaderWidth`, `columnHeaderHeight` or `currency`. They become constants. `handlePasteByClick`'s `triggerType` is never passed.
-- `getMeasureText`'s fallback for a canvas without `actualBoundingBox*` (`getTextSize` with a hidden DOM span, `textHeightCache`, `isSupportBoundingBox`, the `'bottom'`-baseline branches): every supported browser has the metrics, yet the path took two fixes on Nov 1 (`3e2597543`, `30dcf0fd3`), and `isSupportBoundingBox` measures `'田'` uncached for every laid-out cell on the 120 fps path.
-- `scheduleRedraw` skips while `groupValuesRefreshData` is non-empty, which no committed context ever is.
-
-Pattern 6. ~200 LOC + ~50 test, low risk, high confidence.
 
 <a id="r5"></a>**R5. Whether the range picker is open lives in a context flag beside the dialog slot that holds it.**
 `context/modal.tsx` (`NonModalOptions.onClose` with `'replaced' | 'closed'`, `openingRef`); `ctx.rangePickerOpen`, set and cleared in `LinkEditDialog` and `DataValidation/index.tsx`, read by `InputBox` (parks the editor at −10000) and `showLinkCard`.
@@ -465,7 +457,7 @@ Wave 1 (nothing lost, or decided):
 | Undo | [U2](#u2) | `history.ts`, `history-shift.ts`, `Workbook/api.ts` (merge after S1: both touch `patchToOp`) |
 | Formulas | [E9](#e9), [E3](#e3), [E6](#e6), then [E4](#e4), [E5](#e5) | `engine/formula-shift.ts`, `engine/recalc.ts`, `formula-*` |
 | Editing | [D1](#d1), [D7](#d7), [D5](#d5) | `state/api/*`, `paste.ts`, `clipboard.ts`, `filter.ts` |
-| Render and input | [R4](#r4), [R5](#r5), [R2](#r2), [R3](#r3), then [R6](#r6), [R7](#r7) | `state/context.ts`, `context/modal.tsx`, `state/events/*`, `SheetOverlay/*` |
+| Render and input | [R5](#r5), [R2](#r2), [R3](#r3), then [R6](#r6), [R7](#r7) | `state/context.ts`, `context/modal.tsx`, `state/events/*`, `SheetOverlay/*` |
 | Rules | [F1](#f1) (with `alternateFormatRules`), then [F3](#f3) once ruled | `protection.ts`, `validation*.ts`, `DataValidation/*` |
 
 Wave 2 (cross-cutting, after the lanes they depend on merged): [E1](#e1) then [E2](#e2) once ruled (after U2: both touch `history.ts`); [F2](#f2) (after S1 and D2); [D2](#d2) after D4 is ruled; [S2](#s2) then [S5](#s5) (after S1 and U2); [R1](#r1) (after D7 and R3); [D4](#d4), [D8](#d8), [F4](#f4), [F6](#f6), [F7](#f7), [F8](#f8) as ruled. F4, F6 and F7 change `packages/lib/src/charts`, which Docs, Slides and Vector share: tell the other session first.
@@ -478,4 +470,4 @@ Wave 3, the redesigns, in [§ If we built it today](#if-we-built-it-today)'s ord
 
 - This run also takes the API audit's T2 and X2 (the other session agreed). Don't edit `API-SIMPLIFICATION-AUDIT.md` on this branch, because that session keeps editing it: tell it when T2 or X2 lands, and it strikes them. Its X2 ruling: a flat cap, the runner's deadline and its memory limit, and a timeout or out-of-memory is an accepted outcome. X2 joins Wave 2.
 - The owner allows an implementer to hand mechanical work (a grep sweep, rewiring similar test call sites, running a suite) to a cheaper sub-agent: Sonnet, or Haiku for a lookup, at low or medium effort. The implementer keeps Step 0, the design, the diff read and the commit. A sub-agent uses the implementer's worktree with no isolation option, one editing at a time, and never commits.
-- Wave 1 is running. Merged: D3 (the ref's `setSelection` stays: 13 test callers and no other door to the stored selection copy; S7 may remove it). Running: S1, U2, E9, R4, F1. Next: D1, which also has to clear the fake copy state: since D3, `getSheet` treats an empty id as a bad id, so a menu Paste after a cancelled format painter (`dataSheetId: ''`) throws until D1 lands.
+- Wave 1 is running. Merged: R4 (`ctx.rowHeaderWidth` and `columnHeaderHeight` stay for R3 to inline), D3 (the ref's `setSelection` stays: 13 test callers and no other door to the stored selection copy; S7 may remove it). Running: S1, U2, E9, F1, D1, R5. D1 also clears the fake copy state: since D3, `getSheet` treats an empty id as a bad id, so a menu Paste after a cancelled format painter (`dataSheetId: ''`) throws until D1 lands.
