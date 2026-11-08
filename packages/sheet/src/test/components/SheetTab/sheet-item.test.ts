@@ -65,3 +65,29 @@ test('an empty name shows a notice with the reason and keeps the old name', asyn
     expect(dialog.context().sheets[0]?.name).toBe('First');
     expect(name.innerText).toBe('First');
 });
+
+// Picks a row of the first tab's menu, and waits out the tick after which Radix runs its close focus.
+async function pick(row: string) {
+    await act(async () => {
+        document
+            .querySelector('[role="button"]')
+            ?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    });
+    const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((i) => i.textContent === row);
+    if (!item) throw new Error(`no ${row} item`);
+    await act(async () => item.click());
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
+}
+
+test('Duplicate leaves the focus on the grid, so the next keys reach a cell and not the menu', async () => {
+    await renderTabs([sheet('a', 'First'), sheet('b', 'Second')]);
+    await pick('Duplicate');
+    expect(document.activeElement?.id).toBe('sheet-rich-text-editor');
+});
+
+test('Rename puts the focus in the name with the name selected, so typing replaces it', async () => {
+    await renderTabs([sheet('a', 'First'), sheet('b', 'Second')]);
+    await pick('Rename');
+    expect(document.activeElement).toBe(document.querySelector('[role="button"] span'));
+    expect(window.getSelection()?.toString()).toBe('First');
+});
