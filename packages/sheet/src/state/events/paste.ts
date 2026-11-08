@@ -22,9 +22,8 @@ import { carrySides } from '../modules/border';
 import type { CarryTile } from '../modules/cell';
 import { carriedLines, carryCells, getQKBorder, landedRanges, moveCells, setCellValue } from '../modules/cell';
 import { computeFormula } from '../modules/formula-exec';
-import { jfrefreshgrid, recomputeCells } from '../modules/refresh';
+import { cellsIn, jfrefreshgrid, recomputeCells } from '../modules/refresh';
 import { hasPartMC, PART_MERGE_REFUSAL } from '../modules/validation';
-import type { FormulaCell } from '../types';
 import { getSheetIndex } from '../utils';
 import { SHEET_HOTKEYS } from './keyboard';
 
@@ -138,28 +137,8 @@ function pasteCut(ctx: Context, copyState: NonNullable<Context['copyState']>) {
         );
     }
 
-    // A moved formula carries its old value, so it is evaluated where it now lives.
-    const resolver = createArrayResolver(ctx.sheets);
-    const landed: FormulaCell[] = [];
-    for (let r = top; r <= bottom; r += 1) {
-        for (let c = left; c <= right; c += 1) {
-            const cell = d[r]?.[c];
-            if (cell?.f != null) {
-                [cell.v] = computeFormula(ctx, cell.f, { resolver });
-                cell.m = numberDisplay(cell.v, cell.ct?.fa);
-            }
-            landed.push({ r, c, id: ctx.currentSheetId });
-        }
-    }
-    const emptied: FormulaCell[] = [];
-    for (let r = sourceRange.row[0]; r <= sourceRange.row[1]; r += 1) {
-        for (let c = sourceRange.column[0]; c <= sourceRange.column[1]; c += 1) {
-            emptied.push({ r, c, id: copySheetId });
-        }
-    }
-
     ctx.selections = [{ row: targetRange.row, column: targetRange.column }];
-    recomputeCells(ctx, [...emptied, ...landed]);
+    recomputeCells(ctx, [...cellsIn(sourceRange, copySheetId), ...cellsIn(targetRange, ctx.currentSheetId)]);
     // A cut moves its cells once. The clipboard still holds them, and a next paste lands them as a table.
     ctx.copyState = undefined;
     ctx.formulaRangeSelections = [];
