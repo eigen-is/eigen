@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { BackupArtifact, BackupJob, BackupSafetyCopy } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Notification } from '@workspace/lib/types/notification';
+import { teamOwnerId } from '@workspace/lib/types/owner';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { BACKUP_ARTIFACT_EXTENSION, FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import { and, eq } from 'drizzle-orm';
@@ -23,6 +24,7 @@ import {
     assertJson,
     authedRequest,
     collectSSE,
+    createTeam,
     driveGetList,
     driveUpload,
     getTestContext,
@@ -592,6 +594,30 @@ describe('Backup routes', () => {
     test('refuses a backup of a home that does not exist', async () => {
         expect((await adminRequest(`/admin/backup/home/${'a'.repeat(32)}`, { method: 'POST' })).status).toBe(404);
         expect((await adminRequest(`/admin/backup/home/team_${'b'.repeat(32)}`, { method: 'POST' })).status).toBe(404);
+    });
+
+    // A team has no auth rows to bring it back, so its home would answer 404 for good. Its archives stay the admin's
+    // to list and delete.
+    test("refuses to restore a deleted team's archive, which still lists and deletes", async () => {
+        const organizationId = getServerConfig()?.orgId ?? '';
+        await adminJson('/auth/organization/set-active', { organizationId });
+        const teamId = await createTeam(ctx, organizationId, `Backup Routes Gone ${Date.now()}`);
+        const ownerId = teamOwnerId(teamId);
+        await getHome(ownerId);
+        const backup = await startAndFinish(`/admin/backup/home/${ownerId}`);
+        expect(backup.state).toBe('done');
+        const name = backup.artifact ?? '';
+        expect((await adminJson('/auth/organization/remove-team', { teamId, organizationId })).status).toBe(200);
+
+        const job = await startAndFinish(`/admin/backup/artifacts/${name}/restore`, { ownerId });
+
+        expect(job.state).toBe('failed');
+        expect(job.error).toBe(`${ownerId} no longer exists`);
+        expect(existsSync(join(TEST_DATA_DIR, 'team', teamId))).toBe(false);
+        const listed = await listArtifacts(ownerId);
+        expect(listed.safetyCopies).toEqual([]);
+        expect(listed.artifacts.map((artifact) => artifact.name)).toEqual([name]);
+        expect((await adminRequest(`/admin/backup/artifacts/${name}`, { method: 'DELETE' })).status).toBe(200);
     });
 
     test('measures a safety copy once and forgets it when it is deleted', async () => {

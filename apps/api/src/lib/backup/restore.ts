@@ -62,6 +62,10 @@ export async function restoreHome(
 ): Promise<void> {
     const { artifactPath } = requireArtifact(artifactName);
     const homeDir = await resolveHomeDir(ownerId);
+    // A deleted user's archive carries the auth rows that bring them back. Nothing brings a team back, and its home
+    // would answer 404 for good.
+    const owner = parseOwnerId(ownerId);
+    if (owner.type === 'team' && !(await getTeam(owner.id))) throw new ApiError(404, `${ownerId} no longer exists`);
 
     const identity = await replaceHomeFolder(
         ownerId,
