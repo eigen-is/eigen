@@ -15,7 +15,7 @@ import { defaultAc, userAc } from 'better-auth/plugins/admin/access';
 import { and, eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import * as authSchema from '../../../auth-schema';
-import { isProduction, isTest } from '../config/env';
+import { isProduction } from '../config/env';
 import { getServerDataPath, SERVER_DATABASES } from '../config/paths';
 import {
     getAuthSecret,
@@ -236,7 +236,6 @@ export const auth = betterAuth({
     // set-user-password revokes no sessions or app passwords, impersonation hands an admin a member's session, and a
     // ban leaves the app passwords working.
     disabledPaths: ['/admin/set-user-password', '/admin/impersonate-user', '/admin/ban-user', '/admin/unban-user'],
-    logger: { disabled: isTest() },
     secret: getAuthSecret(),
 });
 

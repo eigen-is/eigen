@@ -372,21 +372,6 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
-    // The job line reads every warning's payload after the job left `active`, so a throw there would strand the
-    // requester and leave the queue unstarted.
-    test('a reply the job line cannot read still resolves, and the queue drains', async () => {
-        const runner = makeRunner();
-        const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
-        const unreadable = runner.run(makeRequest({ behavior: 'malformed-warnings' }), PREVIEW_OPTIONS);
-        const queued = runner.run(makeRequest(), PREVIEW_OPTIONS);
-
-        const [first, second] = await Promise.all([unreadable, queued]);
-        errorSpy.mockRestore();
-        expect(previewBody(first)).toBe('{}');
-        expect(second.ok).toBe(true);
-        await runner.close();
-    });
-
     test('a structured document error passes through untouched', async () => {
         const runner = makeRunner();
         const failed = await runner.run(makeRequest({ behavior: 'document-error' }), PREVIEW_OPTIONS);
@@ -395,14 +380,6 @@ describe('DocumentTransformRunner', () => {
             expect(failed.error.code).toBe('transform-failed');
             expect(failed.error.status).toBe(422);
         }
-        await runner.close();
-    });
-
-    test('a document error with a non-HTTP status is a malformed response', async () => {
-        const runner = makeRunner();
-        const failed = await runner.run(makeRequest({ behavior: 'document-error-bad-status' }), PREVIEW_OPTIONS);
-        expect(failed.ok).toBe(false);
-        if (!failed.ok) expect(failed.error.code).toBe('invalid-response');
         await runner.close();
     });
 

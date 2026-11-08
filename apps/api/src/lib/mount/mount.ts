@@ -870,7 +870,7 @@ export class Mount {
             // An id key does not depend on its folder, so every object goes after all the rows, as
             // for a single file.
             const files = this.db.transaction((tx) => this.deleteSubtreeInTx(tx, pathId));
-            for (const { id, file } of files) await this.removeObject(id, file || id);
+            for (const { id, file } of files) await this.removeObject(id, file);
         }
 
         await this.invalidateSizesFrom(pathEntry.parentId);
