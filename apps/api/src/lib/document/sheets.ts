@@ -102,10 +102,8 @@ export function restampRestoredSheetsBase(type: DrivePathType, doc: Y.Doc): void
     if (type === DRIVE_TYPE_SHEETS) stampSheetsBase(doc, null);
 }
 
-// Import… as new tabs. The file's sheets go in after the workbook's own as addSheet ops, the way a peer's new tab
-// arrives, so an open tab adds them live and keeps its view and its undo. Each sheet takes a fresh id. One whose name the
-// workbook already has is renamed the way Duplicate names a copy. The file's references to its own sheets follow them.
-// Formulas, conditional formats, list sources and links name a sheet by name. Charts and link cells name it by id. `current` is the workbook as readLiveSheets reads it in the same write.
+// Import… as new tabs: addSheet ops after the workbook's own, so an open tab adds them live as a peer's and keeps its
+// view and its undo. `current` is the workbook as readLiveSheets reads it in the same write.
 export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string, current: Sheet[]): void {
     const imported = decodeSheetsSnapshot(snapshotJson);
     const taken = current.map((sheet) => sheet.name);
