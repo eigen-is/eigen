@@ -456,8 +456,7 @@ export function serializeBinding(b: Binding): string {
 
 // The pins of a fixedSegments string, without anything malformed. A pin needs an integer index and a start and an
 // end that share exactly one coordinate and differ in the other. An empty or unusable string has no pins, so a
-// corrupt peer write can't jam the arrow or make the scene throw. An older bare array without indexes has none
-// too.
+// corrupt peer write can't jam the arrow or make the scene throw.
 export function parseFixedSegments(s: string): ParsedFixedSegments {
     const empty: ParsedFixedSegments = { segments: [], startIsSpecial: false, endIsSpecial: false };
     if (s === '') return empty;
@@ -467,7 +466,7 @@ export function parseFixedSegments(s: string): ParsedFixedSegments {
     } catch {
         return empty;
     }
-    // Only the object form counts. A bare array is the older form and is dropped.
+    // Only the object form counts: a bare array has no `segments` and reads as none.
     if (typeof raw !== 'object' || raw === null) return empty;
     const segments = prop(raw, 'segments');
     if (!Array.isArray(segments)) return empty;

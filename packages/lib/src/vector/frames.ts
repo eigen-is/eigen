@@ -28,7 +28,7 @@ export const SLIDE_SIZES: Readonly<Record<SlideSize, Readonly<Extent>>> = {
 export const MIN_SLIDE_WIDTH = (72 * FRAME_WIDTH) / SLIDE_SIZES['16:9'].height;
 export const MAX_SLIDE_WIDTH = 4032;
 
-// A deck stored before it had a width printed its 1920 px as 10 in, so a deck without one reads as that.
+// A deck without a width reads as this, so its 1920 px print as 10 in.
 export const UNSTORED_SLIDE_WIDTH = 720;
 
 export function slidePxToPt(px: number, slideWidth: number): number {

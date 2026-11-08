@@ -433,7 +433,7 @@ Word holds a shared edge on both cells, and so does Eigen. The table's `border-c
 
 ## A font is stored as its name
 
-The `textStyle` mark stores a font's name, and renders it as a CSS stack. A doc that still holds a stack is collapsed to names by `normalizeFontFamilyMarks` when an editor with write access opens it, outside the undo history. The reasons are in [TYPOGRAPHY.md](TYPOGRAPHY.md#docs-and-the-canvas-store-a-font-name-never-a-css-stack).
+The `textStyle` mark stores a font's name, and renders it as a CSS stack. A mark that holds a stack draws as stored. The reasons are in [TYPOGRAPHY.md](TYPOGRAPHY.md#docs-and-the-canvas-store-a-font-name-never-a-css-stack).
 
 ## A font size is a number in points on the font's mark
 

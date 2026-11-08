@@ -871,7 +871,7 @@ export class Mount {
             // An id key does not depend on its folder, so every object goes after all the rows, as
             // for a single file.
             const files = this.db.transaction((tx) => this.deleteSubtreeInTx(tx, pathId));
-            for (const { id, file } of files) await this.removeObject(id, file || id);
+            for (const { id, file } of files) await this.removeObject(id, file);
         }
 
         await this.invalidateSizesFrom(pathEntry.parentId);
@@ -893,9 +893,8 @@ export class Mount {
         if (error) throw error;
     }
 
-    // Why pathId can't go into targetParentId, or null. A trashed folder up to the root is a 404 like a deleted one,
-    // because its permanent delete would take the row with it. Depth counts from the deepest row under pathId,
-    // which for a new row is the row itself.
+    // Why pathId can't go into targetParentId, or null. A trashed folder up to the root is a 404, because its permanent
+    // delete would take the row with it. Depth counts from the deepest row under pathId.
     public targetFolderErrorInTx(tx: Tx, pathId: string, targetParentId: string | null): ApiError | null {
         let [{ depth }] = tx.all<{ depth: number }>(sql`
             WITH RECURSIVE below(id, level) AS (

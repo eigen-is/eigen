@@ -96,10 +96,8 @@ export class CommentIndex {
             .where(eq(commentSchema.comments.chatName, chatName));
     }
 
-    // Drops the rows and the mentions of every thread that is not in threads, which holds the folded names of the
-    // threads that are left. The mentions have no foreign key, so they go by name. The search table follows the rows
-    // through its delete trigger. The whole drop is one transaction with no await in it. So a caller that reads the
-    // threads right before the call never drops the row of a thread made meanwhile.
+    // Drops the rows and mentions of every thread not in threads, the folded names of those left. One transaction with
+    // no await, so a caller that read the threads just before never drops the row of a thread made meanwhile.
     public deleteRowsWithoutThread(threads: ReadonlySet<string>): void {
         const { comments, commentMentions } = commentSchema;
         this.db.transaction((tx) => {
@@ -163,9 +161,8 @@ export class CommentIndex {
     }
 }
 
-// Runs fn on the index of the document at pathId, with its comments.db open for just that long.
-// Through a SharedDrive, the lookup of comments.db checks that the caller may read the document. A
-// plain Drive belongs to the caller, so nothing is checked.
+// Runs fn on the index of the document at pathId, with its comments.db open for just that long. Through a SharedDrive
+// the lookup of comments.db checks that the caller may read the document.
 export async function withCommentIndex<T>(
     drive: DriveLike,
     mountId: string,
@@ -179,9 +176,8 @@ export async function withCommentIndex<T>(
     );
 }
 
-// Callers run this before ensureComment. ensureComment may add the missing row of an older thread
-// that is real. A made-up chatName must never get a row, because the row would bring a history event
-// and a notification that links nowhere. A comment thread is a chat in the document's chat folder.
+// A made-up chatName would bring a history event and a notification that link nowhere, so a change of a
+// comment's state runs this first. A comment thread is a chat in the document's chat folder.
 export async function assertCommentChatExists(
     drive: DriveLike,
     mountId: string,

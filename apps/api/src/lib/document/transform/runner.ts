@@ -290,30 +290,25 @@ export class DocumentTransformRunner {
             prep.abort();
             child?.kill('SIGKILL');
             job.resolve(response);
-            // A reply this line can't read, from a bug in the child, must not stop the queue: the caller fails on it.
-            try {
-                const totalMs = Date.now() - startedAt;
-                const outcome = response.ok ? 'success' : response.error.code;
-                const outputBytes = response.ok ? resultBytes(response.result) : 0;
-                const warnings = response.ok && response.warnings.length > 0 ? response.warnings : null;
-                const signal = exited ? child?.signalCode : null;
-                // The child stamps only the transform's own time. The rest is the spawn, the module evaluation and
-                // the messaging. totalMs is whole milliseconds and the stamp fractional, so it is clamped at 0.
-                const startupMs = transformMs === undefined ? -1 : Math.max(0, Math.round(totalMs - transformMs));
-                console.log(
-                    `[transform] job=${job.id} kind=${job.request.kind} type=${requestType(job.request)} ` +
-                        `format=${requestFormat(job.request)} priority=${job.priority} outcome=${outcome} ` +
-                        `queueDepth=${queueDepth} queueWaitMs=${queueWaitMs} ` +
-                        `captureMs=${job.captureMs?.toFixed(0) ?? -1} prepMs=${prepMs?.toFixed(0) ?? -1} ` +
-                        `inputBytes=${inputBytes} startupMs=${startupMs} ` +
-                        `transformMs=${transformMs?.toFixed(0) ?? -1} totalMs=${totalMs} outputBytes=${outputBytes} ` +
-                        `peakRssBytes=${peakRssBytes ?? -1}` +
-                        (signal ? ` signal=${signal}` : '') +
-                        (warnings ? ` warnings=${warnings.map(formatWarning).join(',')}` : ''),
-                );
-            } catch (err) {
-                console.error(`[transform] job=${job.id} reply could not be logged:`, err);
-            }
+            const totalMs = Date.now() - startedAt;
+            const outcome = response.ok ? 'success' : response.error.code;
+            const outputBytes = response.ok ? resultBytes(response.result) : 0;
+            const warnings = response.ok && response.warnings.length > 0 ? response.warnings : null;
+            const signal = exited ? child?.signalCode : null;
+            // The child stamps only the transform's own time. The rest is the spawn, the module evaluation and
+            // the messaging. totalMs is whole milliseconds and the stamp fractional, so it is clamped at 0.
+            const startupMs = transformMs === undefined ? -1 : Math.max(0, Math.round(totalMs - transformMs));
+            console.log(
+                `[transform] job=${job.id} kind=${job.request.kind} type=${requestType(job.request)} ` +
+                    `format=${requestFormat(job.request)} priority=${job.priority} outcome=${outcome} ` +
+                    `queueDepth=${queueDepth} queueWaitMs=${queueWaitMs} ` +
+                    `captureMs=${job.captureMs?.toFixed(0) ?? -1} prepMs=${prepMs?.toFixed(0) ?? -1} ` +
+                    `inputBytes=${inputBytes} startupMs=${startupMs} ` +
+                    `transformMs=${transformMs?.toFixed(0) ?? -1} totalMs=${totalMs} outputBytes=${outputBytes} ` +
+                    `peakRssBytes=${peakRssBytes ?? -1}` +
+                    (signal ? ` signal=${signal}` : '') +
+                    (warnings ? ` warnings=${warnings.map(formatWarning).join(',')}` : ''),
+            );
             this.startNext();
         };
         // Bun delivers every message before the channel closes, which can come after the exit, and the ack decides
@@ -379,16 +374,9 @@ export class DocumentTransformRunner {
                         settle(errorResponse('invalid-response', 'The transform sent a message that is no reply'));
                         return;
                     }
-                    const { response } = message;
-                    // The status becomes the HTTP status the main thread throws, so only an error status may cross.
-                    const status = response.ok ? undefined : response.error.status;
-                    if (status !== undefined && !(Number.isInteger(status) && status >= 400 && status <= 599)) {
-                        settle(errorResponse('invalid-response', 'The transform returned a status that is no error'));
-                        return;
-                    }
                     transformMs = message.transformMs;
                     peakRssBytes = message.peakRssBytes;
-                    settle(response);
+                    settle(message.response);
                 },
                 onExit: () => {
                     exited = true;

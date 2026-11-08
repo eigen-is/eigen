@@ -20,10 +20,10 @@ function makeDataDb(): { path: string; db: Database } {
 }
 
 describe('collab blob compression — read path', () => {
-    test('loads a legacy uncompressed snapshot blob (backward compat)', () => {
+    test('loads a raw snapshot blob', () => {
         const seed = new Y.Doc();
-        seed.getMap('state').set('snapshot', 'legacy-content');
-        const rawSnapshot = Buffer.from(Y.encodeStateAsUpdate(seed)); // uncompressed, pre-change form
+        seed.getMap('state').set('snapshot', 'raw-content');
+        const rawSnapshot = Buffer.from(Y.encodeStateAsUpdate(seed));
         const { path, db } = makeDataDb();
         db.query('INSERT INTO doc_snapshots (stateData, lastUpdateId) VALUES (?, ?)').run(rawSnapshot, 0);
         db.close();
@@ -32,10 +32,10 @@ describe('collab blob compression — read path', () => {
         rmSync(path, { force: true });
         const out = new Y.Doc();
         Y.applyUpdate(out, state);
-        expect(out.getMap('state').get('snapshot')).toBe('legacy-content');
+        expect(out.getMap('state').get('snapshot')).toBe('raw-content');
     });
 
-    test('applies a mix of legacy-raw and zstd-compressed update rows', () => {
+    test('applies a mix of raw and zstd-compressed update rows', () => {
         const doc = new Y.Doc();
         const updates: Uint8Array[] = [];
         doc.on('update', (u: Uint8Array) => updates.push(u));

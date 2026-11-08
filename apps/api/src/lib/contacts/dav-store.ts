@@ -5,7 +5,7 @@
 
 import { eq, gt } from 'drizzle-orm';
 import type { DeleteResourceResult, PutResourceResult, ResourcePreconditions } from '../core';
-import { ApiError, failsPreconditions, matchesIfMatch, normalizeResourceUri } from '../core';
+import { ApiError, failsPreconditions, normalizeResourceUri } from '../core';
 import { pushUserProfile } from '../home/home-relay';
 import { mergeVCard, parseVCard, transcodeTo30 } from '../vcard';
 import type { ParsedCard } from '../vcard/types';
@@ -233,9 +233,7 @@ export async function deleteCard(
             });
             return { ok: false, error: 'self-delete' };
         }
-        if (pre.ifMatch !== null && !matchesIfMatch(pre.ifMatch, `"${row.etag}"`)) {
-            return { ok: false, error: 'precondition' };
-        }
+        if (failsPreconditions({ ...pre, ifNoneMatch: null }, row.etag)) return { ok: false, error: 'precondition' };
         await contacts.purgeCard(row);
         return { ok: true, id: row.id };
     });

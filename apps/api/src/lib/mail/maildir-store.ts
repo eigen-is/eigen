@@ -20,7 +20,7 @@ import { PATHS } from '../config/paths';
 import { ApiError, isEnoent, isSafePathSegment, LocalFilesystem, STALE_TEMP_MAX_AGE_MS } from '../core';
 import type { Home } from '../home';
 import { parseEml, parseEmlBytes, parseEmlForReader } from './mail-parse';
-import type { DraftMeta, MailFlag, MailSearchOptions, MailStore, MailStoreEvents } from './mail-store';
+import type { DraftMeta, MailFlag, MailSearchOptions, MailStoreEvents } from './mail-store';
 import MailDB, { readMailIndexSize } from './maildb';
 import {
     applyFlagsFromFilename,
@@ -43,7 +43,7 @@ const DRAFT_ATTACHMENTS_DIR = 'draft-attachments';
 const DRAFT_ATTACHMENT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 // Staged attachments are charged to the mail quota, and both surfaces that report it walk them here.
-export function readDraftStagingSize(homeFs: LocalFilesystem): Promise<number> {
+function readDraftStagingSize(homeFs: LocalFilesystem): Promise<number> {
     return homeFs.dirSize(path.join(PATHS.MAIL.ROOT, DRAFT_ATTACHMENTS_DIR));
 }
 
@@ -82,7 +82,7 @@ function safeFileId(id: string): string {
     return name;
 }
 
-export class MaildirStore implements MailStore {
+export class MaildirStore {
     private readonly basePath: string;
     public readonly storage: LocalFilesystem;
     private db!: MailDB;
@@ -108,6 +108,7 @@ export class MaildirStore implements MailStore {
 
     // -- Lifecycle --
 
+    // True when a fresh, empty store was created.
     public async init(events: MailStoreEvents): Promise<boolean> {
         this.events = events;
         // With mail off the store builds no Maildir and opens no index, yet the mail kept on disk still counts.
@@ -286,6 +287,8 @@ export class MaildirStore implements MailStore {
             .attachments;
     }
 
+    // skipReconcile leaves discovery to the next pass. arrival: false is a message the user placed there, indexed and
+    // broadcast but not mail arriving, so it reaches `received` as not new.
     public async append(
         mailbox: string,
         message: Buffer,
@@ -518,6 +521,7 @@ export class MaildirStore implements MailStore {
         await this.storage.writeAtomic(this.getDraftMetaPath(safeFileId(draftId)), JSON.stringify(meta));
     }
 
+    // Null when no sidecar can be read, torn or absent; the caller falls back to the .eml.
     public async readDraftMeta(draftId: string): Promise<DraftMeta | null> {
         // Another MDA's filename can hold characters no Eigen id has: no sidecar exists for it, and it must not fail the sync.
         const name = foldFileId(draftId);

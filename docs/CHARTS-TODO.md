@@ -23,7 +23,7 @@ Ranked by how many corpus files hold one (xlsx, docx and pptx together; files, n
 | 11 | **The other chartex kinds**: box and whisker, funnel, treemap, sunburst, region map | 5, 4, 3, 3, 1 | L each | A new layout each. |
 | 12 | **Stock, surface** | 3 (docx), 4 | M each | |
 
-A new field should nest inside a part the spec already stores, a per-series field in its series and a per-chart one in its axis, so a tab on an older build keeps it.
+A new field should nest inside a part the spec already stores, a per-series field in its series and a per-chart one in its axis, so a tab that doesn't know it keeps it.
 
 ## Lost without a note
 

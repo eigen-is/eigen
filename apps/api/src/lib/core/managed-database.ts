@@ -57,9 +57,6 @@ export class ManagedDatabase<S extends SchemaType> {
     private syncTimer: Timer | null = null;
     private lastSyncedChanges = 0;
     private lastSnapshotChanges = 0;
-    private forceDirty = false;
-    // The tail markDirty() recovered is unsnapshotted too, though the fresh connection counts no change for it.
-    private forceSnapshot = false;
     // A tick, a flush and a close run one at a time: two syncs would stage the same bytes and race their watermark,
     // and a close would tear the database down under the other. A callback runs under it, so it must not flush.
     private lifecycleLock = new Semaphore(1);
@@ -221,26 +218,25 @@ export class ManagedDatabase<S extends SchemaType> {
 
     private getTotalChanges(): number {
         if (!this.rawDb) throw new Error('Database not open');
-        const row = this.rawDb.query<{ tc: number }, []>('SELECT total_changes() as tc').get();
-        return row?.tc ?? 0;
+        const [row] = this.rawDb.query<{ tc: number }, []>('SELECT total_changes() as tc').all();
+        return row.tc;
     }
 
     // For an open that adopts a crash temp: the fresh connection counts no change for its unsynced bytes, so a sync
-    // would find it clean and the close would drop them.
+    // would find it clean and the close would drop them. No change count is ever -1, so both are owed.
     public markDirty(): void {
-        this.forceDirty = true;
-        this.forceSnapshot = true;
+        this.lastSyncedChanges = -1;
+        this.lastSnapshotChanges = -1;
     }
 
     private async sync(): Promise<void> {
         if (!this.callbacks.onSync) return;
         // Read before the await: onSync stages the bytes up front, so a write during its later awaits stays dirty.
         const syncedChanges = this.getTotalChanges();
-        if (!this.forceDirty && syncedChanges === this.lastSyncedChanges) return;
+        if (syncedChanges === this.lastSyncedChanges) return;
         this.rawDb?.run('PRAGMA wal_checkpoint(PASSIVE);');
         await this.callbacks.onSync();
         this.lastSyncedChanges = syncedChanges;
-        this.forceDirty = false;
         console.log(`[${this.config.name}] Synced`);
     }
 
@@ -250,11 +246,10 @@ export class ManagedDatabase<S extends SchemaType> {
         if (!this.config.snapshot || !this.callbacks.onSnapshot) return;
         const total = this.getTotalChanges();
         const unsnapshotted = total - this.lastSnapshotChanges;
-        if (unsnapshotted <= 0 && !this.forceSnapshot) return;
+        if (unsnapshotted <= 0) return;
         if (!force && unsnapshotted < this.config.snapshot.writesPerSnapshot) return;
         if ((await this.callbacks.onSnapshot()) !== 'skipped') {
             this.lastSnapshotChanges = total;
-            this.forceSnapshot = false;
         }
     }
 

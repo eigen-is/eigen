@@ -7,7 +7,7 @@ import { CONTROL_CHARS } from '@workspace/lib/validation';
 import { and, eq, gt, inArray, or } from 'drizzle-orm';
 import type ICAL from 'ical.js';
 import type { DeleteResourceResult, PutResourceResult, ResourcePreconditions } from '../core';
-import { ApiError, failsPreconditions, matchesIfMatch, normalizeResourceUri } from '../core';
+import { ApiError, failsPreconditions, normalizeResourceUri } from '../core';
 import { parseResource, restampResource, stripEigenStamps } from '../ical';
 import { EIGEN, readStamp, recurrenceKeyOf, seriesTimezones, uidOf } from '../ical/ical-parse';
 import type { Calendar } from './calendar';
@@ -272,9 +272,7 @@ export async function deleteResource(
     return calendar.writeLock.run(async (): Promise<DeleteResourceResult> => {
         const row = calendar.db.select(PURGED_RESOURCE).from(schema.resources).where(atUri(calendarId, uri)).get();
         if (!row) return { ok: false, error: 'not-found' };
-        if (pre.ifMatch !== null && !matchesIfMatch(pre.ifMatch, `"${row.etag}"`)) {
-            return { ok: false, error: 'precondition' };
-        }
+        if (failsPreconditions({ ...pre, ifNoneMatch: null }, row.etag)) return { ok: false, error: 'precondition' };
         await calendar.purgeResource(row);
         return { ok: true, id: row.id };
     });

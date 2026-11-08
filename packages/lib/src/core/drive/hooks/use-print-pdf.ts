@@ -4,7 +4,7 @@
 import { getDriveExportUrl } from '@workspace/lib/api';
 import { useCallback } from 'react';
 import { toast } from 'sonner';
-import { AppError } from '../../api-error';
+import { AppError, getErrorMessage } from '../../api-error';
 import { toastExportSummary } from './use-export-document';
 
 // A tab that navigated away runs no listener of ours, so its closing is polled. The blob URL lives until then,
@@ -16,10 +16,8 @@ function printWithoutBands(fallback: () => void, reason: string): void {
     fallback();
 }
 
-// Print as Google prints: the server's PDF, which draws the headers, footers and page numbers browser print leaves
-// out, in a tab of its own to print from. A popup blocker allows the tab only inside the click or key press, so it
-// opens before the first await. `fallback` is browser print, for a tab whose edits the server may not have, a
-// blocked tab or a PDF that fails. A PDF that left something out says so, as a download does.
+// Print as Google prints: the server's PDF, in a tab of its own. A popup blocker allows the tab only inside the
+// click or key press, so it opens before the first await. `fallback` is browser print.
 export function usePrintPdf(fallback: () => void): {
     printPdf: (ownerId: string, mountId: string, pathId: string, canUsePdf: boolean) => Promise<void>;
 } {
@@ -48,8 +46,7 @@ export function usePrintPdf(fallback: () => void): {
                 }, TAB_CLOSED_POLL_MS);
             } catch (error) {
                 tab.close();
-                // The server's message already says the export failed, so it stands alone, without its status.
-                printWithoutBands(fallback, error instanceof Error ? error.message : String(error));
+                printWithoutBands(fallback, getErrorMessage(error));
             }
         },
         [fallback],

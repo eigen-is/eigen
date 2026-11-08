@@ -10,7 +10,7 @@ The sections run from the store through reading, the mailbox names and the list,
 
 ## Mail is personal and sits behind a swappable store
 
-Every user route in `apps/api/src/routes/mail.ts` is `requireSelf`: a mailbox belongs to one user and has no ACL. The route hands off to the user's `Mail` (`mail-domain.ts`), which talks to a `MailStore`. `MaildirStore` is the only one. The interface is where a second backend plugs in ([JMAP](proposals/PROPOSAL_STALWART_MAIL.md), or [the user's own provider over IMAP](proposals/PROPOSAL_EXTERNAL_MAIL_PROVIDER.md)), so no file name crosses into the domain or the routes.
+Every user route in `apps/api/src/routes/mail.ts` is `requireSelf`: a mailbox belongs to one user and has no ACL. The route hands off to the user's `Mail` (`mail-domain.ts`), which talks to `MaildirStore`. No file name crosses into the domain or the routes, so a second backend ([JMAP](proposals/PROPOSAL_STALWART_MAIL.md), or [the user's own provider over IMAP](proposals/PROPOSAL_EXTERNAL_MAIL_PROVIDER.md)) extracts its interface from that class when it lands.
 
 The `emails` row is the `EmailSummary` the list and the search return, unmapped except that both cut `textShort` to its preview length (`MAIL_PREVIEW_CHARS`): a received message's row keeps the whole body for the full-text index. A draft's row keeps only the first `MAIL_PREVIEW_CHARS`, so a draft is searched at preview length. A full message is re-parsed from its `.eml`.
 
@@ -66,7 +66,7 @@ A full save rebuilds the `.eml` and bakes the Drive link pills into its HTML. A 
 
 `Attachment.index` is the part's raw position in the parsed message, so the keep list names raw parts and nothing renumbers. An `.ics` part is an ordinary attachment to the composer and the draft save, which never ask a part's type.
 
-The client chooses a draft's id, and that id names a file. So the domain answers 400 to an id `isSafePathSegment` refuses, under any `MailStore`. It never maps one onto a safe name, because two mapped ids would collide on one file.
+The client chooses a draft's id, and that id names a file. So the domain answers 400 to an id `isSafePathSegment` refuses. It never maps one onto a safe name, because two mapped ids would collide on one file.
 
 ## The composer is seeded in TipTap's own form
 

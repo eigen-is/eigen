@@ -92,7 +92,7 @@ test('while a notice is held, a stream that stays down is retried every few seco
     latest().open();
     latest().send({
         type: SSEventType.SERVER_RESTART_NOTICE,
-        notice: { reason: 'update', msLeft: 0, message: null },
+        notice: { reason: 'update', msLeft: 0, msSinceAnnounced: 0, message: null },
     });
     for (let attempt = 1; attempt <= 8; attempt++) {
         latest().fail();

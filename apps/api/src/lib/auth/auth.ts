@@ -15,7 +15,7 @@ import { defaultAc, userAc } from 'better-auth/plugins/admin/access';
 import { and, eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import * as authSchema from '../../../auth-schema';
-import { isProduction, isTest } from '../config/env';
+import { isProduction } from '../config/env';
 import { getServerDataPath, SERVER_DATABASES } from '../config/paths';
 import {
     getAuthSecret,
@@ -249,7 +249,6 @@ export const auth = betterAuth({
         '/admin/unban-user',
         '/organization/leave',
     ],
-    logger: { disabled: isTest() },
     secret: getAuthSecret(),
 });
 

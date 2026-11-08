@@ -12,8 +12,7 @@ export function webdavRequest(
     return davRequest(method, path, { email, headers: options.headers, body: options.body });
 }
 
-// /webdav/<ownerId>/ no longer lists mounts (the discovery endpoint was
-// removed); fetch via the regular drive API instead.
+// /webdav/<ownerId>/ lists no mounts, so this fetches them through the regular drive API.
 export async function getDefaultMountId(sessionToken: string, ownerId: string): Promise<string> {
     const res = await authedRequest(sessionToken, `/drive/${ownerId}/mounts`);
     const mounts = (await res.json()) as { id: string }[];

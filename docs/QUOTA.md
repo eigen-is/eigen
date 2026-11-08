@@ -84,7 +84,7 @@ The admin Users page sizes homes nobody has loaded, through `pullHomeSize` ([SER
 - Contacts and calendar: `readContactsTotalSize` (`card-store.ts`, plus the `avatars/` folder) and `readCalendarTotalSize` (`resource-store.ts`), both through `readBlobTableSize` (`apps/api/src/lib/core/blob-store.ts`).
 - Drive: a live Home sizes its drive the cold way too. `Home.size` and `pullHomeSize` both call `userHomeSize`, which sums the default mount's `metadata.db` through `readMountTotalSize` and takes the cap from the default mount in `settings.json`. So a home whose default mount is switched off still answers its size, and still counts the files it kept. A `metadata.db` that SQLite can't read still fails the size.
 
-`readBlobTableSize` sizes a missing database as 0. It also sizes as 0 a database whose schema stamp is not this build's `currentVersion`, a newer stamp and a missing stamp table included. The column it would sum may not exist yet or may mean other bytes, and the pending migration drops those bytes anyway. So a home not opened since an upgrade reports no cards and no events rather than dropping the user off the page.
+`readBlobTableSize` sizes a missing database as 0, and so a database whose table or column does not exist yet, on which the SUM throws. So a home not opened since an upgrade reports no cards and no events rather than dropping the user off the page.
 
 ## Over quota keeps the data and refuses growth
 

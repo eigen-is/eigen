@@ -111,7 +111,7 @@
     "packages/ui/src/hooks/use-long-press.ts": 1,
     "packages/ui/src/lib/eigenAppRouter.tsx": 1
   },
-  "interface-decls": 3,
+  "interface-decls": 2,
   "biome-ignore": 49,
   "jsdoc-blocks": 0,
   "raw-colors": 0,

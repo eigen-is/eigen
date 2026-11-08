@@ -193,6 +193,20 @@ describe('CalDAV', () => {
         expect(res.status).toBe(412); // Precondition Failed
     });
 
+    test('a stale If-None-Match: * with the bytes already stored is 412, not an unchanged success', async () => {
+        const uri = `/dav/calendars/${userId}/${defaultCalendarId}/${crypto.randomUUID()}.ics`;
+        const uid = crypto.randomUUID();
+        const ics = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:${uid}\r\nSUMMARY:Same\r\nDTSTART:20260401T100000Z\r\nDTEND:20260401T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR`;
+        const put = () =>
+            davRequest('PUT', uri, {
+                email: ctx.alice.user.email,
+                headers: { 'Content-Type': 'text/calendar', 'If-None-Match': '*' },
+                body: ics,
+            });
+        expect((await put()).status).toBe(201);
+        expect((await put()).status).toBe(412);
+    });
+
     test('DELETE removes event', async () => {
         const delRes = await davRequest('DELETE', `/dav/calendars/${userId}/${defaultCalendarId}/caldav-test-1.ics`, {
             email: ctx.alice.user.email,
@@ -547,8 +561,7 @@ describe('CalDAV', () => {
         expect(res.status).toBe(400);
     });
 
-    test('sync-collection rejects a malformed or legacy-format token with 403 valid-sync-token', async () => {
-        // The legacy `urn:eigen:sync/N` slash form is no longer accepted — an unrecognised token is simply invalid.
+    test('sync-collection rejects a malformed token with 403 valid-sync-token', async () => {
         for (const token of ['urn:eigen:sync/5', 'urn:eigen:sync:abc', 'nonsense']) {
             const body = `<?xml version="1.0" encoding="utf-8"?>
 <D:sync-collection xmlns:D="DAV:">

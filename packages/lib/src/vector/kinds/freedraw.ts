@@ -56,7 +56,7 @@ export const freedrawKind = defineKind<VectorLinearElement>({
         // Pen pressure rides a separate index-aligned array. A stored simulate flag, a missing/garbage
         // array, or a length that drifts from the surviving points (a non-finite point was dropped) all
         // collapse to '' + simulate — so the invariant "pressures[i] pairs points[i]" holds for every
-        // consumer, and legacy strokes render exactly as before.
+        // consumer.
         const pressures = parsePressures(str(src.get('pressures'), ''));
         const simulate = bool(src.get('simulatePressure'), true);
         const useReal = !simulate && pressures.length > 0 && pressures.length === clamped.length;

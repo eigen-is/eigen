@@ -30,11 +30,10 @@ type UseDragAndDropProps = {
         input: CreateCommentCardInput,
         anchorInTransact?: (card: CommentCard) => void,
     ) => Promise<CommentCard | undefined>;
-    // The history route requires a cardId, which the event's read shape leaves optional.
     onRecordEvent?: (
         event:
-            | { eventType: 'sticky-moved'; details: FileEventDetailsMap['sticky-moved'] & { cardId: string } }
-            | { eventType: 'sticky-added'; details: FileEventDetailsMap['sticky-added'] & { cardId: string } },
+            | { eventType: 'sticky-moved'; details: FileEventDetailsMap['sticky-moved'] }
+            | { eventType: 'sticky-added'; details: FileEventDetailsMap['sticky-added'] },
     ) => void;
 };
 

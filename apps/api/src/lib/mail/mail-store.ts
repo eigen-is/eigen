@@ -1,17 +1,9 @@
-// The contract between the mail part of a Home and the place its messages are kept. Today there is
-// one store, the Maildir folders that the IMAP server shares; the contract keeps the rest of the
-// mail code independent of how messages are kept on disk.
+// The shapes the mail part of a Home and its Maildir store hand each other: a search, a draft's sidecar,
+// a flag and the change events the store surfaces. Only the types live here, so the domain class and the
+// store don't import each other for them.
 
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
-import type {
-    AddressObject,
-    Attachment,
-    DraftAttachmentUpload,
-    Email,
-    EmailSummary,
-    MaildirMailbox,
-} from '@workspace/lib/types/mail';
-import type { FileSink } from 'bun';
+import type { AddressObject, Email } from '@workspace/lib/types/mail';
 
 export type MailSearchOptions = {
     q: string;
@@ -21,10 +13,8 @@ export type MailSearchOptions = {
     to?: string;
 };
 
-// One entry per named, non-calendar part of a draft EML, under the part's raw index — the number a
-// keep list addresses. An entry from a sidecar written before the index existed carries none, and
-// sends the next save down the full path rather than guessing at positions.
-export type DraftMetaAttachment = { filename: string; contentType: string; size: number; index?: number };
+// One entry per named, non-calendar part of a draft EML, under the part's raw index, the number a keep list addresses.
+type DraftMetaAttachment = { filename: string; contentType: string; size: number; index: number };
 
 export type DraftMeta = {
     subject: string;
@@ -32,9 +22,8 @@ export type DraftMeta = {
     cc?: AddressObject;
     bcc?: AddressObject;
     text: string;
-    // "Clean" body as typed by the user — without the reference-card HTML that the EML
-    // on disk has baked in. Overlaid on messageGet so the compose view shows what the
-    // user typed, not the rendered card block at the bottom.
+    // The body as typed, without the reference-card HTML the EML on disk has baked in. Overlaid on messageGet, so the
+    // compose view shows what the user typed.
     html: string;
     attachments: DraftMetaAttachment[];
     driveReferences?: AttachmentReference[];
@@ -53,52 +42,3 @@ export type MailStoreEvents = {
     flagsChanged: (messageId: string, mailbox: string) => void;
     deleted: (messageId: string, mailbox: string) => void;
 };
-
-// The mail storage contract held by the Mail domain class, implemented by MaildirStore (+ MailDB).
-export interface MailStore {
-    // Resolves true when a fresh (empty) store was created.
-    init(events: MailStoreEvents): Promise<boolean>;
-    watch(): Promise<void>;
-    unwatch(): Promise<void>;
-    destruct(): Promise<void>;
-    size(): Promise<number>;
-    search(opts: MailSearchOptions): EmailSummary[];
-
-    mailboxesList(): Promise<MaildirMailbox[]>;
-    mailboxExists(mailbox: string): Promise<boolean>;
-    listMessages(
-        mailbox: string,
-        opts: { limit: number; before?: { date: Date; id: string } },
-    ): Promise<EmailSummary[]>;
-
-    getSummary(messageId: string): EmailSummary | undefined;
-    unreadCount(mailbox: string): number;
-    getMessage(messageId: string): Promise<Email | null>;
-    getRawMessage(messageId: string): Promise<ArrayBuffer>;
-    getAttachments(messageId: string): Promise<Attachment[]>;
-    // skipReconcile: leave discovery to the next pass. arrival: false for a message the user placed there —
-    // indexed and broadcast, but not mail arriving, so it reaches `received` as not new.
-    append(mailbox: string, message: Buffer, opts?: { skipReconcile?: boolean; arrival?: boolean }): Promise<string>;
-    // Writes raw draft bytes under existingId (or a fresh id), indexes them, returns the parsed result.
-    saveDraft(raw: string, existingId?: string): Promise<Email>;
-    delete(messageId: string): Promise<void>;
-    move(messageId: string, targetMailbox: string): Promise<void>;
-    setFlags(messageId: string, changes: Partial<Record<MailFlag, boolean>>): Promise<void>;
-    // The one projection of a sidecar onto its index row, used by the fast save and by the Drafts sync.
-    applyDraftMeta(draftId: string, meta: DraftMeta): void;
-
-    writeDraftMeta(draftId: string, meta: DraftMeta): Promise<void>;
-    // Null when no sidecar can be read, torn or absent; the caller falls back to the .eml.
-    readDraftMeta(draftId: string): Promise<DraftMeta | null>;
-    deleteDraftMeta(draftId: string): Promise<void>;
-    listDraftMetaIds(): Promise<string[]>;
-
-    persistDraftTemp(
-        write: (writer: FileSink) => Promise<number>,
-        filename: string,
-        contentType: string,
-    ): Promise<DraftAttachmentUpload>;
-    readDraftTempFile(tempId: string): Promise<{ content: Buffer; filename: string; contentType: string } | null>;
-    cleanupDraftTemp(tempId: string): Promise<void>;
-    cleanupStaleDraftTemps(): Promise<void>;
-}

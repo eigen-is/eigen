@@ -157,7 +157,7 @@ export function useOpenStory(body: Editor, editors: StoryEditors, allowed: boole
 
     // The story goes into its editor here, before React mounts the editor in the list or the box: a node view React
     // draws, an image's, would otherwise mount inside a layout effect, where React refuses its flushSync. A story with
-    // no id, such as a note from an older tab or a box a web page's HTML pasted, takes one first: the box draws the
+    // no id, such as a box a web page's HTML pasted, takes one first: the box draws the
     // open editor by it, and a re-anchor finds the story again by it. Opening the open story again keeps what it typed
     // as typed.
     const open = useCallback(

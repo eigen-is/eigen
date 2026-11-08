@@ -149,10 +149,10 @@ export type RestartReason = (typeof RESTART_REASONS)[number];
 // Sent when a stream opens and whenever ./eigen announces or takes back a restart, such as the one an update makes,
 // to every open stream on the server. A null notice means none. msLeft and msSinceAnnounced count from the moment the
 // event is sent, so a browser whose clock is off still shows the right times. The message is the operator's own
-// line, or null. An API from before msSinceAnnounced sends none, which a tab meets after a rollback to one.
+// line, or null.
 export type SSEventRestartNotice = {
     type: typeof SSEventType.SERVER_RESTART_NOTICE;
-    notice: { reason: RestartReason; msLeft: number; msSinceAnnounced?: number; message: string | null } | null;
+    notice: { reason: RestartReason; msLeft: number; msSinceAnnounced: number; message: string | null } | null;
 };
 
 // A restart notice as a tab holds it: its deadline and the time it was announced, both on the tab's own clock.

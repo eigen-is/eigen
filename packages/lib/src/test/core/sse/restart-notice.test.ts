@@ -9,7 +9,8 @@ const noticeEvent = (notice: SSEventRestartNotice['notice']): SSEventRestartNoti
     type: SSEventType.SERVER_RESTART_NOTICE,
     notice,
 });
-const update = (msLeft: number, message: string | null = null) => noticeEvent({ reason: 'update', msLeft, message });
+const update = (msLeft: number, message: string | null = null) =>
+    noticeEvent({ reason: 'update', msLeft, msSinceAnnounced: 0, message });
 
 beforeEach(() => setSystemTime(NOW));
 afterEach(() => {
@@ -32,18 +33,6 @@ test('a notice of null drops the one held', () => {
     expect(readRestartNotice().notice).toBeNull();
 });
 
-test('the same notice sent again by a new stream keeps the time it was first heard', () => {
-    handleRestartNoticeSSEvent(update(600_000));
-    setSystemTime(NOW + 30_000);
-    handleRestartNoticeSSEvent(update(570_000));
-    expect(readRestartNotice().notice).toEqual({
-        reason: 'update',
-        message: null,
-        deadline: NOW + 600_000,
-        heardAt: NOW,
-    });
-});
-
 test('a notice with another time, reason or message is heard anew', () => {
     handleRestartNoticeSSEvent(update(600_000));
     // The launcher announces again for now once the backup after the wait is done.
@@ -56,7 +45,9 @@ test('a notice with another time, reason or message is heard anew', () => {
     expect(readRestartNotice().notice?.heardAt).toBe(NOW + 721_000);
 
     setSystemTime(NOW + 722_000);
-    handleRestartNoticeSSEvent(noticeEvent({ reason: 'rollback', msLeft: 0, message: 'Back at three' }));
+    handleRestartNoticeSSEvent(
+        noticeEvent({ reason: 'rollback', msLeft: 0, msSinceAnnounced: 0, message: 'Back at three' }),
+    );
     expect(readRestartNotice().notice?.heardAt).toBe(NOW + 722_000);
 });
 

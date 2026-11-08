@@ -23,10 +23,8 @@ type TestDirective = {
         | 'allocate'
         | 'limits'
         | 'malformed'
-        | 'malformed-warnings'
         | 'echo-buffers'
         | 'document-error'
-        | 'document-error-bad-status'
         | 'export-ok'
         | 'export-bytes'
         | 'export-echo-media'
@@ -116,10 +114,6 @@ process.on('message', async (message: ChildRequestEnvelope | ParentMediaReply) =
         case 'malformed':
             send({ nonsense: true });
             return;
-        case 'malformed-warnings':
-            // Valid envelope and result, junk inside the warnings array.
-            send({ jobId, response: { ok: true, result: { body: '{}' }, warnings: [null] } });
-            return;
         case 'sleep':
             await Bun.sleep(directive.ms ?? 100);
             break;
@@ -188,14 +182,6 @@ process.on('message', async (message: ChildRequestEnvelope | ParentMediaReply) =
             send(response);
             return;
         }
-        case 'document-error-bad-status':
-            // status rides into `throw new ApiError(status, …)` on the main thread —
-            // a non-HTTP value must be refused at the boundary, not thrown as-is.
-            send({
-                jobId,
-                response: { ok: false, error: { code: 'transform-failed', status: '413', message: 'bad status' } },
-            });
-            return;
         default:
             break;
     }

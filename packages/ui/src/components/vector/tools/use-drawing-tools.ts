@@ -1,10 +1,7 @@
-// The drawing tools (freehand, line, eraser) + line point-handles, factored out of canvas-editor.tsx
-// so the canvas only DISPATCHES (the ground-rule that the canvas file must not grow).
-// This hook owns the local gesture state (never Yjs until finish), the live preview element rendered
-// through the SAME elementToSvg path as committed elements, the eraser's marked-set dimming, and the
-// single sealed write per gesture. Escape/Enter/double-click are claimed in the capture phase so the
-// innermost active gesture wins over the canvas' layered-Escape (CANVAS.md), exactly as ObjectTransform
-// claims Escape mid-resize.
+// The freehand, line, arrow and eraser tools of the vector canvas, and the point, pin and focus handles of a selected
+// line or arrow. A gesture previews in local state, drawn through the same path as committed elements, and writes one
+// sealed Yjs transaction when it ends. Escape, Enter, double-click and Delete are claimed in the capture phase, so the
+// innermost active gesture wins over the canvas's own Escape. CanvasEditor calls this hook and only dispatches to it.
 
 import type {
     Box,
@@ -62,11 +59,7 @@ import { distinctCount, previewPoints, snapSegment, startLineDraft } from './lin
 import { LinePointHandles } from './point-handles';
 import { isFreedrawSpike } from './touch-gestures';
 
-// Screen-px thresholds (÷ the LIVE zoom → constant on-screen distance): the eraser sample step
-// (Excalidraw's eraser trail), the freehand minimum sample spacing that thins sub-pixel points, the
-// multi-point line's confirm/close radius (LINE_CONFIRM_THRESHOLD), and the drag-vs-click threshold that
-// splits a 2-point line from a multi-point one. Hit tolerance is the shared hitThresholdScreen
-// (coarse-aware).
+// Screen px, divided by the live zoom so the distance stays constant on screen.
 const ERASER_STEP_SCREEN = 4;
 const FREEDRAW_MIN_STEP_SCREEN = 1;
 const LINE_CONFIRM_SCREEN = 8;
@@ -292,8 +285,6 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             document.removeEventListener('keyup', track);
         };
     }, []);
-
-    // --- Freehand -------------------------------------------------------------------------------
     const cancelFreedraw = () => {
         strokeRef.current = null;
         pointerIdRef.current = null;
@@ -308,9 +299,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         if (!stroke) return;
         // Real pen pressure iff any sample left the 0.5 no-pressure sentinel (Excalidraw's test — a mouse
         // reports a flat 0.5). normalizeLinear preserves point order and count, so stroke.pressures stays
-        // index-aligned with the written points. Simulate ⇒ pressures '' + true ⇒ byte-identical legacy ink.
+        // index-aligned with the written points. Simulate ⇒ pressures '' + true.
         const realPressure = stroke.pressures.some((p) => p !== 0.5);
-        // Tool stays freedraw (Excalidraw keeps the pencil active); one addElement per stroke.
         const id = sealed(undoManager, () =>
             addElement({
                 type: 'freedraw',
@@ -325,8 +315,6 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         );
         if (id) setSelectedIds([id]);
     };
-
-    // --- Line / arrow ---------------------------------------------------------------------------
     const linePreview = (draft: LineDraft) => {
         const pts = previewPoints(draft);
         setPreviewEl(
@@ -398,8 +386,6 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         draft.trailing = placed;
         linePreview(draft);
     };
-
-    // --- Eraser ---------------------------------------------------------------------------------
     const cancelEraser = () => {
         eraserRef.current = null;
         pointerIdRef.current = null;
@@ -413,10 +399,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         cancelEraser();
         if (!er?.marked.size) return;
         sealed(undoManager, () => deleteElements([...er.marked]));
-        // Tool stays eraser.
     };
-
-    // --- Pointer dispatch -----------------------------------------------------------------------
     const onPointerDown = (e: React.PointerEvent, scene: Point): boolean => {
         if (!canEdit) return false;
         // Any pointerdown that reaches the surface clears the point selection (clicking the shaft, the
@@ -588,7 +571,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
 
     // A second finger landed mid-draw: hand the surface to a two-finger gesture by ending whatever
     // draw draft is live. A freehand stroke is discarded when it's still a short palm spike, else
-    // finalized (Excalidraw App.tsx:8398-8432); an eraser swipe commits what it marked; a press-drag
+    // finalized; an eraser swipe commits what it marked; a press-drag
     // line draft keeps its committed points (mirrors Escape). Returns whether a draft was ended.
     const abortForSecondTouch = (): boolean => {
         if (strokeRef.current) {
@@ -612,8 +595,6 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     const isPenDrawing = (): boolean =>
         drawPointerTypeRef.current === 'pen' &&
         (strokeRef.current !== null || eraserRef.current !== null || lineRef.current !== null);
-
-    // --- Point handles (a single selected line or arrow) ----------------------------------------
     const sole = selectedIds.length === 1 ? ordered.find((el) => el.id === selectedIds[0]) : undefined;
     // Lines and arrows get vertex handles; freedraw never does.
     const selectedLine =
@@ -935,8 +916,6 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         focusArrow && !focusArrow.elbow && !activeKind
             ? createElement(FocusIndicators, { arrow: focusArrow, byId, zoom, hideEnd: draggedEnd })
             : null;
-
-    // --- Escape / Enter / double-click / blur (capture phase, latest closures via a ref) ----------
     const api = {
         escape: (): boolean => {
             if (strokeRef.current) {

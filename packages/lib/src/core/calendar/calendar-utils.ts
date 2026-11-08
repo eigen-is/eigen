@@ -246,7 +246,7 @@ export function rruleToText(rrule: string | null): string | null {
     }
 }
 
-export type SeriesEdit = {
+type SeriesEdit = {
     title: string;
     description: string | null;
     location: string | null;

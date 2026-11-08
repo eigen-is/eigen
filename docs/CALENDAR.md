@@ -164,7 +164,7 @@ Calendar counts against the home data quota with mail and contacts ([QUOTA.md](Q
 
 ## Every write is announced to every Home that sees the calendar
 
-A change broadcasts a `calendar:*` event ([SSE.md](SSE.md)) to the owner's tabs and to each Home the calendar is shared with. A PUT of bytes already stored commits nothing and announces nothing. An import writes each series through the store, which announces nothing, and sends one `calendar:events-changed` when it ends, even when a refusal stops it partway. Other requests' events go out at once meanwhile. The frontend hooks and the SSE handler that invalidates them are in `packages/lib/src/core/calendar/`.
+A change broadcasts a `calendar:*` event ([SSE.md](SSE.md)) to the owner's tabs and to each Home the calendar is shared with. A PUT of bytes already stored commits nothing and announces nothing. An import writes each series through the store, which announces nothing, and sends one `calendar:events-changed` when it ends if it wrote a series, even when a refusal stops it partway. Other requests' events go out at once meanwhile. The frontend hooks and the SSE handler that invalidates them are in `packages/lib/src/core/calendar/`.
 
 ## A linked copy is an ordinary resource with the organizer's stamp
 

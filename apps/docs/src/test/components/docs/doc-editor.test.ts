@@ -3,8 +3,6 @@
 // into it lands in that editor. A table is fitted to the text column of the page the doc holds, not the one on screen.
 import { afterEach, expect, jest, mock, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { getSchema } from '@tiptap/core';
-import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { waitUntil } from '../../fixtures/wait-until';
 
@@ -632,55 +630,6 @@ test('an image pasted into the open note settles in the note', async () => {
     });
     expect(names).toEqual(['logo-2.png']);
     expect(shown.session?.anchor).not.toBeNull();
-});
-
-// A stored stack collapses to its name, the short one of an older doc and the one with the fallback faces alike, in
-// a note's text too, which NoteFormatting would otherwise give back.
-test("the font-name pass reaches a note's text", async () => {
-    const doc = new Y.Doc();
-    const stack = (fontFamily: string) => [{ type: 'textStyle', attrs: { fontFamily } }];
-    const fragment = doc.getXmlFragment('default');
-    prosemirrorJSONToYXmlFragment(
-        getSchema(getDocExtensions()),
-        {
-            type: 'doc',
-            content: [
-                {
-                    type: 'paragraph',
-                    content: [
-                        { type: 'text', text: 'Body', marks: stack("'Source Serif 4', serif") },
-                        {
-                            type: 'footnote',
-                            content: [
-                                {
-                                    type: 'paragraph',
-                                    content: [
-                                        { type: 'text', text: 'Note', marks: stack(getFontFamily('Source Serif 4')) },
-                                    ],
-                                },
-                            ],
-                        },
-                    ],
-                },
-            ],
-        },
-        fragment,
-    );
-    function Body() {
-        useDocEditor({
-            media: useDocMedia(path),
-            yDoc: doc,
-            provider: null,
-            editable: true,
-            target: { undoManager: createDocUndoManager(doc), cardIds: () => new Set() },
-        });
-        return null;
-    }
-    ({ unmount } = await render(createElement(Body)));
-    expect(fragment.toString().match(/fontFamily="[^"]*"/g)).toEqual([
-        'fontFamily="Source Serif 4"',
-        'fontFamily="Source Serif 4"',
-    ]);
 });
 
 // An owner who makes a writer a viewer, or a viewer a writer, changes what the open tab can do now: TipTap keeps an

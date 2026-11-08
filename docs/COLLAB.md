@@ -23,7 +23,7 @@ The sections follow the places where this picture needs care: big documents and 
 
 Yjs blobs (`doc_snapshots.stateData`, `doc_updates.updateData`) are compressed at the SQLite boundary only, in `apps/api/src/lib/collab/blob-codec.ts`. **The live WebSocket protocol exchanges raw Yjs updates**, so sync is untouched by it. The motivation is that a Yjs snapshot embeds the whole document state verbatim: a large sheet's snapshot rides at ~48 MB raw and ~1 MB at zstd level 3. Updates below `COMPRESS_MIN_BYTES` (1 KiB) stay raw, because frame overhead outweighs the gain on a keystroke-sized update.
 
-Reads are backward compatible with **no schema migration**: `decompressBlob` sniffs the 4-byte zstd frame magic and passes a legacy raw blob through untouched. The BLOB column stores either form and every row decodes independently, so old and new rows coexist. The magic cannot plausibly arise from lib0-encoded Yjs data, and a false positive would throw inside the caller's existing `try/catch` and skip that one row rather than silently corrupt state.
+`decompressBlob` sniffs the 4-byte zstd frame magic and passes a raw blob through untouched. The BLOB column stores either form and every row decodes independently. The magic cannot plausibly arise from lib0-encoded Yjs data, and a false positive would throw inside the caller's existing `try/catch` and skip that one row rather than silently corrupt state.
 
 ## Awareness frames are validated before apply
 

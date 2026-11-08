@@ -2,11 +2,13 @@ import { describe, expect, test } from 'bun:test';
 import { MAX_SLIDE_WIDTH, MIN_SLIDE_WIDTH, slideFontSize, slidePtToPx } from '@workspace/lib/vector';
 import { ApiError } from '../../../lib/core/errors';
 import { MAX_MEDIA_PARTS } from '../../../lib/import/image-types';
-import { MAX_PPTX_WORK, readPptx } from '../../../lib/import/slides/from-pptx';
-import { MAX_SLIDES } from '../../../lib/import/slides/package';
+import { readPptx } from '../../../lib/import/slides/from-pptx';
 import { MAX_ELEMENTS, MAX_PPTX_WEIGHT } from '../../../lib/import/slides/shapes';
 import { cpuClock } from '../../cpu-time';
 import { box, buildPptx, NS, PIXEL_PNG, para, pic, pptxParts, rel, solid, sp, zipParts } from '../../fixtures/pptx';
+
+const MAX_PPTX_WORK = 3_000_000;
+const MAX_SLIDES = 500;
 
 // The reader's output and the limits a hostile pptx meets before the work they bound.
 

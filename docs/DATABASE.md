@@ -58,7 +58,7 @@ A config with a `snapshot` key opts into file versioning. `snapshotIfDue` calls 
 
 **Never unlink them by hand.** A connection in another process keeps writing into the unlinked WAL, and its writes are lost or corrupt the file.
 
-The one exception is a temp with no connection on it that is being thrown away or replaced. Its `-wal` and `-shm` go with it (`Mount.cleanupTemp`), because SQLite replays a leftover `-wal` into whatever main file next appears at that path. A download or a staged-copy recovery runs it before writing the fresh main file, and a download refuses to write while a `-wal` it could not remove is still there.
+The one exception is a file with no connection on it that is being thrown away or replaced: a temp, or a restore's old `data.db` on `local-key`. Its `-wal` and `-shm` go with it (`Mount.cleanupTemp`, `replaceContainerDataDb`), because SQLite replays a leftover `-wal` into whatever main file next appears at that path. A download or a staged-copy recovery runs it before writing the fresh main file, and a download refuses to write while a `-wal` it could not remove is still there.
 
 ## A database that holds the truth runs synchronous FULL
 

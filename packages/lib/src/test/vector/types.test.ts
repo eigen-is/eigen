@@ -69,9 +69,9 @@ describe('parseFixedSegments / serializeFixedSegments', () => {
         expect(serializeFixedSegments({ segments: [], startIsSpecial: false, endIsSpecial: false })).toBe('');
     });
 
-    test('drops garbage: non-JSON, legacy bare arrays, and diagonal/degenerate/indexless entries', () => {
+    test('drops garbage: non-JSON, bare arrays, and diagonal/degenerate/indexless entries', () => {
         expect(parseFixedSegments('not json').segments).toEqual([]);
-        // Legacy index-less array form (the old geometric keying) is dropped wholesale.
+        // An index-less array is dropped wholesale.
         expect(parseFixedSegments('[{"start":[0,0],"end":[0,5]}]').segments).toEqual([]);
         // Diagonal, zero-length and index-less entries rejected; the valid one stays.
         expect(

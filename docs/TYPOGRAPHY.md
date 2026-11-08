@@ -80,7 +80,7 @@ One `@theme` block in `font-weights.css`, which `globals.css` imports, sets `--f
 The name expands to CSS only where it renders. A sheet cell is looser ([§ A sheet cell's font has one decoder](#a-sheet-cells-font-has-one-decoder)).
 
 - The canvas reader accepts only a name from `EIGEN_FONT_NAMES` and falls back to its default (`fontFamily` in `packages/lib/src/vector/kinds/read-fields.ts`). The name ends up in a CSS declaration list, where a stray `;` would open a declaration of the writer's choosing.
-- The docs `textStyle` mark stores a name, and its node (`packages/lib/src/docs/eigendoc/nodes/font-family.ts`) renders it through `fontNameToCss` (`packages/lib/src/constants/fonts.ts`). A value that is already a stack passes through unchanged, and `normalizeFontFamilyMarks` in the docs editor collapses it to its name on an editable load. `getFontName` does the reverse lookup for paste and import.
+- The docs `textStyle` mark stores a name, and its node (`packages/lib/src/docs/eigendoc/nodes/font-family.ts`) renders it through `fontNameToCss` (`packages/lib/src/constants/fonts.ts`). A value that is already a stack passes through unchanged. `getFontName` does the reverse lookup for paste, import and export.
 - `getFontFamily` puts an unknown name before the stack of the bundled font it maps to, else Inter's, as `'Bell MT', 'Inter', …`: the emoji face holds the digits, `#` and `*` for its keycaps, so a font the browser lacks must not fall straight to it. `fontNameToCss` must not wrap, or a stored stack would be wrapped twice.
 
 ## Foreign fonts map onto the bundled ones

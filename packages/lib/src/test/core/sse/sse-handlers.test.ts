@@ -88,7 +88,7 @@ const SAMPLES: { [T in SSEventTypeName]: SSEvent & { type: T } } = {
     [SSEventType.HOME_DATA_EPOCHS]: { type: SSEventType.HOME_DATA_EPOCHS, epochs: { [OWNER]: 'epoch-1' } },
     [SSEventType.SERVER_RESTART_NOTICE]: {
         type: SSEventType.SERVER_RESTART_NOTICE,
-        notice: { reason: 'update', msLeft: 600_000, message: null },
+        notice: { reason: 'update', msLeft: 600_000, msSinceAnnounced: 0, message: null },
     },
 };
 
