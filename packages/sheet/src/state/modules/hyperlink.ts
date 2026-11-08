@@ -12,19 +12,14 @@ import { getFlowdata } from '../context';
 import { getSheetIndex } from '../utils';
 import { mergeBorder } from './cell';
 import { getcellrange } from './formula-exec';
-import { colLocation, rowLocation } from './location';
+import { colLocation, rowLocation, sheetPoint } from './location';
 import { normalizeSelection } from './selection';
 import { changeSheet } from './sheet';
 
-export function getCellRowColumn(ctx: Context, e: MouseEvent, container: HTMLDivElement, scrollEl: HTMLDivElement) {
+export function getCellRowColumn(ctx: Context, e: MouseEvent, cellArea: HTMLDivElement) {
     const flowdata = getFlowdata(ctx);
     if (flowdata == null) return undefined;
-    const { scrollLeft, scrollTop } = scrollEl;
-    const rect = container.getBoundingClientRect();
-    let x = e.pageX - rect.left - ctx.rowHeaderWidth;
-    let y = e.pageY - rect.top - ctx.columnHeaderHeight;
-    x += scrollLeft;
-    y += scrollTop;
+    const { x, y } = sheetPoint(ctx, e, cellArea);
     let r = rowLocation(y, ctx.visibledatarow)[2];
     let c = colLocation(x, ctx.visibledatacolumn)[2];
 

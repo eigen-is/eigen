@@ -3,6 +3,7 @@
 // handlers hand the press to the state layer, such as handleColumnHeaderMouseDown, and a right click
 // or long press opens the column menu. RowHeader is its twin on the other axis.
 
+import { SHEET_COLUMN_HEADER_HEIGHT } from '@workspace/lib/sheets';
 import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { ChevronDown } from 'lucide-react';
 import type React from 'react';
@@ -14,7 +15,6 @@ import {
     colLocation,
     colLocationByIndex,
     computeColumnHeaderRegions,
-    fixPositionOnFrozenCells,
     getFrozenHandleLeft,
     handleColFreezeHandleMouseDown,
     handleColSizeHandleMouseDown,
@@ -22,6 +22,7 @@ import {
     overlayRegionForCell,
     selectTitlesMap,
     selectTitlesRange,
+    sheetPoint,
 } from '../../state';
 import { useSheetContextMenu } from '../ContextMenu/useSheetContextMenu';
 import { OverlayRegion } from './OverlayRegion';
@@ -32,7 +33,6 @@ export const ColumnHeader: React.FC = () => {
     // A long press opens the column menu on touch, as it does on the cell area. A touch browser sends no contextmenu,
     // so without it a header has no menu there.
     const longPress = useLongPress<null>((_item, x, y) => openAtPoint(x, y));
-    const containerRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
     const colChangeSizeRef = useRef<HTMLDivElement>(null);
     const [hoverLocation, setHoverLocation] = useState({
@@ -44,43 +44,41 @@ export const ColumnHeader: React.FC = () => {
         { col: number; col_pre: number; c1: number; c2: number }[]
     >([]);
     const freezeHandleLeft = getFrozenHandleLeft(context);
-    // biome-ignore lint/correctness/useExhaustiveDependencies: globalCache.scrollLeft is the live scroll value read fresh off a stable ref, never a React dependency
     const onMouseMove = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
             if (context.colsResizing) {
                 return;
             }
-            const container = containerRef.current;
-            if (!container) return;
-            const mouseX = e.pageX - container.getBoundingClientRect().left - window.scrollX;
-            const scrolledX = mouseX + refs.globalCache.scrollLeft;
-            const freeze = refs.globalCache.freezen?.[context.currentSheetId];
-            const { x } = fixPositionOnFrozenCells(freeze, scrolledX, 0, mouseX, 0);
-            const [col_pre, col, col_index] = colLocation(x, context.visibledatacolumn);
+            const cellArea = refs.cellArea.current;
+            if (!cellArea) return;
+            const [col_pre, col, col_index] = colLocation(
+                sheetPoint(context, e, cellArea).x,
+                context.visibledatacolumn,
+            );
             if (col_index === hoverLocation.col_index) return;
             setHoverLocation({ col_pre, col, col_index });
         },
-        [context, hoverLocation.col_index, refs.globalCache.freezen],
+        [context, hoverLocation.col_index, refs.cellArea],
     );
 
     const onMouseDown = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
             const { nativeEvent } = e;
             setContext((draftCtx) => {
-                const container = containerRef.current;
+                const cellArea = refs.cellArea.current;
                 const cellInput = refs.cellInput.current;
-                if (!container || !cellInput) return;
+                if (!cellArea || !cellInput) return;
                 handleColumnHeaderMouseDown(
                     draftCtx,
                     refs.globalCache,
                     nativeEvent,
-                    container,
+                    cellArea,
                     cellInput,
                     refs.fxInput.current,
                 );
             });
         },
-        [refs.globalCache, refs.cellInput, refs.fxInput, setContext],
+        [refs.cellArea, refs.globalCache, refs.cellInput, refs.fxInput, setContext],
     );
 
     const onMouseLeave = useCallback(() => {
@@ -94,22 +92,14 @@ export const ColumnHeader: React.FC = () => {
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
             const { nativeEvent } = e;
             setContext((draftCtx) => {
-                const container = containerRef.current;
                 const workbookContainer = refs.workbookContainer.current;
                 const cellArea = refs.cellArea.current;
-                if (!container || !workbookContainer || !cellArea) return;
-                handleColSizeHandleMouseDown(
-                    draftCtx,
-                    refs.globalCache,
-                    nativeEvent,
-                    container,
-                    workbookContainer,
-                    cellArea,
-                );
+                if (!workbookContainer || !cellArea) return;
+                handleColSizeHandleMouseDown(draftCtx, nativeEvent, workbookContainer, cellArea);
             });
             e.stopPropagation();
         },
-        [refs.cellArea, refs.globalCache, refs.workbookContainer, setContext],
+        [refs.cellArea, refs.workbookContainer, setContext],
     );
 
     const onColSizeHandleDoubleClick = useCallback(
@@ -126,11 +116,10 @@ export const ColumnHeader: React.FC = () => {
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
             const { nativeEvent } = e;
             setContext((draftCtx) => {
-                const container = containerRef.current;
                 const workbookContainer = refs.workbookContainer.current;
                 const cellArea = refs.cellArea.current;
-                if (!container || !workbookContainer || !cellArea) return;
-                handleColFreezeHandleMouseDown(draftCtx, nativeEvent, container, workbookContainer, cellArea);
+                if (!workbookContainer || !cellArea) return;
+                handleColFreezeHandleMouseDown(draftCtx, nativeEvent, workbookContainer, cellArea);
             });
             e.stopPropagation();
         },
@@ -174,7 +163,7 @@ export const ColumnHeader: React.FC = () => {
 
     // The header splits into the body's panes on its own axis: a frozen band that stays put and a main band that
     // scrolls. Each band's clip cuts the highlights at the freeze boundary.
-    const headerHeight = context.columnHeaderHeight - 1.5;
+    const headerHeight = SHEET_COLUMN_HEADER_HEIGHT - 1.5;
     const freeze = refs.globalCache.freezen?.[context.currentSheetId];
     const colFreeze: Freezen | undefined = freeze?.vertical ? { vertical: freeze.vertical } : undefined;
     const regions = computeColumnHeaderRegions(colFreeze, context.cellmainWidth, headerHeight);
@@ -182,7 +171,6 @@ export const ColumnHeader: React.FC = () => {
 
     return (
         <div
-            ref={containerRef}
             className="sheet-col-header"
             style={{
                 height: headerHeight,

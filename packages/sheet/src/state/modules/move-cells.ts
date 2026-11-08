@@ -8,44 +8,33 @@ import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import type { GlobalCache } from '../types';
 import { carriedLines, carryCells } from './cell';
-import { colLocation, colLocationByIndex, mousePosition, rowLocation, rowLocationByIndex } from './location';
+import { colLocation, colLocationByIndex, rowLocation, rowLocationByIndex, sheetPoint } from './location';
 import { jfrefreshgrid } from './refresh';
 import { normalizeSelection } from './selection';
 import { hasPartMC } from './validation';
 
 const dragCellThreshold = 8;
-
-function getCellLocationByMouse(ctx: Context, e: MouseEvent, scrollEl: HTMLDivElement, container: HTMLDivElement) {
-    const rect = container.getBoundingClientRect();
-    const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollEl.scrollLeft;
-    const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollEl.scrollTop;
-
-    return {
-        row: rowLocation(y, ctx.visibledatarow),
-        column: colLocation(x, ctx.visibledatacolumn),
-    };
-}
+// A drop this close to the cell area's right edge lands on the sheet's last columns.
+const MOVE_RIGHT_MARGIN = 14;
 
 export function onCellsMoveStart(
     ctx: Context,
     globalCache: GlobalCache,
     e: MouseEvent,
-    scrollEl: HTMLDivElement,
+    cellArea: HTMLDivElement,
     container: HTMLDivElement,
 ) {
     if (ctx.allowEdit === false) {
-        // Selection drag is disabled in this mode
         return;
     }
 
-    globalCache.dragCellStartPos = { x: e.pageX, y: e.pageY };
+    globalCache.dragCellStartPos = { x: e.clientX, y: e.clientY };
     ctx.cellSelectMoving = true;
     ctx.scrolling = true;
 
-    let {
-        row: [row_pre, row, row_index],
-        column: [col_pre, col, col_index],
-    } = getCellLocationByMouse(ctx, e, scrollEl, container);
+    const { x, y } = sheetPoint(ctx, e, cellArea);
+    let [row_pre, row, row_index] = rowLocation(y, ctx.visibledatarow);
+    let [col_pre, col, col_index] = colLocation(x, ctx.visibledatacolumn);
 
     const range = ctx.selections?.at(-1);
     if (range == null) return;
@@ -61,8 +50,7 @@ export function onCellsMoveStart(
 
     ctx.cellSelectMoveIndex = [row_index, col_index];
 
-    // The move preview renders once per overlay pane region; write every copy —
-    // each region's clip shows exactly its portion.
+    // The preview renders once per pane, and each pane's clip shows its part.
     const eles = container.querySelectorAll('.sheet-cell-selected-move');
     if (eles.length === 0) return;
     for (const ele of eles) {
@@ -81,29 +69,22 @@ export function onCellsMove(
     ctx: Context,
     globalCache: GlobalCache,
     e: MouseEvent,
-    scrollEl: HTMLDivElement,
+    cellArea: HTMLDivElement,
     container: HTMLDivElement,
 ) {
     if (!ctx.cellSelectMoving) return;
     if (globalCache.dragCellStartPos != null) {
-        const deltaX = Math.abs(globalCache.dragCellStartPos.x - e.pageX);
-        const deltaY = Math.abs(globalCache.dragCellStartPos.y - e.pageY);
+        const deltaX = Math.abs(globalCache.dragCellStartPos.x - e.clientX);
+        const deltaY = Math.abs(globalCache.dragCellStartPos.y - e.clientY);
         if (deltaX < dragCellThreshold && deltaY < dragCellThreshold) {
             return;
         }
         globalCache.dragCellStartPos = undefined;
     }
-    const [x, y] = mousePosition(e.pageX, e.pageY, ctx);
-
-    const rect = container.getBoundingClientRect();
-    const winH = rect.height - 20;
-    const winW = rect.width - 60;
-
-    const { row: rowL, column } = getCellLocationByMouse(ctx, e, scrollEl, container);
-    let [row_pre, row] = rowL;
-    let [col_pre, col] = column;
-    const row_index = rowL[2];
-    const col_index = column[2];
+    const { x, y, viewX, viewY, width, height } = sheetPoint(ctx, e, cellArea);
+    const winW = width - MOVE_RIGHT_MARGIN;
+    const row_index = rowLocation(y, ctx.visibledatarow)[2];
+    const col_index = colLocation(x, ctx.visibledatacolumn)[2];
 
     const row_index_original = ctx.cellSelectMoveIndex[0];
     const col_index_original = ctx.cellSelectMoveIndex[1];
@@ -114,30 +95,30 @@ export function onCellsMove(
     let col_s = ctx.selections[0].column[0] - col_index_original + col_index;
     let col_e = ctx.selections[0].column[1] - col_index_original + col_index;
 
-    if (row_s < 0 || y < 0) {
+    if (row_s < 0 || viewY < 0) {
         row_s = 0;
         row_e = ctx.selections[0].row[1] - ctx.selections[0].row[0];
     }
 
-    if (col_s < 0 || x < 0) {
+    if (col_s < 0 || viewX < 0) {
         col_s = 0;
         col_e = ctx.selections[0].column[1] - ctx.selections[0].column[0];
     }
 
-    if (row_e >= ctx.visibledatarow.length - 1 || y > winH) {
+    if (row_e >= ctx.visibledatarow.length - 1 || viewY > height) {
         row_s = ctx.visibledatarow.length - 1 - ctx.selections[0].row[1] + ctx.selections[0].row[0];
         row_e = ctx.visibledatarow.length - 1;
     }
 
-    if (col_e >= ctx.visibledatacolumn.length - 1 || x > winW) {
+    if (col_e >= ctx.visibledatacolumn.length - 1 || viewX > winW) {
         col_s = ctx.visibledatacolumn.length - 1 - ctx.selections[0].column[1] + ctx.selections[0].column[0];
         col_e = ctx.visibledatacolumn.length - 1;
     }
 
-    col_pre = col_s - 1 === -1 ? 0 : ctx.visibledatacolumn[col_s - 1];
-    col = ctx.visibledatacolumn[col_e];
-    row_pre = row_s - 1 === -1 ? 0 : ctx.visibledatarow[row_s - 1];
-    row = ctx.visibledatarow[row_e];
+    const col_pre = col_s === 0 ? 0 : ctx.visibledatacolumn[col_s - 1];
+    const col = ctx.visibledatacolumn[col_e];
+    const row_pre = row_s === 0 ? 0 : ctx.visibledatarow[row_s - 1];
+    const row = ctx.visibledatarow[row_e];
 
     for (const ele of container.querySelectorAll('.sheet-cell-selected-move')) {
         if (!(ele instanceof HTMLElement)) continue;
@@ -153,10 +134,9 @@ export function onCellsMoveEnd(
     ctx: Context,
     globalCache: GlobalCache,
     e: MouseEvent,
-    scrollEl: HTMLDivElement,
+    cellArea: HTMLDivElement,
     container: HTMLDivElement,
 ) {
-    // Change selection box position and replace target cells
     if (!ctx.cellSelectMoving) return;
     ctx.cellSelectMoving = false;
     for (const ele of container.querySelectorAll('.sheet-cell-selected-move')) {
@@ -168,16 +148,10 @@ export function onCellsMoveEnd(
         return;
     }
 
-    const [x, y] = mousePosition(e.pageX, e.pageY, ctx);
-
-    const rect = container.getBoundingClientRect();
-    const winH = rect.height - 20;
-    const winW = rect.width - 60;
-
-    const {
-        row: [, , row_index],
-        column: [, , col_index],
-    } = getCellLocationByMouse(ctx, e, scrollEl, container);
+    const { x, y, viewX, viewY, width, height } = sheetPoint(ctx, e, cellArea);
+    const winW = width - MOVE_RIGHT_MARGIN;
+    const row_index = rowLocation(y, ctx.visibledatarow)[2];
+    const col_index = colLocation(x, ctx.visibledatacolumn)[2];
 
     if (ctx.allowEdit === false) return;
 
@@ -192,7 +166,6 @@ export function onCellsMoveEnd(
     if (d == null || ctx.selections == null) return;
     const last = ctx.selections[ctx.selections.length - 1];
 
-    // Selection contains partial cells
     if (hasPartMC(ctx, last.row[0], last.row[1], last.column[0], last.column[1])) {
         ctx.warnDialog = 'Cannot perform this operation on merged cells';
         return;
@@ -203,27 +176,26 @@ export function onCellsMoveEnd(
     let col_s = last.column[0] - col_index_original + col_index;
     let col_e = last.column[1] - col_index_original + col_index;
 
-    if (row_s < 0 || y < 0) {
+    if (row_s < 0 || viewY < 0) {
         row_s = 0;
         row_e = last.row[1] - last.row[0];
     }
 
-    if (col_s < 0 || x < 0) {
+    if (col_s < 0 || viewX < 0) {
         col_s = 0;
         col_e = last.column[1] - last.column[0];
     }
 
-    if (row_e >= ctx.visibledatarow.length - 1 || y > winH) {
+    if (row_e >= ctx.visibledatarow.length - 1 || viewY > height) {
         row_s = ctx.visibledatarow.length - 1 - last.row[1] + last.row[0];
         row_e = ctx.visibledatarow.length - 1;
     }
 
-    if (col_e >= ctx.visibledatacolumn.length - 1 || x > winW) {
+    if (col_e >= ctx.visibledatacolumn.length - 1 || viewX > winW) {
         col_s = ctx.visibledatacolumn.length - 1 - last.column[1] + last.column[0];
         col_e = ctx.visibledatacolumn.length - 1;
     }
 
-    // Replacement position contains partial cells
     if (hasPartMC(ctx, row_s, row_e, col_s, col_e)) {
         ctx.warnDialog = 'Cannot perform this operation on merged cells';
         return;

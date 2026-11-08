@@ -16,7 +16,7 @@ function grid(): (Cell | null)[][] {
 }
 
 // Drops the single selected cell at (0,0) onto (2,0); the grid factory's header offsets put
-// pageX 50 / pageY 70 inside that cell.
+// clientX 50 / clientY 70 inside that cell.
 function moveTopLeftToRowTwo(
     seed: (data: (Cell | null)[][]) => void,
     config: Context['sheets'][0]['config'],
@@ -35,7 +35,7 @@ function moveTopLeftToRowTwo(
     ctx.cellSelectMoving = true;
     ctx.cellSelectMoveIndex = [0, 0];
     const { container, scrollEl } = gridElements();
-    const event = { pageX: 50, pageY: 70 } as MouseEvent;
+    const event = { clientX: 50, clientY: 70 } as MouseEvent;
     onCellsMoveEnd(ctx, {} as GlobalCache, event, scrollEl, container);
     return ctx;
 }

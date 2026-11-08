@@ -68,7 +68,7 @@ function mouseDownAt(ctx: Context, x: number, y: number, cacheState: Partial<Glo
     const preventDefault = () => {
         prevented = true;
     };
-    const event = { button: 0, pageX: x, pageY: y, shiftKey: false, preventDefault } as unknown as MouseEvent;
+    const event = { button: 0, clientX: x, clientY: y, shiftKey: false, preventDefault } as unknown as MouseEvent;
     handleCellAreaMouseDown(ctx, globalCache, event, cellInput, container);
     return prevented;
 }
@@ -128,8 +128,8 @@ describe('handleCellAreaMouseDown — a Ctrl-click while composing a formula', (
         win.getSelection()?.removeAllRanges();
         const event = {
             button: 0,
-            pageX: 30,
-            pageY: 30,
+            clientX: 30,
+            clientY: 30,
             ctrlKey: true,
             preventDefault: () => {},
         } as unknown as MouseEvent;
@@ -176,7 +176,6 @@ describe('handleCellAreaMouseDown — a press that closes a menu', () => {
 // are the fill handle's grab and the 2px inside every edge the move band's.
 describe('cell glyphs over the selection drag handles', () => {
     const LIST_RULE: DataValidationRule = { type: 'dropdown', type2: '', value1: 'Red,Green,Blue', value2: '' };
-    const GLOBAL_CACHE = quietCache();
 
     function selectedA1(): Context {
         const ctx = contextFactory() as Context;
@@ -203,8 +202,8 @@ describe('cell glyphs over the selection drag handles', () => {
     function glyphAt(ctx: Context, x: number, y: number) {
         const scrollEl = win.document.createElement('div') as unknown as HTMLDivElement;
         scrollEl.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600 }) as DOMRect;
-        const event = { pageX: x, pageY: y } as MouseEvent;
-        return cellGlyphAtPointer(ctx, GLOBAL_CACHE, event, scrollEl);
+        const event = { clientX: x, clientY: y } as MouseEvent;
+        return cellGlyphAtPointer(ctx, event, scrollEl);
     }
 
     test('the list chevron at the fill corner opens the list, no fill drag', () => {

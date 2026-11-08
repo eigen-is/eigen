@@ -108,8 +108,13 @@ async function mount(rows = 10) {
         if (!area) throw new Error('no cell area');
         area.getBoundingClientRect = () => new DOMRect(0, 0, 1600, 900);
         const mouse = async (target: EventTarget, type: string) => {
-            const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0 });
-            Object.defineProperties(event, { pageX: { value: 300 }, pageY: { value: 100 } });
+            const event = new MouseEvent(type, {
+                bubbles: true,
+                cancelable: true,
+                button: 0,
+                clientX: 300,
+                clientY: 100,
+            });
             await act(async () => {
                 target.dispatchEvent(event);
             });

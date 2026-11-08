@@ -53,7 +53,7 @@ export function sortFilterRange(
 const FILTER_BUTTON_WIDTH = 20;
 const FILTER_BUTTON_HEIGHT = 15;
 
-// x/y are freeze-corrected sheet coordinates, the space fixPositionOnFrozenCells produces in the
+// x/y are freeze-corrected sheet coordinates, the space sheetPoint produces in the
 // mouse handlers. The rect is the one the canvas paints the button in.
 export function getFilterButtonAtPosition(ctx: Context, x: number, y: number) {
     return ctx.filterOptions?.items.find(

@@ -144,7 +144,7 @@ function move(ctx: Context) {
     ctx.cellSelectMoving = true;
     ctx.cellSelectMoveIndex = [0, 0];
     const { container, scrollEl } = gridElements();
-    const event = { pageX: 46 + 6 * 74 + 30, pageY: 20 + 6 * 20 + 10 } as MouseEvent;
+    const event = { clientX: 46 + 6 * 74 + 30, clientY: 20 + 6 * 20 + 10 } as MouseEvent;
     onCellsMoveEnd(ctx, {} as GlobalCache, event, scrollEl, container);
 }
 

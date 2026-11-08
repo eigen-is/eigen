@@ -79,6 +79,7 @@ test('losing edit rights while the same column stays hovered hides its menu arro
         container.remove();
     };
 
+    refs.cellArea.current = document.createElement('div');
     await render(contextWith({}));
     const header = container.querySelector('.sheet-col-header');
     if (!(header instanceof HTMLElement)) throw new Error('no column header');

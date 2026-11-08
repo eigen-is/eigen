@@ -70,7 +70,7 @@ describe('cell edges', () => {
 
 describe('sheet-to-canvas mapping', () => {
     test('subtracts the scroll and adds the header offset into the -1-shifted canvas space', () => {
-        // rowHeaderWidth 46 / columnHeaderHeight 20 (state/settings defaults)
+        // SHEET_ROW_HEADER_WIDTH 46, SHEET_COLUMN_HEADER_HEIGHT 20
         expect(sheetToCanvasX(148, 30, 46)).toBe(148 - 30 + 46 - 1);
         expect(sheetToCanvasY(20, 10, 20)).toBe(20 - 10 + 20 - 1);
         expect(sheetToCanvasX(0, 0, 46)).toBe(45);
