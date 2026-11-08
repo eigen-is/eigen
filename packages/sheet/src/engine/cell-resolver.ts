@@ -38,10 +38,15 @@ export function createArrayResolver(sheets: readonly SheetData[]): CellResolver 
     };
 }
 
-// `computed` is keyed `${row}_${col}_${sheetId}`.
+export function computedKey(row: number, col: number, sheetId: string): string {
+    return `${row}_${col}_${sheetId}`;
+}
+
+// `computed` is keyed by computedKey.
 export function withComputedValues(resolver: CellResolver, computed: ReadonlyMap<string, Cell>): CellResolver {
     return {
         ...resolver,
-        getCell: (sheetId, row, col) => computed.get(`${row}_${col}_${sheetId}`) ?? resolver.getCell(sheetId, row, col),
+        getCell: (sheetId, row, col) =>
+            computed.get(computedKey(row, col, sheetId)) ?? resolver.getCell(sheetId, row, col),
     };
 }

@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import {
     detectAbsolute,
-    forEachRef,
     functionCopy,
     functionStrChange,
     inlineNames,
     moveFormulaRefs,
     renameSheetRefs,
+    walkFormulaRefs,
 } from '../../engine/formula-shift';
 import { sheetFinder } from '../../engine/parser/helper/cell';
 
@@ -487,10 +487,13 @@ describe('engine/formula-shift — a minus before a whole row', () => {
     });
 });
 
-describe('engine/formula-shift — forEachRef', () => {
+describe('engine/formula-shift — walkFormulaRefs', () => {
     const refs = (formula: string) => {
         const found: string[] = [];
-        forEachRef(formula, (ref) => found.push(ref));
+        walkFormulaRefs(formula, (ref) => {
+            found.push(ref);
+            return ref;
+        });
         return found;
     };
 

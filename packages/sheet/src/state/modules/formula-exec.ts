@@ -3,7 +3,7 @@
 // layer, while the parsing and evaluating they call into is the engine's.
 
 import { findSheetByName } from '../../engine/a1-notation';
-import { createArrayResolver, withComputedValues } from '../../engine/cell-resolver';
+import { computedKey, createArrayResolver, withComputedValues } from '../../engine/cell-resolver';
 import { getCalculationOrder } from '../../engine/dependency-graph';
 import { checkBracketNum, LAST_COLUMN, LAST_ROW, matrixWidth, resolveCellRange } from '../../engine/formula-utils';
 import type { Cell, CellResolver, FormulaCellInfo, FormulaCellInfoMap, FormulaDependency } from '../../engine/types';
@@ -115,7 +115,7 @@ export function execFunctionGroup(ctx: Context, changedCells: readonly FormulaCe
     const results = runList.map(({ formula, r, c, id }) => {
         const [v, f] = computeFormula(ctx, formula, { id, resolver });
         const value: Cell = { v, f };
-        computed.set(`${r}_${c}_${id}`, value);
+        computed.set(computedKey(r, c, id), value);
         return { r, c, id, value };
     });
 

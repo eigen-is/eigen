@@ -3,6 +3,7 @@
 // step with each write, through the dependency walk the server's recalc uses too, and an undo or redo replays its
 // patches.
 
+import type { Patch } from 'immer';
 import { current, isDraft } from 'immer';
 import { findSheetByName } from '../../engine/a1-notation';
 import type { DependencyIndex } from '../../engine/dependency-index';
@@ -11,7 +12,7 @@ import { isFormula } from '../../engine/formula-utils';
 import { extractDependencies } from '../../engine/recalc';
 import type { Cell, CellMatrix, FormulaCellInfoMap, FormulaDependency } from '../../engine/types';
 import type { Context } from '../context';
-import type { FormulaCell, History, Selection } from '../types';
+import type { FormulaCell, Selection } from '../types';
 import { getcellFormula } from './cell';
 import { warmFormulaCellInfoMap } from './formula-exec';
 
@@ -107,8 +108,7 @@ export class FormulaCache {
         this.cellTextToIndexList = {};
     }
 
-    public updateFormulaCache(ctx: Context, history: History, type: 'undo' | 'redo') {
-        const patches = type === 'undo' ? history.inversePatches : history.patches;
+    public updateFormulaCache(ctx: Context, patches: readonly Patch[]) {
         // An unbuilt map reads the patched cells when it builds.
         const map = this.formulaCellInfoMap;
         if (map == null) return;

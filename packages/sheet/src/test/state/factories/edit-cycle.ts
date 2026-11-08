@@ -13,18 +13,18 @@ enablePatches();
 
 export function edit(ctx: Context, recipe: (draft: Context) => void): [Context, History] {
     const [next, patches, inversePatches] = produceWithPatches(ctx, recipe);
-    return [next, { patches: filterPatch(patches), inversePatches: filterPatch(inversePatches) }];
+    return [next, { patches: filterPatch(patches), inversePatches: filterPatch(inversePatches), options: {} }];
 }
 
 export function undo(ctx: Context, history: History): Context {
     const next = applyPatches(ctx, history.inversePatches);
-    next.formulaCache.updateFormulaCache(next, history, 'undo');
+    next.formulaCache.updateFormulaCache(next, history.inversePatches);
     return next;
 }
 
 export function redo(ctx: Context, history: History): Context {
     const next = applyPatches(ctx, history.patches);
-    next.formulaCache.updateFormulaCache(next, history, 'redo');
+    next.formulaCache.updateFormulaCache(next, history.patches);
     return next;
 }
 

@@ -8,6 +8,7 @@ import type { Patch } from 'immer';
 import { sheetFinder } from '../../engine/a1-notation';
 import { mapChartRefs } from '../../engine/chart-data';
 import { functionStrChange } from '../../engine/formula-shift';
+import { isFormula } from '../../engine/formula-utils';
 import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
 import {
     shiftCellKeyedForDelete,
@@ -21,8 +22,7 @@ import {
     shiftValidations,
 } from '../../engine/rowcol';
 import type { Cell, SingleRange } from '../../engine/types';
-import type { History, Op, Sheet, SheetValidation } from '../types';
-import type { PatchOptions } from '../utils';
+import type { History, Sheet } from '../types';
 
 // What one row or column op does to the indices on its axis, with the engine's shifter for each kind of map.
 export type RowColMove = {
@@ -43,13 +43,7 @@ export type RowColMove = {
     range: (range: SingleRange) => SingleRange | null;
 };
 
-export function rowColMove({ insertRowColOp, deleteRowColOp }: PatchOptions = {}): RowColMove | undefined {
-    if (insertRowColOp) return insertMove(insertRowColOp);
-    if (deleteRowColOp) return deleteMove(deleteRowColOp);
-    return undefined;
-}
-
-function insertMove(op: InsertRowColOp): RowColMove {
+export function insertMove(op: InsertRowColOp): RowColMove {
     const { id, type, index, count, direction } = op;
     const at = direction === 'lefttop' ? index : index + 1;
     return {
@@ -65,7 +59,7 @@ function insertMove(op: InsertRowColOp): RowColMove {
     };
 }
 
-function deleteMove(op: DeleteRowColOp): RowColMove {
+export function deleteMove(op: DeleteRowColOp): RowColMove {
     const { id, type, start, end } = op;
     const count = end - start + 1;
     return {
@@ -90,26 +84,21 @@ export function dropStructuralEntries(entries: History[]): History[] {
 
 export function isStructural({ options }: History): boolean {
     return Boolean(
-        options?.insertRowColOp ||
-            options?.deleteRowColOp ||
-            options?.addSheetOp ||
-            options?.deleteSheetOp ||
-            options?.renameSheetOp,
+        options.insertRowColOp ||
+            options.deleteRowColOp ||
+            options.addedSheet ||
+            options.deletedSheet ||
+            options.renamedSheet,
     );
 }
 
 // A peer's row or column op moves your entries' cells, merges, borders, links, validation rules and row or column sizes
 // on its sheet, and the formula text that points at it on any sheet. An entry the op makes meaningless is dropped: one
-// that writes inside deleted rows or columns or cuts a merge, a range or a whole config on the op's sheet, or a chart's
-// data on that sheet.
-export function shiftEntries(entries: History[], marker: Op, sheets: Sheet[]): History[] {
-    const { id } = marker;
-    const target = sheets.find((sheet) => sheet.id === id);
-    if (id == null || !target) return entries;
-    let move: RowColMove;
-    if (marker.op === 'insertRowCol') move = insertMove({ ...marker.value, id });
-    else if (marker.op === 'deleteRowCol') move = deleteMove({ ...marker.value, id });
-    else return entries;
+// that writes inside deleted rows or columns or cuts a merge or a range on the op's sheet, or a chart's data on that
+// sheet.
+export function shiftEntries(entries: History[], move: RowColMove, sheets: Sheet[]): History[] {
+    const target = sheets.find((sheet) => sheet.id === move.id);
+    if (!target) return entries;
     const shifter = new Shifter(move, target.name, sheets);
     return entries.flatMap((entry) => shifter.entry(entry) ?? []);
 }
@@ -118,8 +107,7 @@ function axisName(type: 'row' | 'column') {
     return type === 'row' ? 'row' : 'col';
 }
 
-// Shifts one entry for a peer's row or column op. Each step hands back what it was given when the op leaves it as it
-// is, so an untouched entry stays the same object.
+// Shifts one entry for a peer's row or column op.
 class Shifter {
     private readonly id: string;
     private readonly move: RowColMove;
@@ -138,9 +126,7 @@ class Shifter {
     public entry(entry: History): History | null {
         const patches = this.patches(entry.patches);
         const inversePatches = this.patches(entry.inversePatches);
-        if (!patches || !inversePatches) return null;
-        if (patches === entry.patches && inversePatches === entry.inversePatches) return entry;
-        return { ...entry, patches, inversePatches };
+        return patches && inversePatches && { ...entry, patches, inversePatches };
     }
 
     private patches(patches: Patch[]): Patch[] | null {
@@ -150,12 +136,11 @@ class Shifter {
             if (!next) return null;
             shifted.push(next);
         }
-        return shifted.every((patch, i) => patch === patches[i]) ? patches : shifted;
+        return shifted;
     }
 
     private patch(patch: Patch): Patch | null {
-        const [root, sheet, field, ...rest] = patch.path;
-        if (root !== 'sheets' || field == null) return patch;
+        const [, sheet, field, ...rest] = patch.path;
         if (field === 'charts') return this.chartNamesSheet(patch) ? null : patch;
         if (sheet !== this.id) return field === 'data' ? this.otherSheetData(patch, rest.length) : patch;
         if (field === 'data') return this.dataPatch(patch, rest);
@@ -169,22 +154,18 @@ class Shifter {
     private otherSheetData(patch: Patch, depth: number): Patch {
         if (!('value' in patch)) return patch;
         const { value } = patch;
-        let next = value;
-        if (depth === 1 && Array.isArray(value)) next = this.otherRow(value);
-        else if (depth === 2) next = this.otherCell(value);
-        else if (depth === 3 && patch.path[5] === 'f' && typeof value === 'string') next = this.formula(value, false);
-        return next === value ? patch : { ...patch, value: next };
-    }
-
-    private otherRow(row: (Cell | null)[]): (Cell | null)[] {
-        const shifted = row.map((cell) => this.otherCell(cell));
-        return shifted.every((cell, i) => cell === row[i]) ? row : shifted;
+        if (depth === 1 && Array.isArray(value)) {
+            return { ...patch, value: value.map((cell: Cell | null) => this.otherCell(cell)) };
+        }
+        if (depth === 2) return { ...patch, value: this.otherCell(value) };
+        if (depth === 3 && patch.path[5] === 'f' && isFormula(value)) {
+            return { ...patch, value: this.formula(value, false) };
+        }
+        return patch;
     }
 
     private otherCell(cell: Cell | null): Cell | null {
-        if (!cell?.f) return cell;
-        const f = this.formula(cell.f, false);
-        return f === cell.f ? cell : { ...cell, f };
+        return isFormula(cell?.f) ? { ...cell, f: this.formula(cell.f, false) } : cell;
     }
 
     private dataPatch(patch: Patch, [r, c, ...below]: (string | number)[]): Patch | null {
@@ -196,9 +177,9 @@ class Shifter {
         const keys = c == null ? [r] : [r, c, ...below];
         keys[type === 'row' ? 0 : 1] = moved;
         const path = [...patch.path.slice(0, 3), ...keys];
-        if (!('value' in patch)) return at(patch, path, undefined);
+        if (!('value' in patch)) return { ...patch, path };
         const value = this.cellValue(patch.value, below, position);
-        return value === undefined ? null : at(patch, path, value);
+        return value === undefined ? null : { ...patch, path, value };
     }
 
     // A cell, a row of cells, or a cell's field, as the op leaves it; undefined when a merge it holds is cut.
@@ -206,12 +187,11 @@ class Shifter {
         if (below.length === 0) {
             if (Array.isArray(value)) {
                 const row = value.map((cell, c) => this.cell(cell, this.move.type === 'row' ? position : c));
-                if (row.includes(undefined)) return undefined;
-                return row.every((cell, i) => cell === value[i]) ? value : row;
+                return row.includes(undefined) ? undefined : row;
             }
             return isCell(value) ? this.cell(value, position) : value;
         }
-        if (below.length === 1 && below[0] === 'f' && typeof value === 'string') return this.formula(value, true);
+        if (below.length === 1 && below[0] === 'f' && isFormula(value)) return this.formula(value, true);
         if (below.length === 1 && below[0] === 'mc' && isMergeRef(value)) return this.mergeRef(value, position);
         return value;
     }
@@ -219,14 +199,11 @@ class Shifter {
     private cell(cell: Cell | null, position: number): Cell | null | undefined {
         if (!cell) return cell;
         let next = cell;
-        if (cell.f) {
-            const f = this.formula(cell.f, true);
-            if (f !== cell.f) next = { ...next, f };
-        }
+        if (isFormula(cell.f)) next = { ...next, f: this.formula(cell.f, true) };
         if (cell.mc) {
             const mc = this.mergeRef(cell.mc, position);
             if (!mc) return undefined;
-            if (mc !== cell.mc) next = { ...next, mc };
+            next = { ...next, mc };
         }
         return next;
     }
@@ -240,7 +217,6 @@ class Shifter {
         const offsets = new Set(ends.map((end) => this.offset(end)));
         const [offset] = offsets;
         if (offsets.size !== 1 || offset == null) return undefined;
-        if (offset === 0) return mc;
         return row ? { ...mc, r: mc.r + offset } : { ...mc, c: mc.c + offset };
     }
 
@@ -250,40 +226,22 @@ class Shifter {
     }
 
     private configPatch(patch: Patch, [map, key, ...below]: (string | number)[]): Patch | null {
-        if (map == null) return null;
-        if (key == null) return this.configMap(patch, String(map));
-        const keyed = (next: string | number) => at(patch, [...patch.path.slice(0, 4), next, ...below], patch.value);
+        // Every sheet the editor holds has its config maps, so only a peer's forged map leaves a write of a whole one.
+        if (key == null) return null;
+        const head = patch.path.slice(0, 4);
         if (map === 'merge') {
             if (below.length > 0 || !patch.value) return this.cellKeyed(patch, [key, ...below]);
             const [entry] = Object.entries(this.move.merge({ [key]: patch.value }));
             if (!entry || !sameSize(entry[1], patch.value)) return null;
-            return at(patch, [...patch.path.slice(0, 4), entry[0]], entry[1]);
+            return { ...patch, path: [...head, entry[0]], value: entry[1] };
         }
         if (map === 'borderInfo') return this.cellKeyed(patch, [key, ...below]);
         const axis = this.move.type === 'row' ? ROW_MAPS : COLUMN_MAPS;
         if (axis.has(String(map))) {
             const [moved] = Object.keys(this.move.keyed({ [key]: 0 }));
-            return moved == null ? null : keyed(moved);
+            return moved == null ? null : { ...patch, path: [...head, moved, ...below] };
         }
         return (this.move.type === 'row' ? COLUMN_MAPS : ROW_MAPS).has(String(map)) ? patch : null;
-    }
-
-    // A whole map in config, such as the first merge or row height on a sheet. It moves as one; an entry it loses to
-    // a delete, or a merge that changes size, drops the entry.
-    private configMap(patch: Patch, map: string): Patch | null {
-        const { value } = patch;
-        if (!('value' in patch) || value == null) return patch;
-        let moved: Record<string, unknown>;
-        if (map === 'merge') {
-            const merge: Record<string, MergeCell> = value;
-            const shifted = this.move.merge(merge);
-            const sizes = Object.values(shifted);
-            if (!Object.values(merge).every((cell, i) => sizes[i] && sameSize(cell, sizes[i]))) return null;
-            moved = shifted;
-        } else if (map === 'borderInfo') moved = this.move.cellKeyed(value);
-        else if ((this.move.type === 'row' ? ROW_MAPS : COLUMN_MAPS).has(map)) moved = this.move.keyed(value);
-        else return (this.move.type === 'row' ? COLUMN_MAPS : ROW_MAPS).has(map) ? patch : null;
-        return Object.keys(moved).length === Object.keys(value).length ? { ...patch, value: moved } : null;
     }
 
     // An "r_c" key at the head of `rest`, such as a border or a link, or a whole map of them, such as a sheet's first
@@ -298,24 +256,20 @@ class Shifter {
         const [moved] = Object.keys(this.move.cellKeyed({ [key]: true }));
         if (moved == null) return null;
         const depth = patch.path.length - below.length - 1;
-        return at(patch, [...patch.path.slice(0, depth), moved, ...below], patch.value);
+        return { ...patch, path: [...patch.path.slice(0, depth), moved, ...below] };
     }
 
-    // A validation rule, or a sheet's whole map of them, which the editor writes whole. Its ranges move as the
-    // engine moves the live ones. A rule the op leaves with no range drops the entry, as a write into deleted rows does.
+    // A validation rule, whose ranges move as the engine moves the live ones. A rule the op leaves with no range drops
+    // the entry, as a write into deleted rows does.
     private validations(patch: Patch, [id, ...below]: (string | number)[]): Patch | null {
         if (!('value' in patch) || patch.value == null) return patch;
-        if (below.length > 0) return null;
-        const map: Record<string, SheetValidation> = id == null ? patch.value : { [id]: patch.value };
-        const moved = shiftValidations(map, this.move.range);
-        if (Object.keys(moved).length < Object.keys(map).length) return null;
-        return at(patch, patch.path, id == null ? moved : moved[id]);
+        if (id == null || below.length > 0) return null;
+        const value = shiftValidations({ [id]: patch.value }, this.move.range)[id];
+        return value ? { ...patch, value } : null;
     }
 
     private formula(f: string, onTargetSheet: boolean): string {
-        const text = f.startsWith('=') ? f.slice(1) : f;
-        const shifted = `=${this.move.formula(text, this.name, onTargetSheet, this.findSheet)}`;
-        return shifted === f ? f : shifted;
+        return `=${this.move.formula(f.slice(1), this.name, onTargetSheet, this.findSheet)}`;
     }
 
     // A chart's data and points follow the ranges it reads; a write to its box or look moves with nothing.
@@ -353,13 +307,6 @@ function isMergeRef(value: unknown): value is MergeRef {
 
 function sameSize(a: MergeCell, b: MergeCell) {
     return a.rs === b.rs && a.cs === b.cs;
-}
-
-// The patch at `path` with `value`, or the patch itself when neither changed.
-function at(patch: Patch, path: Patch['path'], value: unknown): Patch {
-    const samePath = path.length === patch.path.length && path.every((key, i) => key === patch.path[i]);
-    if (samePath && value === patch.value) return patch;
-    return 'value' in patch ? { ...patch, path, value } : { ...patch, path };
 }
 
 // Sheet fields a row or column op never moves.

@@ -4,14 +4,14 @@
 // extractDependencies, the walk that finds the cells a formula reads, builds the editor's formula map too.
 
 import type { Cell, CellMatrix, Sheet } from '@workspace/lib/sheets';
-import { createArrayResolver, withComputedValues } from './cell-resolver';
+import { computedKey, createArrayResolver, withComputedValues } from './cell-resolver';
 import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
 import { getCalculationOrder } from './dependency-graph';
 import { cellsOf, DependencyIndex, dependencySlots } from './dependency-index';
 import { booleanDisplay, numberDisplay } from './format';
 import { FormulaEngine } from './formula-engine';
-import { forEachRef, inlineNames } from './formula-shift';
+import { inlineNames, walkFormulaRefs } from './formula-shift';
 import type { WalkContext } from './formula-utils';
 import { isFormula, matrixWidth, resolveCellRange } from './formula-utils';
 import { valueIsError } from './parser/error';
@@ -133,7 +133,7 @@ export function recalcSheets(
             // downstream read the cached value. A cell with no cached value still shows the error.
             const unreliable = () => result.type === 'error' || usesUnknownName(engine, info.formula);
             if (hasNonErrorCachedValue(existing) && unreliable()) continue;
-            computed.set(`${info.r}_${info.c}_${info.id}`, { v: result.value });
+            computed.set(computedKey(info.r, info.c, info.id), { v: result.value });
             // The matrix may hold the input snapshot's frozen cells, so write a copy.
             const cell: Cell = { ...existing };
             writeCellValue(cell, result);
@@ -164,9 +164,10 @@ function ensureWorkingData(sheet: Sheet): CellMatrix {
 // once the engine can compute them.
 export function extractDependencies(walk: WalkContext, formula: string, sheetId: string): FormulaDependency[] {
     const dependencies: FormulaDependency[] = [];
-    forEachRef(formula, (reference) => {
+    walkFormulaRefs(formula, (reference) => {
         const range = resolveCellRange(walk, reference, sheetId);
         if (range != null) dependencies.push(range);
+        return reference;
     });
     return dependencies;
 }

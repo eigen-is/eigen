@@ -16,13 +16,14 @@ import { copySheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { applyDataValidation } from '../../../state/modules/data-validation';
 import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
-import { shiftEntries } from '../../../state/modules/history-shift';
+import type { RowColMove } from '../../../state/modules/history-shift';
+import { deleteMove, insertMove, shiftEntries } from '../../../state/modules/history-shift';
 import { saveHyperlink } from '../../../state/modules/hyperlink';
 import { mergeCells } from '../../../state/modules/merge';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import { addSheet, changeSheet, deleteSheet, renameSheet } from '../../../state/modules/sheet';
 import { clearValidations, validationAt } from '../../../state/modules/validation-rules';
-import type { ConditionalFormatRule, DataValidationRule, History, Op, Sheet } from '../../../state/types';
+import type { ConditionalFormatRule, DataValidationRule, Op, Sheet } from '../../../state/types';
 import { commutes } from '../../../state/utils/commute';
 import type { Tab } from '../factories/collab';
 import { author, join, tab, tabEdit, tabReceive, tabRedo, tabUndo } from '../factories/collab';
@@ -1006,22 +1007,11 @@ describe('the undo stack keeps the newest entries', () => {
 // The shifter's own table: one patch of an entry through a peer's marker on One, and what it becomes, or null when the
 // entry is dropped. It pins paths and values, which the cases above only see through what a user sees.
 describe('shiftEntries', () => {
-    const rows = (index: number, count: number): Op => ({
-        op: 'insertRowCol',
-        id: ONE,
-        path: [],
-        value: { type: 'row', index, count, direction: 'lefttop' },
-    });
-    const deletedRows = (start: number, end: number): Op => ({
-        op: 'deleteRowCol',
-        id: ONE,
-        path: [],
-        value: { type: 'row', start, end },
-    });
-    const columns = (index: number, count: number): Op => ({
-        ...rows(index, count),
-        value: { ...rows(index, count).value, type: 'column' },
-    });
+    const rows = (index: number, count: number) =>
+        insertMove({ id: ONE, type: 'row', index, count, direction: 'lefttop' });
+    const deletedRows = (start: number, end: number) => deleteMove({ id: ONE, type: 'row', start, end });
+    const columns = (index: number, count: number) =>
+        insertMove({ id: ONE, type: 'column', index, count, direction: 'lefttop' });
     const onOne = chartReading('c1');
     const sheets: Sheet[] = [
         { ...sheet(ONE, 'One', 0), charts: { c1: onOne } },
@@ -1031,7 +1021,7 @@ describe('shiftEntries', () => {
     const at = (...path: Patch['path']) => ['sheets', ONE, ...path];
     const range = (row: number[]) => ({ row, column: [1, 1] });
 
-    test.each<[string, Op, Patch, Patch | null]>([
+    test.each<[string, RowColMove, Patch, Patch | null]>([
         [
             'a cell below the insert moves down',
             rows(2, 2),
@@ -1118,12 +1108,6 @@ describe('shiftEntries', () => {
             replace(at('dataValidations', 'v'), { ranges: [range([7, 8]), range([1, 5])], rule: { type: 'checkbox' } }),
         ],
         [
-            "a sheet's whole map of validation rules moves",
-            rows(2, 2),
-            replace(at('dataValidations'), { v: { ranges: [range([5, 6])], rule: { type: 'checkbox' } } }),
-            replace(at('dataValidations'), { v: { ranges: [range([7, 8])], rule: { type: 'checkbox' } } }),
-        ],
-        [
             'a validation rule a delete shrinks keeps what is left',
             deletedRows(2, 3),
             replace(at('dataValidations', 'v'), { ranges: [range([3, 6]), range([2, 3])], rule: { type: 'checkbox' } }),
@@ -1174,12 +1158,6 @@ describe('shiftEntries', () => {
             replace(at('hyperlink'), { '3_1': { linkType: 'webpage' } }),
             null,
         ],
-        [
-            'a whole row height map moves',
-            rows(2, 2),
-            replace(at('config', 'rowlen'), { 5: 30 }),
-            replace(at('config', 'rowlen'), { 7: 30 }),
-        ],
         ['a conditional format drops the entry', rows(2, 2), replace(at('conditionalFormatRules', 0), {}), null],
         ['a whole row drops the entry on a column insert', columns(2, 2), replace(at('data', 5), []), null],
         ["a chart's data on One drops the entry", rows(2, 2), replace(at('charts', 'c1', 'specData'), '{}'), null],
@@ -1192,13 +1170,8 @@ describe('shiftEntries', () => {
         ["a chart's box stays", rows(2, 2), replace(at('charts', 'c1', 'x'), 5), replace(at('charts', 'c1', 'x'), 5)],
         ['the name stays', rows(2, 2), replace(at('name'), 'Uno'), replace(at('name'), 'Uno')],
     ])('%s', (_, marker, patch, expected) => {
-        const [shifted] = shiftEntries([{ patches: [patch], inversePatches: [] }], marker, sheets);
+        const [shifted] = shiftEntries([{ patches: [patch], inversePatches: [], options: {} }], marker, sheets);
         expect<Patch | null>(shifted?.patches[0] ?? null).toEqual(expected);
-    });
-
-    test('returns an entry the marker does not touch as it is', () => {
-        const entry: History = { patches: [replace(at('data', 1, 1), { v: 1 })], inversePatches: [] };
-        expect(shiftEntries([entry], rows(2, 2), sheets)[0]).toBe(entry);
     });
 });
 

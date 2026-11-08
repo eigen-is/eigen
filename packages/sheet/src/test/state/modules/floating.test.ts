@@ -20,7 +20,7 @@ import {
     updateFloatingBox,
     withoutDeletedFloatingEdits,
 } from '../../../state/modules/floating';
-import { undoEntry } from '../../../state/modules/history';
+import { redoEntry, undoEntry } from '../../../state/modules/history';
 import {
     insertImage,
     removeImageByMediaName,
@@ -29,8 +29,7 @@ import {
 } from '../../../state/modules/image';
 import { insertRowCol } from '../../../state/modules/rowcol';
 import { deleteSheet } from '../../../state/modules/sheet';
-import type { Op } from '../../../state/types';
-import type { PatchOptions } from '../../../state/utils/patch';
+import type { History, Op } from '../../../state/types';
 import { patchToOp } from '../../../state/utils/patch';
 import { author, join, receive } from '../factories/collab';
 import { contextFactory } from '../factories/context';
@@ -303,7 +302,7 @@ describe('row and column ops over floating objects', () => {
 // The swap of a pending name records no undo step: every entry that brings an image back must take the real name, a
 // whole sheet's included, or the zombie sweep deletes the image a minute later.
 describe('a pending name in the undo stack', () => {
-    const history = (...entries: { patches: Patch[]; inversePatches: Patch[]; options?: PatchOptions }[]) => ({
+    const history = (...entries: History[]) => ({
         undoList: entries,
         redoList: [],
     });
@@ -312,17 +311,20 @@ describe('a pending name in the undo stack', () => {
     test('undoing a row insert made while T uploads keeps the real name', () => {
         const op = { ...insertOp, id: T };
         const inserted = author(withGrid(), (ctx) => insertRowCol(ctx, op), { insertRowColOp: op });
-        const entries = history({ patches: inserted.patches, inversePatches: inserted.inverse });
+        const entries = history({ patches: inserted.patches, inversePatches: inserted.inverse, options: {} });
         const settled = produce(inserted.next, (ctx: Context) => replaceImageMediaName(ctx, 'pending:t1', 'photo.png'));
         replaceMediaNameInHistory(entries, 'pending:t1', 'photo.png');
         expect(names(applyPatches(settled, entries.undoList[0].inversePatches).sheets[1])).toEqual(['photo.png']);
     });
 
     test('redoing a copy of a sheet whose upload settled names the copied image', () => {
-        const copied = author(workbook(), (ctx) => copySheet(ctx, T));
-        const entries = history({ patches: copied.patches, inversePatches: copied.inverse });
+        const copied = author(workbook(), (ctx) => copySheet(ctx, T), { addSheetOp: true });
+        const entries = history(copied.entry);
         replaceMediaNameInHistory(entries, 'pending:t1', 'photo.png');
-        expect(names(applyPatches(workbook(), entries.undoList[0].patches).sheets[2])).toEqual(['photo.png']);
+        const undone = undoEntry(copied.next, entries.undoList[0]);
+        const { ctx, ops } = redoEntry(undone.ctx, entries.undoList[0]);
+        expect(names(ctx.sheets.at(-1))).toEqual(['photo.png']);
+        expect(names(join(workbook(), [copied.ops, undone.ops, ops]).at(-1))).toEqual(['photo.png']);
     });
 
     // Workbook records a sheet's delete as the sheet itself, in the options its undo ships.

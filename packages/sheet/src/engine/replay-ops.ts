@@ -98,12 +98,11 @@ export function deleteRowColOf(op: Op): DeleteRowColOp {
     return { ...value, id: op.id };
 }
 
-// A rename writes its name into every formula naming the tab, so a long one would run the reader out of memory.
+// A rename writes its name into every formula naming the tab, so a long one would run the reader out of memory, which
+// applySheetRename refuses.
 export function renameSheetOf(op: Op): RenameSheetOp {
     const { name } = isRecord(op.value) ? op.value : { name: undefined };
-    if (typeof name !== 'string' || !isSheetName(name) || !op.id) {
-        throw new Error('renameSheet op has a malformed value');
-    }
+    if (typeof name !== 'string' || !op.id) throw new Error('renameSheet op has a malformed value');
     return { id: op.id, name };
 }
 

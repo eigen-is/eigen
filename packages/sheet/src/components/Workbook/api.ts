@@ -68,7 +68,7 @@ export function generateAPIs(
                     if (!applied) return;
                     accepted = true;
                     Object.assign(ctx_, applied.ctx);
-                    // An entry holds formula text naming tabs, so a peer's rename empties both stacks. A rename is rare.
+                    // An entry holds formula text naming tabs, so a peer's rename empties both stacks. It is rare.
                     if (ops.some(({ op }) => op === 'renameSheet')) {
                         history.undoList = [];
                         history.redoList = [];
@@ -76,9 +76,9 @@ export function generateAPIs(
                     }
                     history.undoList = dropStructuralEntries(history.undoList);
                     history.redoList = dropStructuralEntries(history.redoList);
-                    for (const { op, sheets } of applied.moved) {
-                        history.undoList = shiftEntries(history.undoList, op, sheets);
-                        history.redoList = shiftEntries(history.redoList, op, sheets);
+                    for (const { move, sheets } of applied.moved) {
+                        history.undoList = shiftEntries(history.undoList, move, sheets);
+                        history.redoList = shiftEntries(history.redoList, move, sheets);
                     }
                 },
                 { noHistory: true },

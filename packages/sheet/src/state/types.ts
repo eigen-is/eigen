@@ -26,7 +26,7 @@ import type {
     SingleRange,
 } from '../engine/types';
 import type { ConditionRuleType } from './modules/condition-format';
-import type { PatchOptions } from './utils';
+import type { EntryOptions } from './utils';
 
 // Re-exported so state code needn't know where each type lives.
 export type {
@@ -158,7 +158,7 @@ export type FilterOptions = {
 export type History = {
     patches: ImmerPatch[];
     inversePatches: ImmerPatch[];
-    options?: PatchOptions;
+    options: EntryOptions;
     gesture?: object;
 };
 

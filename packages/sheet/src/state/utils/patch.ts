@@ -4,7 +4,7 @@
 // what belongs on the wire, and opToPatch turns a peer's ops back into patches on this client's sheet indices.
 
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
-import { cloneDeep, isNumber, partition } from 'es-toolkit/compat';
+import { cloneDeep, isNumber } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import { dataToCelldata } from '../../engine/celldata';
 import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
@@ -12,20 +12,23 @@ import type { Context } from '../context';
 import type { Op, Sheet } from '../types';
 import { sheetOrder } from '.';
 
-export type PatchOptions = {
+type RowColOptions = {
     insertRowColOp?: InsertRowColOp;
     deleteRowColOp?: DeleteRowColOp;
+};
+
+// What an edit says about itself when it writes.
+export type PatchOptions = RowColOptions & {
     addSheetOp?: boolean;
-    deleteSheetOp?: {
-        id: string;
-    };
-    // The deleted sheet as it stood, with its cells stored. recordEntry adds it to the options it returns, for the
-    // delete's batch and its undo, so a sheet delete's batch is built from the entry's options.
+    deleteSheetOp?: { id: string };
+    renameSheetOp?: { id: string };
+};
+
+// What recordEntry keeps of those options, which its batch and its undo and redo are built from: a sheet added or
+// deleted as it stood, with its cells stored, and a renamed sheet's two names.
+export type EntryOptions = RowColOptions & {
+    addedSheet?: Sheet;
     deletedSheet?: Sheet;
-    renameSheetOp?: {
-        id: string;
-    };
-    // The renamed sheet's names, which recordEntry adds to the options it returns, for the rename's batch and its undo.
     renamedSheet?: { id: string; from: string; to: string };
 };
 
@@ -42,11 +45,12 @@ export function renameSheetOps(id: string, name: string): Op[] {
 }
 
 // The batch an edit sends. A row or column op ships its marker instead of the sheets it rewrote.
-export function patchToOp(ctx: Context, patches: Patch[], options: PatchOptions = {}): Op[] {
+export function patchToOp(ctx: Context, patches: Patch[], options: EntryOptions = {}): Op[] {
     if (options.renamedSheet) return renameSheetOps(options.renamedSheet.id, options.renamedSheet.to);
+    if (options.deletedSheet) return deleteSheetOps(options.deletedSheet, ctx.sheets);
     const marker = rowColMarker(options);
     if (marker) return [marker];
-    let ops = patches.map((p) => {
+    const ops = patches.map((p) => {
         const op: Op = {
             op: p.op,
             value: p.value,
@@ -68,19 +72,17 @@ export function patchToOp(ctx: Context, patches: Patch[], options: PatchOptions 
         // A filled cell carries the `hl` of the cell it came from, and no link of its own.
         if (link) ops.push({ id: op.id, op: 'replace', path: ['hyperlink', key], value: link });
     }
-    if (options.addSheetOp) {
-        // A copy moves the sheets after it, and the batch carries their orders.
-        const [[added], rest] = partition(ops, (op) => op.op === 'add' && op.path.length === 0);
-        ops = rest.filter((op) => op.path[0] !== 'order');
-        if (added) ops.push(...addSheetOps(added.value, ctx.sheets));
-    } else if (options.deletedSheet) {
-        ops = deleteSheetOps(options.deletedSheet, ctx.sheets);
+    if (options.addedSheet) {
+        // A copy moves the sheets after it, and the batch carries their orders. The rest of the recipe still ships, such
+        // as the open edit the add button commits.
+        const rest = ops.filter((op) => op.path.length > 0 && op.path[0] !== 'order');
+        return [...rest, ...addSheetOps(options.addedSheet, ctx.sheets)];
     }
     return ops;
 }
 
 // The op a row or column edit ships in place of the sheets it rewrote.
-export function rowColMarker({ insertRowColOp, deleteRowColOp }: PatchOptions): Op | undefined {
+export function rowColMarker({ insertRowColOp, deleteRowColOp }: RowColOptions): Op | undefined {
     if (insertRowColOp) return { op: 'insertRowCol', id: insertRowColOp.id, path: [], value: insertRowColOp };
     if (deleteRowColOp) return { op: 'deleteRowCol', id: deleteRowColOp.id, path: [], value: deleteRowColOp };
     return undefined;
@@ -118,7 +120,7 @@ export function opToPatch(ctx: Context, ops: Op[]): [Patch[], Op[]] {
     return [pure.map((p) => ({ ...p, path: ['sheets', ...p.path] })), specialOps];
 }
 
-export function inverseRowColOptions({ insertRowColOp, deleteRowColOp }: PatchOptions): PatchOptions {
+export function inverseRowColOptions({ insertRowColOp, deleteRowColOp }: RowColOptions): RowColOptions {
     if (insertRowColOp) {
         const { type, id, index, count, direction } = insertRowColOp;
         const start = direction === 'rightbottom' ? index + 1 : index;

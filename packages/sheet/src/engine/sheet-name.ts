@@ -6,9 +6,11 @@
 import type { Sheet } from '@workspace/lib/sheets';
 import { stripNonXmlChars } from '@workspace/lib/xml';
 import {
+    isSheetName,
     MAX_SHEET_NAME_LENGTH,
     SHEET_NAME_END_QUOTES,
     SHEET_NAME_FORBIDDEN,
+    SHEET_NAME_RULE,
     sheetFinder,
     sheetNameKey,
 } from './a1-notation';
@@ -17,10 +19,13 @@ import { iscelldata } from './formula-utils';
 
 export type RenameSheetOp = { id: string; name: string };
 
-// Whether a sheet other than `id` holds the name. A name is taken in any case, as Excel compares names.
-export function sheetNameTaken(sheets: readonly Sheet[], id: string, name: string): boolean {
+// Why sheet `id` can't take a name, if it can't. A name is taken in any case, as Excel compares names.
+export function sheetNameRefusal(sheets: readonly Sheet[], id: string, name: string): string | undefined {
+    if (name.length === 0) return 'Sheet name cannot be empty';
+    if (!isSheetName(name)) return SHEET_NAME_RULE;
     const key = sheetNameKey(name);
-    return sheets.some((sheet) => sheet.id !== id && sheetNameKey(sheet.name) === key);
+    const taken = sheets.some((sheet) => sheet.id !== id && sheetNameKey(sheet.name) === key);
+    return taken ? 'Another sheet already has this name' : undefined;
 }
 
 // The sheets with one renamed and every text naming it pointed at the new name.
@@ -28,7 +33,8 @@ export function applySheetRename<S extends Sheet>(sheets: S[], { id, name }: Ren
     const target = sheets.find((sheet) => sheet.id === id);
     if (!target) return sheets;
     // Of two renames to one name, the later in the log fails on every reader. Both would repoint formulas at one sheet.
-    if (sheetNameTaken(sheets, id, name)) throw new Error('Another sheet already has this name');
+    const refusal = sheetNameRefusal(sheets, id, name);
+    if (refusal) throw new Error(refusal);
     const findSheet = sheetFinder(sheets);
     const renames = new Map([[target.name, name]]);
     return sheets.map((sheet) => renameSheetTexts(sheet.id === id ? { ...sheet, name } : sheet, findSheet, renames));

@@ -171,14 +171,6 @@ export function functionStrChange(
     });
 }
 
-// Hands over every ref in a formula's text, as the rewrites above read them, for a reader that only wants to know them.
-export function forEachRef(formula: string, onRef: (ref: string) => void): void {
-    walkFormulaRefs(formula, (ref) => {
-        onRef(ref);
-        return ref;
-    });
-}
-
 // Returns [rowAbsolute, colAbsolute] for a single ref like "$A$1" → [true, true].
 export function detectAbsolute(txt: string): [boolean, boolean] {
     const row = txt.replace(/[^0-9]/g, '');
@@ -191,7 +183,7 @@ export function detectAbsolute(txt: string): [boolean, boolean] {
 
 // The character walker every reader here shares. It drops one leading `=` and reads the text as leaves and structure.
 // A leaf `iscelldata` reads as a ref goes to `onRef`; any other leaf goes to `onName`. A function name is no leaf.
-function walkFormulaRefs(
+export function walkFormulaRefs(
     txt: string,
     onRef: (ref: string) => string,
     onName: (token: string) => string = (token) => token,

@@ -10,17 +10,16 @@ import { applyPatches, current, produce } from 'immer';
 import { deleteRowColOf, insertRowColOf, isNewSheet, isRowColOp, renameSheetOf } from '../../engine/replay-ops';
 import type { Context } from '../context';
 import type { Op, Selection, Sheet } from '../types';
-import type { PatchOptions } from '../utils';
 import { opToPatch } from '../utils';
 import { cancelNormalSelected } from './cell';
 import { registerSheetFormulas } from './formula-cache';
 import type { RowColMove } from './history-shift';
-import { rowColMove } from './history-shift';
+import { deleteMove, insertMove } from './history-shift';
 import { deleteRowCol, insertRowCol } from './rowcol';
 import { addSheet, deleteSheet, leaveCurrentSheet, renameSheet } from './sheet';
 
 // A row or column op the batch applied, with the sheets it was applied to.
-type AppliedRowCol = { op: Op; sheets: Sheet[] };
+type AppliedRowCol = { move: RowColMove; sheets: Sheet[] };
 
 // The next context and the row or column ops that moved rows, or null when an op failed and the batch was skipped. A
 // replay passes moveView false for a batch the tab applied before, which already moved the view once.
@@ -42,15 +41,19 @@ export function applyOpBatch(
                 // part ways. The op names its sheet, as the replay reads it, whatever its value carries. One the
                 // shape check or the sheet refuses throws, and the whole batch is skipped.
                 if (isRowColOp(op)) {
-                    const rowCol: PatchOptions =
-                        op.op === 'insertRowCol'
-                            ? { insertRowColOp: insertRowColOf(op) }
-                            : { deleteRowColOp: deleteRowColOf(op) };
                     const sheets = current(draft.sheets);
-                    if (rowCol.insertRowColOp) insertRowCol(draft, rowCol.insertRowColOp, false, true);
-                    else if (rowCol.deleteRowColOp) deleteRowCol(draft, rowCol.deleteRowColOp, true);
-                    moved.push({ op, sheets });
-                    if (moveView) followView(draft, rowCol);
+                    let move: RowColMove;
+                    if (op.op === 'insertRowCol') {
+                        const insert = insertRowColOf(op);
+                        insertRowCol(draft, insert, false, true);
+                        move = insertMove(insert);
+                    } else {
+                        const remove = deleteRowColOf(op);
+                        deleteRowCol(draft, remove, true);
+                        move = deleteMove(remove);
+                    }
+                    moved.push({ move, sheets });
+                    if (moveView) followView(draft, move);
                 } else if (op.op === 'addSheet') {
                     if (!isNewSheet(op.value, draft.sheets)) continue;
                     // addSheet keeps the value it is given, so the op itself never ends up in the frozen context.
@@ -80,16 +83,14 @@ export function applyOpBatch(
         const data = next.sheets.find((sheet) => sheet.id === id)?.data;
         if (data) registerSheetFormulas(next, id, data);
     }
-    if (patches.length > 0) next.formulaCache.updateFormulaCache(next, { patches, inversePatches: [] }, 'redo');
+    if (patches.length > 0) next.formulaCache.updateFormulaCache(next, patches);
     return { ctx: next, moved };
 }
 
 // The open cell editor and the selections, the kept one of a sheet the tab left too, move with their cells, so a commit
 // or the next keystroke lands where the person chose, not in the row that slid under it. A delete of the editor's cell
 // closes the editor without writing.
-function followView(draft: Context, rowCol: PatchOptions) {
-    const move = rowColMove(rowCol);
-    if (!move) return;
+function followView(draft: Context, move: RowColMove) {
     if (move.id !== draft.currentSheetId) {
         const left = draft.sheetViewRecord[move.id];
         if (left) left.selections = movedSelections(left.selections, move);

@@ -140,7 +140,7 @@ describe('updateFormulaCache — a paste that grows the grid', () => {
         const ctx = makeCtx();
         warmFormulaCellInfoMap(ctx);
         const patches: Patch[] = [{ op: 'remove', path: ['sheets', 0, 'data', 0] }];
-        ctx.formulaCache.updateFormulaCache(ctx, { patches, inversePatches: [] }, 'redo');
+        ctx.formulaCache.updateFormulaCache(ctx, patches);
         expect(ctx.formulaCache.formulaCellInfoMap).toBeNull();
     });
 

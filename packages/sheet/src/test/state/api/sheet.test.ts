@@ -253,7 +253,7 @@ describe('sheet order on a copy, an add and a delete', () => {
         expect(next.currentSheetId).toBe(added.id);
         expect(added.data).toHaveLength(DEFAULT_SHEET_ROW_COUNT);
         expect(added.data?.[0]).toHaveLength(DEFAULT_SHEET_COLUMN_COUNT);
-        const [{ value }] = patchToOp(next, filterPatch(patches), { addSheetOp: true });
+        const [{ value }] = patchToOp(next, filterPatch(patches), { addedSheet: added });
         expect(value.data).toBeUndefined();
         expect(value.celldata).toEqual([]);
     });

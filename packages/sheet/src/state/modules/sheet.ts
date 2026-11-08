@@ -3,12 +3,11 @@
 // does a peer's batch through applyOpBatch.
 
 import { sheetDefaultColWidth, sheetDefaultRowHeight } from '@workspace/lib/sheets';
-import { isSheetName, SHEET_NAME_RULE } from '../../engine/a1-notation';
 import { celldataToData } from '../../engine/celldata';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT, gridSize } from '../../engine/defaults';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { RenameSheetOp } from '../../engine/sheet-name';
-import { applySheetRename, sheetNameTaken } from '../../engine/sheet-name';
+import { applySheetRename, sheetNameRefusal } from '../../engine/sheet-name';
 import type { Context } from '../context';
 import { firstVisibleSheetId, updateContextWithSheetData } from '../context';
 import type { Sheet } from '../types';
@@ -155,10 +154,7 @@ export function editSheetName(ctx: Context, id: string, editable: HTMLSpanElemen
         editable.innerText = name;
         return;
     }
-    let refusal: string | undefined;
-    if (text.length === 0) refusal = 'Sheet name cannot be empty';
-    else if (!isSheetName(text)) refusal = SHEET_NAME_RULE;
-    else if (sheetNameTaken(ctx.sheets, id, text)) refusal = 'Another sheet already has this name';
+    const refusal = sheetNameRefusal(ctx.sheets, id, text);
     if (refusal) {
         editable.innerText = name;
         throw new Error(refusal);

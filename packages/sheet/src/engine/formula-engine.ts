@@ -133,7 +133,7 @@ export class FormulaEngine {
     private readCell(cell: CellInfo, formulaSheetId: string, resolver: CellResolver): FormulaValue {
         const sheetId = cell.sheetName == null ? formulaSheetId : resolver.getSheetIdByName(cell.sheetName);
         if (sheetId == null) throw Error(ERROR_REF);
-        return this.readValue(sheetId, cell.row.index, cell.column.index, resolver);
+        return getCellValue(resolver.getCell(sheetId, cell.row.index, cell.column.index));
     }
 
     private readRange(
@@ -172,15 +172,12 @@ export class FormulaEngine {
         const fragment: FormulaValue[][] = [];
         for (let row = startRow; row <= endRow; row++) {
             const colFragment: FormulaValue[] = [];
-            for (let col = startCol; col <= endCol; col++)
-                colFragment.push(this.readValue(sheetId, row, col, resolver));
+            for (let col = startCol; col <= endCol; col++) {
+                colFragment.push(getCellValue(resolver.getCell(sheetId, row, col)));
+            }
             fragment.push(colFragment);
         }
         return fragment;
-    }
-
-    private readValue(sheetId: string, row: number, col: number, resolver: CellResolver): FormulaValue {
-        return getCellValue(resolver.getCell(sheetId, row, col));
     }
 
     // The number of columns a sheet has: its widest row's, as a stored matrix may lack rows, its first among them.
