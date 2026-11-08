@@ -33,7 +33,11 @@ export async function snapshotContainerDataDb(
     containerId: string,
     policy: RetentionPolicy,
 ): Promise<DrivePath> {
-    return mount.withPathLock(containerId, () => takeSnapshot(mount, containerId, policy, 'open-handle-first'));
+    return mount.withPathLock(containerId, async () => {
+        // Brings data.db's stored object, row and search index up to this version now, not at the next tick.
+        await mount.flushContainerDb(containerId);
+        return takeSnapshot(mount, containerId, policy, 'open-handle-first');
+    });
 }
 
 // ManagedDatabase's onSnapshot, inside a close that holds the slot or a tick that a close or a flush waits for. A
@@ -58,14 +62,6 @@ async function takeSnapshot(
     const dataDb = await mount.getChildByName(containerId, CONTAINER_DATA_DB);
     if (!dataDb) throw new ApiError(404, `data.db not found in container ${containerId}`);
 
-    // The flush brings data.db's stored object, row and search index up to this version now, not at the
-    // next tick. A tick or a close has just synced, and a flush inside either would wait for itself.
-    if (order === 'open-handle-first') {
-        await withDocumentDb(mount, dataDb.id, async (slot) => {
-            await slot.db?.flush();
-        });
-    }
-
     let versions = await mount.getChildByName(containerId, VERSIONS_FOLDER_NAME);
     if (!versions) {
         const newId = await mount.createFolder(containerId, VERSIONS_FOLDER_NAME);
@@ -78,8 +74,6 @@ async function takeSnapshot(
     // Two snapshots in the same millisecond hold the same state, so the second returns the first.
     const existing = await mount.getChildByName(versions.id, snapshotName);
     if (existing) return existing;
-    // On s3 the version's upload is queued, so a close-time snapshot never waits on the bucket. A local
-    // mount writes it before this returns.
     const versionPathId = mount.uploadQueue
         ? await snapshotDataDbToVersionStaged(mount, mount.uploadQueue, dataDb, versions.id, snapshotName, order)
         : await snapshotDataDbToVersionLocal(mount, dataDb, versions.id, snapshotName, order);
@@ -99,8 +93,8 @@ async function takeSnapshot(
     return copy;
 }
 
-// The s3 version snapshot. It copies the freshest local copy of data.db, creates the version's row and
-// queues its upload, so a close-time snapshot never waits on the bucket. The caller holds the container lock.
+// The s3 version snapshot. It copies the freshest copy of data.db, creates the version's row and queues its
+// upload. The caller holds the container lock.
 async function snapshotDataDbToVersionStaged(
     mount: Mount,
     queue: UploadQueue,

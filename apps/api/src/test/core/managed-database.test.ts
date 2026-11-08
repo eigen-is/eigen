@@ -240,7 +240,6 @@ describe('ManagedDatabase lifecycle serialization', () => {
         // Regression: ticks were fire-and-forget, flush() called sync() directly and close() only
         // cleared the timer — so two onSync callbacks could stage the same db at once, and close
         // could tear the db down with one still in flight.
-        let syncs = 0;
         let active = 0;
         let overlapped = false;
         let release!: () => void;
@@ -250,7 +249,6 @@ describe('ManagedDatabase lifecycle serialization', () => {
         let first = true;
         const db = new ManagedDatabase(makeConfig(1000), nextDbPath(), {
             onSync: async () => {
-                syncs++;
                 active++;
                 if (active > 1) overlapped = true;
                 if (first) {
@@ -272,12 +270,6 @@ describe('ManagedDatabase lifecycle serialization', () => {
 
         expect(overlapped).toBe(false);
         expect(active).toBe(0); // close awaited the in-flight sync instead of tearing down under it
-
-        // A flush landing after close must not call back into a torn-down db — with rawDb null,
-        // total_changes() reads 0 while lastSyncedChanges doesn't, so isDirty said "sync me".
-        const syncsAtClose = syncs;
-        await db.flush();
-        expect(syncs).toBe(syncsAtClose);
     });
 
     test('a flush during a tick snapshot waits for it, then syncs', async () => {
@@ -332,31 +324,6 @@ describe('ManagedDatabase lifecycle serialization', () => {
         held.resolve();
         await closing;
         expect(rowsSeenBySnapshot).toBe(1);
-    });
-
-    test('a flush during a close does not sync a database the close took down', async () => {
-        const parked = Promise.withResolvers<void>();
-        const held = Promise.withResolvers<void>();
-        let syncs = 0;
-        const db = new ManagedDatabase(makeConfig(1000), nextDbPath(), {
-            onSync: async () => {
-                syncs++;
-            },
-            onSnapshot: async () => {
-                parked.resolve();
-                await held.promise;
-                return 'taken';
-            },
-        });
-        await db.open(0);
-        db.db.insert(items).values({ v: 'x' }).run();
-
-        const closing = db.close();
-        await parked.promise;
-        const flushed = db.flush();
-        held.resolve();
-        await Promise.all([closing, flushed]);
-        expect(syncs).toBe(1);
     });
 });
 

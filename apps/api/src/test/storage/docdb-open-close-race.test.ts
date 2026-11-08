@@ -314,9 +314,13 @@ describe('the sync tick of an open document', () => {
         return { ...doc, fireTick };
     }
 
-    async function versionCount(mount: Mount, containerId: string): Promise<number> {
+    async function listVersions(mount: Mount, containerId: string) {
         const versions = await mount.getChildByName(containerId, VERSIONS_FOLDER_NAME);
-        return versions ? (await mount.listFolder(versions.id)).length : 0;
+        return versions ? mount.listFolder(versions.id) : [];
+    }
+
+    async function versionCount(mount: Mount, containerId: string): Promise<number> {
+        return (await listVersions(mount, containerId)).length;
     }
 
     test('a write during its upload does not upload the document twice for the version it takes', async () => {
@@ -342,6 +346,11 @@ describe('the sync tick of an open document', () => {
         // The next sync, here the close's, stores the write the upload could not hold.
         await mount.closeDatabase(dataDbId);
         expect(await countStoredRows(mount, dataDbId)).toBe(2);
+
+        // The version reads the live database, so it holds that write too.
+        for (const version of await listVersions(mount, containerId)) {
+            expect(await countRowsInFile(await mount.readFile(version.id), TEST_DIR)).toBe(2);
+        }
     }, 15_000);
 
     test('a flush, a save and a reader that come during its snapshot all finish after it', async () => {

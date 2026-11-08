@@ -40,7 +40,7 @@ A missing stamp row is recreated at 0 by `INSERT OR IGNORE`, and every migration
 
 ## The dirty watermark moves only after `onSync` returns
 
-A database with an `onSync` callback (a container database) syncs every 30 s and on close. `sync()` skips a clean database. Dirty means `total_changes()` differs from the watermark, or `markDirty` forced it ([SYNC.md](SYNC.md#a-crash-temp-is-adopted-and-re-synced)). A dirty one runs `PRAGMA wal_checkpoint(PASSIVE)` before `onSync`, so the main file holds the committed frames a snapshot copies, without waiting on another connection.
+A database with an `onSync` callback (a container database) syncs every 30 s and on close. `sync()` skips a clean database. Dirty means `total_changes()` differs from the watermark, or `markDirty` forced it ([SYNC.md](SYNC.md#a-crash-temp-is-adopted-and-re-synced)). A dirty one runs `PRAGMA wal_checkpoint(PASSIVE)` before `onSync`, so the main file holds the committed frames, without waiting on another connection. `uploadFromTemp` on `local` uploads that file, and on `local-key` it is the stored object a byte copy reads. An `s3` sync and a tick's snapshot read a staged copy or `VACUUM INTO`, which need no checkpoint.
 
 The watermark is read before `onSync` runs and stored only after it returns. `onSync` copies the bytes first, so a write landing during its later awaits is not in the copy, and reading the watermark afterwards would count it as synced. A throwing `onSync` stores nothing, so the database stays dirty: the next tick retries, `flush()` passes the error on, and `close()` still tears down and hands `syncFailed` to `onClose`. That flag means the working copy holds bytes storage lacks.
 
@@ -52,7 +52,7 @@ A config with a `snapshot` key opts into file versioning. `snapshotIfDue` calls 
 
 ## SQLite removes its own WAL and shared-memory files
 
-`close()` syncs, runs `PRAGMA wal_checkpoint(TRUNCATE)` and closes strictly. Drizzle's statements are finalized as they run (`withAutoFinalize`), so the file is released before the next open of the same path. The last connection to close removes the `-wal` and `-shm` files, after an exclusive lock proves no connection in any process still has the file. `openCold` sets `SQLITE_FCNTL_PERSIST_WAL` to 0, because macOS's system SQLite otherwise keeps both files after the last close.
+`close()` syncs, runs `PRAGMA wal_checkpoint(TRUNCATE)` and closes strictly. On `local-key` the file is the stored object a close-time snapshot copies, so the checkpoint makes that copy complete. Drizzle's statements are finalized as they run (`withAutoFinalize`), so the file is released before the next open of the same path. The last connection to close removes the `-wal` and `-shm` files, after an exclusive lock proves no connection in any process still has the file. `open` sets `SQLITE_FCNTL_PERSIST_WAL` to 0, because macOS's system SQLite otherwise keeps both files after the last close.
 
 **Never unlink them by hand.** A connection in another process keeps writing into the unlinked WAL, and its writes are lost or corrupt the file.
 
@@ -60,7 +60,7 @@ The one exception is a temp with no connection on it that is being thrown away o
 
 ## A database that holds the truth runs synchronous FULL
 
-Every open sets `journal_mode=WAL`, `foreign_keys=ON` and `busy_timeout=5000`. A database whose rows are the truth, rather than an index of something else, also sets `synchronous: 'FULL'` in its config, and `openCold` runs `PRAGMA synchronous = FULL` right after the WAL pragma. It is set per connection, never stored in the file.
+Every open sets `journal_mode=WAL`, `foreign_keys=ON` and `busy_timeout=5000`. A database whose rows are the truth, rather than an index of something else, also sets `synchronous: 'FULL'` in its config, and `open` runs `PRAGMA synchronous = FULL` right after the WAL pragma. It is set per connection, never stored in the file.
 
 `CONTACTS_DB_CONFIG` and `CALENDAR_DB_CONFIG` ask for it. The vCard and VCALENDAR bytes live in their rows, so an acknowledged CardDAV or CalDAV PUT must survive a power loss, and both write at address-book volume. Every other database takes the SQLite build's default for WAL. That default differs. Bun's bundled SQLite on Linux, so production and CI, stays at FULL. macOS's system library is built with `SQLITE_DEFAULT_WAL_SYNCHRONOUS=1` and drops to NORMAL on entering WAL. So the option buys nothing in production today and everything on a developer's laptop. A crash on an index database costs at most the last commits of something that can be rebuilt.
 

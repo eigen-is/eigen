@@ -78,14 +78,8 @@ export class ManagedDatabase<S extends SchemaType> {
         return this.drizzleDb;
     }
 
-    // A closed database has nothing left to sync, though total_changes() reads 0 and differs from the watermark.
-    private get isDirty(): boolean {
-        return this.rawDb !== null && (this.forceDirty || this.getTotalChanges() !== this.lastSyncedChanges);
-    }
-
     public async open(autoSyncMs = 30000): Promise<BunSQLiteDatabase<S>> {
-        if (this.drizzleDb) return this.drizzleDb;
-        return time(`ManagedDatabase.open ${this.config.name}`, () => this.openCold(autoSyncMs));
+        return time(`ManagedDatabase.open ${this.config.name}`, () => this.openFile(autoSyncMs));
     }
 
     // skipFinalSnapshot is for a caller about to discard the file, such as a restore, whose final snapshot could
@@ -98,7 +92,8 @@ export class ManagedDatabase<S extends SchemaType> {
         }
 
         await this.lifecycleLock.run(async () => {
-            if (!this.rawDb) return; // a concurrent close reached the teardown first
+            const raw = this.rawDb;
+            if (!raw) return; // a concurrent close reached the teardown first
 
             // The teardown runs even when the final sync throws; onClose learns of the failure.
             let syncFailed = true;
@@ -106,9 +101,8 @@ export class ManagedDatabase<S extends SchemaType> {
                 await this.sync();
                 syncFailed = false;
             } finally {
-                // A local backend copies this file for the snapshot, and TRUNCATE makes it complete. A snapshot
-                // failure is caught so it can't block the close.
-                this.rawDb?.run('PRAGMA wal_checkpoint(TRUNCATE);');
+                // On local-key this file is the stored object a close's snapshot copies, so TRUNCATE makes it complete.
+                raw.run('PRAGMA wal_checkpoint(TRUNCATE);');
                 // After a failed sync a path-based snapshot copies storage, which lacks the tail.
                 if (!opts.skipFinalSnapshot && !syncFailed) {
                     await this.snapshotIfDue(true).catch((err) =>
@@ -117,13 +111,11 @@ export class ManagedDatabase<S extends SchemaType> {
                 }
                 // Statements are finalized as they run, so a strict close succeeds. Should one still be live, sqlite
                 // keeps the connection as a zombie until it is finalized.
-                if (this.rawDb) {
-                    try {
-                        this.rawDb.close(true);
-                    } catch (err) {
-                        console.warn(`[${this.config.name}] lazy close:`, err);
-                        this.rawDb.close();
-                    }
+                try {
+                    raw.close(true);
+                } catch (err) {
+                    console.warn(`[${this.config.name}] lazy close:`, err);
+                    raw.close();
                 }
                 this.rawDb = null;
                 this.drizzleDb = null;
@@ -133,7 +125,7 @@ export class ManagedDatabase<S extends SchemaType> {
         });
     }
 
-    private async openCold(autoSyncMs: number): Promise<BunSQLiteDatabase<S>> {
+    private async openFile(autoSyncMs: number): Promise<BunSQLiteDatabase<S>> {
         await this.callbacks.onOpen?.();
 
         const dir = path.dirname(this.localPath);
@@ -178,7 +170,6 @@ export class ManagedDatabase<S extends SchemaType> {
         }
 
         this.drizzleDb = drizzle(withAutoFinalize(this.rawDb), { schema: this.config.schema });
-        this.lastSyncedChanges = 0;
 
         if (this.callbacks.onSync && autoSyncMs > 0) {
             this.syncTimer = setInterval(() => {
@@ -229,32 +220,32 @@ export class ManagedDatabase<S extends SchemaType> {
     }
 
     private getTotalChanges(): number {
-        if (!this.rawDb) return 0;
+        if (!this.rawDb) throw new Error('Database not open');
         const row = this.rawDb.query<{ tc: number }, []>('SELECT total_changes() as tc').get();
         return row?.tc ?? 0;
     }
 
-    // For an open that adopts a crash temp: the fresh connection counts no change for its unsynced bytes, so isDirty
-    // would read false and the close would drop them.
+    // For an open that adopts a crash temp: the fresh connection counts no change for its unsynced bytes, so a sync
+    // would find it clean and the close would drop them.
     public markDirty(): void {
         this.forceDirty = true;
         this.forceSnapshot = true;
     }
 
     private async sync(): Promise<void> {
-        if (this.isDirty && this.callbacks.onSync) {
-            this.rawDb?.run('PRAGMA wal_checkpoint(PASSIVE);');
-            // Read before the await: onSync stages the bytes up front, so a write during its later awaits stays dirty.
-            const syncedChanges = this.getTotalChanges();
-            await this.callbacks.onSync();
-            this.lastSyncedChanges = syncedChanges;
-            this.forceDirty = false;
-            console.log(`[${this.config.name}] Synced`);
-        }
+        if (!this.callbacks.onSync) return;
+        // Read before the await: onSync stages the bytes up front, so a write during its later awaits stays dirty.
+        const syncedChanges = this.getTotalChanges();
+        if (!this.forceDirty && syncedChanges === this.lastSyncedChanges) return;
+        this.rawDb?.run('PRAGMA wal_checkpoint(PASSIVE);');
+        await this.callbacks.onSync();
+        this.lastSyncedChanges = syncedChanges;
+        this.forceDirty = false;
+        console.log(`[${this.config.name}] Synced`);
     }
 
-    // onSnapshot copies the file on disk, which sync() and close() have checkpointed. It is awaited, because a
-    // snapshot left running would race the teardown of a close or the replace of a restore.
+    // onSnapshot is awaited, because a snapshot left running would race the teardown of a close or the replace of a
+    // restore.
     private async snapshotIfDue(force = false): Promise<void> {
         if (!this.config.snapshot || !this.callbacks.onSnapshot) return;
         const total = this.getTotalChanges();
