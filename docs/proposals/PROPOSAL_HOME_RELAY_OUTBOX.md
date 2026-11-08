@@ -1,445 +1,223 @@
 # Proposal: Durable home-relay outbox
 
-This proposal makes every push from one Home to another durable, ordered and bounded. A Home is the data folder of one user or team, and a cross-home push is how one user's action reaches another's data, such as a share landing in the recipient's list or a notification in their bell. The push becomes a row in a server-level outbox table, and one drain loop delivers the rows, retries them and survives a restart. The ACL fan-out (`../../apps/api/src/lib/drive/acl-propagation.ts`) already runs in the background, but in memory. The outbox is the third use of Eigen's "durable rows plus a self-scheduled drain" pattern, after `lib/mount/upload-queue.ts` and `lib/mount/content-reindex-queue.ts`.
+A Home is the data folder of one user or team. A push is how one person's action lands in somebody else's Home, such as a share in the recipient's list or a notification in their bell. This proposal gives every push one path: `sendToHome` writes a row to a server-level database, one drain loop delivers the rows, and one function, `deliver`, decides where a message goes.
 
-**Status:** not started; there is no outbox code. It expands the row "Durable home-relay outbox" in [ROADMAP.md § Before 0.5.0](../ROADMAP.md#before-050-the-open-source-announcement) into a full design. Written 2026-07-05 and checked against the code on 2026-07-06, when every seam claim and the tag and coalesce facts below still held.
+**Status:** not started; there is no outbox code. The owner said yes to the new `outbox.db` on 2026-11-01. Rewritten and checked against the code on 2026-11-08. It adds no API route. It expands the row "Durable home-relay outbox" in [ROADMAP.md](../ROADMAP.md).
 
-> **TLDR**: Cross-home pushes (`sendToHome` in `../../apps/api/src/lib/home/home-relay.ts`) currently
-> deliver by opening the recipient's Home inline. Five independent fan-out sites re-invented the
-> same loop with different (mostly wrong) semantics: awaited-sequential, unbounded-concurrent, or
-> fire-and-forget — and none survives a crash. The outbox is one server-level SQLite table
-> (`data/server/outbox.db`): `sendToHome` becomes a synchronous row insert plus a drain kick; a
-> single self-scheduled drain loop delivers rows through **one global concurrency budget** for
-> home-opens, with per-(target, fifoKey) FIFO, coalescing for state-replacement verbs, full-jitter
-> retry/backoff, dead-lettering, drain-on-shutdown, and replay-on-boot. `HomeMessage` is already
-> plain serializable data and the `switch` in `sendToHome` is already the flat verb registry — no
-> new dispatch machinery is needed. In the sharded future the outbox **is** the message transport:
-> the drain's deliver step is the only place that learns about remote shards
-> (see [SCALABILITY.md](../SCALABILITY.md)).
+> **TLDR**: `sendToHome` becomes a synchronous row insert in `data/server/outbox.db` plus a kick of the drain. The drain delivers through `deliver`, which is today's `sendToHome` body. All pushes move at once, because they all call `sendToHome` already: ACL changes, calendar shares and invitations, RSVPs and every notification. A row survives a crash and a restart, and a failed delivery retries. It is the third queue of the same shape, after `UploadQueue` and `ContentReindexQueue`. When Homes live in several processes, `deliver` is the one function that learns about them.
 
-## Problem
+## What goes through the outbox
 
-Every place where one user's action must land in another user's Home goes through
-`sendToHome(targetUserId, message)`, which calls `getHome(targetUserId)` — a cold Home open costs
-~30 file descriptors and real I/O (six eagerly-opened WAL databases, `shared.db` included, plus
-maildir watchers — the warm ceiling measured in `PROPOSAL_FD_BUDGET.md`). The relay itself is
-fine; the callers are not. The 2026-07-04 seam audit (recorded in the roadmap row, re-verified
-against source 2026-07-05 and again 2026-07-06 post-unified-activity) found five fan-out sites,
-each with a different failure mode:
+Cross-home traffic comes in several kinds. Only pushes that change a Home become rows, because only they can wait and only they must not get lost.
 
-| Seam | File | Verified behavior today |
+| Traffic | Row? | Why |
 |---|---|---|
-| Drive ACL fan-out | `lib/drive/acl-propagation.ts` | Async since 2026-07-04: bounded (Semaphore 8), per-path FIFO promise chain, drain-on-shutdown. **In-memory only — a crash loses every queued delivery**; a failed delivery is logged and dropped (no retry). |
-| Calendar share | `lib/calendar/share-propagation.ts` | `propagateCalendarShare` is **awaited on the share PUT** (`Calendar.setCalendarShares` path), sequential per target, one cold home open each. Failures logged and dropped. |
-| Calendar invitations | `lib/calendar/invite-propagation.ts` | Call sites in `calendar.ts` are fire-and-forget (`.catch(console.error)`), but the loops are sequential and two racing propagations have **no ordering**: an `invitation-update` delivered before its `invitation` finds no linked event and is silently dropped (`receiveInvitationUpdate` returns on miss), after which the older create payload lands — the update never reapplies. A cancel racing a create can be resurrected the same way. |
-| Chat mention + activity | `lib/chat/chat.ts` (`postMessage`) | Both notification loops are **awaited inside `postMessage`**, sequentially — every previous participant's cold home open adds latency to every message send. (The SSE relay `notifySharedUsers` is fire-and-forget and cheap: `broadcast` messages short-circuit in `sendToHome` when the target home isn't resident.) |
-| Watcher notifications | `lib/drive/history.ts` (`FileHistory.notifyWatchers`) | Concurrent but **unbounded** `Promise.all`, awaited (via `fanOut` → `recordFileEvent`) on every drive mutation. This is the fd-burst class: a 26-home fan-out crashed the server with `SQLITE_IOERR_VNODE` under `ulimit -n 256`, silently skipping recipients. |
-| Signup reconciliation | `lib/share/reconciliation.ts` | Sequential in the `user.create` hook and team-member add. Mostly `pull*` reads (can't ride a push queue); rare. Note only. |
+| ACL changes, from sharing, rename, restore, trash | Yes | Pushes |
+| Calendar shares, invitations, updates, removals, RSVPs | Yes | Pushes, and invitations need order |
+| Notifications: chat mentions and activity, file watchers, comment assignment, access requests, admin alerts | Yes | Pushes |
+| The pushes of signup and team-join reconciliation (`lib/share/reconciliation.ts`) | Yes | Same `sendToHome`. Its pulls stay pulls |
+| `broadcast` SSE events | No, but through `deliver` | They reach open tabs only, and a tab refetches on reconnect. A replayed one means nothing |
+| `pull*` and the event writes (`createEventAt` and siblings) | No | The caller needs the answer now |
+| `pushUserProfile`, `pushTeamAvatar` | No | Server-wide data, not a Home |
+| Chat messages, document edits, Drive requests on a share | No | They are not cross-home calls. The request goes to the owner's Home by `:ownerId` and is stored there. Only their notifications and broadcasts cross |
+| Incoming mail (`mailboxDeliver` in `lib/mail/mail.ts`) | No | Postfix is its durable queue and redelivers on a failure. It carries raw bytes, and the sender's server needs the answer. It stays on the `getHome` allowlist |
+| Outgoing mail (`sendMail`) | No | Its own transport, and it leaves the server |
 
-Two corrections to the roadmap row that surfaced while grounding it: (1) chat's "coalesce-by-tag
-makes ordering a non-issue" is true, but via the notification **tag upsert** in
-`NotificationCenter.persist` (last write wins on a UNIQUE tag), not the `coalesce` flag — chat's
-persist inputs carry tags but don't set `coalesce: true`; only `notifyWatchers` does. The flag only
-suppresses SSE toast bursts. (2) Chat's cross-home cost is specifically the two notification
-loops; the mention/activity claim in the row is otherwise accurate as written.
+So "everything that is pushed" is the rule, not "everything that crosses". A chat message is the example people expect to be in here. Its text never crosses a Home, only the notification about it.
 
-Common to all: **nothing survives a crash**, failures are logged-and-dropped rather than retried,
-and each seam hand-rolls its own concurrency policy. The fix belongs in the relay, once — not per
-seam.
+## What is wrong today
 
-## Goals / non-goals
+| Problem | Where |
+|---|---|
+| A crash loses every queued and running delivery | All pushes. `acl-propagation.ts` and `sendToUserHomes` hold them in memory |
+| A failed delivery is logged and dropped, with no retry | `sendToUserHomes`, `share-propagation.ts`, `reconciliation.ts` |
+| Pushes follow three policies: a chain plus the budget of eight, only the budget, or neither | ACL; chat and watchers; calendar, reconciliation, access requests, comment assignment and alerts |
+| A share PUT waits for one Home open per target | `Calendar` awaits `propagateCalendarShare` |
+| An invitation update delivered before its create is dropped for good, because the receiver has no linked event yet | `receiveInvitationUpdate`, fed by `invite-propagation.ts` |
+| A shutdown waits for two of the three policies. Nobody waits for a direct `sendToHome`, and one that opens a Home during the teardown gets a 503 and is lost | `drainDeliveriesWithin` |
 
-**Goals**
-- A crash or restart never loses an accepted cross-home delivery, where **accepted means
-  enqueued**: rows are committed before the triggering request returns, and replay on boot.
-  (The residual window between domain commit and enqueue is stated under Where rows persist.)
-- Failed deliveries retry with backoff instead of being dropped; permanently failing rows
-  dead-letter visibly instead of silently.
-- One global concurrency budget for delivery-driven home-opens replaces every per-seam
-  semaphore/`Promise.all`, closing the fd-burst class everywhere at once.
-- Per-(target, fifoKey) FIFO where ordering is correctness (calendar invitations); coalescing
-  where only the latest state matters (ACL, calendar shares, tagged notifications).
-- The design is the sharding transport: serialized rows + a deliver step that can become an RPC,
-  with no schema change.
+A graceful shutdown and the fd burst of chat and watcher fan-outs are solved already, by `sendToUserHomes`. So the outbox's value is durability, retry, ordering, and one path instead of three.
 
-**Non-goals**
-- Queuing **pulls** or value-returning event mutations (`pull*`, `createEventAt`/`updateEventAt`/
-  `deleteEventAt`, `pushUserProfile`). Reads need answers now; they stay synchronous in-process
-  calls (RPC later, per SCALABILITY.md).
-- Queuing `broadcast`. It is ephemeral SSE, already short-circuited in `sendToHome` when the
-  target home isn't resident (`atHome`); replaying a stale UI-refresh event after a reboot is
-  meaningless — clients refetch on reconnect. It stays a direct call.
-- Queuing outbound email. `sendMail` (iMIP invites, share emails) keeps its own fire-and-forget
-  transport at the seams; the outbox carries `HomeMessage` verbs only.
-- Exactly-once delivery. At-least-once plus idempotent receivers (audited below) is sufficient
-  and infinitely simpler.
-- A generic job system. This is a table and a class, shaped like the two queues we already run.
+## One function decides where a push goes
 
-## Current relay inventory (ground truth)
+`home-relay.ts` splits `sendToHome` in two. `deliver` is the body of today's `sendToHome`: the `broadcast` short-circuit, `getHome` and the switch over `HomeMessage`. No handler moves, and no caller changes its call.
 
-`home-relay.ts` today, verified verb by verb:
+```typescript
+export async function sendToHome(target: string, message: HomeMessage): Promise<void> {
+    if (message.type === 'broadcast') return deliver(target, message);
+    outbox.enqueue(target, message);
+}
+// The one place that knows where a Home lives. Today it is always this process.
+async function deliver(target: string, message: HomeMessage): Promise<void> { /* today's body */ }
+```
 
-**Push** — `sendToHome(targetUserId, message)` with the `HomeMessage` discriminated union:
-`drive:acl-change`, `calendar:share`, `calendar:invitation`, `calendar:invitation-update`,
-`calendar:invitation-removal`, `calendar:rsvp`, `broadcast`, `notification`. Every payload is
-plain data (SCALABILITY.md already relies on this: "Serialize HomeMessage (it's already plain
-data)"). No closures, no live objects — some payloads carry `Date` fields (`DrivePath` timestamps,
-invitation `startTime`/`endTime`), which is a JSON-serialization detail, not a redesign.
+`lib/home/outbox.ts` holds the table, the drain and the timers, and takes `deliver` as a constructor argument, as `ContentReindexQueue` takes `extract`. So it never imports `getHome`, and `scripts/check-home-imports.ts` needs no change. `sendToUserHomes` stays as the same insert for several targets in one transaction, so a fan-out's rows commit together.
 
-**Pull** — `pullSharedPaths`, `pullCalendarShares`, `pullPendingInvitations`,
-`pullCalendarPermission`, `pullCalendars`, `pullCalendarById`, `pullEventsInRange`,
-`pullTeamQuotaOverrides`, `pullTeamMounts`; plus the calendar event-mutation seam
-(`createEventAt`, `updateEventAt`, `deleteEventAt`) and the home→server `pushUserProfile`. All
-stay synchronous — out of scope.
+Pulls and event writes cannot use `deliver`, because they return a value. They ask the same question, "is this Home here?", when that question exists. So there is one routing fact with two users: `deliver` for pushes, which retries, and each pull, which fails at once to its caller.
 
-The `switch` inside `sendToHome` is already the flat, named verb registry the outbox needs: one
-serializable tag dispatching to a self-contained `receive*` method on the target home
-(`Drive.receiveSharedPathChange`, `Calendar.receiveShare`/`receiveInvitation`/…,
-`NotificationCenter.persist`). No `Record` of handlers, no plugin system — the discriminated-union
-switch is the house pattern (same shape as the `sse-events.ts` builders) and it stays.
+### With several processes, `deliver` is what changes
 
-## Design
+[PROPOSAL_SINGLE_MACHINE_CLUSTER.md](PROPOSAL_SINGLE_MACHINE_CLUSTER.md) has Caddy route by `ownerId`, so the application never hashes an id. Its routing wrapper becomes the start of `deliver`: a Home loaded here runs the switch, and anything else is a POST to `/internal/relay/:ownerId`, with an ack on 2xx. A network failure is one more transient failure, and the retries and the order already cover it. `enqueue`, the table and the callers don't change. That route belongs to the cluster proposal and gets its yes there.
 
-### The third queue instance
+In a cluster "server-level" means per process. Each process's outbox holds what its own Homes sent, which is the sender-side ownership sharding wants. Moving a Home means draining its rows first.
 
-| | `UploadQueue` | `ContentReindexQueue` | **`HomeRelayOutbox`** |
+## The code gets simpler, and the line count goes up
+
+| Leaves | Lines |
+|---|---|
+| `pendingFanOuts`, `queueACLFanOut`, `drainACLFanOuts` and `drainDeliveriesWithin` in `acl-propagation.ts` | about 47 of 177 |
+| `deliveries`, `drainHomeDeliveries`, `countHomeDeliveries` and the permit reasoning in `home-relay.ts` | about 35 |
+| The `.catch` handlers and the explanations of them in `chat.ts` and `history.ts`, and a few `try/catch` blocks that guard only a delivery | about 20 |
+
+That is about 100 lines out. In comes `outbox.ts`, its db-config and a small JSON codec for `Date` fields. `content-reindex-queue.ts` is 130 lines and `upload-queue.ts` is 518, and this one sits between them, so a guess is 250 to 300. The net is about 150 to 200 more lines of production code, plus tests.
+
+What gets simpler is what a reader has to know. A caller writes a row and is done. There is one ordering rule, one budget, one retry curve and one shutdown step instead of a separate answer per caller. The reasoning about a delivery waiting for a permit its own fan-out holds goes away, because a team notification now inserts rows for its members and waits for nothing.
+
+The price is that a push is no longer done when `sendToHome` returns. [What changes for callers](#what-changes-for-callers) lists what that touches.
+
+## The third queue of this shape
+
+| | `UploadQueue` | `ContentReindexQueue` | `HomeRelayOutbox` |
 |---|---|---|---|
-| Durable state | `pending_uploads` rows in each mount's `metadata.db` + staged copies | `contentDirty` bit on `paths` | `outbox` rows in `data/server/outbox.db` |
-| Instances | per mount | per mount | **one, server-level** |
-| Kick | `enqueueStaged` | `kick()` on mark | `enqueue()` (from `sendToHome`) |
-| Drain | one loop, coalescing concurrent calls, self-timer for backed-off rows, no global poller | same | same |
-| Concurrency | per-destination semaphore (`getUploadSemaphore`) | serial per mount | **one global semaphore over home-opens** |
-| Ordering | newest-wins PK upsert per `storageKey` | coalesced by the dirty bit | per-(target, fifoKey) FIFO + newest-wins coalesce per `coalesceKey` |
-| Retry | full-jitter backoff, unbounded attempts | cap window, retries forever | full-jitter backoff, dead-letter after cap |
-| Crash | rows replay on mount open | bit replays on mount open | rows replay on **server boot** |
-| Shutdown | bounded flush via drain deadline | bounded await of in-flight | bounded flush before `shutdownAllHomes` |
+| Durable state | `pending_uploads` in each mount's `metadata.db` | `contentDirty` bit on `paths` | `outbox` in `data/server/outbox.db` |
+| Instances | Per mount | Per mount | One per server |
+| Kick | `enqueueStaged` | `kick()` | `enqueue()` |
+| Concurrency | Per destination | Serial per mount | One budget of eight |
+| Order | Newest wins per `storageKey` | Coalesced by the bit | FIFO per lane, newest wins per `coalesceKey` |
+| Retry | Forever, with backoff | Forever, with backoff | With backoff, up to a maximum age |
+| Crash | Replays on mount open | Replays on mount open | Replays on server boot |
 
-Deviations from the exemplars, each justified: a single instance (deliveries target arbitrary
-homes, so there is no per-mount owner — one queue, one budget); a batch of lane-heads dispatched
-concurrently under the semaphore rather than `UploadQueue`'s serial in-loop await (a single
-instance must get its parallelism inside the loop; `acl-propagation.ts` already uses exactly this
-`Promise.all`-over-`semaphore.run` shape); and an attempt cap with dead-lettering (an upload's
-bytes always exist so retrying forever is right; a delivery can fail permanently — deleted target
-user — so retrying forever is wrong).
+The rows live in one server database because replaying per-home tables on boot would mean opening every Home (about 30 file descriptors each), or waiting until the sender next shows up, which for a share can be days. A separate file keeps the frequent writes out of `eigen.db`'s WAL, and rollout only adds a file.
 
-### Where rows persist
-
-Three candidates were weighed:
-
-- **(a) One server-level outbox DB** — replay-on-boot finds every row by opening one database;
-  enqueue is possible from any context without touching the sender's Home; one place to count
-  pending/dead for observability.
-- **(b) Sender-side per-home table** — matches "rows move with the Home" and the sharding
-  instinct, but replay-on-boot would need to open every home (hundreds of homes × ~30 fds — the
-  exact burst this proposal exists to prevent) or accept that a crashed delivery waits until the
-  *sender* next opens, which for a share can be days.
-- **(c) A table in an existing per-home DB** (`shared.db`, `notifications.db`) — same replay
-  problem as (b), plus neither DB's domain fits calendar verbs.
-
-**Decision: (a), a new `data/server/outbox.db`.** The sharding objection to (a) dissolves on
-inspection: in a multi-server deployment "server-wide" means **per API server**, and each server's
-outbox holds messages sent *by homes resident on that server* — which is exactly the sender-side
-ownership sharding wants, at server rather than home granularity. Home migration must drain the
-mover's pending lanes before cutover, which migration already requires (SCALABILITY.md's "queue
-messages until the new shard is ready"). This is the share-registry precedent: `eigen.db` is
-already a server-level durable record of cross-home relationships written on the request path;
-`lib/share/db.ts`'s `createAsyncSingleton` + `openLocalDatabase` pattern is copied verbatim. A
-separate file (not a new table in `eigen.db`) keeps the high-write outbox out of the low-write
-registry's WAL and makes the rollout purely additive — see Frozen-format.
-
-Crash window: `enqueue()` is a synchronous SQLite insert, so **every queued verb commits its rows
-before the triggering request returns** — uniformly, for all delivery-guarantee classes. The
-enqueue-after-response question answers itself: an insert into one WAL database is cheap enough
-that there is no verb for which deferring it buys anything. Seams that are fire-and-forget today
-(invitations, RSVP) actually get *stronger*: today a crash right after the route returns loses
-them entirely; with the outbox the rows already exist.
-
-One residual window is stated honestly rather than hidden: the domain write and the outbox insert
-always live in **different SQLite files**, and there is no cross-database transaction — a crash
-between the domain commit and the enqueue loses that fan-out. In Phase 1 the window is not
-microseconds: the awaited target resolution (`resolveACLUserIds`'s auth-db reads and registry
-writes) sits between the ACL commit and the insert. Accepted, because the window is strictly
-smaller than the status quo (which additionally loses everything already queued or in flight),
-and closing it would take a staged-write redesign of every seam. Hence the definition above:
-"accepted" means enqueued.
-
-### Table and message shape
+## The table
 
 ```sql
 CREATE TABLE outbox (
-    id            TEXT PRIMARY KEY,            -- uuid
-    targetOwnerId TEXT NOT NULL,               -- receiving home (resolved user id)
-    verb          TEXT NOT NULL,               -- HomeMessage['type'], minus 'broadcast'
-    payload       TEXT NOT NULL,               -- JSON: the HomeMessage minus its type tag
-    fifoKey       TEXT NOT NULL,               -- ordering lane within the target ('' = unordered)
-    coalesceKey   TEXT,                        -- newest pending payload wins; NULL = never coalesce
-    status        TEXT NOT NULL DEFAULT 'pending',  -- 'pending' | 'dead'
-    attempt       INTEGER NOT NULL DEFAULT 0,
-    nextAttemptAt INTEGER NOT NULL,
-    enqueuedAt    INTEGER NOT NULL,
-    updatedAt     INTEGER NOT NULL
+    id TEXT PRIMARY KEY, targetOwnerId TEXT NOT NULL,
+    verb TEXT NOT NULL, payload TEXT NOT NULL,
+    fifoKey TEXT NOT NULL, coalesceKey TEXT,
+    attempt INTEGER NOT NULL DEFAULT 0, nextAttemptAt INTEGER NOT NULL,
+    enqueuedAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL
 );
-CREATE UNIQUE INDEX idx_outbox_coalesce ON outbox(coalesceKey) WHERE coalesceKey IS NOT NULL;
-CREATE INDEX idx_outbox_due  ON outbox(status, nextAttemptAt);
-CREATE INDEX idx_outbox_lane ON outbox(targetOwnerId, fifoKey, enqueuedAt);
 ```
 
-Payload serialization: `HomeMessage` payloads carry `Date` fields, so the JSON round-trip uses a
-small date-tagging replacer/reviver pair exported from `home-relay.ts` — the project already
-treats "dates survive the wire" as a convention (Eden's reviver, project-wide). This pair *is* the
-future cross-server wire format; designing it now costs two functions.
+Indexes: a partial unique index on `coalesceKey`, one on `nextAttemptAt`, and one on `(targetOwnerId, fifoKey, enqueuedAt)`.
 
-Targets are **resolved user ids**, expanded at enqueue time — a share to a team inserts one row
-per member, exactly as the seams resolve targets today. Membership changes after enqueue don't
-retarget, matching current semantics.
+A target is a resolved owner id. A team share is one row per member, resolved at enqueue, as the callers resolve it today. `payload` is the message as JSON, with a tagged codec for `Date` fields, exported from `home-relay.ts`. That codec is also the wire format between processes.
 
-Enqueue with a `coalesceKey` upserts on the partial unique index, replacing the pending payload
-and resetting `attempt`/`nextAttemptAt` (UploadQueue's newest-staging-wins upsert, verbatim), and
-keeps the original `enqueuedAt` so the row doesn't jump to the back of its lane. Every upsert
-bumps `updatedAt` — that stamp is what makes the conditional ack below safe. An upsert that hits
-a **dead** row (the unique index doesn't care about `status`) revives it: back to `pending` with
-the fresh payload and `attempt = 0`, so a dead-lettered state-replacement verb heals itself on
-the next change to the same key.
+An enqueue with a `coalesceKey` upserts: it replaces the payload, resets `attempt` and `nextAttemptAt`, bumps `updatedAt` and keeps `enqueuedAt`.
 
-### Per-verb ordering and coalescing
+## Order and coalescing per verb
 
-| Verb | fifoKey | coalesceKey | Why |
+| Verb | `fifoKey` | `coalesceKey` | Why |
 |---|---|---|---|
-| `drive:acl-change` | `path.id` | `{target}:acl:{path.id}` | Full-state replacement: only the latest ACL matters. Coalescing subsumes the per-path FIFO chain in `acl-propagation.ts` and is strictly better — intermediate states are never delivered, so the add→revoke resurrection hazard its comment describes can't occur (given the conditional ack below, which covers the upsert-during-delivery race). |
-| `calendar:share` | `calendarId` | `{target}:calshare:{ownerId}:{calendarId}` | Same: `receiveShare`/`removeShare` carry full desired state. |
-| `calendar:invitation` | `organizerEventId` | — | True FIFO with the update/removal verbs below — this is the create-vs-update hazard the roadmap row names. |
-| `calendar:invitation-update` | `organizerEventId` | — | FIFO behind its create; the receiver's RFC 5546 sequence guard additionally drops stale replays. |
-| `calendar:invitation-removal` | `organizerEventId` | — | FIFO so a cancel can't be overtaken by the create it cancels. |
-| `calendar:rsvp` | `eventId` | — | Two rapid RSVPs from one attendee apply in order. |
-| `notification` | `''` (unordered) | `{target}:notif:{tag}` when a tag is present | The receiver's tag upsert is last-write-wins; a pending duplicate adds nothing, so collapse it (chat activity storms, watcher bursts). Tagless notifications don't coalesce. |
-| `broadcast` | — | — | Not queued; stays a direct short-circuited call. |
+| `drive:acl-change` | `''` | `{target}:acl:{path.id}` | It carries the full ACL, so only the latest matters. An add and a revoke can't arrive reversed, which is what the chain in `acl-propagation.ts` prevents today |
+| `calendar:share` | `''` | `{target}:calshare:{ownerId}:{calendarId}` | It carries the full permission |
+| `calendar:invitation`, `-update`, `-removal` | organizer event id | None | True FIFO, so a cancel can't overtake the create it cancels, and an update can't arrive before it |
+| `calendar:rsvp` | `eventId` | None | Two quick answers apply in order |
+| `notification` | `''` | `{target}:notif:{tag}` | The receiver upserts on the tag, so a pending older one adds nothing |
 
-**FIFO means a failed head blocks its own lane** — that is the point of FIFO, and it is bounded:
-the lane head backs off, its lane waits, every other (target, fifoKey) lane proceeds. Lane heads
-are selected with a not-exists-an-earlier-pending-row-in-my-lane predicate over
-`(targetOwnerId, fifoKey, enqueuedAt, id)`, so the due-selection naturally yields at most one row
-per lane; an in-memory `inFlight` id set (UploadQueue's field, same name) keeps a mid-delivery row
-from being re-selected. Rows with `fifoKey = ''` are unordered by design and **bypass the lane
-predicate entirely** — any due row is eligible — so a target's notifications never form a single
-serial lane and one failed notification blocks nothing. A **dead** row no longer blocks its lane — for state-replacement verbs the
-successor carries full state so skipping is safe; for invitation lanes a skipped create makes the
-follow-on update a receiver-side no-op, which is the same outcome as today's silent drop, now
-visible in the dead-letter table and manually replayable.
+**A failed head blocks its own lane and nothing else.** The drain selects the earliest row per `(targetOwnerId, fifoKey)`. Rows with `fifoKey = ''` skip that check, so one failed notification never holds back another. An in-memory `inFlight` set keeps a running row from being selected again.
 
-### Delivery, retry, poison
+One small function in `home-relay.ts` turns a message into these two keys. The relay's message type requires a `tag` on a notification, so a producer without one fails to compile. All five producers set one today.
 
-The drain loop (one at a time, concurrent kicks coalesce — `draining`/`retryTimer`/`closing`
-fields exactly as in both exemplars):
+## Delivery and retry
 
-1. Select due lane-heads (`status='pending'`, `nextAttemptAt <= now`, lane predicate, ordered by
-   `enqueuedAt`, batch-limited like `REINDEX_BATCH`).
-2. Dispatch the batch concurrently, each delivery wrapped in the **global home-open semaphore**
-   (`OUTBOX_DELIVERY_CONCURRENCY = 8`, inheriting `FAN_OUT_CONCURRENCY`'s measured value). A
-   delivery = deserialize payload → the existing `sendToHome` switch body (`getHome(target)` +
-   `receive*` dispatch).
-3. On success: **conditional** delete-on-ack — `DELETE … WHERE id = ? AND updatedAt = ?`, with
-   the `updatedAt` read at selection (UploadQueue's post-PUT "still ours → clear the row"
-   re-check, ported). This is load-bearing for coalescing: a coalesce upsert that lands while its
-   row is mid-delivery — add in flight, revoke upserts the same `{target}:acl:{path.id}` key, add
-   acks — bumps `updatedAt`, so the ack misses and the superseded-in-flight row stays pending;
-   the never-delivered revoke redelivers. An unconditional delete would silently drop it and
-   leave a stale mirror granting read. On transient failure:
-   `attempt += 1`, `nextAttemptAt = now + backoff(attempt)` — the same full-jitter curve as
-   `uploadBackoffMs`, lifted to a shared util so there is one backoff fact. On **permanent**
-   failure — `getHome` throws `ApiError` 404/400 (target user/team deleted, invalid owner) —
-   skip retries and dead-letter immediately.
-4. After the loop: if rows remain, self-schedule a timer for the earliest `nextAttemptAt`
-   (`scheduleRetry`, verbatim from both exemplars). No global poller.
+The drain runs one at a time, and concurrent kicks coalesce, with the `draining`, `retryTimer` and `closing` fields of both other queues. There is no poller.
 
-After `OUTBOX_MAX_ATTEMPTS` (proposed: 10 — with the 60s-capped jitter that is roughly ten
-minutes of trying) a row flips to `status='dead'`: **kept in the table, never silently deleted**,
-logged loudly (`[outbox] dead-lettered <verb> for <target>`). Manual replay = reset
-`status/attempt/nextAttemptAt` via the admin surface below. Dead rows older than 90 days are
-pruned by a `scheduleInterval` job in `lib/scheduler/jobs.ts` (mirroring `FileHistory.prune`'s
-retention).
+1. Select due lane heads, in batches.
+2. Run them concurrently under the budget of eight, each as decode and `deliver`.
+3. On success, `DELETE ... WHERE id = ? AND updatedAt = ?`, with the `updatedAt` read at selection.
+4. On a failure, follow the rules below.
+5. If rows remain, set a timer for the earliest `nextAttemptAt`.
 
-### At-least-once, audited per verb
+**The ack in step 3 has to be conditional.** A revoke can upsert a row while its add is being delivered. The add then acks. An unconditional delete would lose the revoke and leave a stale mirror row in the recipient's list. The changed `updatedAt` makes the delete miss, so the revoke is delivered next.
 
-Delete-on-ack means a crash between delivery and ack redelivers. Every handler was audited:
+A failure has two outcomes:
 
-- `drive:acl-change` → `receiveSharedPathChange` replaces full state; redelivery converges. One
-  imprecision worth naming: the share branch's notification is tagged (the upsert absorbs
-  redelivery), but the **unshare branch deletes unconditionally and persists an untagged
-  notification** — a redelivered revoke duplicates the "no longer shared" bell row. State still
-  converges; at-least-once holds. Tagging that persist is a one-line broken-window fix to take in
-  Phase 1.
-- `calendar:share` → `receiveShare` is an upsert, `removeShare` a delete-if-exists. Idempotent.
-- `calendar:invitation` → `receiveInvitation` returns early on an existing linked event. Idempotent.
-- `calendar:invitation-update` → sequence guard drops `sequence <= stored`. Idempotent.
-- `calendar:invitation-removal` → no-op on missing linked event. Idempotent.
-- `calendar:rsvp` → sets attendee status; replaying the same message is a no-op write. Idempotent.
-- `notification` → `NotificationCenter.persist` upserts on UNIQUE tag. Idempotent when tagged;
-  **rule: notification verbs routed through the outbox must carry a tag** (every current
-  cross-home producer already does — chat mention/activity, watcher file-events, access requests;
-  the share/unshare bells are receiver-side `persist` calls inside the `drive:acl-change` handler,
-  not `notification` messages).
+- **The target is gone.** Opening the Home throws an `ApiError` 404 or 400, for a deleted user or team, or an invalid id. The row is logged and deleted, as there is nothing to retry and nothing to replay. Only the error of opening the Home counts. A 404 from inside a receive method retries, because it can be a bug or a passing state.
+- **Anything else.** `attempt` goes up, and `nextAttemptAt` moves by the full-jitter curve of `uploadBackoffMs`, capped at 60 s and lifted to `utils/` for both queues to share. A 503 from a restoring Home lands here, and it delivers once the restore is done.
 
-No handler changes are required; the audit is a property of code that already ships.
+A row whose `updatedAt` is older than `OUTBOX_MAX_AGE_MS` (7 days) is logged and deleted. The age is the limit instead of a number of attempts, because ten attempts at this curve is about ten minutes, and a bucket outage of an hour would then throw away valid deliveries.
 
-### Concurrency budget — and PROPOSAL_FD_BUDGET.md
+**There is no dead state.** That removes the replay route, the prune job and the revival of dead rows on an upsert. The cost is that a row which always fails blocks its own lane for up to 7 days and is then dropped, with a log line. One lane is one calendar event for one person, and a drop is what happens to every failed delivery today. A follow-up behind a dropped create is a no-op on the receiver, also as today.
 
-The outbox semaphore is the **only** limiter on delivery-driven home-opens, replacing
-`acl-propagation.ts`'s `fanOutSemaphore` (deleted in Phase 1) and the implicit unbounded/serial
-policies of every other seam. It is complementary to the concurrently-written
-`PROPOSAL_FD_BUDGET.md` (startup rlimit check + LRU cap on open Homes): the outbox bounds
-**in-flight opens** (arrival rate — at most K deliveries can be cold-opening at once), the home
-LRU bounds **resident homes** (steady state). The outbox keeps bursts from stampeding the fd
-budget; the LRU keeps the budget's total honest. K must stay comfortably below the LRU cap's
-headroom; both proposals should cite the shared ~30 fd/Home warm ceiling. Neither replaces the
-other.
+## Delivery is at least once
 
-**Priority lanes: considered and rejected.** One budget means a heavy fan-out can sit ahead of a
-cheap notification: a 200-watcher burst enqueued first fills every batch until drained, and a
-mention enqueued behind it waits roughly (pending ÷ K) × cold-open cost — for 200 rows through
-K=8 at ~50–200 ms per cold open, single-digit seconds. That is acceptable for every queued verb:
-nothing in the outbox is read-your-writes (bell notifications, ACL mirrors, and invitations all
-tolerate seconds of skew — under retry backoff they tolerate *minutes* by design), so a priority
-column would be speculative machinery for a latency class no consumer is sensitive to. Warm-home
-deliveries shrink the real number further — the semaphore bounds opens, but a delivery to an
-already-resident home clears in milliseconds. Revisit only if `oldestPendingAt` on the admin
-surface shows real starvation in production; the change would be one column and one ORDER BY,
-not a redesign.
+A crash between delivery and ack delivers again, so a receiver must tolerate a repeat. Exactly-once is out of scope. The audit of the receivers was last complete in July and the invitation paths changed since, so **rerunning it is the first step of the build**.
 
-### Shutdown and boot
+Known at this check:
 
-- **Graceful shutdown** — `gracefulShutdown` in `../../apps/api/src/server.ts` currently calls
-  `drainACLFanOuts()` before `shutdownAllHomes()` because deliveries reopen recipient homes. The
-  outbox slots into the same position: `outbox.drain({ flushNow })` raced against the existing
-  `SHUTDOWN_DRAIN_BUDGET_MS` deadline, as the UploadQueue flush is; whatever misses the deadline
-  stays in the table.
-- **Hard crash** — rows are already committed; nothing to do.
-- **Boot** — `index.ts` kicks `outbox.drain()` right after `registerScheduledJobs()`. This is the
-  server-start answer that the server-level storage decision implies (a per-home table would have
-  forced replay-on-home-open instead, with the staleness problem described above). Thereafter:
-  kick-on-enqueue plus the self-timer, never a poller.
+- `drive:acl-change` replaces full state, so it converges. The unshare branch in `lib/drive/shared-with-me.ts` notifies without a tag, so a repeated revoke shows a second bell row. Tagging that notification is part of the build.
+- `calendar:share` converges. The notification in `receiveShare` has a tag, and `removeShare` returns early when the row is gone.
+- `calendar:invitation` goes through `decideInboundRequest`. `calendar:invitation-update` returns on a missing link and uses the sequence guard. Both need the audit.
+- `calendar:rsvp` sets a status, so a repeat changes nothing.
+- `notification` upserts on its tag, and the type requires one.
 
-### Observability
+## What changes for callers
 
-The boring option, chosen deliberately: `[outbox]` log lines on every failure, dead-letter
-transition, and boot replay (matching `[sync]` / `[content-reindex]` prefixes), plus
-`pendingCount` / `deadCount` getters mirroring `UploadQueue.pendingCount`. Surface: an admin-gated
-`GET /settings/outbox` returning `{ pending, dead, oldestPendingAt }` and a
-`POST /settings/outbox/replay` that resets dead rows — both in `routes/settings.ts`, the existing
-home-independent admin carve-out. No notification-center integration: infra failures belong to the
-operator's logs/admin app, not to a user's bell. An admin-app widget can come later if the counts
-prove worth watching.
+**The target's data lands a moment after the request answers.** The receive methods broadcast their own SSE event, so an open tab updates when the row is delivered. This applies to `calendar:share`, which was awaited, and to reconciliation, where a guest's sign-in reconciles and then opens the app. Verify in the browser that the first load after a guest's sign-in and a new signup looks right. Reads never depended on delivery for access, because access is always checked on the owner's side.
 
-### Sharding trajectory
+**The RSVP broadcast moves.** `propagateRsvp` sends `calendar:rsvp` and then a `broadcast`, and it is the one place that sends both in a row. With a queue, the organizer's tab would refetch before the answer lands. The broadcast moves into the `calendar:rsvp` case of `deliver`, where a receive method finishes its own job ([SCALABILITY.md](../SCALABILITY.md#a-receive-method-finishes-the-job-on-the-target)).
 
-The outbox is written so that SCALABILITY.md's `lookupShard` sketch lands in one function. Today
-the deliver step is `getHome(target)` + the dispatch switch. In a sharded deployment it becomes:
-local shard → unchanged; remote shard → POST the serialized row (already JSON with the date-aware
-codec) to the target server's relay endpoint, ack on 2xx, and all retry/backoff/FIFO/dead-letter
-machinery applies unchanged — the network is just a new transient-failure source the design
-already absorbs. Enqueue, ordering, and storage don't change at all. Home migration drains the
-mover's lanes first (pause selection for that `targetOwnerId`, flush, cut over). Nothing in this
-proposal narrows that future; most of it exists to serve it.
+**A caller no longer sees a delivery fail.** `sendToHome` can only fail on the insert. By then the domain write has committed, so a failed insert is logged and the request still answers. That is the window below, not a new one.
 
-### Module layout and the getHome lint rule
+**Tests and seed scripts drain first.** The six test files that use the current drains, plus `seed-demo.ts` and `author-fixtures.ts`, move to `outbox.drain()`. Calendar share tests that read the target's view after the PUT need it too.
 
-`../../scripts/check-home-imports.ts` blocks new `getHome` imports in `lib/` — deliberately. The outbox
-respects it by construction: `lib/home/outbox.ts` holds the queue mechanics (table access, drain
-loop, semaphore, timers) and takes `deliver: (targetOwnerId, message) => Promise<void>` as a
-constructor dep — precisely how `ContentReindexQueue` takes its injected `extract`. `home-relay.ts`
-keeps `getHome`, keeps the switch (as the deliver function it passes in), and rewrites
-`sendToHome` to: `broadcast` → direct short-circuited call; everything else → `outbox.enqueue` +
-kick. No new file imports `getHome`; callers of `sendToHome` don't change signatures.
+## The remaining window
 
-## Frozen-format
+The domain write and the insert live in different SQLite files, and no transaction spans them. A crash between the two loses that push. For ACLs this is not microseconds, because the awaited target resolution sits between them. It is accepted, because it is smaller than today's window, and closing it means staging every write. So "accepted" in this proposal means enqueued.
 
-Additive only, and unusually clean: a **brand-new** database file (`data/server/outbox.db`) with a
-new `OUTBOX_DB_CONFIG` (`lib/home/outbox-db-config.ts`, `currentVersion: 1`, the schema above).
-**No existing db-config gets a version bump**; no Yjs root, drive value, or persisted user format
-is touched. Existing deployments create the file on first boot via the normal
-`openLocalDatabase` migration path. Rollback is equally clean: an older binary simply ignores the
-file (accepting loss of any then-pending rows, which is today's status quo for everything but
-staged uploads).
+## Shutdown and boot
 
-## Phasing (each phase shippable)
+**A shutdown stops the drain, it doesn't flush it.** `server.ts` replaces `drainDeliveriesWithin` with `outbox.close(SHUTDOWN_DELIVERY_BOUND_MS)`, in the same position. It stops selecting rows and waits for the running deliveries, up to the bound, because a delivery can hang on a Home that never opens, and it must not eat the time the mounts need to upload. Rows wait for the next boot, and a delivery cut off by the bound repeats. `drain()` remains for tests and seed scripts.
 
-1. **Outbox + ACL fan-out.** Build `outbox.ts` + db-config + the `sendToHome` split; migrate
-   `drive:acl-change` onto it and **delete** `acl-propagation.ts`'s `fanOutSemaphore` /
-   `pendingFanOuts` / `drainACLFanOuts` (index.ts and the tests that call it switch to
-   `outbox.drain()`). Semantics are already async — durability is a pure win. Target resolution
-   and the registry writes stay awaited on the request, exactly as the comment in
-   `propagateSharedPathChange` requires.
-2. **`FileHistory.notifyWatchers`.** Watcher resolution + ACL re-verification (auth-db reads
-   against the pre-captured ancestor chain) stay at enqueue time on the request path — they're
-   cheap and the chain snapshot is already the design; only the home-opening `sendToHome` calls
-   become rows. Kills the unbounded `Promise.all` on every drive mutation — the fd-burst class.
-   Semantic change: delivery is no longer complete when the mutation responds; tests assert after
-   `outbox.drain()`.
-3. **Chat notification loops.** Mention + activity `sendToHome` calls in `postMessage` become
-   enqueues; participant/member resolution and the `coveredEmails` exclusion set (which feeds the
-   watcher fan-out) already compute before sending and stay put. Message-send latency stops
-   scaling with participant count. No caller reads the loops' results — verified.
-4. **Calendar share + invitations.** `propagateCalendarShare` keeps target resolution + registry
-   writes awaited, enqueues the rest; the share PUT stops paying N cold opens. Semantic change —
-   the awaited→async flip this phase carries: the owner's PUT response is unaffected (it never
-   read the fan-out's result), but **target visibility becomes eventually consistent** — a sharee
-   sees the calendar only once `receiveShare` writes their `sharedCalendars` mirror at drain
-   time, and nothing else can discover an undelivered share (the resync path only re-resolves
-   rows already mirrored). Existing calendar share tests that read the target's view right after
-   the PUT must drain first. `invite-propagation.ts` enqueues per-target rows with
-   `fifoKey = organizerEventId`, fixing the create-vs-update ordering hazard; iMIP `sendMail`
-   stays as-is at the seam. RSVP and cancellation ride along (same file, same verbs).
-5. **Signup reconciliation — stays.** `reconcileShares` is pull-shaped (reads from
-   sharers' homes into the caller's own home) and can't ride a push queue; it is rare and runs
-   once per signup or team join. Its `sendToHome` calls may be
-   switched to enqueues opportunistically. Recorded as reviewed, not migrated.
-6. **Observability surface.** The two admin routes + counts; prune job.
+**A boot kicks the drain** right after `registerScheduledJobs()`. The budget keeps a long replay from opening many Homes at once.
+
+## Status, not routes
+
+There are `[outbox]` log lines for each retry, drop and boot replay, like `[sync]` and `[content-reindex]`. `getServerStatus` gets `outbox: { pending, oldestPendingAt }`, which `./eigen status` prints over the control socket and `/settings/status` already returns. It costs no new route.
+
+Nothing has to be replayed by hand, because the rows retry until they deliver or age out. If an operator action is ever needed, it belongs on the control socket as an `./eigen` command, as a repair run on the machine, and it gets its own yes.
+
+Nothing goes to the notification center, because a failed delivery is the operator's concern, and the bell would ride the same queue.
+
+## Backups leave the outbox out
+
+`outbox.db` joins `SERVER_RUNTIME_FILES` and not `SERVER_DATABASES`, so a server backup never captures it, and a server restore removes it. A restored server should not replay rows newer than its Homes, and an archive should not hold other people's notification text a second time. A restore therefore loses the pending rows, as a crash does today.
+
+A row holds notification text and invitation titles from many Homes, which breaks "no database mixes users' content" in [SCALABILITY.md](../SCALABILITY.md#a-home-holds-all-of-one-owners-data) for as long as the row exists. That is normally milliseconds, and at most the maximum age. A row for a deleted target goes at its next attempt. SCALABILITY.md and DATABASE.md change with the build.
+
+## The budget bounds pushes, not every Home open
+
+The budget of eight limits how many deliveries open a Home at once. Pulls don't pass it: `lib/drive/aggregate.ts` pulls from all of a user's teams in one `Promise.all`, and every delivered Home stays open for its idle time. So 26 targets at eight at a time still end at 26 open Homes. The cap on open Homes is [PROPOSAL_FD_BUDGET.md](PROPOSAL_FD_BUDGET.md). The two numbers should be tuned as a pair.
+
+There are no priority lanes. A 200-watcher burst ahead of a mention delays it by seconds at worst, and nothing queued needs to read its own write.
+
+## Stored format
+
+Only a new file: `data/server/outbox.db` with `OUTBOX_DB_CONFIG` at version 1 in `lib/home/`, opened like `lib/share/db.ts`. No existing db-config changes and no stored format is touched. An older binary ignores the file, which loses the rows pending at that moment.
+
+## Building it
+
+It ships as one change, because every push already calls `sendToHome`. Moving verb by verb would keep two paths alive for no gain, and `drainDeliveriesWithin` can only go once the last one moves.
+
+1. Rerun the receiver audit.
+2. Build `outbox.ts`, its db-config and the codec. Split `deliver` out of `sendToHome`. Rewrite `sendToUserHomes`.
+3. Delete the bookkeeping listed in [the table of what leaves](#the-code-gets-simpler-and-the-line-count-goes-up), and switch `server.ts`.
+4. Move the RSVP broadcast. Require the notification tag. Tag the unshare notification.
+5. Add the status field, the runtime-file entry and the docs: SCALABILITY.md, ACL.md, SYNC.md, DATABASE.md.
+
+"Team-removal collab read-revocation" in [ROADMAP.md](../ROADMAP.md) should use the outbox once it exists. It is a separate unit, and so is routing `mailboxDeliver`'s role-address loop when a cluster is built.
 
 ## Open questions
 
-- **Q1 — New `outbox.db` vs a table in `eigen.db`?** One fewer file vs write-volume isolation and
-  a purely additive rollout. *Recommendation:* new file — the share registry stays small and
-  low-write, the outbox is neither, and a v1 CREATE TABLE in a fresh file is the safest possible
-  production migration.
-- **Q2 — Should a dead row block its FIFO lane?** Blocking preserves strict order but lets one
-  poisoned create freeze an event's lane forever. *Recommendation:* dead rows don't block; for
-  state-replacement verbs successors carry full state, and for invitation lanes the skip degrades
-  to today's behavior while remaining visible and replayable — and for state-replacement verbs
-  the coalesce upsert's dead-row revival makes manual replay provably safe (a newer change has
-  already reclaimed the key). Say it in a comment on the lane predicate.
-- **Q3 — Delivery concurrency value?** 8 matches `FAN_OUT_CONCURRENCY`. Honest limit: K bounds
-  the *rate* of opens, not the accumulation — delivered homes stay resident for their idle
-  window (5 min user homes, 30 min team homes), so a 26-target fan-out through K=8 still ends
-  at 26 × ~30 ≈ 780 resident fds. The
-  outbox turns the stampede into a queue; *preventing* the `SQLITE_IOERR_VNODE` class under tight
-  rlimits is PROPOSAL_FD_BUDGET.md's LRU cap (its phase-2 item). *Recommendation:* start at 8,
-  revisit alongside the LRU cap so the two constants are tuned as a pair.
-- **Q4 — Where do dead letters surface?** Notification-center to the admin user vs logs + admin
-  endpoint. *Recommendation:* logs + `GET /settings/outbox` — infra state belongs on the operator
-  surface; a bell notification for a retry-exhausted delivery would itself ride the machinery
-  being reported broken.
-- **Q5 — Backoff fact placement?** Import `uploadBackoffMs` from `lib/mount/upload-limits` (couples home → mount)
-  vs duplicate vs lift. *Recommendation:* lift the full-jitter function to `utils/` and have both
-  queues import it — one source of truth per fact, and the sync module's comment already frames it
-  as generic.
+- **Is 7 days the right maximum age?** Long enough for any outage we would survive, short enough that a row holding someone's text doesn't linger. A wrong value costs little and changes one constant.
+- **Is eight still the right budget?** It is the current value. Revisit it with the cap on open Homes.
 
 ## Testing
 
-- **Unit (`outbox.test.ts`)**: FIFO within a lane under a failing head; independent lanes
-  progress; coalesce upsert replaces payload without re-queuing to lane tail; **coalesce upsert
-  against an in-flight row → the conditional ack misses and a second delivery carries the newer
-  payload** (the add→revoke race); a dead row revived by a coalescing enqueue redelivers;
-  permanent-failure fast-path dead-letters without retries; attempt cap → dead; replay resets;
-  boot `drain()` delivers rows written by a previous "process".
-- **Integration**: share a path with a cold-home recipient, kill delivery mid-flight (test hook,
-  as UploadQueue tests shrink `putTimeoutMs`), restart the outbox, assert the mirror row lands
-  exactly once. Calendar: enqueue create+update+cancel for one event with the create forced to
-  fail twice — assert final state matches FIFO order. Chat: `postMessage` with N participants
-  returns without opening participant homes; `outbox.drain()` then materializes N tagged
-  notifications.
-- **Determinism for existing suites**: everywhere tests currently await `drainACLFanOuts()`,
-  await `outbox.drain()` — same read-your-fanout contract, one queue instead of one-per-seam.
-  Phase 4 extends the same treatment to the calendar share tests that today rely on the awaited
-  PUT for target visibility.
-- **Concurrency**: enqueue a 30-target fan-out and assert (via an instrumented `deliver`) that at
-  most `OUTBOX_DELIVERY_CONCURRENCY` deliveries are ever in flight — the regression test for the
-  `SQLITE_IOERR_VNODE` class.
+- **Unit (`outbox.test.ts`)**: FIFO under a failing head; independent lanes progress; an upsert replaces the payload and keeps the lane position; an upsert during delivery makes the ack miss and delivers the newer payload; a missing target drops the row without a retry; a 404 from a receive method retries; a row past the maximum age drops; a 30-target fan-out never exceeds eight in flight; a boot delivers rows from a previous process.
+- **Integration**: share a path with a cold Home, stop delivery midway, restart the outbox, and the mirror row lands once. Enqueue create, update and cancel for one event with the create failing twice, and the end state follows FIFO order. `postMessage` with N participants answers without opening their Homes, and `outbox.drain()` then shows N notifications. An RSVP reaches the organizer's tab after the status is written.
+- **Shutdown**: `outbox.close` returns within the bound on a delivery that hangs, and the row is still there.
+- **Browser**: the first load after a guest's sign-in and after a signup with a pending share ([verify-in-browser skill](../../.claude/skills/verify-in-browser/SKILL.md)).

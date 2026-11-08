@@ -216,11 +216,11 @@ other half left for sockets, document DBs, and multi-mount variance. Pinned comp
 
 ### Composition with the home-relay outbox
 
-`PROPOSAL_HOME_RELAY_OUTBOX.md` (being written concurrently) adds a **global home-open
-concurrency budget** — a bound on *in-flight opens* (flow). The LRU cap bounds *resident homes*
-(stock). They compose without coordination: a fan-out opens at most `budget` homes concurrently,
-each install may evict the least-recently-used resident, so residency overshoots N by at most
-the open budget. The outbox's per-seam predecessor is today's `FAN_OUT_CONCURRENCY` semaphore.
+`PROPOSAL_HOME_RELAY_OUTBOX.md` runs every push under one **budget of eight deliveries** — a bound
+on *in-flight opens* (flow). Pulls don't pass it. The LRU cap bounds *resident homes* (stock). They
+compose without coordination: a fan-out opens at most `budget` homes concurrently, each install
+may evict the least-recently-used resident, so residency overshoots N by at most the open budget
+plus any concurrent pulls. The budget today is `deliveryBudget` in `home-relay.ts`.
 
 ## Failure honesty
 
