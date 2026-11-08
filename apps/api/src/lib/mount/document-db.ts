@@ -179,6 +179,14 @@ function armIdleClose(mount: Mount, pathId: string, slot: DocumentDbSlot): void 
     slot.idleTimer.unref();
 }
 
+// The file a document database opens: a temp copy, or on `local-key` the stored file in place. Only that
+// storage is sure to have getPath, because s3 has no local file.
+export function documentDbPath(mount: Mount, pathId: string, storageKey: string): string {
+    if (mount.needsTempCopy) return mount.getTempPath(pathId);
+    if (mount.storage.getPath) return mount.storage.getPath(storageKey);
+    throw new Error(`Mount ${mount.id}: storage backend exposes no local path for ${pathId}`);
+}
+
 async function buildDocumentDb<S extends SchemaType>(
     mount: Mount,
     config: DatabaseConfig<S>,
@@ -186,12 +194,7 @@ async function buildDocumentDb<S extends SchemaType>(
     mode: 'open' | 'create',
 ): Promise<ManagedDatabase<S>> {
     const storageKey = await mount.getStorageKey(pathId);
-    // Only `local-key` opens the stored file in place, and its storage always has getPath. Other
-    // backends may lack it, because s3 has no local file.
-    let localPath: string;
-    if (mount.needsTempCopy) localPath = mount.getTempPath(pathId);
-    else if (mount.storage.getPath) localPath = mount.storage.getPath(storageKey);
-    else throw new Error(`Mount.${mode}Database ${pathId}: storage backend exposes no local path`);
+    const localPath = documentDbPath(mount, pathId, storageKey);
 
     if (mode === 'create') {
         if (await mount.storage.exists(storageKey)) {
