@@ -10,9 +10,9 @@ import type { CreateContactInput, UpdateContactInput } from '@workspace/lib/type
 import { AppError, onEtagWriteError, onMutationError } from '../../api-error';
 import { contactKeys, invalidateContactList } from './keys';
 
-// A write echoes the etag its form loaded, and a 412 means the card changed elsewhere first. The hook reloads the list
-// so the form shows the current card, and tells the user.
-const STALE_WRITE_TOAST = 'This contact changed elsewhere. It has been reloaded — please redo your edit.';
+// A write echoes the etag its form holds, and a 412 means the card changed elsewhere first. The hook reloads the list
+// and tells the user. It says nothing about what was typed, because the profile form re-seeds on a reload.
+const STALE_WRITE_TOAST = 'This contact changed elsewhere. Check it and try again.';
 
 export function useContacts() {
     const { user } = useAuth();
@@ -98,8 +98,7 @@ export function useMeContact() {
     });
 }
 
-// Multipart avatar upload bypasses Eden Treaty (which serializes bodies as JSON) and goes through
-// raw fetch, mirroring useUploadDraftAttachment. Returns the stored avatar path.
+// Eden Treaty serializes bodies as JSON, so this multipart upload is a raw fetch. It returns the stored avatar path.
 async function uploadContactAvatarRequest(ownerId: string, file: File): Promise<string> {
     const formData = new FormData();
     formData.append('file', file);

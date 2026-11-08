@@ -66,9 +66,11 @@ Duplicates are skipped, never merged. A card is skipped when its `UID` is alread
 
 Export reads one row at a time, since the whole book's bytes in one query would not scale. It drops every `X-EIGEN-*` line, because the self-link carries the account's id. A whole-book export leaves out group cards, to match import.
 
-## The web app writes with the etag it loaded
+## The web app writes with the etag its form holds
 
-A REST update carries the `etag` its form loaded in the body, and a delete carries it as a query parameter. Both are required. A mismatch is a 412, which the hook answers by reloading the list and telling the user, so two tabs can't last-write-win. The etag is the same content hash CardDAV quotes. The edit form (`contact-edit.tsx`) re-seeds from a sync only while it is clean. With unsaved edits it keeps them and asks "changed elsewhere, reload?", as Drive's editor does. After a 412 it re-seeds anyway, because the toast has said the card was reloaded (`isStaleWrite`).
+A REST update carries the `etag` its form holds in the body, and a delete carries it as a query parameter. Both are required. A mismatch is a 412, which the hook answers by reloading the list and telling the user, so two tabs can't last-write-win. The etag is the same content hash CardDAV quotes.
+
+The edit form (`contact-edit.tsx`) keeps what was typed and follows the rest, the calendar's rule ([CALENDAR.md](CALENDAR.md#a-web-write-carries-the-etag-its-form-holds)). react-hook-form holds the values, so a field nobody touched follows the card through `resetField`, a whole email, phone or address list at a time, because rows have no identity to merge them by. It holds the etag from when typing began, so a Save over a sync it wasn't told about is refused. A refusal keeps the form and lets the etag move on once, to the card the toast says to check. The next Save sends that and overwrites a field typed here that also changed elsewhere. The Space profile form still re-seeds on a new etag and drops its typing, which is why the toast promises nothing about what was typed.
 
 A REST field bound is never tighter than what a CardDAV PUT may store (`routes/contacts.ts`). A tighter bound would make a card a device stored uneditable in the web app.
 
