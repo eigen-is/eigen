@@ -10,6 +10,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Changed
 
+- **Updating from 0.4.1 or earlier** — run `./eigen update 0.4.2` first, then `./eigen update`. Going straight to this version stops with `Unknown argument "--level"`, and a rollback here can't restore a backup made by 0.4.1
 - **GIFs stand still in lists** — in Drive's grid, on Stickies card covers and in the slide list of Slides, an animated GIF or WebP shows its first frame. It still plays in a file's details in Drive, in Quick preview, on the slide itself and in present mode. A deck full of GIFs opens faster, because the slide list loads small stills instead of every animation. Pictures uploaded before this keep playing in lists until the file changes
 - **Deleted comments** — a link, notification, activity entry or search result for a deleted comment opens it as "This comment was deleted" under its grayed title, with nothing to reply to, resolve or assign
 - **Copies in Drive** — a copy or Duplicate of a document leaves out the images and comments deleted from the original

@@ -98,14 +98,13 @@ export class UploadQueue {
         const rows = this.db.select().from(pendingUploads).all();
         const referenced = new Set<string>();
         for (const row of rows) {
-            const staging = this.resolveStagingPath(row.stagingPath);
-            if (fs.existsSync(staging)) {
-                referenced.add(path.basename(staging));
+            if (fs.existsSync(this.resolveStagingPath(row.stagingPath))) {
+                referenced.add(row.stagingPath);
             } else {
                 // The staged copy is gone, after a crash between the two deletes of an ack or after a
                 // restore of the whole server. The row goes too.
                 console.warn(
-                    `[sync] dropping pending upload for ${row.storageKey}: staged copy ${path.basename(staging)} is gone`,
+                    `[sync] dropping pending upload for ${row.storageKey}: staged copy ${row.stagingPath} is gone`,
                 );
                 this.db.delete(pendingUploads).where(eq(pendingUploads.storageKey, row.storageKey)).run();
             }
@@ -161,7 +160,7 @@ export class UploadQueue {
     // The copy it replaces is deleted, unless its PUT runs, and then the upload deletes it when it ends.
     public enqueueStaged(storageKey: string, stagingPath: string, isDatabase: boolean): void {
         // Only the file name is stored, so the staged copy is still found after the data folder moved,
-        // such as to a new host. An absolute path would miss there, and reconcile would drop the row.
+        // such as to a new host.
         const stored = path.basename(stagingPath);
         const now = Date.now();
         const prevStaging = this.getPendingStagingPath(storageKey);
@@ -502,10 +501,8 @@ export class UploadQueue {
         }
     }
 
-    // Turns a row's stagingPath into an absolute path. A new row stores only the file name, so a data
-    // folder that moved still finds its staged copies. An older row may hold an absolute path, which passes.
     private resolveStagingPath(stored: string): string {
-        return path.isAbsolute(stored) ? stored : path.join(this.stagingDir, stored);
+        return path.join(this.stagingDir, stored);
     }
 }
 

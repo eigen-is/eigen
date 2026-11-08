@@ -6,7 +6,7 @@ category: Maintenance
 tags: [self-hosting, update, rollback, release, breaking]
 related: [self-hosting/back-up-and-restore, self-hosting/commands-and-files]
 order: 80
-updated: 2026-11-02
+updated: 2026-11-08
 ---
 
 An update is one command, and so is going back. Eigen backs itself up before every update, so you can go back to the version you had.
@@ -72,8 +72,6 @@ When the check itself stops before it can tell, for example because the server r
 `./eigen rollback --yes` skips the questions, for scripts. A rollback goes back one update, not further. To go back further, `./eigen rollback --help` lists the backups earlier updates made that Eigen kept, and `./eigen restore <file>` puts one of them back.
 
 ### After the update from 0.3.0
-
-An install on 0.3.0 updates to 0.3.1 first: run `./eigen update 0.3.1`, then `./eigen update`.
 
 Close every open document before you update from 0.3.0. When Eigen comes back, an open document reloads, and every edit it had not sent to the server is lost, edits made while it was offline included. A Drive, Mail, Calendar, or Contacts tab opened on 0.3.0 does not reload by itself: it keeps the page it had until you reload it.
 

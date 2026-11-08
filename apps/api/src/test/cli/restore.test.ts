@@ -325,12 +325,13 @@ async function editedMember(
 }
 
 // `archive` with one more pending row in the s3 mount, for a key whose bytes it does not hold.
-async function withUnbackedPendingRow(archive: string): Promise<string> {
+async function withUnbackedPendingRow(archive: string, stagingPath = 'no-such-upload'): Promise<string> {
     const replace = await editedMember(archive, s3User.id, (folder) => {
         const db = new Database(join(folder, 'home/mounts', S3_MOUNT_ID, PATHS.DRIVE.METADATA_DB));
         try {
             db.run(
-                "INSERT INTO pending_uploads (storageKey, stagingPath, enqueuedAt, nextAttemptAt) VALUES ('no-such-key', 'no-such-upload', 0, 0)",
+                "INSERT INTO pending_uploads (storageKey, stagingPath, enqueuedAt, nextAttemptAt) VALUES ('no-such-key', ?, 0, 0)",
+                [stagingPath],
             );
         } finally {
             db.close();
@@ -1753,6 +1754,22 @@ for (const [what, archive] of [
                 expect(readFileSync(join(staged, PATHS.DRIVE.STAGING_DIR, stagedUploadName), 'utf8')).toBe(
                     'not in the bucket yet',
                 );
+            },
+            JOB_TIMEOUT_MS,
+        );
+
+        // After the swap the home would boot on these rows, and its upload queue send the bucket what they name.
+        test.each([
+            ['an absolute path', '/etc/passwd'],
+            ['a .. path', '../../../../../../etc/passwd'],
+        ])(
+            'a pending row whose staged copy is at %s refuses the archive',
+            async (_, stagingPath) => {
+                const dir = install();
+                const result = await stage(dir, await withUnbackedPendingRow(archive(), stagingPath));
+                expect(result.code).toBe(1);
+                expect(result.stderr).toContain(`has an unusable staged copy "${stagingPath}"`);
+                expectUntouched(dir);
             },
             JOB_TIMEOUT_MS,
         );

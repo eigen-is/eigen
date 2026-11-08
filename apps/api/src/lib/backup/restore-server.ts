@@ -240,13 +240,13 @@ function replayPendingUploads(mountDir: string, liveMountDir: string, fromFiles:
         for (const { storageKey, stagingPath } of pending) {
             const staged = path.join(stagingDir, stagingPath);
             if (uploaded?.has(storageKey)) {
-                if (!fromFiles && isUsableName(stagingPath)) fs.rmSync(staged, { force: true });
+                if (!fromFiles) fs.rmSync(staged, { force: true });
                 notReplayed.settled++;
                 continue;
             }
             const row = byKey.get(storageKey);
             const source = fromFiles ? row && resolveInside(dataDir, archivePath(row)) : staged;
-            if (!source || !isUsableName(stagingPath) || !fs.existsSync(source)) {
+            if (!source || !fs.existsSync(source)) {
                 notReplayed.missing++;
                 continue;
             }

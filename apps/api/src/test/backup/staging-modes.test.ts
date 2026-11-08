@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { chmodSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { getBackupStagingDir, getBackupTempPath, getStagingRoot, wipeBackupStagingDir } from '../../lib/backup/paths';
+import { getBackupStagingDir, getStagingRoot, wipeBackupStagingDir } from '../../lib/backup/paths';
 import { pullHomeSnapshot } from '../../lib/home/home-relay';
 import type { TestContext } from '../setup';
 import { getTestContext, TEST_DATA_DIR } from '../setup';
@@ -70,14 +70,6 @@ describe('Backup staging modes', () => {
             await wipeBackupStagingDir(jobId);
         }
     }, 60_000);
-
-    test('a staging root an older build left open is closed on its first use', () => {
-        mkdirSync(getStagingRoot(), { recursive: true });
-        chmodSync(getStagingRoot(), 0o755);
-        const tempPath = getBackupTempPath('.json');
-        expect(modeOf(getStagingRoot())).toBe(0o700);
-        expect(modeOf(dirname(tempPath))).toBe(0o700);
-    });
 
     // The launcher gives backups/ the operator's group with the setgid bit, so a folder made in it takes that group,
     // and on Linux the bit too. Folders staged under it go into data/, which must get neither.

@@ -49,8 +49,8 @@ export function getStagingRoot(): string {
     return path.join(backupsDirPath(), STAGING_DIR);
 }
 
-// The chmod closes a staging root that was made with another mode, and clears the setgid bit that Linux gives a folder
-// made in the setgid backups folder, so a job's folder takes the API's own group.
+// The chmod clears the setgid bit that Linux gives a folder made in the setgid backups folder, so a job's folder takes
+// the API's own group.
 export function getBackupStagingDir(jobId: string): string {
     // Makes backups/ first with its own mode, or the recursive mkdir below would make it 0700 too.
     getBackupsDir();

@@ -13,7 +13,6 @@ import { documentTransformRunner } from './lib/document/transform/runner';
 import { drainDeliveriesWithin } from './lib/drive/acl-propagation';
 import { shutdownAllHomes } from './lib/home';
 import { setShutdownDrainDeadline } from './lib/mount/upload-limits';
-import { pinDefaultTeam } from './lib/org';
 import { registerScheduledJobs } from './lib/scheduler/jobs';
 import { stopAllSchedules } from './lib/scheduler/scheduler';
 import { createSetupLink } from './lib/setup/setup-token';
@@ -31,7 +30,6 @@ const SHUTDOWN_DELIVERY_BOUND_MS = 10_000;
 await recoverBackupsAfterRestart();
 
 await assertMailDomainUnchanged();
-await pinDefaultTeam().catch((error) => console.error('[org] pinning the default team:', error));
 
 const server = app.listen({
     // 8000 in every deployment, because Caddy, Dovecot and the container healthcheck all name it. The
