@@ -9,7 +9,7 @@ import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
 import { getCalculationOrder } from './dependency-graph';
 import { cellsOf, DependencyIndex, dependencySlots } from './dependency-index';
-import { booleanDisplay, numberDisplay } from './format';
+import { booleanDisplay, formulaResultType, numberDisplay } from './format';
 import { FormulaEngine } from './formula-engine';
 import { inlineNames, walkFormulaRefs } from './formula-shift';
 import type { WalkContext } from './formula-utils';
@@ -207,6 +207,7 @@ function writeCellValue(cell: Cell, result: EvaluationResult): void {
     }
 
     cell.v = result.value;
+    if (cell.ct) cell.ct = { ...cell.ct, t: formulaResultType(cell.ct.fa, result.value) };
 
     if (result.type === 'boolean') {
         cell.m = booleanDisplay(Boolean(result.value));

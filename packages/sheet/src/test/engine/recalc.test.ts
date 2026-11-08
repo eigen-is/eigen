@@ -352,6 +352,26 @@ describe('engine/recalc — recalcSheets', () => {
         expect(out[0].data![0][2]?.m).toBe('4');
     });
 
+    test("a cell's type follows its result and its format stays", () => {
+        const sheets = [
+            sheet('s1', 'Sheet1', [
+                [
+                    formula('=TEXT(5,"000")', { v: 0, m: '0', ct: { fa: '0.00', t: 'n' } }),
+                    formula('=2+2', { v: '#N/A', m: '#N/A', ct: { fa: '0.00', t: 'e' } }),
+                    formula('=1=1', { v: 1, m: '1', ct: { fa: 'General', t: 'n' } }),
+                    formula('=2+2', { v: 'x', m: 'x', ct: { fa: 'yyyy-mm-dd', t: 'g' } }),
+                    formula('=2+2'),
+                ],
+            ]),
+        ];
+        const [one, two, three, four, five] = recalcSheets(sheets)[0].data![0];
+        expect(one).toMatchObject({ v: '005', ct: { fa: '0.00', t: 'g' } });
+        expect(two).toMatchObject({ v: 4, m: '4.00', ct: { fa: '0.00', t: 'n' } });
+        expect(three).toMatchObject({ v: true, ct: { fa: 'General', t: 'b' } });
+        expect(four).toMatchObject({ v: 4, ct: { fa: 'yyyy-mm-dd', t: 'd' } });
+        expect(five?.ct).toBeUndefined();
+    });
+
     test('a malformed number format shows the result as General', () => {
         const sheets = [sheet('s1', 'Sheet1', [[formula('=2+2', { ct: { fa: '#,##0;;;;;', t: 'n' } })]])];
         const out = recalcSheets(sheets);

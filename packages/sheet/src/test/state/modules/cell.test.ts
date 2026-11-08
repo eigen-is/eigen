@@ -57,7 +57,7 @@ describe('state/modules/cell — updateCell under a prohibiting rule', () => {
 import { describe, expect, test } from 'bun:test';
 import { unescapeHtml } from '@workspace/lib/html';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
-import { applyPatches, enablePatches, produceWithPatches } from 'immer';
+import { applyPatches, enablePatches, produce, produceWithPatches } from 'immer';
 import { evaluateConditionalFormat } from '../../../engine/conditional-format';
 import type { CellType } from '../../../engine/types';
 import type { Context } from '../../../state/context';
@@ -308,7 +308,7 @@ describe('state/modules/cell — normalizedCellAttr General alignment', () => {
 });
 
 describe('state/modules/cell — setCellValue formula results', () => {
-    function computed(v: string | number, ct?: CellType) {
+    function computed(v: string | number | boolean, ct?: CellType) {
         const ctx = contextFactory({}) as Context;
         const data: CellMatrix = [[ct ? { ct } : null]];
         setCellValue(ctx, 0, 0, data, { f: '=X', v });
@@ -328,5 +328,59 @@ describe('state/modules/cell — setCellValue formula results', () => {
     test('a number result stays a number in the cell format', () => {
         expect(computed(2)).toMatchObject({ v: 2, m: '2', ct: { fa: 'General', t: 'n' } });
         expect(computed(0.5, { fa: '0.00', t: 'n' })).toMatchObject({ v: 0.5, m: '0.50' });
+    });
+
+    test.each<[string, CellType | undefined, string | number | boolean, Partial<Cell>]>([
+        ['text after a number', { fa: 'General', t: 'n' }, '005', { m: '005', ct: { fa: 'General', t: 'g' } }],
+        ['text after an error', { fa: 'General', t: 'e' }, 'ok', { m: 'ok', ct: { fa: 'General', t: 'g' } }],
+        ['a number after an error', { fa: 'General', t: 'e' }, 5, { m: '5', ct: { fa: 'General', t: 'n' } }],
+        ['a number after text', { fa: 'General', t: 'g' }, 5, { m: '5', ct: { fa: 'General', t: 'n' } }],
+        ['a boolean after a number', { fa: 'General', t: 'n' }, true, { m: 'TRUE', ct: { fa: 'General', t: 'b' } }],
+        ['a number after a boolean', { fa: 'General', t: 'b' }, 5, { m: '5', ct: { fa: 'General', t: 'n' } }],
+        ['an error after a number', { fa: 'General', t: 'n' }, '#N/A', { m: '#N/A', ct: { fa: 'General', t: 'e' } }],
+    ])('its type follows the result: %s', (_, ct, v, expected) => {
+        expect(computed(v, ct)).toMatchObject({ v, ...expected });
+    });
+
+    // A person chose the format, so it outlives every result, and the next number shows in it again.
+    test.each<[string, CellType, string | number | boolean, Partial<Cell>]>([
+        ['text', { fa: '0.00', t: 'n' }, 'none', { m: 'none', ct: { fa: '0.00', t: 'g' } }],
+        ['an error', { fa: '0.00', t: 'n' }, '#N/A', { m: '#N/A', ct: { fa: '0.00', t: 'e' } }],
+        ['a boolean', { fa: '0.00', t: 'n' }, false, { m: 'FALSE', ct: { fa: '0.00', t: 'b' } }],
+        ['a number after text', { fa: '0.00', t: 'g' }, 2, { m: '2.00', ct: { fa: '0.00', t: 'n' } }],
+        ['a number after an error', { fa: '0.00', t: 'e' }, 2, { m: '2.00', ct: { fa: '0.00', t: 'n' } }],
+        ['a number after a boolean', { fa: '0.00', t: 'b' }, 2, { m: '2.00', ct: { fa: '0.00', t: 'n' } }],
+        ['a date format after text', { fa: 'yyyy-mm-dd', t: 'g' }, 46027, { ct: { fa: 'yyyy-mm-dd', t: 'd' } }],
+        ['a date format after a date', { fa: 'yyyy-mm-dd', t: 'd' }, 46027, { ct: { fa: 'yyyy-mm-dd', t: 'd' } }],
+        ['text in a date format', { fa: 'yyyy-mm-dd', t: 'd' }, 'none', { ct: { fa: 'yyyy-mm-dd', t: 'g' } }],
+        ['a text format keeps its type', { fa: '@', t: 'e' }, 'ok', { ct: { fa: '@', t: 's' } }],
+        ['a number in a text format', { fa: '@', t: 's' }, 5, { ct: { fa: '@', t: 's' } }],
+        ['an error in a text format', { fa: '@', t: 's' }, '#N/A', { ct: { fa: '@', t: 'e' } }],
+    ])('its format stays: %s', (_, ct, v, expected) => {
+        expect(computed(v, ct)).toMatchObject({ v, ...expected });
+    });
+
+    test('a formula reads the text another formula turned to, not the number it was', () => {
+        let next = workbookContextFactory({
+            currentSheetId: 's1',
+            sheets: [{ id: 's1', name: 'One', data: [Array.from({ length: 4 }, () => null)] }],
+        });
+        const edit = (c: number, value: string) => {
+            next = produce(next, (draft: Context) => {
+                draft.selections = [{ row: [0, 0], column: [c, c], row_focus: 0, column_focus: c }];
+                updateCell(draft, 0, c, null, value);
+            });
+        };
+        const at = (c: number) => next.sheets[0].data?.[0][c];
+        edit(0, '0');
+        edit(1, '=IF(A1>0,TEXT(A1,"000"),0)');
+        edit(2, '=B1&D1');
+        expect(at(1)?.ct?.t).toBe('n');
+        edit(0, '5');
+        expect(at(1)).toMatchObject({ v: '005', ct: { t: 'g' } });
+        edit(3, 'x');
+        expect(at(2)?.v).toBe('005x');
+        edit(3, 'y');
+        expect(at(2)?.v).toBe('005y');
     });
 });
