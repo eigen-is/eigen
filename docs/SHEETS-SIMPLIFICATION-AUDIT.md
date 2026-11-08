@@ -18,8 +18,8 @@ Like ROADMAP and the proposals, this doc holds only open work: strike a finding 
   - [D8](#d8) yes: a cut over filter-hidden rows, and a copy whose merge straddles one, get a notice.
   - [E2](#e2) yes: the import recalcs once, with no `computed` flag and no export recalc.
   - F3 yes: past the validation cap the rule stops extending and the edit goes through (done).
-  - [F4](#f4) yes: sheet charts store their parts as Canvas and Docs do, and concurrent restyles of one part are last write wins.
-  - [F6](#f6) yes: chart code stops carrying keys a newer build might store.
+  - [F4](#f4) yes, and the owner's aim is wider: sheet charts use the same format as the other apps, perhaps except for data references, so the code can be completely shared. Concurrent restyles of one part are last write wins. Sheets needs no backward compatibility here, so old sheet charts aren't converted. Everything in CHARTS.md that keeps a newer build's keys stays.
+  - F6 no, corrected by the owner: the chart format stays future proof, so an edit keeps keys a newer build stored. The batch's answer read yes, on a question that called it the mirror of the no-compatibility ruling and didn't say the format was chosen on purpose.
   - [F7](#f7) yes, after checking what Google does: pie slice colours stay at their index. If Google follows the rows, it comes back to the owner.
   - [F8](#f8) yes, last in Wave 2: a tick box draws its box alone, and corner marks don't outrank the handles.
   - [S4](#s4) skipped: [S9](#s9) removes the base and the remount.
@@ -288,12 +288,7 @@ Root cause: patterns 4 and 5. Canvas and Docs store each part as one JSON string
 Simpler: a sheet chart stores its parts as Canvas and Docs do. `floatingWriteFilter` shrinks to "a write into an object applies when it is held", and the entry cap goes, since the byte limit bounds a string.
 Lost: two peers editing two series of one chart at the same instant; the last write wins for that part. ~230 LOC + ~300 test, medium risk, high confidence.
 
-<a id="f6"></a>**F6. Chart code keeps every key a newer build might store, and guards each writer for it.**
-`holdsUnknownChartData` (`lib/charts/resolve.ts`) and the read-only Setup and Edit data rows it drives, `walkRefs` and `mapChartRefs` moving "every ref under any key, even in a chart this build can't draw", `chartPointMoves` for "series this build doesn't read", `laidOver` (`lib/charts/change.ts`), `chartSpecTexts` and `copySheetChartSpec` carrying every `spec*` key.
-History: `baff5a4c0`, `90fe6212d`, `bbd34f905`, `69b4fe8e8`, `11744cd42` (Oct 24).
-Root cause: pattern 4. Forward compatibility is the mirror of the backward compatibility the owner ruled out; it matters only while a tab from an older build edits during an upgrade.
-Simpler: the resolved `ChartSpec` is the truth; writers apply a change onto the chart as resolved at write time; refs and points move through the known fields.
-Lost: an old tab open across an upgrade may drop a newer build's chart fields. ~110 LOC + ~150 test, medium risk (shared with Docs, Slides and Vector), medium confidence.
+F6 (dropping what chart code keeps for a newer build's keys) is ruled out. The stored chart format is future proof on purpose, chosen after studying the big chart libraries ([CHARTS.md](CHARTS.md)), and the owner keeps it. The no-compatibility ruling looks backward only, and it doesn't reach this.
 
 <a id="f7"></a>**F7. A pie's slice colours follow their rows through row ops and Edit data (product).**
 `pointsForInsert`, `pointsForDelete`, `runsAlong` (`engine/rowcol.ts`), the `points` parameter of `mapChartRefs` and `shiftChartsAcrossSheets`, `chartPointMoves`, the row tracking in `chart-data-dialog.tsx` Save.
@@ -346,7 +341,7 @@ Wave 1 (nothing lost, or decided):
 | Formulas | [E6](#e6), then [E4](#e4), [E5](#e5) | `engine/formula-shift.ts`, `engine/recalc.ts`, `formula-*` |
 | Render and input | [R6](#r6), [R7](#r7) | `state/context.ts`, `context/modal.tsx`, `state/events/*`, `SheetOverlay/*` |
 
-Wave 2 (cross-cutting, after the lanes they depend on merged): [E1](#e1) then [E2](#e2); [F2](#f2) (after D2); [D2](#d2) after D4 is ruled; [S2](#s2) then [S5](#s5); [R1](#r1); [D4](#d4), [D8](#d8), [F4](#f4), [F6](#f6), [F7](#f7), [F8](#f8) as ruled. F4, F6 and F7 change `packages/lib/src/charts`, which Docs, Slides and Vector share: tell the other session first.
+Wave 2 (cross-cutting, after the lanes they depend on merged): [E1](#e1) then [E2](#e2); [F2](#f2) (after D2); [D2](#d2) after D4 is ruled; [S2](#s2) then [S5](#s5); [R1](#r1); [D4](#d4), [D8](#d8), [F4](#f4), [F7](#f7), [F8](#f8) as ruled. F4 and F7 change `packages/lib/src/charts`, which Docs, Slides and Vector share: tell the other session first.
 
 Wave 3, the redesigns, in [§ If we built it today](#if-we-built-it-today)'s order. Each is sized again at its Step 0 and shown to the owner before it is built: [S10](#s10) with [D9](#d9), [S9](#s9) (which supersedes [S4](#s4)), [D10](#d10), [F9](#f9), [E7](#e7) and [E8](#e8), [R9](#r9) with [R10](#r10), [F10](#f10) (touches Docs and Canvas: tell the other session), [U6](#u6) only if still worth it. [U7](#u7) stays parked in ROADMAP-POST-1.
 
