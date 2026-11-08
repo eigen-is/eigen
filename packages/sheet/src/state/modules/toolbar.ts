@@ -8,15 +8,15 @@ import { cellValue, is_date, numberDisplay } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
-import type { GlobalCache } from '../types';
 import { clipToUsedExtent, getSheetIndex } from '../utils';
 import { applyBorder, clearSides } from './border';
 import { getRangetxt, isAllSelectedCellsInStatus, setCellValue } from './cell';
+import { openCellEditor } from './cell-editor';
 import { rangeColor } from './color';
 import { setFormulaCellInfo } from './formula-cache';
 import { israngeseleciton } from './formula-editor';
 import { execFunctionGroup, execfunction } from './formula-exec';
-import { createFormulaRangeSelect, rangeSetValue, setCaretPosition } from './formula-range';
+import { createFormulaRangeSelect, rangeSetValue } from './formula-range';
 import { showLinkCard } from './hyperlink';
 import {
     editorSelectionStyle,
@@ -268,23 +268,11 @@ function activeFormulaInput(
     rowh: number[] | null,
     columnh: number[] | null,
     formula: string,
-    cache: GlobalCache,
-    isnull?: boolean,
+    isnull = false,
 ) {
-    if (isnull == null) {
-        isnull = false;
-    }
-
-    ctx.editingCellPosition = [row_index, col_index];
-    cache.doNotUpdateCell = true;
     if (isnull) {
-        const formulaTxt = `<span dir="auto" class="sheet-formula-text-color">=</span><span dir="auto" class="sheet-formula-text-color">${formula.toUpperCase()}</span><span dir="auto" class="sheet-formula-text-color">(</span><span dir="auto" class="sheet-formula-text-color">)</span>`;
-
-        cellInput.innerHTML = formulaTxt;
-
-        const spanList = cellInput.querySelectorAll('span');
-        setCaretPosition(ctx, spanList[spanList.length - 2], 0, 1);
-
+        const html = `<span dir="auto" class="sheet-formula-text-color">=</span><span dir="auto" class="sheet-formula-text-color">${formula.toUpperCase()}</span><span dir="auto" class="sheet-formula-text-color">(</span><span dir="auto" class="sheet-formula-text-color">)</span>`;
+        openCellEditor(ctx, row_index, col_index, { html, caret: formula.length + 2 });
         return;
     }
 
@@ -294,7 +282,7 @@ function activeFormulaInput(
     const col_pre = colLocationByIndex(columnh[0], ctx.visibledatacolumn)[0];
     const col = colLocationByIndex(columnh[1], ctx.visibledatacolumn)[1];
 
-    const formulaTxt = `<span dir="auto" class="sheet-formula-text-color">=</span><span dir="auto" class="sheet-formula-text-color">${formula.toUpperCase()}</span><span dir="auto" class="sheet-formula-text-color">(</span><span class="sheet-formula-functionrange-cell" rangeindex="0" dir="auto" style="color:${rangeColor(
+    const html = `<span dir="auto" class="sheet-formula-text-color">=</span><span dir="auto" class="sheet-formula-text-color">${formula.toUpperCase()}</span><span dir="auto" class="sheet-formula-text-color">(</span><span class="sheet-formula-functionrange-cell" rangeindex="0" dir="auto" style="color:${rangeColor(
         0,
     )};">${getRangetxt(
         ctx,
@@ -302,7 +290,7 @@ function activeFormulaInput(
         { row: rowh, column: columnh },
         ctx.currentSheetId,
     )}</span><span dir="auto" class="sheet-formula-text-color">)</span>`;
-    cellInput.innerHTML = formulaTxt;
+    openCellEditor(ctx, row_index, col_index, { html });
 
     israngeseleciton(ctx);
     ctx.formulaCache.rangestart = true;
@@ -369,7 +357,6 @@ function singleFormulaInput(
     ed_m: number,
     formula: string,
     type: string,
-    cache: GlobalCache,
     noNum?: boolean,
     noNull?: boolean,
 ) {
@@ -410,9 +397,9 @@ function singleFormulaInput(
 
         if (st_r_r == null) {
             if (type === 'c') {
-                activeFormulaInput(cellInput, fxInput, ctx, _index, fix, null, null, formula, cache, true);
+                activeFormulaInput(cellInput, fxInput, ctx, _index, fix, null, null, formula, true);
             } else {
-                activeFormulaInput(cellInput, fxInput, ctx, fix, _index, null, null, formula, cache, true);
+                activeFormulaInput(cellInput, fxInput, ctx, fix, _index, null, null, formula, true);
             }
         } else {
             if (_index === st_m) {
@@ -509,7 +496,6 @@ export function autoSelectionFormula(
     cellInput: HTMLDivElement,
     fxInput: HTMLDivElement | null | undefined,
     formula: string,
-    cache: GlobalCache,
 ) {
     if (ctx.allowEdit === false) return;
     const flowdata = getFlowdata(ctx);
@@ -528,9 +514,9 @@ export function autoSelectionFormula(
         const st_c_c = getNoNullValue(d, st_r, ed_c, 'c');
 
         if (st_c_c == null) {
-            activeFormulaInput(cellInput, fxInput, ctx, st_r, st_c, null, null, _formula, cache, true);
+            activeFormulaInput(cellInput, fxInput, ctx, st_r, st_c, null, null, _formula, true);
         } else {
-            activeFormulaInput(cellInput, fxInput, ctx, st_r, st_c, [st_r, ed_r], [st_c_c, ed_c - 1], _formula, cache);
+            activeFormulaInput(cellInput, fxInput, ctx, st_r, st_c, [st_r, ed_r], [st_c_c, ed_c - 1], _formula);
         }
     }
 
@@ -540,7 +526,7 @@ export function autoSelectionFormula(
         if (st_r_c == null) {
             execFormulaInput_c(d, st_r, ed_r, st_c, ed_c, _formula);
         } else {
-            activeFormulaInput(cellInput, fxInput, ctx, st_r, st_c, [st_r_c, ed_r - 1], [st_c, ed_c], _formula, cache);
+            activeFormulaInput(cellInput, fxInput, ctx, st_r, st_c, [st_r_c, ed_r - 1], [st_c, ed_c], _formula);
         }
     }
 
@@ -554,7 +540,7 @@ export function autoSelectionFormula(
 
         if (st_r === ed_r && st_c === ed_c) {
             if (ed_r - 1 < 0 && ed_c - 1 < 0) {
-                activeFormulaInput(cellInput, fxInput, ctx, st_r, st_c, null, null, formula, cache, true);
+                activeFormulaInput(cellInput, fxInput, ctx, st_r, st_c, null, null, formula, true);
                 return;
             }
 
@@ -566,33 +552,9 @@ export function autoSelectionFormula(
                 execFormulaInput(flowdata, st_r, ed_r, st_c, ed_c, formula);
             }
         } else if (st_r === ed_r) {
-            isfalse = singleFormulaInput(
-                cellInput,
-                fxInput,
-                ctx,
-                flowdata,
-                col_index!,
-                st_r,
-                st_c,
-                ed_c,
-                formula,
-                'r',
-                cache,
-            );
+            isfalse = singleFormulaInput(cellInput, fxInput, ctx, flowdata, col_index!, st_r, st_c, ed_c, formula, 'r');
         } else if (st_c === ed_c) {
-            isfalse = singleFormulaInput(
-                cellInput,
-                fxInput,
-                ctx,
-                flowdata,
-                row_index!,
-                st_c,
-                st_r,
-                ed_r,
-                formula,
-                'c',
-                cache,
-            );
+            isfalse = singleFormulaInput(cellInput, fxInput, ctx, flowdata, row_index!, st_c, st_r, ed_r, formula, 'c');
         } else {
             let r_false = true;
             for (let r = st_r; r <= ed_r; r += 1) {
@@ -608,7 +570,6 @@ export function autoSelectionFormula(
                         ed_c,
                         formula,
                         'r',
-                        cache,
                         true,
                         false,
                     ) && r_false;
@@ -628,7 +589,6 @@ export function autoSelectionFormula(
                         ed_r,
                         formula,
                         'c',
-                        cache,
                         true,
                         false,
                     ) && c_false;

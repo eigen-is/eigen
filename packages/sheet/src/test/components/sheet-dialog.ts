@@ -87,7 +87,8 @@ export async function renderSheetDialog(
     params: Partial<Context> & { config?: SheetConfig } = {},
     grid?: (context: Context) => ReactNode,
 ) {
-    const harness: Harness = { context: workbookContextFactory(params), refs: workbookRefs(), grid };
+    const refs = workbookRefs();
+    const harness: Harness = { context: workbookContextFactory({ getRefs: () => refs, ...params }), refs, grid };
     await renderInDocument(createElement(Workbook, { harness }));
     // Opens a dialog in the slot the way the app does, such as a notice over the one open.
     const show = (open: (dialogs: Dialogs) => void) =>

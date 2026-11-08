@@ -1,40 +1,32 @@
-// The in-cell editor: a contenteditable over the cell being edited. It opens with the cell's text, its
-// formula as colored references or its rich-text runs as spans, and the grid's keyboard handlers commit
-// it. While it is open on text, ⌘B, ⌘I and ⌘U format its selected characters, a format on a bare caret
-// styles the text typed there next, text typed over a selection takes the style of its first character,
-// and a paste inserts plain text. It waits off-screen while the range picker is open, so a press on the grid picks.
+// The in-cell editor: a contenteditable over the cell being edited. openCellEditor fills it, the grid's
+// keyboard handlers commit it, and it empties itself as it closes. While it is open on text, ⌘B, ⌘I and ⌘U
+// format its selected characters, a format on a bare caret styles the text typed there next, text typed over a
+// selection takes the style of its first character, and a paste inserts plain text. It waits off-screen while the
+// range picker is open, so a press on the grid picks.
 
 import { matchesKeyboardEvent } from '@tanstack/react-hotkeys';
-import { escapeHtml } from '@workspace/lib/html';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
 import { useFormulaAutocomplete } from '../../hooks/useFormulaAutocomplete';
-import { usePrevious } from '../../hooks/usePrevious';
 import {
     cancelNormalSelected,
-    createRangeHightlight,
     forgetEditorSelection,
     getFlowdata,
-    getFormulaHtml,
-    getInlineStringHTML,
     getStyleByCell,
     handleBold,
     handleFormulaInput,
     handleItalic,
     handleUnderline,
-    isInlineStringCell,
     israngeseleciton,
     isSelectionOnHiddenRowCol,
     loadCellFont,
     moveHighlightCell,
-    moveToEnd,
     rememberEditorSelection,
     SHEET_HOTKEYS,
     typeStyledText,
     typesIntoEditor,
-    valueShowEs,
 } from '../../state';
 import { ContentEditable } from './ContentEditable';
 import { FormulaHint } from './FormulaHint';
@@ -52,77 +44,25 @@ export const InputBox: React.FC = () => {
     const { pickerOpen } = useDialog();
     const inputRef = useRef<HTMLDivElement>(null);
     const lastKeyDownEventRef = useRef<KeyboardEvent>(null);
-    const prevEditingCellPosition = usePrevious(context.editingCellPosition);
-    const prevSheetId = usePrevious(context.currentSheetId);
     const [isOnHiddenRowCol, setIsOnHiddenRowCol] = useState<boolean>(false);
     const firstSelection = context.selections?.[0];
-    const row_index = firstSelection?.row_focus;
-    const col_index = firstSelection?.column_focus;
+    const focusRow = firstSelection?.row_focus;
+    const focusColumn = firstSelection?.column_focus;
     const preText = useRef('');
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: cell-style memo keyed on sheet/file/cellUpdate; reads helpers off `context` directly
     const inputBoxStyle = useMemo(() => {
-        if (row_index != null && col_index != null && context.editingCellPosition.length > 0) {
+        if (focusRow != null && focusColumn != null && context.editingCellPosition.length > 0) {
             const flowdata = getFlowdata(context);
             if (!flowdata) return {};
-            return getStyleByCell(context, flowdata, row_index, col_index);
+            return getStyleByCell(context, flowdata, focusRow, focusColumn);
         }
         return {};
     }, [context.sheets, context.currentSheetId, context.editingCellPosition, firstSelection]);
 
-    // biome-ignore lint/correctness/useExhaustiveDependencies: cell-edit sync — collaborative-update guard relies on prev refs, not React deps; firing on every refs.* change would clobber the editor
+    // Here and not in cancelNormalSelected, because a peer's batch that fails rolls its close back, and the typed text
+    // must survive that. A layout effect, so it can't run after the write of the next opener.
     useLayoutEffect(() => {
-        if (row_index != null && col_index != null && context.editingCellPosition.length > 0) {
-            if (refs.globalCache.doNotUpdateCell) {
-                delete refs.globalCache.doNotUpdateCell;
-                return;
-            }
-            // The editor loads its cell only when it opens or its sheet changes. While it stays open the text is the
-            // person's, so a collaborative update leaves it alone, and so does a peer's row op that moves the editor
-            // with its cell.
-            const wasOpen = (prevEditingCellPosition?.length ?? 0) > 0;
-            if (wasOpen && prevSheetId === context.currentSheetId) return;
-            const flowdata = getFlowdata(context);
-            const cell = flowdata?.[row_index]?.[col_index];
-            let value = '';
-            // Set when `value` is markup we generated rather than raw cell text.
-            let isGeneratedHtml = false;
-            if (cell && !refs.globalCache.overwriteCell) {
-                if (isInlineStringCell(cell)) {
-                    value = getInlineStringHTML(row_index, col_index, flowdata);
-                    isGeneratedHtml = true;
-                } else if (cell.f) {
-                    // Colored spans, escaped at their leaves — render, do not escape again.
-                    // createRangeHightlight parses those spans, so it wants the markup too.
-                    value = getFormulaHtml(row_index, col_index, flowdata) ?? '';
-                    isGeneratedHtml = true;
-                    const formulaHtml = value;
-                    setContext((ctx) => {
-                        createRangeHightlight(ctx, formulaHtml);
-                    });
-                } else {
-                    const shown = valueShowEs(row_index, col_index, flowdata);
-                    value = shown == null ? '' : String(shown);
-                }
-            }
-            refs.globalCache.overwriteCell = false;
-            const input = inputRef.current;
-            if (input && !refs.globalCache.ignoreWriteCell)
-                input.innerHTML = isGeneratedHtml ? value : escapeHtml(value);
-            refs.globalCache.ignoreWriteCell = false;
-            if (input && !refs.globalCache.doNotFocus) {
-                // Synchronously too: the innerHTML write leaves the caret at 0, and
-                // fast typing can land before the timeout below — the keystrokes
-                // would insert mid-value. The deferred pass still runs after the
-                // click handler's focus-follow timeout settles focus on the input.
-                moveToEnd(input);
-                setTimeout(() => moveToEnd(input));
-            }
-            delete refs.globalCache.doNotFocus;
-        }
-    }, [context.editingCellPosition, context.sheets, context.currentSheetId, firstSelection]);
-
-    useEffect(() => {
         const input = inputRef.current;
         if (context.editingCellPosition.length === 0 && input) {
             input.innerHTML = '';

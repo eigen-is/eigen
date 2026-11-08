@@ -14,7 +14,6 @@ import { removeHyperlink, saveHyperlink, showLinkCard } from '../../state/module
 import { calcSelectionInfo } from '../../state/modules/selection';
 import { sortRows, sortSelection } from '../../state/modules/sort';
 import { autoSelectionFormula, handleMerge } from '../../state/modules/toolbar';
-import type { GlobalCache } from '../../state/types';
 import { contextFactory, selectionFactory } from './factories/context';
 
 function rich(text: string): Cell {
@@ -150,7 +149,7 @@ describe('readers of a rich cell', () => {
             [[plain(1)], [plain(2)], [rich('Note')], [null]],
             selectionFactory([0, 1], [0, 0], 0, 0),
         );
-        autoSelectionFormula(ctx, {} as HTMLDivElement, null, 'SUM', {} as GlobalCache);
+        autoSelectionFormula(ctx, {} as HTMLDivElement, null, 'SUM');
         const d = ctx.sheets[0].data!;
         expect(cellValue(d[2][0])).toBe('Note');
         expect(d[3][0]?.f).toBe('=SUM(A1:A2)');
