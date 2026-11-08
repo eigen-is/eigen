@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
 import {
     COLLAB_ACCESS_LOST_CLOSE,
+    COLLAB_ACCESS_LOST_REASON,
     COLLAB_STORAGE_UNAVAILABLE_CLOSE,
     COLLAB_STORAGE_UNAVAILABLE_REASON,
 } from '@workspace/lib/constants/collab';
@@ -123,7 +124,7 @@ describe('a collab socket holds its Home', () => {
         const holds = spyOn(home, 'hold');
         try {
             const socket = openSocket(ctx.bob.user.sessionToken);
-            expect(await socket.closed).toEqual({ code: COLLAB_ACCESS_LOST_CLOSE, reason: 'Access denied' });
+            expect(await socket.closed).toEqual({ code: COLLAB_ACCESS_LOST_CLOSE, reason: COLLAB_ACCESS_LOST_REASON });
             expect(holds).not.toHaveBeenCalled();
         } finally {
             holds.mockRestore();

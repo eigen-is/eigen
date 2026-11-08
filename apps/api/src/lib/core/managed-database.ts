@@ -16,7 +16,7 @@ import { ApiError } from './errors';
 
 export type SchemaType = Record<string, unknown>;
 
-export type Migration = {
+type Migration = {
     version: number;
     up: (db: Database) => void;
 };

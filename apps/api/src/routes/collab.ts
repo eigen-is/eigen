@@ -4,6 +4,7 @@
 
 import {
     COLLAB_ACCESS_LOST_CLOSE,
+    COLLAB_ACCESS_LOST_REASON,
     COLLAB_HOME_REPLACED_CLOSE,
     COLLAB_HOME_REPLACED_REASON,
     COLLAB_STORAGE_GONE_CLOSE,
@@ -11,10 +12,7 @@ import {
     COLLAB_STORAGE_UNAVAILABLE_CLOSE,
     COLLAB_STORAGE_UNAVAILABLE_REASON,
 } from '@workspace/lib/constants/collab';
-import { commentAssignedTag } from '@workspace/lib/notification/tags';
 import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
-import type { EffectiveMember } from '@workspace/lib/types/drive';
-import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { Elysia, t } from 'elysia';
 import type { ServerWebSocket } from 'elysia/ws/bun';
 import { withCommentIndex } from '../lib/chat';
@@ -26,8 +24,6 @@ import { ApiError } from '../lib/core/errors';
 import { getSharedDrive } from '../lib/drive';
 import type { DriveLike } from '../lib/drive/get-drive';
 import { getDataEpoch } from '../lib/home/data-epoch';
-import { sendToHome } from '../lib/home/home-relay';
-import { getUserByEmail, getUserById } from '../lib/user';
 import { keepWebSocketAlive } from '../utils/websockets';
 import { betterAuth } from './auth';
 
@@ -117,51 +113,7 @@ export const collabRouter = new Elysia({
             if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
                 throw new ApiError(403, 'No write permission');
             }
-            const assignee = body.assignee ? body.assignee.toLowerCase() : null;
-            // Looked up once for the check and passed on to the broadcast, because it walks the whole ACL.
-            let members: EffectiveMember[] | undefined;
-            if (assignee) {
-                members = await drive.getEffectiveMembers(params.mountId, params.pathId);
-                if (!members.some((m) => m.email === assignee)) {
-                    throw new ApiError(400, 'Assignee is not a member of this document');
-                }
-            }
-            const changed = await drive.assignComment(
-                params.mountId,
-                params.pathId,
-                params.chatName,
-                assignee,
-                user,
-                body.title,
-            );
-
-            broadcastCommentIndexUpdated(drive, params.ownerId, params.mountId, params.pathId, members).catch(() => {});
-
-            if (changed && assignee && assignee !== user.email.toLowerCase()) {
-                try {
-                    const assigneeUser = await getUserByEmail(assignee);
-                    const path = assigneeUser ? await drive.getPath(params.mountId, params.pathId) : null;
-                    if (assigneeUser && path) {
-                        await sendToHome(assigneeUser.id, {
-                            type: 'notification',
-                            notification: {
-                                type: 'assigned',
-                                actorEmail: user.email,
-                                title: `${user.name} assigned you a comment on "${stripEigenExtension(path.name)}"`,
-                                tag: commentAssignedTag({
-                                    ownerId: params.ownerId,
-                                    mountId: params.mountId,
-                                    pathId: params.pathId,
-                                    chatName: params.chatName,
-                                }),
-                                details: { pathType: path.type },
-                            },
-                        });
-                    }
-                } catch {
-                    // The user or their home may not exist: an unregistered guest gets no notification.
-                }
-            }
+            await drive.assignComment(params.mountId, params.pathId, params.chatName, body.assignee, user, body.title);
             return { success: true };
         },
         {
@@ -206,7 +158,7 @@ export const collabRouter = new Elysia({
                     return;
                 }
                 if (!(await drive.canRead(mountId, pathId, user))) {
-                    ws.close(COLLAB_ACCESS_LOST_CLOSE, 'Access denied');
+                    ws.close(COLLAB_ACCESS_LOST_CLOSE, COLLAB_ACCESS_LOST_REASON);
                     return;
                 }
                 // Only a user who may read holds the Home, until cleanupSession lets go. A Home that closes anyway,
@@ -229,11 +181,7 @@ export const collabRouter = new Elysia({
 
                 // A removal or an ACL change during the load found no connection to close, and one after the subscribe
                 // finds this one. A frame that waits for `opened` finds no document once the session is cleaned up.
-                const current = await getUserById(user.id);
-                if (!current || !(await drive.canRead(mountId, pathId, current))) {
-                    ws.close(COLLAB_ACCESS_LOST_CLOSE, 'Access revoked');
-                    cleanupSession(session, rawWs);
-                }
+                if (!(await document.keepsReadAccess(rawWs))) cleanupSession(session, rawWs);
             } catch (err) {
                 const status = err instanceof ApiError ? err.status : 500;
                 // A refusal, such as a document in the trash, is expected on every reconnect, so it gets one line.

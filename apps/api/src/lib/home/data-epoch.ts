@@ -1,12 +1,7 @@
-// The data epoch is a stamp that changes when a restore replaces a home's data or an update replaces
-// the code. An open browser tab remembers the stamp it started with. The event stream announces the
-// current one and a collab socket checks it when it connects; when it differs, the tab reloads. Without
-// it, a tab that was open (or offline) during a restore would sync its old state back over the restored
-// data, and a tab from before an update would write old structures to the new server.
-//
-// The stamp is the server's part, the build's commit, then the home's part. The server's part changes
-// when the whole server is restored, the commit with every update, the home's part when only that home
-// is restored. A restore of one home that fails puts the home's part back.
+// The data epoch is a stamp that changes when a restore replaces a home's data or an update replaces the code. An open
+// tab remembers the stamp it started with. The event stream announces the current one and a collab socket checks it
+// when it connects; when it differs, the tab reloads. Without it, a tab open during a restore would sync its old state
+// back over the restored data, and a tab from before an update would write old structures to the new server.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { parseStringRecord } from '@workspace/lib/validation';
@@ -64,9 +59,8 @@ function loadHomeEpochs(): Map<string, string> {
     return homeEpochs;
 }
 
-// A file that can't be read counts as "no restores yet": the tabs of a restored home then reload
-// one more time, which is better than every event stream and collab socket failing. The next
-// restore writes the file whole again.
+// A file that can't be read counts as "no restores yet": the tabs of a restored home reload once more, which beats
+// every event stream and collab socket failing.
 function readHomeEpochs(file: string): Record<string, string> {
     if (!existsSync(file)) return {};
     const epochs = parseStringRecord(readFileSync(file, 'utf8'));

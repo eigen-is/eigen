@@ -64,15 +64,6 @@ type FolderLocks = { paths: Map<string, Promise<void>>; tree: RWLock };
 // same locks. An entry is small and stays for the process.
 const folderLocks = new Map<string, FolderLocks>();
 
-function locksFor(folder: string): FolderLocks {
-    let locks = folderLocks.get(folder);
-    if (!locks) {
-        locks = { paths: new Map(), tree: new RWLock() };
-        folderLocks.set(folder, locks);
-    }
-    return locks;
-}
-
 export class Mount {
     public readonly id: string;
     public readonly config: MountConfig;
@@ -176,11 +167,6 @@ export class Mount {
     // opened in place.
     public get needsTempCopy(): boolean {
         return this.isRemote || this.isPathBased;
-    }
-
-    // How many uploads on this mount still wait for the bucket to accept them.
-    public get pendingUploadCount(): number {
-        return this.uploadQueue?.pendingCount ?? 0;
     }
 
     // ---- Lifecycle ----
@@ -495,12 +481,12 @@ export class Mount {
             hash: row.hash,
             thumbnail: row.thumbnail,
             acl: row.acl,
-            visibility: row.visibility ?? 'private',
+            visibility: row.visibility,
             sharingRestricted: row.sharingRestricted,
-            details: row.details ?? null,
-            trashedAt: row.trashedAt ?? null,
-            createdAt: row.createdAt ?? new Date(),
-            updatedAt: row.updatedAt ?? new Date(),
+            details: row.details,
+            trashedAt: row.trashedAt,
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
         };
     }
 
@@ -1453,4 +1439,13 @@ export class Mount {
         tx.update(paths).set({ size: total }).where(eq(paths.id, folderId)).run();
         return total;
     }
+}
+
+function locksFor(folder: string): FolderLocks {
+    let locks = folderLocks.get(folder);
+    if (!locks) {
+        locks = { paths: new Map(), tree: new RWLock() };
+        folderLocks.set(folder, locks);
+    }
+    return locks;
 }

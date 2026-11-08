@@ -221,7 +221,7 @@ describe.skipIf(!live)('Backup round trip on a real S3 mount (MinIO)', () => {
         await restored.init();
         try {
             await restored.uploadQueue?.drain({ flushNow: true });
-            expect(restored.pendingUploadCount).toBe(0);
+            expect(restored.uploadQueue?.pendingCount).toBe(0);
             expect(await bytesInBucket(storage, restoredPngKey)).toEqual(TEST_PNG_BYTES);
             expect(await bytesInBucket(storage, restoredTextKey)).toEqual(TEXT_BYTES);
         } finally {

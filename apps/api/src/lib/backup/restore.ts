@@ -15,8 +15,8 @@ import { ApiError } from '../core';
 import { getHomeDataEpoch, rotateHomeDataEpoch, setHomeDataEpoch } from '../home/data-epoch';
 import { clearHomeRestoring, evictHome, markHomeRestoring } from '../home/get-home';
 import { addRegistryEntry } from '../share/registry';
-import { getTeam } from '../team/team';
-import { getUserById } from '../user/user';
+import { getTeamExists } from '../team/team';
+import { getOwnerExists } from '../user/user';
 import { extractArtifact, readUnpackedHome, unpackBound } from './archive';
 import { readDeclaredManifest, requireArtifact } from './artifacts';
 import { authRowsToRestore, restoreAuthRows } from './auth-rows';
@@ -64,7 +64,9 @@ export async function restoreHome(
     // A deleted user's archive carries the auth rows that bring them back. Nothing brings a team back, and its home
     // would answer 404 for good.
     const owner = parseOwnerId(ownerId);
-    if (owner.type === 'team' && !(await getTeam(owner.id))) throw new ApiError(404, `${ownerId} no longer exists`);
+    if (owner.type === 'team' && !(await getTeamExists(owner.id))) {
+        throw new ApiError(404, `${ownerId} no longer exists`);
+    }
 
     const identity = await replaceHomeFolder(
         ownerId,
@@ -140,9 +142,7 @@ export async function restoreSafetyCopy(
     if (!fs.existsSync(folder)) throw new ApiError(404, `${name} is not beside this home`);
     // A safety copy of a home whose owner is gone is a delete candidate, not a restore: the folder on its own leaves a
     // home nobody can sign in to. Restoring a deleted user goes through an artifact, which carries their auth rows.
-    const owner = parseOwnerId(ownerId);
-    const found = owner.type === 'team' ? await getTeam(owner.id) : await getUserById(owner.id);
-    if (!found) throw new ApiError(404, `${ownerId} no longer exists`);
+    if (!(await getOwnerExists(ownerId))) throw new ApiError(404, `${ownerId} no longer exists`);
     const mountIds = mountIdsIn(folder);
 
     const install: InstallHome = async () => {

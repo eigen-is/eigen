@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { COLLAB_ACCESS_LOST_CLOSE } from '@workspace/lib/constants/collab';
+import { COLLAB_ACCESS_LOST_CLOSE, COLLAB_ACCESS_LOST_REASON } from '@workspace/lib/constants/collab';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import * as decoding from 'lib0/decoding';
@@ -28,7 +28,7 @@ import {
 // Read is checked when a collab socket opens, so a membership that goes must close the sockets that lost read with it,
 // on every loaded home, whichever way better-auth removed the row. Needs a real listening server.
 
-const REVOKED = { code: COLLAB_ACCESS_LOST_CLOSE, reason: 'Access revoked' };
+const REVOKED = { code: COLLAB_ACCESS_LOST_CLOSE, reason: COLLAB_ACCESS_LOST_REASON };
 
 let ctx: Awaited<ReturnType<typeof getTestContext>>;
 let orgId: string;
@@ -286,6 +286,29 @@ describe('a membership that goes closes the sockets that lost read', () => {
 
         expect(await removedSocket.closed).toEqual(REVOKED);
         await expectStillReceiving(ownerSocket, owner.id, mountId, doc.id);
+    });
+});
+
+describe("a password reset closes that user's sockets", () => {
+    test("on every loaded home, whether or not they may still read, and another user's socket stays", async () => {
+        const [locked, stays] = await Promise.all([newUser('locked'), newUser('stays')]);
+        const owner = ctx.alice.user;
+        const shared = await docNaming(owner, locked, stays);
+        const own = await newDoc(locked);
+        const sharedSocket = await openSocket(locked, owner.id, shared.mountId, shared.docId);
+        const ownSocket = await openSocket(locked, locked.id, own.mountId, own.docId);
+        const staysSocket = await openSocket(stays, owner.id, shared.mountId, shared.docId);
+
+        const res = await authedRequest(owner.sessionToken, `/settings/user/${locked.id}/password`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: 'a-new-password-1' }),
+        });
+
+        expect(res.status).toBe(200);
+        expect(await sharedSocket.closed).toEqual(REVOKED);
+        expect(await ownSocket.closed).toEqual(REVOKED);
+        await expectStillReceiving(staysSocket, owner.id, shared.mountId, shared.docId);
     });
 });
 

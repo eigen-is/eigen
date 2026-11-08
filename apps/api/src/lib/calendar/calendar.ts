@@ -51,17 +51,6 @@ import { buildCalendarEvent } from './sse-events';
 import { exportEvents, importEvents } from './transfer';
 import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload } from './types';
 
-// The one rule for what a calendar may be called and colored: REST, MKCALENDAR and PROPPATCH all land here.
-function validateCalendarProps(props: { name?: string; color?: string }): void {
-    if (props.name !== undefined && props.name.trim().length > CALENDAR_NAME_MAX_LENGTH) {
-        throw new ApiError(400, `Calendar name is longer than ${CALENDAR_NAME_MAX_LENGTH} characters`);
-    }
-    // Apple writes the eight-digit form, so all three hex lengths are valid.
-    if (props.color !== undefined && !isHexColor(props.color, [3, 6, 8])) {
-        throw new ApiError(400, 'Calendar color must be a hex color');
-    }
-}
-
 export class Calendar {
     private managedDb!: ManagedDatabase<typeof schema>;
     public db!: BunSQLiteDatabase<typeof schema>;
@@ -86,10 +75,11 @@ export class Calendar {
         this.db = this.managedDb.db;
 
         // Seeded once here, then moved by delta at each commit and purge.
-        this.eventsBytes = this.db
-            .select({ total: sql<number>`COALESCE(SUM(${resourceBytes}), 0)` })
-            .from(schema.resources)
-            .get()!.total;
+        this.eventsBytes =
+            this.db
+                .select({ total: sql<number>`COALESCE(SUM(${resourceBytes}), 0)` })
+                .from(schema.resources)
+                .get()?.total ?? 0;
 
         if (this.db.select({ id: schema.calendars.id }).from(schema.calendars).all().length === 0) {
             await this.createCalendar({
@@ -121,15 +111,12 @@ export class Calendar {
     }
 
     public bumpCtag(tx: Tx, calendarId: string): number {
-        tx.update(schema.calendars)
+        return tx
+            .update(schema.calendars)
             .set({ ctag: sql`${schema.calendars.ctag} + 1`, updatedAt: sql`unixepoch()` })
             .where(eq(schema.calendars.id, calendarId))
-            .run();
-        return tx
-            .select({ ctag: schema.calendars.ctag })
-            .from(schema.calendars)
-            .where(eq(schema.calendars.id, calendarId))
-            .get()!.ctag;
+            .returning({ ctag: schema.calendars.ctag })
+            .get().ctag;
     }
 
     public tombstone(tx: Tx, calendarId: string, uri: string, ctag: number): void {
@@ -185,11 +172,9 @@ export class Calendar {
     // Callers hold the write lock and have already run their own guards (preconditions, the linked-copy rule).
     public async purgeResource(row: Pick<PurgedResource, 'id' | 'calendarId' | 'uri'>): Promise<void> {
         const removed = this.db.transaction((tx) => {
-            const size = tx
-                .select({ size: resourceBytes })
-                .from(schema.resources)
-                .where(eq(schema.resources.id, row.id))
-                .get()!.size;
+            const size =
+                tx.select({ size: resourceBytes }).from(schema.resources).where(eq(schema.resources.id, row.id)).get()
+                    ?.size ?? 0;
             const ctag = this.bumpCtag(tx, row.calendarId);
             tx.delete(schema.resources).where(eq(schema.resources.id, row.id)).run();
             this.tombstone(tx, row.calendarId, row.uri, ctag);
@@ -242,7 +227,7 @@ export class Calendar {
         const created = await this.writeLock.run(async () => {
             if (this.calendarIdTaken(id)) throw new ApiError(409, 'Calendar already exists');
 
-            this.db
+            const row = this.db
                 .insert(schema.calendars)
                 .values({
                     id,
@@ -254,8 +239,9 @@ export class Calendar {
                     syncGen: newSyncGen(),
                     shares: null,
                 })
-                .run();
-            return this.calendarById(id)!;
+                .returning()
+                .get();
+            return dbCalendarToCalendarItem(row);
         });
 
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_CREATED, this.home.user.id));
@@ -285,25 +271,25 @@ export class Calendar {
 
         const oldShares = existing.shares;
 
-        this.db
-            .update(schema.calendars)
-            .set({
-                name: input.name !== undefined ? input.name.trim() : existing.name,
-                color: input.color ?? existing.color,
-                visible: input.visible ?? existing.visible,
-                shares: input.shares !== undefined ? input.shares : existing.shares,
-                updatedAt: sql`unixepoch()`,
-            })
-            .where(eq(schema.calendars.id, id))
-            .run();
+        const updated = dbCalendarToCalendarItem(
+            this.db
+                .update(schema.calendars)
+                .set({
+                    name: input.name !== undefined ? input.name.trim() : existing.name,
+                    color: input.color ?? existing.color,
+                    visible: input.visible ?? existing.visible,
+                    shares: input.shares !== undefined ? input.shares : existing.shares,
+                    updatedAt: sql`unixepoch()`,
+                })
+                .where(eq(schema.calendars.id, id))
+                .returning()
+                .get(),
+        );
 
-        if (input.shares !== undefined) {
-            const updated = this.calendarById(id)!;
-            await propagateCalendarShare(this.home, updated, oldShares);
-        }
+        if (input.shares !== undefined) await propagateCalendarShare(this.home, updated, oldShares);
 
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_UPDATED, this.home.user.id));
-        return this.calendarById(id)!;
+        return updated;
     }
 
     public async deleteCalendar(id: string): Promise<void> {
@@ -318,11 +304,12 @@ export class Calendar {
 
         await this.writeLock.run(async () => {
             const removed = this.db.transaction((tx) => {
-                const total = tx
-                    .select({ total: sql<number>`COALESCE(SUM(${resourceBytes}), 0)` })
-                    .from(schema.resources)
-                    .where(eq(schema.resources.calendarId, id))
-                    .get()!.total;
+                const total =
+                    tx
+                        .select({ total: sql<number>`COALESCE(SUM(${resourceBytes}), 0)` })
+                        .from(schema.resources)
+                        .where(eq(schema.resources.calendarId, id))
+                        .get()?.total ?? 0;
                 // The resources and their event rows go with the row, by cascade.
                 tx.delete(schema.calendars).where(eq(schema.calendars.id, id)).run();
                 // No cascade reaches these: a calendar recreated at this id would inherit the 404s.
@@ -643,5 +630,16 @@ export class Calendar {
         },
     ): Promise<void> {
         return invitations.rsvp(this, eventId, user, input);
+    }
+}
+
+// The one rule for what a calendar may be called and colored: REST, MKCALENDAR and PROPPATCH all land here.
+function validateCalendarProps(props: { name?: string; color?: string }): void {
+    if (props.name !== undefined && props.name.trim().length > CALENDAR_NAME_MAX_LENGTH) {
+        throw new ApiError(400, `Calendar name is longer than ${CALENDAR_NAME_MAX_LENGTH} characters`);
+    }
+    // Apple writes the eight-digit form, so all three hex lengths are valid.
+    if (props.color !== undefined && !isHexColor(props.color, [3, 6, 8])) {
+        throw new ApiError(400, 'Calendar color must be a hex color');
     }
 }
