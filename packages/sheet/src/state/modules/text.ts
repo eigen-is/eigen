@@ -97,10 +97,6 @@ function checkWordByteLength(value: string) {
     return Math.ceil(value.charCodeAt(0).toString(2).length / 8);
 }
 
-export function hasChinaword(s: string) {
-    return /[\u4E00-\u9FA5]|[\uFE30-\uFFA0]/.test(s);
-}
-
 let measureTextCache: Record<string, MeasureTextMetrics> = {};
 
 // A font slice that loads changes what the text measures, so the font watcher clears the cache when one arrives.

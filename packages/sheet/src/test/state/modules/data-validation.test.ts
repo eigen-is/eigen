@@ -588,8 +588,6 @@ const draft = (rule: Partial<DataValidationDraft>): DataValidationDraft => ({
     rangeTxt: 'A1:A3',
     value1: '',
     value2: '',
-    validity: '',
-    remote: false,
     prohibitInput: false,
     hintShow: false,
     hintValue: '',
@@ -701,6 +699,23 @@ describe('getValidationHint', () => {
         for (const [rule, cell, text] of cases) {
             expect(getValidationHint(hintContext(rule, cell), 1, 1)?.text).toBe(text);
         }
+    });
+
+    // 2024-06-15 is serial 45458. A date shows the text of its format, so the check reads the serial.
+    test('a date passes its rule whatever format it shows', () => {
+        const rule: DataValidationRule = { type: 'date', type2: 'between', value1: '2024-01-01', value2: '2024-12-31' };
+        const shown = (m: string, v: number): Cell => ({ v, m, ct: { fa: 'd mmm yyyy', t: 'd' } });
+        expect(getValidationHint(hintContext(rule, shown('15 Jun 2024', 45458)), 1, 1)).toBeUndefined();
+        expect(getValidationHint(hintContext(rule, shown('2024-06-15', 45458)), 1, 1)).toBeUndefined();
+        expect(getValidationHint(hintContext(rule, shown('15 Jun 2025', 45823)), 1, 1)?.text).toBe(
+            'Date must be between 2024-01-01 and 2024-12-31.',
+        );
+    });
+
+    test('a plain number under a date rule is read as a serial, and text that is no date fails', () => {
+        const rule: DataValidationRule = { type: 'date', type2: 'laterThan', value1: '2024-01-01', value2: '' };
+        expect(getValidationHint(hintContext(rule, { v: 45458, m: '45458' }), 1, 1)).toBeUndefined();
+        expect(getValidationHint(hintContext(rule, { v: 'soon', m: 'soon' }), 1, 1)?.kind).toBe('invalid');
     });
 
     test('shows the author prompt verbatim, markup and all — React renders it as text', () => {

@@ -1,6 +1,6 @@
 // The Manage rules dialog, opened from the Format menu: the current sheet's conditional-format rules, each with its
 // range, a plain-English description and a swatch of its style. Its delete button per rule removes the rule at once,
-// unless the sheet is protected, so the dialog is a list with only Close in its footer.
+// so the dialog is a list with only Close in its footer.
 
 import type { ConditionalFormatRule, DefaultConditionalFormatRule } from '@workspace/lib/sheets';
 import { Button } from '@workspace/ui/components/button';
@@ -64,8 +64,6 @@ function describeRule(rule: ConditionalFormatRule): string {
             return 'Color scale';
         case 'dataBar':
             return 'Data bar';
-        case 'icons':
-            return 'Icon set';
         case 'default':
             return describeDefaultRule(rule);
     }

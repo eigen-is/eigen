@@ -9,7 +9,7 @@ import { cellValue, dropRuns } from '../../engine/format';
 import { iscelldata } from '../../engine/formula-utils';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
-import { getSheetIndex, isAllowEdit } from '../utils';
+import { getSheetIndex } from '../utils';
 import { mergeBorder } from './cell';
 import { getcellrange } from './formula-exec';
 import { colLocation, rowLocation } from './location';
@@ -79,8 +79,7 @@ export function saveHyperlink(
 }
 
 export function removeHyperlink(ctx: Context, r: number, c: number) {
-    const allowEdit = isAllowEdit(ctx);
-    if (!allowEdit) return;
+    if (ctx.allowEdit === false) return;
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     const flowdata = getFlowdata(ctx);
     if (flowdata != null && sheetIndex != null) {

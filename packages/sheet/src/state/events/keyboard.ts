@@ -6,6 +6,7 @@
 import type { Hotkey } from '@tanstack/react-hotkeys';
 import { matchesKeyboardEvent } from '@tanstack/react-hotkeys';
 import { REDO_ALT_HOTKEY, REDO_HOTKEY, UNDO_HOTKEY } from '@workspace/lib/constants/hotkeys';
+import dayjs from 'dayjs';
 import { cloneDeep, isEmpty, isNil } from 'es-toolkit/compat';
 import { cellValue } from '../../engine/format';
 import type { CellMatrix } from '../../engine/types';
@@ -19,7 +20,7 @@ import { handleFormulaInput } from '../modules/formula-editor';
 import { moveHighlightCell, moveHighlightRange, selectAll, selectionCache } from '../modules/selection';
 import { handleBold, handleItalic, handleUnderline } from '../modules/toolbar';
 import type { GlobalCache, Selection } from '../types';
-import { getNowDateTime, getSheetIndex, isAllowEdit } from '../utils';
+import { getSheetIndex } from '../utils';
 import { clearSelectedContents } from './clear';
 import { handleCopy, handleCut } from './copy';
 
@@ -212,7 +213,7 @@ export function handleWithCtrlOrMetaKey(
             ctx.editingCellPosition = [row_index, col_index];
 
             cache.ignoreWriteCell = true;
-            cellInput.innerText = getNowDateTime(2);
+            cellInput.innerText = dayjs().format('YYYY-MM-DD HH:mm:ss');
             handleFormulaInput(ctx, fxInput, cellInput, e.keyCode);
         }
     } else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
@@ -326,7 +327,7 @@ function toggleFocusedCheckbox(ctx: Context, kstr: string) {
 // the mousedown path does. Returns false for every other cell and key.
 function openFocusedDropdown(ctx: Context, e: KeyboardEvent) {
     if (!e.altKey || e.key !== 'ArrowDown') return false;
-    if (ctx.editingCellPosition.length > 0 || !isAllowEdit(ctx)) return false;
+    if (ctx.editingCellPosition.length > 0 || ctx.allowEdit === false) return false;
     const selection = ctx.selections?.[ctx.selections.length - 1];
     if (selection?.row_focus == null || selection.column_focus == null) return false;
     const { row_focus: r, column_focus: c } = selection;
@@ -355,7 +356,7 @@ export function handleGlobalKeyDown(
         ctx.formulaRangeSelections = [];
     }
 
-    const allowEdit = isAllowEdit(ctx);
+    const allowEdit = ctx.allowEdit !== false;
 
     if (
         ctx.editingCellPosition.length > 0 &&

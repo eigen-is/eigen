@@ -6,6 +6,7 @@
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { booleanDisplay, cellDisplay, cellValue } from '../../engine/format';
 import { iscelldata, matrixWidth } from '../../engine/formula-utils';
+import { dateToSerial } from '../../engine/parser/helper/number';
 import type { Cell } from '../../engine/types';
 import type { CellMatrix, Context, DataValidationRule, SingleRange } from '..';
 import {
@@ -16,7 +17,6 @@ import {
     getRangeByTxt,
     getRealCellValue,
     getSheetIndex,
-    isAllowEdit,
     isdatetime,
     isRealNull,
     isRealNum,
@@ -97,145 +97,72 @@ export function validateCellData(ctx: Context, item: DataValidationRule, cellVal
         return true;
     }
     if (type === 'number' || type === 'number_integer' || type === 'number_decimal') {
-        if (!isRealNum(cellValue)) {
-            return false;
-        }
-
+        if (!isRealNum(cellValue)) return false;
         const n = Number(cellValue);
-        if (type === 'number_integer' && n % 1 !== 0) {
-            return false;
-        }
-
-        if (type === 'number_decimal' && n % 1 === 0) {
-            return false;
-        }
-
-        const v1 = Number(value1);
-        const v2 = Number(value2);
-
-        if (type2 === 'between' && (n < v1 || n > v2)) {
-            return false;
-        }
-
-        if (type2 === 'notBetween' && n >= v1 && n <= v2) {
-            return false;
-        }
-
-        if (type2 === 'equal' && n !== v1) {
-            return false;
-        }
-
-        if (type2 === 'notEqualTo' && n === v1) {
-            return false;
-        }
-
-        if (type2 === 'moreThanThe' && n <= v1) {
-            return false;
-        }
-
-        if (type2 === 'lessThan' && n >= v1) {
-            return false;
-        }
-
-        if (type2 === 'greaterOrEqualTo' && n < v1) {
-            return false;
-        }
-
-        if (type2 === 'lessThanOrEqualTo' && n > v1) {
-            return false;
-        }
-    } else if (type === 'text_content') {
+        if (type === 'number_integer' && n % 1 !== 0) return false;
+        if (type === 'number_decimal' && n % 1 === 0) return false;
+        return meetsCondition(n, type2, Number(value1), Number(value2));
+    }
+    if (type === 'text_content') {
         const s = String(cellValue ?? '');
-        const v1 = String(value1 ?? '');
-
-        if (type2 === 'include' && s.indexOf(v1) === -1) {
-            return false;
-        }
-
-        if (type2 === 'exclude' && s.indexOf(v1) > -1) {
-            return false;
-        }
-
-        if (type2 === 'equal' && s !== v1) {
-            return false;
-        }
-    } else if (type === 'text_length') {
-        const len = String(cellValue ?? '').length;
-
-        const v1 = Number(value1);
-        const v2 = Number(value2);
-
-        if (type2 === 'between' && (len < v1 || len > v2)) {
-            return false;
-        }
-
-        if (type2 === 'notBetween' && len >= v1 && len <= v2) {
-            return false;
-        }
-
-        if (type2 === 'equal' && len !== v1) {
-            return false;
-        }
-
-        if (type2 === 'notEqualTo' && len === v1) {
-            return false;
-        }
-
-        if (type2 === 'moreThanThe' && len <= v1) {
-            return false;
-        }
-
-        if (type2 === 'lessThan' && len >= v1) {
-            return false;
-        }
-
-        if (type2 === 'greaterOrEqualTo' && len < v1) {
-            return false;
-        }
-
-        if (type2 === 'lessThanOrEqualTo' && len > v1) {
-            return false;
-        }
-    } else if (type === 'date') {
-        if (!isdatetime(cellValue)) {
-            return false;
-        }
-        // diff takes no boolean, so the value goes in as text.
-        const dv = String(cellValue ?? '');
-
-        if (type2 === 'between' && (diff(dv, value1) < 0 || diff(dv, value2) > 0)) {
-            return false;
-        }
-
-        if (type2 === 'notBetween' && diff(dv, value1) >= 0 && diff(dv, value2) <= 0) {
-            return false;
-        }
-
-        if (type2 === 'equal' && diff(dv, value1) !== 0) {
-            return false;
-        }
-
-        if (type2 === 'notEqualTo' && diff(dv, value1) === 0) {
-            return false;
-        }
-
-        if (type2 === 'earlierThan' && diff(dv, value1) >= 0) {
-            return false;
-        }
-
-        if (type2 === 'noEarlierThan' && diff(dv, value1) < 0) {
-            return false;
-        }
-
-        if (type2 === 'laterThan' && diff(dv, value1) <= 0) {
-            return false;
-        }
-
-        if (type2 === 'noLaterThan' && diff(dv, value1) > 0) {
-            return false;
-        }
+        if (type2 === 'include') return s.includes(value1);
+        if (type2 === 'exclude') return !s.includes(value1);
+        return type2 !== 'equal' || s === value1;
+    }
+    if (type === 'text_length') {
+        return meetsCondition(String(cellValue ?? '').length, type2, Number(value1), Number(value2));
+    }
+    if (type === 'date') {
+        const serial = dateSerial(cellValue);
+        return !Number.isNaN(serial) && meetsCondition(serial, type2, dateSerial(value1), dateSerial(value2));
     }
     return true;
+}
+
+// A cell against its rule, given the value it shows. A date rule reads the serial, since the text a date shows depends
+// on its format.
+export function cellPassesRule(
+    ctx: Context,
+    rule: DataValidationRule,
+    cell: Cell | null | undefined,
+    shown: CellValueForValidation,
+) {
+    return validateCellData(ctx, rule, rule.type === 'date' ? cell?.v : shown);
+}
+
+// A number already is a date's serial. Text reads as a typed date does, in local time, and a rule's operands are
+// such text.
+function dateSerial(value: CellValueForValidation) {
+    if (typeof value === 'number') return value;
+    return isdatetime(value) ? dateToSerial(new Date(String(value).replace(/-/g, '/'))) : Number.NaN;
+}
+
+// The number and date rules name the same comparisons in their own words.
+function meetsCondition(n: number, condition: string, v1: number, v2: number) {
+    switch (condition) {
+        case 'between':
+            return n >= v1 && n <= v2;
+        case 'notBetween':
+            return n < v1 || n > v2;
+        case 'equal':
+            return n === v1;
+        case 'notEqualTo':
+            return n !== v1;
+        case 'moreThanThe':
+        case 'laterThan':
+            return n > v1;
+        case 'lessThan':
+        case 'earlierThan':
+            return n < v1;
+        case 'greaterOrEqualTo':
+        case 'noEarlierThan':
+            return n >= v1;
+        case 'lessThanOrEqualTo':
+        case 'noLaterThan':
+            return n <= v1;
+        default:
+            return true;
+    }
 }
 
 // A tick box rule names the value that counts as checked, and the cell's value says whether it is. No second flag is
@@ -332,7 +259,7 @@ export function isCheckboxClick(ctx: Context, r: number, c: number, box: Rect, x
 
 // Returns whether the cell toggled. When it did not, the mouse and keyboard callers go on with their normal handling.
 export function checkboxChange(ctx: Context, r: number, c: number) {
-    if (!isAllowEdit(ctx)) return false;
+    if (ctx.allowEdit === false) return false;
     const item = getCellDataValidation(ctx, r, c);
     if (item?.type !== 'checkbox') return false;
     const d = getFlowdata(ctx);
@@ -384,7 +311,7 @@ export function isDropdownChevronClick(ctx: Context, r: number, c: number, box: 
 // whatever was already there. The seeding stops where the sheet's cells stop, so a whole-column tick box writes no
 // million cells.
 export function applyDataValidation(ctx: Context, range: SingleRange, item: DataValidationRule) {
-    if (!isAllowEdit(ctx)) return;
+    if (ctx.allowEdit === false) return;
     const d = getFlowdata(ctx);
     if (!d) return;
     addValidation(getSheet(ctx), crypto.randomUUID(), { ...item }, [range]);
@@ -529,7 +456,7 @@ export function getValidationHint(ctx: Context, r: number, c: number): Validatio
     let kind: ValidationHint['kind'] | undefined;
     let text = '';
     // One card serves both, and a rejection wins because it is more urgent than the prompt.
-    if (!isRealNull(cellValue) && !validateCellData(ctx, item, cellValue)) {
+    if (!isRealNull(cellValue) && !cellPassesRule(ctx, item, d[r]?.[c], cellValue)) {
         kind = 'invalid';
         text = describeValidationRule(item, 'invalid');
     } else if (item.hintShow) {
@@ -547,7 +474,7 @@ export function cellFocus(ctx: Context, r: number, c: number) {
     // The list closes for everyone, viewers included. Otherwise a user who lost edit rights would keep a list the last
     // edit session left open.
     ctx.validationListOpen = false;
-    if (!isAllowEdit(ctx)) return;
+    if (ctx.allowEdit === false) return;
     const anchor = document.getElementById('sheet-validation-list-anchor');
     if (!anchor) return;
     anchor.style.display = 'none';

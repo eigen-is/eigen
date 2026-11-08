@@ -9,11 +9,11 @@ import { getFlowdata } from '../context';
 import { getRealCellValue, isForcedStringNumber, mergeBorder } from './cell';
 import type { CellGlyphRect } from './data-validation';
 import {
+    cellPassesRule,
     cellTextBox,
     getCellDataValidation,
     isCheckboxClick,
     isDropdownChevronClick,
-    validateCellData,
 } from './data-validation';
 import { colLocation, rowLocation } from './location';
 
@@ -59,7 +59,7 @@ export function cellGlyphAt(ctx: Context, x: number, y: number): CellGlyph | und
     const value = cell ? getRealCellValue(r, c, d) : null;
     if (value != null && value.toString().length > 0 && inGlyph(cellIndicatorRect('left', colPre, rowPre, col), x, y)) {
         const rule = getCellDataValidation(ctx, r, c);
-        if (rule && !validateCellData(ctx, rule, value)) return 'invalid';
+        if (rule && !cellPassesRule(ctx, rule, cell, value)) return 'invalid';
         if (isForcedStringNumber(cell)) return 'forced-string';
     }
     return undefined;

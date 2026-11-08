@@ -26,9 +26,6 @@ const RULE_FIELDS: Record<keyof DataValidationRule, 'string' | 'boolean'> = {
     hintShow: 'boolean',
     hintValue: 'string',
     prohibitInput: 'boolean',
-    rangeTxt: 'string',
-    validity: 'string',
-    remote: 'boolean',
 };
 const REQUIRED_RULE_FIELDS: ReadonlySet<string> = new Set<keyof DataValidationRule>([
     'type',

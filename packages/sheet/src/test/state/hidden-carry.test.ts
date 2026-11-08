@@ -43,11 +43,8 @@ function rule(r: number, c: number): DataValidationRule {
     return {
         type: 'dropdown',
         type2: '',
-        rangeTxt: '',
         value1: `list ${r}${c}`,
         value2: '',
-        validity: '',
-        remote: false,
         prohibitInput: false,
         hintShow: false,
         hintValue: '',

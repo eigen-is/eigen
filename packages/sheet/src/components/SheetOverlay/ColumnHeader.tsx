@@ -6,7 +6,7 @@
 import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { ChevronDown } from 'lucide-react';
 import type React from 'react';
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import type { Freezen } from '../../state';
 import {
@@ -15,12 +15,10 @@ import {
     colLocationByIndex,
     computeColumnHeaderRegions,
     fixPositionOnFrozenCells,
-    getFlowdata,
     getFrozenHandleLeft,
     handleColFreezeHandleMouseDown,
     handleColSizeHandleMouseDown,
     handleColumnHeaderMouseDown,
-    isAllowEdit,
     overlayRegionForCell,
     selectTitlesMap,
     selectTitlesRange,
@@ -46,15 +44,6 @@ export const ColumnHeader: React.FC = () => {
         { col: number; col_pre: number; c1: number; c2: number }[]
     >([]);
     const freezeHandleLeft = getFrozenHandleLeft(context);
-    // The hovered column shows its menu arrow only when the sheet lets you edit all of it. It is read as the header
-    // renders, so a protection change shows while the same column stays hovered.
-    const hoverEditable = useMemo(() => {
-        const flowdata = getFlowdata(context);
-        if (flowdata == null || hoverLocation.col_index < 0) return true;
-        const column: [number, number] = [hoverLocation.col_index, hoverLocation.col_index];
-        return isAllowEdit(context) && isAllowEdit(context, [{ row: [0, flowdata.length - 1], column }]);
-    }, [context, hoverLocation.col_index]);
-
     // biome-ignore lint/correctness/useExhaustiveDependencies: globalCache.scrollLeft is the live scroll value read fresh off a stable ref, never a React dependency
     const onMouseMove = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
@@ -247,7 +236,7 @@ export const ColumnHeader: React.FC = () => {
                             display: 'block',
                         }}
                     >
-                        {hoverEditable && (
+                        {context.allowEdit !== false && (
                             <span
                                 className="header-arrow"
                                 role="button"

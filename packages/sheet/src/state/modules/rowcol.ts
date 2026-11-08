@@ -11,8 +11,6 @@ import {
     applySheetsInsertRowCol,
     shiftCellKeyedForDelete,
     shiftCellKeyedForInsert,
-    shiftRangeForDelete,
-    shiftRangeForInsert,
 } from '../../engine/rowcol';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
@@ -37,11 +35,6 @@ export function insertRowCol(
     const sheetIndex = getSheetIndex(ctx, id);
     if (sheetIndex == null) return;
     const sheet = ctx.sheets[sheetIndex];
-
-    sheet.alternateFormatRules = (sheet.alternateFormatRules ?? []).map((rule) => ({
-        ...rule,
-        cellrange: shiftRangeForInsert(rule.cellrange, op),
-    }));
 
     const insertAt = direction === 'lefttop' ? index : index + 1;
     const shift = (at: number) => (at >= insertAt ? at + count : at);
@@ -82,11 +75,6 @@ export function deleteRowCol(
     const sheetIndex = getSheetIndex(ctx, id);
     if (sheetIndex == null) return;
     const sheet = ctx.sheets[sheetIndex];
-
-    sheet.alternateFormatRules = (sheet.alternateFormatRules ?? []).flatMap((rule) => {
-        const cellrange = shiftRangeForDelete(rule.cellrange, op);
-        return cellrange ? [{ ...rule, cellrange }] : [];
-    });
 
     const deletedCount = end - start + 1;
     const calcChain: CalcChainEntry[] = [];

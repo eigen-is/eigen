@@ -78,8 +78,8 @@ export function withMaterializedData(s: Sheet): Sheet {
 }
 
 // The insert a row op names. An op's value is untyped, and a buggy or hostile client may send any shape, so a value
-// that is not whole rows or columns on the grid, at least one of them, throws. The sheet throws too where it refuses
-// the op, such as an insert into a read-only row. Either way the op's whole batch rolls back, here and in a live
+// that is not whole rows or columns on the grid, at least one of them, throws. The sheet throws too where the insert
+// would pass its size limit. Either way the op's whole batch rolls back, here and in a live
 // client, since its other ops were written for the rows the op would have moved.
 export function insertRowColOf(op: Op): InsertRowColOp {
     const value = asInsertValue(op.value);

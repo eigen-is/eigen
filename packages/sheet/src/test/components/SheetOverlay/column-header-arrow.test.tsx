@@ -1,5 +1,5 @@
-// The hovered column's menu arrow shows only on a column the sheet lets you edit, and follows a protection change
-// while the same column stays hovered.
+// The hovered column's menu arrow shows only while the user may edit, and follows a change of rights while the
+// same column stays hovered.
 
 import { afterEach, expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -49,7 +49,7 @@ function contextWith(config: SheetConfig): Context {
     };
 }
 
-test('a protection change while the same column stays hovered hides its menu arrow', async () => {
+test('losing edit rights while the same column stays hovered hides its menu arrow', async () => {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
@@ -86,7 +86,7 @@ test('a protection change while the same column stays hovered hides its menu arr
     });
     expect(container.querySelector('.header-arrow')).not.toBeNull();
 
-    await render(contextWith({ colReadOnly: { 0: 1 } }));
+    await render({ ...contextWith({}), allowEdit: false });
     expect(container.querySelector('.sheet-col-header-hover')).not.toBeNull();
     expect(container.querySelector('.header-arrow')).toBeNull();
 });

@@ -7,6 +7,7 @@ import type { Sheet as LibSheet } from '@workspace/lib/sheets';
 import { produce } from 'immer';
 import { generateAPIs } from '../../../components/Workbook/api';
 import { dataToCelldata } from '../../../engine/celldata';
+import { MAX_SHEET_ROW_COUNT } from '../../../engine/defaults';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
@@ -283,7 +284,7 @@ describe('applyOp and a joiner agree on the batch shapes that once disagreed', (
         expect(join(ctx, [ops])[1].data?.length).toBe(5);
     });
 
-    it('skips the whole batch of an insert into a read-only row, as the replay does', () => {
+    it('skips the whole batch of an insert past the row limit, as the replay does', () => {
         const ops: Op[] = [
             {
                 op: 'insertRowCol',
@@ -294,7 +295,11 @@ describe('applyOp and a joiner agree on the batch shapes that once disagreed', (
             { op: 'replace', id: 'id_1', path: ['data', 0, 0], value: { v: 9, m: '9' } },
         ];
         const ctx = produce(makeCtx(null), (draft: Context) => {
-            draft.sheets[0].config = { rowReadOnly: { 1: 1 } };
+            const width = draft.sheets[0].data?.[0]?.length ?? 1;
+            while ((draft.sheets[0].data?.length ?? MAX_SHEET_ROW_COUNT) < MAX_SHEET_ROW_COUNT) {
+                draft.sheets[0].data?.push(new Array(width).fill(null));
+            }
+            draft.sheets[0].row = MAX_SHEET_ROW_COUNT;
         });
         const [joiner] = join(ctx, [ops]);
         const [live] = applyPeerOps(ctx, ops).sheets;

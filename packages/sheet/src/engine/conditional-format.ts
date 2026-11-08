@@ -249,8 +249,6 @@ export function evaluateConditionalFormat(
                     }
                 });
             }
-        } else if (rule.type === 'icons') {
-            // icon set — not yet implemented
         } else {
             // 'default' — comparison / aggregation / formula rules
             const { cellrange, format, conditionName, conditionValue } = rule;
@@ -481,8 +479,6 @@ export function isWellFormedCfRule(rule: ConditionalFormatRule | null): boolean 
                     (color) => typeof color === 'string' && (color.startsWith('#') || parseRgb(color) !== undefined),
                 )
             );
-        case 'icons':
-            return true;
         default:
             return false;
     }

@@ -149,9 +149,10 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataValidatio
             setProblem({ field: 'value', message });
             return false;
         }
+        const { rangeTxt: _, ...rule } = draft;
         setContext((ctx) => {
-            const value1 = draft.type === 'dropdown' ? getDropdownList(ctx, draft.value1).join(',') : draft.value1;
-            applyDataValidation(ctx, target, { ...draft, value1 });
+            const value1 = rule.type === 'dropdown' ? getDropdownList(ctx, rule.value1).join(',') : rule.value1;
+            applyDataValidation(ctx, target, { ...rule, value1 });
         });
     };
 
@@ -416,8 +417,6 @@ function draftAtSelection(context: Context): DataValidationDraft {
         rangeTxt,
         value1: item?.value1 ?? '',
         value2: item?.value2 ?? '',
-        validity: item?.validity ?? '',
-        remote: item?.remote ?? false,
         prohibitInput: item?.prohibitInput ?? false,
         hintShow: item?.hintShow ?? false,
         hintValue: item?.hintValue ?? '',

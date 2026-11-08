@@ -55,9 +55,6 @@ describe('wellFormedValidations', () => {
         ['hintValue', { x: 1 }],
         ['hintShow', 'yes'],
         ['prohibitInput', 1],
-        ['rangeTxt', ['A1']],
-        ['validity', null],
-        ['remote', 'false'],
     ])('drops a rule whose %s is %p', (field, value) => {
         const entry = { ranges: [cell(0, 0)], rule: { ...RULE, [field]: value } };
         expect(wellFormedValidations({ v: entry })).toEqual({});
@@ -69,9 +66,6 @@ describe('wellFormedValidations', () => {
             hintShow: true,
             hintValue: 'Pick one',
             prohibitInput: false,
-            rangeTxt: 'A1:A3',
-            validity: '',
-            remote: false,
         };
         const validations = { v: { ranges: [cell(0, 0)], rule } };
         expect(wellFormedValidations(validations)).toBe(validations);

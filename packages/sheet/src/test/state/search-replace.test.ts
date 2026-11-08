@@ -153,30 +153,6 @@ describe('replaceAllMatches', () => {
         expect(getFlowdata(ctx, 'id_1')?.[0]?.[1]?.f).toBe('=A1');
         expect(cellV(ctx, 'id_1', 0, 1)).toBe('dog');
     });
-
-    it('skips per-cell locked cells (checkCellIsLocked)', () => {
-        const ctx = contextFactory({
-            currentSheetId: 'id_1',
-            sheets: [
-                {
-                    name: 'Alpha',
-                    id: 'id_1',
-                    order: 0,
-                    data: [
-                        [
-                            { v: 'cat', m: 'cat', lo: 1 },
-                            { v: 'cat', m: 'cat' },
-                        ],
-                    ],
-                },
-            ],
-        }) as Context;
-
-        const replaced = replaceAllMatches(ctx, 'cat', 'dog', OPTS, false);
-        expect(replaced).toBe(1);
-        expect(cellV(ctx, 'id_1', 0, 0)).toBe('cat'); // locked — unchanged
-        expect(cellV(ctx, 'id_1', 0, 1)).toBe('dog');
-    });
 });
 
 describe('replaceSearchMatch', () => {

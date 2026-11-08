@@ -94,35 +94,7 @@ export type Presence = {
     };
 };
 
-// Sheet-protection settings. Read-only in this fork: no UI or xlsx-import
-// path writes the field (the upstream protect-sheet dialog was never ported).
-// protection.ts reads only these five fields: `sheet !== 0` toggles
-// protection on; the `selectLockedCells` / `selectunLockedCells` flags allow
-// selection when set to `1` (any other value, including undefined, blocks);
-// `hintText` overrides `defaultSheetHintText` as the warn-dialog body.
-export type SheetAuthority = {
-    sheet?: number;
-    selectLockedCells?: number;
-    selectunLockedCells?: number;
-    hintText?: string;
-    defaultSheetHintText?: string;
-};
-
-// Editor-runtime SheetConfig: lib's canonical fields plus editor-only extras
-// shared with the engine's row/col shifter (`EditorSheetConfigExtras`: custom
-// row/col size overrides, per-row/col read-only locks) and a state-only
-// `authority` (sheet-protection settings; the engine doesn't shift it). None
-// of these reach the wire shape.
-export type SheetConfig = LibSheetConfig &
-    EditorSheetConfigExtras & {
-        authority?: SheetAuthority;
-    };
-
-// Alternate-format placeholder entry. The feature never landed; rowcol shifts
-// the cellrange but nothing ever reads the entries.
-export type AlternateFormatEntry = {
-    cellrange: { row: [number, number]; column: [number, number] };
-};
+export type SheetConfig = LibSheetConfig & EditorSheetConfigExtras;
 
 // The sheet as the editor holds it: lib's stored fields plus editor-only ones, such as the selections, the calc chain
 // and the filter criteria, which never reach the stored shape. `config` widens to the editor's SheetConfig. `id` is
@@ -135,11 +107,7 @@ export type Sheet = Omit<LibSheet, 'config' | 'id'> & {
     status?: number;
     selections?: Selection[];
     calcChain?: CalcChainEntry[];
-    // A pivot table's config, which workbooks from the upstream fork may carry. Nothing reads it.
-    pivotTable?: unknown;
-    isPivotTable?: boolean;
     filter?: Record<string, FilterEntry>;
-    alternateFormatRules?: AlternateFormatEntry[];
     // Dynamic-array formula source list — entries describe spill ranges; engine
     // pushes here when a `=A1:A3*2`-style formula is evaluated. Same r/c/id
     // shape as calcChain; `id` is optional for legacy entries.
@@ -174,20 +142,9 @@ export type LinkCardProps = {
     isEditing: boolean;
 };
 
-// The rule the data-validation dialog edits, every field set, with '' or false where the rule has none. OK spreads it
-// into the stored DataValidationRule. `rangeTxt` is the range the user typed or picked for the rule.
-export type DataValidationDraft = {
-    type: string;
-    type2: string;
-    rangeTxt: string;
-    value1: string;
-    value2: string;
-    validity: string;
-    remote: boolean;
-    prohibitInput: boolean;
-    hintShow: boolean;
-    hintValue: string;
-};
+// The rule the data-validation dialog edits, every field set, with '' or false where the rule has none, and the range
+// the user typed or picked for it, which OK leaves off the stored rule.
+export type DataValidationDraft = Required<DataValidationRule> & { rangeTxt: string };
 
 export type ConditionRulesProps = {
     rulesType: ConditionRuleType;

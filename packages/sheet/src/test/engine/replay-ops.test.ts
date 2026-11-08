@@ -1,8 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import type { Op, Sheet } from '@workspace/lib/sheets';
-import { createDefaultSheets, DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../../engine/defaults';
+import {
+    createDefaultSheets,
+    DEFAULT_SHEET_COLUMN_COUNT,
+    DEFAULT_SHEET_ROW_COUNT,
+    MAX_SHEET_ROW_COUNT,
+} from '../../engine/defaults';
 import { replaySheetsOps } from '../../engine/replay-ops';
-import type { EditorSheetConfigExtras } from '../../engine/types';
 
 const baseSheet = (id: string, name: string): Sheet => ({ id, name, order: 0, data: [[null]], config: {} });
 
@@ -324,15 +328,17 @@ describe('replaySheetsOps', () => {
         expect(result[0].celldata).toEqual([{ r: 1, c: 0, v: { v: 'a', m: 'a', ct: { fa: 'General', t: 'g' } } }]);
     });
 
-    test('an insert into a read-only row skips its whole batch on the replay path', () => {
+    test('an insert past the row limit skips its whole batch on the replay path', () => {
         // The engine refuses the insert with a RowColError. The replay must not crash on it, or every export and
         // preview would, and the batch's other ops were written for the rows the insert would have moved.
-        const sheet: Sheet & { config?: EditorSheetConfigExtras } = {
+        const sheet: Sheet = {
             id: 's1',
             name: 'Sheet1',
             order: 0,
-            data: [[{ v: 'a', m: 'a', ct: { fa: 'General', t: 'g' } }]],
-            config: { rowReadOnly: { 0: 1 } },
+            data: [
+                [{ v: 'a', m: 'a', ct: { fa: 'General', t: 'g' } }],
+                ...Array.from({ length: MAX_SHEET_ROW_COUNT - 1 }, () => [null]),
+            ],
         };
         const ops: Op[][] = [
             [
@@ -346,7 +352,7 @@ describe('replaySheetsOps', () => {
             ],
         ];
         const result = replaySheetsOps([sheet], ops);
-        expect(result[0].data!.length).toBe(1);
+        expect(result[0].data!.length).toBe(MAX_SHEET_ROW_COUNT);
         expect(result[0].data![0][0]?.v).toBe('a');
     });
 

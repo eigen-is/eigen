@@ -265,7 +265,6 @@ describe("a row or column op racing a peer's unfreeze", () => {
             sheet.filter = {
                 1: { rowhidden: { 2: 0 }, optionstate: true, str: 0, edr: 3, cindex: 1, stc: 0, edc: 3 },
             };
-            sheet.alternateFormatRules = [{ cellrange: { row: [1, 3], column: [1, 3] } }];
         });
     const size = (sheets: LibSheet[]) => [sheets[0].data!.length, sheets[0].data![0].length];
     const rows = { type: 'row', index: 0, count: 2, direction: 'lefttop', id: 'id_1' } as const;
@@ -370,9 +369,8 @@ test('a row insert inside a whole-column rule writes no rule', () => {
     expect([...op.patches, ...op.inverse].filter(({ path }) => path[2] === 'dataValidations')).toEqual([]);
 });
 
-// A peer can send any value in a row op, and a sheet can refuse one, such as an insert into a read-only row. A peer and
-// a joiner then skip the whole batch alike, so no other op of it lands on rows the op did not move.
-describe('a malformed or refused row op skips its whole batch', () => {
+// A peer can send any value in a row op. A peer and a joiner then skip the whole batch alike, so no other op of it lands on rows the op did not move.
+describe('a malformed row op skips its whole batch', () => {
     const write: Op = { op: 'replace', id: 'id_1', path: ['data', 0, 0], value: { v: 'x', m: 'x' } };
     const insert = (value: Record<string, unknown>): Op => ({
         op: 'insertRowCol',
@@ -397,14 +395,10 @@ describe('a malformed or refused row op skips its whole batch', () => {
         ['a start past its end', remove({ start: 2, end: 1 })],
         ['a fractional end', remove({ end: 1.5 })],
         ['a NaN end', remove({ end: Number.NaN })],
-        ['an insert into a read-only row', insert({})],
     ];
 
     test.each(cases)('%s', (_, op) => {
-        const base = produce(richContext(), (ctx: Context) => {
-            const { config } = ctx.sheets[0];
-            if (config) config.rowReadOnly = { 1: 1 };
-        });
+        const base = richContext();
         const [joined] = join(base, [[op, write]]).map(withMaterializedData);
         for (const sheet of [receive(base, [op, write]).sheets[0], joined]) {
             expect(sheet.data?.length).toBe(4);
