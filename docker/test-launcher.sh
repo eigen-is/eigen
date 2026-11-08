@@ -826,9 +826,8 @@ for SHELL_NAME in dash busybox host; do
     # --services spans lines of the call log.
     if printf '%s\n' "$CALLS" | grep -q " status --install=$FIX/release --services=" &&
         printf '%s\n' "$CALLS" | grep -q ' --backups=server-manual-full-20260101-000000.tar ' &&
-        ! printf '%s\n' "$CALLS" | grep -q -e '--kept-aside' &&
-        printf '%s\n' "$CALLS" | grep -q ' --latest=0.2.99 --files=0.2.100 (abc1234)$'; then
-        ok "$SHELL_NAME: status passes the folder, what backups/ holds, and the build the files were written from, but not what restores kept aside while an update stopped halfway: that CLI may refuse the flag"
+        printf '%s\n' "$CALLS" | grep -q ' --latest=0.2.99 --files=0.2.100 (abc1234) --kept-aside=data.pre-restore-20260101-000000$'; then
+        ok "$SHELL_NAME: status passes the folder, what backups/ holds, the build the files were written from, and what restores kept aside the flag"
     else
         fail "$SHELL_NAME: status: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
@@ -1444,17 +1443,20 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     else
         fail "$SHELL_NAME: rollback lists the backups earlier updates made: exit $refused_code, '$refused'; --help exit $CODE, '$OUT'"
     fi
-    echo server-pre-update-full-20260101-000000.tar >"$FIX/release/.eigen/last-update"
-    : >"$FIX/release/backups/server-pre-update-full-20260101-000000.tar"
-    STUB_CHECKED=$checked launch release rollback --yes
-    rm "$FIX/release/backups/server-pre-update-full-20260101-000000.tar"
+    # The first way back keeps data/: the build before the update checks it opens it, and Eigen switches to the pins the
+    # update recorded. When that build cannot open it, the update's Full backup goes back.
+    full=server-pre-update-full-20260101-000000.tar
+    old=ghcr.io/eigen-is/eigen/api@sha256:old
+    pinned="$full|EIGEN_REGISTRY=ghcr.io/eigen-is/eigen|EIGEN_VERSION=0.2.98|EIGEN_API_IMAGE=$old"
+    record_pins() { printf '%s\n' "$pinned" | tr '|' '\n' >"$FIX/release/.eigen/last-update"; }
+    record_pins
+    : >"$FIX/release/backups/$full"
+    STUB_RUN_FAIL=--check-data STUB_RUN_CODE=4 STUB_CHECKED=$checked launch release rollback --yes
+    rm "$FIX/release/backups/$full"
     if [ "$CODE" = 0 ] &&
-        printf '%s\n' "$OUT" | grep -q '▲  The launcher that made the last update kept no note of the build before it.$' &&
-        printf '%s\n' "$OUT" | grep -q '◆  Back from Eigen 0.2.99 (abc1234) to the backup the last update made' &&
-        [ "$(steps)" = 'share|stage eigen-api restore server-pre-update-full-20260101-000000.tar --stage --yes|restore --staged (ghcr.io/eigen-is/eigen/api:local)|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|bootstrap ghcr.io/eigen-is/eigen/api@sha256:bbb|share|up|' ] &&
         [ ! -e "$FIX/release/.eigen/last-update" ] &&
         printf '%s\n' "$OUT" | grep -q '◇  Eigen 0.2.99 (abc1234) → 0.2.99 (abc1234) is running at https://eigen.example.com/'; then
-        ok "$SHELL_NAME: rollback after an update that recorded no pins restores the archive .eigen/last-update names on the images it pins, and names the builds it leaves and reaches"
+        ok "$SHELL_NAME: rollback that puts the archive back names the builds it leaves and reaches"
     else
         fail "$SHELL_NAME: a release rollback: exit $CODE, steps '$(steps)', '$OUT', '$ERR'"
     fi
@@ -1472,15 +1474,15 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
             -e 's/^run .* rm -rf data\/.restoring$/unstage/p' -e 's/^compose .* stop$/stop/p' \
             -e 's/^compose .* exec .*\/entrypoint.sh \(restart-notice .*\)$/\1/p' | tr '\n' '|'
     }
-    echo server-pre-update-full-20260101-000000.tar >"$FIX/release/.eigen/last-update"
-    : >"$FIX/release/backups/server-pre-update-full-20260101-000000.tar"
-    STUB_CHECKED=$checked launch release rollback --in 1s --yes
+    record_pins
+    : >"$FIX/release/backups/$full"
+    STUB_RUN_FAIL=--check-data STUB_RUN_CODE=4 STUB_CHECKED=$checked launch release rollback --in 1s --yes
     sequence=$(notice_steps)
     rm -f "$FIX/release/.eigen/bundle"
     reset_release
-    echo server-pre-update-full-20260101-000000.tar >"$FIX/release/.eigen/last-update"
-    LAUNCH_TERM='restart-notice --in 600' STUB_CHECKED=$checked launch release rollback --yes --in 10m
-    rm -f "$FIX/release/backups/server-pre-update-full-20260101-000000.tar" "$FIX/release/.eigen/last-update"
+    record_pins
+    LAUNCH_TERM='restart-notice --in 600' STUB_RUN_FAIL=--check-data STUB_RUN_CODE=4 STUB_CHECKED=$checked launch release rollback --yes --in 10m
+    rm -f "$FIX/release/backups/$full" "$FIX/release/.eigen/last-update"
     if [ "$sequence" = 'stage|staged|restart-notice --in 1 --reason rollback|stop|' ] && [ "$CODE" = 130 ] &&
         [ "$(notice_steps)" = 'stage|staged|restart-notice --in 600 --reason rollback|unstage|restart-notice --clear|' ]; then
         ok "$SHELL_NAME: rollback --in waits right before the stop, and cut off there it unstages and takes the notice back"
@@ -1505,12 +1507,6 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
         fail "$SHELL_NAME: the notice after a wait for a server backup: exit $CODE, '$(notice_steps)', '$OUT', '$ERR'"
     fi
 
-    # The first way back keeps data/: the build before the update checks it opens it, and Eigen switches to the pins the
-    # update recorded. When that build cannot open it, the update's Full backup goes back.
-    full=server-pre-update-full-20260101-000000.tar
-    old=ghcr.io/eigen-is/eigen/api@sha256:old
-    pinned="$full|EIGEN_REGISTRY=ghcr.io/eigen-is/eigen|EIGEN_VERSION=0.2.98|EIGEN_API_IMAGE=$old"
-    record_pins() { printf '%s\n' "$pinned" | tr '|' '\n' >"$FIX/release/.eigen/last-update"; }
     : >"$FIX/release/backups/$full"
     record_pins
     STUB_IMAGE=1 STUB_FAIL=$old launch release rollback --yes

@@ -1053,14 +1053,10 @@ status() {
     if [ -n "$bundle" ]; then
         files=$(describe "$bundle")
         set -- "$@" --files="$files"
-    else
-        # Passed only when the runner is this build's CLI: after an update that stopped halfway it is the build
-        # .env.production pins, which may not know the flag and would refuse. Their size is left out: du would read
-        # all of a copy of data/, which is uid 1000's.
-        kept=$(kept_aside)
-        set -- "$@" ${kept:+"--kept-aside=$kept"}
     fi
-    "$runner" status "$@"
+    # Their size is left out: du would read all of a copy of data/, which is uid 1000's.
+    kept=$(kept_aside)
+    "$runner" status "$@" ${kept:+"--kept-aside=$kept"}
 }
 
 # The running API makes the backup: its job map keeps a backup off a home a restore writes and waits for it at shutdown.
@@ -1170,7 +1166,7 @@ announce() {
     RESTART_AT=$(answer at "$told" | sed 's/^.*T//; s/\.[0-9]*Z$/ UTC/')
 }
 
-# unannounce: takes the notice back. The API it asks may be an older version's, without the command, or down.
+# unannounce: takes the notice back. The API it asks may be down.
 unannounce() { api_cli restart-notice --clear </dev/null >/dev/null 2>&1 || :; }
 
 # countdown: waits out IN_SECONDS in this process, a second at a time, so a hangup's trap runs at once. A terminal
@@ -1273,7 +1269,7 @@ update() {
             --accept-breaking) accept=--accept-breaking ;;
             --no-backup) no_backup=--no-backup ;;
             # The handover from the launcher that got the new version to the one that came with it, with the backup
-            # it made, or --no-backup.
+            # it made.
             --pulled) pulled=1 ;;
             --saved) ;;
             -*) refuse update "$arg" ;;
@@ -1391,7 +1387,6 @@ update_get() {
     pin_images "$tag"
     # The pulls and the questions are done, so the wait comes right before the backup, which then misses little.
     warn_restart update
-    handover=--no-backup
     if [ -z "$no_backup" ]; then
         # The operator may have edited the file during the wait.
         if [ "$IN_SECONDS" -gt 0 ]; then need_env_mounted; fi
@@ -1409,7 +1404,6 @@ update_get() {
         sed -n 's/^▲  //p' "$LOG" | while IFS= read -r line; do say "$YELLOW" '▲' "$line"; done
         # What changes from here to the stop is not in it: the operator is told until when it holds.
         say "$GRAY" '│' "backups/$saved, made until $(date -u +%H:%M:%S) UTC"
-        handover="--saved $saved"
         # The backup may have outlasted the notice's expiry, which starts over for the handover and the stop.
         announce 0 update
     fi
@@ -1417,7 +1411,7 @@ update_get() {
     # The notice holds on until the new launcher stops Eigen.
     AT_EXIT=''
     # The new launcher gets the tag and what it saves as arguments and parses them as this one did; no variable crosses.
-    exec ./eigen update --pulled "$tag" $handover
+    exec ./eigen update --pulled "$tag" ${saved:+--saved "$saved"}
 }
 
 # The part the launcher of the new version runs: stop, switch and start.
@@ -1525,16 +1519,12 @@ pre_update_archives() {
 # Eigen runs, checks it opens every database here and asks; then the rollback warns the open tabs as put_back does,
 # stops Eigen, checks again what Eigen wrote since (check_again) and switches back to the pins the update recorded.
 # The archive stays for ./eigen restore. Sets switched once Eigen runs on that build. Leaves it empty, and says why,
-# when that build cannot open the data or the launcher that made the update recorded no pins: the rollback then puts
-# the archive back. A check that stopped without a verdict on the data ends the rollback, which keeps today's data.
+# when that build cannot open the data: the rollback then puts the archive back. A check that stopped without a verdict
+# on the data ends the rollback, which keeps today's data.
 switch_back() {
     switched=''
     PINS=$(sed -n '2,$p' .eigen/last-update)
     old_image=$(answer EIGEN_API_IMAGE "$PINS")
-    if [ -z "$old_image" ]; then
-        say "$YELLOW" '▲' "The launcher that made the last update kept no note of the build before it."
-        return
-    fi
     NEXT="Eigen $current runs on as it was. Check the network, then run ./eigen rollback again."
     step "Getting the build before the update" "The build before the update is here" \
         "Could not get the build before the update" \
