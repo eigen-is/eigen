@@ -17,9 +17,8 @@ import { buildStorageKey } from '../mount/names';
 import { paths, pendingUploads } from '../mount/schema';
 import { errnoOf } from '../storage/deadline';
 import type { MountPathRow } from './archive-layout';
-import { archivePaths, HOME_DATABASES, listManagedDatabases, readMountPathRows, storageKeyOf } from './archive-layout';
+import { archivePaths, HOME_DATABASES, listManagedDatabases, readMountPathRows, storageKeys } from './archive-layout';
 import { describeError } from './errors';
-import { requireMountDir, resolveInside } from './paths';
 
 // A restored database and the schema this build expects of it.
 export type VersionedDatabase = { filePath: string; config: DatabaseConfig<SchemaType> };
@@ -44,7 +43,7 @@ export async function materializeMount(
     stamp: string,
 ): Promise<VersionedDatabase[]> {
     const metadataPath = requireMetadataDb(homeDir, summary);
-    const mountDir = requireMountDir(homeDir, summary.id);
+    const mountDir = path.join(homeDir, PATHS.DRIVE.ROOT, summary.id);
     const dataDir = path.join(mountDir, PATHS.DRIVE.DATA_DIR);
     // A key may spell another row's archive path, such as a file named exactly another's `{id}.{ext}`, so every file
     // moves out of the archive's tree into a new data/ and none lands on bytes still waiting to move.
@@ -57,10 +56,9 @@ export async function materializeMount(
     try {
         const orm = drizzle(db);
         const rows = readMountPathRows(db);
-        const byId = new Map(rows.map((row) => [row.id, row]));
         const archivePath = archivePaths(rows);
+        const keyOf = storageKeys(rows, isPathBased);
         const managed = listManagedDatabases(rows);
-        const inData = (relPath: string): string => inMountData(dataDir, summary.id, relPath);
         // Every pending row names a staged copy on the source server that the archive does not carry.
         orm.delete(pendingUploads).run();
 
@@ -69,7 +67,7 @@ export async function materializeMount(
             // the table, at the key the mount renames them from, or a later rename of one 404s.
             for (const row of rows) {
                 if (row.type === 'file' || row.parentId === null) continue;
-                fs.mkdirSync(inData(storageKeyOf(row, byId, true)), { recursive: true });
+                fs.mkdirSync(path.join(dataDir, keyOf(row)), { recursive: true });
             }
         }
         // The mount's own staging folder, where the upload queue keeps a copy until its PUT acks.
@@ -79,7 +77,7 @@ export async function materializeMount(
         const managedPaths = new Set(managed.map((entry) => entry.path));
         const placeFile = (row: MountPathRow): void => {
             const archived = archivePath(row);
-            const source = inMountData(archivedDir, summary.id, archived);
+            const source = path.join(archivedDir, archived);
             // A bucket's objects did not move aside with the folder: every row gets a fresh key, even one with
             // no bytes, so no upload lands on an object the `.pre-restore-` copy still names.
             if (isRemote) {
@@ -89,7 +87,7 @@ export async function materializeMount(
             // A row whose storage object was already missing when the backup ran has no bytes here;
             // the restored home mirrors that absence rather than inventing an empty object.
             if (!fs.existsSync(source)) return;
-            const key = storageKeyOf(row, byId, isPathBased);
+            const key = keyOf(row);
             if (isRemote) {
                 const staged = crypto.randomUUID();
                 movePath(source, path.join(mountStagingDir, staged));
@@ -105,7 +103,7 @@ export async function materializeMount(
                     .run();
                 return;
             }
-            movePath(source, inData(key));
+            movePath(source, path.join(dataDir, key));
         };
         // A transaction per batch: a VACUUM INTO copy journals and fsyncs every statement on its own, and this is two
         // per file.
@@ -119,7 +117,7 @@ export async function materializeMount(
         await fsp.rm(archivedDir, { recursive: true, force: true });
         if (isRemote) return [];
         return managed.map((entry) => ({
-            filePath: inData(storageKeyOf(entry.row, byId, isPathBased)),
+            filePath: path.join(dataDir, keyOf(entry.row)),
             config: entry.config,
         }));
     } finally {
@@ -134,14 +132,11 @@ export async function materializeMount(
 export async function checkUnpackedHome(homeDir: string, mounts: BackupManifest['mounts']): Promise<void> {
     const containerDatabases: VersionedDatabase[] = [];
     for (const summary of mounts) {
-        const dataDir = path.join(requireMountDir(homeDir, summary.id), PATHS.DRIVE.DATA_DIR);
+        const dataDir = path.join(homeDir, PATHS.DRIVE.ROOT, summary.id, PATHS.DRIVE.DATA_DIR);
         const db = openToCheck(requireMetadataDb(homeDir, summary));
         try {
             for (const entry of listManagedDatabases(readMountPathRows(db))) {
-                containerDatabases.push({
-                    filePath: inMountData(dataDir, summary.id, entry.path),
-                    config: entry.config,
-                });
+                containerDatabases.push({ filePath: path.join(dataDir, entry.path), config: entry.config });
             }
         } finally {
             db.close();
@@ -180,7 +175,7 @@ export function homeDatabasesIn(homeDir: string, mountIds: readonly string[]): V
     return [
         ...HOME_DATABASES.map(([config, relPath]) => ({ filePath: path.join(homeDir, relPath), config })),
         ...mountIds.map((mountId) => ({
-            filePath: path.join(requireMountDir(homeDir, mountId), PATHS.DRIVE.METADATA_DB),
+            filePath: path.join(homeDir, PATHS.DRIVE.ROOT, mountId, PATHS.DRIVE.METADATA_DB),
             config: MOUNT_DB_CONFIG,
         })),
     ];
@@ -225,7 +220,7 @@ export function quickCheck(filePath: string): string {
 // aside may still name. A mount with no metadata.db has no trash.
 export function redateTrash(homeDir: string, mountIds: readonly string[], now: number): void {
     for (const mountId of mountIds) {
-        const metadataPath = path.join(requireMountDir(homeDir, mountId), PATHS.DRIVE.METADATA_DB);
+        const metadataPath = path.join(homeDir, PATHS.DRIVE.ROOT, mountId, PATHS.DRIVE.METADATA_DB);
         if (!fs.existsSync(metadataPath)) continue;
         const db = new Database(metadataPath, { readwrite: true, create: false });
         try {
@@ -253,23 +248,20 @@ export function mountIdsIn(homeDir: string): string[] {
 export function containerDatabasesIn(homeDir: string, mountIds: readonly string[]): VersionedDatabase[] {
     const found: VersionedDatabase[] = [];
     for (const mountId of mountIds) {
-        const mountDir = requireMountDir(homeDir, mountId);
+        const mountDir = path.join(homeDir, PATHS.DRIVE.ROOT, mountId);
         const dataDir = path.join(mountDir, PATHS.DRIVE.DATA_DIR);
         const metadataPath = path.join(mountDir, PATHS.DRIVE.METADATA_DB);
         if (!fs.existsSync(metadataPath)) continue;
         const db = openToCheck(metadataPath);
         try {
             const rows = readMountPathRows(db);
-            const byId = new Map(rows.map((row) => [row.id, row]));
             // A folder row carries its own name as `file` on a path-based mount, and nothing on a
             // flat-key one (Mount.createFolder). That tells the two layouts apart with no manifest to
             // ask. A mount with no folders has no containers either.
             const isPathBased = rows.some((row) => row.type !== 'file' && row.parentId !== null && row.file !== '');
+            const keyOf = storageKeys(rows, isPathBased);
             for (const entry of listManagedDatabases(rows)) {
-                found.push({
-                    filePath: inMountData(dataDir, mountId, storageKeyOf(entry.row, byId, isPathBased)),
-                    config: entry.config,
-                });
+                found.push({ filePath: path.join(dataDir, keyOf(entry.row)), config: entry.config });
             }
         } finally {
             db.close();
@@ -295,7 +287,7 @@ export function openToCheck(filePath: string): Database {
 
 // The metadata.db of a mount the archive promises, refused when the archive carries none.
 function requireMetadataDb(homeDir: string, summary: BackupManifest['mounts'][number]): string {
-    const metadataPath = path.join(requireMountDir(homeDir, summary.id), PATHS.DRIVE.METADATA_DB);
+    const metadataPath = path.join(homeDir, PATHS.DRIVE.ROOT, summary.id, PATHS.DRIVE.METADATA_DB);
     if (!fs.existsSync(metadataPath)) {
         throw new ApiError(400, `The archive promises mount ${summary.id} but carries no metadata.db for it`);
     }
@@ -332,12 +324,4 @@ function readSchemaVersion(db: Database): number {
         .get();
     if (!stamped) return 0;
     return db.query<{ version: number }, []>('SELECT version FROM __schema_version WHERE id = 1').get()?.version ?? 0;
-}
-
-// Verify refuses a paths table that could leave its mount (checkArchivedPathRows). This second guard resolves every
-// path a restore derives from one, so nothing here reads or moves a byte outside `data/`.
-function inMountData(dataDir: string, mountId: string, relPath: string): string {
-    const abs = resolveInside(dataDir, relPath);
-    if (!abs) throw new ApiError(400, `Mount ${mountId} names a path that leaves it: ${relPath}`);
-    return abs;
 }

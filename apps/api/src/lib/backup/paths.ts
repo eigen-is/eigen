@@ -1,7 +1,6 @@
 // Where backups live and what they are called. It builds the names of archives, home folders, safety copies and the
 // folder a restore unpacks into, and the places inside an archive where each part of a home goes. It makes the private
-// staging folder every job works in. It also resolves a path inside a folder without ever leaving it, which every
-// restore step needs before it touches the disk.
+// staging folder every job works in.
 
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -15,7 +14,6 @@ import {
     BACKUP_STAMP_PATTERN,
     buildBackupStamp,
     FAILED_RESTORE_SUFFIX,
-    NO_CONTROL_PATTERN,
     PRE_RESTORE_SUFFIX,
     parseBackupStamp,
     SERVER_ARCHIVE_EXTENSION,
@@ -96,39 +94,6 @@ export function isRestoreStagingName(name: string): boolean {
 // the same filesystem as the artifacts, so the last rename of a pack is atomic.
 export function getBackupTempPath(suffix: string): string {
     return path.join(getBackupStagingDir('archive'), `${crypto.randomUUID()}${suffix}`);
-}
-
-const NO_CONTROL = new RegExp(NO_CONTROL_PATTERN);
-
-// An archive comes from outside: its manifest, its mount trees and the settings.json of a folder it
-// left behind all name paths this server then reads, opens and deletes. Anything that would leave
-// `root` is refused before it reaches the filesystem, such as an absolute path, a `..` hop, a control
-// character, or a path that walks through a symlink. `root` is resolved to its real path here, so the
-// comparison holds on a macOS temp folder too, where /var is /private/var.
-export function resolveInside(root: string, relPath: string): string | null {
-    if (relPath === '' || path.isAbsolute(relPath) || !NO_CONTROL.test(relPath)) return null;
-    if (relPath.split(/[\\/]/).includes('..')) return null;
-    const realRoot = fs.existsSync(root) ? fs.realpathSync(root) : root;
-    const abs = path.resolve(realRoot, relPath);
-    if (!abs.startsWith(`${realRoot}${path.sep}`)) return null;
-    // Lexically inside is not enough: one symlinked directory along the way and the bytes read are
-    // somebody else's.
-    const real = fs.existsSync(abs) ? fs.realpathSync(abs) : abs;
-    return real.startsWith(`${realRoot}${path.sep}`) ? abs : null;
-}
-
-// The mount folder inside a home, for a mount id that came from outside (a manifest, a home's
-// settings.json). Null when the id would leave the home, so the caller refuses rather than touching
-// another home's databases and files.
-export function resolveMountDir(homeDir: string, mountId: string): string | null {
-    return resolveInside(homeDir, `${PATHS.DRIVE.ROOT}/${mountId}`);
-}
-
-// The same folder, refusing a mount id that would leave the home.
-export function requireMountDir(homeDir: string, mountId: string): string {
-    const mountDir = resolveMountDir(homeDir, mountId);
-    if (!mountDir) throw new ApiError(400, `${mountId} is not a mount of this home`);
-    return mountDir;
 }
 
 // The layout inside a backup folder: `home/` mirrors the home directory one-for-one, and every

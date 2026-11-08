@@ -11,6 +11,7 @@ import {
     utimesSync,
     writeFileSync,
 } from 'node:fs';
+import * as nodeFsPromises from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import {
     COLLAB_HOME_REPLACED_CLOSE,
@@ -1368,19 +1369,15 @@ describe('Backup restore of the avatar', () => {
         const artifact = await backup(user.id, new Date());
         rmSync(own, { force: true });
 
-        const file = Bun.file;
-        const spy = spyOn(Bun, 'file').mockImplementation((...args: Parameters<typeof Bun.file>) => {
-            const opened = file(...args);
-            if (String(args[0]).endsWith(`${ARCHIVE_AVATAR_DIR}/${user.id}.webp`)) {
-                opened.bytes = () => Promise.reject(new Error('the avatar was read into memory'));
-            }
-            return opened;
-        });
+        const copy = spyOn(nodeFsPromises, 'copyFile');
+        let copied: string[] = [];
         try {
             await restoreHome(artifact, user.id, `restore-avatar-copy-${Date.now()}`);
+            copied = copy.mock.calls.map(([, target]) => String(target));
         } finally {
-            spy.mockRestore();
+            copy.mockRestore();
         }
+        expect(copied).toEqual([own]);
         expect(new Uint8Array(await Bun.file(own).arrayBuffer())).toEqual(TEST_PNG_BYTES);
         rmSync(own, { force: true });
         rmSync(join(getBackupsDir(), artifact), { force: true });

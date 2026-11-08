@@ -15,7 +15,7 @@ import { createMountConfig, createMountStorage } from '../mount/helpers';
 import type { StorageBackend } from '../storage';
 import { readHomeMounts } from './enumerate-homes';
 import { resolveHomeDir } from './home-dir';
-import { parseSafetyCopyName, resolveMountDir } from './paths';
+import { parseSafetyCopyName } from './paths';
 
 // A safety copy holds a whole home; its size is a line in a list, not an accounting figure, so the
 // walk stops here and the number becomes a floor rather than taking a minute on a huge home. The
@@ -186,13 +186,11 @@ async function deleteRemoteObjects(folder: string, homeDir: string): Promise<voi
     for (const { id, mountDir, metadataPath, config } of remote) {
         // Nothing to hold the copy's keys against: the mount is gone from the live home, and an
         // object it may still hold is not this delete's to judge.
-        const liveMountDir = resolveMountDir(homeDir, id);
-        if (!liveMountDir || !fs.existsSync(path.join(liveMountDir, PATHS.DRIVE.METADATA_DB))) continue;
+        if (!fs.existsSync(path.join(homeDir, PATHS.DRIVE.ROOT, id, PATHS.DRIVE.METADATA_DB))) continue;
         const referenced = new Set<string>();
         for (const dir of referencing) {
-            const referencingMount = resolveMountDir(dir, id);
-            const referencingDb = referencingMount && path.join(referencingMount, PATHS.DRIVE.METADATA_DB);
-            if (referencingDb && fs.existsSync(referencingDb)) {
+            const referencingDb = path.join(dir, PATHS.DRIVE.ROOT, id, PATHS.DRIVE.METADATA_DB);
+            if (fs.existsSync(referencingDb)) {
                 for (const key of storageKeysIn(referencingDb)) referenced.add(key);
             }
         }
@@ -222,10 +220,7 @@ function remoteMountsOf(folder: string): RemoteMount[] {
     const remote: RemoteMount[] = [];
     for (const [id, settings] of Object.entries(mounts)) {
         if (settings.storageType !== 's3') continue;
-        // settings.json of a safety copy came from an archive, so its keys are untrusted. A mount id that
-        // resolves outside this folder would have this read, and delete, the objects of another home.
-        const mountDir = resolveMountDir(folder, id);
-        if (!mountDir) continue;
+        const mountDir = path.join(folder, PATHS.DRIVE.ROOT, id);
         const metadataPath = path.join(mountDir, PATHS.DRIVE.METADATA_DB);
         if (!fs.existsSync(metadataPath)) continue;
         // A mount with no S3 config of its own keeps its objects in the server's default bucket. On a bucket two

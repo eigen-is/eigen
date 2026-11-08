@@ -26,14 +26,7 @@ import { archivePaths, readMountPathRows } from './archive-layout';
 import { describeError } from './errors';
 import type { VersionedDatabase } from './materialize-mount';
 import { checkRestoredDatabases, materializeMount, movePath, openToCheck, redateTrash } from './materialize-mount';
-import {
-    ARCHIVE_HOME_DIR,
-    buildServerFolderName,
-    INSTALL_FOLDERS,
-    requireMountDir,
-    resolveInside,
-    SERVER_ARCHIVE_SERVER_MEMBER,
-} from './paths';
+import { ARCHIVE_HOME_DIR, buildServerFolderName, INSTALL_FOLDERS, SERVER_ARCHIVE_SERVER_MEMBER } from './paths';
 import { requireVerified, verifyFolder } from './verify';
 
 // The staging folder in the data root, data/.restoring, which the swap renames into place.
@@ -197,7 +190,7 @@ async function stageHome(
             continue;
         }
         const replay = replayPendingUploads(
-            requireMountDir(homeDir, summary.id),
+            path.join(homeDir, PATHS.DRIVE.ROOT, summary.id),
             path.join(liveHomeDir, PATHS.DRIVE.ROOT, summary.id),
             summary.contents !== 'metadata',
         );
@@ -243,7 +236,7 @@ function replayPendingUploads(mountDir: string, liveMountDir: string, fromFiles:
                 continue;
             }
             const row = byKey.get(storageKey);
-            const source = fromFiles ? row && resolveInside(dataDir, archivePath(row)) : staged;
+            const source = fromFiles ? row && path.join(dataDir, archivePath(row)) : staged;
             if (!source || !fs.existsSync(source)) {
                 notReplayed.missing++;
                 continue;

@@ -11,7 +11,6 @@ import {
     canUploadServerArchive,
     incompleteReason,
     isCompleteArchive,
-    listUnusableMountIds,
     parseBackupManifest,
     parseBackupSidecar,
     parseServerArchiveManifest,
@@ -57,21 +56,6 @@ const homeManifest: BackupManifest = {
     mounts: [mount('drive', 'local')],
     entries: [{ path: 'home/mounts/drive/metadata.db', bytes: 10, sha256: 'a'.repeat(64) }],
 };
-
-describe('listUnusableMountIds', () => {
-    test('names an id that is no one folder, whatever its entry holds', () => {
-        const text = JSON.stringify({
-            mounts: { default: {}, 'a/b': null, '../x': { storageType: 's3' }, 'c-1_d': {} },
-        });
-        expect(listUnusableMountIds(text)).toEqual(['a/b', '../x']);
-    });
-
-    test('finds none in a file with no mounts, or one that does not read', () => {
-        expect(listUnusableMountIds('{}')).toEqual([]);
-        expect(listUnusableMountIds('{"mounts":null}')).toEqual([]);
-        expect(listUnusableMountIds('not json')).toEqual([]);
-    });
-});
 
 describe('parseBackupManifest', () => {
     test('reads the warnings of a home backed up with them, and a manifest without them', () => {

@@ -31,9 +31,10 @@ export async function flushOpenDocumentDbs(mount: Mount): Promise<void> {
     }
 }
 
-// A salvaged or hand-edited table can hold rows whose parent chain ends at a missing row or in a cycle, and a hand edit
-// rows whose name no path can hold. No path is theirs, so the archive's copy drops them before anything reads it, as a live delete would, and the backup goes on with a warning per kind. A table whose root row is
-// gone holds nothing that can be placed. The live table is never touched.
+// A hand-edited table can hold rows whose parent chain ends at a missing row or in a cycle, and rows whose name no path
+// can hold. No path is theirs, so the archive's copy drops them before anything reads it, as a live delete would, and
+// the backup goes on with a warning per kind. A table whose root row is gone holds nothing that can be placed. The live
+// table is never touched.
 export function pruneUnreachableRows(mountId: string, metadataPath: string): string[] {
     const db = new Database(metadataPath, { readwrite: true, create: false });
     try {
