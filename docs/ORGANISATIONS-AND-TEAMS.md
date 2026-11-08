@@ -18,8 +18,6 @@ A user has no username field. The "username" an invite or the admin's new-user f
 
 The org join adds the user to the default team in the same `addMember` call, then reconciles the team's shares itself (`reconcileShares`), because `addMember` skips `afterAddTeamMember`. That delivers what was shared with the team before the user existed. `addMember` refuses a team that is gone before it writes anything, org join included, so the hook first checks that the team still exists: a deleted default team never keeps a user out of the org. Its undo covers only a failure after the member row is written, such as a team member limit. The team join runs only with the org join, so a member an admin later removes from the team stays out.
 
-An org that predates teams has no default team. A boot with no pinned id looks for it once (`pinDefaultTeam` in `apps/api/src/lib/org/org.ts`): a team in the org with the org's name, created within 5 seconds of the org. Only `createOrganization` makes such a team, since its rows are written in one call and stored to the second. Exactly one match is pinned; none or several pin nothing, and new users then join the org only. Existing members are never added, because a member an admin removed and one never added look the same.
-
 The public config carries `defaultTeamId` next to `orgId`, since the client has no other way to tell the default team from a team an admin made. Admin's user detail leaves it out of the user's Teams section, its count included, and the **Add to team** picker never offers it, so "Not in any team yet" means no team besides the one everyone joins. The team's own Members section still lists and removes its members.
 
 ## The owner holds server settings and admins manage people
