@@ -1,6 +1,6 @@
 // Inserting and deleting rows and columns on plain sheets, without the DOM: the cells, the config with its merges,
-// borders and row heights, the conditional formats, validation rules, frozen pane, filter and size of the sheet the
-// op names, and the formula text and chart ranges on every sheet that point at it. It runs wherever such an op
+// borders and row heights, the links, conditional formats, validation rules, frozen pane, filter and size of the sheet
+// the op names, and the formula text and chart ranges on every sheet that point at it. It runs wherever such an op
 // applies, for example in the editor's own insert and in the server's replay of the op log. The shifters for one kind
 // of map are exported for code that moves the same maps, such as the undo stacks.
 
@@ -53,12 +53,8 @@ export class RowColError extends Error {
 type AxisRange = { row: readonly number[]; column: readonly number[] };
 
 // Excel's rule for a range across an insert: an insert at or before its first row (or column) moves it, one inside
-// grows it, one right after leaves it. Conditional formats, validation rules, alternate formats and chart refs all
-// shift through this pair.
-//
-// A range stops at the grid's last row or column, as Excel's does. So a whole-column rule still ends there after an
-// insert, and a chart ref stays one readChartSpec accepts. A range the insert leaves as it was comes back as the same
-// object, so its owner writes nothing.
+// grows it, one right after leaves it. A range stops at the grid's last row or column, as Excel's does. A range the
+// insert leaves as it was comes back as the same object, so its owner writes nothing.
 export function shiftRangeForInsert<R extends AxisRange>(
     range: R,
     op: Pick<InsertRowColOp, 'type' | 'index' | 'count' | 'direction'>,
@@ -113,24 +109,6 @@ function runsAlong(ref: CellRangeRef, type: 'row' | 'column'): boolean {
     return type === 'row' ? ref.column[0] === ref.column[1] : ref.row[0] === ref.row[1];
 }
 
-// Generic over S, so the editor's wider sheet, with its filter and frozen panes, keeps its type. The engine
-// reads only the plain sheet's fields, and its shallow copies keep the rest.
-//
-// Nothing is deep-cloned. Rows an op doesn't touch, and for a column op the cells, are reused as they are. In the
-// editor the inputs are immer drafts, so untouched rows keep their old objects, and a row insert on a large sheet
-// doesn't walk every cell.
-export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op: InsertRowColOp): S[] {
-    const targetIndex = sheets.findIndex((s) => s.id === op.id);
-    if (targetIndex === -1) return sheets;
-    return applyInsert(sheets, targetIndex, op);
-}
-
-export function applySheetsDeleteRowCol<S extends ShiftedSheet>(sheets: S[], op: DeleteRowColOp): S[] {
-    const targetIndex = sheets.findIndex((s) => s.id === op.id);
-    if (targetIndex === -1) return sheets;
-    return applyDelete(sheets, targetIndex, op);
-}
-
 export function shiftMergeForInsert(
     cfg: ExtendedSheetConfig,
     type: 'row' | 'column',
@@ -138,52 +116,17 @@ export function shiftMergeForInsert(
     count: number,
     direction: 'lefttop' | 'rightbottom',
 ): Record<string, MergeCell> {
-    const merge_new: Record<string, MergeCell> = {};
-    for (const mc of Object.values(cfg.merge ?? {})) {
-        const { r, c, rs, cs } = mc;
-        if (type === 'row') {
-            if (index < r) {
-                merge_new[`${r + count}_${c}`] = { r: r + count, c, rs, cs };
-            } else if (index === r) {
-                if (direction === 'lefttop') {
-                    merge_new[`${r + count}_${c}`] = { r: r + count, c, rs, cs };
-                } else {
-                    merge_new[`${r}_${c}`] = { r, c, rs: rs + count, cs };
-                }
-            } else if (index < r + rs - 1) {
-                merge_new[`${r}_${c}`] = { r, c, rs: rs + count, cs };
-            } else if (index === r + rs - 1) {
-                if (direction === 'lefttop') {
-                    merge_new[`${r}_${c}`] = { r, c, rs: rs + count, cs };
-                } else {
-                    merge_new[`${r}_${c}`] = { r, c, rs, cs };
-                }
-            } else {
-                merge_new[`${r}_${c}`] = { r, c, rs, cs };
-            }
-        } else {
-            if (index < c) {
-                merge_new[`${r}_${c + count}`] = { r, c: c + count, rs, cs };
-            } else if (index === c) {
-                if (direction === 'lefttop') {
-                    merge_new[`${r}_${c + count}`] = { r, c: c + count, rs, cs };
-                } else {
-                    merge_new[`${r}_${c}`] = { r, c, rs, cs: cs + count };
-                }
-            } else if (index < c + cs - 1) {
-                merge_new[`${r}_${c}`] = { r, c, rs, cs: cs + count };
-            } else if (index === c + cs - 1) {
-                if (direction === 'lefttop') {
-                    merge_new[`${r}_${c}`] = { r, c, rs, cs: cs + count };
-                } else {
-                    merge_new[`${r}_${c}`] = { r, c, rs, cs };
-                }
-            } else {
-                merge_new[`${r}_${c}`] = { r, c, rs, cs };
-            }
-        }
+    const shifted: Record<string, MergeCell> = {};
+    for (const merge of Object.values(cfg.merge ?? {})) {
+        const [first, span] = type === 'row' ? [merge.r, merge.rs] : [merge.c, merge.cs];
+        const last = first + span - 1;
+        const above = direction === 'lefttop';
+        if (index < first || (index === first && above)) placeMerge(shifted, merge, type, first + count, span);
+        else if (index === first || index < last || (index === last && above)) {
+            placeMerge(shifted, merge, type, first, span + count);
+        } else placeMerge(shifted, merge, type, first, span);
     }
-    return merge_new;
+    return shifted;
 }
 
 export function shiftMergeForDelete(
@@ -193,44 +136,28 @@ export function shiftMergeForDelete(
     slen: number,
 ): Record<string, MergeCell> {
     const end = start + slen - 1;
-    const merge_new: Record<string, MergeCell> = {};
-    for (const mc of Object.values(cfg.merge ?? {})) {
-        const { r, c, rs, cs } = mc;
-        if (type === 'row') {
-            if (r < start) {
-                if (r + rs - 1 < start) {
-                    merge_new[`${r}_${c}`] = { r, c, rs, cs };
-                } else if (r + rs - 1 >= start && r + rs - 1 < end) {
-                    merge_new[`${r}_${c}`] = { r, c, rs: start - r, cs };
-                } else if (r + rs - 1 >= end) {
-                    merge_new[`${r}_${c}`] = { r, c, rs: rs - slen, cs };
-                }
-            } else if (r >= start && r <= end) {
-                if (r + rs - 1 > end) {
-                    merge_new[`${start}_${c}`] = { r: start, c, rs: r + rs - 1 - end, cs };
-                }
-            } else if (r > end) {
-                merge_new[`${r - slen}_${c}`] = { r: r - slen, c, rs, cs };
-            }
-        } else {
-            if (c < start) {
-                if (c + cs - 1 < start) {
-                    merge_new[`${r}_${c}`] = { r, c, rs, cs };
-                } else if (c + cs - 1 >= start && c + cs - 1 < end) {
-                    merge_new[`${r}_${c}`] = { r, c, rs, cs: start - c };
-                } else if (c + cs - 1 >= end) {
-                    merge_new[`${r}_${c}`] = { r, c, rs, cs: cs - slen };
-                }
-            } else if (c >= start && c <= end) {
-                if (c + cs - 1 > end) {
-                    merge_new[`${r}_${start}`] = { r, c: start, rs, cs: c + cs - 1 - end };
-                }
-            } else if (c > end) {
-                merge_new[`${r}_${c - slen}`] = { r, c: c - slen, rs, cs };
-            }
-        }
+    const shifted: Record<string, MergeCell> = {};
+    for (const merge of Object.values(cfg.merge ?? {})) {
+        const [first, span] = type === 'row' ? [merge.r, merge.rs] : [merge.c, merge.cs];
+        const last = first + span - 1;
+        if (first > end) placeMerge(shifted, merge, type, first - slen, span);
+        else if (first >= start) {
+            if (last > end) placeMerge(shifted, merge, type, start, last - end);
+        } else if (last < start) placeMerge(shifted, merge, type, first, span);
+        else placeMerge(shifted, merge, type, first, last >= end ? span - slen : start - first);
     }
-    return merge_new;
+    return shifted;
+}
+
+function placeMerge(
+    merges: Record<string, MergeCell>,
+    merge: MergeCell,
+    type: 'row' | 'column',
+    first: number,
+    span: number,
+) {
+    const placed = type === 'row' ? { ...merge, r: first, rs: span } : { ...merge, c: first, cs: span };
+    merges[`${placed.r}_${placed.c}`] = placed;
 }
 
 // Re-keys an "r_c" map for an insert: the row/column at `index` is the template, copied by `clone`
@@ -420,7 +347,11 @@ export function shiftKeyedMapForDelete(
     return shifted;
 }
 
-function applyInsert<S extends ShiftedSheet>(sheets: S[], targetIndex: number, op: InsertRowColOp): S[] {
+// Generic over S, so the editor's wider sheet keeps its type. Nothing is deep-cloned: in the editor the inputs are immer
+// drafts, so rows an op doesn't touch keep their objects, and a row insert on a large sheet doesn't walk every cell.
+export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op: InsertRowColOp): S[] {
+    const targetIndex = sheets.findIndex((s) => s.id === op.id);
+    if (targetIndex === -1) return sheets;
     const target = sheets[targetIndex];
     const cfg: ExtendedSheetConfig = target.config ?? {};
     const data = target.data;
@@ -477,6 +408,9 @@ function applyInsert<S extends ShiftedSheet>(sheets: S[], targetIndex: number, o
     newTarget.config = newCfg;
     setSize(newTarget, newData, op.type);
 
+    if (target.hyperlink != null) {
+        newTarget.hyperlink = shiftCellKeyedForInsert(target.hyperlink, op.type, op.index, count, op.direction);
+    }
     if (target.conditionalFormatRules != null) {
         newTarget.conditionalFormatRules = target.conditionalFormatRules.map((cf) => ({
             ...cf,
@@ -507,7 +441,9 @@ function applyInsert<S extends ShiftedSheet>(sheets: S[], targetIndex: number, o
     );
 }
 
-function applyDelete<S extends ShiftedSheet>(sheets: S[], targetIndex: number, op: DeleteRowColOp): S[] {
+export function applySheetsDeleteRowCol<S extends ShiftedSheet>(sheets: S[], op: DeleteRowColOp): S[] {
+    const targetIndex = sheets.findIndex((s) => s.id === op.id);
+    if (targetIndex === -1) return sheets;
     const target = sheets[targetIndex];
     const data = target.data;
     if (!data) return sheets;
@@ -554,6 +490,9 @@ function applyDelete<S extends ShiftedSheet>(sheets: S[], targetIndex: number, o
     newTarget.config = newCfg;
     setSize(newTarget, newData, op.type);
 
+    if (target.hyperlink != null) {
+        newTarget.hyperlink = shiftCellKeyedForDelete(target.hyperlink, op.type, op.start, op.end);
+    }
     if (target.conditionalFormatRules != null) {
         const rules = [];
         for (const cf of target.conditionalFormatRules) {
@@ -689,11 +628,10 @@ function writeFilter(
     for (const row of hidden) cfg.rowhidden[row] = 0;
 }
 
-// The merge map alone doesn't draw a merge: each of its cells points at the corner, and the corner holds the size.
-// The op moved the cells from index `from` on its axis but not their stamps, so every merge that reaches that far
+// The op moved the cells from index `from` on its axis but not their `mc` stamps, so every merge that reaches that far
 // stamps its cells again, empty cells included. A merge that ends right before `from` may have lost its last rows to a
-// delete, so it stamps too. A column op copied every row already. A row op shares the rows it did not insert with the
-// sheet before the op, so a row is copied before its first stamp.
+// delete, so it stamps too. A row op shares the rows it did not insert with the sheet before it, so a row is copied
+// before its first stamp.
 function stampMerges(data: CellMatrix, merges: Record<string, MergeCell>, type: 'row' | 'column', from: number) {
     const copied = new Set<number>();
     for (const { r, c, rs, cs } of Object.values(merges)) {

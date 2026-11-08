@@ -1,16 +1,14 @@
 // Row and column inserts, deletes, hides and unhides on the open workbook. The engine shifts what every reader of the
-// workbook sees, such as the cells, the formulas and the validation rules (applySheetsInsertRowCol). This module
-// writes that result back into the editor's draft, then shifts what the engine leaves alone, such as the links, the
-// calc chain and the selection. A local edit, a peer's op and an undo all come through here. It also tells the editors
-// and the arrow keys where the hidden rows and columns are.
+// workbook sees, such as the cells, the formulas and the links (applySheetsInsertRowCol). This module writes that result
+// back into the editor's draft, then shifts what only this tab holds, such as the calc chain and the selection. A local
+// edit, a peer's op and an undo all come through here. It also tells the editors and the arrow keys where the hidden
+// rows and columns are.
 
 import { isRecord } from '@workspace/lib/guards';
 import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
 import {
     applySheetsDeleteRowCol,
     applySheetsInsertRowCol,
-    shiftCellKeyedForDelete,
-    shiftCellKeyedForInsert,
     shiftRangeForDelete,
     shiftRangeForInsert,
 } from '../../engine/rowcol';
@@ -24,15 +22,13 @@ export function insertRowCol(
     ctx: Context,
     op: InsertRowColOp,
     changeSelection = true,
-    // applyOpBatch sets fromBatch for a peer's op or an undo. Such a batch applies for a read-only viewer too, and
-    // applyOpBatch moves the selection itself. So the permission check stops only a viewer's own insert.
+    // A batch applies for a read-only viewer too, so the permission check stops only a viewer's own insert.
     fromBatch = false,
 ) {
     if (!fromBatch && ctx.allowEdit === false) return;
-    const id = op.id || ctx.currentSheetId;
-    const { type, index, count, direction } = op;
+    const { id, type, index, count, direction } = op;
 
-    writeBackSheets(ctx, applySheetsInsertRowCol(ctx.sheets, { ...op, id }));
+    writeBackSheets(ctx, applySheetsInsertRowCol(ctx.sheets, op));
 
     const sheetIndex = getSheetIndex(ctx, id);
     if (sheetIndex == null) return;
@@ -49,8 +45,6 @@ export function insertRowCol(
     sheet.calcChain = (sheet.calcChain ?? []).map((entry) =>
         type === 'row' ? { ...entry, r: shift(entry.r) } : { ...entry, c: shift(entry.c) },
     );
-
-    sheet.hyperlink = shiftCellKeyedForInsert(sheet.hyperlink, type, index, count, direction);
 
     const { data } = sheet;
     if (changeSelection && data) {
@@ -69,15 +63,14 @@ export function insertRowCol(
 export function deleteRowCol(
     ctx: Context,
     op: DeleteRowColOp,
-    // applyOpBatch sets fromBatch for a peer's op or an undo. Such a batch applies for a read-only viewer too, and
-    // applyOpBatch moves the selection itself. So the permission check stops only a viewer's own delete.
+    // A batch applies for a read-only viewer too and moves the selection itself, so the permission check and the
+    // selection reset are for a tab's own delete.
     fromBatch = false,
 ) {
     if (!fromBatch && ctx.allowEdit === false) return;
-    const id = op.id || ctx.currentSheetId;
-    const { type, start, end } = op;
+    const { id, type, start, end } = op;
 
-    writeBackSheets(ctx, applySheetsDeleteRowCol(ctx.sheets, { ...op, id }));
+    writeBackSheets(ctx, applySheetsDeleteRowCol(ctx.sheets, op));
 
     const sheetIndex = getSheetIndex(ctx, id);
     if (sheetIndex == null) return;
@@ -99,7 +92,6 @@ export function deleteRowCol(
     }
     sheet.calcChain = calcChain;
 
-    sheet.hyperlink = shiftCellKeyedForDelete(sheet.hyperlink, type, start, end);
     if (!fromBatch) ctx.selections = undefined;
 
     ctx.formulaCache.formulaCellInfoMap = null;
@@ -111,7 +103,6 @@ export function hideSelectedRowCol(ctx: Context, type: 'row' | 'column') {
     if (!ctx.selections || ctx.selections.length > 1) return 'noMulti';
     const sheet = getSheet(ctx);
     const { data } = sheet;
-    // A sheet that is not loaded has nothing to hide.
     if (!data) return '';
     const config = (sheet.config ??= {});
     const key = type === 'row' ? 'rowhidden' : 'colhidden';
@@ -168,13 +159,8 @@ export function moveCountPastHiddenRowCol(ctx: Context, key: string): number {
     return count;
 }
 
-// Writes the engine's result back one sheet and one field at a time, never `ctx.sheets = ...` or a whole sheet.
-// A whole write makes immer emit one replace that carries the whole workbook, and collab would ship it on every
-// edit. Undoing a whole sheet would also put back its images and charts over a peer's later changes. A moved chart
-// gets only the fields that changed, and a keyed part of its spec one entry at a time. So a peer's move or delete
-// of that chart, or its edit of another entry, survives, and the undo puts back only the entries the op moved. A
-// validation rule the op moved or dropped is written whole under its id, so a rule a peer added or deleted meanwhile
-// stays as the peer left it.
+// Writes the engine's result back one sheet and one field at a time, a chart and a validation rule one at a time, so
+// the undo entry immer records puts back only what the op moved and leaves a peer's later changes alone.
 function writeBackSheets(ctx: Context, sheets: Sheet[]) {
     for (const [i, next] of sheets.entries()) {
         const sheet: Record<string, unknown> = ctx.sheets[i];

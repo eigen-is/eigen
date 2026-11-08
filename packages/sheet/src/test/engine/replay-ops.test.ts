@@ -145,9 +145,7 @@ describe('replaySheetsOps', () => {
     });
 
     test('mixed batch: insertRowCol runs before companion patches (post-mutation positions)', () => {
-        // Mirrors how patchToOp emits real batches: the special row/col op is
-        // pushed first, and the cell patches that follow already reference
-        // post-insert row/col indices (additionalCellOps, mergeOps).
+        // As an undo's batch holds them: the row op first, and the cell patches after it at post-insert indices.
         const sheet: Sheet = {
             id: 's1',
             name: 'Sheet1',

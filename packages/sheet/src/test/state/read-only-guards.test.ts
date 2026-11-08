@@ -80,9 +80,8 @@ describe('read-only (allowEdit === false) state guards', () => {
 });
 
 // The permission guard must stop LOCAL viewer ops only — never the remote mirror.
-// applyOp re-runs the reducer to re-derive the `data` shift while the metadata rides
-// along as authoritative patches; if the guard skipped the shift but the patches still
-// applied, a read-only collaborator's grid would diverge until the next snapshot.
+// applyOp runs the reducer on the marker; if the guard skipped it, a read-only collaborator's grid would diverge
+// until the next snapshot.
 describe('remote-op mirror (applyOp) still applies to viewers', () => {
     // Build the wire ops an editor would emit for a row insert/delete, then apply the
     // exact same ops through the real applyOp on a read-only viewer context.

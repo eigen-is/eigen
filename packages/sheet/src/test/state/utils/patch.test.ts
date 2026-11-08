@@ -61,11 +61,11 @@ describe('per-client sheet state never reaches the wire', () => {
         expect(paths).toEqual([]);
     });
 
-    test('the row-insert metadata sweep drops it too, not just filterPatch', () => {
-        const ctx = getContext();
-        const ops = patchToOp(ctx, [], {
+    test('the undo step of a row op, which ships the sheet fields whole, drops it too', () => {
+        const options = {
             insertRowColOp: { type: 'row', index: 0, count: 1, direction: 'lefttop', id: 'sheet-1' },
-        });
-        expect(ops.map((op) => op.path).filter((path) => path[0] === 'selections')).toEqual([]);
+        } as const;
+        const ops = patchToOp(getContext(), [], options, { fields: { selections: [], name: 'Kept' }, repair: [] });
+        expect(ops.map((op) => op.path).filter((path) => path.length === 1)).toEqual([['name']]);
     });
 });
