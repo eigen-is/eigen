@@ -7,7 +7,6 @@ import {
     heldAttendees,
     isSeriesOccurrence,
     isTransferableCalendarHome,
-    occurrenceDateToString,
     parseOccurrenceDate,
     truncateRRule,
     useCreateEvent,
@@ -103,7 +102,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                     eventId,
                     status: 'declined',
                     scope: action,
-                    recurrenceDate: occurrenceDateToString(event.occurrenceDate),
+                    recurrenceDate: event.occurrenceDate,
                     remove: true,
                 });
             }
@@ -124,7 +123,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                         endTime: event.endTime,
                         allDay: Boolean(event.allDay),
                         parentEventId: event.id,
-                        recurrenceDate: occurrenceDateToString(event.occurrenceDate),
+                        recurrenceDate: event.occurrenceDate,
                         status: 'cancelled',
                         etag: event.etag,
                     });
@@ -175,7 +174,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                 eventId,
                 status: pendingRsvpStatus,
                 scope: 'this',
-                recurrenceDate: occurrenceDateToString(event.occurrenceDate),
+                recurrenceDate: event.occurrenceDate,
             });
         } else {
             rsvp.mutate({ calendarId: event.calendarId, eventId, status: pendingRsvpStatus });

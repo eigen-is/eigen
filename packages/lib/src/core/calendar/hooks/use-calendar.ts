@@ -38,6 +38,12 @@ import {
 // nothing typed, such as a delete's, so the toast promises nothing about typing.
 const STALE_WRITE_TOAST = 'This event changed elsewhere. Check it and try again.';
 
+// Eden's reviver makes a UTC-midnight Date of a bare YYYY-MM-DD, for a year of 19xx or 20xx only, and a range read keeps
+// its timestamps revived. So what the type promises holds only from here on, whichever of the two arrived.
+function withOccurrenceDay(event: CalendarEventOccurrence): CalendarEventOccurrence {
+    return { ...event, occurrenceDate: occurrenceDateToString(new Date(event.occurrenceDate)) };
+}
+
 // --- Calendar CRUD ---
 
 export function useCalendars(ownerId: string, enabled = true) {
@@ -105,7 +111,7 @@ export function useEvents(ownerId: string, from: number, to: number, enabled = t
                 ['event-range']({ from: String(from) })({ to: String(to) })
                 .get();
             if (response.error) throw new AppError(response);
-            return response.data;
+            return response.data.map(withOccurrenceDay);
         },
         staleTime: STALE_TIME.TWO_MINUTES,
         enabled: !!ownerId && enabled && from > 0 && to > 0,
@@ -277,7 +283,7 @@ export function useAllSharedCalendarEvents(sharedCalendars: SharedCalendar[], fr
                         }),
                     );
                 }
-                return data as CalendarEventOccurrence[];
+                return (data as CalendarEventOccurrence[]).map(withOccurrenceDay);
             },
             staleTime: STALE_TIME.TWO_MINUTES,
             enabled: from > 0 && to > 0,

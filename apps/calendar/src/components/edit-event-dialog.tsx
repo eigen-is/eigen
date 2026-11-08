@@ -10,7 +10,6 @@ import { useAuth } from '@workspace/lib/auth';
 import {
     heldAttendees,
     isSeriesOccurrence,
-    occurrenceDateToString,
     parseOccurrenceDate,
     seriesEditFromOccurrence,
     toLocalDateString,
@@ -203,7 +202,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
                 ...updates,
                 rrule: null,
                 parentEventId: targetId,
-                recurrenceDate: occurrenceDateToString(event.occurrenceDate),
+                recurrenceDate: event.occurrenceDate,
                 etag,
             });
         } else if (action === 'this-and-following') {

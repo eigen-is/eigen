@@ -211,14 +211,11 @@ export function getInviteStatus(event: CalendarEventOccurrence, userEmail?: stri
 
 export const WEEKDAY_HEADERS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
-// Eden's reviver turns an occurrence's YYYY-MM-DD into a Date, so the string its type promises can arrive as one.
-export function parseOccurrenceDate(value: Date | string): Date {
-    if (typeof value !== 'string') return value;
+export function parseOccurrenceDate(value: string): Date {
     return new Date(`${value}T00:00:00Z`);
 }
 
-export function occurrenceDateToString(value: Date | string): string {
-    if (typeof value === 'string') return value;
+export function occurrenceDateToString(value: Date): string {
     const pad = (n: number, width: number) => String(n).padStart(width, '0');
     return `${pad(value.getUTCFullYear(), 4)}-${pad(value.getUTCMonth() + 1, 2)}-${pad(value.getUTCDate(), 2)}`;
 }
