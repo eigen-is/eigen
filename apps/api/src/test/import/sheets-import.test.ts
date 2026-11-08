@@ -164,6 +164,18 @@ function parseXlsx(xlsx: ArrayBuffer | Uint8Array): Sheet[] {
     return decodeSheetsSnapshot(new TextDecoder().decode(snapshotJson));
 }
 
+test('a tab named with a ! comes in under its name, and a formula naming it reads it', () => {
+    const [, uses] = parseXlsx(
+        xlsxFixture({
+            sheets: [
+                { name: 'Q1!', data: rowsXml([['A1', 5]]) },
+                { name: 'Uses', data: rowsXml([['A1', { formula: "'Q1!'!A1*2" }]]) },
+            ],
+        }),
+    );
+    expect(uses.celldata?.[0].v).toMatchObject({ f: "='Q1!'!A1*2", v: 10 });
+});
+
 describe('Sheets xlsx import/convert', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
     let mountId: string;

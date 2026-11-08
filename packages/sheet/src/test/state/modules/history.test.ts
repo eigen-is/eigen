@@ -19,7 +19,7 @@ import { shiftEntries } from '../../../state/modules/history-shift';
 import { saveHyperlink } from '../../../state/modules/hyperlink';
 import { mergeCells } from '../../../state/modules/merge';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
-import { addSheet, changeSheet, deleteSheet } from '../../../state/modules/sheet';
+import { addSheet, changeSheet, deleteSheet, renameSheet } from '../../../state/modules/sheet';
 import { clearValidations, validationAt } from '../../../state/modules/validation-rules';
 import type { ConditionalFormatRule, DataValidationRule, History, Op, Sheet } from '../../../state/types';
 import type { Tab } from '../factories/collab';
@@ -174,6 +174,10 @@ const deleteColumns = (start: number, end: number, id = ONE) => {
     return [(ctx: Context) => deleteRowCol(ctx, op), { deleteRowColOp: op }] as const;
 };
 const removeSheet = (id: string) => [(ctx: Context) => deleteSheet(ctx, id), { deleteSheetOp: { id } }] as const;
+const renameTab = [
+    (ctx: Context) => renameSheet(ctx, { id: ONE, name: 'Renamed' }),
+    { renameSheetOp: { id: ONE } },
+] as const;
 type Structural = readonly [(ctx: Context) => void, Parameters<typeof tabEdit>[2]];
 
 describe("undo after a peer's row, column or sheet change lands on your cell", () => {
@@ -345,6 +349,7 @@ describe("a peer's batch ends your row, column and sheet undo", () => {
         ['row delete', deleteRows(4, 4)],
         ['sheet delete', removeSheet(TWO)],
         ['sheet add', [(ctx: Context) => addSheet(ctx), { addSheetOp: true }]],
+        ['rename', renameTab],
     ];
     test.each(kinds)('a %s and everything older leave the undo stack, the newer stay', (_, structural) => {
         const s = session(workbook({ B2: text('old'), B3: text('old') }));
@@ -469,6 +474,7 @@ describe('working alone', () => {
         ['a column delete through a merge', deleteColumns(1, 1)],
         ['a sheet delete', removeSheet(TWO)],
         ['a copy', [(ctx: Context) => copySheet(ctx, TWO), { addSheetOp: true }]],
+        ['a rename', renameTab],
     ];
     test.each(kinds)('%s goes back and forth exactly, on both tabs and for a joiner', (_, structural) => {
         const s = session(rich());

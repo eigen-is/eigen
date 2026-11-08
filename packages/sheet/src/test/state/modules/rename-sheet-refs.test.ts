@@ -11,7 +11,9 @@ const { setCellValue } = await import('../../../state/modules/cell');
 const { execFunctionGroup, getcellrange, groupValuesRefresh, warmFormulaCellInfoMap } = await import(
     '../../../state/modules/formula-exec'
 );
+const { insertRowCol } = await import('../../../state/modules/rowcol');
 const { editSheetName } = await import('../../../state/modules/sheet');
+const { dataToCelldata } = await import('../../../engine/celldata');
 const { join, tab, tabEdit, tabReceive, tabRedo, tabUndo } = await import('../factories/collab');
 type Tab = import('../factories/collab').Tab;
 type Sheet = import('../../../state/types').Sheet;
@@ -74,9 +76,8 @@ function workbookTab(cells: Record<string, string>, extra: Partial<Sheet> = {}, 
 function renameFirst(t: Tab, name: string): Op[] {
     const input = document.createElement('span');
     const [sheet] = t.ctx.sheets;
-    input.dataset.oldText = sheet.name;
     input.innerText = name;
-    return tabEdit(t, (ctx) => editSheetName(ctx, input), { renameSheetOp: { id: sheet.id, name, from: sheet.name } });
+    return tabEdit(t, (ctx) => editSheetName(ctx, sheet.id, input), { renameSheetOp: { id: sheet.id } });
 }
 
 const renameOp = (id: string, name: unknown): Op => ({ op: 'renameSheet', id, path: [], value: { name } });
@@ -269,12 +270,48 @@ describe('a tab rename rewrites the text that names the tab', () => {
         expect(join(base, batches)[1].celldata?.[0].v?.f).toBe("='Q1 plan'!A1+1");
     });
 
-    test('an undo also rewrites a formula a peer wrote since, under the new name', () => {
+    test("a peer's batch ends the rename's undo and redo", () => {
         const author = workbookTab({ '0_0': '=One!A1' });
         renameFirst(author, 'Inputs');
         tabReceive(author, [{ op: 'replace', id: 'id_2', path: ['data', 1, 1], value: { f: '=Inputs!A1', v: 1 } }]);
+        expect(tabUndo(author)).toEqual([]);
+        expect(author.ctx.sheets[0].name).toBe('Inputs');
+        renameFirst(author, 'Other');
         tabUndo(author);
-        expect(formula(author, 1, 1)).toBe('=One!A1');
+        tabReceive(author, [{ op: 'replace', id: 'id_2', path: ['color'], value: 'red' }]);
+        expect(tabRedo(author)).toEqual([]);
+        expect(author.ctx.sheets[0].name).toBe('Inputs');
+    });
+
+    test("an undo can't overwrite a peer's later rename, or find its old name taken", () => {
+        const author = workbookTab({ '0_0': '=One!A1' });
+        renameFirst(author, 'Inputs');
+        tabReceive(author, [renameOp('id_1', 'Peer')]);
+        expect(tabUndo(author)).toEqual([]);
+        expect(author.ctx.sheets[0].name).toBe('Peer');
+
+        const other = workbookTab({});
+        renameFirst(other, 'Inputs');
+        tabReceive(other, [renameOp('id_2', 'One')]);
+        expect(tabUndo(other)).toEqual([]);
+        expect(other.ctx.sheets.map((sheet) => sheet.name)).toEqual(['Inputs', 'One']);
+    });
+
+    test('a tab that is not the current one is the one renamed, and its op and undo name it', () => {
+        const t = workbookTab({ '0_0': '=Two!A1' });
+        const input = document.createElement('span');
+        input.innerText = 'Second';
+        const ops = tabEdit(t, (ctx) => editSheetName(ctx, 'id_2', input), { renameSheetOp: { id: 'id_2' } });
+        expect(t.ctx.currentSheetId).toBe('id_1');
+        expect(t.ctx.sheets.map((sheet) => sheet.name)).toEqual(['One', 'Second']);
+        expect(ops).toEqual([renameOp('id_2', 'Second')]);
+        expect(tabUndo(t)).toEqual([renameOp('id_2', 'Two')]);
+        expect(t.ctx.sheets.map((sheet) => sheet.name)).toEqual(['One', 'Two']);
+        input.innerText = 'a:b';
+        expect(() =>
+            tabEdit(t, (ctx) => editSheetName(ctx, 'id_2', input), { renameSheetOp: { id: 'id_2' } }),
+        ).toThrow();
+        expect(input.innerText).toBe('Two');
     });
 
     test('of two renames to one name, the later in the log is dropped on every tab', () => {
@@ -302,6 +339,102 @@ describe('a tab rename rewrites the text that names the tab', () => {
         expect(join(base, [[rename], [insert]])[1].celldata?.[0].v?.f).toBe('=Inputs!A4');
     });
 
+    const insertRowAbove = (t: Tab) => {
+        const op = { type: 'row', index: 0, count: 1, direction: 'lefttop', id: 'id_1' } as const;
+        return tabEdit(t, (ctx) => insertRowCol(ctx, op), { insertRowColOp: op });
+    };
+
+    // A row op's batch and its undo's carry no name, so neither can undo a rename on any reader.
+    test.each([
+        ['the rename first', [0, 1]],
+        ['the row op first', [1, 0]],
+    ])('a rename and a row op, %s in the log, read the tab on the author, a peer and a joiner', (_, order) => {
+        const author = workbookTab({ '2_0': '=One!A3' });
+        const base = author.ctx;
+        const peer = tab(base);
+        const rename = renameFirst(author, 'Inputs');
+        const insert = insertRowAbove(peer);
+        tabReceive(author, insert);
+        tabReceive(peer, rename);
+        for (const t of [author, peer]) {
+            expect(t.ctx.sheets[0].name).toBe('Inputs');
+            expect(formula(t, 2, 0)).toBe('=Inputs!A4');
+        }
+        const log = order.map((i) => [rename, insert][i]);
+        expect(join(base, log)[1].celldata?.[0].v?.f).toBe('=Inputs!A4');
+    });
+
+    test.each([
+        ['after', true],
+        ['before', false],
+    ])(
+        'a row op %s a rename, and its undo, leave the tab its name on the author, a peer and a joiner',
+        (_, renamedFirst) => {
+            const author = workbookTab({ '2_0': '=One!A3' });
+            const base = author.ctx;
+            const peer = tab(base);
+            const log: Op[][] = [];
+            const send = (ops: Op[]) => {
+                log.push(ops);
+                tabReceive(peer, ops);
+            };
+            if (renamedFirst) send(renameFirst(author, 'Inputs'));
+            send(insertRowAbove(author));
+            if (!renamedFirst) send(renameFirst(author, 'Inputs'));
+            for (let undo = renamedFirst ? 1 : 2; undo > 0; undo -= 1) send(tabUndo(author));
+            expect(log.flat().flatMap(({ path }) => path)).not.toContain('name');
+            const name = renamedFirst ? 'Inputs' : 'One';
+            for (const sheets of [author.ctx.sheets, peer.ctx.sheets, join(base, log)]) {
+                expect(sheets[0].name).toBe(name);
+                const [cell] = sheets[1].data ? dataToCelldata(sheets[1].data) : (sheets[1].celldata ?? []);
+                expect(cell.v?.f).toBe(`=${name}!A3`);
+            }
+        },
+    );
+
+    describe('a name with a ! in it', () => {
+        const named = (cells: Record<string, string>) => {
+            const author = workbookTab(cells);
+            const base = author.ctx;
+            const peer = tab(base);
+            const log = [renameFirst(author, 'Q1!')];
+            tabReceive(peer, log[0]);
+            return { author, base, peer, log };
+        };
+
+        test('reads its cells, on a recalc and in a dependent, and a row op and its undo move the ref', () => {
+            const { author, base, peer, log } = named({ '0_0': '=One!A1+1', '0_1': '=SUM(One!A1:B2)' });
+            expect(formula(author)).toBe("='Q1!'!A1+1");
+            expect(join(base, log)[1].celldata?.[0].v?.f).toBe("='Q1!'!A1+1");
+
+            warmFormulaCellInfoMap(author.ctx);
+            tabEdit(author, (ctx) => {
+                const { data } = ctx.sheets[0];
+                if (!data) return;
+                execFunctionGroup(ctx, 0, 0, 9, 'id_1');
+                setCellValue(ctx, 0, 0, data, 9);
+                groupValuesRefresh(ctx);
+            });
+            expect(author.ctx.sheets[1].data?.[0][0]?.v).toBe(10);
+
+            tabReceive(peer, insertRowAbove(author));
+            for (const t of [author, peer]) {
+                expect(formula(t)).toBe("='Q1!'!A2+1");
+                expect(formula(t, 0, 1)).toBe("=SUM('Q1!'!A2:B3)");
+            }
+            tabReceive(peer, tabUndo(author));
+            for (const t of [author, peer]) expect(formula(t)).toBe("='Q1!'!A1+1");
+        });
+
+        test('renames again, and its undo reads the plain name', () => {
+            const { author } = named({ '0_0': '=One!A1+1' });
+            renameFirst(author, 'Plain');
+            expect(formula(author)).toBe('=Plain!A1+1');
+            tabUndo(author);
+            expect(formula(author)).toBe("='Q1!'!A1+1");
+        });
+    });
+
     test('a malformed rename fails its batch, and one on a sheet that is gone changes nothing', () => {
         const t = workbookTab({ '0_0': '=One!A1' });
         const bad = [renameOp('id_1', 7), { op: 'replace' as const, id: 'id_1', path: ['color'], value: 'red' }];
@@ -311,5 +444,25 @@ describe('a tab rename rewrites the text that names the tab', () => {
         expect(join(t.ctx, [bad])[0].color).toBeUndefined();
         tabReceive(t, [renameOp('gone', 'X')]);
         expect(formula(t)).toBe('=One!A1');
+    });
+
+    // One op over every formula naming the tab would otherwise make a text of the name's size per formula.
+    test.each([
+        ['past the length limit', 'x'.repeat(32)],
+        ['of a megabyte', 'x'.repeat(1_000_000)],
+        ['empty', ''],
+        ['with a colon', 'a:b'],
+        ['with brackets', '[x]'],
+        ['with a quote at its end', "x'"],
+    ])('a name %s fails its batch on a tab and in the replay', (_, name) => {
+        const t = workbookTab({ '0_0': '=One!A1' });
+        const bad = [renameOp('id_1', name)];
+        const base = t.ctx;
+        tabReceive(t, bad);
+        expect(t.ctx.sheets[0].name).toBe('One');
+        expect(formula(t)).toBe('=One!A1');
+        const joined = join(base, [bad]);
+        expect(joined[0].name).toBe('One');
+        expect(joined[1].celldata?.[0].v?.f).toBe('=One!A1');
     });
 });

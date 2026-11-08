@@ -5,9 +5,9 @@
 import type { Op } from '../types';
 
 // Whether the fresh batches, applied after the overtaken ones, still give the workbook the log's order gives. They do
-// when no batch adds, deletes or moves sheets, rows or columns. They also need that no op of one side writes a path an
-// op of the other writes, or a path inside or above it. The recalc list counts too, since two formula cells added at
-// once both append to it.
+// when no batch adds, deletes, renames or moves sheets, rows or columns: a rename rewrites the formulas naming the sheet
+// wherever they are. They also need that no op of one side writes a path an op of the other writes, or a path inside or
+// above it. The recalc list counts too, since two formula cells added at once both append to it.
 export function commutes(fresh: Iterable<Op[]>, overtaken: Op[][]): boolean {
     const written = new Set<string>();
     const above = new Set<string>();
@@ -33,7 +33,7 @@ export function commutes(fresh: Iterable<Op[]>, overtaken: Op[][]): boolean {
 // worked out once and kept for as long as the batch lives.
 const keysByBatch = new WeakMap<Op[], string[][] | null>();
 
-// The path keys of each op in a batch, or null when an op moves sheets, rows or columns.
+// The path keys of each op in a batch, or null when an op changes sheets, rows or columns.
 function batchKeys(ops: Op[]): string[][] | null {
     const cached = keysByBatch.get(ops);
     if (cached !== undefined) return cached;

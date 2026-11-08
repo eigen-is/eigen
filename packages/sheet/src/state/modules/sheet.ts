@@ -3,12 +3,7 @@
 // does a peer's batch through applyOpBatch.
 
 import { sheetDefaultColWidth, sheetDefaultRowHeight } from '@workspace/lib/sheets';
-import {
-    MAX_SHEET_NAME_LENGTH,
-    SHEET_NAME_END_QUOTES,
-    SHEET_NAME_FORBIDDEN,
-    SHEET_NAME_RULE,
-} from '../../engine/a1-notation';
+import { isSheetName, SHEET_NAME_RULE } from '../../engine/a1-notation';
 import { celldataToData } from '../../engine/celldata';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT, gridSize } from '../../engine/defaults';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
@@ -155,41 +150,25 @@ export function shiftSheetOrders(sheets: Sheet[], at: number, by: 1 | -1) {
     }
 }
 
-// Renames the current sheet to the text its tab holds. A name it refuses puts the old text back in the tab and throws
-// the reason, which the tab shows in a notice.
-export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
-    const index = getSheetIndex(ctx, ctx.currentSheetId);
-    if (ctx.allowEdit === false) {
-        if (index == null) return;
-        editable.innerText = ctx.sheets[index].name;
+// Renames a sheet to the text its tab holds. A name it refuses puts the old text back in the tab and throws the reason,
+// which the tab shows in a notice.
+export function editSheetName(ctx: Context, id: string, editable: HTMLSpanElement) {
+    const index = getSheetIndex(ctx, id);
+    if (index == null) return;
+    const { name } = ctx.sheets[index];
+    const text = editable.innerText;
+    if (ctx.allowEdit === false || text === name) {
+        editable.innerText = name;
         return;
     }
-    const oldText = editable.dataset.oldText || '';
-    const text = editable.innerText;
-
-    if (text.length === 0) {
-        editable.innerText = oldText;
-        throw new Error('Sheet name cannot be empty');
+    let refusal: string | undefined;
+    if (text.length === 0) refusal = 'Sheet name cannot be empty';
+    else if (!isSheetName(text)) refusal = SHEET_NAME_RULE;
+    else if (sheetNameTaken(ctx.sheets, id, text)) refusal = 'Another sheet already has this name';
+    if (refusal) {
+        editable.innerText = name;
+        throw new Error(refusal);
     }
-
-    // `search` ignores the global pattern's lastIndex, which `test` would carry from one call into the next.
-    if (
-        text.length > MAX_SHEET_NAME_LENGTH ||
-        text.search(SHEET_NAME_END_QUOTES) !== -1 ||
-        text.search(SHEET_NAME_FORBIDDEN) !== -1
-    ) {
-        editable.innerText = oldText;
-        throw new Error(SHEET_NAME_RULE);
-    }
-
-    if (index == null || ctx.sheets[index].name === text) return;
-
-    const { id } = ctx.sheets[index];
-    if (sheetNameTaken(ctx.sheets, id, text)) {
-        editable.innerText = oldText;
-        throw new Error('Another sheet already has this name');
-    }
-
     renameSheet(ctx, { id, name: text });
 }
 

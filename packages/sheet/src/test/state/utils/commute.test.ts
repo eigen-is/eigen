@@ -9,6 +9,12 @@ const rowInsert: Op[] = [
 ];
 
 describe('commutes', () => {
+    test('fails for a rename, which rewrites formulas on any sheet', () => {
+        const rename: Op[] = [{ op: 'renameSheet', id: 's1', path: [], value: { name: 'New' } }];
+        expect(commutes([rename], [replace(['data', 0, 0], 's2')])).toBe(false);
+        expect(commutes([replace(['data', 0, 0], 's2')], [rename])).toBe(false);
+    });
+
     test('holds for writes to different cells', () => {
         expect(commutes([replace(['data', 0, 0])], [replace(['data', 1, 1])])).toBe(true);
     });

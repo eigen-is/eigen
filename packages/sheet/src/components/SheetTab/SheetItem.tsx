@@ -48,17 +48,14 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
     const { showNotice } = useDialog();
 
     useEffect(() => {
-        if (!editable.current) return;
-        if (editing) {
-            const range = document.createRange();
-            range.selectNodeContents(editable.current);
-            if (range.startContainer && document.body.contains(range.startContainer)) {
-                const selection = window.getSelection();
-                selection?.removeAllRanges();
-                selection?.addRange(range);
-            }
+        if (!editable.current || !editing) return;
+        const range = document.createRange();
+        range.selectNodeContents(editable.current);
+        if (range.startContainer && document.body.contains(range.startContainer)) {
+            const selection = window.getSelection();
+            selection?.removeAllRanges();
+            selection?.addRange(range);
         }
-        editable.current.dataset.oldText = editable.current.innerText;
     }, [editing]);
 
     // A refused name throws out of the write, which then applies nothing, and the notice opens outside the recipe.
@@ -66,15 +63,13 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
         const input = editable.current;
         if (input) {
             try {
-                setContext((draftCtx) => editSheetName(draftCtx, input), {
-                    renameSheetOp: { id, name: input.innerText, from: sheet.name },
-                });
+                setContext((draftCtx) => editSheetName(draftCtx, id, input), { renameSheetOp: { id } });
             } catch (e) {
                 if (e instanceof Error) showNotice(e.message);
             }
         }
         setEditing(false);
-    }, [id, sheet.name, setContext, showNotice]);
+    }, [id, setContext, showNotice]);
 
     const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLSpanElement>) => {
         // The blur may open a notice whose OK button takes the focus at once, and the browser would send this Enter's

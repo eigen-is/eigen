@@ -1,8 +1,8 @@
 // What ⌘Z and ⌘⇧Z do in this tab. An edit is recorded as an entry of immer patches that names its sheet by id. Undo and
 // redo take the context and an entry and return the next context and the batch to send. A cell or field entry skips a
-// target a peer changed since and recalculates the formulas it writes back. A sheet, row or column entry leaves the
-// stacks at a peer's first batch, so it always finds the grid as it left it, and it applies exactly the ops it sends,
-// through applyOpBatch, as its peers will. The Workbook keeps the stacks.
+// target a peer changed since and recalculates the formulas it writes back. A structural entry, such as a row op or a
+// rename, leaves the stacks at a peer's first batch, so it always finds the workbook as it left it, and it applies
+// exactly the ops it sends, through applyOpBatch, as its peers will. The Workbook keeps the stacks.
 
 import type { MergeCell } from '@workspace/lib/sheets';
 import { parseCellKey } from '@workspace/lib/sheets';
@@ -38,8 +38,8 @@ type Step = { ctx: Context; ops: Op[] };
 
 // What setContextWithProduce keeps of one edit. Its options are the ones the edit's batch is built from. A sheet
 // delete adds the deleted sheet to them and keeps nothing else, because its undo and redo are ops and its patches
-// would hold the whole sheet list twice. A rename keeps only its options too, since its undo and redo rename again. A
-// row or column op keeps what its undo brings back, because its redo is its marker again.
+// would hold the whole sheet list twice. A rename adds its two names and keeps nothing else, since its undo and redo
+// rename again. A row or column op keeps what its undo brings back, because its redo is its marker again.
 export function recordEntry(
     before: Context,
     after: Context,
@@ -47,7 +47,13 @@ export function recordEntry(
     inversePatches: Patch[],
     options: PatchOptions,
 ): History {
-    if (options.renameSheetOp) return { patches: [], inversePatches: [], options };
+    if (options.renameSheetOp) {
+        const { id } = options.renameSheetOp;
+        const from = before.sheets.find((s) => s.id === id)?.name;
+        const to = after.sheets.find((s) => s.id === id)?.name;
+        const renamedSheet = from != null && to != null ? { id, from, to } : undefined;
+        return { patches: [], inversePatches: [], options: { ...options, renamedSheet } };
+    }
     if (options.deleteSheetOp) {
         const { id } = options.deleteSheetOp;
         const sheet = before.sheets.find((s) => s.id === id);
@@ -64,7 +70,7 @@ export function recordEntry(
     };
 }
 
-// How far back undo reaches. A sheet, row or column entry holds whole cell matrices, so fewer of those stay.
+// How far back undo reaches. A structural entry may hold whole cell matrices, so fewer of those stay.
 const MAX_ENTRIES = 200;
 const MAX_STRUCTURAL_ENTRIES = 10;
 
@@ -111,8 +117,8 @@ export function undoEntry(ctx: Context, entry: History): Step {
     }
     const marker = options && rowColMarker(inverseRowColOptions(options));
     if (marker) return undoRowCol(ctx, marker, entry.inversePatches);
-    if (options?.renameSheetOp) {
-        return batchStep(ctx, renameSheetOps(options.renameSheetOp.id, options.renameSheetOp.from));
+    if (options?.renamedSheet) {
+        return batchStep(ctx, renameSheetOps(options.renamedSheet.id, options.renamedSheet.from));
     }
     return patchStep(ctx, entry.inversePatches, entry.patches);
 }
@@ -129,9 +135,7 @@ export function redoEntry(ctx: Context, entry: History): Step {
     }
     const marker = options && rowColMarker(options);
     if (marker) return batchStep(ctx, [marker]);
-    if (options?.renameSheetOp) {
-        return batchStep(ctx, renameSheetOps(options.renameSheetOp.id, options.renameSheetOp.name));
-    }
+    if (options?.renamedSheet) return batchStep(ctx, renameSheetOps(options.renamedSheet.id, options.renamedSheet.to));
     return patchStep(ctx, entry.patches, entry.inversePatches);
 }
 

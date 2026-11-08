@@ -8,7 +8,6 @@ import { cloneDeep, isEqual, isNumber, partition } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import { dataToCelldata } from '../../engine/celldata';
 import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
-import type { RenameSheetOp } from '../../engine/sheet-name';
 import type { Context } from '../context';
 import type { Op, Sheet } from '../types';
 import { sheetOrder } from '.';
@@ -23,8 +22,11 @@ export type PatchOptions = {
     // The deleted sheet as it stood, with its cells stored. recordEntry adds it to the options it returns, for the
     // delete's batch and its undo, so a sheet delete's batch is built from the entry's options.
     deletedSheet?: Sheet;
-    // `from` is the name an undo puts back.
-    renameSheetOp?: RenameSheetOp & { from: string };
+    renameSheetOp?: {
+        id: string;
+    };
+    // The renamed sheet's names, which recordEntry adds to the options it returns, for the rename's batch and its undo.
+    renamedSheet?: { id: string; from: string; to: string };
 };
 
 // `Sheet` fields that are per-client UI state and must never reach a peer. Typed against `keyof Sheet`, so a field that
@@ -45,7 +47,7 @@ export function renameSheetOps(id: string, name: string): Op[] {
 
 // The batch an edit sends. A row or column op ships its marker instead of the sheets it rewrote.
 export function patchToOp(ctx: Context, patches: Patch[], options: PatchOptions = {}): Op[] {
-    if (options.renameSheetOp) return renameSheetOps(options.renameSheetOp.id, options.renameSheetOp.name);
+    if (options.renamedSheet) return renameSheetOps(options.renamedSheet.id, options.renamedSheet.to);
     const marker = rowColMarker(options);
     if (marker) return [marker];
     let ops = patches.map((p) => {
