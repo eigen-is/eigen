@@ -49,7 +49,7 @@ import {
     sameRunStyle,
 } from './inline-string';
 import { recomputeCells } from './refresh';
-import { getCellTextInfo, measuringContext } from './text';
+import { growRowToFit } from './text';
 import { ID_CARD_NUMBER, isPlainNumber, isRealNull, isRealNum, valueIsError } from './validation';
 import { addValidation, clearValidations, validationAt } from './validation-rules';
 
@@ -643,25 +643,7 @@ export function updateCell(
 
     const written = d[r][c];
     if (written && ((cellWrapsText(written) && written.v) || isInlineStringCell(written))) {
-        const { defaultrowlen } = ctx;
-
-        const cfg = (sheet.config ??= {});
-        if (!(cfg.columnlen?.[c] && cfg.rowlen?.[r])) {
-            const cellWidth = cfg.columnlen?.[c] || ctx.defaultcollen;
-
-            const measuring = measuringContext();
-            const textInfo = measuring && getCellTextInfo(written, measuring, { r, c, cellWidth });
-
-            let currentRowLen = defaultrowlen;
-            if (textInfo?.textHeightAll != null) {
-                currentRowLen = textInfo.textHeightAll + 2;
-            }
-
-            if (currentRowLen > defaultrowlen && !cfg.customHeight?.[r]) {
-                if (isNil(cfg.rowlen)) cfg.rowlen = {};
-                cfg.rowlen[r] = currentRowLen;
-            }
-        }
+        growRowToFit(ctx, (sheet.config ??= {}), written, r, c);
     }
 
     recomputeCells(ctx, [{ r, c, id: ctx.currentSheetId }], d);

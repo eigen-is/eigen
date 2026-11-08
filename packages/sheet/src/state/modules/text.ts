@@ -1,15 +1,15 @@
-// Measures and lays out a cell's text for the canvas: the font set it draws in, where its lines wrap,
-// and where each piece of text sits, a rich cell's runs included. The painter and the row's auto height
-// both lay out here, the painter on its grid's canvas and a commit on measuringContext. Text measurements
-// are cached until clearMeasureTextCache, which the font watcher calls when a font slice loads before it
-// tells the grids to redraw. The cell editors ask for the font slices of the text being typed, so a commit
-// measures the real face.
+// Measures and lays out a cell's text for the canvas: the font set it draws in, where its lines wrap, and where each
+// piece of text sits, a rich cell's runs included. The painter lays out here on its grid's canvas, and a commit fits its
+// row on measuringContext. Measurements are cached until a font slice loads, when the font watcher clears them and tells
+// the grids to redraw. The cell editors ask for the slices of the text being typed, so a commit measures the real face.
 
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { cellFontName, cellFontSize, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
 import { isEmpty, isNil } from 'es-toolkit/compat';
 import { cellWrapsText } from '../../engine/format';
 import type { Cell, CellStyle } from '../../engine/types';
+import type { Context } from '../context';
+import type { SheetConfig } from '../types';
 import { normalizedCellAttr } from './cell';
 import { isInlineStringCell, runStyleOf } from './inline-string';
 
@@ -162,6 +162,20 @@ let measuring: CanvasRenderingContext2D | null = null;
 export function measuringContext() {
     measuring ??= document.createElement('canvas').getContext('2d');
     return measuring;
+}
+
+// Grows a row to show a cell's text whole, the height a commit or a format stores for every reader. The painter lays
+// the text out in the cell's text box, 2 px smaller than the cell each way, and 2 px in from the box's edge. A row sized
+// by hand stays, and a row another cell made taller stays too.
+export function growRowToFit(ctx: Context, config: SheetConfig, cell: Cell, r: number, c: number) {
+    if (config.customHeight?.[r]) return;
+    const measuring = measuringContext();
+    if (!measuring) return;
+    const cellWidth = (config.columnlen?.[c] ?? ctx.defaultcollen) - 2;
+    const textHeight = getCellTextInfo(cell, measuring, { r, c, cellWidth })?.textHeightAll;
+    if (textHeight == null) return;
+    const height = Math.ceil(textHeight) + 4;
+    if (height > (config.rowlen?.[r] ?? ctx.defaultrowlen)) (config.rowlen ??= {})[r] = height;
 }
 
 // Measures one piece of text in the canvas's current font, or in `fontset` when the caller passes it.

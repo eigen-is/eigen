@@ -3,7 +3,7 @@
 // open on text, a font format goes to the editor's selected characters rather than to the cells.
 
 import type { BorderType } from '@workspace/lib/sheets';
-import { forEach, isNil, isPlainObject, pick, round } from 'es-toolkit/compat';
+import { forEach, isNil, isPlainObject, pick } from 'es-toolkit/compat';
 import { cellValue, is_date, numberDisplay } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
@@ -28,7 +28,7 @@ import { mergeCells } from './merge';
 import { recomputeCells } from './refresh';
 import { selectIsOverlap } from './selection';
 
-import { getCellTextInfo, measuringContext } from './text';
+import { growRowToFit } from './text';
 import { hasPartMC, isRealNull, isRealNum } from './validation';
 
 export function updateFormatCell(
@@ -142,20 +142,8 @@ export function updateFormatCell(
                 if (value && isPlainObject(value)) {
                     if (isRunStyleKey(attr)) updateInlineStringFormatOutside(value, attr, foucsStatus);
                     Object.assign(value, { [attr]: foucsStatus });
-                    const cellWidth = cfg.columnlen?.[c] || ctx.defaultcollen;
-                    // A larger size or wrapped lines need a taller row. The row grows to fit and never
-                    // shrinks here, as another cell in it may need the height.
-                    const measuring =
-                        attr === 'fs' || (attr === 'tb' && foucsStatus === '2') ? measuringContext() : null;
-                    if (measuring) {
-                        const textInfo = getCellTextInfo(value, measuring, { r, c, cellWidth });
-                        if (textInfo?.textHeightAll == null) continue;
-                        const rowHeight = round(textInfo.textHeightAll);
-                        const currentRowHeight = cfg.rowlen?.[r] || ctx.defaultrowlen;
-                        if (rowHeight > currentRowHeight && cfg.customHeight?.[r] !== 1) {
-                            (cfg.rowlen ??= {})[r] = rowHeight;
-                        }
-                    }
+                    // A larger size or wrapped lines need a taller row.
+                    if (attr === 'fs' || (attr === 'tb' && foucsStatus === '2')) growRowToFit(ctx, cfg, value, r, c);
                 } else {
                     d[r][c] = { [attr]: foucsStatus };
                 }
