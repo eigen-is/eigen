@@ -8,7 +8,7 @@ import type { Sheet } from '@workspace/lib/sheets';
 import { SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { renameSheetTexts, sheetFinder } from '@workspace/sheet/engine';
-import { sheetRefName } from '@workspace/sheet/engine/a1-notation';
+import { misreadBare } from '@workspace/sheet/engine/a1-notation';
 import type { LossCounter } from '../../../document/transform/protocol';
 import { THEME_TYPE, themeXml } from '../../../ooxml/drawingml';
 import type { PackagePart } from '../../../ooxml/opc';
@@ -30,9 +30,7 @@ export function writeXlsx(
     const active = activeTabOf(sheets);
     // A repaired sheet's new name, and a name a person may have typed bare that Excel refuses so, such as Q1!A1.
     const respelled = new Map(
-        sheets.flatMap(({ name }, index) =>
-            name !== names[index] || sheetRefName(name) !== name ? [[name, names[index]]] : [],
-        ),
+        sheets.flatMap(({ name }, index) => (name !== names[index] || misreadBare(name) ? [[name, names[index]]] : [])),
     );
     const findSheet = sheetFinder(sheets);
     // Every text and chart ref naming a sheet names it as the workbook writes it.

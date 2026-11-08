@@ -197,6 +197,19 @@ describe('an xlsx export read back by the import', () => {
         expect(xml).toContain("<formula1>'Q1'!$A$1:$A$3</formula1>");
     });
 
+    test('a name Excel reads bare keeps how the file spells it, a dot in it too', () => {
+        const bytes = exportXlsx([
+            { name: 'T3.2', celldata: [] },
+            { name: 'My Sheet', celldata: [] },
+            {
+                name: 'Index',
+                celldata: [{ r: 0, c: 0, v: { v: 'go' } }],
+                hyperlink: { '0_0': { linkType: 'cellrange', linkAddress: 'T3.2!A1' } },
+            },
+        ]);
+        expect(entry(bytes, 'xl/worksheets/sheet3.xml')).toContain('location="T3.2!A1"');
+    });
+
     test('keeps a rich string its runs', async () => {
         const runs = [
             { v: 'Hello ', bl: 1, fc: '#FF0000' },
