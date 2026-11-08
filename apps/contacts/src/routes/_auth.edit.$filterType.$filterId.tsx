@@ -1,6 +1,10 @@
+// The page that adds or edits one contact: ContactEdit's form over the live address book. It leaves for the list when
+// the contact is gone, and it remounts the form when the form asks to reload, so its fields and etag re-seed together.
+
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
+import { isStaleWrite } from '@workspace/lib/api-error';
 import { emptyContact } from '@workspace/lib/constants/contact';
-import { isStaleWrite, useContacts, useUpdateContact } from '@workspace/lib/contacts';
+import { useContacts, useUpdateContact } from '@workspace/lib/contacts';
 import type { Contact, CreateContactInput } from '@workspace/lib/types/contact';
 import { Column, ColumnLayout, LoadingState } from '@workspace/ui';
 import { useEffect, useState } from 'react';
