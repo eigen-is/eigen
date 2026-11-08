@@ -12,7 +12,7 @@ const { act, createElement, createRef } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { WorkbookContext } = await import('../../../context');
 const { FxEditor } = await import('../../../components/FxEditor');
-const { defaultContext, defaultSettings } = await import('../../../state');
+const { defaultContext } = await import('../../../state');
 const { FormulaCache } = await import('../../../state');
 type Context = import('../../../state').Context;
 type SetContext = (recipe: (ctx: Context) => void) => void;
@@ -31,6 +31,7 @@ const refs = {
     canvas: createRef<HTMLCanvasElement | null>(),
     cellArea: createRef<HTMLDivElement | null>(),
     workbookContainer: createRef<HTMLDivElement | null>(),
+    hooks: { current: {} },
 };
 
 // One selection object shared by every context below: an undo leaves the cursor exactly where it was.
@@ -58,7 +59,7 @@ function render(root: ReturnType<typeof createRoot>, context: Context, setContex
                         context,
                         getContext: () => context,
                         setContext,
-                        settings: defaultSettings,
+                        aspectLocked: false,
                         refs,
                         handleUndo: () => {},
                         handleRedo: () => {},

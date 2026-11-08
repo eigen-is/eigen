@@ -11,7 +11,7 @@ const { createRoot } = await import('react-dom/client');
 const { produce } = await import('immer');
 const { WorkbookContext } = await import('../../../context');
 const { InputBox } = await import('../../../components/SheetOverlay/InputBox');
-const { defaultContext, defaultSettings, committedRuns, FormulaCache, openCellEditor } = await import('../../../state');
+const { defaultContext, committedRuns, FormulaCache, openCellEditor } = await import('../../../state');
 type Context = import('../../../state').Context;
 
 const refs = {
@@ -28,6 +28,7 @@ const refs = {
     canvas: createRef<HTMLCanvasElement | null>(),
     cellArea: createRef<HTMLDivElement | null>(),
     workbookContainer: createRef<HTMLDivElement | null>(),
+    hooks: { current: {} },
 };
 
 let cleanup: (() => Promise<void>) | undefined;
@@ -62,7 +63,7 @@ async function openEditor(text: string) {
                             context = produce(context, recipe);
                             render();
                         },
-                        settings: defaultSettings,
+                        aspectLocked: false,
                         refs,
                         handleUndo: () => {},
                         handleRedo: () => {},

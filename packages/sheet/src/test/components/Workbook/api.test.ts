@@ -648,7 +648,7 @@ describe("the selection follows a peer's row and column ops", () => {
         expect(focus(backOnFirst(applyPeerOps(leftBehind(), [insert('column', 0)])))).toEqual([[2, 2], [2, 2], 2, 2]);
     });
 
-    it('on a sheet the tab left a delete of its cell drops it', () => {
-        expect(backOnFirst(applyPeerOps(leftBehind(), [remove('row', 2, 2)])).selections).toBeUndefined();
+    it('on a sheet the tab left a delete of its cell drops it, and a switch back opens on A1', () => {
+        expect(focus(backOnFirst(applyPeerOps(leftBehind(), [remove('row', 2, 2)])))).toEqual([[0, 0], [0, 0], 0, 0]);
     });
 });

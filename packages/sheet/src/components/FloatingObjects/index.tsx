@@ -1,3 +1,7 @@
+// The current sheet's images and charts over the grid, in their one paint order, DOM order being paint order, with one
+// right-click and long-press menu and the z-order keys for the selected one. The overlay renders it.
+
+import { useMediaResolver } from '@workspace/lib/drive';
 import type { SheetFloatingItem } from '@workspace/lib/sheets';
 import { floatingItems } from '@workspace/lib/sheets';
 import type { ZOp } from '@workspace/lib/vector';
@@ -23,10 +27,9 @@ import { ImageContent } from './ImageContent';
 
 const refOf = ({ kind, object }: SheetFloatingItem) => ({ kind, id: object.id });
 
-// The current sheet's images and charts over the grid in their one paint order, DOM order being paint order, with
-// one right-click and long-press menu and the z-order keys for the selected one.
 export function FloatingObjects() {
-    const { context, setContext, settings } = useContext(WorkbookContext);
+    const { context, setContext } = useContext(WorkbookContext);
+    const { resolveMediaPath } = useMediaResolver();
     const index = getSheetIndex(context, context.currentSheetId);
     const items = index == null ? [] : floatingItems(context.sheets[index]);
     const { activeObject } = context;
@@ -77,11 +80,7 @@ export function FloatingObjects() {
             <ObjectContextMenu
                 contextMenu={contextMenu}
                 canEdit={canEdit}
-                imagePath={
-                    menuItem?.kind === 'image'
-                        ? settings.hooks?.resolveImagePath?.(menuItem.object.mediaName)
-                        : undefined
-                }
+                imagePath={menuItem?.kind === 'image' ? resolveMediaPath(menuItem.object.mediaName) : undefined}
                 onDownloadImage={menuChart ? () => downloadChartImage(menuChart) : undefined}
                 onArrange={(op) => menuRef && setContext((ctx) => reorderFloatingObject(ctx, menuRef, op))}
                 onCut={() => copyActiveObject(true)}

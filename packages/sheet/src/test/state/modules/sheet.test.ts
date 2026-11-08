@@ -29,6 +29,13 @@ describe('changeSheet', () => {
         expect(ctx.visibledatacolumn).toEqual([100, 200, 240, 340]);
     });
 
+    test('a sheet opened for the first time gets a cursor on A1', () => {
+        const ctx = twoSheetContext();
+        changeSheet(ctx, 'id_2');
+        expect(ctx.selections).toHaveLength(1);
+        expect(ctx.selections?.[0]).toMatchObject({ row: [0, 0], column: [0, 0], row_focus: 0, column_focus: 0 });
+    });
+
     test('switching back restores the workbook defaults for a sheet without its own', () => {
         const ctx = twoSheetContext();
         changeSheet(ctx, 'id_2');

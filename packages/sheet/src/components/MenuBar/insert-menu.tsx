@@ -33,7 +33,8 @@ const AUTO_SUM_FUNCTIONS = [
 ] as const;
 
 export function InsertMenu() {
-    const { context, getContext, setContext, refs, settings } = useContext(WorkbookContext);
+    const { context, getContext, setContext, refs } = useContext(WorkbookContext);
+    const hooks = refs.hooks.current;
     const { showDialog, showNotice } = useDialog();
 
     const selection = context.selections?.[0];
@@ -118,9 +119,9 @@ export function InsertMenu() {
             </DropdownMenuItem>
 
             <DropdownMenuItem
-                disabled={!settings.hooks?.onInsertImage}
+                disabled={!hooks.onInsertImage}
                 onClick={() => {
-                    settings.hooks?.onInsertImage?.();
+                    hooks.onInsertImage?.();
                 }}
             >
                 Insert image
@@ -177,19 +178,19 @@ export function InsertMenu() {
 
             {hasComment ? (
                 <DropdownMenuItem
-                    disabled={!settings.hooks?.commentLifecycle}
+                    disabled={!hooks.commentLifecycle}
                     onClick={() => {
-                        const card = settings.hooks?.getCommentInfo?.(commentRow, commentCol)?.card;
-                        if (card) settings.hooks?.commentLifecycle?.setOpenCardId(card.id);
+                        const card = hooks.getCommentInfo?.(commentRow, commentCol)?.card;
+                        if (card) hooks.commentLifecycle?.setOpenCardId(card.id);
                     }}
                 >
                     View comment
                 </DropdownMenuItem>
             ) : (
                 <DropdownMenuItem
-                    disabled={!settings.hooks?.onAddComment}
+                    disabled={!hooks.onAddComment}
                     onClick={() => {
-                        settings.hooks?.onAddComment?.(commentRow, commentCol);
+                        hooks.onAddComment?.(commentRow, commentCol);
                     }}
                 >
                     Comment

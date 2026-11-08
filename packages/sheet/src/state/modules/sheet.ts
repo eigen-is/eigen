@@ -17,6 +17,7 @@ import { cancelNormalSelected } from './cell';
 import { createFilterOptions } from './filter';
 import { snapshotContext } from './formula-cache';
 import { writeBackSheets } from './rowcol';
+import { normalizeSelection } from './selection';
 
 export function changeSheet(ctx: Context, id: string) {
     if (id === ctx.currentSheetId) return;
@@ -60,7 +61,8 @@ export function settleCurrentSheet(ctx: Context) {
 }
 
 // Everything the grid paints per sheet, derived in the recipe that makes the sheet current: the
-// first frame after a switch must not draw the new cells on the previous sheet's geometry.
+// first frame after a switch must not draw the new cells on the previous sheet's geometry. A sheet nobody
+// selected in yet, at a mount, a first visit or a copy, opens on A1, since a key does nothing without a cursor.
 export function applySheetView(ctx: Context) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
@@ -70,6 +72,7 @@ export function applySheetView(ctx: Context) {
     ctx.showGridLines = sheet.showGridLines !== 0 && sheet.showGridLines !== false;
     if (sheet.data) updateContextWithSheetData(ctx, sheet.data);
     createFilterOptions(ctx);
+    if (!ctx.selections?.length) ctx.selections = normalizeSelection(ctx, [{ row: [0, 0], column: [0, 0] }]);
 }
 
 export function addSheet(

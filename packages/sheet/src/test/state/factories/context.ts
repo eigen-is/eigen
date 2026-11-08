@@ -83,7 +83,6 @@ export function contextFactory({
         groupValuesRefreshData: [],
         formulaCache: new FormulaCache(),
         defaultCell: {},
-        hooks: {},
         ...params,
     };
 }
