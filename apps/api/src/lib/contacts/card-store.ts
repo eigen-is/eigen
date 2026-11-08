@@ -68,12 +68,6 @@ const PHOTO_HASH = '[0-9a-f]{8}'; // avatarCacheName's hash suffix
 
 // Allowlisting the two served webp names refuses separators, `..` and control characters by construction.
 export const AVATAR_FILENAME = new RegExp(`^${CONTACT_ID}(-${PHOTO_HASH})?\\.webp$`);
-const OWN_PHOTO_CACHE = new RegExp(`^${PHOTO_HASH}\\.webp$`);
-
-// Another row may still reference a staged or legacy name, so only a card's own hash cache is safe to unlink.
-export function isCardPhotoCacheOf(contactId: string, filename: string): boolean {
-    return filename.startsWith(`${contactId}-`) && OWN_PHOTO_CACHE.test(filename.slice(contactId.length + 1));
-}
 
 // Staged beside the served webp: the exact PHOTO bytes a save embeds verbatim for Apple, never served itself.
 const STAGED_EMBED_FORMATS = {

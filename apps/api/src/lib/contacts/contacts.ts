@@ -31,7 +31,6 @@ import {
     CONTACT_ROW,
     cardBytes,
     indexCard,
-    isCardPhotoCacheOf,
     normalizeLabelName,
     PURGED_CARD,
     prepareCard,
@@ -259,7 +258,7 @@ export class Contacts {
 
         this.cardsBytes -= removed;
         const avatarName = row.data?.avatar ? avatarNameOf(row.data.avatar) : undefined;
-        if (avatarName && isCardPhotoCacheOf(row.id, avatarName)) {
+        if (avatarName) {
             const avatarPath = `${PATHS.CONTACTS.AVATARS}/${avatarName}`;
             try {
                 const avatarSize = await this.storage.size(avatarPath);
