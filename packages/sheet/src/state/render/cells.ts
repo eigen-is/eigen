@@ -2,8 +2,6 @@
 // checkbox, data bar, text and grid lines. Text layout itself lives in
 // getCellTextInfo.
 
-// One red for both attention marks: the invalid-value triangle, and the comment
-// triangle's fallback when its card carries no color of its own.
 import { INDICATOR_RED } from '@workspace/lib/constants/comment-indicator';
 import { isForcedStringNumber, normalizedAttr } from '../modules/cell';
 import { cellIndicatorRect } from '../modules/cell-glyph';
@@ -269,7 +267,7 @@ export function cellRender(
     renderCtx.fillRect(cellsize[0], cellsize[1], cellsize[2], cellsize[3]);
 
     // Invalid-value indicator (red triangle top-left)
-    if (rule && !cellPassesRule(sheetCtx, rule, cell, value)) {
+    if (rule && !cellPassesRule(sheetCtx, rule, cell)) {
         drawCellIndicator(
             renderCtx,
             'left',

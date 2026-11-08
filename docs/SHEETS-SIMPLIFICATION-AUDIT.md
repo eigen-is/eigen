@@ -17,7 +17,7 @@ Like ROADMAP and the proposals, this doc holds only open work: strike a finding 
   - [D4](#d4) yes: fill drops Chinese numeral and weekday series and the geometric guess.
   - [D8](#d8) yes: a cut over filter-hidden rows, and a copy whose merge straddles one, get a notice.
   - [E2](#e2) yes: the import recalcs once, with no `computed` flag and no export recalc.
-  - [F3](#f3) yes: past the validation cap the rule stops extending and the edit goes through.
+  - F3 yes: past the validation cap the rule stops extending and the edit goes through (done).
   - [F4](#f4) yes: sheet charts store their parts as Canvas and Docs do, and concurrent restyles of one part are last write wins.
   - [F6](#f6) yes: chart code stops carrying keys a newer build might store.
   - [F7](#f7) yes, after checking what Google does: pie slice colours stay at their index. If Google follows the rows, it comes back to the owner.
@@ -210,7 +210,7 @@ Lost: 一, 二 and 周一 copy instead of counting; 1, 2, 4 fills linearly, Exce
 String codes (`deleteSelectedCellText` → `'partMC'`, `hideSelectedRowCol` → `'noMulti'`, `CLEAR_ERRORS`), `ctx.warnDialog = …` (`onCellsMoveEnd`), a plain `throw` (`expandRowsAndColumns`), and `ValidationLimitError`, the only one that drops the edit whole. `handlePaste`'s HTML arm calls `setRowHeight` before the guards. `onPaste` (twice) and the overlay's `onMouseUp` catch inside the recipe and keep partial writes (open in SHEETS-TODO).
 History: `d368dcbcc` ("seed config keys after the guards"), `2354a8666`, `60de3a61f`, `eeae07d20`, and `rejected-writes.test.ts`, whose header calls itself a gate against order slips.
 Root cause: pattern 1. "Validate before you write" is a convention a table of tests enforces.
-Simpler: one `EditRefused(message)` any writer throws; `setContextWithProduce` drops the edit and shows the notice. The catch-inside-recipe sites go. With normalization at every entry point, `config` and its collections become non-optional in the `Sheet` type, so the `??=` seeding and the `bareSheet` half of the gate go. [F3](#f3) is compatible: the validation cap stops refusing at all.
+Simpler: one `EditRefused(message)` any writer throws; `setContextWithProduce` drops the edit and shows the notice. The catch-inside-recipe sites go. With normalization at every entry point, `config` and its collections become non-optional in the `Sheet` type, so the `??=` seeding and the `bareSheet` half of the gate go.
 Lost: nothing. ~50 LOC + ~70 test, low-medium risk, high confidence.
 
 <a id="d8"></a>**D8. A copy over an active filter closes up the block, and a cut doesn't (product).**
@@ -298,13 +298,6 @@ Root cause: root 2. The link is the cell's, but every writer that moves cells ca
 Simpler: `cell.link = {type, address}` on the `Cell`, as runs and `commentCardIds` already are. The matrix shift, `carryCells`, sort, fill, undo and the op log move it for free; the map, `hl`, the sync loop, `linkMap` and the editor-only shift go. Delete drops it with the value; Clear formatting and the painter keep it. The import, the exports and `document/sheets.ts` read it from the cell (about 10 lines each). Old snapshots drop their links, or the decoder converts them once. 
 Lost: nothing. ~45 LOC net + ~50 test, low-medium risk, high confidence on the problem.
 
-<a id="f3"></a>**F3. An edit that would push a validation rule past its cap throws, and the Workbook rolls the whole edit back (small product).**
-`ValidationLimitError` (`state/modules/validation-rules.ts`: `addValidation`, `clearValidations`), `refuse` in `setContextWithProduce` (runs `resetEngine` and `warmFormulaCellInfoMapOnIdle`, ends the drag), three rethrows in the paste and mouse-up handlers, and the ordering rule that `carryCells` must move rules before any cell so no formula is evaluated before the throw.
-History: `530108ef2` (ranges bounded), `3f4473bc4` (rules capped), `19a94d756` (the editor throws): three fixes in a day on one cap.
-Root cause: pattern 3. The caps belong at the boundary (`wellFormedValidations`, `opToPatchOnSheets`), where they stay. The editor's own writer predicts that a peer would drop the rule and refuses the edit.
-Simpler: past a cap, a carry lands its cells without extending the rule, or drops a rule a cut would split past it. The edit goes through: "may forget, must not corrupt".
-Lost: the "too complex" alert; in a pathological paste the rule silently doesn't extend. ~45 LOC + ~150 test, low risk, high confidence.
-
 <a id="f4"></a>**F4. Sheets keeps a chart codec of its own (keyed records, entry writes, an entry cap) so two peers can restyle two series of one chart at once (small product).**
 `lib/charts/spec.ts` (`SHEET_CHART_KEYED_PART_KEYS`, `keyedPart`'s record branch, `entryPath`, `sheetChartSpecWrites`, `entryWrites`, `newSheetChartSpecParts`), `lib/sheets/floating.ts` (`chartWrite`, `chartEntries`, `chartsFit`, `chartsWithinEntryCap`), `MAX_CHART_SPEC_ENTRIES`, `engine/chart-data.ts` (`writeSheetChartSpec`, `withSheetChartSpecWrites`, `copySheetChartSpec`), the record loop in `writeBackSheets`.
 History: `1d65b5a72`, then `1b4bf2763` (a whole write to a keyed part applies only as a record) and `07298670f` (a duplicated chart gets records of its own) on Oct 24, then `b98f85bea`, `2d185b9ca`.
@@ -370,7 +363,6 @@ Wave 1 (nothing lost, or decided):
 | Formulas | [E6](#e6), then [E4](#e4), [E5](#e5) | `engine/formula-shift.ts`, `engine/recalc.ts`, `formula-*` |
 | Editing | [D5](#d5) | `state/api/*`, `paste.ts`, `clipboard.ts`, `filter.ts` |
 | Render and input | [R3](#r3), then [R6](#r6), [R7](#r7) | `state/context.ts`, `context/modal.tsx`, `state/events/*`, `SheetOverlay/*` |
-| Rules | [F3](#f3) | `protection.ts`, `validation*.ts`, `DataValidation/*` |
 
 Wave 2 (cross-cutting, after the lanes they depend on merged): [E1](#e1) then [E2](#e2); [F2](#f2) (after D2); [D2](#d2) after D4 is ruled; [S2](#s2) then [S5](#s5); [R1](#r1) (after R3); [D4](#d4), [D8](#d8), [F4](#f4), [F6](#f6), [F7](#f7), [F8](#f8) as ruled. F4, F6 and F7 change `packages/lib/src/charts`, which Docs, Slides and Vector share: tell the other session first.
 
@@ -382,7 +374,7 @@ Wave 3, the redesigns, in [§ If we built it today](#if-we-built-it-today)'s ord
 
 - This run also takes the API audit's T2 and X2 (the other session agreed). Don't edit `API-SIMPLIFICATION-AUDIT.md` on this branch, because that session keeps editing it: tell it when T2 or X2 lands, and it strikes them. Its X2 ruling: a flat cap, the runner's deadline and its memory limit, and a timeout or out-of-memory is an accepted outcome. X2 joins Wave 2.
 - The owner allows an implementer to hand mechanical work (a grep sweep, rewiring similar test call sites, running a suite) to a cheaper sub-agent: Sonnet, or Haiku for a lookup, at low or medium effort. The implementer keeps Step 0, the design, the diff read and the commit. A sub-agent uses the implementer's worktree with no isolation option, one editing at a time, and never commits.
-- Wave 1 is running. Merged: D7, E3, U2, S3, R2, D1, F1, E9, S1, R5, R4 (`ctx.rowHeaderWidth` and `columnHeaderHeight` stay for R3 to inline), D3 (the ref's `setSelection` stays: 13 test callers and no other door to the stored selection copy; S7 may remove it). Running: S7, E6, F1 fixes then F3, U2, E9 and S3 review fixes, R3. Next: S8, D5, E4, E5, D5, R6, R7, then the wave's close.
+- Wave 1 is running. Merged: F3, D7, E3, U2, S3, R2, D1, F1, E9, S1, R5, R4 (`ctx.rowHeaderWidth` and `columnHeaderHeight` stay for R3 to inline), D3 (the ref's `setSelection` stays: 13 test callers and no other door to the stored selection copy; S7 may remove it). Running: S7, E6, D5, U2, E9 and S3 review fixes, R3. Next: S8, E4, E5, D5, R6, R7, then the wave's close.
 - For E4: half-open legs (`B2:1`, `A:B1`, `TRUE:A1`) read more than their dependency list, and `A1\n:B2` is missed because only spaces join a range.
 - For S5 or S10: `sheet.filter ??= {}` means a `['filter','1']` op after a peer cleared the filter should throw and drop its batch, and two first filters at once overwrite each other (D7 read this; not run). The `state/types.ts` line saying filter criteria never reach the stored shape looks false, since `encodeSheetsSnapshot` keeps `filter`.
 - For R6: R2's implementer read that the date shortcut's `updateCell` with the closed, empty editor clears a filled cell before opening the edit, so Escape wouldn't restore it. Not run.
@@ -390,5 +382,6 @@ Wave 3, the redesigns, in [§ If we built it today](#if-we-built-it-today)'s ord
 - For D5: `handlePaste` sits below its helpers; `setRowHeight` still runs before the guards in `pasteHandler`.
 - After S3, `Sheet.data` is optional only because the type is shared with stored sheets. An editor-side required type would remove the guards in `paste.ts`, `refresh.ts`, `api/cell.ts`, `apply-ops.ts`, `applySheetView` and `comment-anchors.ts`.
 - Open for the wave's docs unit: SHEETS.md and SHEETS-TODO.md statements S1, R5 and the units in review make false; the help center and CHANGELOG for U2 (undo limit), E9 (rename rewrites formulas), R4 and S1's fixes. Each unit's report names them, and the orchestrator's merge list holds them.
-- F1's review fixes, running now with F3 next: an imported "any date" rule stores `1899-12-31`, which `dateSerial` rejects, so every date fails it. Validation reads the display text `m` in the painter and on entry, so `1,234.50` fails a number rule and a dd/MM/yyyy date refused on Enter: rules should read the parsed value.
+- Accepted, for the ledger: at exactly 1,024 rules, the undo of a write that drops one rule and adds one sends `add` before `remove`, so a peer drops the `add` and tabs differ by one rule until compaction (F9 would remove this). The dialog refuses to re-save an imported `1899-12-31` date rule. Past the rule cap the dialog's OK silently adds no rule.
+- For SHEETS-TODO in the docs unit: clearing a cell under `prohibitInput` is refused, unlike Excel's allow-blank; a formula typed under a number rule is refused because its text isn't a number.
 - For the closing review: D3 deleted the API insert and delete tests as covered by `rowcol.test.ts` and `rowcol-ops` without comparing assertions. `state/modules/cell.ts` got only a light pass; `carryCells` could split out.

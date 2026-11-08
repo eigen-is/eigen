@@ -35,7 +35,7 @@ import type { Range, RangeOrWholeAxis, Selection, SingleRange } from '../types';
 import { getSheetIndex, rgbToHex } from '../utils';
 import { carrySides, getBorderInfoCompute } from './border';
 import { checkCF, getComputeMap } from './condition-format';
-import { describeValidationRule, validateCellData } from './data-validation';
+import { describeValidationRule, inputPassesRule } from './data-validation';
 import { setFormulaCellInfo } from './formula-cache';
 import { functionHTMLGenerate } from './formula-editor';
 import { delFunctionGroup, execFunctionGroup, execfunction, getcellrange } from './formula-exec';
@@ -551,10 +551,9 @@ export function updateCell(
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
 
-    // Data validation: block input when the entered data is invalid
     const sheet = getSheet(ctx);
     const rule = validationAt(sheet.dataValidations, r, c);
-    if (rule?.prohibitInput && !validateCellData(ctx, rule, inputText)) {
+    if (rule?.prohibitInput && !inputPassesRule(ctx, rule, flowdata[r][c], inputText)) {
         cancelNormalSelected(ctx);
         ctx.warnDialog = describeValidationRule(rule, 'invalid');
         return;
@@ -1014,10 +1013,9 @@ export function carryCells(
     rules.sort(([a], [b]) => compareValidationIds(a, b));
     const linkMap = cloneDeep(from.hyperlink) ?? {};
 
-    // The rules move before any cell, so a carry that would make a rule too complex throws before land evaluates a
-    // formula. A source cell without a rule takes the destination's away, as Excel does. The tiles are joined first,
-    // so a block pasted down a column clears the rules once. On the same sheet the landed cells join the rule itself,
-    // and on another sheet they become a rule of their own.
+    // A source cell without a rule takes the destination's away, as Excel does. The tiles are joined first, so a block
+    // pasted down a column clears the rules once. On the same sheet the landed cells join the rule itself, and on
+    // another sheet they become a rule of their own.
     if (cut) clearValidations(from, block);
     const landing = tiles.map(({ row, column, height, width }) => ({
         row: [row, row + height - 1],

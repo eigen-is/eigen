@@ -4,6 +4,7 @@
 // Which rule covers a cell is the rule store's to say (validationAt).
 
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
+import { cloneDeep } from 'es-toolkit/compat';
 import { booleanDisplay, cellDisplay, cellValue } from '../../engine/format';
 import { iscelldata, matrixWidth } from '../../engine/formula-utils';
 import { dateToSerial } from '../../engine/parser/helper/number';
@@ -52,7 +53,7 @@ const OPTION_LABEL: Record<string, string> = {
     noLaterThan: 'not later than',
 };
 
-// A value checked against a rule: a cell's stored value, or the text the user typed into the cell editor.
+// A value checked against a rule, as a cell holds or shows it.
 type CellValueForValidation = string | number | boolean | null | undefined;
 
 export function getDropdownList(ctx: Context, txt: string) {
@@ -78,63 +79,64 @@ export function getDropdownList(ctx: Context, txt: string) {
     return list;
 }
 
-export function validateCellData(ctx: Context, item: DataValidationRule, cellValue: CellValueForValidation) {
+export function validateCellData(ctx: Context, item: DataValidationRule, value: CellValueForValidation) {
     const { type, type2, value1, value2 } = item;
     if (type === 'dropdown') {
-        const list = getDropdownList(ctx, value1);
+        const list = getDropdownList(ctx, value1).map(String);
 
         // A rule that allows several values stores them comma-separated, and each one must be on the list.
-        if (type2 && cellValue != null && cellValue !== '') {
-            return String(cellValue)
+        if (type2 && value != null && value !== '') {
+            return String(value)
                 .split(',')
-                .every((i) => list.indexOf(i) !== -1);
+                .every((i) => list.includes(i));
         }
 
-        if (cellValue == null) return false;
-        return list.some((v) => v === cellValue);
+        return value != null && list.includes(String(value));
     }
     if (type === 'checkbox') {
         return true;
     }
     if (type === 'number' || type === 'number_integer' || type === 'number_decimal') {
-        if (!isRealNum(cellValue)) return false;
-        const n = Number(cellValue);
+        if (!isRealNum(value)) return false;
+        const n = Number(value);
         if (type === 'number_integer' && n % 1 !== 0) return false;
         if (type === 'number_decimal' && n % 1 === 0) return false;
         return meetsCondition(n, type2, Number(value1), Number(value2));
     }
     if (type === 'text_content') {
-        const s = String(cellValue ?? '');
+        const s = String(value ?? '');
         if (type2 === 'include') return s.includes(value1);
         if (type2 === 'exclude') return !s.includes(value1);
         return type2 !== 'equal' || s === value1;
     }
     if (type === 'text_length') {
-        return meetsCondition(String(cellValue ?? '').length, type2, Number(value1), Number(value2));
+        return meetsCondition(String(value ?? '').length, type2, Number(value1), Number(value2));
     }
     if (type === 'date') {
-        const serial = dateSerial(cellValue);
-        return !Number.isNaN(serial) && meetsCondition(serial, type2, dateSerial(value1), dateSerial(value2));
+        return typeof value === 'number' && meetsCondition(value, type2, operandSerial(value1), operandSerial(value2));
     }
     return true;
 }
 
-// A cell against its rule, given the value it shows. A date rule reads the serial, since the text a date shows depends
-// on its format.
-export function cellPassesRule(
-    ctx: Context,
-    rule: DataValidationRule,
-    cell: Cell | null | undefined,
-    shown: CellValueForValidation,
-) {
-    return validateCellData(ctx, rule, rule.type === 'date' ? cell?.v : shown);
+// A cell against its rule. A list holds the text its source cells show, so a list rule reads what the cell shows.
+// Any other rule reads the value, which a number format doesn't change.
+export function cellPassesRule(ctx: Context, rule: DataValidationRule, cell: Cell | null | undefined) {
+    return validateCellData(ctx, rule, rule.type === 'dropdown' ? cellDisplay(cell) : cellValue(cell));
 }
 
-// A number already is a date's serial. Text reads as a typed date does, in local time, and a rule's operands are
-// such text.
-function dateSerial(value: CellValueForValidation) {
-    if (typeof value === 'number') return value;
-    return isdatetime(value) ? dateToSerial(new Date(String(value).replace(/-/g, '/'))) : Number.NaN;
+// A commit from the cell editor against the cell's rule. The text the editor opened with changes nothing, even where
+// no write could read it back, such as a date shown as dd/MM/yyyy. Other text is read as the write will read it.
+export function inputPassesRule(ctx: Context, rule: DataValidationRule, cell: Cell | null | undefined, text = '') {
+    if (text === cell?.f || text === String(cellDisplay(cell) ?? '')) return true;
+    const typed: CellMatrix = [[cloneDeep(cell ?? null)]];
+    setCellValue(ctx, 0, 0, typed, text);
+    return cellPassesRule(ctx, rule, typed[0][0]);
+}
+
+// A rule's date operand is YYYY-MM-DD text, read in local time as a typed date is. It can fall before 1900, where
+// isdatetime stops: Excel's "any date" stores serial 1, which the importer writes as 1899-12-31.
+function operandSerial(operand: string) {
+    return dateToSerial(new Date(operand.replace(/-/g, '/')));
 }
 
 // The number and date rules name the same comparisons in their own words.
@@ -452,11 +454,10 @@ export function getValidationHint(ctx: Context, r: number, c: number): Validatio
     const d = getFlowdata(ctx);
     if (!d) return undefined;
 
-    const cellValue = getCellValue(r, c, d);
     let kind: ValidationHint['kind'] | undefined;
     let text = '';
     // One card serves both, and a rejection wins because it is more urgent than the prompt.
-    if (!isRealNull(cellValue) && !cellPassesRule(ctx, item, d[r]?.[c], cellValue)) {
+    if (!isRealNull(getCellValue(r, c, d)) && !cellPassesRule(ctx, item, d[r]?.[c])) {
         kind = 'invalid';
         text = describeValidationRule(item, 'invalid');
     } else if (item.hintShow) {
