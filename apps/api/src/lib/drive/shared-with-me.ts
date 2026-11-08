@@ -6,13 +6,11 @@
 
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
 import { getEigenDocInfoByType, isFolderType, stripEigenExtension } from '@workspace/lib/types/drive';
-import { parseOwnerId } from '@workspace/lib/types/owner';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq, inArray } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import type { Home } from '../home';
-import { getTeamExists } from '../team';
-import { actorDisplayName, getMemberships, getUserById } from '../user';
+import { actorDisplayName, getMemberships, getOwnerExists } from '../user';
 import { matchesACL } from './acl';
 import * as sharedSchema from './sharedschema';
 import { buildDriveEvent } from './sse-events';
@@ -122,9 +120,7 @@ export async function listSharedWithMeByMimeType(sharedDb: SharedDb, mimeType: s
 async function dropRowsOfDeletedOwners(sharedDb: SharedDb, rows: readonly SharedPathRow[]): Promise<SharedPathRow[]> {
     const deleted = new Set<string>();
     for (const ownerId of new Set(rows.map((row) => row.ownerId))) {
-        const owner = parseOwnerId(ownerId);
-        if (owner.type === 'user' && !(await getUserById(owner.id))) deleted.add(ownerId);
-        if (owner.type === 'team' && !(await getTeamExists(owner.id))) deleted.add(ownerId);
+        if (!(await getOwnerExists(ownerId))) deleted.add(ownerId);
     }
     if (deleted.size > 0) {
         sharedDb
@@ -144,15 +140,15 @@ function sharedRowToDrivePath(row: SharedPathRow): DrivePath {
         parentId: row.parentId,
         ownerId: row.ownerId,
         mimeType: row.mimeType,
-        size: row.size ?? 0,
+        size: row.size,
         hash: null,
         thumbnail: row.thumbnail,
         acl: row.acl,
-        visibility: row.visibility ?? 'private',
+        visibility: row.visibility,
         sharingRestricted: row.sharingRestricted,
         details: row.details,
         trashedAt: null,
-        createdAt: row.createdAt ?? new Date(),
-        updatedAt: row.updatedAt ?? new Date(),
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
     };
 }
