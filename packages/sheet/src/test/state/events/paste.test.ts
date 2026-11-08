@@ -482,6 +482,29 @@ describe('conditional-format migration on cut/paste (cfSplitRange contract)', ()
     });
 });
 
+describe('a paste over a whole merge replaces it', () => {
+    const merged = () => {
+        const ctx = makeCtx(4, 4, (d) => {
+            d[0][0] = { v: 'a', m: 'a', mc: { r: 0, c: 0, rs: 1, cs: 2 } };
+            d[0][1] = { mc: { r: 0, c: 0 } };
+        });
+        ctx.sheets[0].config = { merge: { '0_0': { r: 0, c: 0, rs: 1, cs: 2 } } };
+        return ctx;
+    };
+
+    it('for plain text, whose second value shows', () => {
+        const ctx = merged();
+        pasteText(ctx, 'x\ty');
+
+        expect(ctx.sheets[0].config?.merge).toEqual({});
+        const d = ctx.sheets[0].data!;
+        expect(d[0][0]).toMatchObject({ v: 'x' });
+        expect(d[0][0]?.mc).toBeUndefined();
+        expect(d[0][1]).toMatchObject({ v: 'y' });
+        expect(d[0][1]?.mc).toBeUndefined();
+    });
+});
+
 describe('partial-merge guard (hasPartMC)', () => {
     it('refuses a plain-text paste that would split a merged cell', () => {
         const ctx = makeCtx(6, 6);

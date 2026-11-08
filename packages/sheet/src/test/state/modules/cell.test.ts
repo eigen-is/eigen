@@ -178,6 +178,18 @@ describe('state/modules/cell — updateCell auto-height', () => {
         expect(grown.sheets[0].config?.rowlen?.[0]).toBeGreaterThan(19);
     });
 
+    test('a merged cell leaves its row alone, as its text fits the merge and not its first column', () => {
+        clearMeasureTextCache();
+        const base = editContext();
+        const [next] = produceWithPatches(base, (ctx: Context) => {
+            const cell = ctx.sheets[0].data?.[0][0];
+            if (cell) cell.mc = { r: 0, c: 0, rs: 1, cs: 4 };
+            updateCell(ctx, 0, 0, multilineInput());
+        });
+
+        expect(next.sheets[0].config?.rowlen?.[0]).toBeUndefined();
+    });
+
     test('and still syncs, because the patch that survives filterPatch carries it', () => {
         clearMeasureTextCache();
         const base = editContext();

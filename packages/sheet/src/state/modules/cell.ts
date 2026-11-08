@@ -26,10 +26,8 @@ import {
     parseCellInput,
     richText,
 } from '../../engine/format';
-
 import { moveFormulaRefs } from '../../engine/formula-shift';
 import { iscelldata, isFormula } from '../../engine/formula-utils';
-
 import type { Cell, CellMatrix, FormulaDependency } from '../../engine/types';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';

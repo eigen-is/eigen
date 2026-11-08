@@ -369,14 +369,12 @@ function pasteTable(ctx: Context, html: string) {
     if (!d) return;
 
     setRowHeight(ctx, rowHeights);
+    clearCoveredMerges(ctx, d, top, bottom, left, right);
     const cfg = (getSheet(ctx).config ??= {});
     const merge = (cfg.merge ??= {});
     const borders = (cfg.borderInfo ??= {});
     for (let h = top; h <= bottom; h += 1) {
         for (let c = left; c <= right; c += 1) {
-            const replaced = d[h][c]?.mc;
-            if (replaced?.rs != null) delete merge[`${replaced.r}_${replaced.c}`];
-
             const value = data[h - top][c - left] ?? null;
             d[h][c] = value;
             if (value?.mc?.rs != null) merge[`${h}_${c}`] = { r: h, c, rs: value.mc.rs, cs: value.mc.cs ?? 1 };
@@ -426,6 +424,7 @@ function pasteText(ctx: Context, text: string) {
 
     const d = roomFor(ctx, top, bottom, left, right);
     if (!d) return;
+    clearCoveredMerges(ctx, d, top, bottom, left, right);
 
     for (const [r, row] of rows.entries()) {
         for (let c = 0; c < columns; c += 1) {
@@ -459,6 +458,19 @@ function pasteFormula(ctx: Context, formulaStr: string) {
     cell.f = formulaStr;
 
     jfrefreshgrid(ctx, [{ row: [r, r], column: [c, c] }]);
+}
+
+// A paste replaces every merge it covers. roomFor has refused a paste that covers only part of one.
+function clearCoveredMerges(ctx: Context, d: CellMatrix, top: number, bottom: number, left: number, right: number) {
+    const merge = getSheet(ctx).config?.merge;
+    for (let r = top; r <= bottom; r += 1) {
+        for (let c = left; c <= right; c += 1) {
+            const cell = d[r][c];
+            if (!cell?.mc) continue;
+            if (cell.mc.rs != null) delete merge?.[`${cell.mc.r}_${cell.mc.c}`];
+            delete cell.mc;
+        }
+    }
 }
 
 // The grid a paste lands in, grown when the paste runs past it; undefined when the paste is refused, before any op.
