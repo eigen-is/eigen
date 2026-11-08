@@ -13,7 +13,9 @@ const { act, createElement } = await import('react');
 const { REFERENCE_ROW_COUNT } = await import('@workspace/lib/sheets');
 const { renderSheetDialog } = await import('../sheet-dialog');
 const { DataValidation } = await import('../../../components/DataValidation');
+const { InputBox } = await import('../../../components/SheetOverlay/InputBox');
 type Selection = import('../../../state').Selection;
+type ReactNode = import('react').ReactNode;
 
 const LAST = REFERENCE_ROW_COUNT - 1;
 const LIST = { type: 'dropdown', type2: '', value1: 'Yes,No', value2: '' };
@@ -22,20 +24,24 @@ const B3 = { row: [2, 2], column: [1, 1], row_focus: 2, column_focus: 1 };
 const NO_RANGE = 'Enter a cell range, such as A1:B10';
 
 // The dialog over a 1,000-row sheet.
-const openDialog = (selection: Selection, dataValidations = {}) =>
-    renderSheetDialog((d) => d.showDialog(createElement(DataValidation)), {
-        sheets: [
-            {
-                id: 'id_1',
-                name: 'Sheet1',
-                order: 0,
-                config: {},
-                data: Array.from({ length: 1000 }, () => [null, null, null]),
-                dataValidations,
-            },
-        ],
-        selections: [selection],
-    });
+const openDialog = (selection: Selection, dataValidations = {}, grid?: () => ReactNode) =>
+    renderSheetDialog(
+        (d) => d.showDialog(createElement(DataValidation)),
+        {
+            sheets: [
+                {
+                    id: 'id_1',
+                    name: 'Sheet1',
+                    order: 0,
+                    config: {},
+                    data: Array.from({ length: 1000 }, () => [null, null, null]),
+                    dataValidations,
+                },
+            ],
+            selections: [selection],
+        },
+        grid,
+    );
 
 type Dialog = Awaited<ReturnType<typeof openDialog>>;
 
@@ -170,13 +176,11 @@ test('back from the range picker, the draft keeps every value the user typed', a
     await dialog.type('Value 2', '50');
     await pickWith('Select cell range');
     expect(dialog.title()).toBe('Select cell range');
-    expect(dialog.context().rangePickerOpen).toBe(true);
     await dialog.click('OK');
     expect(dialog.dialogs()).toHaveLength(1);
     expect(dialog.title()).toBe('Data validation');
     expect(dialog.field('Cell range').value).toBe('B3');
     expect(dialog.field('Value 2').value).toBe('50');
-    expect(dialog.context().rangePickerOpen).toBe(false);
 });
 
 test('Cancel in the range picker brings the dialog back with its draft too', async () => {
@@ -186,16 +190,31 @@ test('Cancel in the range picker brings the dialog back with its draft too', asy
     await dialog.click('Cancel');
     expect(dialog.title()).toBe('Data validation');
     expect(dialog.field('Value 2').value).toBe('50');
-    expect(dialog.context().rangePickerOpen).toBe(false);
 });
 
-test("a notice that takes the range picker's place lets the cell editor back", async () => {
+test('Escape in the range picker brings the dialog back with its draft too', async () => {
     const dialog = await openDialog(B3);
+    await dialog.type('Cell range', 'B2:B3');
     await pickWith('Select cell range');
-    expect(dialog.context().rangePickerOpen).toBe(true);
+    await act(async () => {
+        document.activeElement?.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+        );
+    });
+    expect(dialog.title()).toBe('Data validation');
+    expect(dialog.field('Cell range').value).toBe('B2:B3');
+});
+
+// Whichever dialog takes the slot, the editor comes back: it must not stay off-screen for good.
+test('the cell editor waits off-screen only while the range picker holds the slot', async () => {
+    const dialog = await openDialog(B3, {}, () => createElement(InputBox));
+    const parked = () => document.querySelector<HTMLElement>('.sheet-input-box')?.style.left === '-10000px';
+    expect(parked()).toBe(false);
+    await pickWith('Select cell range');
+    expect(parked()).toBe(true);
     await dialog.show((d) => d.showNotice('A notice'));
-    expect(dialog.context().rangePickerOpen).toBe(false);
     expect(dialog.dialogs()[0]?.textContent).toContain('A notice');
+    expect(parked()).toBe(false);
 });
 
 test("the list's grid button picks the options' source and keeps the range", async () => {

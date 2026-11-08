@@ -1,7 +1,7 @@
 // The sheet's modal host. A dialog in it draws its own FormDialog, renders as the only dialog, closes through its own
 // opening, and keeps its mouse events from the handlers above the host. A close from an opening the slot no longer
-// holds does nothing, so a submit that opens a confirm leaves the confirm open. The range picker's onClose runs once,
-// whether it closes or another dialog takes its place, and says which. However a dialog closes, the focus goes
+// holds does nothing, so a submit that opens a confirm leaves the confirm open. pickerOpen is true only while the range
+// picker holds the slot, and Escape in the picker is its opener's to answer. However a dialog closes, the focus goes
 // back to the grid's keyboard target, unless another dialog took the slot. The range picker opens at a viewport
 // point the caller computed, so the host clamps it on screen: a picker larger than the viewport pins to the top-left
 // margin instead of being pushed off the opposite edge.
@@ -75,7 +75,7 @@ async function renderHost() {
     );
     const { host, dialogs } = opened;
     if (!host || !dialogs) throw new Error('the host did not render');
-    return { host, dialogs };
+    return { host, dialogs, opened };
 }
 
 const openDialogs = () => [...document.querySelectorAll('[role="dialog"]')];
@@ -122,26 +122,28 @@ describe('a FormDialog in the host', () => {
     });
 });
 
-describe("the range picker's onClose", () => {
-    test('runs once when the picker closes, however often it is hidden', async () => {
-        const { host } = await renderHost();
-        const onClose = mock((_reason: string) => {});
-        await act(async () => host.showNonModal('Pick a range', { onClose }));
-        await act(async () => {
-            host.hideModal();
-            host.hideModal();
-        });
-        expect(onClose.mock.calls).toEqual([['closed']]);
+describe('the range picker in the slot', () => {
+    const onEscape = () => {};
+
+    test('pickerOpen holds only while the picker does, whichever dialog takes its place', async () => {
+        const { dialogs, opened } = await renderHost();
+        expect(dialogs.pickerOpen).toBe(false);
+        await act(async () => dialogs.showNonModalDialog('Pick a range', { onEscape }));
+        expect(opened.dialogs?.pickerOpen).toBe(true);
+        await act(async () => dialogs.showNotice('A notice'));
+        expect(opened.dialogs?.pickerOpen).toBe(false);
     });
 
-    test('runs once when another dialog takes the slot, and not again when that one closes', async () => {
-        const { host } = await renderHost();
-        const onClose = mock((_reason: string) => {});
-        await act(async () => host.showNonModal('Pick a range', { onClose }));
-        await act(async () => host.showModal('A notice'));
-        expect(onClose.mock.calls).toEqual([['replaced']]);
-        await act(async () => host.hideModal());
-        expect(onClose).toHaveBeenCalledTimes(1);
+    test('Escape asks its opener', async () => {
+        const { dialogs } = await renderHost();
+        const escaped = mock(() => {});
+        await act(async () => dialogs.showNonModalDialog('Pick a range', { onEscape: escaped }));
+        await act(async () => {
+            document.activeElement?.dispatchEvent(
+                new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+            );
+        });
+        expect(escaped).toHaveBeenCalledTimes(1);
     });
 });
 
@@ -153,8 +155,8 @@ describe("the range picker's shell", () => {
         document.head.append(fade);
         try {
             const { host } = await renderHost();
-            await act(async () => host.showNonModal('Pick a range', {}));
-            await act(async () => host.hideModal());
+            await act(async () => host.showNonModal('Pick a range', { onEscape: () => {} }));
+            await act(async () => host.showModal('A notice'));
             expect(openDialogs()).toHaveLength(0);
         } finally {
             fade.remove();
@@ -163,7 +165,9 @@ describe("the range picker's shell", () => {
 
     test('keeps a picker anchored past the viewport edge on screen', async () => {
         const { host } = await renderHost();
-        await act(async () => host.showNonModal('Pick a range', { anchor: { left: 5000, top: 5000 } }));
+        await act(async () =>
+            host.showNonModal('Pick a range', { anchor: { left: 5000, top: 5000 }, onEscape: () => {} }),
+        );
         const [picker] = openDialogs();
         if (!(picker instanceof HTMLElement)) throw new Error('no picker');
         expect(picker.style.left).toBe(`${window.innerWidth - VIEWPORT_MARGIN}px`);
@@ -220,7 +224,9 @@ describe('the focus after a dialog closes', () => {
     // The picker leaves the grid usable, so no focus trap would pull the focus back to it.
     test('stays in the range picker a dialog opened in its place', async () => {
         const dialog = await renderSheetDialog((d) =>
-            d.showDialog(createElement(Rename, { onSubmit: () => d.showNonModalDialog('Pick a range', {}) })),
+            d.showDialog(
+                createElement(Rename, { onSubmit: () => d.showNonModalDialog('Pick a range', { onEscape: () => {} }) }),
+            ),
         );
         await dialog.click('Save');
         await focusSettled();

@@ -41,7 +41,7 @@ type LinkDraft = { text: string; type: string; address: string };
 export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: LinkDraft }) {
     const { context, setContext, refs } = useContext(WorkbookContext);
     const dialogProps = useDialogProps();
-    const { showDialog, showNonModalDialog, hideDialog } = useDialog();
+    const { showDialog, showNonModalDialog } = useDialog();
     const [linkText, setLinkText] = useState(draft?.text ?? link.originText);
     const [linkType, setLinkType] = useState(draft?.type ?? link.originType);
     const [linkAddress, setLinkAddress] = useState(draft?.address ?? link.originAddress);
@@ -74,28 +74,20 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
         );
     };
 
-    // The picker leaves the grid usable, so rangePickerOpen keeps the cell editor and the link card out of the way.
-    // A pick may wander to another sheet, so the picker hands back the link's sheet and cell however it leaves. Its
-    // OK opens this dialog again with the picked range, and Cancel or Escape with the draft as it was.
+    // A pick may wander to another sheet, so coming back also goes back to the link's sheet and cell. The picker's OK
+    // comes back with the picked range, and Cancel or Escape with the draft as it was.
     const pickRange = (before: LinkDraft) => {
-        const reopen = (address: string) => showDialog(<LinkEditDialog link={link} draft={{ ...before, address }} />);
-        const backToLinkCell = (picking: boolean) =>
+        const reopen = (address: string) => {
             setContext((ctx) => {
                 changeSheet(ctx, link.sheetId);
                 ctx.selections = normalizeSelection(ctx, [{ row: [r, r], column: [c, c] }]);
-                ctx.rangePickerOpen = picking;
             });
-        backToLinkCell(true);
+            showDialog(<LinkEditDialog link={link} draft={{ ...before, address }} />);
+        };
+        const cancel = () => reopen(before.address);
         showNonModalDialog(
-            <CellRangeDialog value={before.address} variant="link" onConfirm={reopen} onCancel={hideDialog} />,
-            {
-                width: RANGE_PICKER_WIDTH,
-                anchor: rangePickerAnchor(),
-                onClose: (reason) => {
-                    backToLinkCell(false);
-                    if (reason === 'closed') reopen(before.address);
-                },
-            },
+            <CellRangeDialog value={before.address} variant="link" onConfirm={reopen} onCancel={cancel} />,
+            { width: RANGE_PICKER_WIDTH, anchor: rangePickerAnchor(), onEscape: cancel },
         );
     };
 

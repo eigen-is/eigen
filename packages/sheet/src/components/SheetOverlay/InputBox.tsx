@@ -2,13 +2,14 @@
 // formula as colored references or its rich-text runs as spans, and the grid's keyboard handlers commit
 // it. While it is open on text, ⌘B, ⌘I and ⌘U format its selected characters, a format on a bare caret
 // styles the text typed there next, text typed over a selection takes the style of its first character,
-// and a paste inserts plain text.
+// and a paste inserts plain text. It waits off-screen while the range picker is open, so a press on the grid picks.
 
 import { matchesKeyboardEvent } from '@tanstack/react-hotkeys';
 import { escapeHtml } from '@workspace/lib/html';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
+import { useDialog } from '../../hooks/useDialog';
 import { useFormulaAutocomplete } from '../../hooks/useFormulaAutocomplete';
 import { usePrevious } from '../../hooks/usePrevious';
 import {
@@ -49,6 +50,7 @@ const FORMAT_SHORTCUTS = [
 
 export const InputBox: React.FC = () => {
     const { context, setContext, refs } = useContext(WorkbookContext);
+    const { pickerOpen } = useDialog();
     const inputRef = useRef<HTMLDivElement>(null);
     const lastKeyDownEventRef = useRef<KeyboardEvent>(null);
     const prevEditingCellPosition = usePrevious(context.editingCellPosition);
@@ -276,22 +278,14 @@ export const InputBox: React.FC = () => {
         <div
             className="sheet-input-box"
             style={
-                firstSelection && !context.rangePickerOpen
+                firstSelection && !pickerOpen
                     ? {
                           left: firstSelection.left,
                           top: firstSelection.top,
                           zIndex: context.editingCellPosition.length === 0 ? -1 : 19,
-                          // z:-1 no longer hides the box: inside the overlay layer's
-                          // transformed content div (a stacking context) it can't sink
-                          // below the canvas. opacity 0 hides it while keeping the cell
-                          // input focusable at the cell position (display/visibility
-                          // would break focus; off-screen focus auto-scrolls the grid),
-                          // and pointer-events none keeps it unhittable like the old
-                          // behind-the-canvas box (opacity 0 alone still hit-tests, and
-                          // the box's stopPropagation would swallow focus-cell clicks).
-                          // While editing it must be an explicit auto: the pane-region
-                          // wrapper is pointer-events none, and inheriting that would
-                          // kill caret clicks in the open editor.
+                          // A closed editor stays focusable at its cell, because hiding it would break focus and
+                          // focus off-screen scrolls the grid. It must not take clicks, or its stopPropagation would
+                          // swallow them. An open one needs an explicit auto, since the pane-region wrapper sets none.
                           opacity: context.editingCellPosition.length === 0 ? 0 : 1,
                           pointerEvents: context.editingCellPosition.length === 0 ? 'none' : 'auto',
                           display: 'block',
