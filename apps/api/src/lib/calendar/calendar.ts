@@ -75,11 +75,10 @@ export class Calendar {
         this.db = this.managedDb.db;
 
         // Seeded once here, then moved by delta at each commit and purge.
-        this.eventsBytes =
-            this.db
-                .select({ total: sql<number>`COALESCE(SUM(${resourceBytes}), 0)` })
-                .from(schema.resources)
-                .get()?.total ?? 0;
+        this.eventsBytes = this.db
+            .select({ total: sql<number>`COALESCE(SUM(${resourceBytes}), 0)` })
+            .from(schema.resources)
+            .all()[0].total;
 
         if (this.db.select({ id: schema.calendars.id }).from(schema.calendars).all().length === 0) {
             await this.createCalendar({
@@ -172,9 +171,11 @@ export class Calendar {
     // Callers hold the write lock and have already run their own guards (preconditions, the linked-copy rule).
     public async purgeResource(row: Pick<PurgedResource, 'id' | 'calendarId' | 'uri'>): Promise<void> {
         const removed = this.db.transaction((tx) => {
-            const size =
-                tx.select({ size: resourceBytes }).from(schema.resources).where(eq(schema.resources.id, row.id)).get()
-                    ?.size ?? 0;
+            const { size } = tx
+                .select({ size: resourceBytes })
+                .from(schema.resources)
+                .where(eq(schema.resources.id, row.id))
+                .all()[0];
             const ctag = this.bumpCtag(tx, row.calendarId);
             tx.delete(schema.resources).where(eq(schema.resources.id, row.id)).run();
             this.tombstone(tx, row.calendarId, row.uri, ctag);
@@ -304,12 +305,11 @@ export class Calendar {
 
         await this.writeLock.run(async () => {
             const removed = this.db.transaction((tx) => {
-                const total =
-                    tx
-                        .select({ total: sql<number>`COALESCE(SUM(${resourceBytes}), 0)` })
-                        .from(schema.resources)
-                        .where(eq(schema.resources.calendarId, id))
-                        .get()?.total ?? 0;
+                const { total } = tx
+                    .select({ total: sql<number>`COALESCE(SUM(${resourceBytes}), 0)` })
+                    .from(schema.resources)
+                    .where(eq(schema.resources.calendarId, id))
+                    .all()[0];
                 // The resources and their event rows go with the row, by cascade.
                 tx.delete(schema.calendars).where(eq(schema.calendars.id, id)).run();
                 // No cascade reaches these: a calendar recreated at this id would inherit the 404s.

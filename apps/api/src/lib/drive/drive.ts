@@ -682,7 +682,7 @@ export class Drive {
         }
         // Moving a path out of a shared folder takes read access away from whoever had it through
         // that folder. Their open documents close now, the same as after an ACL change.
-        await this.documents.enforceReadAccessBelow(mount, pathId);
+        await this.documents.forEachOpenDocument((document) => document.enforceReadAccess());
         return movedPath;
     }
 
@@ -958,7 +958,7 @@ export class Drive {
         }
         // Someone who lost read access loses their open documents now, not when they next reconnect.
         // Every connection to this owner's documents lives in this Drive, shared users included.
-        await this.documents.enforceReadAccessBelow(mount, pathId);
+        await this.documents.forEachOpenDocument((document) => document.enforceReadAccess());
         // The copies in the homes of the people it is shared with go last, the same as in renamePath.
         await propagateSharedPathChange(updatedItem, oldACL, normalizedACL, actor ?? null, options);
     }
@@ -1253,6 +1253,7 @@ export class Drive {
         });
         const eventType = status === 'resolved' ? 'resolved' : 'reopened';
         await this.recordFileEvent(mountId, pathId, user, { eventType, details: { card, chatName } });
+        broadcastCommentIndexUpdated(this, this.owner.id, mountId, pathId).catch(() => {});
     }
 
     // ---- Collab documents and versions ----
