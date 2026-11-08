@@ -18,6 +18,7 @@ import type {
     Context,
     FloatingRef,
     GlobalCache,
+    History,
     Op,
     Presence,
     SearchHighlight,
@@ -51,12 +52,24 @@ import {
     warmFormulaCellInfoMapOnIdle,
 } from '../../state';
 
+type Stacks = Pick<GlobalCache, 'undoList' | 'redoList' | 'cutByPeer'>;
+
+// A peer's batch only ever shortens a stack, so a shorter one is a stack it took something from.
+function setStacksAfterPeer(history: Stacks, undoList: History[], redoList: History[]) {
+    history.cutByPeer = {
+        undo: history.cutByPeer?.undo || undoList.length < history.undoList.length,
+        redo: history.cutByPeer?.redo || redoList.length < history.redoList.length,
+    };
+    history.undoList = undoList;
+    history.redoList = redoList;
+}
+
 export function generateAPIs(
     getContext: () => Context,
     setContext: (recipe: (ctx: Context) => void, options?: SetContextOptions) => void,
     handleUndo: () => void,
     handleRedo: () => void,
-    history: Pick<GlobalCache, 'undoList' | 'redoList' | 'undoGesture'>,
+    history: Stacks & Pick<GlobalCache, 'undoGesture'>,
 ) {
     return {
         // True when the batch applied, false when an op failed and the whole batch was rolled back.
@@ -70,16 +83,16 @@ export function generateAPIs(
                     Object.assign(ctx_, applied.ctx);
                     // An entry holds formula text naming tabs, so a peer's rename empties both stacks. It is rare.
                     if (ops.some(({ op }) => op === 'renameSheet')) {
-                        history.undoList = [];
-                        history.redoList = [];
+                        setStacksAfterPeer(history, [], []);
                         return;
                     }
-                    history.undoList = dropStructuralEntries(history.undoList);
-                    history.redoList = dropStructuralEntries(history.redoList);
+                    let undoList = dropStructuralEntries(history.undoList);
+                    let redoList = dropStructuralEntries(history.redoList);
                     for (const { move, sheets } of applied.moved) {
-                        history.undoList = shiftEntries(history.undoList, move, sheets);
-                        history.redoList = shiftEntries(history.redoList, move, sheets);
+                        undoList = shiftEntries(undoList, move, sheets);
+                        redoList = shiftEntries(redoList, move, sheets);
                     }
+                    setStacksAfterPeer(history, undoList, redoList);
                 },
                 { noHistory: true },
             );
@@ -122,8 +135,7 @@ export function generateAPIs(
             );
             if (lost) getContext().getRefs().cellInput.current?.blur();
             warmFormulaCellInfoMapOnIdle(getContext);
-            history.undoList = [];
-            history.redoList = [];
+            setStacksAfterPeer(history, [], []);
             return accepted;
         },
 

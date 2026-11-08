@@ -39,8 +39,10 @@ export function SheetEditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<
     const { showNotice } = useDialog();
     const docSearchBar = useOptionalDocSearchBar();
 
-    const canUndo = refs.globalCache.undoList.length > 0;
-    const canRedo = refs.globalCache.redoList.length > 0;
+    // A stack a peer's edit took away stays pressable: the press says why nothing happens.
+    const { undoList, redoList, cutByPeer } = refs.globalCache;
+    const canUndo = undoList.length > 0 || cutByPeer?.undo;
+    const canRedo = redoList.length > 0 || cutByPeer?.redo;
 
     // Deletes the row or the column of the selection's focused cell.
     const deleteFocused = (type: 'row' | 'column') => {

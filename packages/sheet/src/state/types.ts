@@ -176,6 +176,9 @@ export type GlobalCache = {
     recentBackgroundColor?: string;
     undoList: History[];
     redoList: History[];
+    // Which stacks a peer's batch took entries from since this tab's last own edit: an undo or redo that finds its
+    // stack empty says why.
+    cutByPeer?: { undo: boolean; redo: boolean };
     // An open panel edit (a typed title): its writes merge into one undo entry.
     undoGesture?: object;
     // The chart this workbook last copied: the inline parts it put on the clipboard and the chart itself, with its
