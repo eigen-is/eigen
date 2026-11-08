@@ -8,7 +8,6 @@ import { createArrayResolver } from './cell-resolver';
 import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
 import { getCalculationOrder } from './dependency-graph';
-import type { SheetExtent } from './dependency-index';
 import { cellsOf, DependencyIndex, dependencySlots } from './dependency-index';
 import { booleanDisplay, numberDisplay } from './format';
 import { FormulaEngine, isFormula } from './formula-engine';
@@ -27,6 +26,8 @@ import type {
 
 // A sheet's dense `data`, by id, which the pass reads and writes.
 type WorkingSheet = { id: string; name: string; data: CellMatrix };
+
+type SheetExtent = { rows: number; columns: number };
 
 // A workbook needs the server's recalc when a sheet has formula cells but no calcChain, such as an import whose
 // recalc failed, or a workbook a tab from such a file was added to. The editor's ops and the import's recalc both
@@ -91,10 +92,9 @@ export function recalcSheets(
         working.push(w);
     }
 
-    const walk: WalkContext = { sheets: working, findSheet: sheetFinder(working), cellTextToIndexList: {} };
+    const walk: WalkContext = { findSheet: sheetFinder(working), cellTextToIndexList: {} };
     const extents = new Map<string, SheetExtent>();
     for (const w of working) extents.set(w.id, { rows: w.data.length, columns: matrixWidth(w.data) });
-    const extentOf = (sheetId: string) => extents.get(sheetId);
 
     // 2. Find the formula cells by scanning the data, never trusting calcChain, and index the ranges each one reads.
     const infoMap: FormulaCellInfoMap = {};
@@ -112,7 +112,7 @@ export function recalcSheets(
                 if (typeof f !== 'string' || !isFormula(f)) continue;
                 chain.push({ r, c, id: w.id });
                 const key = `r${r}c${c}i${w.id}`;
-                const deps = extractDependencies(walk, f, w.id, w.data);
+                const deps = extractDependencies(walk, f, w.id);
                 infoMap[key] = {
                     formula: f,
                     key,
@@ -122,9 +122,9 @@ export function recalcSheets(
                     dependents: [],
                 };
                 const indexed = deps.flatMap((dep) => withinSheet(dep, extents) ?? []);
-                slots += dependencySlots(indexed, extentOf);
+                slots += dependencySlots(indexed);
                 if (slots > maxDependencySlots) throw new RangeError('Formula ranges past the dependency budget');
-                depIndex.set(key, indexed, extentOf);
+                depIndex.set(key, indexed);
             }
         }
     }
@@ -206,25 +206,20 @@ function ensureWorkingData(sheet: Sheet): CellMatrix {
 }
 
 // The ranges a formula reads, for the server's pass and the editor's formula map alike: every reference in its text,
-// a function's arguments included, as Excel lists a cell's precedents. `data` is the matrix of the formula's own sheet.
-// The reference INDEX returns lies inside its range argument, so that argument covers it. OFFSET and INDIRECT build a
-// reference the text doesn't hold, which only matters once the engine can compute them.
-export function extractDependencies(
-    walk: WalkContext,
-    formula: string,
-    sheetId: string,
-    data: CellMatrix | null | undefined,
-): FormulaDependency[] {
+// a function's arguments included, as Excel lists a cell's precedents. The reference INDEX returns lies inside its range
+// argument, so that argument covers it. OFFSET and INDIRECT build a reference the text doesn't hold, which only matters
+// once the engine can compute them.
+export function extractDependencies(walk: WalkContext, formula: string, sheetId: string): FormulaDependency[] {
     const dependencies: FormulaDependency[] = [];
     forEachRef(formula, (reference) => {
-        const range = resolveCellRange(walk, reference, sheetId, data);
+        const range = resolveCellRange(walk, reference, sheetId);
         if (range != null) dependencies.push(range);
     });
     return dependencies;
 }
 
 // A dependency cut to the cells its sheet holds, null when it holds none. Only a formula cell is looked up in the
-// index, and each lies in its sheet's data, so `SUM(A1:XFD1048576)` costs the blocks the sheet spans, not 16 million.
+// index, and each lies in its sheet's data, so `SUM(A1:XFD1048576)` costs what the sheet spans, not 16 million blocks.
 function withinSheet(dep: FormulaDependency, extents: ReadonlyMap<string, SheetExtent>): FormulaDependency | null {
     const cells = cellsOf(dep);
     const extent = cells && extents.get(cells.sheetId);

@@ -1,15 +1,11 @@
 // The reverse dependency index: for a cell, the formulas that read it. The editor's formula map and the server's
 // recalc both fill one, through set, and ask it dependentsOf for each cell that changed or holds a formula. A single
 // cell gets an exact bucket. A range is listed in each 64 × 16 block it meets, so a lookup scans only the ranges near
-// its cell. A range down every row of its sheet, such as a whole column, is listed once per column instead, and one
-// across every column once per row.
+// its cell. A range that runs down a whole column is listed once per column instead, and one across a whole row once
+// per row.
 
+import { LAST_COLUMN, LAST_ROW } from './formula-utils';
 import type { FormulaDependency } from './types';
-
-// A sheet's size, which tells set whether a range runs down every row or across every column.
-export type SheetExtent = { rows: number; columns: number };
-
-type ExtentOf = (sheetId: string) => SheetExtent | undefined;
 
 type RangeEntry = {
     r0: number;
@@ -34,9 +30,13 @@ const COL_BLOCK = 16;
 const CELL_PACK = 1 << 20;
 const BLOCK_PACK = 1 << 16;
 
+// The rows from which a range costs fewer slots in its columns than in its blocks, as columns do in its rows.
+const LONG_RANGE = ROW_BLOCK * COL_BLOCK;
+
 const EMPTY: readonly string[] = [];
 
-// A dependency's sheet and cells, its corners in order and none below 0; null when it names no sheet.
+// A dependency's sheet and cells, its corners in order and inside Excel's grid, as `A:ZZZZZZ` may run past it; null
+// when it names no sheet.
 export function cellsOf(
     dep: FormulaDependency,
 ): { sheetId: string; r0: number; r1: number; c0: number; c1: number } | null {
@@ -44,20 +44,28 @@ export function cellsOf(
     return {
         sheetId: dep.sheetId,
         r0: Math.max(0, Math.min(dep.row[0], dep.row[1])),
-        r1: Math.max(0, dep.row[0], dep.row[1]),
+        r1: Math.min(LAST_ROW, Math.max(0, dep.row[0], dep.row[1])),
         c0: Math.max(0, Math.min(dep.column[0], dep.column[1])),
-        c1: Math.max(0, dep.column[0], dep.column[1]),
+        c1: Math.min(LAST_COLUMN, Math.max(0, dep.column[0], dep.column[1])),
     };
 }
 
 // The slots set lists a formula's ranges in, a single cell costing none: what recalc charges an untrusted workbook's
 // formulas before the index holds them.
-export function dependencySlots(deps: readonly FormulaDependency[], extentOf: ExtentOf): number {
+export function dependencySlots(deps: readonly FormulaDependency[]): number {
     let slots = 0;
     for (const dep of deps) {
         const cells = cellsOf(dep);
         if (cells == null || (cells.r0 === cells.r1 && cells.c0 === cells.c1)) continue;
-        slots += layoutOf(cells, extentOf(cells.sheetId)).slots;
+        const { r0, r1, c0, c1 } = cells;
+        const layout = layoutOf(cells);
+        if (layout === 'columns') slots += c1 - c0 + 1;
+        else if (layout === 'rows') slots += r1 - r0 + 1;
+        else {
+            slots +=
+                (Math.floor(r1 / ROW_BLOCK) - Math.floor(r0 / ROW_BLOCK) + 1) *
+                (Math.floor(c1 / COL_BLOCK) - Math.floor(c0 / COL_BLOCK) + 1);
+        }
     }
     return slots;
 }
@@ -68,7 +76,7 @@ export class DependencyIndex {
     private byKey = new Map<string, KeyedEntry[]>();
     private queryCache = new Map<string, Map<number, readonly string[]>>();
 
-    public set(key: string, deps: readonly FormulaDependency[], extentOf: ExtentOf): void {
+    public set(key: string, deps: readonly FormulaDependency[]): void {
         this.delete(key);
 
         const stored: KeyedEntry[] = [];
@@ -92,7 +100,7 @@ export class DependencyIndex {
                 stored.push({ sheetId, point });
             } else {
                 const entry: RangeEntry = { r0, r1, c0, c1, key };
-                const { layout } = layoutOf(cells, extentOf(sheetId));
+                const layout = layoutOf(cells);
                 let sheetBuckets = this.buckets[layout].get(sheetId);
                 if (sheetBuckets == null) {
                     sheetBuckets = new Map();
@@ -214,28 +222,13 @@ export class DependencyIndex {
     }
 }
 
-// The cheapest of the layouts that fit a range, and the slots it takes there. Only a range down every row of its
-// sheet may go in its columns, and only one across every column in its rows. A lookup in such a column or row then
-// finds every range listed there, so it scans nothing it doesn't return.
-function layoutOf(
-    cells: { r0: number; r1: number; c0: number; c1: number },
-    extent: SheetExtent | undefined,
-): { layout: Layout; slots: number } {
-    const { r0, r1, c0, c1 } = cells;
-    let best: { layout: Layout; slots: number } = {
-        layout: 'blocks',
-        slots:
-            (Math.floor(r1 / ROW_BLOCK) - Math.floor(r0 / ROW_BLOCK) + 1) *
-            (Math.floor(c1 / COL_BLOCK) - Math.floor(c0 / COL_BLOCK) + 1),
-    };
-    if (extent == null) return best;
-    if (r0 === 0 && r1 >= extent.rows - 1 && c1 - c0 + 1 < best.slots) {
-        best = { layout: 'columns', slots: c1 - c0 + 1 };
-    }
-    if (c0 === 0 && c1 >= extent.columns - 1 && r1 - r0 + 1 < best.slots) {
-        best = { layout: 'rows', slots: r1 - r0 + 1 };
-    }
-    return best;
+// A range to the grid's last row, or a long one from the top of its sheet, such as a table a lookup reads, is listed in
+// its columns, and likewise along the rows. A lookup there also scans the ranges that end above its cell, so any other
+// range goes by blocks, which keep a lookup to what is near.
+function layoutOf({ r0, r1, c0, c1 }: { r0: number; r1: number; c0: number; c1: number }): Layout {
+    if (r1 >= LAST_ROW || (r0 === 0 && r1 >= LONG_RANGE)) return 'columns';
+    if (c1 >= LAST_COLUMN || (c0 === 0 && c1 >= LONG_RANGE)) return 'rows';
+    return 'blocks';
 }
 
 function forEachSlot(entry: RangeEntry, layout: Layout, fn: (slot: number) => void): void {

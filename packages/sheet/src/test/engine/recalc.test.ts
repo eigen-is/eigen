@@ -589,7 +589,6 @@ describe('engine/recalc — sheetsNeedRecalc', () => {
 
 describe('engine/recalc — extractDependencies', () => {
     const walkOver = (sheets: Pick<Sheet, 'id' | 'name' | 'data'>[]) => ({
-        sheets,
         findSheet: sheetFinder(sheets),
         cellTextToIndexList: {},
     });
@@ -600,7 +599,7 @@ describe('engine/recalc — extractDependencies', () => {
         const f = `=${"'My Data'!A1+".repeat(160_000)}1`;
         expect(f.length).toBeGreaterThan(2_000_000);
         const start = performance.now();
-        const deps = extractDependencies(g, f, 's1', null);
+        const deps = extractDependencies(g, f, 's1');
         expect(performance.now() - start).toBeLessThan(1_000);
         expect(deps).toHaveLength(160_000);
         expect(deps[0]).toEqual({ row: [0, 0], column: [0, 0], sheetId: 's2' });
@@ -609,7 +608,7 @@ describe('engine/recalc — extractDependencies', () => {
     test('walks a 1 MB run of letters in well under a second', () => {
         const g = walkOver([{ id: 's1', name: 'Sheet1', data: [[num(1)]] }]);
         const start = performance.now();
-        expect(extractDependencies(g, `=${'A'.repeat(1_000_000)}`, 's1', [[num(1)]])).toEqual([]);
+        expect(extractDependencies(g, `=${'A'.repeat(1_000_000)}`, 's1')).toEqual([]);
         expect(performance.now() - start).toBeLessThan(1_000);
     });
 
@@ -662,7 +661,7 @@ describe('engine/recalc — extractDependencies', () => {
         expect(read.length).toBeGreaterThan(0);
 
         const listed = new Set<string>();
-        for (const { sheetId, row, column } of extractDependencies(walkOver(sheets), text, 's0', sheets[0].data)) {
+        for (const { sheetId, row, column } of extractDependencies(walkOver(sheets), text, 's0')) {
             for (let r = row[0]; r <= row[1]; r += 1) {
                 for (let c = column[0]; c <= column[1]; c += 1) listed.add(`${sheetId} ${r} ${c}`);
             }
@@ -673,13 +672,13 @@ describe('engine/recalc — extractDependencies', () => {
     test("a function's name reads as no cell, after an operator or a colon", () => {
         const data = [[num(1), num(2)]];
         const g = walkOver([{ id: 's1', name: 'Sheet1', data }]);
-        expect(extractDependencies(g, '=LOG10(A1)+ATAN2(B2,1)', 's1', data)).toEqual([
+        expect(extractDependencies(g, '=LOG10(A1)+ATAN2(B2,1)', 's1')).toEqual([
             { row: [0, 0], column: [0, 0], sheetId: 's1' },
             { row: [1, 1], column: [1, 1], sheetId: 's1' },
         ]);
-        expect(extractDependencies(g, '=A1:INDEX(B:B,1)', 's1', data)).toEqual([
+        expect(extractDependencies(g, '=A1:INDEX(B:B,1)', 's1')).toEqual([
             { row: [0, 0], column: [0, 0], sheetId: 's1' },
-            { row: [0, 0], column: [1, 1], sheetId: 's1' },
+            { row: [0, 1_048_575], column: [1, 1], sheetId: 's1' },
         ]);
     });
 });
