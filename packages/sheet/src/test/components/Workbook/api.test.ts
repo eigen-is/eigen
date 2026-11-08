@@ -542,15 +542,6 @@ describe('replayOps', () => {
             expect(ctx.currentSheetId).toBe('id_2');
         });
 
-        it('a filter set before leaves the filter the tab shows', () => {
-            const shown = makeCtx(null);
-            const filter: Op[] = [
-                { op: 'replace', id: 'id_1', path: ['filterRange'], value: { row: [0, 3], column: [0, 0] } },
-            ];
-            const { ctx } = replay(shown, shown.sheets, [filter, typed], [typed]);
-            expect(ctx.filterRange).toBe(shown.filterRange);
-        });
-
         it('a fresh hide of the current sheet moves the tab off it', () => {
             const shown = makeCtx(null);
             const hide: Op[] = [{ op: 'replace', id: 'id_1', path: ['hide'], value: 1 }];

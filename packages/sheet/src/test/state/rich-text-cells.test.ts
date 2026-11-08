@@ -119,7 +119,6 @@ describe('readers of a rich cell', () => {
         );
         expect(buildFilterConditionMatcher({ conditionName: 'isEmpty', values: [] })(rich('Hello'))).toBe(false);
         const ctx = sheetContext([[plain('Head')], [rich('Hello')], [plain('x')]]);
-        ctx.filter = {};
         const { values } = getFilterColumnValues(ctx, 0, 0, 2, 0);
         expect(values.map((value) => value.text)).toEqual(['Hello', 'x']);
         expect(

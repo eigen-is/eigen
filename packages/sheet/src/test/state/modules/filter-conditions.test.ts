@@ -205,7 +205,6 @@ describe('FILTER_CONDITION_ITEMS', () => {
 // Filter range: header on row 0, data on rows 1-4. Column 0 numeric, column 1 text.
 function filterContext(): Context {
     return contextFactory({
-        filter: {},
         sheets: [
             {
                 name: 'sheet',
@@ -236,14 +235,16 @@ describe('getFilterConditionHiddenRows', () => {
     test('skips rows already hidden by other columns', () => {
         const ctx = filterContext();
         // column 1 filter already hid row 2
-        ctx.filter[1] = {
-            rowhidden: { 2: 0 },
-            optionstate: true,
-            str: 0,
-            edr: 4,
-            cindex: 1,
-            stc: 0,
-            edc: 1,
+        ctx.sheets[0].filter = {
+            1: {
+                rowhidden: { 2: 0 },
+                optionstate: true,
+                str: 0,
+                edr: 4,
+                cindex: 1,
+                stc: 0,
+                edc: 1,
+            },
         };
         const hidden = getFilterConditionHiddenRows(ctx, 0, 0, 4, 0, cond('greaterThan', '10'));
         expect(hidden).toEqual({ 1: 0, 4: 0 });
@@ -259,9 +260,8 @@ describe('saveFilter with a condition', () => {
         saveFilter(ctx, true, hidden, byCondition, 0, 4, 0, 0, 1);
 
         expect(ctx.sheets[0].config?.rowhidden).toEqual({ 1: 0, 4: 0 });
-        expect(ctx.filter[0]?.byCondition).toEqual(byCondition);
         expect(ctx.sheets[0].filter?.[0]?.byCondition).toEqual(byCondition);
-        expect(ctx.filter[0]?.optionstate).toBe(true);
+        expect(ctx.sheets[0].filter?.[0]?.optionstate).toBe(true);
     });
 
     test('coexists with another column filter via the otherHiddenRows merge', () => {
@@ -285,7 +285,6 @@ describe('saveFilter with a condition', () => {
 
         clearFilter(ctx);
         expect(ctx.sheets[0].config?.rowhidden).toEqual({});
-        expect(ctx.filter).toEqual({});
         expect(ctx.sheets[0].filter).toBeUndefined();
     });
 });

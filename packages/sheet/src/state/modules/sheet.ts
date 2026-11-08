@@ -27,7 +27,7 @@ import { firstVisibleSheetId, updateContextWithSheetData } from '../context';
 import type { Sheet } from '../types';
 import { getSheetIndex, nextSheetName, sheetOrder } from '../utils';
 import { cancelNormalSelected } from './cell';
-import { applySheetFilter } from './filter';
+import { createFilterOptions } from './filter';
 import { snapshotContext } from './formula-cache';
 import { writeBackSheets } from './rowcol';
 
@@ -88,7 +88,7 @@ export function applySheetView(ctx: Context) {
     ctx.defaultcollen = sheetDefaultColWidth(sheet);
     ctx.showGridLines = sheet.showGridLines !== 0 && sheet.showGridLines !== false;
     if (sheet.data) updateContextWithSheetData(ctx, sheet.data);
-    applySheetFilter(ctx);
+    createFilterOptions(ctx);
 }
 
 export function addSheet(

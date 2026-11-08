@@ -54,13 +54,13 @@ describe('read-only (allowEdit === false) state guards', () => {
     test('createFilter is a no-op for viewers', () => {
         const ctx = contextFactory({ allowEdit: false }) as Context;
         createFilter(ctx);
-        expect(ctx.filterRange).toBeUndefined();
+        expect(ctx.sheets[0].filterRange).toBeUndefined();
     });
 
     test('createFilter still creates a filter for editors', () => {
         const ctx = contextFactory({ allowEdit: true }) as Context;
         createFilter(ctx);
-        expect(ctx.filterRange).toBeDefined();
+        expect(ctx.sheets[0].filterRange).toBeDefined();
     });
 
     test('insertCheckbox is a no-op for viewers', () => {

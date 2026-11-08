@@ -19,8 +19,8 @@ import { useDialog } from '../../hooks/useDialog';
 import type { Context, GlobalCache } from '../../state';
 import {
     api,
-    applySheetFilter,
     computeOverlayRegions,
+    createFilterOptions,
     getCellHyperlink,
     getCellRowColumn,
     getFlowdata,
@@ -291,7 +291,7 @@ export const SheetOverlay: React.FC = () => {
     const sheetFilterRange = sheetIndex == null ? undefined : context.sheets[sheetIndex].filterRange;
     // biome-ignore lint/correctness/useExhaustiveDependencies: deps are intentional triggers — body reads `draftCtx` so biome can't see the connection
     useEffect(() => {
-        setContext((draftCtx) => applySheetFilter(draftCtx));
+        setContext((draftCtx) => createFilterOptions(draftCtx));
     }, [
         context.visibledatarow,
         context.visibledatacolumn,

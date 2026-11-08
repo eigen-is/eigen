@@ -16,7 +16,6 @@ import type { FloatingRef } from './modules/floating';
 import { normalizeSelection } from './modules/selection';
 import type { Hooks } from './settings';
 import type {
-    FilterEntry,
     FilterOptions,
     GlobalCache,
     LinkCardProps,
@@ -70,7 +69,6 @@ export type Context = {
         endRow: number;
         startCol: number;
         endCol: number;
-        hiddenRows: number[];
     };
 
     currentSheetId: string;
@@ -130,8 +128,6 @@ export type Context = {
     painterSource?: { sheetId: string; range: { row: number[]; column: number[] } };
 
     filterOptions?: FilterOptions;
-    filterRange?: { row: number[]; column: number[] } | undefined;
-    filter: Record<string, FilterEntry>;
     filterButtonHover?: number;
     cellGlyphHover?: CellGlyph;
 
@@ -217,8 +213,6 @@ export function defaultContext(refs: RefValues): Context {
         formulaRangeSelect: undefined,
         functionCandidates: [],
         functionHint: null,
-
-        filter: {},
 
         scrolling: false,
 
