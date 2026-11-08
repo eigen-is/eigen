@@ -23,6 +23,7 @@ import type {
     UpdateSharedCalendarInput,
 } from '@workspace/lib/types/calendar';
 import { useCallback, useMemo } from 'react';
+import { toast } from 'sonner';
 import { AppError, onEtagWriteError, onMutationError } from '../../api-error';
 import { usePublicUser, usePublicUsers } from '../../public';
 import { formatFreeBusyTitle, isInvitationFromOthers, occurrenceDateToString } from '../calendar-utils';
@@ -205,13 +206,12 @@ export function useMoveEvent(ownerId: string) {
 }
 
 // A form that can see it is behind before it writes anything gets the same answer as the server's 412.
-export function useRefuseStaleEvent(ownerId: string): () => never {
+export function useRefuseStaleEvent(ownerId: string): () => void {
     const queryClient = useQueryClient();
 
     return () => {
-        const error = new AppError({ error: { status: 412, value: null }, status: 412 });
-        onEtagWriteError(error, STALE_WRITE_TOAST, () => invalidateEventList(queryClient, ownerId));
-        throw error;
+        invalidateEventList(queryClient, ownerId);
+        toast.error(STALE_WRITE_TOAST);
     };
 }
 

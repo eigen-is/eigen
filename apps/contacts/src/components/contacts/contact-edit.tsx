@@ -3,18 +3,20 @@
 // other field follows the contact it is given, so a sync or a refused Save moves only what nobody touched.
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { isStaleWrite, wasToasted } from '@workspace/lib/api-error';
+import { rethrowUntoasted } from '@workspace/lib/api-error';
 import { useLabels } from '@workspace/lib/contacts';
 import type { Contact } from '@workspace/lib/types/contact';
+import { useHeldEtag } from '@workspace/lib/use-held-etag';
 import { AvatarEditor, Toolbar, ToolbarTitle, useContactAvatarUpload } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
 import { Input } from '@workspace/ui/components/input';
 import { Textarea } from '@workspace/ui/components/textarea';
+import { useFollowedFields } from '@workspace/ui/hooks/use-followed-fields';
 import { Plus, Trash2 } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -55,19 +57,7 @@ const formSchema = z
 type FormValues = z.infer<typeof formSchema>;
 export type ContactFormValues = Omit<FormValues, 'email' | 'phone'> & { email: string[]; phone: string[] };
 
-const FORM_FIELDS = [
-    'firstName',
-    'lastName',
-    'company',
-    'jobTitle',
-    'email',
-    'phone',
-    'address',
-    'birthday',
-    'notes',
-    'labels',
-    'avatar',
-] as const;
+const FORM_FIELDS = formSchema.keyof().options;
 
 type ContactEditToolbarProps = {
     isNew: boolean;
@@ -110,29 +100,10 @@ type ContactEditProps = {
 
 export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
     const { data: labels = [], error: labelsError } = useLabels();
-    const form = useForm<FormValues>({ resolver: zodResolver(formSchema), defaultValues: formValues(contact) });
-
-    const dirtyNames = Object.keys(form.formState.dirtyFields).join();
-    const typing = dirtyNames !== '';
-
-    // A whole list or address field stays or follows as one: its rows have no identity to merge them by. A field goes
-    // clean when typed back to its old value, and follows then. Resetting an unchanged list would remount its rows.
-    useEffect(() => {
-        const current = formValues(contact);
-        for (const name of FORM_FIELDS) {
-            const followed = JSON.stringify(form.getValues(name)) === JSON.stringify(current[name]);
-            if (!followed && !form.getFieldState(name).isDirty) form.resetField(name, { defaultValue: current[name] });
-        }
-    }, [contact, form, dirtyNames]);
-
-    // The etag typed edits answer to: the contact's when typing began, so a save can't overwrite a change it never
-    // showed. A refusal lets it move on once, to the contact the toast says to check.
-    const [heldEtag, setHeldEtag] = useState(contact.etag);
-    const [refused, setRefused] = useState(false);
-    if (contact.etag !== heldEtag && (!typing || refused)) {
-        setHeldEtag(contact.etag);
-        setRefused(false);
-    }
+    const record = useMemo(() => formValues(contact), [contact]);
+    const form = useForm<FormValues>({ resolver: zodResolver(formSchema), defaultValues: record });
+    const typing = useFollowedFields(form, FORM_FIELDS, record);
+    const { heldEtag, saveHeld } = useHeldEtag(contact.etag, typing);
 
     form.register('avatar');
     const avatar = form.watch('avatar') ?? null;
@@ -164,21 +135,18 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
         name: 'address',
     });
 
-    const handleSubmit = form.handleSubmit(async (data) => {
-        try {
-            await onSave(
+    const handleSubmit = form.handleSubmit((data) =>
+        saveHeld(() =>
+            onSave(
                 {
                     ...data,
                     email: data.email.map((row) => row.value).filter(Boolean),
                     phone: data.phone.map((row) => row.value).filter(Boolean),
                 },
                 heldEtag,
-            );
-        } catch (error) {
-            if (isStaleWrite(error)) setRefused(true);
-            if (!wasToasted(error)) throw error;
-        }
-    });
+            ),
+        ).catch(rethrowUntoasted),
+    );
 
     const isLoading = form.formState.isSubmitting;
 

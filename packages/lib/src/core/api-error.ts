@@ -107,3 +107,8 @@ export function onEtagWriteError(error: unknown, staleMessage: string, reload: (
 export function wasToasted(error: unknown): boolean {
     return error !== null && typeof error === 'object' && toastedErrors.has(error);
 }
+
+// For a form with no dialog to take the rejection: a toast has told the user, and anything else must still surface.
+export function rethrowUntoasted(error: unknown): void {
+    if (!wasToasted(error)) throw error;
+}

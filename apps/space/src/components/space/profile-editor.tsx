@@ -4,15 +4,17 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigate } from '@tanstack/react-router';
-import { isStaleWrite, wasToasted } from '@workspace/lib/api-error';
+import { rethrowUntoasted } from '@workspace/lib/api-error';
 import { useMeContact, useUpdateContact } from '@workspace/lib/contacts';
 import type { Contact } from '@workspace/lib/types/contact';
+import { useHeldEtag } from '@workspace/lib/use-held-etag';
 import { AvatarEditor, ErrorState, LoadingState, useContactAvatarUpload } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
 import { Input } from '@workspace/ui/components/input';
+import { useFollowedFields } from '@workspace/ui/hooks/use-followed-fields';
 import { InfoIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -24,7 +26,7 @@ const formSchema = z.object({
 
 type ProfileFormValues = z.infer<typeof formSchema>;
 
-const FORM_FIELDS = ['firstName', 'lastName', 'avatar'] as const;
+const FORM_FIELDS = formSchema.keyof().options;
 
 export function ProfileEditor() {
     const { data: contact, isLoading, error: fetchError } = useMeContact();
@@ -36,23 +38,9 @@ export function ProfileEditor() {
         defaultValues: { firstName: '', lastName: '', avatar: null },
     });
 
-    useEffect(() => {
-        if (!contact) return;
-        const current = formValues(contact);
-        for (const name of FORM_FIELDS) {
-            if (!form.getFieldState(name).isDirty) form.resetField(name, { defaultValue: current[name] });
-        }
-    }, [contact, form]);
-
-    // The etag typed edits answer to: the card's when typing began, so a save can't overwrite a change it never showed.
-    // A refusal lets it move on once, to the card the toast says to check.
-    const [heldEtag, setHeldEtag] = useState('');
-    const [refused, setRefused] = useState(false);
-    const typing = Object.keys(form.formState.dirtyFields).length > 0;
-    if (contact && contact.etag !== heldEtag && (!typing || refused)) {
-        setHeldEtag(contact.etag);
-        setRefused(false);
-    }
+    const record = useMemo(() => (contact ? formValues(contact) : undefined), [contact]);
+    const typing = useFollowedFields(form, FORM_FIELDS, record);
+    const { heldEtag, saveHeld } = useHeldEtag(contact?.etag ?? '', typing);
 
     form.register('avatar');
     const avatar = form.watch('avatar');
@@ -62,7 +50,7 @@ export function ProfileEditor() {
     const handleSubmit = form.handleSubmit(async (data) => {
         if (!contact) return;
 
-        try {
+        await saveHeld(async () => {
             await updateContactMutation.mutateAsync({
                 ...contact,
                 firstName: data.firstName,
@@ -70,12 +58,8 @@ export function ProfileEditor() {
                 avatar: data.avatar || '',
                 etag: heldEtag,
             });
-        } catch (error) {
-            if (isStaleWrite(error)) setRefused(true);
-            if (!wasToasted(error)) throw error;
-            return;
-        }
-        await navigate({ to: '/' });
+            await navigate({ to: '/' });
+        }).catch(rethrowUntoasted);
     });
 
     if (isLoading && !contact) {
