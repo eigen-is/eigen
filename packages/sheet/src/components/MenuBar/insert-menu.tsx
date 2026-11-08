@@ -55,13 +55,7 @@ export function InsertMenu() {
             direction,
             id: currentSheetId,
         };
-        setContext(
-            (draftCtx) => {
-                const error = tryInsertRowCol(draftCtx, insertRowColOp);
-                if (error) showNotice(error);
-            },
-            { insertRowColOp },
-        );
+        setContext((draftCtx) => tryInsertRowCol(draftCtx, insertRowColOp), { insertRowColOp });
     };
 
     const commentCell = getFlowdata(context)?.[commentRow]?.[commentCol];

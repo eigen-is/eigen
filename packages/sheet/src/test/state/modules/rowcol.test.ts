@@ -7,6 +7,7 @@ import {
     insertRowCol,
     isSelectionOnHiddenRowCol,
     moveCountPastHiddenRowCol,
+    ONE_AREA_ONLY,
     showSelectedRowCol,
 } from '../../../state/modules/rowcol';
 import { receiveOps } from '../factories/collab';
@@ -148,9 +149,13 @@ describe('hidden rows and columns under the selection', () => {
     });
 
     test('hiding or showing refuses more than one selection', () => {
-        const two = hiddenSheet([...at(0, 0), ...at(1, 1)]);
-        expect(hideSelectedRowCol(two, 'row')).toBe('noMulti');
-        expect(showSelectedRowCol(two, 'row')).toBe('noMulti');
+        for (const write of [hideSelectedRowCol, showSelectedRowCol]) {
+            const two = hiddenSheet([...at(0, 0), ...at(1, 1)]);
+            const before = two.sheets[0].config?.rowhidden;
+            write(two, 'row');
+            expect(two.warnDialog).toBe(ONE_AREA_ONLY);
+            expect(two.sheets[0].config?.rowhidden).toEqual(before);
+        }
     });
 
     // A peer's replace can set the hidden map to any value. The cell editors ask on every selection change, so a

@@ -2,13 +2,17 @@ import { describe, expect, it, spyOn } from 'bun:test';
 import { SHEET_DEFAULT_FONT_SIZE, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import { pick } from 'es-toolkit/compat';
 import { Window } from 'happy-dom';
+import { produce, produceWithPatches } from 'immer';
+import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../../engine/defaults';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import { handleCopy } from '../../../state/events/copy';
 import { handlePaste } from '../../../state/events/paste';
 import { consumePendingCopy } from '../../../state/modules/clipboard';
 import { COPY_ACTION_TABLE_MARKER, copy, rangeValueToClipboard } from '../../../state/modules/selection';
+import { filterPatch } from '../../../state/utils';
 import { clipboardWith } from '../factories/clipboard';
+import { syncablePaths } from '../factories/collab';
 import { contextFactory } from '../factories/context';
 import { pastedHtmlFactory } from '../factories/pasted-html';
 
@@ -498,6 +502,64 @@ describe('HTML-table paste — merges, borders, row height', () => {
         expect(d[1][0]).toBeNull();
         expect(d[2][0]).toBeNull();
         expect(ctx.sheets[0].config!.merge).toEqual({ '0_0': { r: 0, c: 0, rs: 2, cs: 2 } });
+    });
+});
+
+// A refused paste ships no op and takes no undo step, whatever the table carries.
+describe('a refused paste writes nothing', () => {
+    const table = '<table><tr height="50"><td>9</td></tr><tr height="60"><td>8</td></tr></table>';
+
+    it('a table over part of a merge leaves the row heights alone', () => {
+        const ctx = makeCtx(6, 6);
+        ctx.sheets[0].config = { merge: { '0_0': { r: 0, c: 0, rs: 2, cs: 2 } } };
+        ctx.selections = single(1, 0);
+        expect(syncablePaths(ctx, (draft: Context) => pasteHtml(draft, table))).toEqual([]);
+    });
+
+    const limit = `This action would increase the number of rows in the workbook above the limit of ${MAX_SHEET_ROW_COUNT}.`;
+    const atLastRow = (draft: Context) => {
+        draft.selections = single(MAX_SHEET_ROW_COUNT - 1, 0);
+    };
+
+    it('a table past the row limit says so and writes nothing', () => {
+        const ctx = makeCtx(MAX_SHEET_ROW_COUNT, 1);
+        const [next, patches] = produceWithPatches(ctx, (draft: Context) => {
+            atLastRow(draft);
+            pasteHtml(draft, table);
+        });
+        expect(filterPatch(patches)).toEqual([]);
+        expect(next.warnDialog).toBe(limit);
+    });
+
+    it('text past the column limit says so and writes nothing', () => {
+        const ctx = makeCtx(1, MAX_SHEET_COLUMN_COUNT);
+        const [next, patches] = produceWithPatches(ctx, (draft: Context) => {
+            draft.selections = single(0, MAX_SHEET_COLUMN_COUNT - 1);
+            handlePaste(draft, clipboardWith({ text: '9\t8' }));
+        });
+        expect(filterPatch(patches)).toEqual([]);
+        expect(next.warnDialog).toBe(
+            `This action would increase the number of columns in the workbook above the limit of ${MAX_SHEET_COLUMN_COUNT}.`,
+        );
+    });
+
+    for (const cut of [false, true]) {
+        it(`a ${cut ? 'cut' : 'copy'} past the row limit says so and writes nothing`, () => {
+            const ctx = makeCtx(MAX_SHEET_ROW_COUNT, 1);
+            ctx.copyState = { id: 'own', cut, dataSheetId: 'id_1', copyRange: [{ row: [0, 1], column: [0, 0] }] };
+            const [next, patches] = produceWithPatches(ctx, (draft: Context) => {
+                atLastRow(draft);
+                pasteHtml(draft, '<table data-copy-id="own"></table>');
+            });
+            expect(filterPatch(patches)).toEqual([]);
+            expect(next.warnDialog).toBe(limit);
+        });
+    }
+
+    it('a table that fits still sets its row heights', () => {
+        const ctx = makeCtx(6, 6);
+        const next = produce(ctx, (draft: Context) => pasteHtml(draft, table));
+        expect(next.sheets[0].config?.rowlen).toEqual({ 0: 50, 1: 60 });
     });
 });
 

@@ -42,6 +42,7 @@ import {
     handleLink,
     hideSelectedRowCol,
     insertCheckbox,
+    ONE_AREA_ONLY,
     pasteFromClipboard,
     showSelectedRowCol,
     sortSelection,
@@ -49,8 +50,6 @@ import {
     tryInsertRowCol,
 } from '../../state';
 import { ResizeDialog } from '../ResizeDialog';
-
-const MSG_MULTI = 'Cannot perform this operation on multiple selection areas, please select a single area';
 
 type RowColType = 'row' | 'column';
 
@@ -68,7 +67,7 @@ function ClipboardItems() {
             }
             onCopy={() => {
                 if ((context.selections?.length ?? 0) > 1) {
-                    showNotice(MSG_MULTI);
+                    showNotice(ONE_AREA_ONLY);
                     return;
                 }
                 setContext((d) => {
@@ -91,7 +90,6 @@ function InsertItem({
     label: string;
 }) {
     const { getContext, setContext } = useContext(WorkbookContext);
-    const { showNotice } = useDialog();
     const insert = () => {
         const context = getContext();
         const sel = context.selections?.[0];
@@ -104,13 +102,7 @@ function InsertItem({
             direction,
             id: context.currentSheetId,
         };
-        setContext(
-            (d) => {
-                const error = tryInsertRowCol(d, op);
-                if (error) showNotice(error);
-            },
-            { insertRowColOp: op },
-        );
+        setContext((d) => tryInsertRowCol(d, op), { insertRowColOp: op });
     };
     return (
         <DropdownMenuItem onClick={insert}>
@@ -122,7 +114,6 @@ function InsertItem({
 
 function DeleteItem({ type, label }: { type: RowColType; label: string }) {
     const { getContext, setContext } = useContext(WorkbookContext);
-    const { showNotice } = useDialog();
     const remove = () => {
         const context = getContext();
         const sel = context.selections?.[0];
@@ -131,12 +122,8 @@ function DeleteItem({ type, label }: { type: RowColType; label: string }) {
         const op: SetContextOptions['deleteRowColOp'] = { type, start, end, id: context.currentSheetId };
         setContext(
             (d) => {
-                if ((d.selections?.length ?? 0) > 1) {
-                    showNotice(MSG_MULTI);
-                    return;
-                }
-                const error = tryDeleteRowCol(d, op);
-                if (error) showNotice(error);
+                if ((d.selections?.length ?? 0) > 1) d.warnDialog = ONE_AREA_ONLY;
+                else tryDeleteRowCol(d, op);
             },
             { deleteRowColOp: op },
         );
@@ -151,16 +138,8 @@ function DeleteItem({ type, label }: { type: RowColType; label: string }) {
 
 function ClearItem({ label }: { label: string }) {
     const { setContext } = useContext(WorkbookContext);
-    const { showNotice } = useDialog();
     return (
-        <DropdownMenuItem
-            onClick={() =>
-                setContext((d) => {
-                    const error = clearSelectedContents(d);
-                    if (error) showNotice(error);
-                })
-            }
-        >
+        <DropdownMenuItem onClick={() => setContext(clearSelectedContents)}>
             <X className="size-4" />
             {label}
         </DropdownMenuItem>
@@ -169,15 +148,8 @@ function ClearItem({ label }: { label: string }) {
 
 function HideItem({ type, label }: { type: RowColType; label: string }) {
     const { setContext } = useContext(WorkbookContext);
-    const { showNotice } = useDialog();
     return (
-        <DropdownMenuItem
-            onClick={() =>
-                setContext((d) => {
-                    if (hideSelectedRowCol(d, type) === 'noMulti') showNotice(MSG_MULTI);
-                })
-            }
-        >
+        <DropdownMenuItem onClick={() => setContext((d) => hideSelectedRowCol(d, type))}>
             <EyeOff className="size-4" />
             {label}
         </DropdownMenuItem>
@@ -186,15 +158,8 @@ function HideItem({ type, label }: { type: RowColType; label: string }) {
 
 function ShowHiddenItem({ type, label }: { type: RowColType; label: string }) {
     const { setContext } = useContext(WorkbookContext);
-    const { showNotice } = useDialog();
     return (
-        <DropdownMenuItem
-            onClick={() =>
-                setContext((d) => {
-                    if (showSelectedRowCol(d, type) === 'noMulti') showNotice(MSG_MULTI);
-                })
-            }
-        >
+        <DropdownMenuItem onClick={() => setContext((d) => showSelectedRowCol(d, type))}>
             <Eye className="size-4" />
             {label}
         </DropdownMenuItem>

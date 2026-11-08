@@ -212,22 +212,18 @@ export const SheetOverlay: React.FC = () => {
                 const cellArea = refs.cellArea.current;
                 const container = containerRef.current;
                 if (!cellArea || !container) return;
-                try {
-                    handleOverlayMouseUp(
-                        draftCtx,
-                        refs.globalCache,
-                        nativeEvent,
-                        cellArea,
-                        container,
-                        refs.cellInput.current,
-                        refs.fxInput.current,
-                    );
-                } catch (e) {
-                    if (e instanceof Error) showNotice(e.message);
-                }
+                handleOverlayMouseUp(
+                    draftCtx,
+                    refs.globalCache,
+                    nativeEvent,
+                    cellArea,
+                    container,
+                    refs.cellInput.current,
+                    refs.fxInput.current,
+                );
             });
         },
-        [refs.cellArea, refs.cellInput, refs.fxInput, refs.globalCache, setContext, showNotice],
+        [refs.cellArea, refs.cellInput, refs.fxInput, refs.globalCache, setContext],
     );
 
     const handleBottomAddRow = useCallback(() => {
@@ -244,14 +240,8 @@ export const SheetOverlay: React.FC = () => {
             direction: 'rightbottom',
             id: ctx.currentSheetId,
         };
-        setContext(
-            (draftCtx) => {
-                const error = tryInsertRowCol(draftCtx, insertRowColOp, false);
-                if (error) showNotice(error);
-            },
-            { insertRowColOp },
-        );
-    }, [getContext, setContext, showNotice]);
+        setContext((draftCtx) => tryInsertRowCol(draftCtx, insertRowColOp, false), { insertRowColOp });
+    }, [getContext, setContext]);
 
     useEffect(() => {
         setContext((draftCtx) => {
