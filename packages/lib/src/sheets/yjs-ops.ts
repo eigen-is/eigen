@@ -30,6 +30,7 @@ export function opToPatchOnSheets(sheets: Sheet[], ops: Op[]): [Patch[], Op[]] {
         const writesMatrixOrRow = op.path.length === 1 || (op.path.length === 2 && typeof op.path[1] === 'number');
         if (op.path[0] === 'data' && kind !== 'remove' && writesMatrixOrRow && !Array.isArray(op.value)) continue;
         if (op.path[0] === 'dataValidations' && !isValidationWrite(op)) continue;
+        if (op.path[0] === 'hyperlink' && !isLinkWrite(op)) continue;
         const i = sheets.findIndex((s) => s.id === op.id);
         if (i === -1) continue;
         if (op.path[0] === 'dataValidations' && !ruleIds(i, op)) continue;
@@ -44,6 +45,20 @@ export function opToPatchOnSheets(sheets: Sheet[], ops: Op[]): [Patch[], Op[]] {
 function isValidationWrite(op: Op): boolean {
     if (op.path.length === 1) return isSheetValidations(op.value);
     return op.path.length === 2 && (op.op === 'remove' || isSheetValidation(op.value));
+}
+
+// A rename and the export read every link's type and address, so a write that would leave a link without them is
+// dropped. The editor writes a sheet's links whole or one at a time.
+function isLinkWrite({ op, path, value }: Op): boolean {
+    if (op === 'remove') return path.length <= 2;
+    if (path.length === 1) return isRecord(value) && Object.values(value).every(isLink);
+    return path.length === 2 && isLink(value);
+}
+
+function isLink(value: unknown): boolean {
+    if (!isRecord(value)) return false;
+    const { linkType, linkAddress } = value;
+    return typeof linkType === 'string' && typeof linkAddress === 'string';
 }
 
 // Follows the rule ids each sheet holds through a batch, and says whether a validation write applies. A `replace` of

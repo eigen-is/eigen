@@ -68,6 +68,12 @@ export function generateAPIs(
                     if (!applied) return;
                     accepted = true;
                     Object.assign(ctx_, applied.ctx);
+                    // An entry holds formula text naming tabs, so a peer's rename empties both stacks. A rename is rare.
+                    if (ops.some(({ op }) => op === 'renameSheet')) {
+                        history.undoList = [];
+                        history.redoList = [];
+                        return;
+                    }
                     history.undoList = dropStructuralEntries(history.undoList);
                     history.redoList = dropStructuralEntries(history.redoList);
                     for (const { op, sheets } of applied.moved) {

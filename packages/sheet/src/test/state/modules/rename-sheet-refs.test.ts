@@ -11,6 +11,8 @@ const { setCellValue } = await import('../../../state/modules/cell');
 const { execFunctionGroup, getcellrange, warmFormulaCellInfoMap } = await import('../../../state/modules/formula-exec');
 const { insertRowCol } = await import('../../../state/modules/rowcol');
 const { editSheetName } = await import('../../../state/modules/sheet');
+const { dropCellCache, updateDropCell } = await import('../../../state/modules/drop-cell');
+const { saveHyperlink } = await import('../../../state/modules/hyperlink');
 const { dataToCelldata } = await import('../../../engine/celldata');
 const { join, tab, tabEdit, tabReceive, tabRedo, tabUndo } = await import('../factories/collab');
 type Tab = import('../factories/collab').Tab;
@@ -453,5 +455,103 @@ describe('a tab rename rewrites the text that names the tab', () => {
         const joined = join(base, [bad]);
         expect(joined[0].name).toBe('One');
         expect(joined[1].celldata?.[0].v?.f).toBe('=One!A1');
+    });
+});
+
+describe('a rename after a fill down from a linked cell', () => {
+    // A1 of the first tab gets a link and fills down to A2, as the fill handle does.
+    function linkedAndFilled() {
+        const t = workbookTab({ '0_0': '=One!A1' });
+        const base = t.ctx;
+        const link = tabEdit(t, (ctx) => saveHyperlink(ctx, 0, 0, 'go', 'webpage', 'https://example.com'));
+        const fill = tabEdit(t, (ctx) => {
+            dropCellCache.copyRange = { row: [0, 0], column: [0, 0] };
+            dropCellCache.applyRange = { row: [1, 1], column: [0, 0] };
+            dropCellCache.direction = 'down';
+            dropCellCache.applyType = '0';
+            ctx.selections = [{ row: [0, 1], column: [0, 0], row_focus: 0, column_focus: 0 }];
+            updateDropCell(ctx);
+        });
+        return { t, base, log: [link, fill] };
+    }
+
+    test('the fill ships no link for a cell that holds none', () => {
+        const { t, log } = linkedAndFilled();
+        expect(t.ctx.sheets[0].data?.[1][0]?.hl).toBeDefined();
+        expect(log[1].filter(({ path }) => path[0] === 'hyperlink')).toEqual([]);
+    });
+
+    test('the peer and the joiner take the rename', () => {
+        const { t, base, log } = linkedAndFilled();
+        const peer = tab(base);
+        for (const ops of log) tabReceive(peer, ops);
+        const rename = renameFirst(t, 'Renamed');
+        tabReceive(peer, rename);
+        for (const sheets of [t.ctx.sheets, peer.ctx.sheets, join(base, [...log, rename])]) {
+            expect(sheets[0].name).toBe('Renamed');
+            expect(Object.keys(sheets[0].hyperlink ?? {})).toEqual(['0_0']);
+        }
+    });
+
+    test.each([
+        ['a link with no value', ['hyperlink', '1_0'], undefined],
+        ['a link that is null', ['hyperlink', '1_0'], null],
+        ['a link of the wrong shape', ['hyperlink', '1_0'], 'https://example.com'],
+        ['a link with no address', ['hyperlink', '1_0'], { linkType: 'cellrange' }],
+        ['a whole map holding a hole', ['hyperlink'], { '1_0': null }],
+        ['a write into a link', ['hyperlink', '0_0', 'linkAddress'], 5],
+    ])('%s from a peer is dropped, so a later rename still applies', (_, path, value) => {
+        const { t, base, log } = linkedAndFilled();
+        const forged: Op[] = [{ op: 'replace', id: 'id_1', path, value }];
+        tabReceive(t, forged);
+        const rename = renameFirst(t, 'Renamed');
+        const joined = join(base, [...log, forged, rename]);
+        expect(joined[0].name).toBe('Renamed');
+        expect(joined[0].hyperlink).toEqual({ '0_0': { linkType: 'webpage', linkAddress: 'https://example.com' } });
+        expect(t.ctx.sheets[0].hyperlink).toEqual(joined[0].hyperlink);
+    });
+});
+
+describe("a peer's rename empties the undo and redo stacks", () => {
+    const setCell = (t: Tab, cell: { v?: string; f?: string }) =>
+        tabEdit(t, (ctx) => {
+            const { data } = ctx.sheets[1];
+            if (data) data[0][0] = cell;
+        });
+
+    test('text over a formula naming the tab: an undo brings no formula back', () => {
+        const t = workbookTab({ '0_0': '=One!A1' });
+        setCell(t, { v: 'text' });
+        tabReceive(t, [renameOp('id_1', 'Renamed')]);
+        expect(tabUndo(t)).toEqual([]);
+        expect(t.ctx.sheets[1].data?.[0][0]?.v).toBe('text');
+        expect(t.history.undoList).toEqual([]);
+    });
+
+    test('a formula typed and undone: a redo brings nothing back', () => {
+        const t = workbookTab({});
+        setCell(t, { f: '=One!A1' });
+        tabUndo(t);
+        tabReceive(t, [renameOp('id_1', 'Renamed')]);
+        expect(tabRedo(t)).toEqual([]);
+        expect(t.ctx.sheets[1].data?.[0][0]).toBeNull();
+        expect(t.history.redoList).toEqual([]);
+    });
+
+    test('a formula typed: it stays through an undo, as the rename rewrote it', () => {
+        const t = workbookTab({});
+        setCell(t, { f: '=One!A1' });
+        tabReceive(t, [renameOp('id_1', 'Renamed')]);
+        expect(tabUndo(t)).toEqual([]);
+        expect(formula(t)).toBe('=Renamed!A1');
+    });
+
+    test('a rename its batch fails on, and a batch with no rename, leave them', () => {
+        const t = workbookTab({});
+        setCell(t, { f: '=One!A1' });
+        tabReceive(t, [renameOp('id_1', 'Two')]);
+        expect(t.history.undoList).toHaveLength(1);
+        tabReceive(t, [{ op: 'replace', id: 'id_2', path: ['data', 3, 3], value: { v: 'peer' } }]);
+        expect(t.history.undoList).toHaveLength(1);
     });
 });

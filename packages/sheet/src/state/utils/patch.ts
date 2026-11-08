@@ -64,8 +64,9 @@ export function patchToOp(ctx: Context, patches: Patch[], options: PatchOptions 
         const [field, r, c] = op.path;
         if (op.op !== 'replace' || op.value?.hl == null || op.path.length !== 3 || field !== 'data') continue;
         const key = `${r}_${c}`;
-        const sheet = ctx.sheets.find((s) => s.id === op.id);
-        ops.push({ id: op.id, op: 'replace', path: ['hyperlink', key], value: sheet?.hyperlink?.[key] });
+        const link = ctx.sheets.find((s) => s.id === op.id)?.hyperlink?.[key];
+        // A filled cell carries the `hl` of the cell it came from, and no link of its own.
+        if (link) ops.push({ id: op.id, op: 'replace', path: ['hyperlink', key], value: link });
     }
     if (options.addSheetOp) {
         // A copy moves the sheets after it, and the batch carries their orders.
