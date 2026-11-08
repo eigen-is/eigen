@@ -127,8 +127,8 @@ export function restoreAuthRows(ownerId: string, archive: BackupAuthRows): void 
 
 // The rows of the archive's auth.json a restore would insert, or null when it inserts none: a team has no auth.json,
 // and a user who is still here keeps every row they have, since a restore puts a home's data back and never rewrites
-// who somebody is. It throws for an archive that is not this user's, so a restore calls it while it judges the archive,
-// before it takes the home.
+// who somebody is. It throws for an archive that is not this user's or whose email somebody else now holds, so a
+// restore calls it while it judges the archive, before it takes the home.
 export function authRowsToRestore(ownerId: string, manifest: BackupManifest, folder: string): BackupAuthRows | null {
     const authPath = path.join(folder, ARCHIVE_AUTH_FILE);
     if (!fs.existsSync(authPath)) return null;
@@ -147,11 +147,16 @@ export function authRowsToRestore(ownerId: string, manifest: BackupManifest, fol
     // The identity itself is exactly one user row, with this owner's id and the email the manifest was
     // written with. Anything else and no row goes in: a second user row is somebody the archive invented.
     const identity = (archive['user'] ?? []).filter((row) => row['id'] === ownerId);
-    if (identity.length !== 1 || (manifest.email && identity[0]['email'] !== manifest.email)) {
+    const email = identity[0]?.['email'];
+    if (identity.length !== 1 || typeof email !== 'string' || (manifest.email && email !== manifest.email)) {
         throw new ApiError(
             400,
             `${ARCHIVE_AUTH_FILE} does not hold exactly one ${ownerId} row for ${manifest.email ?? 'this home'}`,
         );
+    }
+    // The insert comes after the swap, where this clash would leave a home nobody can sign in to.
+    if (getAuthDrizzleDb().select({ id: user.id }).from(user).where(eq(user.email, email)).get()) {
+        throw new ApiError(409, `Another account now uses ${email}, the email in this backup of ${ownerId}`);
     }
     return archive;
 }
