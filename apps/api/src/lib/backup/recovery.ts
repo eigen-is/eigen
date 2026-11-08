@@ -20,11 +20,8 @@ const RESTORING_MARKER = 'restoring.json';
 // home. `parkName` is the name that unfinished folder goes aside under.
 type RestoringMarker = { ownerId: string; preRestoreName: string | null; parkName: string };
 
-// Before the server listens: a request that resolved a home while the recovery was still deciding about it would
-// open a half-written folder as if it were the home. Then the staging folder in backups/ is cleared, because a backup
-// or verify cut off by a restart leaves a half-written folder that nothing resumes. Last, a server backup killed
-// mid-run left its record running, and it becomes a failed attempt. A step that throws, such as on a backups folder
-// whose mount is down, leaves the rest to the next boot: scratch space is no reason to keep the API down.
+// Before the server listens, so no request opens a half-written home folder mid-recovery. A step that throws is logged
+// and leaves the rest to the next boot: scratch space is no reason to keep the API down.
 export async function recoverBackupsAfterRestart(): Promise<void> {
     try {
         recoverInterruptedRestores();

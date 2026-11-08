@@ -47,16 +47,12 @@ export function requireVerified(verified: BackupVerifyRecord, name: string): voi
     throw new ApiError(400, `${name} did not verify: ${describeFailures(verified)}`);
 }
 
-// An Eigen-owned database inside the archive, by the path the manifest speaks of. `isYjsDocument` marks the data.db of
-// a collab container, the only kind stage 3 can decode. A chat's data.db is plain SQLite. `config` is the schema its
-// stamp is read against. A server database has none here: the stage refuses an archive of a newer Eigen as a whole.
+// `isYjsDocument` marks the data.db of a collab container, the only kind stage 3 can decode. A server database has no
+// `config`: the stage refuses an archive of a newer Eigen as a whole.
 type ArchiveDatabase = { path: string; isYjsDocument: boolean; config?: DatabaseConfig<SchemaType> };
 
-// Decides whether an unpacked backup folder counts as good: every file is the one the manifest
-// describes (transport), every Eigen database is structurally sound (structure), and a sample of
-// the collab documents still decodes into a document with content (content). Works on any folder
-// with a manifest, such as a staging folder straight after a backup or a fresh extract before a restore.
-// Every database is opened read-only: a verify never changes a byte of what it is checking.
+// Three stages: transport (files match the manifest), structure (databases are sound), content (a sample of collab
+// documents decodes). Databases open read-only: a verify never changes a byte.
 export async function verifyFolder(dir: string, onProgress?: BackupProgress): Promise<BackupVerifyRecord> {
     const checkedAt = new Date();
     const manifest = readManifestFile(dir);
@@ -128,11 +124,8 @@ export async function verifyFolder(dir: string, onProgress?: BackupProgress): Pr
     const targets = [...collab.slice(0, SAMPLE_LARGEST), ...rest.slice(0, SAMPLE_REST)];
     for (const [index, target] of targets.entries()) {
         try {
-            // A document nobody has typed in holds no blobs at all, and a backup of one must not come
-            // out failed. With blobs present, every one of them has to decode (the loader throws
-            // otherwise) into a document that has shared types. Which types, and what is in them, is
-            // not verify's business: a document may keep content under names this build does not know,
-            // and that is not corruption.
+            // A document nobody has typed in holds no blobs, and its backup must not fail. With blobs, each must decode
+            // into a document with shared types; what is in them is not verify's business.
             if (countYjsBlobs(target.abs) > 0) {
                 const doc = new Y.Doc();
                 Y.applyUpdate(doc, readYjsStateFromFile(target.abs, { readonly: true }));
@@ -189,9 +182,8 @@ function listArchiveDatabases(
         if (!fs.existsSync(metadata)) continue;
         found.push({ path: relMetadata, isYjsDocument: false, config: MOUNT_DB_CONFIG });
 
-        // Which of a mount's files are Eigen's own databases follows from its tree, so the archived
-        // metadata.db is read back for it. One too broken to read is a failure of its own; stage 2
-        // opens the same file right after and says the same thing in SQLite's words.
+        // The archived metadata.db is read back to learn which files are Eigen's databases. One too broken to read
+        // fails here.
         try {
             const db = new Database(metadata, { readonly: true });
             try {

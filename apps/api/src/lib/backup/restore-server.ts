@@ -37,18 +37,14 @@ export type ServerArchiveFile = {
     members: Map<string, HashedArchiveMember>;
 };
 
-// What the stage leaves out of the pending uploads it finds: `settled` the ones data/ here already uploaded,
-// `missing` the ones whose bytes the archive does not hold. The rows of the missing name missing files, which
-// reconcile drops.
+// `settled`: already uploaded by the data/ here. `missing`: no bytes in the archive, so reconcile drops their rows.
 type NotReplayed = { settled: number; missing: number };
 
 // What every member's step of the stage shares.
 type StageContext = { dataDir: string; unpackDir: string; s3FromArchive: boolean; stamp: string; now: number };
 
-// What the stage takes on the data disk, at most: the bytes of each member, with the slack and the reserve added once.
-// The server member and each home count theirs in their own manifest, and the rest are copied at their size. Each
-// inner manifest is the last entry of its member, so reading one decompresses the whole member. Counted once: the stage
-// streams each member out and renames what it unpacked into place.
+// At most what the stage takes on the data disk, with the slack and reserve added once.
+// An inner manifest is the last entry of its member, so reading one decompresses the whole member.
 export async function stageBytesNeeded({ manifest, members }: ServerArchiveFile): Promise<number> {
     const unpacked = new Set([SERVER_ARCHIVE_SERVER_MEMBER, ...manifest.homes.flatMap((home) => home.member ?? [])]);
     let declared = 0;
@@ -128,9 +124,8 @@ async function stageServerMember(
     }
 }
 
-// One home member into the staged tree, by the mode of each mount. An s3 mount stays on the bucket as it is, with its
-// staged uploads replayed, unless the archive holds its objects and the operator asked for them (fresh keys, as a
-// per-home restore does).
+// An s3 mount stays on its bucket with its staged uploads replayed, unless the archive holds its objects and the
+// operator asked for them.
 async function stageHome(
     archive: ServerArchiveFile,
     home: ServerArchiveManifest['homes'][number] & { member: string },
@@ -177,10 +172,8 @@ async function stageHome(
     return notReplayed;
 }
 
-// An s3 mount the bucket stays as it is for. Each pending row's bytes go to staging/ under the name its row gives
-// them: from staging/ as archived, or, when the archive holds the mount's files, from its data/, which goes.
-// A key the live mount uploaded is not replayed, since that would put older bytes on it. Every other key is: the
-// bucket may never have had it, such as after a restore of the home gave its files new keys.
+// Pending bytes come from staging/ as archived, or from data/ when the archive holds the mount's files. A key the live
+// mount uploaded is not replayed, since that would put older bytes on it.
 function replayPendingUploads(mountDir: string, liveMountDir: string, fromFiles: boolean): NotReplayed {
     const dataDir = path.join(mountDir, PATHS.DRIVE.DATA_DIR);
     const stagingDir = path.join(mountDir, PATHS.DRIVE.STAGING_DIR);
@@ -218,9 +211,8 @@ function replayPendingUploads(mountDir: string, liveMountDir: string, fromFiles:
     return notReplayed;
 }
 
-// The storage keys the live mount has uploaded: those of its files with no pending upload. It is null for a mount that
-// never ran here or whose metadata.db does not read: a damaged live database is a reason to restore, not to refuse
-// one, and the warning says what that costs.
+// Null for a mount that never ran here or whose metadata.db does not read: a damaged live database is a reason to
+// restore, not to refuse.
 function liveUploadedKeys(liveMountDir: string): Set<string> | null {
     const metadata = path.join(liveMountDir, PATHS.DRIVE.METADATA_DB);
     if (!fs.existsSync(metadata)) return null;

@@ -123,9 +123,8 @@ export function toControlJob({
     return { id, state, progress, artifact, error, uploadJobId, warnings, bytes };
 }
 
-// The job, from its record to its retention. `admit` is called once the room check passes, so the caller can
-// answer a refusal with its 507. A home that failed keeps the archive and fails the job. A home backed up with
-// warnings is in the archive, so the job ends done and ./eigen update goes on. The owner gets an alert of its own.
+// A home that failed keeps the archive and fails the job. One backed up with warnings is in the archive, so the job
+// ends done and ./eigen update goes on.
 async function runServerBackup(
     job: BackupJob,
     archivePath: string,
@@ -167,9 +166,8 @@ async function runServerBackup(
         await writeServerSidecar(archivePath, sidecar);
         // Retention that throws must not replace the job's own outcome.
         await pruneLocalArchives().catch(console.error);
-        // An archive that verified goes even when a home failed: the owner heard of the home, and the rest of the
-        // server is worth its copy off the box. A pre-update archive exists for ./eigen rollback on this box. The
-        // upload starts before this job ends, so ./eigen stop always finds one of the two running.
+        // A verified archive goes off the box even when a home failed; a pre-update one stays for ./eigen rollback.
+        // The upload starts before this job ends, so ./eigen stop always finds one of the two running.
         const { enabled } = getServerSettings().backups.upload;
         if (enabled && options.reason !== 'pre-update' && sidecar.verify?.status === 'verified') {
             job.uploadJobId = startUploadJob(archivePath, job.startedBy).id;

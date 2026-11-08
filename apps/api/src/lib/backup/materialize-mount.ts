@@ -23,9 +23,8 @@ import { describeError } from './errors';
 // A database and the schema this build expects of it.
 type VersionedDatabase = { filePath: string; config: DatabaseConfig<SchemaType> };
 
-// The verdict on a database this build cannot open as it is: damaged, or written by a newer Eigen. A rollback's check
-// tells it apart from a check that could not run, such as one that met a lock longer than it waits or a file it may
-// not read, which says nothing of the data.
+// A database this build cannot open as it is, damaged or written by a newer Eigen.
+// A check that could not run, such as one that met a lock, is another error.
 export class UnopenableDatabaseError extends ApiError {}
 
 // How many databases a check opens before it gives the event loop back, here and in verifyFolder.
@@ -33,10 +32,8 @@ export const DATABASES_PER_YIELD = 50;
 // How many files materializeMount puts in place in one transaction before it gives the event loop back.
 const FILES_PER_BATCH = 500;
 
-// Puts one mount's files where the restored mount looks for them. The archive holds them by path, so each backend
-// derives its keys again; an `s3` mount stages each file with a pending upload, which the UploadQueue drains with
-// its retry. A restore runs it in the API on a folder no home serves yet, so it gives the event loop back between
-// batches, and a failure halfway leaves only that folder.
+// Puts one mount's files where the restored mount looks for them; an `s3` mount's go in as pending uploads.
+// It gives the event loop back between batches.
 export async function materializeMount(
     homeDir: string,
     summary: BackupManifest['mounts'][number],
@@ -133,12 +130,8 @@ export function homeDatabasesIn(homeDir: string, mountIds: readonly string[]): V
     ];
 }
 
-// What this server can still open: SQLite's own verdict on the bytes, and the schema stamp against the config that will
-// open them. A database from a newer server passes quick_check and is then refused by ManagedDatabase's forward-version
-// guard, which fails the whole home on the next load. It opens the files directly, never through a home: a safety copy
-// is not the home's folder yet, and a rollback's check runs in another process than the API. One that is not there is
-// skipped. A home can hold tens of thousands of document databases, and each open blocks the thread, so it lets other
-// requests run between every few databases.
+// SQLite's verdict plus the schema stamp: a newer server's database passes quick_check but fails ManagedDatabase.
+// It opens the files directly, since a safety copy is no home and a rollback runs outside the API.
 export async function checkDatabases(targets: readonly VersionedDatabase[]): Promise<void> {
     for (const [index, { filePath, config }] of targets.entries()) {
         if (index > 0 && index % DATABASES_PER_YIELD === 0) await new Promise(setImmediate);
@@ -167,10 +160,7 @@ export function quickCheck(filePath: string): string {
     return readToJudge(filePath, readQuickCheck);
 }
 
-// Every restore starts the trash of each restored mount over at `now`, in seconds as trashPath writes it. Whoever
-// restored gets the whole retention window to look through what came back, and the purge at the home's first load
-// deletes nothing whose time ran out since the backup. It also keeps that purge off bucket objects that a folder kept
-// aside may still name. A mount with no metadata.db has no trash.
+// Restarts the trash clock at `now`, so the purge at the home's first load deletes nothing the backup brought back.
 export function redateTrash(homeDir: string, mountIds: readonly string[], now: number): void {
     for (const mountId of mountIds) {
         const metadataPath = path.join(homeDir, PATHS.DRIVE.ROOT, mountId, PATHS.DRIVE.METADATA_DB);
@@ -194,10 +184,8 @@ export function mountIdsIn(homeDir: string): string[] {
         .map((entry) => entry.name);
 }
 
-// The managed databases a home folder holds, for a restore with no manifest to enumerate them
-// from: every mount's paths table, keyed the way that mount's own backend keys its objects. A
-// remote mount's are in its bucket, so the path derived for one does not exist and the check skips
-// it. That is exactly what materializeMount returns for the same mount.
+// The managed databases of a home folder, for a restore with no manifest. A remote mount's are in its bucket,
+// so the derived path does not exist and the check skips it.
 export function containerDatabasesIn(homeDir: string, mountIds: readonly string[]): VersionedDatabase[] {
     const found: VersionedDatabase[] = [];
     for (const mountId of mountIds) {
@@ -208,9 +196,8 @@ export function containerDatabasesIn(homeDir: string, mountIds: readonly string[
         const db = openToCheck(metadataPath);
         try {
             const rows = readMountPathRows(db);
-            // A folder row carries its own name as `file` on a path-based mount, and nothing on a
-            // flat-key one (Mount.createFolder). That tells the two layouts apart with no manifest to
-            // ask. A mount with no folders has no containers either.
+            // A path-based mount's folder rows carry their own name as `file`, a flat-key one's carry none.
+            // That tells the layouts apart with no manifest.
             const isPathBased = rows.some((row) => row.type !== 'file' && row.parentId !== null && row.file !== '');
             const keyOf = storageKeys(rows, isPathBased);
             for (const entry of listManagedDatabases(rows)) {
@@ -229,18 +216,16 @@ export function movePath(from: string, to: string): void {
     fs.renameSync(from, to);
 }
 
-// A database that is there, opened to be read beside a process that may be writing it, such as the live API. It is
-// read-write, because a closed WAL database has no -shm and a read-only open of it fails. A writer is waited out as
-// long as the API waits for one, so a busy database is not read as damaged.
+// Read-write because a closed WAL database has no -shm and a read-only open fails.
+// It waits out a writer as long as the API does, so a busy database is not read as damaged.
 export function openToCheck(filePath: string): Database {
     const db = new Database(filePath, { readwrite: true, create: false });
     db.run('PRAGMA busy_timeout = 5000;');
     return db;
 }
 
-// Runs `read` on one open of a database that is there. A file that is no database, or one too damaged to answer,
-// makes SQLite throw rather than answer, and that is a verdict too: it comes back as what SQLite said. Any other
-// error, such as a lock held longer than openToCheck waits, is not one, and goes on to the caller.
+// A file SQLite cannot read throws, and that is a verdict, returned as what SQLite said.
+// Any other error, such as a lock, goes to the caller.
 function readToJudge(filePath: string, read: (db: Database) => string): string {
     let db: Database | undefined;
     try {

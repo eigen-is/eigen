@@ -63,9 +63,8 @@ export async function grantAccessForReferences(
                 suppressShareEmail: 'all',
             });
         }
-        // Already-readable recipients (e.g. via a public ancestor) get no ACL clutter — just a
-        // registry entry so a closed-signup guest can still be admitted. Sourced from the path owner
-        // like the ACL branch's (resolveACLUserIds), never from the sender.
+        // Recipients who can already read (say via a public ancestor) get no ACL clutter, only a registry entry so a
+        // closed-signup guest can be admitted. It is sourced from the path owner, never the sender.
         for (const r of recipients) {
             if (r.hasReadAccess && r.needsGuestAdmission) {
                 await addRegistryEntry(path.ownerId, r.email);

@@ -28,9 +28,8 @@ export function backupsDirPath(): string {
     return process.env['EIGEN_BACKUPS_DIR'] || path.join(getDataRoot(), '..', 'backups');
 }
 
-// Only the writers ensure the folder: a server that has never made a backup should not grow one
-// because an admin opened the pane, and in the container the path may not be writable at all.
-// Readers take backupsDirPath() and treat a missing folder as an empty one.
+// Only the writers ensure the folder: a server that never made a backup should not grow one because an admin opened the
+// pane.
 export function getBackupsDir(): string {
     const dir = backupsDirPath();
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -89,9 +88,8 @@ export function isRestoreStagingName(name: string): boolean {
     return name.startsWith(RESTORE_STAGING_PREFIX);
 }
 
-// Scratch space for packing: the half-written artifact, the half-written sidecar. Under
-// the staging root so a crash leaves nothing behind that the boot-time wipe does not clear, and on
-// the same filesystem as the artifacts, so the last rename of a pack is atomic.
+// Under the staging root so the boot wipe clears a crash's leftovers, and on the artifacts' filesystem so the last
+// rename of a pack is atomic.
 export function getBackupTempPath(suffix: string): string {
     return path.join(getBackupStagingDir('archive'), `${crypto.randomUUID()}${suffix}`);
 }
@@ -204,9 +202,7 @@ export function buildSafetyCopyName(homeDir: string, kind: BackupSafetyCopy['kin
     return `${homeDir}${kind === 'pre-restore' ? PRE_RESTORE_SUFFIX : FAILED_RESTORE_SUFFIX}${stamp}`;
 }
 
-// The stamp the two safety copies of one restore share, under the same collision rule: a second
-// restore of a home inside one second must not rename onto the first's copy (ENOTEMPTY, with the
-// home already moved aside).
+// Shares the collision rule: a second restore of a home inside one second must not rename onto the first's copy.
 export function freeSafetyCopyStamp(homeDir: string, at: Date): string {
     return buildBackupStamp(
         nextFreeTime(at, (candidate) => {
@@ -230,9 +226,7 @@ export function parseSafetyCopyName(
     return { homeName, kind: groups['suffix'] === PRE_RESTORE_SUFFIX ? 'pre-restore' : 'failed-restore', at };
 }
 
-// The one collision rule these names have: a stamp is a second wide, and two of a home's artifacts
-// or safety copies can land inside one. The later one is stamped a second on, so every name in
-// both grammars keeps exactly one shape.
+// A stamp is a second wide, so the later of two names inside one is stamped a second on.
 export function nextFreeTime(at: Date, taken: (candidate: Date) => boolean): Date {
     let candidate = at;
     while (taken(candidate)) candidate = new Date(candidate.getTime() + 1000);

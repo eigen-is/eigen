@@ -26,15 +26,12 @@ import {
     tarEntries,
 } from './tar';
 
-// An archive holds password hashes, keys and every file of a home, so only the API's own user may read it.
-// The files inside an archive get the same mode and its folders get ARCHIVE_FOLDER_MODE. A `tar -xf` by hand
-// then unpacks them for that user alone too.
+// Only the API's own user may read an archive, since it holds password hashes and keys. Files inside get the same mode.
 export const ARCHIVE_MODE = 0o600;
 export const ARCHIVE_FOLDER_MODE = 0o700;
 
-// Packs `dir` into a `.tar.zst` with `dir`'s name as its one root folder. The tar is made entry by entry and
-// streamed through zstd to disk, so memory use stays flat. The archive is written in the staging folder and then
-// renamed into place, so an interrupted pack never leaves a short archive that the list would offer for restore.
+// Entry by entry through zstd keeps memory flat. It is written in staging and renamed into place, so an interrupted
+// pack never leaves a short archive that the list would offer for restore.
 export async function packFolder(dir: string, artifactPath: string, onProgress?: BackupProgress): Promise<void> {
     fs.mkdirSync(path.dirname(artifactPath), { recursive: true });
     const tempPath = getBackupTempPath('.tar.zst');
@@ -54,10 +51,8 @@ export type ServerArchiveWriter = {
     abort(): Promise<void>;
 };
 
-// Writes a whole-server archive. It is a plain tar because its members are compressed already, and a plain tar
-// can be read one member at a time. Each member is hashed while it is copied in. finish() then adds the manifest
-// that lists them all, so the manifest is always the last member. The caller writes to a temp name and renames
-// the file into place. It calls abort() in a finally, which removes an archive that finish() never closed.
+// A plain tar, since its members are compressed already and can be read one at a time. finish() writes the manifest
+// last. The caller runs abort() in a finally, which removes an archive finish() never closed.
 export async function createServerArchiveWriter(archivePath: string): Promise<ServerArchiveWriter> {
     const handle = await fsp.open(archivePath, 'w', ARCHIVE_MODE);
     const entries: BackupEntry[] = [];
@@ -201,10 +196,8 @@ export function withUnpackSlack(bytes: number): number {
 // An artifact's compressed bytes are a file of their own, or a member read in place from a whole-server archive.
 type ArtifactSource = string | ArchiveMemberLocation;
 
-// Unpacks an artifact into `targetDir`. Every folder it makes is 0700 and every file 0600, whatever the header says.
-// Only the API's user reads a restored home, so an archive packed elsewhere with 0644 files restores as private as one
-// of ours, no entry can ask for a setuid bit that root would then move into data/, and no folder is one its own extract
-// cannot enter. Its callers remove what a failed unpack leaves.
+// Folders are 0700 and files 0600 whatever the header says, so an archive packed elsewhere restores as private as ours
+// and no entry can carry a setuid bit.
 export async function extractArtifact(source: ArtifactSource, targetDir: string): Promise<void> {
     fs.mkdirSync(targetDir, { recursive: true, mode: ARCHIVE_FOLDER_MODE });
     for await (const entry of tarEntries(artifactBytes(source))) {

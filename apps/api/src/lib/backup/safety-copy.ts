@@ -17,10 +17,7 @@ import { readHomeMounts } from './enumerate-homes';
 import { resolveHomeDir } from './home-dir';
 import { parseSafetyCopyName } from './paths';
 
-// A safety copy holds a whole home; its size is a line in a list, not an accounting figure, so the
-// walk stops here and the number becomes a floor rather than taking a minute on a huge home. The
-// floor is reported as one (`truncated`), because "52.79 MB" for a 284 MB copy is a lie the admin
-// would act on.
+// The walk stops here so a huge home does not stall the list, and the size is then reported as a floor (`truncated`).
 const MAX_WALKED_FILES = 50_000;
 
 // Deleting an owner's objects: how many DELETEs one bucket gets at once, and how many refusals in a row give it up.
@@ -29,9 +26,8 @@ const MAX_REFUSED_DELETES_IN_A_ROW = 10;
 
 type FolderSize = { bytes: number; truncated: boolean };
 
-// A safety copy never changes after the restore that made it, so it is measured once per process. Every admin with
-// the backup pane open refetches the list of copies whenever a job starts or ends. Walking a whole home each time
-// would stall the event loop for every user on the server.
+// A safety copy never changes after its restore, so it is measured once per process.
+// The list refetches on every job start and end.
 const measuredBytes = new Map<string, FolderSize>();
 
 // The folders a restore left beside this home, as the admin pane lists them: with their size and the delete.
@@ -68,10 +64,8 @@ export async function deleteSafetyCopy(folder: string, homeDir: string): Promise
     forgetSafetyCopySize(folder);
 }
 
-// The objects deleting an owner leaves in buckets: every object its home and safety copies name on an s3 mount,
-// grouped by bucket. Read before the folders go, since they are the only record of whose objects these are. All of
-// them go: no other home names these keys, because a copy writes new objects, a restore rekeys, and a team's mount
-// is its own.
+// Every object an owner's home and safety copies name on an s3 mount, by bucket, read before the folders go
+// since they are the only record of whose objects these are. All of them go: no other home names these keys.
 export type BucketObjects = { storage: StorageBackend; keys: Set<string> };
 
 export function collectHomeObjects(homeDir: string): { folders: string[]; buckets: BucketObjects[] } {
@@ -101,9 +95,8 @@ export function collectHomeObjects(homeDir: string): { folders: string[]; bucket
     return { folders, buckets: [...buckets.values()] };
 }
 
-// Deletes the objects and answers the keys that did not go. A failed DELETE is kept and the rest go on, since
-// nothing retries them. A bucket that refuses a run of them is down or revoked, so its remaining keys count as
-// failed rather than waiting out a timeout each.
+// A failed DELETE is kept and the rest go on, since nothing retries them.
+// A bucket that refuses a run of them is down or revoked, so its remaining keys count as failed.
 export async function deleteBucketObjects(buckets: BucketObjects[]): Promise<string[]> {
     const failed: string[] = [];
     for (const { storage, keys } of buckets) {
@@ -125,9 +118,7 @@ export async function deleteBucketObjects(buckets: BucketObjects[]): Promise<str
     return failed;
 }
 
-// Every way a safety copy stops being at that path: deleted, or renamed back over the home by a
-// restore of it. A later copy can land on the same name (one stamp per second), and it would then
-// list the size of the folder that used to be there.
+// A later copy can land on the same name (stamps are per second) and would list the old folder's size.
 export function forgetSafetyCopySize(dir: string): void {
     measuredBytes.delete(dir);
 }
@@ -169,10 +160,8 @@ function homeFolders(homeDir: string): string[] {
     return folders;
 }
 
-// A remote mount keeps its bytes in a bucket, not in the home folder, so removing a safety copy has
-// to take the objects only that copy points at with it. Anything the live home or another copy still
-// names is left alone. A delete that does not land keeps the whole folder: it is the only record of
-// which objects those bytes belong to, and losing it would orphan a home's worth of them in silence.
+// Takes the objects only this copy points at; the live home's and other copies' stay.
+// A delete that fails keeps the folder, the only record of which objects those are.
 async function deleteRemoteObjects(folder: string, homeDir: string): Promise<void> {
     const remote = remoteMountsOf(folder);
     if (remote.length === 0) return;
@@ -235,9 +224,7 @@ function remoteMountsOf(folder: string): RemoteMount[] {
     return remote;
 }
 
-// The storage keys one mount's metadata.db points at, on a flat-key backend. Read-write on purpose:
-// a WAL database whose owner is not holding it open has no -shm beside it, and a read-only open of
-// one fails outright. That is exactly the shape of a home folder moved aside.
+// Read-write on purpose: a WAL database whose owner is not holding it open has no -shm, and a read-only open fails.
 function storageKeysIn(metadataPath: string): Set<string> {
     const db = new Database(metadataPath, { readwrite: true, create: false });
     try {

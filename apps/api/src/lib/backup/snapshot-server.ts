@@ -27,18 +27,16 @@ import {
 
 type ServerDatabase = (typeof SERVER_DATABASES)[keyof typeof SERVER_DATABASES];
 
-// Each server database is copied with VACUUM INTO through the handle the running server writes
-// with, so the copy is one committed state. Keyed by file name: a database added to SERVER_DATABASES
-// does not compile until it is staged here.
+// VACUUM INTO through the handle the server writes with gives one committed state. Keyed by file name, so a database
+// added to SERVER_DATABASES does not compile until it is staged here.
 const STAGE_SERVER_DATABASE: Record<ServerDatabase, (destPath: string) => void | Promise<void>> = {
     [SERVER_DATABASES.users]: stageAuthDbCopy,
     [SERVER_DATABASES.shares]: stageEigenDbCopy,
     [SERVER_DATABASES.waitlist]: stageWaitlistDbCopy,
 };
 
-// Writes the server's own data into `{targetDir}/server-{stamp}/`, laid out as in data/: `server/`
-// holds the databases and SERVER_FILES by name, so runtime files and strays stay out, and `org/` is
-// the org folder as plain files. Packed and verified like a home; the manifest's kind is 'server'.
+// `server/` holds the databases and SERVER_FILES by name, so runtime files and strays stay out.
+// `org/` is the org folder as plain files.
 export async function snapshotServer(
     targetDir: string,
     at: Date,
@@ -104,10 +102,8 @@ export async function snapshotServer(
     return manifest;
 }
 
-// `.env.production`, the DKIM key and the TLS key sit outside data/ or belong to other users, so the API takes
-// what it has been let read. What it cannot read stays out and the manifest says so: a restore then keeps the
-// install's own env file, key and certificate, and a move to another machine needs new DKIM DNS and a new
-// certificate. There is no env file in `bun run dev`.
+// `.env.production`, the DKIM key and the TLS key sit outside data/ or belong to other users, so the API takes what it
+// may read. What it cannot read stays out and the manifest says so.
 export async function appendInstallFiles(
     writer: ServerArchiveWriter,
 ): Promise<{ envFile: boolean; dkim: boolean; certs: boolean }> {
@@ -125,9 +121,8 @@ export async function appendInstallFiles(
     return { envFile: hasEnvFile, ...held };
 }
 
-// eigen-api mounts the one file, so it keeps the inode it started with. A .env.production that an editor or
-// `sed -i` wrote anew since then reads stale on Linux. On Docker Desktop access() passes and the open fails ENOENT,
-// which is why this opens the file. A server backup asks before its homes, so it fails before an hour of them.
+// eigen-api mounts the one file, so an editor or `sed -i` that wrote it anew leaves a stale read on Linux.
+// Docker Desktop passes access() and fails the open with ENOENT, which is why this opens the file.
 export function assertEnvFileMounted(): void {
     const envFile = getEnvFile();
     if (envFile === undefined) return;

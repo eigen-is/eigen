@@ -72,23 +72,19 @@ export function readMountPathRows(db: Database): MountPathRow[] {
     return db.query<MountPathRow, []>(`SELECT ${columns} FROM paths`).all();
 }
 
-// Where each row's bytes go inside the archive: the storage key it would have on a `local` mount. Deriving it from
-// metadata.db instead of the mount's own keys is what makes the archive storage-independent: local-key and s3 mounts
-// store flat keys, and restore re-derives whichever shape the target mount needs.
+// An archive path is the key a `local` mount would use, derived from metadata.db, so the archive is
+// storage-independent.
 export function archivePaths(rows: readonly MountPathRow[]): (row: MountPathRow) => string {
     return lookUp(pathsFromRoot(rows, archiveSegment));
 }
 
-// Mirrors Mount.findStorageKey from the tree already held, rather than one recursive-CTE query per file. Restore puts
-// every file back at the key the restored mount looks for it under. A flat-key backend stores a file's object under
-// its `file`, which a restore to one rewrites as it goes.
+// Mirrors Mount.findStorageKey from the tree already held, not one recursive-CTE query per file.
 export function storageKeys(rows: readonly MountPathRow[], isPathBased: boolean): (row: MountPathRow) => string {
     return isPathBased ? lookUp(pathsFromRoot(rows, (row) => row.file)) : (row) => row.file;
 }
 
-// The databases the mount itself manages: a container's data.db/comments.db, and the versions/
-// snapshots of one. Returns the container to lock while copying, or null for anything else: a
-// user's own upload that happens to be SQLite must round-trip byte-identical.
+// Returns the container to lock while copying, or null: a user's own upload that happens to be SQLite must round-trip
+// byte-identical.
 export function managedDbContainer(row: MountPathRow, byId: ReadonlyMap<string, MountPathRow>): MountPathRow | null {
     const parent = row.parentId ? byId.get(row.parentId) : undefined;
     if (!parent) return null;
@@ -112,9 +108,8 @@ export function unreachableRows(rows: readonly MountPathRow[]): { orphaned: Moun
     return { orphaned, unusable };
 }
 
-// A `..` or a separator in an id, a name or a file would move bytes out of the mount, and a reserved name or file is
-// the trash folder itself on `local`. The one separator a live table holds is a trash root's `file` on a path-based
-// mount, which must be exactly trashPath's key.
+// A `..` or separator would move bytes out of the mount, and a reserved name is the trash folder itself on `local`.
+// The one separator a live table holds is a path-based trash root's `file`, which must be exactly trashPath's key.
 function hasUnusablePart(row: MountPathRow): boolean {
     // Empty is how a flat-key mount spells a folder row (Mount.createFolder). A file always has one, its object's key.
     const flatFolder = row.type !== 'file' && row.file === '';
@@ -128,9 +123,7 @@ function hasUnusablePart(row: MountPathRow): boolean {
     );
 }
 
-// Which of a mount's files are Eigen's own databases, by managedDbContainer's rule. Verify needs it to know what it may
-// open: a user's own SQLite upload is stored byte-identical, journal header and all, and opening it is not verify's
-// business. A row of a live table that does not reach the root has no path to check.
+// Verify may open only Eigen's own databases: a user's SQLite upload is stored byte-identical, not verify's business.
 export function listManagedDatabases(rows: readonly MountPathRow[]): ManagedArchiveDatabase[] {
     const byId = new Map(rows.map((row) => [row.id, row]));
     const archivePath = pathsFromRoot(rows, archiveSegment);
@@ -153,9 +146,7 @@ export function listManagedDatabases(rows: readonly MountPathRow[]): ManagedArch
     return found;
 }
 
-// Which schema a managed file carries: a comment index, or the container's own document database,
-// which is Yjs for every collab type and chat's own for a chat room. A versions/ snapshot is a copy
-// of the container's data.db, so it answers the same.
+// A versions/ snapshot is a copy of the container's data.db, so it answers the same.
 function configOf(name: string, containerType: DrivePathType): DatabaseConfig<SchemaType> {
     if (name === CONTAINER_COMMENTS_DB) return COMMENT_INDEX_DB_CONFIG;
     return isCollabType(containerType) ? COLLAB_DB_CONFIG : CHAT_ROOM_DB_CONFIG;

@@ -31,9 +31,7 @@ import { getTeam } from '../lib/team/team';
 import { getOrgOwner, getOrgRole, getUserById } from '../lib/user';
 import { betterAuth } from './auth';
 
-// The ownerId ends up naming a home folder, so its shape is checked before anything is resolved. The
-// shape is the one the shared artifact-name grammar allows. Which kinds of home a backup can be of is
-// requireBackableHome's answer.
+// The ownerId ends up naming a home folder, so its shape is checked before anything is resolved.
 async function requireRestorableHome(ownerId: string): Promise<BackableOwner> {
     if (!BACKUP_OWNER_ID.test(ownerId)) throw new ApiError(400, 'Invalid ownerId');
     return requireBackableHome(ownerId);
@@ -145,9 +143,8 @@ export const backupRouter = new Elysia({ name: 'backup' })
         '/admin/backup/artifacts',
         async ({ query, request, user }): Promise<{ name: string }> => {
             await requireOwner(user.id);
-            // The name travels in the query, not a header, as getBackupUploadUrl builds it. It has to be a
-            // name this server writes: the artifact list groups by the ownerId in it, and the bytes land
-            // under it.
+            // The name travels in the query, not a header. It has to be a name this server writes: the artifact list
+            // groups by the ownerId in it, and the bytes land under it.
             if (!parseBackupArtifactName(query.name)) {
                 throw new ApiError(400, 'The name parameter must be a backup artifact name');
             }
