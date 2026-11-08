@@ -58,6 +58,7 @@ const room = {
     mediaFolderId: undefined,
     handleSendMessage: async (content: string) => {
         sent.push(content);
+        return true;
     },
     handleEditMessage: async () => {},
     handleDeleteMessage: async () => {},

@@ -1,7 +1,8 @@
 // A Radix dialog dismisses on Escape from a document capture listener, which runs before the textarea
 // hears the key. Pinned here: Escape with the @-mention list open closes only the list, inside a dialog
 // as well, and Escape with nothing open still closes the dialog. Also pinned: a send clears the box at
-// once, and a failed one puts its text and files back unless the user has started the next message.
+// once, and a failed one puts its text and files back unless the user has started the next message. A send that takes
+// no files, a slash command that runs here, puts its files back too.
 import { expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
@@ -35,7 +36,7 @@ async function mount() {
                 null,
                 createElement(DialogTitle, null, 'Card'),
                 createElement(DialogDescription, null, 'Replies'),
-                createElement(ChatMessageInput, { ...attachProps, onSend: async () => {}, roomMembers }),
+                createElement(ChatMessageInput, { ...attachProps, onSend: async () => true, roomMembers }),
             ),
         ),
     );
@@ -81,9 +82,9 @@ test('Escape on an @-mention with no matches closes the dialog', async () => {
 
 // A send's promise stays open until the test settles it, as on a slow network.
 async function mountSending() {
-    const sends: { content: string; files?: File[]; resolve: () => void; reject: () => void }[] = [];
+    const sends: { content: string; files?: File[]; resolve: (filesTaken: boolean) => void; reject: () => void }[] = [];
     const onSend = (content: string, files?: File[]) =>
-        new Promise<void>((resolve, reject) => {
+        new Promise<boolean>((resolve, reject) => {
             sends.push({ content, files, resolve, reject: () => reject(new Error('server down')) });
         });
     const input = createRef<ChatMessageInputHandle>();
@@ -124,6 +125,17 @@ test('a send clears the box at once, so a second Enter on a slow network sends n
     await cleanup();
 });
 
+test('a local command clears its text and keeps the staged files', async () => {
+    const { sends, textarea, type, pressEnter, stage, cleanup } = await mountSending();
+    await type('/help');
+    await stage(photo);
+    await pressEnter();
+    await act(async () => sends[0].resolve(false));
+    expect(textarea.value).toBe('');
+    expect(stagedText()).toContain('photo.png');
+    await cleanup();
+});
+
 test('a failed send puts the text and files back, and they send again', async () => {
     const { sends, textarea, type, pressEnter, stage, cleanup } = await mountSending();
     await type('hello');
@@ -158,7 +170,7 @@ test('a send that succeeds leaves the box empty', async () => {
     const { sends, textarea, type, pressEnter, cleanup } = await mountSending();
     await type('hello');
     await pressEnter();
-    await act(async () => sends[0].resolve());
+    await act(async () => sends[0].resolve(true));
     expect(textarea.value).toBe('');
     await cleanup();
 });
