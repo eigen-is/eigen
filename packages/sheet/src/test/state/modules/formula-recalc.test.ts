@@ -31,8 +31,8 @@ function makeCtx(): Context {
     return contextFactory({
         currentSheetId: 'id_1',
         sheets: [
-            { name: 'One', id: 'id_1', order: 0, data: one, calcChain: [{ r: 0, c: 1, id: 'id_1' }] },
-            { name: 'Two', id: 'id_2', order: 1, data: two, calcChain: [{ r: 0, c: 0, id: 'id_2' }] },
+            { name: 'One', id: 'id_1', order: 0, data: one },
+            { name: 'Two', id: 'id_2', order: 1, data: two },
         ],
     }) as Context;
 }
@@ -120,7 +120,7 @@ describe('execFunctionGroup — index-driven recalc', () => {
         let draftReads = -1;
 
         produceWithPatches(base, (draft) => {
-            warmFormulaCellInfoMap(draft as Context, draft.sheets[0].data);
+            warmFormulaCellInfoMap(draft as Context);
             draftReads = reads.mock.calls.filter(([, , , , data]) => data != null && isDraft(data)).length;
         });
         reads.mockRestore();
@@ -201,7 +201,6 @@ describe('execFunctionGroup — index-driven recalc', () => {
         const ctx = makeCtx();
         ctx.sheets[0].data![0][2] = { f: '=SUM(A3:A1)', v: 5, m: '5' };
         ctx.sheets[0].data![1][3] = { f: '=SUM(B$3:A1)', v: 15, m: '15' };
-        ctx.sheets[0].calcChain!.push({ r: 0, c: 2, id: 'id_1' }, { r: 1, c: 3, id: 'id_1' });
         warmFormulaCellInfoMap(ctx);
 
         cellModule.updateCell(ctx, 1, 0, null, 7);
@@ -215,7 +214,6 @@ describe('execFunctionGroup — index-driven recalc', () => {
     it('shows #NAME? for a real Excel function the engine lacks, even inside IFERROR, once an input changes', () => {
         const ctx = makeCtx();
         ctx.sheets[0].data![0][2] = { f: '=IFERROR(FILTER(A1:A3,A1:A3>1),"none")', v: 5, m: '5' };
-        ctx.sheets[0].calcChain!.push({ r: 0, c: 2, id: 'id_1' });
         warmFormulaCellInfoMap(ctx);
 
         editCell(ctx, 0, 0, 7, 'id_1');
@@ -227,7 +225,6 @@ describe('execFunctionGroup — index-driven recalc', () => {
         const ctx = makeCtx();
         ctx.sheets[0].data![0][2] = { f: '=IFERROR(FILTRE(A1),"x")', v: 'x', m: 'x' };
         ctx.sheets[0].data![0][3] = { f: '=IFERROR(FILTRE(A1),A1)', v: 5, m: '5' };
-        ctx.sheets[0].calcChain!.push({ r: 0, c: 2, id: 'id_1' }, { r: 0, c: 3, id: 'id_1' });
         warmFormulaCellInfoMap(ctx);
 
         editCell(ctx, 0, 0, 7, 'id_1');
@@ -244,9 +241,6 @@ describe('execFunctionGroup — index-driven recalc', () => {
         one[1][0] = { f: '=ISERROR(C1)', v: false, m: 'FALSE' };
         one[1][1] = { f: '=C1+1', v: 0.5, m: '0.5' };
         ctx.sheets[1].data![1][0] = { f: '=ERROR.TYPE(One!C1)', v: '#N/A', m: '#N/A' };
-        ctx.sheets[0].calcChain!.push({ r: 0, c: 2, id: 'id_1' }, { r: 0, c: 3, id: 'id_1' });
-        ctx.sheets[0].calcChain!.push({ r: 1, c: 0, id: 'id_1' }, { r: 1, c: 1, id: 'id_1' });
-        ctx.sheets[1].calcChain!.push({ r: 1, c: 0, id: 'id_2' });
         warmFormulaCellInfoMap(ctx);
 
         editCell(ctx, 0, 0, 7, 'id_1');
@@ -260,7 +254,6 @@ describe('execFunctionGroup — index-driven recalc', () => {
         const ctx = makeCtx();
         ctx.sheets[0].data![0][2] = { f: '=FILTER(A1:A3,A1:A3>1)', v: 5, m: '5' };
         ctx.sheets[0].data![0][3] = { f: '=IFERROR(C1,"none")', v: 5, m: '5' };
-        ctx.sheets[0].calcChain!.push({ r: 0, c: 2, id: 'id_1' }, { r: 0, c: 3, id: 'id_1' });
         warmFormulaCellInfoMap(ctx);
 
         editCell(ctx, 0, 0, 7, 'id_1');
@@ -307,7 +300,6 @@ describe('updateCell — the formulas that read an edited cell through a functio
                     id: 's1',
                     order: 0,
                     data: sheet1,
-                    calcChain: formulas.map(([r, c]) => ({ r, c, id: 's1' })),
                 },
                 { name: 'Data', id: 's2', order: 1, data },
             ],
@@ -341,7 +333,6 @@ describe('execFunctionGroup — references resolved before the sheets changed', 
                 { name: 'Two', id: 'id_2', order: 1, data: two },
             ].map((sheet) => ({
                 ...sheet,
-                calcChain: formula != null && sheet.id === id ? [{ r: 0, c: 1, id }] : [],
             })),
         }) as Context;
     }

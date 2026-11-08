@@ -427,10 +427,10 @@ describe('replaySheetsOps', () => {
     });
 });
 
-// A granular patch into a collection (`['config','rowlen','2']`, `['calcChain', 0]`) only
-// resolves if the collection already exists. Every document written before the editor started
-// materializing them — and every fresh doc before its first compaction — stores `config: {}`
-// and no `calcChain`, so the replay base must materialize them too. Without this,
+// A granular patch into a collection (`['config','rowlen','2']`) only resolves if the collection
+// already exists. Every document written before the editor started materializing them — and every
+// fresh doc before its first compaction — stores `config: {}`, so the replay base must materialize
+// them too. Without this,
 // replaySheetsOps throws "path doesn't resolve" and rolls back the WHOLE batch: the edit is
 // lost, not degraded, on every reader (a second client opening the doc, the preview renderer,
 // and every xlsx/HTML/PDF export).
@@ -456,20 +456,6 @@ describe('ops from a normalizing editor apply to an un-normalized stored sheet',
             ],
         ]);
         expect(out[0].config?.borderInfo).toEqual({ '0_0': { l: { style: 1, color: '#000' } } });
-    });
-
-    test("the first formula's calcChain op resolves, so the cell's value is not rolled back", () => {
-        // seedCalcChain hands every mounted sheet a calcChain, so the first formula a user
-        // types emits `add ['calcChain', 0]` in the SAME batch as the computed cell. A fresh
-        // doc replays over createDefaultSheets — without a materialized chain that batch rolled
-        // back whole and the formula cell exported blank between its two text neighbours.
-        const out = replaySheetsOps(createDefaultSheets(), [
-            [
-                { op: 'replace', id: 'sheet-1', path: ['data', 0, 1], value: { v: 2, f: '=1+1', m: '2' } },
-                { op: 'add', id: 'sheet-1', path: ['calcChain', 0], value: { r: 0, c: 1, id: 'sheet-1' } },
-            ],
-        ]);
-        expect(out[0].data![0][1]).toEqual({ v: 2, f: '=1+1', m: '2' });
     });
 
     test('a sheet added mid-session takes ops on its config too', () => {

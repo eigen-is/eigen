@@ -429,7 +429,6 @@ describe('a filled formula', () => {
             for (let r = 0; r < 3; r += 1) d[r][0] = { v: r + 1, m: `${r + 1}` };
             d[0][1] = { f: '=A1*2', v: 2, m: '2' };
         }, src);
-        ctx.sheets[0].calcChain = [{ r: 0, c: 1, id: 'id_1' }];
         warmFormulaCellInfoMap(ctx);
 
         autoFillCell(ctx, src, { row: [1, 2], column: [1, 1] }, 'down');

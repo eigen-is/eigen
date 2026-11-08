@@ -146,7 +146,7 @@ export class FormulaCache {
 export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?: CellMatrix, dataSheetId?: string) {
     const dataSheet = dataSheetId ?? ctx.currentSheetId;
     // An entry written into an unbuilt map would pass for the whole map, and the build would never run.
-    const formulaCellInfoMap = warmFormulaCellInfoMap(ctx, dataSheet === ctx.currentSheetId ? data : undefined);
+    const formulaCellInfoMap = warmFormulaCellInfoMap(ctx);
     const key = `r${formulaCell.r}c${formulaCell.c}i${formulaCell.id}`;
     const cellData = formulaCell.id === dataSheet ? data : undefined;
     const formula = getcellFormula(ctx, formulaCell.r, formulaCell.c, formulaCell.id, cellData);
@@ -186,9 +186,16 @@ export function registerSheetFormulas(ctx: Context, id: string, data: CellMatrix
         delete map[key];
         ctx.formulaCache.dependencyIndex.delete(key);
     }
+    registerFormulas(ctx, id, data);
+}
+
+// Records every formula one sheet's matrix holds. A cell's `f` is the one record of which cells hold a formula.
+export function registerFormulas(ctx: Context, id: string, data: CellMatrix) {
     for (let r = 0; r < data.length; r += 1) {
-        for (let c = 0; c < data[r].length; c += 1) {
-            if (data[r][c]?.f != null) setFormulaCellInfo(ctx, { r, c, id }, data, id);
+        const row = data[r];
+        if (!row) continue;
+        for (let c = 0; c < row.length; c += 1) {
+            if (row[c]?.f != null) setFormulaCellInfo(ctx, { r, c, id }, data, id);
         }
     }
 }

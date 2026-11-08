@@ -20,7 +20,7 @@ import {
     shiftRangeForInsert,
     shiftValidations,
 } from '../../engine/rowcol';
-import type { CalcChainEntry, Cell, SingleRange } from '../../engine/types';
+import type { Cell, SingleRange } from '../../engine/types';
 import type { History, Op, Sheet, SheetValidation } from '../types';
 import type { PatchOptions } from '../utils';
 
@@ -162,7 +162,6 @@ class Shifter {
         if (field === 'config') return this.configPatch(patch, rest);
         if (field === 'hyperlink') return this.cellKeyed(patch, rest);
         if (field === 'dataValidations') return this.validations(patch, rest);
-        if (field === 'calcChain') return this.calcChain(patch, rest);
         return POSITION_FREE_FIELDS.has(field) ? patch : null;
     }
 
@@ -311,30 +310,6 @@ class Shifter {
         const moved = shiftValidations(map, this.move.range);
         if (Object.keys(moved).length < Object.keys(map).length) return null;
         return at(patch, patch.path, id == null ? moved : moved[id]);
-    }
-
-    // The recalc list names each formula cell by its place, so an entry moves with its cell. A whole list moves as one
-    // and loses the cells the op deletes: an edit that overwrites one formula records every formula cell's place, and
-    // a deleted row elsewhere must not drop that edit's undo. A write of the list's length moves nothing.
-    private calcChain(patch: Patch, [index]: (string | number)[]): Patch | null {
-        if (!('value' in patch) || patch.value == null || index === 'length') return patch;
-        if (index != null) {
-            const moved = this.chainEntry(patch.value);
-            return moved && at(patch, patch.path, moved);
-        }
-        const list: CalcChainEntry[] = patch.value;
-        const moved = list.flatMap((entry) => this.chainEntry(entry) ?? []);
-        if (moved.length === list.length && moved.every((entry, i) => entry === list[i])) return patch;
-        return { ...patch, value: moved };
-    }
-
-    private chainEntry(entry: CalcChainEntry): CalcChainEntry | null {
-        const row = this.move.type === 'row';
-        const position = row ? entry.r : entry.c;
-        const moved = this.move.to(position);
-        if (moved == null) return null;
-        if (moved === position) return entry;
-        return row ? { ...entry, r: moved } : { ...entry, c: moved };
     }
 
     private formula(f: string, onTargetSheet: boolean): string {

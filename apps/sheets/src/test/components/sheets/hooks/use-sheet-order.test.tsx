@@ -359,9 +359,6 @@ test("a peer's edit of the tab's cell that lands before the tab's edits clears t
     expect([tab.cell(0, 0)?.v, tab.cell(1, 1)?.bl ?? null]).toEqual(['mine', null]);
 });
 
-// The recalc list is never stored, but it rides the log, and overwriting a formula sends the whole list. A tab that
-// took that list on top of its own new formula would lose the formula from its list, and so from every formula map it
-// builds from the list, such as the one after a peer's row op.
 test('a formula typed while a peer overwrites another keeps recalculating on the typing tab', async () => {
     const s = server({ '0_0': '1' });
     const a = await openTab(s, 1);
@@ -372,10 +369,6 @@ test('a formula typed while a peer overwrites another keeps recalculating on the
     await b.type(2, 1, '=A1*3');
     await deliver(a.doc, b.doc);
     await deliver(b.doc, a.doc);
-    const chain = (sheet: Sheet & { calcChain?: { r: number; c: number }[] }) =>
-        sheet.calcChain?.map(({ r, c }) => [r, c]);
-    const joiner = replaySheetsOps(decodeSheetsSnapshot(readSheetsSnapshotJson(b.doc) ?? ''), opsOf(b.doc));
-    for (const tab of [a, b]) expect(chain(tab.workbook().getAllSheets()[0])).toEqual(chain(joiner[0]));
     const peer = replica(b.doc, 3);
     push(peer, rowInsert(11));
     await deliver(peer, b.doc);

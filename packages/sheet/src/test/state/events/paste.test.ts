@@ -550,8 +550,8 @@ describe('pasted formulas and the dependency map', () => {
             currentSheetId: 'id_1',
             selections: single(0, 0),
             sheets: [
-                { name: 'One', id: 'id_1', order: 0, data: one, calcChain: [{ r: 0, c: 1, id: 'id_1' }] },
-                { name: 'Two', id: 'id_2', order: 1, data: two, calcChain: [] },
+                { name: 'One', id: 'id_1', order: 0, data: one },
+                { name: 'Two', id: 'id_2', order: 1, data: two },
             ],
         }) as Context;
         warmFormulaCellInfoMap(base);
@@ -590,10 +590,6 @@ describe('pasted formulas and the dependency map', () => {
             d[0][1] = { f: '=A1*2', v: 10, m: '10' };
             d[0][2] = { f: '=B1+1', v: 11, m: '11' };
         });
-        base.sheets[0].calcChain = [
-            { r: 0, c: 1, id: 'id_1' },
-            { r: 0, c: 2, id: 'id_1' },
-        ];
         warmFormulaCellInfoMap(base);
         const [ctx] = edit(base, (d) => copyThenPaste(d, single(0, 1), single(3, 3), { cut: true }));
 

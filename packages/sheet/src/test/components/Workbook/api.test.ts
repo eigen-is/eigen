@@ -38,9 +38,8 @@ function makeCtx(b1: Cell | null, currentSheetId = 'id_1'): Context {
                 row: 4,
                 column: 4,
                 data,
-                calcChain: b1?.f ? [{ r: 0, c: 1, id: 'id_1' }] : [],
             },
-            { name: 'second', id: 'id_2', order: 1, row: 4, column: 4, data: makeData(null), calcChain: [] },
+            { name: 'second', id: 'id_2', order: 1, row: 4, column: 4, data: makeData(null) },
         ],
     });
 }
@@ -111,17 +110,14 @@ describe('applyOp and the formula dependency map', () => {
         expect(map[key(0, 1, 'id_1')]).toBeUndefined();
     });
 
-    // Clearing a formula ships the whole reassigned calcChain; the map only follows cell data.
-    it('re-registers only the cell a peer typed over, not the whole calcChain', () => {
+    it('re-registers only the cell a peer typed over', () => {
         const withColumn = (ctx: Context) => {
             const data = makeData({ f: '=A1*2', v: 10, m: '10' }, 50);
             for (let r = 1; r < 50; r += 1) data[r][1] = { f: `=A${r + 1}*2`, v: 0, m: '0' };
             ctx.sheets[0].data = data;
-            ctx.sheets[0].calcChain = data.map((_, r) => ({ r, c: 1, id: 'id_1' }));
             return ctx;
         };
         const ops = emitOps(withColumn(makeCtx(null)), typed(0, 1, '3'));
-        expect(ops.some((op) => op.path[0] === 'calcChain' && Array.isArray(op.value))).toBe(true);
         const ctx = withColumn(makeCtx(null));
         const before = { ...warmFormulaCellInfoMap(ctx) };
 
@@ -156,7 +152,6 @@ describe('applyOp and the formula dependency map', () => {
                 { r: 0, c: 0, v: { v: 5, m: '5' } },
                 { r: 0, c: 1, v: { f: '=A1*2', v: 10, m: '10' } },
             ],
-            calcChain: [{ r: 0, c: 1, id: 'id_3' }],
         };
 
         const next = applyPeerOps(ctx, [{ op: 'addSheet', id: 'id_3', path: [], value: added }]);

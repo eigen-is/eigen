@@ -8,7 +8,7 @@ import { cellValue } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
 import type { Context, Selection } from '..';
 import { diff, getFlowdata, isdatetime, isRealNull, isRealNum } from '..';
-import { execfunction, functionCopy, numberDisplay } from '.';
+import { computeFormula, functionCopy, numberDisplay } from '.';
 import { jfrefreshgrid } from './refresh';
 
 // The menus' Ascending and Descending: the one selected range, by its first column.
@@ -69,8 +69,7 @@ export function sortDataRange(
                 if (moveOffset !== 0) {
                     func = `=${functionCopy(func, moveOffset, 0)}`;
                 }
-                const funcV = execfunction(ctx, func, r, c, { resolver });
-                [, cell.v, cell.f] = funcV;
+                [cell.v, cell.f] = computeFormula(ctx, func, { resolver });
                 cell.m = numberDisplay(cell.v, cell.ct?.fa);
             }
             sheetData[r][c] = cell;

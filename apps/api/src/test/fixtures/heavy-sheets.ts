@@ -39,8 +39,8 @@ function textCell(text: string) {
     return { v: text, m: text, ct: { fa: 'General', t: 'g' } };
 }
 
-// `f` without `v`/`m` and no sheet calcChain → sheetsNeedRecalc fires. Only the
-// export read recalcs these; preview and extract serve them uncomputed (empty).
+// `f` without `v`/`m`, in a snapshot stored as not computed. Only the export read
+// recalcs these; preview and extract serve them uncomputed (empty).
 function formulaCell(formula: string) {
     return { f: formula };
 }
@@ -211,9 +211,9 @@ export function buildHeavyOps(batches = 40, opsPerBatch = 25, rows = 600, cols =
 }
 
 // Test-only seam: production never writes Sheet[] (the editor flushes an encoded
-// snapshot, the import commits the Worker's JSON). `computed` seeds the decoded
-// calcChain, which the read-path recalc gate keys off — only pass true for
-// value-complete sheets; false makes an export recompute, the safe direction.
+// snapshot, the import commits the Worker's JSON). `computed` is what the export read
+// keys off — only pass true for value-complete sheets; false makes an export recompute,
+// the safe direction.
 export function writeSheetsToYjs(doc: Y.Doc, sheets: Sheet[], opts: { computed: boolean }): void {
     writeSheetsSnapshot(doc, encodeSheetsSnapshot(sheets, opts), null);
 }

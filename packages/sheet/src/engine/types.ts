@@ -10,7 +10,6 @@ import type { CellCoordinate } from './parser/helper/cell';
 // not vice versa). Re-exported here so engine code keeps importing from `./types`
 // without churning every file.
 export type {
-    CalcChainEntry,
     Cell,
     CellMatrix,
     CellStyle,
@@ -20,7 +19,6 @@ export type {
     DefaultConditionalFormatRule,
     InlineStringSegment,
     Range,
-    SheetWithCalcChain,
     SingleRange,
 } from '@workspace/lib/sheets';
 

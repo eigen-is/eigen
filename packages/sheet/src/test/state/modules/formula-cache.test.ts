@@ -19,7 +19,7 @@ function makeCtx(): Context {
     return contextFactory({
         currentSheetId: 'id_1',
         selections: sel(0, 0, 0, 0),
-        sheets: [{ name: 'sheet', id: 'id_1', order: 0, data, calcChain: [{ r: 0, c: 1, id: 'id_1' }] }],
+        sheets: [{ name: 'sheet', id: 'id_1', order: 0, data }],
     }) as Context;
 }
 
@@ -105,7 +105,6 @@ describe('updateFormulaCache — a paste that grows the grid', () => {
         const data = ctx.sheets[0].data ?? [];
         data[0][3] = { f: '=SUM(A:A)', v: 5, m: '5' };
         data[1][5] = { f: '=SUM(1:1)', v: 23, m: '23' };
-        ctx.sheets[0].calcChain?.push({ r: 0, c: 3, id: 'id_1' }, { r: 1, c: 5, id: 'id_1' });
         warmFormulaCellInfoMap(ctx);
         return ctx;
     };
@@ -209,7 +208,7 @@ describe('setFormulaCellInfo — a reference to a sheet with no matrix', () => {
             currentSheetId: 'r',
             selections: sel(0, 0, 0, 0),
             sheets: [
-                { name: 'Report', id: 'r', order: 0, data: [[null, null]], calcChain: [] },
+                { name: 'Report', id: 'r', order: 0, data: [[null, null]] },
                 { name: 'Fresh', id: 'f', order: 1, celldata: [{ r: 0, c: 0, v: { v: 1 } }] },
             ],
         }) as Context;

@@ -37,7 +37,7 @@ import { carrySides, getBorderInfoCompute } from './border';
 import { checkCF, getComputeMap } from './condition-format';
 import { describeValidationRule, inputPassesRule } from './data-validation';
 import { functionHTMLGenerate } from './formula-editor';
-import { delFunctionGroup, execfunction, getcellrange } from './formula-exec';
+import { computeFormula, getcellrange } from './formula-exec';
 import type { RunStyleKey } from './inline-string';
 import {
     committedRuns,
@@ -613,12 +613,10 @@ export function updateCell(
     if (curv && isPlainObject(curv)) {
         if (!isCurInline) {
             if (isFormula(value)) {
-                const v = execfunction(ctx, value, r, c);
+                const computed = computeFormula(ctx, value);
                 curv = cloneDeep(d?.[r]?.[c] || {});
-                [, curv.v, curv.f] = v;
+                [curv.v, curv.f] = computed;
             } else {
-                delFunctionGroup(ctx, r, c);
-
                 curv = cloneDeep(d?.[r]?.[c] || {});
                 curv.v = value;
 
@@ -633,20 +631,11 @@ export function updateCell(
                     }
                 }
             }
-        } else {
-            delFunctionGroup(ctx, r, c);
         }
         value = curv;
-    } else {
-        if (isFormula(value)) {
-            const v = execfunction(ctx, value, r, c);
-            value = {
-                v: v[1],
-                f: v[2],
-            };
-        } else {
-            delFunctionGroup(ctx, r, c);
-        }
+    } else if (isFormula(value)) {
+        const [v, f] = computeFormula(ctx, value);
+        value = { v, f };
     }
 
     setCellValue(ctx, r, c, d, value);
@@ -692,9 +681,7 @@ export function getOrigincell(ctx: Context, r: number, c: number, i: string) {
 
 export function getcellFormula(ctx: Context, r: number, c: number, i: string, data?: CellMatrix) {
     let cell: Cell | null;
-    // `data` is a fast path for the current sheet. A calc-chain entry can belong
-    // to another sheet (getAllFunctionGroup spans the whole workbook), whose rows
-    // may be absent here — resolve those against their own sheet's data via `i`.
+    // `data` is a fast path for the current sheet. A cell of another sheet may name a row it lacks.
     if (isNil(data) || isNil(data[r])) {
         cell = getOrigincell(ctx, r, c, i);
     } else {

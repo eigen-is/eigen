@@ -12,7 +12,7 @@ import { getFlowdata } from '../context';
 import type { FormulaCell, SearchHighlight, SearchResult } from '../types';
 import { sheetOrder } from '../utils';
 import { setCellValue as setCellValueInternal } from './cell';
-import { delFunctionGroup, execFunctionGroup } from './formula-exec';
+import { execFunctionGroup } from './formula-exec';
 import { normalizeSelection } from './selection';
 import { changeSheet } from './sheet';
 
@@ -116,7 +116,6 @@ function replaceInCell(
     const newText = oldText.replace(regex, (m) => (preserveCase ? applyPreserveCase(m, replacement) : replacement));
     if (newText === oldText) return false;
 
-    delFunctionGroup(ctx, cell.r, cell.c, cell.sheetId);
     setCellValueInternal(ctx, cell.r, cell.c, flowdata, newText);
     return true;
 }

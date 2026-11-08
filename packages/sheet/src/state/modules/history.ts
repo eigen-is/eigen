@@ -31,7 +31,7 @@ import { applyOpBatch } from './apply-ops';
 import { setCellValue } from './cell';
 import { withoutDeletedFloatingEdits } from './floating';
 import { snapshotContext } from './formula-cache';
-import { execFunctionGroup, execfunction } from './formula-exec';
+import { computeFormula, execFunctionGroup } from './formula-exec';
 import { isStructural } from './history-shift';
 import { settleCurrentSheet, shiftSheetOrders } from './sheet';
 
@@ -239,7 +239,7 @@ function recalculate(ctx: Context, patches: Patch[]) {
         const data = getFlowdata(ctx, id);
         const f = data?.[r]?.[c]?.f;
         if (!data || f == null) continue;
-        const [, v] = execfunction(ctx, f, r, c, { id, notInsertFunc: true, resolver });
+        const [v] = computeFormula(ctx, f, { id, resolver });
         setCellValue(ctx, r, c, data, { v, f });
     }
     execFunctionGroup(ctx, [...cells.values()]);
@@ -293,8 +293,7 @@ function authored(cell: Cell | null | undefined) {
 }
 
 // The patches whose targets still hold what the entry wrote there: a target a peer changed since keeps the peer's
-// value, as Google does. A merge and its cells, and a link and its cell, pass or skip together. calcChain is the
-// tab's recalc list, so its patches always apply.
+// value, as Google does. A merge and its cells, and a link and its cell, pass or skip together.
 function stillWritten(ctx: Context, apply: Patch[], written: Patch[]): Patch[] {
     const parent = new Map<string, string>();
     const find = (key: string): string => {
@@ -324,7 +323,6 @@ function stillWritten(ctx: Context, apply: Patch[], written: Patch[]): Patch[] {
         const unit = unitOf(patch.path);
         const key = JSON.stringify(unit);
         joinUnits(patch, key);
-        if (patch.path[2] === 'calcChain') continue;
         const write = writes.get(key) ?? { unit, patches: [] };
         write.patches.push(patch);
         writes.set(key, write);

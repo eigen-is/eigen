@@ -15,6 +15,7 @@ import type { Cell, ShiftedSheet } from '../../../engine/types';
 import { copySheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { applyDataValidation } from '../../../state/modules/data-validation';
+import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import { shiftEntries } from '../../../state/modules/history-shift';
 import { saveHyperlink } from '../../../state/modules/hyperlink';
 import { mergeCells } from '../../../state/modules/merge';
@@ -22,6 +23,7 @@ import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import { addSheet, changeSheet, deleteSheet, renameSheet } from '../../../state/modules/sheet';
 import { clearValidations, validationAt } from '../../../state/modules/validation-rules';
 import type { ConditionalFormatRule, DataValidationRule, History, Op, Sheet } from '../../../state/types';
+import { commutes } from '../../../state/utils/commute';
 import type { Tab } from '../factories/collab';
 import { author, join, tab, tabEdit, tabReceive, tabRedo, tabUndo } from '../factories/collab';
 import { workbookContextFactory } from '../factories/context';
@@ -45,13 +47,11 @@ function at(a1: string): [number, number] {
 
 function sheet(id: string, name: string, order: number, cells: Record<string, Cell> = {}): Sheet {
     const data: (Cell | null)[][] = Array.from({ length: 40 }, () => Array.from({ length: 8 }, () => null));
-    const calcChain = [];
     for (const [a1, cell] of Object.entries(cells)) {
         const [r, c] = at(a1);
         data[r][c] = cell;
-        if (cell.f) calcChain.push({ r, c, id });
     }
-    return { id, name, order, row: 40, column: 8, data, config: {}, calcChain };
+    return { id, name, order, row: 40, column: 8, data, config: {} };
 }
 
 function workbook(one: Record<string, Cell> = {}, two: Record<string, Cell> = {}, three: Record<string, Cell> = {}) {
@@ -256,16 +256,13 @@ describe("undo after a peer's row, column or sheet change lands on your cell", (
         expectAgree(s);
     });
 
-    // Overwriting a formula rewrites the whole recalc list, so the entry holds every formula cell's place, also one in
-    // rows the peer deletes.
-    test("a peer's row delete keeps the undo of an edit that rewrote the whole recalc list", () => {
+    test("a peer's row delete keeps the undo of an overwritten formula", () => {
         const s = session(workbook({ A1: num(1), C2: { f: '=A1', v: 1, m: '1' }, B10: { f: '=A1', v: 1, m: '1' } }));
         s.edit(s.a, typedAt('C2', '5'));
         s.edit(s.b, ...deleteRows(9, 9));
         expect(s.a.history.undoList).toHaveLength(1);
         s.undo(s.a);
         expect(cellAt(s.a, 'C2')).toMatchObject({ f: '=A1', v: 1 });
-        expect(s.a.ctx.sheets[0].calcChain).toContainEqual({ r: 1, c: 2, id: ONE });
         expectAgree(s);
     });
 
@@ -457,12 +454,7 @@ describe('working alone', () => {
             two.charts = { c2: chartReading('c2') };
         });
     };
-    const shown = (t: Tab) => ({
-        sheets: stored(t.ctx.sheets),
-        calcChains: t.ctx.sheets
-            .toSorted(byOrder)
-            .map(({ calcChain }) => new Set(calcChain?.map(({ r, c, id: sheet }) => `${r}_${c}_${sheet}`))),
-    });
+    const shown = (t: Tab) => ({ sheets: stored(t.ctx.sheets) });
 
     const kinds: [string, Structural][] = [
         ['a row insert', insertRows(4, 2)],
@@ -695,16 +687,139 @@ describe('undo and redo recalculate the formulas they touch', () => {
     });
 });
 
-test("a redone formula stays in the recalc list at its place after a peer's row insert", () => {
+test("a redone formula follows its inputs at its place after a peer's row insert", () => {
     const s = session(workbook({ A1: { v: 1, m: '1', ct: { fa: 'General', t: 'n' } } }));
     s.edit(s.a, typedAt('D10', '=A1*2'));
     s.edit(s.b, ...insertRows(2, 2));
     s.undo(s.a);
     s.redo(s.a);
-    for (const t of [s.a, s.b]) expect(t.ctx.sheets[0].calcChain).toEqual([{ r: 11, c: 3, id: ONE }]);
     s.edit(s.b, typedAt('A1', '7'));
     for (const t of [s.a, s.b]) expect(cellAt(t, 'D12')?.v).toBe(14);
     expectAgree(s);
+});
+
+describe("a formula is its cell's `f`, nothing else", () => {
+    const formula = (f: string, v = 1): Cell => ({ f, v, m: String(v) });
+
+    test('both tabs undo their formulas, and the sheet still takes every commit', () => {
+        const s = session(workbook());
+        s.edit(s.a, typedAt('A1', '=1+1'));
+        s.edit(s.b, typedAt('B1', '=2+2'));
+        s.undo(s.a);
+        s.undo(s.b);
+        s.edit(s.a, typedAt('C1', 'hello'));
+        s.edit(s.b, typedAt('C2', '=3+3'));
+        for (const t of [s.a, s.b]) {
+            expect(cellAt(t, 'A1')).toBeNull();
+            expect(cellAt(t, 'C1')?.v).toBe('hello');
+            expect(cellAt(t, 'C2')?.v).toBe(6);
+        }
+        expectAgree(s);
+    });
+
+    test('a new sheet keeps a formula through a row insert, its undo and redo, for a joiner too', () => {
+        spyOn(crypto, 'randomUUID').mockReturnValue(FOUR);
+        const s = session(workbook());
+        s.edit(s.a, (ctx) => addSheet(ctx, undefined, 'New'), { addSheetOp: true });
+        s.edit(s.a, ...insertRows(2, 1, FOUR));
+        s.undo(s.a);
+        s.redo(s.a);
+        s.edit(s.a, typedAt('C3', '=1+1', FOUR));
+        expect(s.joiner().find((one) => one.id === FOUR)?.data?.[2]?.[2]?.v).toBe(2);
+        expect(cellAt(s.b, 'C3', FOUR)?.v).toBe(2);
+    });
+
+    test('a new sheet keeps later formulas for a joiner after a formula, its undo and a row insert', () => {
+        spyOn(crypto, 'randomUUID').mockReturnValue(FOUR);
+        const s = session(workbook());
+        s.edit(s.a, (ctx) => addSheet(ctx, undefined, 'New'), { addSheetOp: true });
+        s.edit(s.a, typedAt('A1', '=1+1', FOUR));
+        s.undo(s.a);
+        s.edit(s.a, ...insertRows(5, 1, FOUR));
+        s.edit(s.a, typedAt('C3', '=2+2', FOUR));
+        expect(s.joiner().find((one) => one.id === FOUR)?.data?.[2]?.[2]?.v).toBe(4);
+        expect(cellAt(s.b, 'C3', FOUR)?.v).toBe(4);
+    });
+
+    test("undoing your own formula leaves a peer's formula following its inputs once the map rebuilds", () => {
+        const s = session(workbook({ A1: num(1) }));
+        s.edit(s.a, typedAt('C1', '=A1'));
+        s.edit(s.b, typedAt('D1', '=A1*2'));
+        s.undo(s.a);
+        s.edit(s.b, ...insertRows(20, 1));
+        s.edit(s.b, typedAt('A1', '10'));
+        for (const t of [s.a, s.b]) expect(cellAt(t, 'D1')?.v).toBe(20);
+        expectAgree(s);
+    });
+
+    test("an undone formula leaves a peer's overwrites alone, and a later row op reaches every reader", () => {
+        const s = session(workbook({ A1: num(1), B1: formula('=A1'), B2: formula('=A1') }));
+        s.edit(s.a, typedAt('D1', '=A1'));
+        s.edit(s.b, typedAt('B1', '5'));
+        s.edit(s.b, typedAt('B2', '6'));
+        s.undo(s.a);
+        s.edit(s.b, typedAt('E1', 'typed'));
+        s.edit(s.a, ...insertRows(5, 1));
+        for (const sheets of [s.a.ctx.sheets, s.b.ctx.sheets, s.joiner()]) expect(sheets[0].data).toHaveLength(41);
+        expectAgree(s);
+    });
+
+    test("an undo leaves a peer's formula following its inputs once the map rebuilds", () => {
+        const s = session(workbook({ A1: num(1), B1: formula('=A1') }));
+        s.edit(s.a, typedAt('B1', '5'));
+        s.edit(s.b, typedAt('C1', '=A1*2'));
+        s.undo(s.a);
+        s.edit(s.b, ...insertRows(20, 1));
+        s.edit(s.b, typedAt('A1', '10'));
+        for (const t of [s.a, s.b]) {
+            expect(cellAt(t, 'B1')?.v).toBe(10);
+            expect(cellAt(t, 'C1')?.v).toBe(20);
+        }
+        expectAgree(s);
+    });
+
+    test("two formulas typed at once commute, so each tab keeps its undo and the peer's formula", () => {
+        const base = workbook({ A1: num(1) });
+        const a = tab(base);
+        const b = tab(base);
+        const fromA = tabEdit(a, typedAt('C1', '=A1'));
+        const fromB = tabEdit(b, typedAt('D1', '=A1*2'));
+        expect(commutes([fromB], [fromA])).toBe(true);
+        expect(commutes([fromA], [fromB])).toBe(true);
+        tabReceive(a, fromB);
+        tabReceive(b, fromA);
+        expect(view(a.ctx.sheets)).toEqual(view(b.ctx.sheets));
+        expect(view(join(base, [fromA, fromB]))).toEqual(view(a.ctx.sheets));
+        tabReceive(b, tabUndo(a));
+        expect(a.history.redoList).toHaveLength(1);
+        expect(b.history.undoList).toHaveLength(1);
+        expect(cellAt(b, 'C1')).toBeNull();
+        expect(cellAt(b, 'D1')?.v).toBe(2);
+    });
+
+    test('a row written past the end leaves holes in the matrix, and the map still builds', () => {
+        const t = tab(workbook());
+        tabReceive(t, [{ op: 'replace', id: ONE, path: ['data', 50], value: [{ f: '=1+1', v: 2, m: '2' }] }]);
+        t.ctx.formulaCache.formulaCellInfoMap = null;
+        expect(warmFormulaCellInfoMap(t.ctx)[`r50c0i${ONE}`]?.formula).toBe('=1+1');
+    });
+
+    test('a stored op on the old recalc list fails no batch, and leaves no list on the sheet', () => {
+        const oldLog: Op[] = [
+            { op: 'add', id: ONE, path: ['calcChain', 0], value: { r: 0, c: 1, id: ONE } },
+            { op: 'replace', id: ONE, path: ['data', 0, 1], value: { v: 2, f: '=1+1', m: '2' } },
+            { op: 'replace', id: ONE, path: ['calcChain'], value: [null] },
+            { op: 'remove', id: ONE, path: ['calcChain'] },
+        ];
+        const base = workbook();
+        const t = tab(base);
+        tabReceive(t, oldLog);
+        const [joined] = join(base, [oldLog]);
+        for (const one of [t.ctx.sheets[0], joined]) {
+            expect(one.data?.[0]?.[1]?.v).toBe(2);
+            expect('calcChain' in one).toBe(false);
+        }
+    });
 });
 
 describe('a structural undo or redo applies exactly what it sends', () => {
@@ -1075,43 +1190,6 @@ describe('shiftEntries', () => {
             null,
         ],
         ["a chart's box stays", rows(2, 2), replace(at('charts', 'c1', 'x'), 5), replace(at('charts', 'c1', 'x'), 5)],
-        [
-            'a recalc list entry moves with its cell',
-            rows(2, 2),
-            replace(at('calcChain', 0), { r: 5, c: 1, id: ONE }),
-            replace(at('calcChain', 0), { r: 7, c: 1, id: ONE }),
-        ],
-        [
-            'a whole recalc list moves',
-            columns(0, 1),
-            replace(at('calcChain'), [{ r: 5, c: 1, id: ONE }]),
-            replace(at('calcChain'), [{ r: 5, c: 2, id: ONE }]),
-        ],
-        [
-            'a whole recalc list loses the cells inside a delete',
-            deletedRows(2, 3),
-            replace(at('calcChain'), [
-                { r: 1, c: 1, id: ONE },
-                { r: 3, c: 1, id: ONE },
-                { r: 5, c: 1, id: ONE },
-            ]),
-            replace(at('calcChain'), [
-                { r: 1, c: 1, id: ONE },
-                { r: 3, c: 1, id: ONE },
-            ]),
-        ],
-        [
-            'a recalc list entry inside a delete drops the entry',
-            deletedRows(2, 3),
-            replace(at('calcChain', 0), { r: 3, c: 1, id: ONE }),
-            null,
-        ],
-        [
-            "the recalc list's length stays",
-            rows(2, 2),
-            replace(at('calcChain', 'length'), 0),
-            replace(at('calcChain', 'length'), 0),
-        ],
         ['the name stays', rows(2, 2), replace(at('name'), 'Uno'), replace(at('name'), 'Uno')],
     ])('%s', (_, marker, patch, expected) => {
         const [shifted] = shiftEntries([{ patches: [patch], inversePatches: [] }], marker, sheets);

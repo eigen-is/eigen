@@ -4,7 +4,7 @@
 // and end with the same sheets.
 
 import { isRecord } from '@workspace/lib/guards';
-import type { Op, Sheet, SheetWithCalcChain } from '@workspace/lib/sheets';
+import type { Op, Sheet } from '@workspace/lib/sheets';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
 import { applyPatches, enablePatches } from 'immer';
@@ -143,12 +143,10 @@ export function isRowColOp(op: Op): boolean {
 }
 
 // Every sheet leaves the replay in one shape, whether it came from the snapshot or from an addSheet op. The editor
-// writes into its config collections, `images`, `charts` and `calcChain` key by key, and a patch against a missing
-// collection fails and takes its whole batch down. The editor seeds a calcChain on every sheet it mounts, so the first
-// formula a user types adds to it in the same batch as the cell's value. An empty chain reads as "not computed" to
-// sheetsNeedRecalc, as a missing one does, so adding it changes no recalc.
-function withNormalizedSheet(s: SheetWithCalcChain): SheetWithCalcChain {
-    const next = { ...s, config: { ...s.config }, calcChain: s.calcChain ?? [] };
+// writes into its config collections, `images` and `charts` key by key, and a patch against a missing collection fails
+// and takes its whole batch down.
+function withNormalizedSheet(s: Sheet): Sheet {
+    const next = { ...s, config: { ...s.config } };
     normalizeSheetConfig(next);
     return next;
 }

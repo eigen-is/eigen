@@ -1,6 +1,6 @@
 // The server's recalc of a workbook nobody computed, such as an xlsx import whose recalc failed. recalcSheets takes
 // the replayed sheets, orders their formula cells through the dependency graph and writes each cell's computed value
-// and display string. A workbook the editor computed is marked computed, and sheetsNeedRecalc lets it skip this.
+// and display string. A workbook the editor computed is stored as computed, so its readers skip this.
 // extractDependencies, the walk that finds the cells a formula reads, builds the editor's formula map too.
 
 import type { Cell, CellMatrix, Sheet } from '@workspace/lib/sheets';
@@ -16,55 +16,12 @@ import type { WalkContext } from './formula-utils';
 import { matrixWidth, resolveCellRange } from './formula-utils';
 import { valueIsError } from './parser/error';
 import { sheetFinder } from './parser/helper/cell';
-import type {
-    CalcChainEntry,
-    EvaluationResult,
-    FormulaCellInfoMap,
-    FormulaDependency,
-    SheetWithCalcChain,
-} from './types';
+import type { EvaluationResult, FormulaCellInfoMap, FormulaDependency } from './types';
 
 // A sheet's dense `data`, by id, which the pass reads and writes.
 type WorkingSheet = { id: string; name: string; data: CellMatrix };
 
 type SheetExtent = { rows: number; columns: number };
-
-// A workbook needs the server's recalc when a sheet has formula cells but no calcChain, such as an import whose
-// recalc failed, or a workbook a tab from such a file was added to. The editor's ops and the import's recalc both
-// write a calcChain, so a computed workbook's read path pays nothing.
-export function sheetsNeedRecalc(sheets: readonly SheetWithCalcChain[]): boolean {
-    for (const sheet of sheets) {
-        // recalcSheets skips a sheet without an id, so one must not arm the gate, or every read runs the pass for nothing.
-        if (!sheet.id) continue;
-        const { calcChain } = sheet;
-        if (Array.isArray(calcChain) && calcChain.length > 0) {
-            continue;
-        }
-        if (sheetHasFormula(sheet)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-// Uses the isFormula check of the pass, so the gate and the pass agree on what a formula cell is: a stray `f` that
-// doesn't start with `=` can't fire the gate on every read.
-function sheetHasFormula(sheet: Sheet): boolean {
-    if (sheet.data) {
-        for (const row of sheet.data) {
-            if (!row) continue;
-            for (const cell of row) {
-                if (cell?.f != null && isFormula(cell.f)) return true;
-            }
-        }
-    }
-    if (sheet.celldata) {
-        for (const entry of sheet.celldata) {
-            if (entry.v?.f != null && isFormula(entry.v.f)) return true;
-        }
-    }
-    return false;
-}
 
 // Four budgets bound what an untrusted workbook's formulas may cost, and past any of them the recalc throws before the
 // work. `maxDependencySlots` bounds the slots the dependency index lists the formulas' ranges in (dependencySlots).
@@ -96,21 +53,17 @@ export function recalcSheets(
     const extents = new Map<string, SheetExtent>();
     for (const w of working) extents.set(w.id, { rows: w.data.length, columns: matrixWidth(w.data) });
 
-    // 2. Find the formula cells by scanning the data, never trusting calcChain, and index the ranges each one reads.
+    // 2. Find the formula cells by scanning the data, and index the ranges each one reads.
     const infoMap: FormulaCellInfoMap = {};
     const depIndex = new DependencyIndex();
     let slots = 0;
-    const calcChainBySheet = new Map<string, CalcChainEntry[]>();
     for (const w of working) {
-        const chain: CalcChainEntry[] = [];
-        calcChainBySheet.set(w.id, chain);
         for (let r = 0; r < w.data.length; r += 1) {
             const rowArr = w.data[r];
             if (!rowArr) continue;
             for (let c = 0; c < rowArr.length; c += 1) {
                 const f = rowArr[c]?.f;
                 if (typeof f !== 'string' || !isFormula(f)) continue;
-                chain.push({ r, c, id: w.id });
                 const key = `r${r}c${c}i${w.id}`;
                 const deps = extractDependencies(walk, f, w.id);
                 infoMap[key] = {
@@ -131,8 +84,7 @@ export function recalcSheets(
 
     const allInfos = Object.values(infoMap);
     if (allInfos.length === 0) {
-        // No formulas: still write celldata and an empty calcChain, so the read gate sees the doc as computed.
-        return finalize(byId, sheets, calcChainBySheet);
+        return finalize(byId, sheets);
     }
 
     // 3. Weigh the links before making them. A whole column read by every formula in it costs the index one slot per
@@ -192,8 +144,8 @@ export function recalcSheets(
     }
     overRead();
 
-    // 7. Write celldata from the computed data, and stamp each sheet's calcChain.
-    return finalize(byId, sheets, calcChainBySheet);
+    // 7. Write celldata from the computed data.
+    return finalize(byId, sheets);
 }
 
 // A sheet's dense `data`, built from `celldata` when it has none, as the editor's initSheetData does: a resolver over
@@ -284,21 +236,9 @@ function writeCellValue(cell: Cell, result: EvaluationResult): void {
     cell.m = result.value == null ? '' : String(result.value);
 }
 
-function finalize(
-    byId: ReadonlyMap<string, WorkingSheet>,
-    sheets: readonly Sheet[],
-    calcChainBySheet: ReadonlyMap<string, CalcChainEntry[]>,
-): Sheet[] {
+function finalize(byId: ReadonlyMap<string, WorkingSheet>, sheets: readonly Sheet[]): Sheet[] {
     return sheets.map((sheet) => {
-        if (!sheet.id) return sheet;
-        const w = byId.get(sheet.id);
-        if (!w) return sheet;
-        const out: SheetWithCalcChain = {
-            ...sheet,
-            data: w.data,
-            celldata: dataToCelldata(w.data),
-            calcChain: calcChainBySheet.get(sheet.id) ?? [],
-        };
-        return out;
+        const w = sheet.id ? byId.get(sheet.id) : undefined;
+        return w ? { ...sheet, data: w.data, celldata: dataToCelldata(w.data) } : sheet;
     });
 }

@@ -34,7 +34,6 @@ import { createArrayResolver } from '../../engine/cell-resolver';
 import { copySheetChartSpec, resolveRangeChartData, seriesName } from '../../engine/chart-data';
 import type { ChartPanelState, Context, GlobalCache, Hooks, Op, Settings, Sheet as SheetType } from '../../state';
 import {
-    api,
     applySheetView,
     COPY_ACTION_TABLE_MARKER,
     defaultContext,
@@ -110,8 +109,7 @@ function activeFloating(ctx: Context): { image?: SheetImage; chart?: SheetChart 
 // The workbook a mount opens on, with A1 selected. Each sheet is copied one level deep, and its cells stay shared: a
 // deep copy of a large import takes about a second. The init writes only a sheet's own fields and keeps a matrix the
 // sheet has, so a remount can run it again on the same data, and the shared cells, which immer freezes, are never
-// written. The list of formula cells is seeded without computing them: a stored sheet carries its computed values, and
-// an edit computes the formulas it affects.
+// written. Nothing is computed: a stored sheet carries its computed values, and an edit computes the formulas it affects.
 function loadWorkbook(refs: RefValues, { data, allowEdit, commentCards }: Settings): Context {
     const ctx = defaultContext(refs);
     ctx.allowEdit = allowEdit ?? true;
@@ -119,7 +117,6 @@ function loadWorkbook(refs: RefValues, { data, allowEdit, commentCards }: Settin
     ctx.sheets = data.map((sheet) => ({ ...sheet, id: sheet.id ?? crypto.randomUUID() }));
     ensureUniqueSheetIds(ctx.sheets);
     for (const sheet of ctx.sheets) initSheetData(sheet);
-    api.seedCalcChain(ctx);
     ctx.currentSheetId = firstVisibleSheetId(ctx) ?? '';
     applySheetView(ctx);
     return ctx;
