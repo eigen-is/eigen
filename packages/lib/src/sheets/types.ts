@@ -214,7 +214,7 @@ export type ConditionalFormatRule = DataBarRule | ColorGradationRule | DefaultCo
 
 export type Sheet = {
     name: string;
-    id?: string;
+    id: string;
     order?: number;
     // 1 hides the tab (View > Hidden sheets shows it again); the editor opens on a sheet it shows.
     hide?: number;

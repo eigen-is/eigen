@@ -119,7 +119,9 @@ describe('an imported picture', () => {
     test('comes back as the media its image names', async () => {
         const image = { id: 'photo', index: 'a0', x: 10, y: 10, width: 40, height: 30, mediaName: 'photo.png' };
         const media = [{ name: 'photo.png', contentType: 'image/png', data: toTransferableBuffer(PIXEL_PNG) }];
-        const xlsx = exportXlsx([{ name: 'Pictures', celldata: [], images: { photo: image } }], { media });
+        const xlsx = exportXlsx([{ id: 'fixture-1', name: 'Pictures', celldata: [], images: { photo: image } }], {
+            media,
+        });
         const { snapshotJson, images } = importXlsxToSheetsSnapshot(toTransferableBuffer(xlsx), JOB);
         const [sheet] = decodeSheetsSnapshot(new TextDecoder().decode(snapshotJson));
         const names = Object.values(sheet.images ?? {}).map((stored) => stored.mediaName);

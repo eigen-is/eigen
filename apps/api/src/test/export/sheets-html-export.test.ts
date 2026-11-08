@@ -61,6 +61,7 @@ function makeSheet(cells: { r: number; c: number; v: Cell }[], rules?: Condition
         data[r][c] = v;
     }
     return {
+        id: 'fixture-2',
         name: 'Sheet1',
         celldata: cells.map(({ r, c, v }) => ({ r, c, v })),
         data,
@@ -1432,6 +1433,7 @@ describe('Sheets HTML export — floating images', () => {
 
     test('an image on an otherwise blank sheet still renders', () => {
         const sheet: Sheet = {
+            id: 'fixture-1',
             name: 'Blank',
             images: imagesOf({ id: 'img_1', mediaName: 'chart.png', x: 5, y: 5, width: 10, height: 10 }),
         };

@@ -91,9 +91,7 @@ export type Presence = {
 export type SheetConfig = LibSheetConfig & EditorSheetConfigExtras;
 
 // The sheet as the editor holds it: lib's stored fields plus editor-only ones that never reach the stored shape.
-// `id` is required here, but a stored sheet may lack one: the Workbook gives it an id when it mounts.
-export type Sheet = Omit<LibSheet, 'config' | 'id'> & {
-    id: string;
+export type Sheet = Omit<LibSheet, 'config'> & {
     config?: SheetConfig;
     filter?: Record<string, FilterEntry>;
 };

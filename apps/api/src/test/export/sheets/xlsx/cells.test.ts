@@ -17,6 +17,7 @@ function gridOf(sheet: Omit<Sheet, 'name'>) {
 describe("a sheet's grid", () => {
     test('each value is written with its type: number, shared string, boolean, and a formula with its cached result', () => {
         const { xml, strings } = gridOf({
+            id: 'fixture-12',
             celldata: [
                 { r: 0, c: 0, v: { v: 28254, m: '28254', ct: { fa: 'General', t: 'n' } } },
                 { r: 0, c: 1, v: { v: 'text', m: 'text', ct: { fa: 'General', t: 's' } } },
@@ -41,6 +42,7 @@ describe("a sheet's grid", () => {
 
     test('an error result is an error, never text', () => {
         const { xml } = gridOf({
+            id: 'fixture-11',
             celldata: [
                 { r: 0, c: 0, v: { v: '#DIV/0!', m: '#DIV/0!', f: '=1/0' } },
                 { r: 0, c: 1, v: { v: Number.POSITIVE_INFINITY } },
@@ -53,6 +55,7 @@ describe("a sheet's grid", () => {
 
     test('an error typed into a cell is an error, and text that reads as one stays text', () => {
         const { xml, strings } = gridOf({
+            id: 'fixture-10',
             celldata: [
                 { r: 0, c: 0, v: { v: '#N/A', m: '#N/A', ct: { fa: 'General', t: 'e' } } },
                 { r: 0, c: 1, v: { v: '#N/A', m: '#N/A', ct: { fa: 'General', t: 's' } } },
@@ -63,18 +66,25 @@ describe("a sheet's grid", () => {
     });
 
     test('a date is its serial in a date format', () => {
-        const { xml } = gridOf({ celldata: [{ r: 0, c: 0, v: { v: 45366, ct: { fa: 'M/d/yyyy', t: 'd' } } }] });
+        const { xml } = gridOf({
+            id: 'fixture-9',
+            celldata: [{ r: 0, c: 0, v: { v: 45366, ct: { fa: 'M/d/yyyy', t: 'd' } } }],
+        });
         expect(xml).toBe('<row r="1"><c r="A1" s="1"><v>45366</v></c></row>');
     });
 
     test("a formula past Excel's 8,192 characters writes its value alone, counted", () => {
-        const { xml, lost } = gridOf({ celldata: [{ r: 0, c: 0, v: { v: 1, f: `=${'1+'.repeat(5000)}1` } }] });
+        const { xml, lost } = gridOf({
+            id: 'fixture-8',
+            celldata: [{ r: 0, c: 0, v: { v: 1, f: `=${'1+'.repeat(5000)}1` } }],
+        });
         expect(xml).toBe('<row r="1"><c r="A1"><v>1</v></c></row>');
         expect(lost).toEqual(['formulas-dropped']);
     });
 
     test('rows and cells come in order whatever order the sheet holds them in, a repeated cell once', () => {
         const { xml, dimension } = gridOf({
+            id: 'fixture-7',
             celldata: [
                 { r: 4, c: 1, v: { v: 3 } },
                 { r: 0, c: 2, v: { v: 2 } },
@@ -90,6 +100,7 @@ describe("a sheet's grid", () => {
 
     test('a row keeps its height and hidden flag, with cells or without', () => {
         const { xml } = gridOf({
+            id: 'fixture-6',
             celldata: [{ r: 1, c: 0, v: { v: 1 } }],
             config: { rowlen: { 1: 40, 3: 30 }, rowhidden: { 3: 0, 5: 0 } },
         });
@@ -105,6 +116,7 @@ describe("a sheet's grid", () => {
     test('a cell holds its own borders; a cell with a border alone is written for it', () => {
         const thin = { style: 1, color: '#000000' };
         const { xml } = gridOf({
+            id: 'fixture-5',
             celldata: [{ r: 0, c: 0, v: { v: 'x' } }],
             config: { borderInfo: { '0_0': { b: thin }, '0_1': { l: thin }, '2_2': { t: thin } } },
         });
@@ -116,6 +128,7 @@ describe("a sheet's grid", () => {
     test('a merge constituent keeps its value, as Excel keeps it under the merge, and its own look or border', () => {
         const thin = { style: 1, color: '#000000' };
         const { xml } = gridOf({
+            id: 'fixture-4',
             celldata: [
                 { r: 0, c: 0, v: { v: 'anchor', mc: { r: 0, c: 0, rs: 1, cs: 3 } } },
                 { r: 0, c: 1, v: { v: 'stale', mc: { r: 0, c: 0 } } },
@@ -130,6 +143,7 @@ describe("a sheet's grid", () => {
 
     test("a cell past Excel's grid is left out, counted", () => {
         const { xml, lost } = gridOf({
+            id: 'fixture-3',
             celldata: [
                 { r: 0, c: 0, v: { v: 1 } },
                 { r: 1_048_576, c: 0, v: { v: 2 } },
@@ -141,13 +155,13 @@ describe("a sheet's grid", () => {
     });
 
     test('an empty sheet is A1', () => {
-        expect(gridOf({ celldata: [] })).toMatchObject({ dimension: 'A1', xml: '' });
+        expect(gridOf({ id: 'fixture-2', celldata: [] })).toMatchObject({ dimension: 'A1', xml: '' });
     });
 
     test('rows are handed over in batches of about a megabyte', () => {
         const celldata = [];
         for (let r = 0; r < 20_000; r++) for (let c = 0; c < 10; c++) celldata.push({ r, c, v: { v: r * 10 + c } });
-        const { batches, dimension } = gridOf({ celldata });
+        const { batches, dimension } = gridOf({ id: 'fixture-1', celldata });
         expect(dimension).toBe('A1:J20000');
         expect(batches.length).toBeGreaterThan(3);
         for (const batch of batches) {

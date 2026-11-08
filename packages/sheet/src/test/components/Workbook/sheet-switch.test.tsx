@@ -64,18 +64,6 @@ function tab(container: HTMLElement, name: string) {
     return span.parentElement;
 }
 
-// A stored sheet's id is optional, the editor's isn't: the mount gives one to a sheet that comes without.
-test('a sheet without an id gets one when the workbook mounts', async () => {
-    const given = '00000000-0000-4000-8000-000000000001';
-    spyOn(crypto, 'randomUUID').mockReturnValue(given);
-    const data = [{ name: 'One', order: 0, row: 10, column: 5, celldata: [], config: {} }];
-    const { workbook } = await mountWorkbook({ data });
-    const ids = workbook()
-        .getAllSheets()
-        .map((sheet) => sheet.id);
-    expect(ids).toEqual([given]);
-});
-
 test('a tab switch derives the sheet geometry once', async () => {
     const { container, current } = await mountWorkbook();
     const geometry = spyOn(contextModule, 'updateContextWithSheetData');

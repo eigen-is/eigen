@@ -38,7 +38,7 @@ const BELOW_ZERO_FORMAT = { textColor: eigenColor('red', 700), cellColor: eigenC
 
 // The workbook's sheets with every formula computed.
 export function buildWorkbook(specs: SheetSpec[]): Sheet[] {
-    const ids = new Map(specs.map((spec, i) => [spec.name, `sheet-${i + 1}`]));
+    const ids = new Map(specs.map((spec, i) => [spec.name, sheetIdAt(i)]));
     return recalcSheets(specs.map((spec, i) => buildSheet(spec, i, ids)));
 }
 
@@ -46,6 +46,8 @@ export function buildWorkbook(specs: SheetSpec[]): Sheet[] {
 export function buildWorkbookDoc(doc: Y.Doc, specs: SheetSpec[]): void {
     writeSheetsSnapshot(doc, encodeSheetsSnapshot(buildWorkbook(specs), { computed: true }), null);
 }
+
+const sheetIdAt = (order: number) => `sheet-${order + 1}`;
 
 function buildSheet(spec: SheetSpec, order: number, ids: Map<string, string>): Sheet {
     const celldata: CellWithRowAndCol[] = [];
@@ -92,7 +94,7 @@ function buildSheet(spec: SheetSpec, order: number, ids: Map<string, string>): S
     const charts: Record<string, SheetChart> = {};
     const sheet: Sheet = {
         name: spec.name,
-        id: ids.get(spec.name),
+        id: sheetIdAt(order),
         order,
         celldata,
         config: {

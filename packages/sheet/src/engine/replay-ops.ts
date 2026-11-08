@@ -41,7 +41,7 @@ export function replaySheetsOps(
         try {
             const dataOpIds = collectDataOpSheetIds(batch);
             if (dataOpIds) {
-                result = result.map((s) => (s.id && dataOpIds.has(s.id) ? withMaterializedData(s) : s));
+                result = result.map((s) => (dataOpIds.has(s.id) ? withMaterializedData(s) : s));
             }
             // opToPatchOnSheets finds a sheet by its place in the array, so the sheet and row ops settle the array
             // before the patches resolve.
@@ -128,7 +128,7 @@ function isLine(value: unknown, type: 'row' | 'column'): value is number {
 
 // A new sheet needs an id no sheet has yet, because every later op names its sheet by id. Its name follows the
 // sheet-name rule, or a rename's undo could not restore it.
-export function isNewSheet(v: unknown, sheets: { id?: string }[]): v is Sheet & { id: string } {
+export function isNewSheet(v: unknown, sheets: { id: string }[]): v is Sheet {
     if (!isRecord(v)) return false;
     const { id, name } = v;
     return typeof id === 'string' && typeof name === 'string' && isSheetName(name) && !sheets.some((s) => s.id === id);

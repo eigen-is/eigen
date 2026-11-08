@@ -383,6 +383,23 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         expect(() => decodeSheetsSnapshot(JSON.stringify(envelope))).toThrow('Unknown sheets snapshot format');
     });
 
+    test('a sheet without an id throws the same error, as no reader could agree on one', () => {
+        const envelope = JSON.parse(encodeSheetsSnapshot(WORKBOOK, { computed: true })) as Envelope;
+        delete envelope.sheets[0]!['id'];
+        expect(() => decodeSheetsSnapshot(JSON.stringify(envelope))).toThrow('Unknown sheets snapshot format');
+    });
+
+    test('a second sheet of one id throws the same error', () => {
+        const encoded = encodeSheetsSnapshot(
+            [
+                { id: 'same', name: 'One' },
+                { id: 'same', name: 'Two' },
+            ],
+            { computed: true },
+        );
+        expect(() => decodeSheetsSnapshot(encoded)).toThrow('Unknown sheets snapshot format');
+    });
+
     test('a v1 snapshot (plain Sheet[] JSON) throws instead of decoding', () => {
         // No legacy reading anywhere: the editor opens such a doc read-only on defaults
         // (use-sheet.ts loadedRef) and never persists over it.

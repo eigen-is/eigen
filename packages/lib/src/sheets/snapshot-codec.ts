@@ -117,8 +117,13 @@ export function decodeSheetsWorkbook(snapshot: string): { sheets: Sheet[]; compu
     // A corrupt snapshot, an older format or a newer one throws here. Read on, it would become a half-empty workbook
     // that hides the problem.
     if (f !== FORMAT) throw unknownFormat(f);
+    const ids = new Set<string>();
     const decoded = sheets.map((encoded) => {
         const { cells, borderCells, config, images, charts, dataValidations, ...rest } = encoded;
+        // Every op names its sheet by id, so a sheet without an id of its own is as corrupt as a bad style index. Minting
+        // one here would give each reader a different sheet.
+        if (typeof rest.id !== 'string' || ids.has(rest.id)) throw unknownFormat(rest.id);
+        ids.add(rest.id);
         // Every sheet gets all three maps, even empty ones. The editor writes each image, chart or validation under its
         // own key, and that patch needs the map to exist. A value that is no map is dropped, and so is a chart past the
         // entry cap and a validation that is not well formed.

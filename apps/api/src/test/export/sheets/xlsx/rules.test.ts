@@ -22,7 +22,7 @@ import { sheetXml } from '../../../fixtures/xlsx';
 function roundTrip(sheet: Partial<Sheet>) {
     const lost: CountedWarningCode[] = [];
     const styles = styleRegistry((code) => lost.push(code));
-    const xml = rulesXml({ name: 'Sheet1', ...sheet }, styles, (code) => lost.push(code));
+    const xml = rulesXml({ id: 'fixture', name: 'Sheet1', ...sheet }, styles, (code) => lost.push(code));
     const looks = readDxfs(parseOoxml(styles.xml()) ?? undefined, []);
     const read = readRules(parseOoxml(sheetXml({ after: xml })) ?? undefined, {
         dxfs: looks,

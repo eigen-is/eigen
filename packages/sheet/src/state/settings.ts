@@ -41,7 +41,6 @@ export type Hooks = {
 
 export type Settings = {
     allowEdit?: boolean;
-    // The stored sheets the Workbook mounts on. A sheet without an id gets one there.
     data: LibSheet[];
     hooks?: Hooks;
     // The cards by id. The grid repaints when this object changes, so a host passes a new one only with new cards.
