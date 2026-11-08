@@ -1,5 +1,5 @@
-// Opens the database of a Home that lists the paths its owner has shared with others. Drive code uses it whenever it
-// needs those rows.
+// Opens the database of a Home that holds its copies of the paths other owners shared with it. A Drive opens it when
+// it loads, and the functions behind "Shared with me" read and write it.
 
 import { PATHS } from '../config/paths';
 import type { Home } from '../home';

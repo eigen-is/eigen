@@ -91,47 +91,47 @@ export async function receiveSharedPathChange(
 }
 
 export async function listSharedWithMe(sharedDb: SharedDb): Promise<DrivePath[]> {
-    const results = await sharedDb.select().from(sharedSchema.sharedPaths).all();
-    return results.map(sharedRowToDrivePath);
+    const rows = sharedDb.select().from(sharedSchema.sharedPaths).all();
+    return rows.map(sharedRowToDrivePath);
 }
 
 // The owners who shared at least one path with this home. The Watched view asks each of them for
 // the user's watched paths, so it doesn't have to load every shared path first.
-export async function listSharedOwnerIds(sharedDb: SharedDb): Promise<string[]> {
-    const results = await sharedDb
+export function listSharedOwnerIds(sharedDb: SharedDb): string[] {
+    const rows = sharedDb
         .selectDistinct({ ownerId: sharedSchema.sharedPaths.ownerId })
         .from(sharedSchema.sharedPaths)
         .all();
-    return results.map((r) => r.ownerId);
+    return rows.map((row) => row.ownerId);
 }
 
 export async function listSharedWithMeByMimeType(sharedDb: SharedDb, mimeType: string): Promise<DrivePath[]> {
-    const results = await sharedDb
+    const rows = sharedDb
         .select()
         .from(sharedSchema.sharedPaths)
         .where(eq(sharedSchema.sharedPaths.mimeType, mimeType))
         .all();
-    return results.map(sharedRowToDrivePath);
+    return rows.map(sharedRowToDrivePath);
 }
 
-function sharedRowToDrivePath(r: typeof sharedSchema.sharedPaths.$inferSelect): DrivePath {
+function sharedRowToDrivePath(row: typeof sharedSchema.sharedPaths.$inferSelect): DrivePath {
     return {
-        id: r.id,
-        mountId: r.mountId,
-        name: r.name,
-        type: r.type,
-        parentId: r.parentId,
-        ownerId: r.ownerId,
-        mimeType: r.mimeType,
-        size: r.size ?? 0,
+        id: row.id,
+        mountId: row.mountId,
+        name: row.name,
+        type: row.type,
+        parentId: row.parentId,
+        ownerId: row.ownerId,
+        mimeType: row.mimeType,
+        size: row.size ?? 0,
         hash: null,
-        thumbnail: r.thumbnail,
-        acl: r.acl,
-        visibility: r.visibility ?? 'private',
-        sharingRestricted: r.sharingRestricted,
-        details: r.details ?? null,
+        thumbnail: row.thumbnail,
+        acl: row.acl,
+        visibility: row.visibility ?? 'private',
+        sharingRestricted: row.sharingRestricted,
+        details: row.details,
         trashedAt: null,
-        createdAt: r.createdAt ?? new Date(),
-        updatedAt: r.updatedAt ?? new Date(),
+        createdAt: row.createdAt ?? new Date(),
+        updatedAt: row.updatedAt ?? new Date(),
     };
 }
