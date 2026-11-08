@@ -10,7 +10,7 @@ Like ROADMAP and the proposals, this doc holds only open work: strike a finding 
 - The measure of every unit: the code ends up flatter, with fewer patches on patches and fixes on fixes, fewer lines, and easier to understand.
 - Adding tests is fine when they add real value. Lines are judged on production code.
 - The goal is cleaner and simpler code. A product loss that removes a whole mechanism is welcome; there is no backward compatibility to keep, stored formats included.
-- [U2](#u2) is accepted: once another user edits, your own row, column or sheet insert or delete can no longer be undone. Pick the simplest cut rule that removes the machinery; a peer batch on that sheet, or any peer batch, are both fine. U1 is folded into U2, and U3 (the alternative if U2 were declined) is ruled out.
+- U2 is accepted: once another user edits, your own row, column or sheet insert or delete can no longer be undone. Pick the simplest cut rule that removes the machinery; a peer batch on that sheet, or any peer batch, are both fine. U1 is folded into U2, and U3 (the alternative if U2 were declined) is ruled out.
 - A tab rename rewrites the formulas that name the tab, as Excel does. It is one `renameSheet` op kind, which every reader applies, not a cell write per formula: 107 bytes on the wire against 14.6 MB on 100,000 rewritten formulas.
 - The batch of product calls, all as recommended:
   - [D2](#d2) yes: sort moves borders, links and validation with their rows, fill copies links, and a paste adds no duplicate rule.
@@ -30,8 +30,8 @@ The API audit's six patterns all show up here. Read across the six areas, though
 
 1. **The wire is whatever immer wrote.** An op is a raw immer patch. So everything a reducer happens to write reaches every peer, and every leak got its own filter or repair: the recalc list on the wire ([E1](#e1)), per-tab fields on the shared sheet ([S7](#s7)), merge stamps that must land after the cells ([D9](#d9)), a link companion op for `hl` ([F2](#f2)), a pre-apply simulation of what `applyPatches` would throw on ([S5](#s5)), and `normalizeSheetConfig` at six entry points because a first write to a missing collection ships it whole. The cure is a closed op vocabulary ([S10](#s10)).
 2. **Facts stored twice inside the workbook.** `calcChain` beside the cells' `f` ([E1](#e1)), `cell.mc` beside `config.merge` ([D9](#d9)), `cell.hl` beside `sheet.hyperlink` ([F2](#f2)), `ctx.filter` beside `sheet.filter` ([D7](#d7)), the freeze and pixel boxes beside the indices ([R1](#r1), [R9](#r9)), the clipboard. Every writer has to keep the two in step, and each one that didn't is a fix in the log.
-3. **Two paths for one job.** The editor's batch applier beside the engine's replay ([S2](#s2)), writers doing their own formula bookkeeping beside the patch-derived recompute that undo already uses ([E7](#e7)), sort and fill outside `carryCells` ([D2](#d2)), two hand-written formula walkers ([E3](#e3)), four ways to turn a pointer into a cell ([R3](#r3)), eight commit paths of which two measure the row ([R2](#r2)), and row and column handlers written twice ([R9](#r9)).
-4. **Structural undo across peers.** Undoing your own row, column or sheet op after a peer edited since needs a three-way merge, trial runs, a refusal path and half the shifter ([U2](#u2)). The refusal path guards a sheet that turned read-only, which no UI or import can make. The owner accepted the smaller undo.
+3. **Two paths for one job.** The editor's batch applier beside the engine's replay ([S2](#s2)), writers doing their own formula bookkeeping beside the patch-derived recompute that undo already uses ([E7](#e7)), sort and fill outside `carryCells` ([D2](#d2)), two hand-written formula walkers ([E3](#e3)), four ways to turn a pointer into a cell ([R3](#r3)), and row and column handlers written twice ([R9](#r9)).
+4. **Structural undo across peers.** Undoing your own row, column or sheet op after a peer edited since needed a three-way merge, trial runs, a refusal path and half the shifter. The owner accepted the smaller undo, and that is done.
 5. **Fork scaffolding.** fill modes no menu can choose and Chinese numeral series ([D4](#d4)), dead formula state ([E6](#e6)). Each is still checked on edits, and at least one got a fix (`b6ecee4d3`, protection checked before a delete, for a protection nobody can switch on).
 
 The API audit's tripwire applies here unchanged: at the third `fix(x)` on one mechanism within a week, stop and ask which root it is before a fourth patch lands.
@@ -45,7 +45,6 @@ Each comes from reading or tracing the code, not from running it, unless it says
 | Sort moves cells but leaves their borders, links and validation behind, and the moved `hl` stamp points at a link that stayed, so the link lands on another row's text | [D2](#d2) | Sort's write read; link outcome traced |
 | A refused table paste still changes row heights (`setRowHeight` runs before the guards) | [D5](#d5) | Traced |
 | A peer's column filter change leaves this tab's `ctx.filter` stale, so the next local filter edit can leave the peer's rows hidden for good | [D7](#d7) | Traced |
-| Long text committed from the formula bar, by a header click, by the date shortcut or on a new tab keeps the default row height | [R2](#r2) | Traced |
 | The link card over a frozen column of a scrolled sheet shows the cell scrolled underneath; a row-header drag while composing a formula picks rows offset by the grid's page top minus 70 px | [R3](#r3) | Offsets read; outcome traced |
 | The first formula typed on an uncomputed sheet ships chain entries, so the server treats that sheet as computed and its export skips the recalc | [E1](#e1) | Traced |
 
@@ -59,9 +58,8 @@ The best payoff per unit of risk, with no redesign. **Product** marks a finding 
 | [E1](#e1) | Drop `calcChain`; build the formula map from the cells | ~250 + ~200 test, three open TODO rows | med | no | nothing; every edit gets faster |
 | [F2](#f2) | A link lives on its cell | ~45 net + ~50 test, the link map, `hl`, a sync loop, an open bug | low-med | no | nothing |
 | [R1](#r1) | View geometry derived in the commit | ~110 + ~40 test | med | no | nothing; a cell edit stops recomputing every row and rendering twice |
-| [R2](#r2) + [R3](#r3) | One measuring context; one pointer-to-cell function | ~140 + ~10 test, four bugs | low-med | no | nothing |
+| [R3](#r3) | One pointer-to-cell function | ~80, two bugs | low-med | no | nothing |
 | [E2](#e2) | The import recalcs once; no `computed` flag, no export recalc | ~90 + ~150 test | low | small | a failed import later shrunk below the budget isn't recomputed at export |
-| [U2](#u2) | Structural undo only until a peer edits | ~170 + ~410 test, the three-way merge, the refusal pile, half the shifter | med | decided | after a collaborator's edit, your row, column or sheet op can't be undone |
 
 ## If we built it today
 
@@ -85,13 +83,6 @@ History: `c6b839be3`, `52c817a2b`, `9cb1085e7`, `fca68450d`, `59a34caff` (three 
 Root cause: root 3. The editor applies a peer's row op through its own reducers, which add shifts the engine lacks and need `fromBatch` to skip the permission check and the selection change. `addSheet` drops the matrix a value carries, so `applyOpBatch` puts it back. Materializing a matrix is coded twice (`initSheetData`, `withMaterializedData`).
 Simpler: lift the body of `replaySheetsOps`' loop into `applySheetsBatch(sheets, ops) → { sheets, moved }`, throwing on a refusal. The replay keeps its base normalization, rollback and final celldata sync. `applyOpBatch` sets `draft.sheets` from it and runs only the editor's after-effects (`followView`, `leaveCurrentSheet`, filter options, formula cache). The `fromBatch` parameters go. 
 Lost: nothing. ~50 LOC + ~100 test (agreement tests become one path's tests), medium risk, medium-high confidence.
-
-<a id="s3"></a>**S3. A tab's own new sheet enters without its matrix, and two guards cover the gap.**
-`state/modules/sheet.ts` (`addSheet`), the materialize loop at the top of `applyOpBatch`, the "open sheet without matrix" step in `replayOps` (`components/Workbook/api.ts`).
-History: `9cb1085e7`, `b6e2effb6` (a blank grid, lost typing and "sheet not found" after a rollback to an anchor taken at the tab's own add), `c6414f8df`.
-Root cause: root 3, pattern 1. Every other sheet gets its matrix on entry; a blank sheet the tab adds itself waits for the grid to open it.
-Simpler: `addSheet` calls `initSheetData`. Both guards and the switch's "if no data" branch go. The replay keeps lazy matrices for snapshot sheets, for compaction speed.
-Lost: nothing. ~20 LOC + ~50 test, low risk, high confidence.
 
 <a id="s4"></a>**S4. A new snapshot remounts the grid, a late batch resets it in place, and the compaction base exists to dodge the remount (small product).**
 `apps/sheets/src/components/sheets/hooks/use-sheet.ts` (`pendingRef` and its effect, `reload`, `judgeTransaction`, `baseIdRef` written in six places, the `folded` and `overtaken` branches), `editor.tsx` (`key={snapshotVersion}`), `use-presence.ts` (republishes because a remount wipes presences), `lib/sheets/yjs-state.ts` (`SheetsBase`, `stampSheetsBase`, `compactedFrom`), `api/document/sheets.ts` (`stampMissingSheetsBase`, `restampRestoredSheetsBase`).
@@ -138,18 +129,11 @@ Judged essential: the log-order rule and `commutes` (61 lines, keeps undo when t
 
 The history is two bursts: about 20 commits on 2026-10-27 (`da208cb7a` to `92a67c419`) built the current design, and a refusal pile followed on 2026-11-02. Cell undo that follows a peer's insert is cheap and earned. Structural undo across peers is where the pile is.
 
-<a id="u2"></a>**U2. Undoing a structural op after a peer edited since needs a three-way merge, trial runs, a refusal path and half the shifter. Decided: drop it.**
-`state/modules/history.ts` (`rowColStep`'s two `trial` runs, `restoredFields`, `restoredRuleWrites`, `restoredValue`, `restoredChain`, the peer check in `repairOps`, `refusedStep`, `stepNewestEntry`'s `kept`/`shiftEntries` call, `Step.refused`, `redoEntry`'s `deletedSheet` refresh), `history-shift.ts` (`Shifter.addedSheet`, `deletedSheet`, `celldata`, `matrixPatch`, `otherMatrix`, `shiftEntries`' `own?.id === id` branch, its `stack` parameter, `inverseRowColOptions`), `components/Workbook/api.ts` (`applyOp`'s shift loop for structural entries).
-History: the design came in about 20 commits on 2026-10-27: `da208cb7a` → `257a8d17d` → `364ef8b89` → `0b6e4b82e` → `77de870b8` (the three-way merge) → `758cc9e25`, `92a67c419` (the trials need their own formula map) → `c192bb38b` → `fd3f95297` → `380ecab57`. Then a refusal run on 2026-11-02, each fix covering the corner the previous one opened: `48968238f`, `6b660592d` (a refused step stays on its stack) → `e56c07a36` (staying blocks every older undo, so it leaves) → `d3522c83b`/`c35a6318b` (notice text) → `048e2a5ed` (leaving misplaces the entries below, so shift them by the refused op). SHEETS-TODO holds the next corner as an open M row.
-Root cause: pattern 4. The entry holds whole fields and matrices, so the step works out per field what a peer changed by applying the marker to the old and to the live state, four row-op runs per structural undo (about 147 ms each on the 301k-cell sheet). And the refusal can barely happen: the sheet refuses a marker only when it is read-only or at its row or column limit, and nothing outside the tests writes `rowReadOnly` or `colReadOnly` (checked).
-Simpler: a row, column or sheet entry is undoable only until a peer's batch lands (on that sheet, or at all, whichever is simpler). Then that entry and every older one leave the stack; "only the oldest go" is already `pushEntry`'s invariant, so nothing moves. The live state is then exactly what the entry recorded against: fields restore as recorded, `repairOps` loses its peer check, one trial serves both, the refusal can't happen, and the shifter never sees a structural entry. Cell and field entries still follow a peer's rows. Check whether the structural entries can then drop their whole matrices too, and with them `pushEntry`'s two-tier cap.
-Lost: once a collaborator edits, you can't undo or redo your own earlier row or column insert or delete, or sheet add, copy or delete, nor anything older. Working alone, nothing changes. The SHEETS-TODO refusal row goes. ~170 LOC + ~410 test, medium risk, high confidence.
-
-U1 is part of U2, U3 is ruled out, and U4 (the recalc list in undo entries) is [E1](#e1).
+U1 and U2 are done, U3 is ruled out, and U4 (the recalc list in undo entries) is [E1](#e1).
 
 <a id="u6"></a>**U6. Redesign: one op transformer for undo entries and late batches.**
 Today `Shifter` transforms immer patch shapes eagerly on every peer row op, while late batches aren't transformed at all. Two SHEETS-TODO M rows ask for exactly that missing transform ("A batch recorded before a peer's row insert writes at the rows it recorded", and the paste-past-the-grid row). Pattern 5: one job, one path built and one missing.
-After [U2](#u2) only cell and field entries are left to transform, which makes this smaller. Design: entries are the ops they sent plus inverse ops, tagged with their batch's log index. An undo rebases its inverse through later log batches with `transformOps(ops, rowColOp)`; the receiver uses the same function on a late batch whose only conflict is structural, instead of an anchor replay. The hard part: an op and its own undo must be skipped as a pair.
+Only cell and field entries are left to transform, which makes this smaller. Design: entries are the ops they sent plus inverse ops, tagged with their batch's log index. An undo rebases its inverse through later log batches with `transformOps(ops, rowColOp)`; the receiver uses the same function on a late batch whose only conflict is structural, instead of an anchor replay. The hard part: an op and its own undo must be skipped as a pair.
 ~250 LOC replacing `Shifter`'s ~390, plus ~80; net about −100, two TODO rows closed. High risk, medium-low confidence. No migration.
 
 <a id="u7"></a>**U7. Redesign: stable row and column ids, the only change that removes the whole family.**
@@ -276,13 +260,6 @@ Root cause: roots 1 and 2 (pattern 1). A recipe changes the config, frozen panes
 Simpler: one `deriveView(base, next)` inside `commit`, so edits, undo, redo and peer batches all pass through it, running only when the current sheet, `data.length` or the identity of a geometry map, `frozen` or `filterRange` changed. The freeze becomes an O(1) read, `freezeOf(ctx)`; `scroll`, `cumulative` and `globalCache.freezen` go. With [D7](#d7), readers take the sheet's filter directly.
 Lost: nothing; a cell edit gets faster. ~110 LOC + ~40 test, medium risk, high confidence.
 
-<a id="r2"></a>**R2. Only two of eight commit paths measure the row height, because the measuring canvas is an optional parameter.**
-`updateCell(…, canvas?)` (`state/modules/cell.ts`) grows a wrapped or rich cell's row only when given a 2D context. `commitEdit` (`keyboard.ts`) and the click commit in `handleCellAreaMouseDown` pass one. The formula bar's Enter (`FxEditor`'s `onKeyDown`, which re-implements `handleGlobalEnter`), the header-click commits in `handleRowHeaderMouseDown` and `handleColumnHeaderMouseDown`, the date shortcut, `SheetTab`'s commit on adding a sheet and `state/api/cell.ts` don't. The parameter runs through 16 signatures. `FxEditor` and `InputBox` each keep their own Escape, F4 and keyCode whitelist.
-History: a quiet divergence; each commit path was written separately.
-Root cause: root 3. Measuring needs any 2D context with the font set, and `getMeasureText`'s cache is already module-wide.
-Simpler: one lazily created measuring context in `state/modules/text.ts` for `updateCell`, `updateFormatCell` and auto-fit. FxEditor's Enter calls `handleGlobalEnter`; the keyCode filters become one helper.
-Lost: nothing; every commit grows the row. ~60 LOC + ~10 test, low risk, high confidence.
-
 <a id="r3"></a>**R3. Every pointer handler turns page coordinates into sheet coordinates itself, four different ways, and two are wrong.**
 48 lines in 11 files (`mouse-cell.ts`, `mouse-drag.ts`, `mouse-header.ts`, `mouse-resize.ts`, `move-cells.ts`, `drop-cell.ts`, `formula-range.ts`, `hyperlink.ts`, `useSheetContextMenu`, both headers) compute `e.pageX - rect.left (- scrollX) (- rowHeaderWidth) + scroll` against different elements and scroll sources, then call `fixPositionOnFrozenCells` (15 sites), or don't. `getCellRowColumn` (`hyperlink.ts`) applies no freeze. `mousePosition` (`location.ts`) subtracts fortune-sheet's fixed `toolbarHeight` (41) and `calculatebarHeight` (29) instead of the grid's top (checked).
 History: `a3f0dd9b9` ("mousedown measured from the header while mouseup measures from the overlay, and the 3 was bridging that gap by hand"), `5daf7dbac`, `505e131c9`, `4747f70ca`.
@@ -301,7 +278,7 @@ Lost: nothing. ~50 LOC + ~10 test, medium risk (caret timing after a click), med
 The Workbook effect keyed on `currentSheetId`, `sheets.length`, `originalData` and nine `mergedSettings` fields does five jobs: the one-time load, copying settings and `hooks` into `ctx`, a fallback `initSheetData`, adopting a stored selection (`viewStale`) and `applySheetView`. `mergedSettings` is memoized on `Object.values(props)` and `editor.tsx` passes `hooks` inline, so every host render reruns it and renders the workbook twice. The comment corner marks depend on that accident: only the rewritten `ctx.hooks` makes the grid repaint when a card's colour changes. `SheetOverlay` seeds a first selection in an effect of its own.
 History: `3295ff781`, `792b0ac6a`, `2f6db5b69`, `c21d7c021`, `2bf964067`.
 Root cause: patterns 1 and 5.
-Simpler: load in the `useState` initializer and seed the selection there; keep hooks in a ref read at call time; sync `allowEdit` in the recipe; hand comment info to the painter as data whose identity changes with the cards; drop the `initSheetData` fallback ([S3](#s3)).
+Simpler: load in the `useState` initializer and seed the selection there; keep hooks in a ref read at call time; sync `allowEdit` in the recipe; hand comment info to the painter as data whose identity changes with the cards; the `initSheetData` fallback is already gone.
 Lost: nothing. ~70 LOC, medium risk, medium-high confidence.
 
 R8 (two paste paths) is [D1](#d1).
@@ -404,16 +381,15 @@ Wave 1 (nothing lost, or decided):
 
 | Lane | Units, in order | Main files |
 |---|---|---|
-| Op log | [S3](#s3), [S7](#s7), [S8](#s8) | `state/utils/patch.ts`, `state/modules/sheet.ts`, `engine/replay-ops.ts`, `use-sheet.ts` |
-| Undo | [U2](#u2) | `history.ts`, `history-shift.ts`, `Workbook/api.ts`  |
+| Op log | [S7](#s7), [S8](#s8) | `state/utils/patch.ts`, `state/modules/sheet.ts`, `engine/replay-ops.ts`, `use-sheet.ts` |
 | Formulas | [E3](#e3), [E6](#e6), then [E4](#e4), [E5](#e5) | `engine/formula-shift.ts`, `engine/recalc.ts`, `formula-*` |
 | Editing | [D7](#d7), [D5](#d5) | `state/api/*`, `paste.ts`, `clipboard.ts`, `filter.ts` |
-| Render and input | [R2](#r2), [R3](#r3), then [R6](#r6), [R7](#r7) | `state/context.ts`, `context/modal.tsx`, `state/events/*`, `SheetOverlay/*` |
+| Render and input | [R3](#r3), then [R6](#r6), [R7](#r7) | `state/context.ts`, `context/modal.tsx`, `state/events/*`, `SheetOverlay/*` |
 | Rules | [F3](#f3) | `protection.ts`, `validation*.ts`, `DataValidation/*` |
 
-Wave 2 (cross-cutting, after the lanes they depend on merged): [E1](#e1) then [E2](#e2) once ruled (after U2: both touch `history.ts`); [F2](#f2) (after D2); [D2](#d2) after D4 is ruled; [S2](#s2) then [S5](#s5) (after U2); [R1](#r1) (after D7 and R3); [D4](#d4), [D8](#d8), [F4](#f4), [F6](#f6), [F7](#f7), [F8](#f8) as ruled. F4, F6 and F7 change `packages/lib/src/charts`, which Docs, Slides and Vector share: tell the other session first.
+Wave 2 (cross-cutting, after the lanes they depend on merged): [E1](#e1) then [E2](#e2); [F2](#f2) (after D2); [D2](#d2) after D4 is ruled; [S2](#s2) then [S5](#s5); [R1](#r1) (after D7 and R3); [D4](#d4), [D8](#d8), [F4](#f4), [F6](#f6), [F7](#f7), [F8](#f8) as ruled. F4, F6 and F7 change `packages/lib/src/charts`, which Docs, Slides and Vector share: tell the other session first.
 
-Wave 3, the redesigns, in [§ If we built it today](#if-we-built-it-today)'s order. Each is sized again at its Step 0 and shown to the owner before it is built: [S10](#s10) with [D9](#d9), [S9](#s9) (which supersedes [S4](#s4)), [D10](#d10), [F9](#f9), [E7](#e7) and [E8](#e8), [R9](#r9) with [R10](#r10), [F10](#f10) (touches Docs and Canvas: tell the other session), [U6](#u6) only if still worth it after U2. [U7](#u7) stays parked in ROADMAP-POST-1.
+Wave 3, the redesigns, in [§ If we built it today](#if-we-built-it-today)'s order. Each is sized again at its Step 0 and shown to the owner before it is built: [S10](#s10) with [D9](#d9), [S9](#s9) (which supersedes [S4](#s4)), [D10](#d10), [F9](#f9), [E7](#e7) and [E8](#e8), [R9](#r9) with [R10](#r10), [F10](#f10) (touches Docs and Canvas: tell the other session), [U6](#u6) only if still worth it. [U7](#u7) stays parked in ROADMAP-POST-1.
 
 **Talking to the other session.** Another session works on other parts of Eigen in the main checkout. At the start and before each wave, list the other sessions (`ListAgents`) and send each one message: the branch, the worktree path, the paths this run owns (`packages/sheet`, `apps/sheets`, `packages/lib/src/sheets`, the sheets files under `apps/api/src/lib/document`, `export/sheets` and `import/sheets`, the sheets parts of `apps/api/src/lib/collab/collab-document.ts`), and the shared paths it will touch next. Ask for its own. Before changing a shared path (`packages/lib/src/charts`, `packages/lib/src/core`, `packages/ui`, `apps/docs`, the collab store, CODE-STANDARDS, ROADMAP, README), message first and wait for an answer. The API audit's [T2](API-SIMPLIFICATION-AUDIT.md#t2) is the server half of S4 and S9, so this run takes it and says so. Announce each merge to `develop`. Never push, and never merge to `develop`, without the owner's go.
 
@@ -421,8 +397,11 @@ Wave 3, the redesigns, in [§ If we built it today](#if-we-built-it-today)'s ord
 
 - This run also takes the API audit's T2 and X2 (the other session agreed). Don't edit `API-SIMPLIFICATION-AUDIT.md` on this branch, because that session keeps editing it: tell it when T2 or X2 lands, and it strikes them. Its X2 ruling: a flat cap, the runner's deadline and its memory limit, and a timeout or out-of-memory is an accepted outcome. X2 joins Wave 2.
 - The owner allows an implementer to hand mechanical work (a grep sweep, rewiring similar test call sites, running a suite) to a cheaper sub-agent: Sonnet, or Haiku for a lookup, at low or medium effort. The implementer keeps Step 0, the design, the diff read and the commit. A sub-agent uses the implementer's worktree with no isolation option, one editing at a time, and never commits.
-- Wave 1 is running. Merged: S1, R5, R4 (`ctx.rowHeaderWidth` and `columnHeaderHeight` stay for R3 to inline), D3 (the ref's `setSelection` stays: 13 test callers and no other door to the stored selection copy; S7 may remove it). E9 (its review fixes are still to come; see below). F1 (its review fixes are still to come; see below). D1. In cold review: U2. Running: S3, R2, E3, F1 fixes then F3, D7.
+- Wave 1 is running. Merged: U2, S3, R2, D1, F1, E9, S1, R5, R4 (`ctx.rowHeaderWidth` and `columnHeaderHeight` stay for R3 to inline), D3 (the ref's `setSelection` stays: 13 test callers and no other door to the stored selection copy; S7 may remove it). Running: E3, F1 fixes then F3, D7, U2 and E9 review fixes, R3. In cold review: S3. Next: S7, S8, E6, E4, E5, D5, R6, R7, then the wave's close.
+- For R6: R2's implementer read that the date shortcut's `updateCell` with the closed, empty editor clears a filled cell before opening the edit, so Escape wouldn't restore it. Not run.
+- For R3: `handleCellAreaMouseDown` sets `ctx.selectionActive = true` and then tests it, so that block is always true.
+- For D5: `handlePaste` sits below its helpers; `setRowHeight` still runs before the guards in `pasteHandler`.
+- After S3, `Sheet.data` is optional only because the type is shared with stored sheets. An editor-side required type would remove the guards in `paste.ts`, `refresh.ts`, `api/cell.ts`, `apply-ops.ts`, `applySheetView` and `comment-anchors.ts`.
 - Open for the wave's docs unit: SHEETS.md and SHEETS-TODO.md statements S1, R5 and the units in review make false; the help center and CHANGELOG for U2 (undo limit), E9 (rename rewrites formulas), R4 and S1's fixes. Each unit's report names them, and the orchestrator's merge list holds them.
-- E9's review fixes, to dispatch after U2 merges: a boundary check for the op through one shared `isSheetName`, since a 1 MB name over 200 formulas made 201 MB of JSON in the replay; a `!` in a name; a rename joins U2's structural rule, so undo neither overwrites a peer's rename nor silently does nothing; one list of the texts that name a sheet, shared with `appendSheetsToYjs`; the rename op takes its id from the recipe. The reviewer's first finding, a row op shipping `name`, went with S1 and U2; check it on the merged code.
 - F1's review fixes, running now with F3 next: an imported "any date" rule stores `1899-12-31`, which `dateSerial` rejects, so every date fails it. Validation reads the display text `m` in the painter and on entry, so `1,234.50` fails a number rule and a dd/MM/yyyy date refused on Enter: rules should read the parsed value.
 - For the closing review: D3 deleted the API insert and delete tests as covered by `rowcol.test.ts` and `rowcol-ops` without comparing assertions. `state/modules/cell.ts` got only a light pass; `carryCells` could split out.

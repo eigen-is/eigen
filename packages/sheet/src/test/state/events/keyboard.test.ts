@@ -10,7 +10,6 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import { Window } from 'happy-dom';
 import type { Context } from '../../../state/context';
 import { handleGlobalKeyDown, typesIntoEditor } from '../../../state/events/keyboard';
-import { selectionCache } from '../../../state/modules/selection';
 import type { Cell, DataValidationRule, GlobalCache, SingleRange } from '../../../state/types';
 import { contextFactory } from '../factories/context';
 import { validationsByCell } from '../factories/validations';
