@@ -708,10 +708,10 @@ describe('Backup restoreHome', () => {
         expect(await rootNames(target.sessionToken, target.id, mountId, rootId)).toEqual(before);
     });
 
-    // The note the next boot reads to tell a restore that finished from one that died halfway. It
-    // lives in the folder the job staged beside the home, on the home's disk, and nothing goes to the backups folder.
-    // Every restore removes that folder on its way out, so the wipe is held off here to look at what was written.
-    test('a finished restore leaves its completion note beside the marker, beside the home', async () => {
+    // A note the next boot finds means a restore to undo. It lives in the folder the job staged beside the home, on the
+    // home's disk, and nothing goes to the backups folder. Every restore removes that folder on its way out, so the wipe
+    // is held off here to look at what is left.
+    test('a finished restore leaves no marker beside the home', async () => {
         const jobId = `restore-sentinel-${Date.now()}`;
         const spy = spyOn(recoveryModule, 'wipeRestoreStagingDir').mockImplementation(async () => {});
         try {
@@ -721,8 +721,8 @@ describe('Backup restoreHome', () => {
         }
 
         const staging = buildRestoreStagingDir(join(TEST_DATA_DIR, 'home', target.id), jobId);
-        expect(existsSync(join(staging, 'restoring.json'))).toBe(true);
-        expect(existsSync(join(staging, 'restore-complete.json'))).toBe(true);
+        expect(existsSync(staging)).toBe(true);
+        expect(existsSync(join(staging, 'restoring.json'))).toBe(false);
         expect(existsSync(join(getBackupsDir(), '.staging', jobId))).toBe(false);
         rmSync(staging, { recursive: true, force: true });
     });
@@ -1991,7 +1991,7 @@ describe('Backup restore killed at any point', () => {
         | 'while the mounts are put in place'
         | 'between the marker and the move-aside'
         | 'between the two renames'
-        | 'before the completion note';
+        | 'before the marker goes';
 
     // A restore that dies at `point`: from there on nothing the job would still do happens, its rollback and its
     // cleanup included, so the disk is left as a kill leaves it.
@@ -2003,7 +2003,7 @@ describe('Backup restore killed at any point', () => {
         };
         const extract = archiveModule.extractArtifact;
         const materialize = materializeModule.materializeMount;
-        const writeComplete = recoveryModule.writeRestoreCompleteMarker;
+        const dropMarker = recoveryModule.dropRestoringMarker;
         const rename = nodeFs.renameSync;
         const spies = [
             spyOn(recoveryModule, 'wipeRestoreStagingDir').mockImplementation(async () => {}),
@@ -2021,9 +2021,9 @@ describe('Backup restore killed at any point', () => {
                 if (point === 'between the two renames' && to === homeDir) kill();
                 rename(from, to);
             }),
-            spyOn(recoveryModule, 'writeRestoreCompleteMarker').mockImplementation((dir) => {
-                if (point === 'before the completion note') kill();
-                writeComplete(dir);
+            spyOn(recoveryModule, 'dropRestoringMarker').mockImplementation((dir) => {
+                if (point === 'before the marker goes') kill();
+                dropMarker(dir);
             }),
         ];
         try {
@@ -2072,8 +2072,8 @@ describe('Backup restore killed at any point', () => {
     // A boot without the backups folder, such as one with its mount missing, still finds the notes, so the restored
     // home goes aside at once. A later boot with the folder back has nothing left to act on, and the work done on the
     // home in between stays.
-    test('a restore killed before its completion note is undone by the next boot, and a later boot changes nothing', async () => {
-        await restoreKilledAt('before the completion note');
+    test('a restore killed before its marker goes is undone by the next boot, and a later boot changes nothing', async () => {
+        await restoreKilledAt('before the marker goes');
         // Both renames ran: the restored home is in place and the home as it was is aside.
         expect(existsSync(homeDir)).toBe(true);
         expect(safetyCopies(user.id, PRE_RESTORE_SUFFIX)).toHaveLength(1);

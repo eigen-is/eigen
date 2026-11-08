@@ -39,7 +39,7 @@ import {
     buildSafetyCopyName,
     freeSafetyCopyStamp,
 } from './paths';
-import { putHomeBack, wipeRestoreStagingDir, writeRestoreCompleteMarker, writeRestoringMarker } from './recovery';
+import { dropRestoringMarker, putHomeBack, wipeRestoreStagingDir, writeRestoringMarker } from './recovery';
 import { forgetSafetyCopySize, resolveSafetyCopy } from './safety-copy';
 import { requireVerified, verifyFolder } from './verify';
 
@@ -219,7 +219,6 @@ async function replaceHomeFolder<Judged>(
             const movedAside = fs.existsSync(homeDir) ? buildSafetyCopyName(homeDir, 'pre-restore', stamp) : null;
             const marker = {
                 ownerId,
-                homeDir,
                 preRestoreName: movedAside && path.basename(movedAside),
                 parkName: path.basename(parkOnFailure(stamp)),
             };
@@ -230,10 +229,10 @@ async function replaceHomeFolder<Judged>(
 
             try {
                 await install();
-                // Every tab of the home reloads, once the folder is whole and before the completion note: a crash
-                // between the two costs an extra reload, never a stale tab over the new home.
+                // Every tab of the home reloads, once the folder is whole and before the note goes: a crash between
+                // the two costs an extra reload, never a stale tab over the new home.
                 await rotateHomeDataEpoch(ownerId);
-                writeRestoreCompleteMarker(restoreDir);
+                dropRestoringMarker(restoreDir);
             } catch (error) {
                 // The boot's own undo, from the same note. A failure in it must not hide the one that brought us here.
                 try {

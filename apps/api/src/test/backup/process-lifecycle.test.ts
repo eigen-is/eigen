@@ -348,33 +348,29 @@ describe('Boot recovery in a real boot', () => {
         writeFileSync(join(homeRoot, name, 'marker'), content);
     }
 
-    // What replaceHomeFolder writes before it moves a home aside, in the folder its job staged beside the home, and
-    // the note it adds once the install is through.
-    function seedMarker(jobId: string, homeName: string, preRestoreName: string | null, complete: boolean): void {
+    // What replaceHomeFolder writes before it moves a home aside, in the folder its job staged beside the home.
+    function seedMarker(jobId: string, homeName: string, preRestoreName: string | null): void {
         const dir = buildRestoreStagingDir(join(homeRoot, homeName), jobId);
         mkdirSync(dir, { recursive: true });
         writeFileSync(
             join(dir, 'restoring.json'),
             JSON.stringify({
                 ownerId: homeName,
-                homeDir: join(homeRoot, homeName),
                 preRestoreName,
                 parkName: `${homeName}${FAILED_RESTORE_SUFFIX}20261231-235959`,
             }),
         );
-        if (complete) writeFileSync(join(dir, 'restore-complete.json'), JSON.stringify({ completedAt: 'seeded' }));
     }
 
     beforeAll(async () => {
         mkdirSync(homeRoot, { recursive: true });
         seedFolder(interrupted, 'half-written');
         seedFolder(interruptedAside, 'the home as it was');
-        seedMarker('job-interrupted', interrupted, interruptedAside, false);
+        seedMarker('job-interrupted', interrupted, interruptedAside);
         seedFolder(finished, 'the restored home');
         seedFolder(finishedAside, 'the home as it was');
-        seedMarker('job-finished', finished, finishedAside, true);
         seedFolder(deleted, 'half-written, no copy');
-        seedMarker('job-deleted', deleted, null, false);
+        seedMarker('job-deleted', deleted, null);
         mkdirSync(join(unpacking, `home-${finished}`, 'home'), { recursive: true });
         api = await startApi(dataRoot, backupsDir, 'boot-recovery');
     }, LISTEN_TIMEOUT_MS);

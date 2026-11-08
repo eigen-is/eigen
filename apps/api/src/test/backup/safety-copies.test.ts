@@ -407,13 +407,13 @@ describe('Backup restore of a safety copy that does not survive its checks', () 
         rmSync(join(getBackupsDir(), artifact), { force: true });
     });
 
-    // A process killed after the copy is in place and before the completion note: the next boot finds no note and a
+    // A process killed after the copy is in place and before the marker goes: the next boot finds the marker and a
     // folder at the home's path. That folder is the pristine copy, so it goes back under its own name.
-    test('a safety-copy restore killed before its completion note is put back under the copy name at boot', async () => {
+    test('a safety-copy restore killed before its marker goes is put back under the copy name at boot', async () => {
         const [copy] = safetyCopies(userId);
         const jobId = `safety-killed-${Date.now()}`;
         const spies = [
-            spyOn(recoveryModule, 'writeRestoreCompleteMarker').mockImplementation(() => {}),
+            spyOn(recoveryModule, 'dropRestoringMarker').mockImplementation(() => {}),
             spyOn(recoveryModule, 'wipeRestoreStagingDir').mockImplementation(async () => {}),
         ];
         try {
