@@ -144,7 +144,7 @@ describe('ACL share email', () => {
         const doc = await createDoc('trash-notify');
         await setAcl(doc.id, { add: [{ id: ctx.bob.user.email, read: true, write: false }] });
 
-        // Trashing routes through the null-actor propagateSharedPathChange path that used to
+        // Trashing routes through the null-actor propagateSharedPathChange path, which must not
         // render "undefined removed your access" for the sharee.
         await driveDelete(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${doc.id}`);
         const afterTrash = await assertJson<Notification[]>(

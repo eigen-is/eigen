@@ -547,8 +547,7 @@ describe('CalDAV', () => {
         expect(res.status).toBe(400);
     });
 
-    test('sync-collection rejects a malformed or legacy-format token with 403 valid-sync-token', async () => {
-        // The legacy `urn:eigen:sync/N` slash form is no longer accepted — an unrecognised token is simply invalid.
+    test('sync-collection rejects a malformed token with 403 valid-sync-token', async () => {
         for (const token of ['urn:eigen:sync/5', 'urn:eigen:sync:abc', 'nonsense']) {
             const body = `<?xml version="1.0" encoding="utf-8"?>
 <D:sync-collection xmlns:D="DAV:">

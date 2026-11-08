@@ -251,9 +251,8 @@ describe('buildIcsPreviewPayload', () => {
         expect(JSON.stringify(payload)).not.toContain(HOSTILE);
     });
 
-    // One VEVENT a stranger's file spells wrong used to cost the quick look the whole file. Every member
-    // the card cannot show is counted instead: a VEVENT with no start, and an override whose series the
-    // file does not hold.
+    // Every member the card cannot show is counted: a VEVENT with no start, and an override whose series
+    // the file does not hold.
     test('a member the builder cannot read is counted, and the rest of the file still shows', () => {
         const payload = payloadOf(
             vcal([

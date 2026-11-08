@@ -231,8 +231,8 @@ describe('Comment assignee', () => {
     });
 
     test('assigning on a REAL chat whose index row was deleted heals it (ensureComment)', async () => {
-        // Legacy case: a real .eigenchat thread predating row-seeding. Create it (seeding gives it a
-        // row), delete the row directly, then assign — ensureComment must re-create it, not 404.
+        // Create it (seeding gives it a row), delete the row directly, then assign: ensureComment must
+        // re-create it, not 404.
         await drivePost<DrivePath>(
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,

@@ -2017,11 +2017,9 @@ describe('Calendar occurrence timezone consistency (audit #24)', () => {
     });
 });
 
-// Finding #1 (P1): moving an event between calendars used to be a FE create-then-delete that dropped
-// timezone/data and, for a linked event, fired a decline at the organizer. The server owns the move now:
-// a calendarId re-home that preserves every field + the row identity, drags exception children along,
-// and never runs deleteEvent's iMIP path.
-describe('Event move across calendars (finding #1)', () => {
+// The server owns a move between calendars: a calendarId re-home that preserves every field + the row
+// identity, drags exception children along, and never runs deleteEvent's iMIP path.
+describe('Event move across calendars', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
     let sourceCalId: string;
     let targetCalId: string;

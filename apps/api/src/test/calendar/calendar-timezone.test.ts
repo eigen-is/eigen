@@ -609,8 +609,7 @@ describe('Calendar Timezone', () => {
             expect(occurrences.length).toBe(5);
         });
 
-        test('old events without timezone still work (backward compat)', async () => {
-            // Event without timezone — should behave exactly like before
+        test('an event without a timezone still works', async () => {
             const startTime = new Date('2026-03-16T22:30:00Z');
 
             await createEvent(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceCalendarId, {

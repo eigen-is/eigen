@@ -650,7 +650,7 @@ describe('CalDAV round-trip fidelity', () => {
         });
 
         // Audit #C, TZID flavor: the rid must be in the MASTER's timezone form even though the
-        // stored exception row may carry a different (or legacy null) timezone.
+        // stored exception row may carry a different (or null) timezone.
         test('moved override of a TZID series echoes the rid in the master timezone', async () => {
             const body = vcal(
                 VTZ_NY,
