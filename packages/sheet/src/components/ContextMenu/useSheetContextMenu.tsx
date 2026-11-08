@@ -386,25 +386,21 @@ export function useSheetContextMenu(area: SheetMenuArea) {
         (e: React.MouseEvent) => {
             if (!allowEdit) return;
             setContext((d) => {
-                handleContextMenu(d, e.nativeEvent, refs.cellArea.current!, STATE_AREA[area]);
+                const cellArea = refs.cellArea.current;
+                if (cellArea) handleContextMenu(d, e.nativeEvent, cellArea, STATE_AREA[area]);
             });
             openMenu(e, true);
         },
         [allowEdit, setContext, refs.cellArea, area, openMenu],
     );
 
-    // A long press on touch selects and opens the same way, at a point on screen. The state layer works in page
-    // coordinates, so the scroll offset is added back.
+    // A long press on touch selects and opens the same way, at a point on screen.
     const openAtPoint = useCallback(
         (x: number, y: number) => {
             if (!allowEdit) return;
             setContext((d) => {
-                handleContextMenu(
-                    d,
-                    { pageX: x + window.scrollX, pageY: y + window.scrollY },
-                    refs.cellArea.current!,
-                    STATE_AREA[area],
-                );
+                const cellArea = refs.cellArea.current;
+                if (cellArea) handleContextMenu(d, { clientX: x, clientY: y }, cellArea, STATE_AREA[area]);
             });
             openMenuAt(true, x, y);
         },

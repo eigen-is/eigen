@@ -379,15 +379,17 @@ describe('a fill touching a merge changes nothing', () => {
 
     // Drags the fill handle from A1 down to row 3 (y = 50 lands in the third 20px row).
     function dragDown(ctx: Context) {
-        Object.assign(ctx, { rowHeaderWidth: 0, columnHeaderHeight: 0, cellSelectExtendIndex: [0, 0] });
+        ctx.cellSelectExtendIndex = [0, 0];
         ctx.selections = [
             { row: [0, 0], column: [0, 0], row_focus: 0, column_focus: 0, top: 0, left: 0, height: 19, width: 73 },
         ];
-        const container = {
-            getBoundingClientRect: () => ({ left: 0, top: 0 }),
-            querySelectorAll: () => [],
+        const cellArea = {
+            getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600 }),
+            scrollLeft: 0,
+            scrollTop: 0,
         } as unknown as HTMLDivElement;
-        onDropCellSelectEnd(ctx, { pageX: 10, pageY: 50 } as MouseEvent, container);
+        const container = { querySelectorAll: () => [] } as unknown as HTMLDivElement;
+        onDropCellSelectEnd(ctx, { clientX: 10, clientY: 50 } as MouseEvent, cellArea, container);
     }
 
     it('the fill-handle drag over a merge', () => {

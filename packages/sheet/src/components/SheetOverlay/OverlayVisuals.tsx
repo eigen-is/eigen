@@ -30,13 +30,13 @@ export function OverlayVisuals({ containerRef }: Props) {
     const onHandleMouseDown = (e: React.MouseEvent<HTMLDivElement>, handle: 'move' | 'fill') => {
         const { nativeEvent } = e;
         const cellArea = refs.cellArea.current;
-        if (!cellArea || cellGlyphAtPointer(context, refs.globalCache, nativeEvent, cellArea) != null) return;
+        if (!cellArea || cellGlyphAtPointer(context, nativeEvent, cellArea) != null) return;
         e.stopPropagation();
         setContext((draftCtx) => {
             const container = containerRef.current;
             if (!container) return;
             if (handle === 'fill') {
-                createDropCellRange(draftCtx, nativeEvent, container);
+                createDropCellRange(draftCtx, nativeEvent, cellArea, container);
             } else {
                 onCellsMoveStart(draftCtx, refs.globalCache, nativeEvent, cellArea, container);
             }

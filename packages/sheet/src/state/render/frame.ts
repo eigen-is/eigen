@@ -4,6 +4,7 @@
 // thin band at the pane's ends. Every painter places the sheet on the canvas by a plain offset, and the
 // panes paint apart, each pane of cells clipped to its own rect, so both give the same picture.
 
+import { SHEET_COLUMN_HEADER_HEIGHT, SHEET_ROW_HEADER_WIDTH } from '@workspace/lib/sheets';
 import { Canvas } from '../canvas';
 import type { Context } from '../context';
 import type { Freezen } from '../types';
@@ -50,7 +51,7 @@ export function drawFrame(canvas: HTMLCanvasElement, ctx: Context, scroll: Scrol
     for (const layer of frameLayers(ctx, scroll, freeze)) {
         paintLayer(painter, renderCtx, ctx, layer, layer.box);
     }
-    drawFreezeLines(painter, ctx, freeze);
+    drawFreezeLines(painter, freeze);
 }
 
 // Moves the frame drawn at `from` to `to` and repaints what that leaves out of date. Returns false when
@@ -124,18 +125,27 @@ export function planScroll(
 function frameLayers(ctx: Context, scroll: ScrollPos, freeze: Freezen | undefined): Layer[] {
     const rows = freeze?.horizontal?.freezenhorizontaldata;
     const cols = freeze?.vertical?.freezenverticaldata;
-    const { rowHeaderWidth, columnHeaderHeight } = ctx;
     const [width, height] = ctx.tableContentSize;
     const { frozenWidth, frozenHeight } = frozenSize(freeze);
 
     const colBands = [
-        { at: rowHeaderWidth + frozenWidth, size: width, sheet: scroll.scrollLeft + frozenWidth, follows: true },
+        {
+            at: SHEET_ROW_HEADER_WIDTH + frozenWidth,
+            size: width,
+            sheet: scroll.scrollLeft + frozenWidth,
+            follows: true,
+        },
     ];
-    if (cols) colBands.push({ at: rowHeaderWidth, size: cols.pos, sheet: cols.scroll, follows: false });
+    if (cols) colBands.push({ at: SHEET_ROW_HEADER_WIDTH, size: cols.pos, sheet: cols.scroll, follows: false });
     const rowBands = [
-        { at: columnHeaderHeight + frozenHeight, size: height, sheet: scroll.scrollTop + frozenHeight, follows: true },
+        {
+            at: SHEET_COLUMN_HEADER_HEIGHT + frozenHeight,
+            size: height,
+            sheet: scroll.scrollTop + frozenHeight,
+            follows: true,
+        },
     ];
-    if (rows) rowBands.push({ at: columnHeaderHeight, size: rows.pos, sheet: rows.scroll, follows: false });
+    if (rows) rowBands.push({ at: SHEET_COLUMN_HEADER_HEIGHT, size: rows.pos, sheet: rows.scroll, follows: false });
 
     const layers: Layer[] = [];
     for (const col of colBands) {
@@ -155,8 +165,8 @@ function frameLayers(ctx: Context, scroll: ScrollPos, freeze: Freezen | undefine
     for (const col of colBands) {
         layers.push({
             kind: 'columnHeader',
-            box: { x0: col.at, y0: 0, x1: col.at + col.size, y1: columnHeaderHeight },
-            paint: { x0: col.at - 1, y0: 0, x1: col.at + col.size - 1, y1: columnHeaderHeight - 1 },
+            box: { x0: col.at, y0: 0, x1: col.at + col.size, y1: SHEET_COLUMN_HEADER_HEIGHT },
+            paint: { x0: col.at - 1, y0: 0, x1: col.at + col.size - 1, y1: SHEET_COLUMN_HEADER_HEIGHT - 1 },
             left: col.sheet,
             top: 0,
             followsX: col.follows,
@@ -166,8 +176,8 @@ function frameLayers(ctx: Context, scroll: ScrollPos, freeze: Freezen | undefine
     for (const row of rowBands) {
         layers.push({
             kind: 'rowHeader',
-            box: { x0: 0, y0: row.at, x1: rowHeaderWidth, y1: row.at + row.size },
-            paint: { x0: 0, y0: row.at - 1, x1: rowHeaderWidth - 1, y1: row.at + row.size - 1 },
+            box: { x0: 0, y0: row.at, x1: SHEET_ROW_HEADER_WIDTH, y1: row.at + row.size },
+            paint: { x0: 0, y0: row.at - 1, x1: SHEET_ROW_HEADER_WIDTH - 1, y1: row.at + row.size - 1 },
             left: 0,
             top: row.sheet,
             followsX: false,
@@ -216,12 +226,12 @@ function paintLayer(painter: Canvas, renderCtx: CanvasRenderingContext2D, ctx: C
     renderCtx.restore();
 }
 
-function drawFreezeLines(painter: Canvas, ctx: Context, freeze: Freezen | undefined) {
+function drawFreezeLines(painter: Canvas, freeze: Freezen | undefined) {
     if (!freeze?.horizontal && !freeze?.vertical) return;
     const { frozenWidth, frozenHeight } = frozenSize(freeze);
     painter.drawFreezeLine({
-        horizontalTop: freeze.horizontal ? frozenHeight + ctx.columnHeaderHeight - 2 : undefined,
-        verticalLeft: freeze.vertical ? frozenWidth + ctx.rowHeaderWidth - 2 : undefined,
+        horizontalTop: freeze.horizontal ? frozenHeight + SHEET_COLUMN_HEADER_HEIGHT - 2 : undefined,
+        verticalLeft: freeze.vertical ? frozenWidth + SHEET_ROW_HEADER_WIDTH - 2 : undefined,
     });
 }
 
@@ -273,7 +283,7 @@ function repaint(
         const part = intersect(layer.box, reach(layer.kind === 'columnHeader' ? HEADER_MARGIN : MARGIN));
         if (part) paintLayer(painter, renderCtx, ctx, layer, part);
     }
-    drawFreezeLines(painter, ctx, freeze);
+    drawFreezeLines(painter, freeze);
     renderCtx.restore();
 }
 

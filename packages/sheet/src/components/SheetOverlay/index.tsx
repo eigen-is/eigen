@@ -4,6 +4,7 @@
 // handleCellAreaMouseDown, and coalesces mouse moves to one update per frame. A press that closes an open app-bar
 // menu is marked before the cells or a header read it, so it puts no reference into a formula.
 
+import { SHEET_COLUMN_HEADER_HEIGHT, SHEET_ROW_HEADER_WIDTH } from '@workspace/lib/sheets';
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
 import { pressClosesMenu } from '@workspace/ui/components/menubar';
@@ -108,10 +109,10 @@ export const SheetOverlay: React.FC = () => {
             setContext((draftCtx) => {
                 const cellArea = refs.cellArea.current;
                 if (!cellArea) return;
-                handleCellAreaDoubleClick(draftCtx, refs.globalCache, nativeEvent, cellArea);
+                handleCellAreaDoubleClick(draftCtx, nativeEvent, cellArea);
             });
         },
-        [refs.cellArea, refs.globalCache, setContext],
+        [refs.cellArea, setContext],
     );
 
     // Never setContext here: it would re-render every context consumer on each scroll tick.
@@ -141,14 +142,8 @@ export const SheetOverlay: React.FC = () => {
     );
 
     const overShowLinkCard = useCallback(
-        (
-            ctx: Context,
-            globalCache: GlobalCache,
-            e: MouseEvent,
-            container: HTMLDivElement,
-            scrollEl: HTMLDivElement,
-        ) => {
-            const rc = getCellRowColumn(ctx, e, container, scrollEl);
+        (ctx: Context, globalCache: GlobalCache, e: MouseEvent, cellArea: HTMLDivElement) => {
+            const rc = getCellRowColumn(ctx, e, cellArea);
             if (rc == null) return;
             const link = getCellHyperlink(ctx, rc.r, rc.c);
             if (link == null) {
@@ -187,7 +182,7 @@ export const SheetOverlay: React.FC = () => {
                             ev.target instanceof Node &&
                             cellArea.contains(ev.target)
                         ) {
-                            overShowLinkCard(draftCtx, refs.globalCache, ev, container, cellArea);
+                            overShowLinkCard(draftCtx, refs.globalCache, ev, cellArea);
                         }
                         handleOverlayMouseMove(
                             draftCtx,
@@ -387,8 +382,8 @@ export const SheetOverlay: React.FC = () => {
                     onClick={onLeftTopClick}
                     tabIndex={0}
                     style={{
-                        width: context.rowHeaderWidth - 1.5,
-                        height: context.columnHeaderHeight - 1.5,
+                        width: SHEET_ROW_HEADER_WIDTH - 1.5,
+                        height: SHEET_COLUMN_HEADER_HEIGHT - 1.5,
                     }}
                 />
                 <ColumnHeader />

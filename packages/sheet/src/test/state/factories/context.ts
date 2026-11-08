@@ -12,12 +12,32 @@ export function selectionFactory(row: number[], column: number[], row_focus: num
     ];
 }
 
+function refsFactory() {
+    return {
+        globalCache: {
+            undoList: [],
+            redoList: [],
+            scrollLeft: 0,
+            scrollTop: 0,
+            scrollListeners: new Set<() => void>(),
+            notifyScrollListeners: () => {},
+        },
+        cellInput: { current: null },
+        fxInput: { current: null },
+        canvas: { current: null },
+        cellArea: { current: null },
+        workbookContainer: { current: null },
+    };
+}
+
 // `config` seeds the first sheet's config — the one place a sheet config lives.
 export function contextFactory({
     config = {},
     ...params
 }: Partial<Context> & { config?: SheetConfig } = {}): Partial<Context> {
+    const refs = refsFactory();
     return {
+        getRefs: () => refs,
         sheets: [
             {
                 name: 'sheet',
@@ -70,21 +90,6 @@ export function contextFactory({
 
 // A whole context, for code typed to take one: the editor's defaults under contextFactory's fields.
 export function workbookContextFactory(params: Partial<Context> & { config?: SheetConfig } = {}): Context {
-    const globalCache = {
-        undoList: [],
-        redoList: [],
-        scrollLeft: 0,
-        scrollTop: 0,
-        scrollListeners: new Set<() => void>(),
-        notifyScrollListeners: () => {},
-    };
-    const refs = {
-        globalCache,
-        cellInput: { current: null },
-        fxInput: { current: null },
-        canvas: { current: null },
-        cellArea: { current: null },
-        workbookContainer: { current: null },
-    };
-    return { ...defaultContext(refs), ...contextFactory(params) };
+    const refs = refsFactory();
+    return { ...defaultContext(refs), ...contextFactory({ getRefs: () => refs, ...params }) };
 }

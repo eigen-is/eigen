@@ -1,7 +1,7 @@
 // Row and column header strips: header backgrounds, sequence labels, and
 // the separator lines (hidden rows/columns get a doubled separator).
 
-import { columnIndexToLabel } from '@workspace/lib/sheets';
+import { columnIndexToLabel, SHEET_COLUMN_HEADER_HEIGHT, SHEET_ROW_HEADER_WIDTH } from '@workspace/lib/sheets';
 import type { Context } from '../context';
 import { getSheetConfig } from '../context';
 import { defaultFont, getMeasureText } from '../modules/text';
@@ -18,7 +18,7 @@ export function drawRowHeader(
     renderCtx.save();
     renderCtx.scale(sheetCtx.devicePixelRatio, sheetCtx.devicePixelRatio);
 
-    renderCtx.clearRect(0, offsetTop, sheetCtx.rowHeaderWidth - 1, drawHeight);
+    renderCtx.clearRect(0, offsetTop, SHEET_ROW_HEADER_WIDTH - 1, drawHeight);
 
     const colors = canvasColors(renderCtx.canvas);
     const font = defaultFont();
@@ -29,7 +29,7 @@ export function drawRowHeader(
 
     renderCtx.save();
     renderCtx.beginPath();
-    renderCtx.rect(0, offsetTop - 1, sheetCtx.rowHeaderWidth - 1, drawHeight - 2);
+    renderCtx.rect(0, offsetTop - 1, SHEET_ROW_HEADER_WIDTH - 1, drawHeight - 2);
     renderCtx.clip();
 
     const rowhidden = getSheetConfig(sheetCtx)?.rowhidden;
@@ -45,7 +45,7 @@ export function drawRowHeader(
             renderCtx.fillRect(
                 0,
                 startY + offsetTop + firstOffset,
-                sheetCtx.rowHeaderWidth - 1,
+                SHEET_ROW_HEADER_WIDTH - 1,
                 endY - startY + 1 + lastOffset - firstOffset,
             );
             renderCtx.fillStyle = colors.headerText;
@@ -53,7 +53,7 @@ export function drawRowHeader(
             // Row header sequence number
             const textMetrics = getMeasureText(r + 1, renderCtx, font);
 
-            const horizonAlignPos = (sheetCtx.rowHeaderWidth - textMetrics.width) / 2;
+            const horizonAlignPos = (SHEET_ROW_HEADER_WIDTH - textMetrics.width) / 2;
             const verticalAlignPos = startY + (endY - startY) / 2 + offsetTop;
 
             renderCtx.fillText(`${r + 1}`, horizonAlignPos, verticalAlignPos);
@@ -61,8 +61,8 @@ export function drawRowHeader(
 
         // Row header right edge
         renderCtx.beginPath();
-        renderCtx.moveTo(sheetCtx.rowHeaderWidth - 2 + HALF_PIXEL, startY + offsetTop - 2);
-        renderCtx.lineTo(sheetCtx.rowHeaderWidth - 2 + HALF_PIXEL, endY + offsetTop - 2);
+        renderCtx.moveTo(SHEET_ROW_HEADER_WIDTH - 2 + HALF_PIXEL, startY + offsetTop - 2);
+        renderCtx.lineTo(SHEET_ROW_HEADER_WIDTH - 2 + HALF_PIXEL, endY + offsetTop - 2);
         renderCtx.lineWidth = 1;
 
         renderCtx.strokeStyle = colors.gridLine;
@@ -73,13 +73,13 @@ export function drawRowHeader(
         if (rowhidden && rowhidden[r] == null && rowhidden[r + 1] != null) {
             renderCtx.beginPath();
             renderCtx.moveTo(-1, endY + offsetTop - 4 + HALF_PIXEL);
-            renderCtx.lineTo(sheetCtx.rowHeaderWidth - 1, endY + offsetTop - 4 + HALF_PIXEL);
+            renderCtx.lineTo(SHEET_ROW_HEADER_WIDTH - 1, endY + offsetTop - 4 + HALF_PIXEL);
             renderCtx.closePath();
             renderCtx.stroke();
         } else if (rowhidden == null || rowhidden[r] == null) {
             renderCtx.beginPath();
             renderCtx.moveTo(-1, endY + offsetTop - 2 + HALF_PIXEL);
-            renderCtx.lineTo(sheetCtx.rowHeaderWidth - 1, endY + offsetTop - 2 + HALF_PIXEL);
+            renderCtx.lineTo(SHEET_ROW_HEADER_WIDTH - 1, endY + offsetTop - 2 + HALF_PIXEL);
 
             renderCtx.closePath();
             renderCtx.stroke();
@@ -88,7 +88,7 @@ export function drawRowHeader(
         if (rowhidden?.[r - 1] != null && prevEndY !== undefined) {
             renderCtx.beginPath();
             renderCtx.moveTo(-1, prevEndY + offsetTop + HALF_PIXEL);
-            renderCtx.lineTo(sheetCtx.rowHeaderWidth - 1, prevEndY + offsetTop + HALF_PIXEL);
+            renderCtx.lineTo(SHEET_ROW_HEADER_WIDTH - 1, prevEndY + offsetTop + HALF_PIXEL);
             renderCtx.closePath();
             renderCtx.stroke();
         }
@@ -109,7 +109,7 @@ export function drawColumnHeader(
 ) {
     renderCtx.save();
     renderCtx.scale(sheetCtx.devicePixelRatio, sheetCtx.devicePixelRatio);
-    renderCtx.clearRect(offsetLeft, 0, drawWidth, sheetCtx.columnHeaderHeight - 1);
+    renderCtx.clearRect(offsetLeft, 0, drawWidth, SHEET_COLUMN_HEADER_HEIGHT - 1);
 
     const colors = canvasColors(renderCtx.canvas);
     const font = defaultFont();
@@ -120,7 +120,7 @@ export function drawColumnHeader(
 
     renderCtx.save();
     renderCtx.beginPath();
-    renderCtx.rect(offsetLeft - 1, 0, drawWidth, sheetCtx.columnHeaderHeight - 1);
+    renderCtx.rect(offsetLeft - 1, 0, drawWidth, SHEET_COLUMN_HEADER_HEIGHT - 1);
     renderCtx.clip();
 
     const colhidden = getSheetConfig(sheetCtx)?.colhidden;
@@ -132,7 +132,7 @@ export function drawColumnHeader(
         const columnLabel = columnIndexToLabel(c);
         if (colhidden?.[c] == null) {
             renderCtx.fillStyle = colors.headerBackground;
-            renderCtx.fillRect(startX + offsetLeft - 1, 0, endX - startX, sheetCtx.columnHeaderHeight - 1);
+            renderCtx.fillRect(startX + offsetLeft - 1, 0, endX - startX, SHEET_COLUMN_HEADER_HEIGHT - 1);
             renderCtx.fillStyle = colors.headerText;
 
             // Column header sequence number
@@ -142,7 +142,7 @@ export function drawColumnHeader(
             // by half a pixel.
             const sheetLeft = startX + scrollWidth + (endX - startX) / 2 - textMetrics.width / 2;
             const horizonAlignPos = Math.round(sheetLeft) - scrollWidth + offsetLeft;
-            const verticalAlignPos = Math.round(sheetCtx.columnHeaderHeight / 2);
+            const verticalAlignPos = Math.round(SHEET_COLUMN_HEADER_HEIGHT / 2);
 
             renderCtx.fillText(columnLabel, horizonAlignPos, verticalAlignPos);
         }
@@ -151,7 +151,7 @@ export function drawColumnHeader(
         if (colhidden && colhidden[c] != null && colhidden[c + 1] != null) {
             renderCtx.beginPath();
             renderCtx.moveTo(endX + offsetLeft - 4 + HALF_PIXEL, 0);
-            renderCtx.lineTo(endX + offsetLeft - 4 + HALF_PIXEL, sheetCtx.columnHeaderHeight - 2);
+            renderCtx.lineTo(endX + offsetLeft - 4 + HALF_PIXEL, SHEET_COLUMN_HEADER_HEIGHT - 2);
             renderCtx.lineWidth = 1;
             renderCtx.strokeStyle = colors.gridLine;
             renderCtx.closePath();
@@ -159,7 +159,7 @@ export function drawColumnHeader(
         } else if (colhidden == null || colhidden[c] == null) {
             renderCtx.beginPath();
             renderCtx.moveTo(endX + offsetLeft - 2 + HALF_PIXEL, 0);
-            renderCtx.lineTo(endX + offsetLeft - 2 + HALF_PIXEL, sheetCtx.columnHeaderHeight - 2);
+            renderCtx.lineTo(endX + offsetLeft - 2 + HALF_PIXEL, SHEET_COLUMN_HEADER_HEIGHT - 2);
 
             renderCtx.lineWidth = 1;
             renderCtx.strokeStyle = colors.gridLine;
@@ -170,15 +170,15 @@ export function drawColumnHeader(
         if (colhidden?.[c - 1] != null && prevEndX !== undefined) {
             renderCtx.beginPath();
             renderCtx.moveTo(prevEndX + offsetLeft + HALF_PIXEL, 0);
-            renderCtx.lineTo(prevEndX + offsetLeft + HALF_PIXEL, sheetCtx.columnHeaderHeight - 2);
+            renderCtx.lineTo(prevEndX + offsetLeft + HALF_PIXEL, SHEET_COLUMN_HEADER_HEIGHT - 2);
             renderCtx.closePath();
             renderCtx.stroke();
         }
 
         // Column header bottom edge
         renderCtx.beginPath();
-        renderCtx.moveTo(startX + offsetLeft - 1, sheetCtx.columnHeaderHeight - 2 + HALF_PIXEL);
-        renderCtx.lineTo(endX + offsetLeft - 1, sheetCtx.columnHeaderHeight - 2 + HALF_PIXEL);
+        renderCtx.moveTo(startX + offsetLeft - 1, SHEET_COLUMN_HEADER_HEIGHT - 2 + HALF_PIXEL);
+        renderCtx.lineTo(endX + offsetLeft - 1, SHEET_COLUMN_HEADER_HEIGHT - 2 + HALF_PIXEL);
         renderCtx.stroke();
         renderCtx.closePath();
 

@@ -80,11 +80,6 @@ export type Context = {
 
     cellmainWidth: number;
     cellmainHeight: number;
-    toolbarHeight: number;
-    infobarHeight: number;
-    calculatebarHeight: number;
-    rowHeaderWidth: number;
-    columnHeaderHeight: number;
     tableContentSize: number[];
 
     defaultcollen: number;
@@ -190,11 +185,6 @@ export function defaultContext(refs: RefValues): Context {
 
         cellmainWidth: 0,
         cellmainHeight: 0,
-        toolbarHeight: 41,
-        infobarHeight: 57,
-        calculatebarHeight: 29,
-        rowHeaderWidth: SHEET_ROW_HEADER_WIDTH,
-        columnHeaderHeight: SHEET_COLUMN_HEADER_HEIGHT,
         tableContentSize: [0, 0],
 
         defaultcollen: SHEET_DEFAULT_COL_WIDTH,
@@ -354,8 +344,8 @@ export function updateContextWithSheetData(ctx: Context, data: CellMatrix) {
 
 export function updateContextWithCanvas(ctx: Context, canvas: HTMLCanvasElement, placeholder: HTMLDivElement) {
     ctx.tableContentSize = [placeholder.clientWidth, placeholder.clientHeight];
-    ctx.cellmainHeight = placeholder.clientHeight - ctx.columnHeaderHeight;
-    ctx.cellmainWidth = placeholder.clientWidth - ctx.rowHeaderWidth;
+    ctx.cellmainHeight = placeholder.clientHeight - SHEET_COLUMN_HEADER_HEIGHT;
+    ctx.cellmainWidth = placeholder.clientWidth - SHEET_ROW_HEADER_WIDTH;
 
     canvas.style.width = `${ctx.tableContentSize[0]}px`;
     canvas.style.height = `${ctx.tableContentSize[1]}px`;

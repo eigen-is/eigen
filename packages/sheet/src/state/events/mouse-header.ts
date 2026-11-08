@@ -16,34 +16,23 @@ import {
     rangeSetValue,
 } from '../modules';
 import { cancelFunctionrangeSelected, mergeMoveMain, updateCell } from '../modules/cell';
-import { colLocation, colLocationByIndex, rowLocation, rowLocationByIndex } from '../modules/location';
+import { colLocation, colLocationByIndex, rowLocation, rowLocationByIndex, sheetPoint } from '../modules/location';
 import type { GlobalCache } from '../types';
 import { swallowMenuPress } from './mouse-cell';
 import { extendSelectionGeometry } from './mouse-drag';
-import { fixPositionOnFrozenCells } from './mouse-resize';
 
 export function handleRowHeaderMouseDown(
     ctx: Context,
     globalCache: GlobalCache,
     e: MouseEvent,
-    container: HTMLDivElement,
+    cellArea: HTMLDivElement,
     cellInput: HTMLDivElement,
     fxInput: HTMLDivElement | null,
 ) {
     if (swallowMenuPress(ctx, globalCache, e)) return;
     deselectFloatingObject(ctx);
 
-    const rect = container.getBoundingClientRect();
-    const mouseY = e.pageY - rect.top - window.scrollY;
-    const _y = mouseY + ctx.scrollTop;
-
-    const freeze = globalCache.freezen?.[ctx.currentSheetId];
-    const { y } = fixPositionOnFrozenCells(freeze, 0, _y, 0, mouseY);
-
-    const row_location = rowLocation(y, ctx.visibledatarow);
-    const row = row_location[1];
-    const row_pre = row_location[0];
-    const row_index = row_location[2];
+    const [row_pre, row, row_index] = rowLocation(sheetPoint(ctx, e, cellArea).y, ctx.visibledatarow);
     const col_index = ctx.visibledatacolumn.length - 1;
     const col = ctx.visibledatacolumn[col_index];
     const col_pre = 0;
@@ -306,26 +295,17 @@ export function handleColumnHeaderMouseDown(
     ctx: Context,
     globalCache: GlobalCache,
     e: MouseEvent,
-    container: HTMLElement,
+    cellArea: HTMLDivElement,
     cellInput: HTMLDivElement,
     fxInput: HTMLDivElement | null,
 ) {
     if (swallowMenuPress(ctx, globalCache, e)) return;
     deselectFloatingObject(ctx);
 
-    const rect = container.getBoundingClientRect();
-    const mouseX = e.pageX - rect.left - window.scrollX;
-    const _x = mouseX + ctx.scrollLeft;
-    const freeze = globalCache.freezen?.[ctx.currentSheetId];
-    const { x } = fixPositionOnFrozenCells(freeze, _x, 0, mouseX, 0);
-
     const row_index = ctx.visibledatarow.length - 1;
     const row = ctx.visibledatarow[row_index];
     const row_pre = 0;
-    const col_location = colLocation(x, ctx.visibledatacolumn);
-    const col = col_location[1];
-    const col_pre = col_location[0];
-    const col_index = col_location[2];
+    const [col_pre, col, col_index] = colLocation(sheetPoint(ctx, e, cellArea).x, ctx.visibledatacolumn);
 
     if (e.button === 2) {
         const flowdata = getFlowdata(ctx);

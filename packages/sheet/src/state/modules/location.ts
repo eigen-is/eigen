@@ -1,66 +1,65 @@
+// Where a pointer is on the sheet. sheetPoint measures every mouse event of the grid and its headers from the cell
+// area, whatever element received it, such as a press on a cell or a fill drag over a header. visibledatarow and
+// visibledatacolumn hold each row's and column's far edge, so rowLocation and colLocation turn the point's sheet
+// position into a row or a column.
+
 import { sortedIndex } from 'es-toolkit/compat';
 import type { Context } from '../context';
+import type { OverlayRegionSpec } from './freeze';
 
-export function mousePosition(x: number, y: number, ctx: Context) {
-    const newX = x - ctx.rowHeaderWidth;
-    const newY =
-        y -
-        // ctx.infobarHeight -
-        ctx.toolbarHeight -
-        ctx.calculatebarHeight -
-        ctx.columnHeaderHeight;
+// viewX and viewY are relative to the cell area's top left, and width and height are its size. x and y are the place on
+// the sheet the pointer shows, which in a frozen pane doesn't follow the scroll. A point over a header or past the grid
+// has a view coordinate outside the cell area.
+type SheetPoint = {
+    viewX: number;
+    viewY: number;
+    width: number;
+    height: number;
+    x: number;
+    y: number;
+    inside: boolean;
+    pane: OverlayRegionSpec['pane'];
+};
 
-    return [newX, newY];
+export function sheetPoint(
+    ctx: Context,
+    e: Pick<MouseEvent, 'clientX' | 'clientY'>,
+    cellArea: HTMLElement,
+): SheetPoint {
+    const { left, top, width, height } = cellArea.getBoundingClientRect();
+    const viewX = e.clientX - left;
+    const viewY = e.clientY - top;
+    const freeze = ctx.getRefs().globalCache.freezen?.[ctx.currentSheetId];
+    const cols = freeze?.vertical?.freezenverticaldata;
+    const rows = freeze?.horizontal?.freezenhorizontaldata;
+    const inCols = cols != null && viewX < cols.pos - cols.scroll;
+    const inRows = rows != null && viewY < rows.pos - rows.scroll;
+    return {
+        viewX,
+        viewY,
+        width,
+        height,
+        x: viewX + (inCols ? cols.scroll : cellArea.scrollLeft),
+        y: viewY + (inRows ? rows.scroll : cellArea.scrollTop),
+        inside: viewX >= 0 && viewY >= 0 && viewX < width && viewY < height,
+        pane: inRows && inCols ? 'corner' : inRows ? 'rows' : inCols ? 'cols' : 'main',
+    };
 }
 
 export function rowLocationByIndex(row_index: number, visibleRow: number[]) {
-    let row = 0;
-    let row_pre = 0;
-    row = visibleRow[row_index];
-
-    if (row_index === 0) {
-        row_pre = 0;
-    } else {
-        row_pre = visibleRow[row_index - 1];
-    }
-
-    return [row_pre, row, row_index];
+    return [row_index === 0 ? 0 : visibleRow[row_index - 1], visibleRow[row_index], row_index];
 }
 
 export function rowLocation(y: number, visibleRow: number[]) {
-    let row_index = sortedIndex(visibleRow, y);
-
-    if (row_index >= visibleRow.length && y > 0) {
-        row_index = visibleRow.length - 1;
-    } else if (row_index === -1 && y <= 0) {
-        row_index = 0;
-    }
-
-    return rowLocationByIndex(row_index, visibleRow);
+    const row_index = sortedIndex(visibleRow, y);
+    return rowLocationByIndex(row_index >= visibleRow.length && y > 0 ? visibleRow.length - 1 : row_index, visibleRow);
 }
 
 export function colLocationByIndex(col_index: number, visibleCol: number[]) {
-    let col = 0;
-    let col_pre = 0;
-    col = visibleCol[col_index];
-
-    if (col_index === 0) {
-        col_pre = 0;
-    } else {
-        col_pre = visibleCol[col_index - 1];
-    }
-
-    return [col_pre, col, col_index];
+    return [col_index === 0 ? 0 : visibleCol[col_index - 1], visibleCol[col_index], col_index];
 }
 
 export function colLocation(x: number, visibleCol: number[]) {
-    let col_index = sortedIndex(visibleCol, x);
-
-    if (col_index >= visibleCol.length && x > 0) {
-        col_index = visibleCol.length - 1;
-    } else if (col_index === -1 && x <= 0) {
-        col_index = 0;
-    }
-
-    return colLocationByIndex(col_index, visibleCol);
+    const col_index = sortedIndex(visibleCol, x);
+    return colLocationByIndex(col_index >= visibleCol.length && x > 0 ? visibleCol.length - 1 : col_index, visibleCol);
 }
