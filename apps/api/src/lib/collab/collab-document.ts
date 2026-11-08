@@ -28,6 +28,7 @@ import {
     CONTAINER_MEDIA_FOLDER,
 } from '../mount/container-dbs';
 import type { User } from '../user';
+import { getUserById } from '../user';
 import { COLLAB_DB_CONFIG } from './db-config';
 import { DbProvider } from './db-provider';
 
@@ -211,14 +212,16 @@ export class CollabDocument {
         if (this.connections.size === 0) this.scheduleClose();
     }
 
-    // Read is checked once, when a socket opens, while write is checked on every message. So when
-    // sharing changes, the Drive calls this to drop each user who may no longer read. Otherwise they
+    // Read is checked when a socket opens, while write is checked on every message. So when sharing or a
+    // membership changes, the Drive calls this to drop each user who may no longer read. Otherwise they
     // would keep receiving edits until they disconnect.
     public async enforceReadAccess(): Promise<void> {
         if (this.closed) return;
         // A copy, because unsubscribe changes the map.
-        for (const [conn, user] of [...this.connections]) {
-            if (!(await this.drive.canRead(this.path.mountId, this.path.id, user))) {
+        for (const [conn, { id }] of [...this.connections]) {
+            // The row, not the user the socket opened with: an ACL entry outlives its user, and matches on the email.
+            const user = await getUserById(id);
+            if (!user || !(await this.drive.canRead(this.path.mountId, this.path.id, user))) {
                 conn.close(1008, 'Access revoked');
                 this.unsubscribe(conn);
             }

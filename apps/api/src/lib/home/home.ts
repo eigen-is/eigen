@@ -275,6 +275,11 @@ export class Home {
         }
     }
 
+    // Uses the field, not the getter: a home without a drive, such as an org's, has no open document to check.
+    public async enforceReadAccess(): Promise<void> {
+        await this._drive?.enforceReadAccess();
+    }
+
     // A team home has no notification center, so a notice to it is dropped.
     public notify(input: NotificationPersistInput): void {
         this._notifications?.persist(input);

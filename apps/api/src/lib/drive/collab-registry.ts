@@ -1,8 +1,9 @@
 // The collab documents that are open in one Drive, such as docs that someone edits right now. It opens
-// each document once, however many people connect, and closes it again. When sharing changes, it
-// closes the connections of people who may no longer read.
+// each document once, however many people connect, and closes it again. When sharing or a membership
+// changes, it closes the connections of people who may no longer read.
 
 import { isCollabType, isContainerType } from '@workspace/lib/types/drive';
+import type { AsyncSingleton } from '../../utils/singleton';
 import { createAsyncSingleton } from '../../utils/singleton';
 import { CollabDocument } from '../collab/collab-document';
 import { ApiError } from '../core';
@@ -10,7 +11,7 @@ import type { Mount } from '../mount';
 import type { Drive } from './drive';
 
 export class CollabRegistry {
-    private readonly documents = new Map<string, () => Promise<CollabDocument>>();
+    private readonly documents = new Map<string, AsyncSingleton<CollabDocument>>();
     // Set by destructAll. A document opened after it would never be destructed, and closing the mount
     // next would close its database under it.
     private destructed = false;
@@ -105,20 +106,27 @@ export class CollabRegistry {
         if (!path) return;
 
         if (isCollabType(path.type)) {
-            // Only an open document has connections to check.
-            const getter = this.documents.get(this.key(mount.id, pathId));
-            if (!getter) return;
-            try {
-                const doc = await getter();
-                await doc.enforceReadAccess();
-            } catch (error) {
-                console.error(`Failed to enforce read access on ${pathId}:`, error);
-            }
+            await this.enforceReadAccessOn(this.key(mount.id, pathId));
         } else if (isContainerType(path.type)) {
             const children = await mount.listFolderAll(pathId);
             for (const child of children) {
                 await this.enforceReadAccessBelow(mount, child.id);
             }
+        }
+    }
+
+    // The same check for every open document, after a change no path hears of, such as a member leaving a team.
+    public async enforceReadAccess(): Promise<void> {
+        for (const key of this.documents.keys()) await this.enforceReadAccessOn(key);
+    }
+
+    // A document that is still loading has no connections yet, and its load can take as long as a download, so
+    // nothing waits for it. One document that fails must not stop the check of the others.
+    private async enforceReadAccessOn(key: string): Promise<void> {
+        try {
+            await this.documents.get(key)?.peek()?.enforceReadAccess();
+        } catch (error) {
+            console.error(`Failed to enforce read access on ${key}:`, error);
         }
     }
 

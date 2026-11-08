@@ -1,6 +1,6 @@
 // The collab routes: a document's access info and comment index over HTTP, and the WebSocket each
-// editor opens to sync a document. The socket checks read once when it opens and write on every
-// message, and it hands the frames to the CollabDocument the Drive keeps open for that document.
+// editor opens to sync a document. The socket checks read when it opens and write on every message,
+// and it hands the frames to the CollabDocument the Drive keeps open for that document.
 
 import {
     COLLAB_HOME_REPLACED_CLOSE,
@@ -26,7 +26,7 @@ import { getSharedDrive } from '../lib/drive';
 import type { DriveLike } from '../lib/drive/get-drive';
 import { getDataEpoch } from '../lib/home/data-epoch';
 import { sendToHome } from '../lib/home/home-relay';
-import { getUserByEmail } from '../lib/user';
+import { getUserByEmail, getUserById } from '../lib/user';
 import { keepWebSocketAlive } from '../utils/websockets';
 import { betterAuth } from './auth';
 
@@ -230,6 +230,14 @@ export const collabRouter = new Elysia({
                 session.drive = drive;
                 session.collabDocument = document;
                 session.pingInterval = keepWebSocketAlive(user, rawWs, () => cleanupSession(session, rawWs));
+
+                // A removal or an ACL change during the load found no connection to close, and one after the subscribe
+                // finds this one. A frame that waits for `opened` finds no document once the session is cleaned up.
+                const current = await getUserById(user.id);
+                if (!current || !(await drive.canRead(mountId, pathId, current))) {
+                    ws.close(1008, 'Access revoked');
+                    cleanupSession(session, rawWs);
+                }
             } catch (err) {
                 const status = err instanceof ApiError ? err.status : 500;
                 // A refusal, such as a document in the trash, is expected on every reconnect, so it gets one line.
