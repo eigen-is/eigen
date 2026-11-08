@@ -117,8 +117,7 @@ export function undoEntry(ctx: Context, entry: History): Step {
     if (options?.insertRowColOp || options?.deleteRowColOp) {
         return rowColStep(ctx, entry.inversePatches, inverseRowColOptions(options) ?? {});
     }
-    if (options?.renameSheetOp)
-        return applyBatch(ctx, renameSheetOps(options.renameSheetOp.id, options.renameSheetOp.from));
+    if (options?.renameSheetOp) return renameStep(ctx, options.renameSheetOp.id, options.renameSheetOp.from);
     return patchStep(ctx, entry.inversePatches, entry.patches);
 }
 
@@ -135,8 +134,7 @@ export function redoEntry(ctx: Context, entry: History): Step {
     if (options?.insertRowColOp || options?.deleteRowColOp) {
         return rowColStep(ctx, entry.patches, options);
     }
-    if (options?.renameSheetOp)
-        return applyBatch(ctx, renameSheetOps(options.renameSheetOp.id, options.renameSheetOp.name));
+    if (options?.renameSheetOp) return renameStep(ctx, options.renameSheetOp.id, options.renameSheetOp.name);
     return patchStep(ctx, entry.patches, entry.inversePatches);
 }
 
@@ -169,6 +167,12 @@ function atSheetIndex(ctx: Context, patches: Patch[]): Patch[] {
         if (index != null) resolved.push({ ...patch, path: ['sheets', index, ...rest] });
     }
     return resolved;
+}
+
+function renameStep(ctx: Context, id: string, name: string): Step {
+    const ops = renameSheetOps(id, name);
+    const applied = applyOpBatch(ctx, ops);
+    return applied ? { ctx: produce(applied.ctx, settleCurrentSheet), ops } : { ctx, ops: [] };
 }
 
 // A sheet comes back, or goes, through applyOpBatch, as a peer's would. The step is the author here, so it moves the
