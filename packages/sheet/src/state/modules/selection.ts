@@ -14,7 +14,7 @@ import { cellDisplay, numberDisplay, numberText } from '../../engine/format';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
 import type { CalcChainEntry, Cell, CellMatrix, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
-import { getSheetIndex, isAllowEdit, replaceHtml, styleObjectToCss } from '../utils';
+import { getSheetIndex, replaceHtml, styleObjectToCss } from '../utils';
 import type { CarryTile } from './cell';
 import {
     carriedLines,
@@ -1235,11 +1235,6 @@ export function deleteSelectedCellText(ctx: Context): string {
     // select-all). Reset up front so an aborted delete never leaves a stale set.
     const changed: CalcChainEntry[] = [];
     ctx.formulaCache.pendingChangedCells = changed;
-
-    const allowEdit = isAllowEdit(ctx);
-    if (allowEdit === false) {
-        return 'allowEdit';
-    }
 
     const selection = ctx.selections;
     if (selection && !isEmpty(selection)) {

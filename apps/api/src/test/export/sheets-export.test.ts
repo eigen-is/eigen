@@ -660,7 +660,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
         expect(rt[0].conditionalFormatRules).toEqual(rules);
     });
 
-    test('skips occurrenceDate and icons rules without emitting empty blocks', async () => {
+    test('skips an occurrenceDate rule without emitting an empty block', async () => {
         const rules: ConditionalFormatRule[] = [
             {
                 type: 'default',
@@ -670,7 +670,6 @@ describe('Sheets xlsx export — conditional formatting', () => {
                 conditionRange: [],
                 conditionValue: ['2024-01-01', '2024-12-31'],
             },
-            { type: 'icons', cellrange: [{ row: [0, 4], column: [0, 0] }] },
             {
                 type: 'default',
                 cellrange: [{ row: [0, 4], column: [0, 0] }],
@@ -689,10 +688,10 @@ describe('Sheets xlsx export — conditional formatting', () => {
         expect(written.get('A1:A5')?.map(({ attributes }) => attributes)).toMatchObject([
             { type: 'cellIs', operator: 'equal', priority: '1' },
         ]);
-        expect(warnings).toEqual([{ code: 'conditional-formats-dropped', count: 2 }]);
+        expect(warnings).toEqual([{ code: 'conditional-formats-dropped', count: 1 }]);
 
         const rt = await roundTrip(sheets);
-        expect(rt[0].conditionalFormatRules).toEqual([rules[2]]);
+        expect(rt[0].conditionalFormatRules).toEqual([rules[1]]);
     });
 
     test("exports duplicate and unique value rules as Excel's own, which re-import as themselves", async () => {

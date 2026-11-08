@@ -57,7 +57,7 @@ export type Context = {
     searchActive?: SearchHighlight | null;
     linkCard?: LinkCardProps;
     // Whether a range picker is open. While it is, the cell editor and the link card keep out of the way of the pick.
-    // A notice for the overlay to show, such as why a protected sheet refused an edit. A write sets it, and the
+    // A notice for the overlay to show, such as why an edit was refused. A write sets it, and the
     // overlay opens the notice and clears it.
     warnDialog?: string;
     validationListOpen?: boolean;
@@ -132,8 +132,6 @@ export type Context = {
     cellGlyphHover?: CellGlyph;
 
     scrolling: boolean;
-
-    currentSheetIsPivot: boolean;
 
     rowsSelected: boolean;
     colsSelected: boolean;
@@ -225,8 +223,6 @@ export function defaultContext(refs: RefValues): Context {
         filter: {},
 
         scrolling: false,
-
-        currentSheetIsPivot: false,
 
         rowsSelected: false,
         colsSelected: false,

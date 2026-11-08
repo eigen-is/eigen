@@ -28,10 +28,8 @@ import { cellGlyphAt } from '../modules/cell-glyph';
 import { getFilterButtonAtPosition } from '../modules/filter';
 import { showLinkCard } from '../modules/hyperlink';
 import { colLocation, colLocationByIndex, rowLocation, rowLocationByIndex } from '../modules/location';
-import { checkProtectionSelectLockedOrUnLockedCells } from '../modules/protection';
 import { normalizeSelection } from '../modules/selection';
 import type { GlobalCache } from '../types';
-import { isAllowEdit } from '../utils';
 import { extendSelectionGeometry } from './mouse-drag';
 import { fixPositionOnFrozenCells } from './mouse-resize';
 
@@ -182,7 +180,7 @@ export function handleCellAreaMouseDown(
     if (
         e.button !== 2 &&
         !editing &&
-        isAllowEdit(ctx) &&
+        ctx.allowEdit !== false &&
         isDropdownChevronClick(ctx, row_index, col_index, textBox, x, y)
     ) {
         ctx.validationListOpen = true;
@@ -396,9 +394,7 @@ export function handleCellAreaMouseDown(
         updateCell(ctx, ctx.editingCellPosition[0], ctx.editingCellPosition[1], cellInput, undefined, canvas);
         ctx.selectionActive = true;
     }
-    if (checkProtectionSelectLockedOrUnLockedCells(ctx, row_index, col_index, ctx.currentSheetId)) {
-        ctx.selectionActive = true;
-    }
+    ctx.selectionActive = true;
 
     if (ctx.selectionActive) {
         if (e.shiftKey) {
@@ -519,7 +515,7 @@ export function handleCellAreaDoubleClick(
     ) {
         return;
     }
-    if (!isAllowEdit(ctx)) return;
+    if (ctx.allowEdit === false) return;
 
     const rect = container.getBoundingClientRect();
     const mouseX = e.pageX - rect.left;

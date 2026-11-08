@@ -379,7 +379,7 @@ describe('execFunctionGroup — references resolved before the sheets changed', 
         const ctx = workbook('=One!A1');
         warmFormulaCellInfoMap(ctx);
         deleteSheet(ctx, 'id_1');
-        addSheet(ctx, 'id_3', false, 'One');
+        addSheet(ctx, 'id_3', 'One');
         ctx.sheets[1].data = grid(4, 4);
         editCell(ctx, 0, 0, 100, 'id_3');
         expect(ctx.sheets[0].data?.[0][1]?.v).toBe(100);

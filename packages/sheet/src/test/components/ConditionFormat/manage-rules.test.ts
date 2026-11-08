@@ -1,6 +1,5 @@
 // The Manage rules dialog lists the sheet's conditional formats, each with its description and range, and a named
-// delete button that removes that rule at once. A protected sheet refuses the delete with its hint. It is a list with
-// no submit, so its footer has only Close.
+// delete button that removes that rule at once. It is a list with no submit, so its footer has only Close.
 
 import { expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -70,12 +69,4 @@ test('each rule has a named delete button that removes it at once', async () => 
 test('a formula rule, such as one whose value reads a cell, shows its formula', async () => {
     const dialog = await openManageRules([{ ...GREATER_THAN, conditionName: 'formula', conditionValue: ['=A1>$B$1'] }]);
     expect(dialog.dialogs()[0]?.textContent).toContain('Custom formula =A1>$B$1');
-});
-
-test('a protected sheet keeps its rule and shows its hint', async () => {
-    const hintText = 'This sheet is protected.';
-    const dialog = await openManageRules([GREATER_THAN], { authority: { sheet: 1, hintText } });
-    await act(async () => deleteButtons()[0]?.click());
-    expect(dialog.context().sheets[0]?.conditionalFormatRules).toEqual([GREATER_THAN]);
-    expect(dialog.context().warnDialog).toBe(hintText);
 });

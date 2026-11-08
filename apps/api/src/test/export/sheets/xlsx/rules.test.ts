@@ -182,7 +182,6 @@ describe('a conditional format', () => {
         const { xml, lost, conditionalFormatRules } = roundTrip({
             conditionalFormatRules: [
                 condition('greaterThan', ['1']),
-                { type: 'icons', cellrange: RANGE },
                 condition('occurrenceDate', ['2026/01/01 - 2026/01/31']),
                 condition('lessThan', ['0']),
                 condition('duplicateValue', ['2']),
@@ -202,7 +201,7 @@ describe('a conditional format', () => {
             'lessThan',
             'equal',
         ]);
-        expect(lost).toEqual(Array(10).fill('conditional-formats-dropped'));
+        expect(lost).toEqual(Array(9).fill('conditional-formats-dropped'));
     });
 
     test('a sheet without rules writes nothing', () => {

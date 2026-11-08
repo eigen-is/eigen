@@ -12,7 +12,7 @@ import type { Cell, CellMatrix, SingleRange } from '../../engine/types';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
 import type { Rect } from '../types';
-import { getSheetIndex, isAllowEdit } from '../utils';
+import { getSheetIndex } from '../utils';
 import { carrySides, getBorderInfoCompute } from './border';
 import { setCellValue } from './cell';
 import { createContextResolver } from './formula-cache';
@@ -1881,8 +1881,7 @@ function getApplyData(
 
 export function updateDropCell(ctx: Context) {
     const d = getFlowdata(ctx);
-    const allowEdit = isAllowEdit(ctx);
-    if (allowEdit === false || d == null) {
+    if (ctx.allowEdit === false || d == null) {
         return;
     }
 

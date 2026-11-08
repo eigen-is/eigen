@@ -20,7 +20,6 @@ import type { ConditionRulesProps } from '../types';
 import { getSheetIndex } from '../utils';
 import { getRangeByTxt } from './cell';
 import { createContextResolver } from './formula-cache';
-import { checkProtectionFormatCells } from './protection';
 import { isRealNum } from './validation';
 
 // The rules the conditional formatting dialog makes. The others, such as a formula rule, come from a file or from a
@@ -51,9 +50,8 @@ export function conditionRuleError(ctx: Context, rules: ConditionRulesProps): st
     return typeof values === 'string' ? values : undefined;
 }
 
-// Adds the dialog's rule over the selection, unless conditionRuleError refuses it or the sheet is protected.
+// Adds the dialog's rule over the selection, unless conditionRuleError refuses it.
 export function setConditionRules(ctx: Context, rules: ConditionRulesProps) {
-    if (!checkProtectionFormatCells(ctx)) return;
     const values = readRuleValues(ctx, rules);
     const cellrange = ctx.selections ?? [];
     const [anchor] = cellrange;
@@ -231,24 +229,20 @@ export const CF_PRESETS: Record<string, string[]> = {
 };
 
 export function clearSheetRules(ctx: Context) {
-    if (!checkProtectionFormatCells(ctx)) return;
     getSheet(ctx).conditionalFormatRules = [];
 }
 
 export function deleteSheetRule(ctx: Context, ruleIndex: number) {
-    if (!checkProtectionFormatCells(ctx)) return;
     getSheet(ctx).conditionalFormatRules?.splice(ruleIndex, 1);
 }
 
 export function applyColorScalePreset(ctx: Context, presetKey: string) {
-    if (!checkProtectionFormatCells(ctx)) return;
     const format = CF_PRESETS[presetKey];
     if (!format) return;
     appendRule(ctx, 'colorGradation', format);
 }
 
 export function applyDataBarPreset(ctx: Context, presetKey: string) {
-    if (!checkProtectionFormatCells(ctx)) return;
     const format = CF_PRESETS[presetKey];
     if (!format) return;
     appendRule(ctx, 'dataBar', format);

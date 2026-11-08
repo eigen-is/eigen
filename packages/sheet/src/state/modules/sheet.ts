@@ -25,7 +25,7 @@ import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { firstVisibleSheetId, updateContextWithSheetData } from '../context';
 import type { Sheet } from '../types';
-import { generateRandomSheetName, getSheetIndex, sheetOrder } from '../utils';
+import { getSheetIndex, nextSheetName, sheetOrder } from '../utils';
 import { cancelNormalSelected } from './cell';
 import { applySheetFilter } from './filter';
 import { snapshotContext } from './formula-cache';
@@ -57,7 +57,6 @@ export function changeSheet(ctx: Context, id: string) {
     ctx.validationListOpen = false;
     ctx.activeObject = undefined;
     ctx.currentSheetId = id;
-    ctx.currentSheetIsPivot = !!file.isPivotTable;
     const record = ctx.sheetScrollRecord[id];
     ctx.scrollRequest = { left: record?.scrollLeft ?? 0, top: record?.scrollTop ?? 0 };
     ctx.selectionActive = record?.selectionActive ?? false;
@@ -98,7 +97,6 @@ export function addSheet(
     ctx: Context,
     // A copy or a peer's add names the new sheet's id, and the add then stays on the current sheet.
     newSheetID?: string,
-    isPivotTable = false,
     sheetName?: string,
     sheetData?: Sheet,
     // A batch through applyOpBatch, such as a peer's add, lands for a read-only viewer too, and leaves the other
@@ -112,15 +110,13 @@ export function addSheet(
     if (!isNil(sheetData)) delete sheetData.data;
     const sheetconfig: Sheet = isNil(sheetData)
         ? {
-              name: sheetName || generateRandomSheetName(ctx.sheets, isPivotTable),
+              name: sheetName || nextSheetName(ctx.sheets),
               status: 0,
               order,
               id,
               row: DEFAULT_SHEET_ROW_COUNT,
               column: DEFAULT_SHEET_COLUMN_COUNT,
               config: {},
-              pivotTable: null,
-              isPivotTable: !!isPivotTable,
           }
         : sheetData;
     normalizeSheetConfig(sheetconfig);

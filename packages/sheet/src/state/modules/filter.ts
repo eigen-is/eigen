@@ -9,7 +9,7 @@ import type { Cell, CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
 import type { FilterCondition, FilterConditionName, FilterOptions, Selection } from '../types';
-import { getSheetIndex, isAllowEdit, rgbToHex } from '../utils';
+import { getSheetIndex, rgbToHex } from '../utils';
 import { normalizedAttr } from './cell';
 import { checkCF, getComputeMap } from './condition-format';
 import { normalizeSelection } from './selection';
@@ -79,7 +79,7 @@ export function createFilterOptions(
     saveData?: boolean,
 ) {
     if (sheetId != null && sheetId !== ctx.currentSheetId) return;
-    if (!isAllowEdit(ctx)) {
+    if (ctx.allowEdit === false) {
         delete ctx.filterOptions;
         return;
     }
@@ -139,7 +139,7 @@ export function createFilterOptions(
 }
 
 export function clearFilter(ctx: Context) {
-    if (!isAllowEdit(ctx)) return;
+    if (ctx.allowEdit === false) return;
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     const hiddenRows = reduce(ctx.filter, (pre, curr) => Object.assign(pre, curr?.rowhidden || {}), {});
     ctx.filterRange = undefined;
@@ -161,7 +161,7 @@ export function clearFilter(ctx: Context) {
 // Toggles the filter: clears the one there is, else filters the selection. A single selected cell
 // widens to the first run of filled cells in its row.
 export function createFilter(ctx: Context) {
-    if (!isAllowEdit(ctx)) return;
+    if (ctx.allowEdit === false) return;
     if (size(ctx.selections) > 1) return;
     if (size(ctx.filterRange) > 0) {
         clearFilter(ctx);
@@ -169,7 +169,7 @@ export function createFilter(ctx: Context) {
     }
 
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
-    if (sheetIndex == null || ctx.sheets[sheetIndex].isPivotTable) {
+    if (sheetIndex == null) {
         return;
     }
 

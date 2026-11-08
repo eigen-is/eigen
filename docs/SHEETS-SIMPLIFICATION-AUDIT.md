@@ -32,7 +32,7 @@ The API audit's six patterns all show up here. Read across the six areas, though
 2. **Facts stored twice inside the workbook.** `calcChain` beside the cells' `f` ([E1](#e1)), `cell.mc` beside `config.merge` ([D9](#d9)), `cell.hl` beside `sheet.hyperlink` ([F2](#f2)), `ctx.filter` beside `sheet.filter` ([D7](#d7)), the freeze and pixel boxes beside the indices ([R1](#r1), [R9](#r9)), `ctx.copyState` beside the clipboard ([D1](#d1)). Every writer has to keep the two in step, and each one that didn't is a fix in the log.
 3. **Two paths for one job.** The editor's batch applier beside the engine's replay ([S2](#s2)), writers doing their own formula bookkeeping beside the patch-derived recompute that undo already uses ([E7](#e7)), sort and fill outside `carryCells` ([D2](#d2)), two hand-written formula walkers ([E3](#e3)), ⌘V beside menu Paste ([D1](#d1)), four ways to turn a pointer into a cell ([R3](#r3)), eight commit paths of which two measure the row ([R2](#r2)), and row and column handlers written twice ([R9](#r9)).
 4. **Structural undo across peers.** Undoing your own row, column or sheet op after a peer edited since needs a three-way merge, trial runs, a refusal path and half the shifter ([U2](#u2)). The refusal path guards a sheet that turned read-only, which no UI or import can make. The owner accepted the smaller undo.
-5. **Fork scaffolding.** Sheet protection, read-only rows, alternate formats, pivot remnants, icon rules ([F1](#f1)), fill modes no menu can choose and Chinese numeral series ([D4](#d4)), dead formula state ([E6](#e6)). Each is still checked on edits, and at least one got a fix (`b6ecee4d3`, protection checked before a delete, for a protection nobody can switch on).
+5. **Fork scaffolding.** fill modes no menu can choose and Chinese numeral series ([D4](#d4)), dead formula state ([E6](#e6)). Each is still checked on edits, and at least one got a fix (`b6ecee4d3`, protection checked before a delete, for a protection nobody can switch on).
 
 The API audit's tripwire applies here unchanged: at the third `fix(x)` on one mechanism within a week, stop and ask which root it is before a fourth patch lands.
 
@@ -50,7 +50,6 @@ Each comes from reading or tracing the code, not from running it, unless it says
 | A peer's column filter change leaves this tab's `ctx.filter` stale, so the next local filter edit can leave the peer's rows hidden for good | [D7](#d7) | Traced |
 | Long text committed from the formula bar, by a header click, by the date shortcut or on a new tab keeps the default row height | [R2](#r2) | Traced |
 | The link card over a frozen column of a scrolled sheet shows the cell scrolled underneath; a row-header drag while composing a formula picks rows offset by the grid's page top minus 70 px | [R3](#r3) | Offsets read; outcome traced |
-| Date validation compares a typed date's serial `v` against `YYYY-MM-DD` text, so the hint likely says "Date must be…" on every valid date | [F1](#f1) | Traced; check in the browser |
 | The first formula typed on an uncomputed sheet ships chain entries, so the server treats that sheet as computed and its export skips the recalc | [E1](#e1) | Traced |
 
 ## Shortlist
@@ -59,7 +58,6 @@ The best payoff per unit of risk, with no redesign. **Product** marks a finding 
 
 | # | Finding | Removes | Risk | Product? | What is lost |
 |---|---------|---------|------|----------|--------------|
-| [F1](#f1) | Delete protection, read-only rows, alternate formats, pivot and icon remnants | ~215 + ~60 test, a per-cell walk on every edit | low | no | nothing |
 | [D4](#d4) | Fill keeps four series kinds; dead modes and Chinese series go | ~850 | low | small | 一, 二 and 周一 copy instead of counting; 1, 2, 4 fills linearly |
 | [E1](#e1) | Drop `calcChain`; build the formula map from the cells | ~250 + ~200 test, three open TODO rows | med | no | nothing; every edit gets faster |
 | [D1](#d1) | Paste knows its own copy by an id; menu Paste runs the ⌘V path | ~60 + ~110 test, three paste bugs | low-med | small | menu Paste without clipboard permission shows a notice |
@@ -342,19 +340,6 @@ Judged essential: `scrollFrame`/`planScroll` with its shared-pixel and edge-band
 
 Answers to questions the audit asked itself: a chart's Setup block is not a second copy, since `chartRangeOf` derives it from the refs on every read (`f7662c628`). Conditional formats, validation and chart refs already share `shiftRangeForInsert`/`Delete`, and borders and links share `shiftCellKeyedFor*`. The chart redraw cache is one earned `WeakMap` (`4749f1c5e`, `8955f236f`).
 
-<a id="f1"></a>**F1. Fortune-sheet features nobody can switch on are still checked on every edit, and one of them got a fix.**
-- Sheet protection: `state/modules/protection.ts` (`checkCellIsLocked`, `checkProtection*`) at about 12 call sites (mouse-cell, mouse-drag, mouse-header ×2, search-replace, condition-format ×5).
-- `isAllowEdit` (`state/utils/index.ts`) calls `checkCellIsLocked` on every cell of every selection before it reads `ctx.allowEdit`, from 34 call sites, so Ctrl+A over 100k rows costs millions of `findSheet` calls per edit.
-- `config.authority`, `cell.lo`, `rowReadOnly`/`colReadOnly`: shifted in `engine/rowcol.ts`, checked by four `RowColError('readOnly')` throws, `InputBox.tsx`, `history-shift.ts` and `sheet-config.ts`. Nothing outside the tests writes them (checked); `state/types.ts` says so for `authority`.
-- `alternateFormatRules`, whose own type says "the feature never landed".
-- Pivot remnants (`pivotTable`, `isPivotTable`, `currentSheetIsPivot`, `generateRandomSheetName`'s "Pivot Table"); the conditional-format `'icons'` type ("not yet implemented"); `isdatatypemulti`/`hasChinaword`.
-- `validity`, `remote` and `rangeTxt` stored on every validation rule because OK spreads the dialog's whole draft (`DataValidation/index.tsx` `apply`); `rangeTxt` goes stale after a row shift, and `wellFormedValidations` checks all three.
-
-History: `b6ecee4d3` ("Manage rules checks protection before a delete") fixed a protection no user can turn on; `7a11b3719` extended the rule shape check to the three dead fields.
-Root cause: root 5. Upstream features never ported, their guards and fields kept.
-Simpler: delete all of it. `isAllowEdit` becomes `ctx.allowEdit !== false`; the dialog stores `{type, type2, value1, value2, hintShow, hintValue, prohibitInput}`. While there, check the date validation bug in [§ Bugs](#bugs-found-on-the-way): compare serials.
-Lost: nothing. ~215 LOC + ~60 test, low risk, high confidence.
-
 <a id="f2"></a>**F2. A link lives in a side map keyed by position, and the cell carries a stamp of where the link was made, which no row op moves.**
 It was D6 too. `sheet.hyperlink` with `cell.hl = {r, c, id}` (`state/modules/hyperlink.ts`: `saveHyperlink`, `removeHyperlink`), the loop in `patchToOp` that ships `['hyperlink', key]` beside any whole write of a linked cell, the editor-only shift in `state/modules/rowcol.ts`, the link carry in `carryCells` (`linkMap`), the link loop in `deleteSelectedCellText`, `delete value.hl` in the format painter, the API's `v.hl.id = id` rename.
 History: `c885c852d`, `0bda5dec0`, `42269e140`, `0e7a1fab1`, `36a095a36` (the painter carried `hl` and the server replay dropped the whole batch). SHEETS-TODO has the open bug: a row op ships `hyperlink` whole, so a peer's link is lost and two concurrent inserts leave a link one row off. (The SHEETS-TODO row about pasted links only working from A1 names a `pasteHyperlinks` that no longer exists, so it looks stale.)
@@ -435,7 +420,7 @@ Wave 1 (nothing lost, or decided):
 | Formulas | [E3](#e3), [E6](#e6), then [E4](#e4), [E5](#e5) | `engine/formula-shift.ts`, `engine/recalc.ts`, `formula-*` |
 | Editing | [D1](#d1), [D7](#d7), [D5](#d5) | `state/api/*`, `paste.ts`, `clipboard.ts`, `filter.ts` |
 | Render and input | [R2](#r2), [R3](#r3), then [R6](#r6), [R7](#r7) | `state/context.ts`, `context/modal.tsx`, `state/events/*`, `SheetOverlay/*` |
-| Rules | [F1](#f1) (with `alternateFormatRules`), then [F3](#f3) once ruled | `protection.ts`, `validation*.ts`, `DataValidation/*` |
+| Rules | [F3](#f3) | `protection.ts`, `validation*.ts`, `DataValidation/*` |
 
 Wave 2 (cross-cutting, after the lanes they depend on merged): [E1](#e1) then [E2](#e2) once ruled (after U2: both touch `history.ts`); [F2](#f2) (after D2); [D2](#d2) after D4 is ruled; [S2](#s2) then [S5](#s5) (after U2); [R1](#r1) (after D7 and R3); [D4](#d4), [D8](#d8), [F4](#f4), [F6](#f6), [F7](#f7), [F8](#f8) as ruled. F4, F6 and F7 change `packages/lib/src/charts`, which Docs, Slides and Vector share: tell the other session first.
 
@@ -447,7 +432,8 @@ Wave 3, the redesigns, in [§ If we built it today](#if-we-built-it-today)'s ord
 
 - This run also takes the API audit's T2 and X2 (the other session agreed). Don't edit `API-SIMPLIFICATION-AUDIT.md` on this branch, because that session keeps editing it: tell it when T2 or X2 lands, and it strikes them. Its X2 ruling: a flat cap, the runner's deadline and its memory limit, and a timeout or out-of-memory is an accepted outcome. X2 joins Wave 2.
 - The owner allows an implementer to hand mechanical work (a grep sweep, rewiring similar test call sites, running a suite) to a cheaper sub-agent: Sonnet, or Haiku for a lookup, at low or medium effort. The implementer keeps Step 0, the design, the diff read and the commit. A sub-agent uses the implementer's worktree with no isolation option, one editing at a time, and never commits.
-- Wave 1 is running. Merged: S1, R5, R4 (`ctx.rowHeaderWidth` and `columnHeaderHeight` stay for R3 to inline), D3 (the ref's `setSelection` stays: 13 test callers and no other door to the stored selection copy; S7 may remove it). E9 (its review fixes are still to come; see below). In cold review: U2, F1. Running: D1, S3, R2, E3. D1 also clears the fake copy state: since D3, `getSheet` treats an empty id as a bad id, so a menu Paste after a cancelled format painter (`dataSheetId: ''`) throws until D1 lands.
+- Wave 1 is running. Merged: S1, R5, R4 (`ctx.rowHeaderWidth` and `columnHeaderHeight` stay for R3 to inline), D3 (the ref's `setSelection` stays: 13 test callers and no other door to the stored selection copy; S7 may remove it). E9 (its review fixes are still to come; see below). F1 (its review fixes are still to come; see below). In cold review: U2. Running: D1, S3, R2, E3. D1 also clears the fake copy state: since D3, `getSheet` treats an empty id as a bad id, so a menu Paste after a cancelled format painter (`dataSheetId: ''`) throws until D1 lands.
 - Open for the wave's docs unit: SHEETS.md and SHEETS-TODO.md statements S1, R5 and the units in review make false; the help center and CHANGELOG for U2 (undo limit), E9 (rename rewrites formulas), R4 and S1's fixes. Each unit's report names them, and the orchestrator's merge list holds them.
 - E9's review fixes, to dispatch after U2 merges: a boundary check for the op through one shared `isSheetName`, since a 1 MB name over 200 formulas made 201 MB of JSON in the replay; a `!` in a name; a rename joins U2's structural rule, so undo neither overwrites a peer's rename nor silently does nothing; one list of the texts that name a sheet, shared with `appendSheetsToYjs`; the rename op takes its id from the recipe. The reviewer's first finding, a row op shipping `name`, went with S1 and U2; check it on the merged code.
+- F1's review fixes, running now with F3 next: an imported "any date" rule stores `1899-12-31`, which `dateSerial` rejects, so every date fails it. Validation reads the display text `m` in the painter and on entry, so `1,234.50` fails a number rule and a dd/MM/yyyy date refused on Enter: rules should read the parsed value.
 - For the closing review: D3 deleted the API insert and delete tests as covered by `rowcol.test.ts` and `rowcol-ops` without comparing assertions. `state/modules/cell.ts` got only a light pass; `carryCells` could split out.

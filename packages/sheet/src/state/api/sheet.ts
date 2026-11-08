@@ -60,7 +60,7 @@ export function copySheet(ctx: Context, sheetId: string) {
     sheetData.charts = Object.fromEntries(
         Object.values(sheetData.charts ?? {}).map((chart) => withFreshId(mapChartRefs(chart, toCopy))),
     );
-    addSheet(ctx, copyId, ctx.sheets[index].isPivotTable, sheetName, sheetData);
+    addSheet(ctx, copyId, sheetName, sheetData);
     setSheetOrder(ctx, { [copyId]: order });
     // The copy gets its cell matrix now, as a peer's tab builds it when the add arrives, so every read of the open
     // workbook's cells finds the copy's.

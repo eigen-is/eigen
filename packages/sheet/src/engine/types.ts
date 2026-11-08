@@ -26,14 +26,9 @@ export type {
 
 import type { CalcChainEntry, Cell, CellMatrix } from '@workspace/lib/sheets';
 
-// Editor-only SheetConfig overlay: structural per-row/col flags the state layer
-// reads/writes and the engine's row/col shifter shifts, but the BE/wire-shape
-// `SheetConfig` in `@workspace/lib/sheets` never serializes. Hoisted here so
-// state's `SheetConfig` and `engine/rowcol.ts::ExtendedSheetConfig` share one
-// declaration instead of independently re-listing the same four fields.
+// Row and column size overrides the state layer writes and the engine's row and column shifter moves, on top of the
+// config lib stores.
 export type EditorSheetConfigExtras = {
-    rowReadOnly?: Record<string, number>;
-    colReadOnly?: Record<string, number>;
     customHeight?: Record<string, number>;
     customWidth?: Record<string, number>;
 };

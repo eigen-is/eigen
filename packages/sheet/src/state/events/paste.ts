@@ -25,12 +25,11 @@ import { jfrefreshgrid } from '../modules/refresh';
 import { COPY_ACTION_TABLE_MARKER, copiedCellText, copiedTdColumns, selectionCache } from '../modules/selection';
 import { expandRowsAndColumns, storeSheetSelections } from '../modules/sheet';
 import { hasPartMC } from '../modules/validation';
-import { getSheetIndex, isAllowEdit } from '../utils';
+import { getSheetIndex } from '../utils';
 
 // The HTML paste path's per-cell borders, keyed `${row}_${col}` relative to the pasted block.
 function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Record<string, CellBorderSides>) {
-    const allowEdit = isAllowEdit(ctx);
-    if (!allowEdit) return;
+    if (ctx.allowEdit === false) return;
 
     if (ctx.selections?.length !== 1) {
         return;
@@ -198,7 +197,7 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
 }
 
 function pasteHandlerOfCutPaste(ctx: Context, copyState: Context['copyState']) {
-    if (!isAllowEdit(ctx) || !copyState) return;
+    if (ctx.allowEdit === false || !copyState) return;
 
     const copySheetId = copyState.dataSheetId;
     const sourceRange = copyState.copyRange[0];
@@ -296,8 +295,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyState: Context['copyState']) {
 }
 
 function pasteHandlerOfCopyPaste(ctx: Context, copyState: Context['copyState']) {
-    const allowEdit = isAllowEdit(ctx);
-    if (!allowEdit) return;
+    if (ctx.allowEdit === false) return;
 
     if (!copyState) return;
 
@@ -458,8 +456,7 @@ function isOwnCopyTable(ctx: Context, html: string, copyState: NonNullable<Conte
 }
 
 export function handlePaste(ctx: Context, e: ClipboardEvent) {
-    const allowEdit = isAllowEdit(ctx);
-    if (!allowEdit) return;
+    if (ctx.allowEdit === false) return;
 
     if (selectionCache.isPasteAction) {
         ctx.editingCellPosition = [];
@@ -698,8 +695,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
 }
 
 export function handlePasteByClick(ctx: Context, clipboardData: string) {
-    const allowEdit = isAllowEdit(ctx);
-    if (!allowEdit) return;
+    if (ctx.allowEdit === false) return;
 
     if (ctx.copyState?.copyRange != null && ctx.copyState.copyRange.length > 0) {
         if (ctx.pasteIsCut) {

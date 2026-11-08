@@ -17,7 +17,6 @@ import { handleFormulaInput } from '../modules/formula-editor';
 import { rangeDragColumn, rangeDragRow } from '../modules/formula-range';
 import { getFrozenHandleLeft, getFrozenHandleTop, scrollToFrozenRowCol } from '../modules/freeze';
 import { colLocation, rowLocation } from '../modules/location';
-import { checkProtectionSelectLockedOrUnLockedCells } from '../modules/protection';
 import { pasteHandlerOfPaintModel } from '../modules/selection';
 import type { GlobalCache } from '../types';
 import { getSheetIndex } from '../utils';
@@ -340,11 +339,6 @@ function renderCellSelection(ctx: Context, globalCache: GlobalCache, e: MouseEve
 
     const [row_pre, row, row_index] = rowLocation(y, ctx.visibledatarow);
     const [col_pre, col, col_index] = colLocation(x, ctx.visibledatacolumn);
-
-    if (!checkProtectionSelectLockedOrUnLockedCells(ctx, row_index, col_index, ctx.currentSheetId)) {
-        ctx.selectionActive = false;
-        return;
-    }
 
     const { selections } = ctx;
     const anchor = selections?.[selections.length - 1];

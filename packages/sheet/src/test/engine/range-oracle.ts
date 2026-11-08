@@ -1,6 +1,6 @@
 // The cell-membership reading of Excel's rule: every row of a range lands where the insert or
-// delete moves it, and the range spans what survives. Every range-carrying feature (CF,
-// alternate formats and charts) must agree with it on every small case.
+// delete moves it, and the range spans what survives. Every range-carrying feature (CF
+// and charts) must agree with it on every small case.
 export type Span = [number, number];
 export const SPANS: Span[] = [];
 for (let a = 0; a <= 5; a += 1) for (let b = a; b <= 5; b += 1) SPANS.push([a, b]);

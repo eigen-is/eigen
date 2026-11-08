@@ -13,7 +13,6 @@ import type { SearchHighlight, SearchResult } from '../types';
 import { sheetOrder } from '../utils';
 import { setCellValue as setCellValueInternal } from './cell';
 import { delFunctionGroup, execFunctionGroup, groupValuesRefresh } from './formula-exec';
-import { checkCellIsLocked } from './protection';
 import { normalizeSelection } from './selection';
 import { changeSheet } from './sheet';
 
@@ -98,8 +97,7 @@ export function revealSearchMatch(ctx: Context, cell: SearchHighlight) {
 
 // Rewrite every occurrence of the query inside one cell via the recalc path. Returns true iff the
 // cell was rewritten. A formula cell (its COMPUTED value matched — the Excel/Google convention is not
-// to rewrite inside formula results), a per-cell-locked cell, or a value that no longer matches (a
-// stale id under collab) all no-op and return false, so they're excluded from the replaced count.
+// to rewrite inside formula results) or a value that no longer matches (a stale id under collab) all no-op and return false, so they're excluded from the replaced count.
 function replaceInCell(
     ctx: Context,
     cell: SearchHighlight,
@@ -111,7 +109,6 @@ function replaceInCell(
     if (!flowdata) return false;
     const cellData = flowdata[cell.r]?.[cell.c];
     if (cellData == null || cellData.f != null) return false;
-    if (checkCellIsLocked(ctx, cell.r, cell.c, cell.sheetId)) return false;
 
     const oldText = cellText(cell.r, cell.c, flowdata);
     regex.lastIndex = 0;
@@ -145,7 +142,7 @@ export function replaceSearchMatch(
 }
 
 // Replace across every matching cell in one pass (one setContext recipe = one undo when driven from
-// the Workbook API), skipping formula/locked cells. Returns the count of cells actually rewritten.
+// the Workbook API), skipping formula cells. Returns the count of cells actually rewritten.
 export function replaceAllMatches(
     ctx: Context,
     query: string,

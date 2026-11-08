@@ -11,13 +11,13 @@ import { checkCF } from '../modules/condition-format';
 import type { CellGlyphRect } from '../modules/data-validation';
 import {
     CHECKBOX_LABEL_GAP,
+    cellPassesRule,
     cellTextBox,
     checkboxAlign,
     checkboxRect,
     dropdownChevronRect,
     isCheckboxChecked,
     showsCheckboxLabel,
-    validateCellData,
 } from '../modules/data-validation';
 import { getCellTextInfo } from '../modules/text';
 import type { Rect } from '../types';
@@ -269,7 +269,7 @@ export function cellRender(
     renderCtx.fillRect(cellsize[0], cellsize[1], cellsize[2], cellsize[3]);
 
     // Invalid-value indicator (red triangle top-left)
-    if (rule && !validateCellData(sheetCtx, rule, value)) {
+    if (rule && !cellPassesRule(sheetCtx, rule, cell, value)) {
         drawCellIndicator(
             renderCtx,
             'left',

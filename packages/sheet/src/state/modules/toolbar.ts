@@ -9,7 +9,7 @@ import type { Cell, CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
 import type { GlobalCache } from '../types';
-import { clipToUsedExtent, getSheetIndex, isAllowEdit } from '../utils';
+import { clipToUsedExtent, getSheetIndex } from '../utils';
 import { applyBorder, clearSides } from './border';
 import { getRangetxt, isAllSelectedCellsInStatus, setCellValue } from './cell';
 import { rangeColor } from './color';
@@ -28,7 +28,7 @@ import { colLocationByIndex, rowLocationByIndex } from './location';
 import { mergeCells } from './merge';
 import { selectIsOverlap } from './selection';
 import { getCellTextInfo } from './text';
-import { hasPartMC, isdatatypemulti, isRealNull, isRealNum } from './validation';
+import { hasPartMC, isRealNull, isRealNum } from './validation';
 
 export function updateFormatCell(
     ctx: Context,
@@ -174,7 +174,7 @@ export function updateFormat(
     foucsStatus: string | number,
     canvas?: CanvasRenderingContext2D,
 ) {
-    if (!isAllowEdit(ctx)) return;
+    if (ctx.allowEdit === false) return;
 
     if (isRunStyleKey(attr) && isEditingText(ctx, $input)) {
         const [r, c] = ctx.editingCellPosition;
@@ -222,17 +222,7 @@ function setAttr(
 }
 
 function checkNoNullValue(cell: Cell | null) {
-    const v = cellValue(cell);
-
-    if (
-        !isRealNull(v) &&
-        isdatatypemulti(v) &&
-        (cell?.ct == null || cell.ct.t == null || cell.ct.t === 'n' || cell.ct.t === 'g')
-    ) {
-        return true;
-    }
-
-    return false;
+    return isRealNum(cellValue(cell)) && (cell?.ct?.t == null || cell.ct.t === 'n' || cell.ct.t === 'g');
 }
 
 function checkNoNullValueAll(cell: Cell | null) {
@@ -530,7 +520,7 @@ export function autoSelectionFormula(
     formula: string,
     cache: GlobalCache,
 ) {
-    if (!isAllowEdit(ctx)) return;
+    if (ctx.allowEdit === false) return;
     const flowdata = getFlowdata(ctx);
     if (flowdata == null) return;
     let isfalse = true;
@@ -719,7 +709,7 @@ export function handleVerticalAlign(ctx: Context, cellInput: HTMLDivElement, val
 }
 
 export function handleFormatPainter(ctx: Context) {
-    if (!isAllowEdit(ctx)) return;
+    if (ctx.allowEdit === false) return;
     // The painter takes one range, and never one that cuts through a merge.
     const selection = ctx.selections?.length === 1 ? ctx.selections[0] : undefined;
     if (!selection || hasPartMC(ctx, selection.row[0], selection.row[1], selection.column[0], selection.column[1])) {
@@ -771,7 +761,7 @@ export function handleTextBackground(ctx: Context, cellInput: HTMLDivElement, co
 }
 
 export function handleBorder(ctx: Context, type: BorderType, borderColor?: string, borderStyle?: string) {
-    if (!isAllowEdit(ctx)) return;
+    if (ctx.allowEdit === false) return;
 
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
@@ -784,7 +774,7 @@ export function handleBorder(ctx: Context, type: BorderType, borderColor?: strin
 }
 
 export function handleMerge(ctx: Context, type: string) {
-    if (!isAllowEdit(ctx)) return;
+    if (ctx.allowEdit === false) return;
 
     if (selectIsOverlap(ctx)) {
         return;
@@ -821,7 +811,7 @@ export function handleMerge(ctx: Context, type: string) {
 }
 
 export function handleFreeze(ctx: Context, type: string) {
-    if (!isAllowEdit(ctx)) return;
+    if (ctx.allowEdit === false) return;
 
     const file = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!];
     if (!file) return;
@@ -861,7 +851,7 @@ export function handleTextSize(
 }
 
 export function handleLink(ctx: Context) {
-    if (!isAllowEdit(ctx)) return;
+    if (ctx.allowEdit === false) return;
     const selection = ctx.selections?.[0];
     const flowdata = getFlowdata(ctx);
     if (flowdata != null && selection != null) {

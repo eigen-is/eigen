@@ -4,7 +4,7 @@
 // editor and the reference highlights follow.
 
 import { escapeHtml } from '@workspace/lib/html';
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { richText } from '../../engine/format';
 import { useFormulaAutocomplete } from '../../hooks/useFormulaAutocomplete';
@@ -13,7 +13,6 @@ import {
     getFlowdata,
     getFormulaHtml,
     handleFormulaInput,
-    isAllowEdit,
     isSelectionOnHiddenRowCol,
     loadCellFont,
     moveHighlightCell,
@@ -76,11 +75,7 @@ export function FxEditor() {
         if (context.allowEdit === false) {
             return;
         }
-        if (
-            (context.selections?.length ?? 0) > 0 &&
-            !context.cellSelectMoving &&
-            isAllowEdit(context, context.selections)
-        ) {
+        if ((context.selections?.length ?? 0) > 0 && !context.cellSelectMoving) {
             setFocused(true);
             setContext((draftCtx) => {
                 const last = draftCtx.selections?.at(-1);
@@ -205,19 +200,7 @@ export function FxEditor() {
         }
     }, [editingCell, refs.cellInput, refs.fxInput, setContext]);
 
-    // biome-ignore lint/correctness/useExhaustiveDependencies: re-evaluates allowEdit only on the listed shape changes — internals of `context` are read directly
-    const allowEdit = useMemo(() => {
-        if (context.allowEdit === false) {
-            return false;
-        }
-        if (isOnHiddenRowCol) {
-            return false;
-        }
-        if (!isAllowEdit(context, context.selections)) {
-            return false;
-        }
-        return true;
-    }, [context.selections, context.sheets, context.currentSheetId, isOnHiddenRowCol]);
+    const allowEdit = context.allowEdit !== false && !isOnHiddenRowCol;
 
     return (
         // eigen-paper: the formula bar reads like the grid — light in dark mode too (globals.css)

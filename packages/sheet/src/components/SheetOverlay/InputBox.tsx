@@ -19,13 +19,11 @@ import {
     getFlowdata,
     getFormulaHtml,
     getInlineStringHTML,
-    getSheetConfig,
     getStyleByCell,
     handleBold,
     handleFormulaInput,
     handleItalic,
     handleUnderline,
-    isAllowEdit,
     isInlineStringCell,
     israngeseleciton,
     isSelectionOnHiddenRowCol,
@@ -243,7 +241,7 @@ export const InputBox: React.FC = () => {
                     )
                         return;
                     const input = refs.cellInput.current;
-                    if (!input || !isAllowEdit(draftCtx, draftCtx.selections)) {
+                    if (!input || draftCtx.allowEdit === false) {
                         return;
                     }
                     handleFormulaInput(draftCtx, refs.fxInput.current, input, kcode, preText.current);
@@ -266,13 +264,6 @@ export const InputBox: React.FC = () => {
         },
         [context.editingCellPosition, editingCell],
     );
-
-    const cfg = getSheetConfig(context);
-    const rowReadOnly: Record<string, number> = cfg?.rowReadOnly || {};
-    const colReadOnly: Record<string, number> = cfg?.colReadOnly || {};
-
-    const isReadOnly = (col_index != null && colReadOnly[col_index]) || (row_index != null && rowReadOnly[row_index]);
-    const edit = !(isReadOnly && context.allowEdit === true);
 
     return (
         <div
@@ -319,7 +310,7 @@ export const InputBox: React.FC = () => {
                     onPaste={onPaste}
                     onFocus={() => setInputFocused(true)}
                     onBlur={() => setInputFocused(false)}
-                    allowEdit={edit ? !isOnHiddenRowCol : edit}
+                    allowEdit={!isOnHiddenRowCol}
                 />
             </div>
             <FormulaSearch

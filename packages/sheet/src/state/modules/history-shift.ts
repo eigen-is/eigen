@@ -480,5 +480,5 @@ const POSITION_FREE_FIELDS = new Set<string | number>([
     'images',
 ]);
 
-const ROW_MAPS = new Set(['rowlen', 'rowhidden', 'customHeight', 'rowReadOnly']);
-const COLUMN_MAPS = new Set(['columnlen', 'colhidden', 'customWidth', 'colReadOnly']);
+const ROW_MAPS = new Set(['rowlen', 'rowhidden', 'customHeight']);
+const COLUMN_MAPS = new Set(['columnlen', 'colhidden', 'customWidth']);

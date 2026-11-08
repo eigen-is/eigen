@@ -36,19 +36,9 @@ export type DeleteRowColOp = {
     id: string;
 };
 
-export type RowColErrorCode = 'readOnly' | 'maxExceeded';
-
-// The engine refuses a row or column op with this error. The editor's menus read its `code` to tell the user why.
-// The replay and a peer's applyOp skip the op's whole batch.
-export class RowColError extends Error {
-    public readonly code: RowColErrorCode;
-
-    public constructor(code: RowColErrorCode) {
-        super(code);
-        this.name = 'RowColError';
-        this.code = code;
-    }
-}
+// The engine refuses an insert past the sheet's size limit with this error. The editor's menus say so, and the replay
+// and a peer's applyOp skip the op's whole batch.
+export class RowColError extends Error {}
 
 type AxisRange = { row: readonly number[]; column: readonly number[] };
 
@@ -308,11 +298,8 @@ export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op:
     const data = target.data;
     if (!data) return sheets;
 
-    if (op.type === 'row' && cfg.rowReadOnly?.[op.index]) throw new RowColError('readOnly');
-    if (op.type === 'column' && cfg.colReadOnly?.[op.index]) throw new RowColError('readOnly');
-    if (op.type === 'row' && data.length + op.count > MAX_SHEET_ROW_COUNT) throw new RowColError('maxExceeded');
-    if (op.type === 'column' && data[0] && data[0].length + op.count > MAX_SHEET_COLUMN_COUNT)
-        throw new RowColError('maxExceeded');
+    if (op.type === 'row' && data.length + op.count > MAX_SHEET_ROW_COUNT) throw new RowColError();
+    if (op.type === 'column' && data[0] && data[0].length + op.count > MAX_SHEET_COLUMN_COUNT) throw new RowColError();
 
     const { count } = op;
     const newTarget = { ...target };
@@ -330,8 +317,6 @@ export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op:
         if (cfg.rowlen != null) newCfg.rowlen = shiftKeyedMapForInsert(cfg.rowlen, op.index, count, op.direction);
         if (cfg.customHeight != null)
             newCfg.customHeight = shiftKeyedMapForInsert(cfg.customHeight, op.index, count, op.direction);
-        if (cfg.rowReadOnly != null)
-            newCfg.rowReadOnly = shiftKeyedMapForInsert(cfg.rowReadOnly, op.index, count, op.direction);
 
         const cols = newData[0]?.length ?? 0;
         const blank = () => new Array<null>(cols).fill(null);
@@ -346,8 +331,6 @@ export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op:
             newCfg.columnlen = shiftKeyedMapForInsert(cfg.columnlen, op.index, count, op.direction);
         if (cfg.customWidth != null)
             newCfg.customWidth = shiftKeyedMapForInsert(cfg.customWidth, op.index, count, op.direction);
-        if (cfg.colReadOnly != null)
-            newCfg.colReadOnly = shiftKeyedMapForInsert(cfg.colReadOnly, op.index, count, op.direction);
 
         const blanks = new Array<null>(count).fill(null);
         for (const row of newData) {
@@ -401,17 +384,6 @@ export function applySheetsDeleteRowCol<S extends ShiftedSheet>(sheets: S[], op:
 
     const cfg: ExtendedSheetConfig = target.config ?? {};
 
-    if (op.type === 'row' && cfg.rowReadOnly) {
-        for (let i = op.start; i <= op.end; i += 1) {
-            if (cfg.rowReadOnly[i]) throw new RowColError('readOnly');
-        }
-    }
-    if (op.type === 'column' && cfg.colReadOnly) {
-        for (let i = op.start; i <= op.end; i += 1) {
-            if (cfg.colReadOnly[i]) throw new RowColError('readOnly');
-        }
-    }
-
     const newTarget = { ...target };
     const newCfg: ExtendedSheetConfig = { ...target.config };
     const newData = op.type === 'row' ? [...data] : data.map((row) => [...row]);
@@ -425,14 +397,12 @@ export function applySheetsDeleteRowCol<S extends ShiftedSheet>(sheets: S[], op:
         if (cfg.rowhidden != null) newCfg.rowhidden = shiftKeyedMapForDelete(cfg.rowhidden, op.start, op.end);
         if (cfg.rowlen != null) newCfg.rowlen = shiftKeyedMapForDelete(cfg.rowlen, op.start, op.end);
         if (cfg.customHeight != null) newCfg.customHeight = shiftKeyedMapForDelete(cfg.customHeight, op.start, op.end);
-        if (cfg.rowReadOnly != null) newCfg.rowReadOnly = shiftKeyedMapForDelete(cfg.rowReadOnly, op.start, op.end);
 
         newData.splice(op.start, removeCount);
     } else {
         if (cfg.colhidden != null) newCfg.colhidden = shiftKeyedMapForDelete(cfg.colhidden, op.start, op.end);
         if (cfg.columnlen != null) newCfg.columnlen = shiftKeyedMapForDelete(cfg.columnlen, op.start, op.end);
         if (cfg.customWidth != null) newCfg.customWidth = shiftKeyedMapForDelete(cfg.customWidth, op.start, op.end);
-        if (cfg.colReadOnly != null) newCfg.colReadOnly = shiftKeyedMapForDelete(cfg.colReadOnly, op.start, op.end);
 
         for (const row of newData) row.splice(op.start, removeCount);
     }

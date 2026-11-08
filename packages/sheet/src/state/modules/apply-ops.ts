@@ -69,7 +69,7 @@ export function applyOpBatch(
                     // addSheet drops a cell matrix the value carries, but the replay keeps it, so it goes back once
                     // the sheet is in.
                     const { data } = value;
-                    addSheet(draft, value.id, false, undefined, value, true);
+                    addSheet(draft, value.id, undefined, value, true);
                     const index = getSheetIndex(draft, value.id);
                     if (index == null) continue;
                     initSheetData(draft, index, value);

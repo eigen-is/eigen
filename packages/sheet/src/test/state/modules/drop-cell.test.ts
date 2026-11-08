@@ -201,8 +201,6 @@ describe('drag-fill carries the source cell data validation', () => {
         type2: '',
         value1: 'yes,no',
         value2: '',
-        validity: '',
-        remote: false,
         prohibitInput: false,
         hintShow: false,
         hintValue: '',

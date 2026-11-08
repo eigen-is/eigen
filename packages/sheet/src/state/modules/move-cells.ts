@@ -7,7 +7,6 @@ import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import type { GlobalCache } from '../types';
-import { isAllowEdit } from '../utils';
 import { carriedLines, carryCells } from './cell';
 import { colLocation, colLocationByIndex, mousePosition, rowLocation, rowLocationByIndex } from './location';
 import { jfrefreshgrid } from './refresh';
@@ -34,8 +33,7 @@ export function onCellsMoveStart(
     scrollEl: HTMLDivElement,
     container: HTMLDivElement,
 ) {
-    const allowEdit = isAllowEdit(ctx);
-    if (allowEdit === false) {
+    if (ctx.allowEdit === false) {
         // Selection drag is disabled in this mode
         return;
     }
@@ -181,13 +179,7 @@ export function onCellsMoveEnd(
         column: [, , col_index],
     } = getCellLocationByMouse(ctx, e, scrollEl, container);
 
-    const allowEdit = isAllowEdit(ctx, [
-        {
-            row: [row_index, row_index],
-            column: [col_index, col_index],
-        },
-    ]);
-    if (!allowEdit) return;
+    if (ctx.allowEdit === false) return;
 
     const row_index_original = ctx.cellSelectMoveIndex[0];
     const col_index_original = ctx.cellSelectMoveIndex[1];

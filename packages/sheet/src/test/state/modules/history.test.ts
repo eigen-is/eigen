@@ -279,18 +279,6 @@ describe("a peer's batch shifts the undo stacks once it applied", () => {
         expect(cellAt(s.a, 'B10')?.v).toBe('old');
     });
 
-    test('a row op the sheet refuses leaves the undo where it was', () => {
-        const s = session(workbook({ B10: text('old') }));
-        s.edit(s.a, typedAt('B10', 'new'));
-        s.a.ctx = produce(s.a.ctx, (ctx: Context) => {
-            ctx.sheets[0].config = { ...ctx.sheets[0].config, rowReadOnly: { 2: 1 } };
-        });
-        tabReceive(s.a, peerInsert());
-        expect(cellAt(s.a, 'B10')?.v).toBe('new');
-        tabUndo(s.a);
-        expect(cellAt(s.a, 'B10')?.v).toBe('old');
-    });
-
     test('a second batch before the next render shifts against the sheets the first one added', () => {
         const base = workbook({}, { A1: text('old') });
         const a = tab(base);
@@ -421,109 +409,6 @@ describe("an open cell editor follows a peer's row or column op", () => {
         s.edit(s.b, ...insertRows(2, 2, TWO));
         expect(s.a.ctx.editingCellPosition).toEqual(at('B10'));
     });
-
-    // A row undo first tries its marker on copies of the context. Those runs must not close the editor's formula range
-    // state, which lives outside immer, when the live sheet then refuses the marker.
-    test('an undo whose row delete the sheet refuses leaves its formula range state', () => {
-        const s = session(workbook());
-        s.edit(s.a, ...insertRows(4, 1));
-        open(s.a, 'B5');
-        s.a.ctx = produce(s.a.ctx, (ctx: Context) => {
-            ctx.sheets[0].config = { ...ctx.sheets[0].config, rowReadOnly: { 4: 1 } };
-        });
-        s.a.ctx.formulaCache.rangestart = true;
-        s.undo(s.a);
-        expect(s.a.ctx.editingCellPosition).toEqual(at('B5'));
-        expect(s.a.ctx.formulaCache.rangestart).toBe(true);
-    });
-});
-
-// A row step the sheet now refuses sends nothing and says why, once. Its entry leaves its stack and goes to neither,
-// so the next press steps the entry before it.
-test('an undo whose row op a read-only row refuses says why and leaves its stack', () => {
-    const s = session(workbook());
-    const readOnly = (rows: Record<number, number>) =>
-        s.edit(s.b, (ctx) => {
-            ctx.sheets[0].config = { ...ctx.sheets[0].config, rowReadOnly: rows };
-        });
-    const refused = (step: () => void, notice: string) => {
-        const sent = s.batches.length;
-        s.a.ctx = produce(s.a.ctx, (ctx: Context) => {
-            ctx.warnDialog = undefined;
-        });
-        step();
-        expect(s.batches.length).toBe(sent);
-        expect(s.a.ctx.warnDialog).toBe(notice);
-    };
-
-    s.edit(s.a, typedAt('B2', 'typed'));
-    s.edit(s.a, ...insertRows(4, 1));
-    const [typedEntry] = s.a.history.undoList;
-    readOnly({ 4: 1 });
-    refused(() => s.undo(s.a), "Sorry, this change can't be undone anymore.");
-    expect(s.a.history).toEqual({ undoList: [typedEntry], redoList: [] });
-    s.undo(s.a);
-    expect(cellAt(s.a, 'B2')?.v).toBeUndefined();
-    expect(s.a.history).toEqual({ undoList: [], redoList: [typedEntry] });
-    expect(s.a.ctx.sheets[0].data?.length).toBe(41);
-    expectAgree(s);
-});
-
-test('a redo whose row op a read-only row refuses says why and leaves its stack', () => {
-    const s = session(workbook());
-    s.edit(s.a, ...insertRows(4, 1));
-    s.edit(s.a, typedAt('B2', 'typed'));
-    s.undo(s.a);
-    s.undo(s.a);
-    const [typedEntry] = s.a.history.redoList;
-    s.edit(s.b, (ctx) => {
-        ctx.sheets[0].config = { ...ctx.sheets[0].config, rowReadOnly: { 4: 1 } };
-    });
-    const sent = s.batches.length;
-    s.redo(s.a);
-    expect(s.batches.length).toBe(sent);
-    expect(s.a.ctx.warnDialog).toBe("Sorry, this change can't be redone anymore.");
-    expect(s.a.history).toEqual({ undoList: [], redoList: [typedEntry] });
-    s.redo(s.a);
-    expect(cellAt(s.a, 'B2')?.v).toBe('typed');
-    expect(s.a.history).toEqual({ undoList: [typedEntry], redoList: [] });
-    expect(s.a.ctx.sheets[0].data?.length).toBe(40);
-    expectAgree(s);
-});
-
-// The refused insert stays in the grid, so the undo below it lands on the row its cell moved to. B10 then holds the
-// value B9 moved down, which equals what the typing wrote, so an undo left on the old row would overwrite it.
-test('an undo below a refused row insert lands where its cell moved', () => {
-    const s = session(workbook({ B9: text('new'), B10: text('old') }));
-    s.edit(s.a, typedAt('B10', 'new'));
-    s.edit(s.a, ...insertRows(4, 1));
-    s.edit(s.b, (ctx) => {
-        ctx.sheets[0].config = { ...ctx.sheets[0].config, rowReadOnly: { 4: 1 } };
-    });
-    s.undo(s.a);
-    s.undo(s.a);
-    expect(cellAt(s.a, 'B10')?.v).toBe('new');
-    expect(cellAt(s.a, 'B11')?.v).toBe('old');
-    expect(s.a.history.redoList).toHaveLength(1);
-    expectAgree(s);
-});
-
-// The refused insert stays out of the grid, so the redo below it lands on the row its cell had before the insert.
-test('a redo below a refused row insert lands where its cell is without the insert', () => {
-    const s = session(workbook({ B10: text('old'), B11: text('old') }));
-    s.edit(s.a, ...insertRows(4, 1));
-    s.edit(s.a, typedAt('B11', 'new'));
-    s.undo(s.a);
-    s.undo(s.a);
-    s.edit(s.b, (ctx) => {
-        ctx.sheets[0].config = { ...ctx.sheets[0].config, rowReadOnly: { 4: 1 } };
-    });
-    s.redo(s.a);
-    s.redo(s.a);
-    expect(cellAt(s.a, 'B10')?.v).toBe('new');
-    expect(cellAt(s.a, 'B11')?.v).toBe('old');
-    expect(s.a.history.undoList).toHaveLength(1);
-    expectAgree(s);
 });
 
 // A joiner and the server read the stored cells of every sheet a batch doesn't name, so a row op must move the
