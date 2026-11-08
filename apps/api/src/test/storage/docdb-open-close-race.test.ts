@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite';
-import { afterAll, afterEach, beforeAll, describe, expect, jest, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
 import { existsSync, mkdirSync, rmSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BunFile } from 'bun';
@@ -10,6 +10,7 @@ import { HOLDER_WAIT_MS, IDLE_CLOSE_MS } from '../../lib/mount/document-db';
 import { Mount } from '../../lib/mount/mount';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
+import { VERSIONS_FOLDER_NAME } from '../../lib/versioning/versions-folder';
 import {
     countRowsInFile,
     createGetLocalDatabase,
@@ -296,6 +297,74 @@ describe('snapshot skip semantics (tick/close snapshots never park on the contai
         expect(await mount.listFolder(versions!.id)).toHaveLength(1);
         expect(await openPromise).toHaveLength(1);
         expect(mount.documentDbs.get(dataDbId)?.db).toBeDefined();
+    }, 15_000);
+});
+
+describe('the sync tick of an open document', () => {
+    afterEach(() => jest.useRealTimers());
+
+    // The document with its 30 s sync timer on the fake clock, so a test fires the real tick itself.
+    async function provisionDocWithTick(mount: Mount) {
+        jest.useFakeTimers();
+        const doc = await provisionDoc(mount, snapshotDocConfig);
+        const fireTick = () => {
+            jest.advanceTimersByTime(30_000);
+            jest.useRealTimers();
+        };
+        return { ...doc, fireTick };
+    }
+
+    async function versionCount(mount: Mount, containerId: string): Promise<number> {
+        const versions = await mount.getChildByName(containerId, VERSIONS_FOLDER_NAME);
+        return versions ? (await mount.listFolder(versions.id)).length : 0;
+    }
+
+    test('a write during its upload does not upload the document twice for the version it takes', async () => {
+        const { mount, storage } = await createGatedLocalMount('tick-one-upload');
+        const { containerId, dataDbId, managed, fireTick } = await provisionDocWithTick(mount);
+        const key = await mount.getStorageKey(dataDbId);
+        const writes = spyOn(storage, 'write');
+        const gate = storage.armWrite();
+
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'synced' }).run();
+        fireTick();
+        await gate.parked;
+        managed.db.insert(docSchema.items).values({ id: 2, data: 'during the upload' }).run();
+        gate.release();
+
+        const deadline = Date.now() + SETTLE_BOUND_MS;
+        while ((await versionCount(mount, containerId)) === 0 && Date.now() < deadline) await Bun.sleep(5);
+        // On a wedged tick, afterEach must not park on the close that waits for it.
+        if ((await versionCount(mount, containerId)) === 0) createdMounts.splice(createdMounts.indexOf(mount), 1);
+        expect(await versionCount(mount, containerId)).toBe(1);
+        expect(writes.mock.calls.filter(([written]) => written === key)).toHaveLength(1);
+
+        // The next sync, here the close's, stores the write the upload could not hold.
+        await mount.closeDatabase(dataDbId);
+        expect(await countStoredRows(mount, dataDbId)).toBe(2);
+    }, 15_000);
+
+    test('a flush, a save and a reader that come during its snapshot all finish after it', async () => {
+        const { mount, storage } = await createGatedLocalMount('tick-snapshot-waiters');
+        const { containerId, dataDbId, managed, fireTick } = await provisionDocWithTick(mount);
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'x' }).run();
+        await managed.flush();
+
+        // The database is clean, so the first write of the tick is the version's own.
+        const gate = storage.armWrite();
+        fireTick();
+        await gate.parked;
+        const waiters = [
+            mount.flushContainerDb(containerId),
+            mount.snapshotContainerDataDb(containerId, DEFAULT_RETENTION),
+            readItems(mount, snapshotDocConfig, dataDbId),
+        ];
+        gate.release();
+
+        const settled = await settlesWithin(waiters, SETTLE_BOUND_MS);
+        if (!settled) createdMounts.splice(createdMounts.indexOf(mount), 1);
+        expect(settled).toBe(true);
+        expect(await versionCount(mount, containerId)).toBeGreaterThanOrEqual(1);
     }, 15_000);
 });
 

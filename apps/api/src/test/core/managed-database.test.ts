@@ -1,12 +1,11 @@
 import { Database as BunDatabase } from 'bun:sqlite';
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { like, sql } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import type { DatabaseConfig } from '../../lib/core';
-import { ManagedDatabase, withAutoFinalize } from '../../lib/core';
+import { ManagedDatabase } from '../../lib/core';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-managed-db-${Date.now()}`);
@@ -176,9 +175,6 @@ describe('ManagedDatabase future-version guard', () => {
 
 describe('ManagedDatabase snapshot lifecycle', () => {
     test('flush() pushes writes to storage but does NOT take a version snapshot', async () => {
-        // Regression: flush() used to run the snapshot trigger, so a snapshot
-        // callback that itself flushes the cached db (Mount.snapshotContainerDataDb)
-        // re-entered and fired a second, preserve-hint-less snapshot.
         let syncs = 0;
         let snapshots = 0;
         const db = new ManagedDatabase(makeConfig(3), nextDbPath(), {
@@ -284,27 +280,83 @@ describe('ManagedDatabase lifecycle serialization', () => {
         expect(syncs).toBe(syncsAtClose);
     });
 
-    test('a snapshot callback that flushes the same db deadlocks neither the tick nor the close', async () => {
-        // versioning/snapshot.ts flushes the cached db it is about to copy, and for a container's
-        // data.db that is the very instance running onSnapshot — so onSnapshot → flush() re-enters.
-        // flush() must never queue behind the lifecycle op the tick or close is holding.
-        let snapshots = 0;
-        const db: ManagedDatabase<Schema> = new ManagedDatabase(makeConfig(1), nextDbPath(), {
-            onSync: async () => {},
+    test('a flush during a tick snapshot waits for it, then syncs', async () => {
+        const parked = Promise.withResolvers<void>();
+        const held = Promise.withResolvers<void>();
+        let syncs = 0;
+        const db = new ManagedDatabase(makeConfig(1), nextDbPath(), {
+            onSync: async () => {
+                syncs++;
+            },
             onSnapshot: async () => {
-                await db.flush();
-                snapshots++;
+                parked.resolve();
+                await held.promise;
                 return 'taken';
             },
         });
         await db.open(5);
         db.db.insert(items).values({ v: 'x' }).run();
-        await new Promise((r) => setTimeout(r, 30));
-        expect(snapshots).toBeGreaterThanOrEqual(1); // tick path
+        await parked.promise;
+        const syncsAtPark = syncs;
 
         db.db.insert(items).values({ v: 'y' }).run();
-        await db.close();
-        expect(snapshots).toBeGreaterThanOrEqual(2); // close path
+        const flushed = db.flush();
+        await new Promise((r) => setTimeout(r, 20));
+        expect(syncs).toBe(syncsAtPark);
+
+        held.resolve();
+        await flushed;
+        expect(syncs).toBe(syncsAtPark + 1);
+        await db.close({ skipFinalSnapshot: true });
+    });
+
+    test('a close waits for a tick snapshot and leaves the database open under it', async () => {
+        const parked = Promise.withResolvers<void>();
+        const held = Promise.withResolvers<void>();
+        let rowsSeenBySnapshot = 0;
+        const db: ManagedDatabase<Schema> = new ManagedDatabase(makeConfig(1), nextDbPath(), {
+            onSync: async () => {},
+            onSnapshot: async () => {
+                parked.resolve();
+                await held.promise;
+                rowsSeenBySnapshot = db.db.select().from(items).all().length;
+                return 'taken';
+            },
+        });
+        await db.open(5);
+        db.db.insert(items).values({ v: 'x' }).run();
+        await parked.promise;
+
+        const closing = db.close({ skipFinalSnapshot: true });
+        await new Promise((r) => setTimeout(r, 20));
+        held.resolve();
+        await closing;
+        expect(rowsSeenBySnapshot).toBe(1);
+    });
+
+    test('a flush during a close does not sync a database the close took down', async () => {
+        const parked = Promise.withResolvers<void>();
+        const held = Promise.withResolvers<void>();
+        let syncs = 0;
+        const db = new ManagedDatabase(makeConfig(1000), nextDbPath(), {
+            onSync: async () => {
+                syncs++;
+            },
+            onSnapshot: async () => {
+                parked.resolve();
+                await held.promise;
+                return 'taken';
+            },
+        });
+        await db.open(0);
+        db.db.insert(items).values({ v: 'x' }).run();
+
+        const closing = db.close();
+        await parked.promise;
+        const flushed = db.flush();
+        held.resolve();
+        await Promise.all([closing, flushed]);
+        expect(syncs).toBe(1);
     });
 });
 
@@ -335,15 +387,13 @@ describe('ManagedDatabase close teardown', () => {
 });
 
 describe('ManagedDatabase statement finalization', () => {
-    test('drizzle statements are finalized as they run, so the raw handle closes strictly', () => {
-        // Drizzle prepares one bun:sqlite statement per execution and leaves it to GC; sqlite refuses
-        // a strict close (SQLITE_BUSY) while any survive — including a collected wrapper whose native
-        // handle hasn't been swept yet, which no amount of Bun.gc() can force. Every execution path
-        // drizzle has (run/all/get/values, transactions, savepoints, relational queries) must leave
-        // nothing behind.
-        const raw = new BunDatabase(nextDbPath(), { create: true });
-        raw.run('CREATE TABLE items (id INTEGER PRIMARY KEY AUTOINCREMENT, v TEXT)');
-        const db = drizzle(withAutoFinalize(raw), { schema: { items } });
+    test('drizzle statements are finalized as they run, so the close is strict', async () => {
+        // Every execution path drizzle has (run/all/get/values, transactions, savepoints, relational
+        // queries) must leave nothing behind, or the close falls back to a lazy one and warns.
+        const managed = new ManagedDatabase(makeConfig(1000), nextDbPath());
+        await managed.open(0);
+        const db = managed.db;
+        const warn = spyOn(console, 'warn');
 
         db.insert(items).values({ v: 'a' }).run();
         db.transaction((tx) => {
@@ -355,7 +405,9 @@ describe('ManagedDatabase statement finalization', () => {
         expect(db.query.items.findMany().sync()).toHaveLength(3);
         expect(db.select({ v: items.v }).from(items).all()[2]?.v).toBe('c');
 
-        expect(() => raw.close(true)).not.toThrow();
+        await managed.close({ skipFinalSnapshot: true });
+        expect(warn).not.toHaveBeenCalled();
+        warn.mockRestore();
     });
 });
 

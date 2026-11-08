@@ -44,7 +44,7 @@ A database with an `onSync` callback (a container database) syncs every 30 s and
 
 The watermark is read before `onSync` runs and stored only after it returns. `onSync` copies the bytes first, so a write landing during its later awaits is not in the copy, and reading the watermark afterwards would count it as synced. A throwing `onSync` stores nothing, so the database stays dirty: the next tick retries, `flush()` passes the error on, and `close()` still tears down and hands `syncFailed` to `onClose`. That flag means the working copy holds bytes storage lacks.
 
-A tick and a close never run their sync and snapshot at the same time, so a close can't tear the database down under a tick in flight. `flush()` takes only the sync lock, because `onSnapshot` flushes the very database it snapshots.
+A tick, a flush and a close run one at a time under one lock. So two syncs can't stage the same bytes and race their watermark, and a close can't tear the database down under a tick in flight. `onSync` and `onSnapshot` run under that lock, so they must not call `flush()`: it would wait for itself. A tick's snapshot needs no flush anyway, because the sync just before it has run. A flush waits for a tick's snapshot as a close does, so a caller may hold the database's slot or container lock while it waits, because that snapshot only tries the container lock and never takes the slot.
 
 ## The database triggers snapshots, the mount takes them
 

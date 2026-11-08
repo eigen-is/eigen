@@ -1,3 +1,8 @@
+// One SQLite database of the server, opened through Drizzle: it runs the versioned migrations, tracks whether
+// writes are pending, syncs them on a timer and at close, and says when a version is due. The caller says what a
+// sync, an open, a close and a version mean, such as a document database's upload. Server, Home and container
+// databases all open through this class.
+
 import type { Statement } from 'bun:sqlite';
 import { constants, Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
@@ -6,7 +11,6 @@ import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { Semaphore } from '../../utils/semaphore';
 import { time } from '../../utils/timing';
-import { isTest } from '../config/env';
 import type { RetentionPolicy } from '../versioning/retention';
 import { ApiError } from './errors';
 
@@ -38,10 +42,9 @@ export type Tx<S extends SchemaType> = Parameters<Parameters<BunSQLiteDatabase<S
 export type SyncCallbacks = {
     onOpen?: () => Promise<void>;
     onSync?: () => Promise<void>;
-    // syncFailed: the close-time sync threw — the working copy holds bytes storage doesn't.
+    // syncFailed: the final sync threw, so the working copy holds bytes storage lacks.
     onClose?: (syncFailed: boolean) => Promise<void>;
-    // 'skipped': the snapshot was deliberately not taken (container lock contended) — the
-    // watermark must not advance, so a tick-path skip retries next tick.
+    // 'skipped': the container lock was busy, so the snapshot stays due and the next tick tries again.
     onSnapshot?: () => Promise<'taken' | 'skipped'>;
 };
 
@@ -57,19 +60,10 @@ export class ManagedDatabase<S extends SchemaType> {
     private forceDirty = false;
     // The tail markDirty() recovered is unsnapshotted too, though the fresh connection counts no change for it.
     private forceSnapshot = false;
-    // One lifecycle op at a time: a tick and a close never run their sync + snapshot concurrently,
-    // so close can't tear the db down under an in-flight tick. flush() deliberately takes only
-    // syncLock — onSnapshot flushes the very db it is snapshotting (versioning/snapshot.ts
-    // takeSnapshot), so a flush waiting on this lock would deadlock on its own tick.
+    // A tick, a flush and a close run one at a time: two syncs would stage the same bytes and race their watermark,
+    // and a close would tear the database down under the other. A callback runs under it, so it must not flush.
     private lifecycleLock = new Semaphore(1);
-    // Every onSync runs under this: two of them stage the same bytes and race their watermark.
-    private syncLock = new Semaphore(1);
-    // Set the moment close() starts, so queued ticks and flushes can't call back into a db that is
-    // being (or has been) torn down. Cleared by a reopen.
-    private closed = false;
-    // When true, openCold opens with { create: false } so a MISSING working copy throws instead of
-    // silently materialising an empty db. Set by Mount for "open existing" document dbs — the file is
-    // known to exist (metadata.db has its row), so a fresh empty db here means lost data, not a new doc.
+    // An open of a file metadata.db has a row for, so a missing or empty one means lost data, not a new database.
     private mustExist: boolean;
 
     public constructor(config: DatabaseConfig<S>, localPath: string, callbacks: SyncCallbacks = {}, mustExist = false) {
@@ -79,9 +73,64 @@ export class ManagedDatabase<S extends SchemaType> {
         this.mustExist = mustExist;
     }
 
+    public get db(): BunSQLiteDatabase<S> {
+        if (!this.drizzleDb) throw new Error('Database not open');
+        return this.drizzleDb;
+    }
+
+    // A closed database has nothing left to sync, though total_changes() reads 0 and differs from the watermark.
+    private get isDirty(): boolean {
+        return this.rawDb !== null && (this.forceDirty || this.getTotalChanges() !== this.lastSyncedChanges);
+    }
+
     public async open(autoSyncMs = 30000): Promise<BunSQLiteDatabase<S>> {
         if (this.drizzleDb) return this.drizzleDb;
         return time(`ManagedDatabase.open ${this.config.name}`, () => this.openCold(autoSyncMs));
+    }
+
+    // skipFinalSnapshot is for a caller about to discard the file, such as a restore, whose final snapshot could
+    // prune the version that restore is about to read.
+    public async close(opts: { skipFinalSnapshot?: boolean } = {}): Promise<void> {
+        // Before the wait, so no tick queues behind this close.
+        if (this.syncTimer) {
+            clearInterval(this.syncTimer);
+            this.syncTimer = null;
+        }
+
+        await this.lifecycleLock.run(async () => {
+            if (!this.rawDb) return; // a concurrent close reached the teardown first
+
+            // The teardown runs even when the final sync throws; onClose learns of the failure.
+            let syncFailed = true;
+            try {
+                await this.sync();
+                syncFailed = false;
+            } finally {
+                // A local backend copies this file for the snapshot, and TRUNCATE makes it complete. A snapshot
+                // failure is caught so it can't block the close.
+                this.rawDb?.run('PRAGMA wal_checkpoint(TRUNCATE);');
+                // After a failed sync a path-based snapshot copies storage, which lacks the tail.
+                if (!opts.skipFinalSnapshot && !syncFailed) {
+                    await this.snapshotIfDue(true).catch((err) =>
+                        console.error(`[${this.config.name}] close snapshot failed:`, err),
+                    );
+                }
+                // Statements are finalized as they run, so a strict close succeeds. Should one still be live, sqlite
+                // keeps the connection as a zombie until it is finalized.
+                if (this.rawDb) {
+                    try {
+                        this.rawDb.close(true);
+                    } catch (err) {
+                        console.warn(`[${this.config.name}] lazy close:`, err);
+                        this.rawDb.close();
+                    }
+                }
+                this.rawDb = null;
+                this.drizzleDb = null;
+
+                await this.callbacks.onClose?.(syncFailed);
+            }
+        });
     }
 
     private async openCold(autoSyncMs: number): Promise<BunSQLiteDatabase<S>> {
@@ -91,22 +140,18 @@ export class ManagedDatabase<S extends SchemaType> {
         fs.mkdirSync(dir, { recursive: true });
 
         if (this.mustExist) {
-            // "Open existing" must find a populated db. A missing OR 0-byte working copy would
-            // otherwise be initialized as a fresh EMPTY db — the 2026-06-08 data-loss shape (a
-            // failed/empty S3 GET leaves a 0-byte temp, itself a valid empty SQLite). Refuse it so
-            // the caller re-fetches the authoritative object or fails loud, never silently wipes.
+            // A failed or empty S3 GET leaves a 0-byte file, itself a valid empty SQLite. Opening it would wipe the
+            // document, so the caller fetches the stored object again or fails loud.
             const size = fs.existsSync(this.localPath) ? fs.statSync(this.localPath).size : -1;
             if (size <= 0) {
                 throw new ApiError(503, `${this.config.name}: expected an existing database at ${this.localPath}`);
             }
         }
 
-        // create:false keeps a missing file an error.
         this.rawDb = this.mustExist
             ? new Database(this.localPath, { readwrite: true, create: false })
             : new Database(this.localPath, { create: true });
-        // A failed open — corrupt bytes tripping the first PRAGMA (SQLITE_NOTADB on a partial
-        // download) or a throwing migration — must not leak the raw handle (fd + mapped journals).
+        // A failed open, from corrupt bytes or a throwing migration, must not leak the handle and its mapped journals.
         try {
             // macOS's system SQLite keeps -wal and -shm after the last close; turn that off so the
             // last connection removes them, once its exclusive lock proves no other process has the file.
@@ -125,7 +170,7 @@ export class ManagedDatabase<S extends SchemaType> {
                 INSERT OR IGNORE INTO __schema_version (id, version) VALUES (1, 0);
             `);
 
-            await this.runMigrations(this.rawDb);
+            this.runMigrations(this.rawDb);
         } catch (e) {
             this.rawDb.close();
             this.rawDb = null;
@@ -134,7 +179,6 @@ export class ManagedDatabase<S extends SchemaType> {
 
         this.drizzleDb = drizzle(withAutoFinalize(this.rawDb), { schema: this.config.schema });
         this.lastSyncedChanges = 0;
-        this.closed = false;
 
         if (this.callbacks.onSync && autoSyncMs > 0) {
             this.syncTimer = setInterval(() => {
@@ -145,19 +189,15 @@ export class ManagedDatabase<S extends SchemaType> {
         return this.drizzleDb;
     }
 
-    private async runMigrations(db: Database): Promise<void> {
+    private runMigrations(db: Database): void {
         const stamp = db
             .query<{ version: number }, []>('SELECT version FROM __schema_version WHERE id = 1')
             .get()?.version;
-        // Only our own migrations write the stamp; anything else is a db we don't understand, and a
-        // non-number compares false against every migration so the db would open unmigrated.
         if (stamp === undefined || !Number.isInteger(stamp)) {
             throw new ApiError(503, `${this.config.name}: unreadable schema stamp ${stamp}`);
         }
         let currentVersion = stamp;
 
-        // A db written by a newer binary carries a schema past what we know how to migrate. Rolling
-        // back to an older server and silently opening it would corrupt it — refuse loudly instead.
         if (currentVersion > this.config.currentVersion) {
             throw new ApiError(
                 503,
@@ -170,13 +210,11 @@ export class ManagedDatabase<S extends SchemaType> {
             .sort((a, b) => a.version - b.version);
 
         for (const migration of pending) {
-            if (!isTest()) {
-                const msg =
-                    currentVersion === 0
-                        ? `Init v${migration.version}`
-                        : `Migrating v${currentVersion} → v${migration.version}`;
-                console.log(`[${this.config.name}] ${msg}`);
-            }
+            const msg =
+                currentVersion === 0
+                    ? `Init v${migration.version}`
+                    : `Migrating v${currentVersion} → v${migration.version}`;
+            console.log(`[${this.config.name}] ${msg}`);
             db.run('BEGIN');
             try {
                 migration.up(db);
@@ -196,30 +234,17 @@ export class ManagedDatabase<S extends SchemaType> {
         return row?.tc ?? 0;
     }
 
-    private get isDirty(): boolean {
-        return this.forceDirty || this.getTotalChanges() !== this.lastSyncedChanges;
-    }
-
-    // Force the next sync() to run even though total_changes() looks unchanged.
-    // Crash recovery: buildDocumentDb (mount/document-db.ts) reuses a temp file that survived an
-    // unclean shutdown, but total_changes() resets to 0 on the fresh connection, so
-    // isDirty would read false and the close-time cleanupTemp would silently drop the
-    // unsynced bytes. Marking dirty guarantees they re-reach storage. Cleared on sync.
+    // For an open that adopts a crash temp: the fresh connection counts no change for its unsynced bytes, so isDirty
+    // would read false and the close would drop them.
     public markDirty(): void {
         this.forceDirty = true;
         this.forceSnapshot = true;
     }
 
-    // Push pending writes to storage. Snapshots are handled separately by
-    // snapshotIfDue() so that an explicit flush() (e.g. from a snapshot callback
-    // that flushes the cached db first) can't re-enter the snapshot trigger.
     private async sync(): Promise<void> {
         if (this.isDirty && this.callbacks.onSync) {
             this.rawDb?.run('PRAGMA wal_checkpoint(PASSIVE);');
-            // Snapshot the watermark BEFORE the await: onSync stages the current bytes up front, so a
-            // write landing during its later awaits isn't in that copy. Reading total_changes() after
-            // would count that racing write as synced and drop it (silent tail-loss); capturing before
-            // keeps it dirty to re-sync next tick — at worst a redundant re-stage, never a loss.
+            // Read before the await: onSync stages the bytes up front, so a write during its later awaits stays dirty.
             const syncedChanges = this.getTotalChanges();
             await this.callbacks.onSync();
             this.lastSyncedChanges = syncedChanges;
@@ -228,116 +253,50 @@ export class ManagedDatabase<S extends SchemaType> {
         }
     }
 
-    // Take a version snapshot when enough writes have accumulated since the last
-    // one (or `force`, used at close, for any unsnapshotted change). The snapshot
-    // callback copies the on-disk db, so the caller must have the latest state
-    // checkpointed to the main file first (sync() runs PASSIVE; close() TRUNCATEs).
-    // Awaited — a fire-and-forget snapshot would race close()'s file teardown and,
-    // during restore eviction, the imminent data.db replace.
+    // onSnapshot copies the file on disk, which sync() and close() have checkpointed. It is awaited, because a
+    // snapshot left running would race the teardown of a close or the replace of a restore.
     private async snapshotIfDue(force = false): Promise<void> {
         if (!this.config.snapshot || !this.callbacks.onSnapshot) return;
         const total = this.getTotalChanges();
         const unsnapshotted = total - this.lastSnapshotChanges;
         if (unsnapshotted <= 0 && !this.forceSnapshot) return;
         if (!force && unsnapshotted < this.config.snapshot.writesPerSnapshot) return;
-        // A skip must stay due — advancing would record it as taken and never retry it.
         if ((await this.callbacks.onSnapshot()) !== 'skipped') {
             this.lastSnapshotChanges = total;
             this.forceSnapshot = false;
         }
     }
 
-    // Periodic auto-sync: push writes, then snapshot if the threshold is crossed. A tick that was
-    // already queued when close() started is dropped rather than run against a closing db.
     private async tick(): Promise<void> {
         await this.lifecycleLock.run(async () => {
-            if (this.closed) return;
-            await this.syncLock.run(() => this.sync());
+            await this.sync();
             await this.snapshotIfDue();
         });
     }
 
-    // Serialized against every other sync but NOT against the lifecycle op, so the re-entrant
-    // flush from onSnapshot can't wedge (see lifecycleLock). Once close() has started this is a
-    // no-op: close ran its own final sync, and nothing may touch the db it is tearing down.
     public async flush(): Promise<void> {
-        await this.syncLock.run(async () => {
-            if (!this.closed) await this.sync();
-        });
+        await this.lifecycleLock.run(() => this.sync());
     }
 
-    // The write-behind upload pipeline uploads the VACUUM INTO copy, not the live file (which keeps
-    // mutating as the user edits); VACUUM INTO captures committed-but-uncheckpointed WAL frames, so
-    // the copy is complete without a prior checkpoint.
+    // VACUUM INTO captures committed WAL frames, so the copy is complete with no checkpoint.
     public stageCopy(destPath: string): void {
         if (!this.rawDb) throw new Error('Database not open');
         this.rawDb.run('VACUUM INTO ?', [destPath]);
     }
-
-    // skipFinalSnapshot: callers about to discard the on-disk file (eviction
-    // inside Drive.restoreContainer) opt out so the close-time snapshot can't
-    // prune the snapshot the restore is about to read from.
-    public async close(opts: { skipFinalSnapshot?: boolean } = {}): Promise<void> {
-        if (!this.rawDb) return;
-
-        // Stop scheduling and disarm queued flushes BEFORE waiting for the in-flight lifecycle op:
-        // from here on nothing may sync a db that is about to lose its handle.
-        this.closed = true;
-        if (this.syncTimer) {
-            clearInterval(this.syncTimer);
-            this.syncTimer = null;
-        }
-
-        await this.lifecycleLock.run(async () => {
-            if (!this.rawDb) return; // a concurrent close reached the teardown first
-
-            // The teardown runs even when the final sync throws; onClose learns of the failure.
-            let syncFailed = true;
-            try {
-                await this.syncLock.run(() => this.sync());
-                syncFailed = false;
-            } finally {
-                // Fold the WAL into the main file before snapshotting: local backends copy
-                // this on-disk file (TRUNCATE makes it complete), remote backends copy the
-                // object sync() uploaded. A snapshot failure is caught so it can't block close.
-                this.rawDb?.run('PRAGMA wal_checkpoint(TRUNCATE);');
-                // After a failed sync a path-based snapshot copies storage, which lacks the tail.
-                if (!opts.skipFinalSnapshot && !syncFailed) {
-                    await this.snapshotIfDue(true).catch((err) =>
-                        console.error(`[${this.config.name}] close snapshot failed:`, err),
-                    );
-                }
-                // Strict close. Statements are finalized as they run (withAutoFinalize), so this
-                // succeeds; should one still be live, sqlite keeps the connection as a zombie that
-                // closes when the statement is finalized. The journals are sqlite's to remove.
-                if (this.rawDb) {
-                    try {
-                        this.rawDb.close(true);
-                    } catch (err) {
-                        console.warn(`[${this.config.name}] lazy close:`, err);
-                        this.rawDb.close();
-                    }
-                }
-                this.rawDb = null;
-                this.drizzleDb = null;
-
-                await this.callbacks.onClose?.(syncFailed);
-            }
-        });
-    }
-
-    public get db(): BunSQLiteDatabase<S> {
-        if (!this.drizzleDb) throw new Error('Database not open');
-        return this.drizzleDb;
-    }
 }
 
-// Drizzle prepares one bun:sqlite statement per execution and leaves it to GC. sqlite refuses a
-// strict close while any survive (SQLITE_BUSY) — and a collected wrapper whose native handle
-// hasn't been swept yet still counts, which no Bun.gc() retry can force. Finalize each statement
-// right after its single execution instead. Migrations get the raw handle (they reuse statements
-// in loops) and finalize their own.
-export function withAutoFinalize(db: Database): Database {
+export async function openLocalDatabase<S extends SchemaType>(
+    config: DatabaseConfig<S>,
+    absolutePath: string,
+): Promise<ManagedDatabase<S>> {
+    const db = new ManagedDatabase(config, absolutePath);
+    await db.open();
+    return db;
+}
+
+// Drizzle prepares one statement per execution and leaves it to GC, and sqlite refuses a strict close while any
+// survive. So each is finalized right after its one run. Migrations get the raw handle, as they reuse statements.
+function withAutoFinalize(db: Database): Database {
     return new Proxy(db, {
         get(target, prop) {
             if (prop === 'prepare') {
@@ -366,13 +325,4 @@ function finalizeAfterRun(stmt: Statement): Statement {
             };
         },
     });
-}
-
-export async function openLocalDatabase<S extends SchemaType>(
-    config: DatabaseConfig<S>,
-    absolutePath: string,
-): Promise<ManagedDatabase<S>> {
-    const db = new ManagedDatabase(config, absolutePath);
-    await db.open();
-    return db;
 }
