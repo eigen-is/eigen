@@ -151,7 +151,7 @@ export const collabRouter = new Elysia({
                 const { ownerId, mountId, pathId } = ws.data.params;
                 const drive = await getSharedDrive(ownerId, user);
                 // A stale epoch's sync would bring back what a restore undid. This comes after getSharedDrive's 503 for
-                // a running restore, because a restore that fails puts the epoch back.
+                // a running restore, so no tab reloads onto that 503.
                 const { epoch } = ws.data.query;
                 if (epoch !== undefined && epoch !== getDataEpoch(ownerId)) {
                     ws.close(COLLAB_HOME_REPLACED_CLOSE, COLLAB_HOME_REPLACED_REASON);
@@ -191,7 +191,7 @@ export const collabRouter = new Elysia({
                     console.error('Error opening collab session:', err);
                 }
                 // A 5xx makes the client retry, a home a restore is replacing included: the reconnect then names a
-                // stale epoch and reloads, or, if the restore failed, syncs the edits it holds.
+                // stale epoch and reloads, or, if the restore never rotated it, syncs the edits it holds.
                 if (status >= 500) {
                     ws.close(COLLAB_STORAGE_UNAVAILABLE_CLOSE, COLLAB_STORAGE_UNAVAILABLE_REASON);
                 } else if (status === 410) {

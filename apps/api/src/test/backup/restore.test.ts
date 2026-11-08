@@ -38,11 +38,10 @@ import { recoverBackupsAfterRestart } from '../../lib/backup/recovery';
 import { restoreHome, restoreSafetyCopy } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import * as verifyModule from '../../lib/backup/verify';
-import { getAvatarsDir, getDataRoot, getServerDataPath, PATHS, SERVER_RUNTIME_FILES } from '../../lib/config/paths';
+import { getAvatarsDir, getDataRoot, PATHS } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { avatarNameOf } from '../../lib/contacts/card-store';
 import { ApiError } from '../../lib/core';
-import { LocalFilesystem } from '../../lib/core/local-filesystem';
 import type { Home } from '../../lib/home';
 import * as dataEpochModule from '../../lib/home/data-epoch';
 import { getDataEpoch } from '../../lib/home/data-epoch';
@@ -202,24 +201,6 @@ async function expectNotTaken(userId: string, before: Awaited<ReturnType<typeof 
     expect(after.copies).toEqual(before.copies);
     expect(after.epoch).toBe(before.epoch);
     expect(restoreStagingFolders()).toEqual([]);
-}
-
-function homeEpochsOnDisk(): Record<string, string> {
-    const file = getServerDataPath(SERVER_RUNTIME_FILES.homeEpochs);
-    return existsSync(file) ? JSON.parse(nodeFs.readFileSync(file, 'utf8')) : {};
-}
-
-// Fails the saves of the home-epochs file that `shouldFail` picks, and lets every other write through.
-function failHomeEpochSaves(shouldFail: () => boolean) {
-    const writeAtomic = LocalFilesystem.prototype.writeAtomic;
-    return spyOn(LocalFilesystem.prototype, 'writeAtomic').mockImplementation(async function (
-        this: LocalFilesystem,
-        filePath,
-        data,
-    ) {
-        if (filePath === SERVER_RUNTIME_FILES.homeEpochs && shouldFail()) throw new Error('save refused');
-        await writeAtomic.call(this, filePath, data);
-    });
 }
 
 // Where a flat-key mount stores one row's object: `paths.file` (Mount.getStorageKey).
@@ -551,7 +532,7 @@ describe('Backup restoreHome', () => {
     }
 
     // The socket retries through the restore; the reconnect after it names the old epoch, so only a restore that
-    // finished reloads the tab, once, and one that failed lets it sync the edits it still holds.
+    // rotated it reloads the tab, once.
     test('an open collab socket is closed with the retry close, and its reconnect after the restore with 1012', async () => {
         const epoch = getDataEpoch(target.id);
         const ws = new WebSocket(`ws://localhost:${port}/ws/collab/${target.id}/${mountId}/${docId}`, {
@@ -777,7 +758,6 @@ describe('Backup restoreHome', () => {
 
     test('a failure after the move-aside leaves .failed-restore and puts the original back', async () => {
         const before = await rootNames(target.sessionToken, target.id, mountId, rootId);
-        const epoch = getDataEpoch(target.id);
         const failedBefore = safetyCopies(target.id, FAILED_RESTORE_SUFFIX).length;
         // After the new home folder moved in, so a new folder is in place when it throws.
         const spy = spyOn(dataEpochModule, 'rotateHomeDataEpoch').mockImplementation(async () => {
@@ -791,9 +771,6 @@ describe('Backup restoreHome', () => {
             spy.mockRestore();
         }
 
-        // The home as it was is back, so a tab that held it has nothing to reload for.
-        expect(getDataEpoch(target.id)).toBe(epoch);
-
         expect(safetyCopies(target.id, FAILED_RESTORE_SUFFIX).length).toBe(failedBefore + 1);
         expect(existsSync(join(TEST_DATA_DIR, 'home', target.id))).toBe(true);
         expect(restoreStagingFolders()).toEqual([]);
@@ -801,12 +778,33 @@ describe('Backup restoreHome', () => {
         expect(await rootNames(target.sessionToken, target.id, mountId, rootId)).toEqual(before);
     });
 
-    // The rotation has landed when the note fails, in memory and in the file. Left rotated, every editor tab of the home
-    // that was put back would reload and drop the edits it was about to sync.
-    test('a completion note that cannot be written puts the data epoch back', async () => {
+    // The rotation comes after the install, so a failed install never reaches it and the tabs sync the edits they hold.
+    test('a failed install leaves the data epoch as it was', async () => {
+        const before = await rootNames(target.sessionToken, target.id, mountId, rootId);
+        const homeDir = join(TEST_DATA_DIR, 'home', target.id);
+        const epoch = getDataEpoch(target.id);
+        const rename = nodeFs.renameSync;
+        const spy = spyOn(nodeFs, 'renameSync').mockImplementation((from, to) => {
+            // The install's move of the unpacked folder, which the rollback's move of the original is not.
+            if (to === homeDir && !String(from).includes(PRE_RESTORE_SUFFIX)) throw new Error('install failed');
+            rename(from, to);
+        });
+        try {
+            await expect(restoreHome(artifact, target.id, `restore-install-${Date.now()}`)).rejects.toThrow(
+                'install failed',
+            );
+        } finally {
+            spy.mockRestore();
+        }
+
+        expect(getDataEpoch(target.id)).toBe(epoch);
+        expect(await rootNames(target.sessionToken, target.id, mountId, rootId)).toEqual(before);
+    });
+
+    // Accepted: the original home is back under a new epoch, so its tabs reload once.
+    test('a note that cannot be removed after the rotation leaves the epoch rotated', async () => {
         const before = await rootNames(target.sessionToken, target.id, mountId, rootId);
         const epoch = getDataEpoch(target.id);
-        const onDisk = homeEpochsOnDisk()[target.id];
         const spy = spyOn(recoveryModule, 'dropRestoringMarker').mockImplementation(() => {
             throw new Error('failed by the test');
         });
@@ -818,102 +816,7 @@ describe('Backup restoreHome', () => {
             spy.mockRestore();
         }
 
-        expect(getDataEpoch(target.id)).toBe(epoch);
-        expect(homeEpochsOnDisk()[target.id]).toBe(onDisk);
-        expect(await rootNames(target.sessionToken, target.id, mountId, rootId)).toEqual(before);
-    });
-
-    test('a home that had no epoch of its own goes back to having none', async () => {
-        const user = await createTestUser('restore-first-epoch@test.eigen.is', PASSWORD, 'Restore First Epoch');
-        await authedRequest(user.sessionToken, `/drive/${user.id}/mounts`);
-        const firstArtifact = await backup(user.id, new Date());
-        const epoch = getDataEpoch(user.id);
-        const spy = spyOn(recoveryModule, 'dropRestoringMarker').mockImplementation(() => {
-            throw new Error('failed by the test');
-        });
-        try {
-            await expect(restoreHome(firstArtifact, user.id, `restore-first-${Date.now()}`)).rejects.toThrow(
-                'failed by the test',
-            );
-        } finally {
-            spy.mockRestore();
-        }
-        rmSync(join(getBackupsDir(), firstArtifact), { force: true });
-
-        expect(getDataEpoch(user.id)).toBe(epoch);
-        expect(Object.keys(homeEpochsOnDisk())).not.toContain(user.id);
-    });
-
-    test('a rotation whose save fails leaves memory and the file on the old epoch', async () => {
-        const before = await rootNames(target.sessionToken, target.id, mountId, rootId);
-        const epoch = getDataEpoch(target.id);
-        const onDisk = homeEpochsOnDisk()[target.id];
-        const spy = failHomeEpochSaves(() => true);
-        try {
-            await expect(restoreHome(artifact, target.id, `restore-save-${Date.now()}`)).rejects.toThrow(
-                'save refused',
-            );
-        } finally {
-            spy.mockRestore();
-        }
-
-        expect(getDataEpoch(target.id)).toBe(epoch);
-        expect(homeEpochsOnDisk()[target.id]).toBe(onDisk);
-        expect(await rootNames(target.sessionToken, target.id, mountId, rootId)).toEqual(before);
-    });
-
-    // The home is back, so the old epoch in memory lets its tabs sync. The file holding the rotated one costs one more
-    // reload at the next restart, and no new home ever served under the old epoch.
-    test('an epoch that cannot be saved back still serves the old one, and hides no failure', async () => {
-        const before = await rootNames(target.sessionToken, target.id, mountId, rootId);
-        const epoch = getDataEpoch(target.id);
-        const onDisk = homeEpochsOnDisk()[target.id];
-        let saves = 0;
-        const saveSpy = failHomeEpochSaves(() => ++saves === 2);
-        const noteSpy = spyOn(recoveryModule, 'dropRestoringMarker').mockImplementation(() => {
-            throw new Error('failed by the test');
-        });
-        try {
-            await expect(restoreHome(artifact, target.id, `restore-save-back-${Date.now()}`)).rejects.toThrow(
-                'failed by the test',
-            );
-        } finally {
-            noteSpy.mockRestore();
-            saveSpy.mockRestore();
-        }
-
-        expect(saves).toBe(2);
-        expect(getDataEpoch(target.id)).toBe(epoch);
-        expect(homeEpochsOnDisk()[target.id]).not.toBe(onDisk);
-        expect(await rootNames(target.sessionToken, target.id, mountId, rootId)).toEqual(before);
-    });
-
-    // Until the next boot puts the home back, the new folder may still be in place, and a tab on the old epoch must not
-    // sync over it. So the epoch stays rotated, which costs an extra reload.
-    test('a rollback that fails leaves the epoch rotated', async () => {
-        const before = await rootNames(target.sessionToken, target.id, mountId, rootId);
-        const homeDir = join(TEST_DATA_DIR, 'home', target.id);
-        const epoch = getDataEpoch(target.id);
-        const noteSpy = spyOn(recoveryModule, 'dropRestoringMarker').mockImplementation(() => {
-            throw new Error('failed by the test');
-        });
-        const rename = nodeFs.renameSync;
-        const renameSpy = spyOn(nodeFs, 'renameSync').mockImplementation((from, to) => {
-            if (from === homeDir && String(to).includes(FAILED_RESTORE_SUFFIX)) throw new Error('rename failed');
-            rename(from, to);
-        });
-        try {
-            await expect(restoreHome(artifact, target.id, `restore-stays-rotated-${Date.now()}`)).rejects.toThrow(
-                'could not be put back',
-            );
-        } finally {
-            noteSpy.mockRestore();
-            renameSpy.mockRestore();
-        }
-
         expect(getDataEpoch(target.id)).not.toBe(epoch);
-        await recoverBackupsAfterRestart();
-        clearHomeRestoring(target.id);
         expect(await rootNames(target.sessionToken, target.id, mountId, rootId)).toEqual(before);
     });
 
