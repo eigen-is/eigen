@@ -2,7 +2,7 @@
 // A write on a stale etag is refused, says so, and the next try goes through on what was reloaded, with the dialog still
 // open. Edit event keeps what was typed and follows the rest: a refetch moves only the fields nobody touched, and typed
 // edits can't overwrite a change unseen. So a guest's reply costs a form nothing, and a second Save doesn't revert it. A
-// save of two writes sends the second with the etag the first answered, and a refused cross-home move copies once.
+// save of two writes sends the second with the etag the first answered, and a cross-home redo copies all of the form.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type {
     Attendee,
@@ -501,7 +501,7 @@ test('a refusal behind the recurring choice brings back the form, on the current
     expect(titleField().value).toBe('Standup, renamed');
 });
 
-test('a cross-home move refused at its delete copies once: the redo only deletes, and invites nobody twice', async () => {
+test('a cross-home move refused at its delete leaves both, and the redo copies everything', async () => {
     server.shared = [teamCalendar];
     server.event = { ...dentist, data: invited(['ada@example.org', 'pending']) };
     await openEdit();
@@ -516,18 +516,66 @@ test('a cross-home move refused at its delete copies once: the redo only deletes
         { write: 'create', etag: 'v2' },
         { write: 'delete', etag: 'v1' },
     ]);
+    expect(server.created).toMatchObject({ title: 'Dentist at noon', location: null });
     expect(toasts).toEqual([STALE_TOAST]);
     expect(dialogTitles()).toEqual(['Edit event']);
     expect(titleField().value).toBe('Dentist at noon');
 
+    await typeDescription('Bring the x-rays');
     await click('Save');
     await click('Move');
     expect(server.writes).toEqual([
         { write: 'create', etag: 'v2' },
         { write: 'delete', etag: 'v1' },
+        { write: 'create', etag: 'v2' },
         { write: 'delete', etag: 'v2' },
     ]);
+    expect(server.created).toMatchObject({
+        title: 'Dentist at noon',
+        location: 'New practice',
+        description: 'Bring the x-rays',
+    });
     expect(dialogTitles()).toEqual([]);
+});
+
+test('a cross-home move over a change the form has seen is refused like a 412, and writes nothing', async () => {
+    server.shared = [teamCalendar];
+    await openEdit();
+    await typeTitle('Dentist at noon');
+    await pickCalendar('Work', 'Team');
+    changeFieldsElsewhere({ location: 'New practice' });
+    await refetch();
+
+    await click('Save');
+    expect(server.writes).toEqual([]);
+    expect(toasts).toEqual([STALE_TOAST]);
+    expect(dialogTitles()).toEqual(['Edit event']);
+    expect(titleField().value).toBe('Dentist at noon');
+
+    await click('Save');
+    expect(server.writes).toEqual([
+        { write: 'create', etag: 'v2' },
+        { write: 'delete', etag: 'v2' },
+    ]);
+    expect(server.created).toMatchObject({ title: 'Dentist at noon', location: 'New practice' });
+    expect(toasts).toEqual([STALE_TOAST]);
+    expect(dialogTitles()).toEqual([]);
+});
+
+test('a refusal behind the move warning writes nothing and brings back the form', async () => {
+    server.shared = [teamCalendar];
+    server.event = { ...dentist, data: invited(['ada@example.org', 'pending']) };
+    await openEdit();
+    await typeTitle('Dentist at noon');
+    await pickCalendar('Work', 'Team');
+    await click('Save');
+    changeFieldsElsewhere({ location: 'New practice' });
+    await refetch();
+
+    await click('Move');
+    expect(server.writes).toEqual([]);
+    expect(toasts).toEqual([STALE_TOAST]);
+    expect(dialogTitles()).toEqual(['Edit event']);
 });
 
 test('a move to another of your calendars sends the etag the update before it answered', async () => {

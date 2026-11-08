@@ -198,6 +198,17 @@ export function useMoveEvent(ownerId: string) {
     });
 }
 
+// A form that can see it is behind before it writes anything gets the same answer as the server's 412.
+export function useRefuseStaleEvent(ownerId: string): () => never {
+    const queryClient = useQueryClient();
+
+    return () => {
+        const error = new AppError({ error: { status: 412, value: null }, status: 412 });
+        onEtagWriteError(error, STALE_WRITE_TOAST, () => invalidateEventList(queryClient, ownerId));
+        throw error;
+    };
+}
+
 // The owner's address tells their own organized events from invitations; a team owner has none to ask for. Until a
 // user owner's address arrives every event counts as an invitation, so none is briefly editable.
 export function useIsInvitationFromOthers(eventOwnerId: string): (event: { data?: EventData | null }) => boolean {

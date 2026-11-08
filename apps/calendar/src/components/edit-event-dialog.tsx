@@ -22,6 +22,7 @@ import {
     useEvent,
     useIsInvitationFromOthers,
     useMoveEvent,
+    useRefuseStaleEvent,
     useSharedCalendars,
     useUpdateEvent,
     viewerTimeZone,
@@ -72,10 +73,6 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
     const [showRecurringDialog, setShowRecurringDialog] = useState(false);
     const [showMoveConfirm, setShowMoveConfirm] = useState(false);
 
-    // The calendar a cross-home move already created its copy in. A retry after a failed source delete must not create
-    // that copy twice, nor send its invitations again. A retry into another calendar still creates the copy there.
-    const createdDestinationRef = useRef<string | null>(null);
-
     // The etag typed edits answer to: the event's when typing began, so a save can't overwrite a change it never showed.
     // With nothing typed, or after a refusal has told the user to check, a save answers to the event as it is now.
     const heldEtag = useRef<string | null>(null);
@@ -101,6 +98,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
     const createEvent = useCreateEvent(selectedCal?.ownerId || eventOwnerId);
     const deleteEventOnSource = useDeleteEvent(eventOwnerId);
     const moveEvent = useMoveEvent(eventOwnerId);
+    const refuseStaleEvent = useRefuseStaleEvent(eventOwnerId);
     const isFromOthers = useIsInvitationFromOthers(eventOwnerId);
     // A series is saved on its master, and only the master's own row says which date the series starts on.
     const { data: master } = useEvent(
@@ -186,13 +184,10 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
                 });
             } else {
                 // Two Homes have no atomic move. The event is recreated, then deleted, and the organizer link and the
-                // overrides stay behind.
-                if (createdDestinationRef.current !== selectedCalKey) {
-                    await createEvent.mutateAsync({ calendarId: selectedCal.id, ...updates });
-                    createdDestinationRef.current = selectedCalKey;
-                }
+                // overrides stay behind. A form already behind the event would only leave its copy beside the original.
+                if (etag !== event.etag) refuseStaleEvent();
+                await createEvent.mutateAsync({ calendarId: selectedCal.id, ...updates });
                 await deleteEventOnSource.mutateAsync({ id: targetId, calendarId: event.calendarId, etag });
-                createdDestinationRef.current = null;
             }
         } else if (action === 'all') {
             await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, etag, ...seriesUpdates });
