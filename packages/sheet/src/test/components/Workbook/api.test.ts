@@ -444,7 +444,7 @@ describe('replayOps', () => {
         const shown = applyPeerOps(base, [typedA1]);
         const { ctx, history, accepted } = replay(shown, base.sheets, [[typedB2], [typedA1]], [[typedB2]]);
         expect([ctx.sheets[0].data?.[0][0]?.v, ctx.sheets[0].data?.[1][1]?.v]).toEqual([9, 'b2']);
-        expect(history).toEqual({ undoList: [], redoList: [] });
+        expect(history).toMatchObject({ undoList: [], redoList: [] });
         expect(ctx.selections).toBe(shown.selections);
         expect(accepted).toBe(true);
     });

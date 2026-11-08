@@ -70,4 +70,6 @@ A filled cell also takes the data validation of its source cell. Where the sourc
 
 Both are also available under **Edit → Undo** and **Edit → Redo**.
 
-When someone else edits the spreadsheet with you, undo stops at your last insert or delete of rows or columns, or your last added, duplicated, deleted or renamed sheet. As soon as they change anything, you can no longer undo or redo that change or anything you did before it. What you did after it still undoes. If someone else renames a sheet, you can no longer undo or redo anything you did before that.
+Once someone else edits the spreadsheet, you can no longer undo or redo your last insert or delete of rows or columns, your last added, duplicated, deleted or renamed sheet, a paste that added rows or columns, a conditional format rule you removed or added to a sheet that already has rules, or anything you did before it. What you did after it still undoes. If someone else renames a sheet, you can no longer undo or redo anything you did before that. Your own edit in another tab or on another device counts too.
+
+When there is nothing left to undo for this reason, pressing undo shows a notice: "Someone else edited this spreadsheet, so this can't be undone anymore." Pressing redo says: "Someone else edited this spreadsheet, so this can't be redone anymore." The notice stops once you make a new edit.

@@ -86,6 +86,11 @@ type AdditionalProps = {
     toolbarRightItems?: React.ReactNode;
 };
 
+const CUT_BY_PEER_NOTICE = {
+    undo: "Someone else edited this spreadsheet, so this can't be undone anymore.",
+    redo: "Someone else edited this spreadsheet, so this can't be redone anymore.",
+};
+
 // The copied cell range as a text item. Every clipboard item carries its drawn box. A sheet has no zoom, so the row and
 // column edges give the box in pixels. The first cell's font size goes along, so an app that keeps the box, such as
 // slides, draws the text at the size it had here and not at its own larger default, which the box would clip. A copy
@@ -233,29 +238,40 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         pushEntry(undoList, { ...entry, gesture: undoGesture });
                     }
                     globalCache.current.redoList = [];
+                    globalCache.current.cutByPeer = undefined;
                 }
                 onOp?.(patchToOp(result, filteredPatches, entry.options));
             },
             [commit, onOp],
         );
 
-        const handleUndo = useCallback(() => {
-            if (contextRef.current.allowEdit === false) return;
-            const { undoList, redoList } = globalCache.current;
-            const step = stepNewestEntry(contextRef.current, undoList, redoList, undoEntry);
-            if (!step) return;
-            commit(step.ctx);
-            if (step.ops.length > 0) onOp?.(step.ops);
-        }, [commit, onOp]);
-
-        const handleRedo = useCallback(() => {
-            if (contextRef.current.allowEdit === false) return;
-            const { undoList, redoList } = globalCache.current;
-            const step = stepNewestEntry(contextRef.current, redoList, undoList, redoEntry);
-            if (!step) return;
-            commit(step.ctx);
-            if (step.ops.length > 0) onOp?.(step.ops);
-        }, [commit, onOp]);
+        const stepHistory = useCallback(
+            (kind: 'undo' | 'redo') => {
+                const ctx = contextRef.current;
+                if (ctx.allowEdit === false) return;
+                const { undoList, redoList, cutByPeer } = globalCache.current;
+                const step =
+                    kind === 'undo'
+                        ? stepNewestEntry(ctx, undoList, redoList, undoEntry)
+                        : stepNewestEntry(ctx, redoList, undoList, redoEntry);
+                if (!step) {
+                    if (cutByPeer?.[kind]) {
+                        setContextWithProduce(
+                            (draft) => {
+                                draft.warnDialog = CUT_BY_PEER_NOTICE[kind];
+                            },
+                            { noHistory: true },
+                        );
+                    }
+                    return;
+                }
+                commit(step.ctx);
+                if (step.ops.length > 0) onOp?.(step.ops);
+            },
+            [commit, onOp, setContextWithProduce],
+        );
+        const handleUndo = useCallback(() => stepHistory('undo'), [stepHistory]);
+        const handleRedo = useCallback(() => stepHistory('redo'), [stepHistory]);
 
         // A changed right opens or closes the grid's controls, and a card's new colour repaints its corner mark.
         // Both take a new context, which every reader and the painter follow.
