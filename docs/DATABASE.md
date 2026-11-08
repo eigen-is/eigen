@@ -30,6 +30,8 @@ drizzle's bun-sqlite driver types `.run()` as void, so a write that must count t
 
 `__schema_version` holds the version stamp. Each pending migration runs between `BEGIN` and `COMMIT` together with the stamp update, so a failing one rolls back and leaves the version where it was. Any failure inside `open()` closes the raw handle before it rethrows, so the same file reopens cleanly once repaired.
 
+`PRAGMA foreign_keys` can't change inside that transaction and is on, so a table rebuild that runs `DROP TABLE` on a referenced table cascades: on `paths` it silently empties `file_events` and `path_watchers`. Add, copy and drop columns instead.
+
 ## An open refuses a schema newer than the binary
 
 Before applying anything, `runMigrations` refuses a database whose stamp is higher than `config.currentVersion` with a 503. After a deploy migrated a database forward, an older server would otherwise open it and keep writing to a schema it doesn't understand. The domain answers 503 until the binary is rolled forward, and nothing on disk is touched meanwhile. The same guard sends a rollback to the backup: `./eigen rollback` first has the build before check that it opens today's data, a migrated database fails that check, and the rollback restores the Full backup `./eigen update` made first ([BACKUP.md](BACKUP.md#a-rollback-keeps-the-data-when-the-build-before-opens-it)). So a migration needs no mark in CHANGELOG.md.
