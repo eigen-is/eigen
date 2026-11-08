@@ -147,7 +147,7 @@ const save = async () => {
     await settle();
 };
 
-const STALE_TOAST = 'This contact changed elsewhere. Check it and try again.';
+const STALE_TOAST = 'This contact changed elsewhere. What you typed is still here. Check it and save again.';
 
 test('a refused Save keeps what was typed and follows the rest, and the next Save sends the new etag', async () => {
     const page = await open();

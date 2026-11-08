@@ -4,8 +4,8 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigate } from '@tanstack/react-router';
-import { wasToasted } from '@workspace/lib/api-error';
-import { isStaleWrite, useMeContact, useUpdateContact } from '@workspace/lib/contacts';
+import { isStaleWrite, wasToasted } from '@workspace/lib/api-error';
+import { useMeContact, useUpdateContact } from '@workspace/lib/contacts';
 import type { Contact } from '@workspace/lib/types/contact';
 import { AvatarEditor, ErrorState, LoadingState, useContactAvatarUpload } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';

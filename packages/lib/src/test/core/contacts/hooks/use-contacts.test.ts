@@ -42,7 +42,9 @@ describe('a write that meets a 412', () => {
             await latest.mutateAsync({ ...ada, id: 'c1', etag: '1' }).catch((error: unknown) => (failure = error));
         });
         await unmount();
-        expect(toasts).toEqual(['error: This contact changed elsewhere. Check it and try again.']);
+        expect(toasts).toEqual([
+            'error: This contact changed elsewhere. What you typed is still here. Check it and save again.',
+        ]);
         expect(hasKey(invalidated, contactKeys.lists(OWNER))).toBe(true);
         expect(wasToasted(failure)).toBe(true);
     });

@@ -11,8 +11,8 @@ import { AppError, onEtagWriteError, onMutationError } from '../../api-error';
 import { contactKeys, invalidateContactList } from './keys';
 
 // A write echoes the etag its form holds, and a 412 means the card changed elsewhere first. The hook reloads the list
-// and tells the user. It says nothing about what was typed, because the profile form re-seeds on a reload.
-const STALE_WRITE_TOAST = 'This contact changed elsewhere. Check it and try again.';
+// and tells the user.
+const STALE_WRITE_TOAST = 'This contact changed elsewhere. What you typed is still here. Check it and save again.';
 
 export function useContacts() {
     const { user } = useAuth();
