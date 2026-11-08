@@ -1963,6 +1963,34 @@ describe('a write under a folder deleted meanwhile (local-key storage)', () => {
         expect(existsSync(mount.dataDir) ? readdirSync(mount.dataDir) : []).toEqual([]);
     });
 
+    // Off `local` a folder delete locks none of its files, and the object at the key is this file's alone.
+    test('an overwrite answers 404 and leaves no object behind', async () => {
+        const folderId = await mount.createFolder(rootId, 'GoneWhileOverwriting');
+        const fileId = await mount.createFile(folderId, 'late.bin', 'application/octet-stream', 3, Buffer.from('old'));
+        const key = await mount.getStorageKey(fileId);
+        const inWrite = Promise.withResolvers<void>();
+        const release = Promise.withResolvers<void>();
+        const write = mount.storage.write.bind(mount.storage);
+        const spy = spyOn(mount.storage, 'write').mockImplementationOnce(async (writeKey, data) => {
+            inWrite.resolve();
+            await release.promise;
+            return write(writeKey, data);
+        });
+        try {
+            const outcome = mount.writeFile(fileId, Buffer.from('new')).catch((e: unknown) => e);
+            await inWrite.promise;
+            await mount.deletePath(folderId);
+            release.resolve();
+
+            const err = await outcome;
+            expect(err).toBeInstanceOf(ApiError);
+            expect(err).toMatchObject({ status: 404 });
+        } finally {
+            spy.mockRestore();
+        }
+        expect(await mount.storage.exists(key)).toBe(false);
+    });
+
     test('a folder answers 404', async () => {
         const err = await mount.createFolder('no-such-folder', 'Child').catch((e: unknown) => e);
         expect(err).toBeInstanceOf(ApiError);

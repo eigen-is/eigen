@@ -111,8 +111,8 @@ export class Mount {
     // Holds the Home open while the upload queue has a PUT on the wire. A mount that no Home serves,
     // such as a backup's read of a disabled mount, has none.
     private readonly holdHome?: () => () => void;
-    // One map holds three kinds of lock key: a path id, a folder id with a folded name for a create, and
-    // the one key that permanent deletes share. Ids are UUIDs, so the kinds never collide.
+    // One map holds two kinds of lock key: a path id, and a folder id with a folded name for a create. Ids are
+    // UUIDs, so the kinds never collide.
     private readonly pathLocks: Map<string, Promise<void>>;
     private readonly treeLock: RWLock;
 
@@ -844,7 +844,8 @@ export class Mount {
         // another delete of the row got there first.
         const deleteDir = this.storage.deleteDir;
         if (pathEntry.type === 'file') {
-            await this.withTreeShared(async () => {
+            // Exclusive, because on `local` a create of this name writes this same key once the row is gone.
+            await this.withTreeExclusive(async () => {
                 const storageKey = await this.findStorageKey(pathId);
                 if (storageKey === null) return;
                 const deleted = await this.db
@@ -1113,8 +1114,8 @@ export class Mount {
         if (ifMatch !== undefined && !matchesIfMatch(ifMatch, etag)) throw new StaleWriteError(etag);
     }
 
-    // deletePath takes no path lock, so a delete during the write leaves new bytes, which go here. The stored row
-    // is answered because its column keeps whole seconds, which a GET's etag reads.
+    // Off `local` no lock keeps a delete out of the write, and the bytes it leaves at this row's own key go here. The
+    // stored row is answered because its column keeps whole seconds, which a GET's etag reads.
     private async commitOverwrite(pathId: string, storageKey: string, size: number, hash: string): Promise<DrivePath> {
         const row = await this.db
             .select({ name: paths.name, mimeType: paths.mimeType })

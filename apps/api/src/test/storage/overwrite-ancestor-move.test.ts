@@ -29,12 +29,13 @@ const docConfig: DatabaseConfig<typeof docSchema> = {
 
 type Gate = { parked: Promise<void>; release: () => void };
 
-// LocalStorage whose next write or rename after arm parks until the test releases it. `order`
+// LocalStorage whose next write, rename or delete after arm parks until the test releases it. `order`
 // records the storage calls that completed since the last arm.
 class GatedLocalStorage extends LocalStorage {
     public order: string[] = [];
     private writeGate: { parked: () => void; released: Promise<void> } | null = null;
     private renameGate: { parked: () => void; released: Promise<void> } | null = null;
+    private deleteGate: { parked: () => void; released: Promise<void> } | null = null;
 
     public armWrite(): Gate {
         const parked = Promise.withResolvers<void>();
@@ -48,6 +49,14 @@ class GatedLocalStorage extends LocalStorage {
         const parked = Promise.withResolvers<void>();
         const released = Promise.withResolvers<void>();
         this.renameGate = { parked: parked.resolve, released: released.promise };
+        this.order = [];
+        return { parked: parked.promise, release: released.resolve };
+    }
+
+    public armDelete(): Gate {
+        const parked = Promise.withResolvers<void>();
+        const released = Promise.withResolvers<void>();
+        this.deleteGate = { parked: parked.resolve, released: released.promise };
         this.order = [];
         return { parked: parked.promise, release: released.resolve };
     }
@@ -76,6 +85,12 @@ class GatedLocalStorage extends LocalStorage {
     }
 
     public override async delete(key: string): Promise<boolean> {
+        const gate = this.deleteGate;
+        if (gate) {
+            this.deleteGate = null;
+            gate.parked();
+            await gate.released;
+        }
         const deleted = await super.delete(key);
         this.order.push('delete');
         return deleted;
@@ -315,6 +330,47 @@ describe('a key-derived write racing an ancestor move on a path-based mount', ()
         } finally {
             await mount.cleanupTemp(tempId);
         }
+    });
+});
+
+// A create of a deleted file's name writes the key that file's writes and its delete still use, so the delete holds
+// the exclusive side and none of them overlap.
+describe('a file delete beside writes at its key on a path-based mount', () => {
+    test('a delete and a create of its name during an overwrite leave the new file its bytes', async () => {
+        const { mount, storage, folderId, fileId } = await fileInFolder('overwrite-delete-create');
+        const gate = storage.armWrite();
+        const overwrite = mount.writeFile(fileId, Buffer.from('late overwrite')).catch(() => null);
+        await gate.parked;
+        const deleteWaiting = mount.armTreeWait();
+        const del = mount.deletePath(fileId);
+        await deleteWaiting;
+        const createWaiting = mount.armTreeWait();
+        const create = mount.createFile(folderId, 'notes.txt', 'text/plain', 8, Buffer.from('new file'));
+        await createWaiting;
+        gate.release();
+        const [committed, , newId] = await Promise.all([overwrite, del, create]);
+
+        expect(await mount.getPath(fileId)).toBeNull();
+        expect(await mount.getStorageKey(newId)).toBe('before/notes.txt');
+        expect(await storage.exists('before/notes.txt')).toBe(true);
+        expect(await storage.read('before/notes.txt').text()).toBe('new file');
+        expect(committed?.id).toBe(fileId);
+    });
+
+    test('a create of its name during the delete keeps its bytes', async () => {
+        const { mount, storage, folderId, fileId } = await fileInFolder('create-during-delete');
+        const gate = storage.armDelete();
+        const del = mount.deletePath(fileId);
+        await gate.parked;
+        const waiting = mount.armTreeWait();
+        const create = mount.createFile(folderId, 'notes.txt', 'text/plain', 8, Buffer.from('new file'));
+        await waiting;
+        gate.release();
+        const [, newId] = await Promise.all([del, create]);
+
+        expect(await mount.getStorageKey(newId)).toBe('before/notes.txt');
+        expect(await storage.exists('before/notes.txt')).toBe(true);
+        expect(await storage.read('before/notes.txt').text()).toBe('new file');
     });
 });
 
