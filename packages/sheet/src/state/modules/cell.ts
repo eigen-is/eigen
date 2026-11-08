@@ -15,6 +15,7 @@ import {
     SHEET_DEFAULT_FONT_SIZE,
 } from '@workspace/lib/sheets';
 import { cloneDeep, isNil, isNumber, isPlainObject, isString } from 'es-toolkit/compat';
+import { sheetFinder } from '../../engine/a1-notation';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
 import {
     booleanDisplay,
@@ -26,6 +27,7 @@ import {
     richText,
 } from '../../engine/format';
 import { isFormula } from '../../engine/formula-engine';
+import { moveFormulaRefs } from '../../engine/formula-shift';
 import { iscelldata } from '../../engine/formula-utils';
 import type { Cell, CellMatrix, FormulaDependency } from '../../engine/types';
 import { getSheet } from '../api/common';
@@ -1048,6 +1050,27 @@ export function carryCells(
             }
         }
     }
+}
+
+// A cut or a drag: the block `range` lands once, its source clears, and each formula in it follows the move.
+export function moveCells(ctx: Context, lines: CarriedLines, range: SingleRange, tile: CarryTile) {
+    const from = getSheet(ctx, { id: lines.sheetId }).name;
+    const to = getSheet(ctx).name;
+    const findSheet = sheetFinder(ctx.sheets);
+    const rowOffset = tile.row - range.row[0];
+    const colOffset = tile.column - range.column[0];
+    carryCells(
+        ctx,
+        lines,
+        [tile],
+        ({ source }) => {
+            if (source?.f != null) {
+                source.f = `=${moveFormulaRefs(source.f, range, rowOffset, colOffset, from, to, findSheet)}`;
+            }
+            return source;
+        },
+        { cut: true },
+    );
 }
 
 // Where the cells of a range land in one tile: a range for each run of carried rows and columns it covers. A whole

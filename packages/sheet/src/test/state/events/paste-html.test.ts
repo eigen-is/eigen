@@ -8,6 +8,7 @@ import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import { handleCopy } from '../../../state/events/copy';
 import { handlePaste } from '../../../state/events/paste';
+import { normalizedCellAttr } from '../../../state/modules/cell';
 import { consumePendingCopy } from '../../../state/modules/clipboard';
 import { COPY_ACTION_TABLE_MARKER, copy, rangeValueToClipboard } from '../../../state/modules/selection';
 import { filterPatch } from '../../../state/utils';
@@ -275,6 +276,17 @@ describe('HTML-table paste — style extraction', () => {
         expect(d[0][2]?.ht).toBe(1);
         expect(d[0][2]?.vt).toBe(2);
     });
+
+    it('leaves a cell with no text-align to its value, so a number lands on the right', () => {
+        const ctx = makeCtx();
+        pasteHtml(ctx, '<table><tr><td>12</td><td>word</td></tr></table>');
+
+        const d = ctx.sheets[0].data!;
+        expect(d[0][0]?.v).toBe(12);
+        expect(d[0][0]?.ht).toBeUndefined();
+        expect(normalizedCellAttr(d[0][0] ?? {}, 'ht')).toBe('2');
+        expect(normalizedCellAttr(d[0][1] ?? {}, 'ht')).toBe('1');
+    });
 });
 
 // The style fields a pasted cell can take from the <style> block, read from the top-left rows x cols.
@@ -294,7 +306,7 @@ function styleBlockHtml(css: string, cells: string): string {
 
 describe('HTML-table paste — the <style> block', () => {
     // A td the block styles only through its td rule: Excel's and WPS's both say vertical-align:middle.
-    const plain = { bl: 0, it: 0, fs: SHEET_DEFAULT_FONT_SIZE, ht: 1, vt: 0 };
+    const plain = { bl: 0, it: 0, fs: SHEET_DEFAULT_FONT_SIZE, vt: 0 };
     const wps = { ...plain, fs: 12, fc: '#000000' };
 
     it.each<['Excel' | 'WPS', Partial<Cell>[][]]>([
@@ -384,6 +396,40 @@ describe('HTML-table paste — the <style> block', () => {
         );
         const mono = { ...plain, vt: 1, bl: 1, ff: 'JetBrains Mono' };
         expect(styleGrid(ctx, 1, 2)).toEqual([[mono, mono]]);
+    });
+});
+
+// A cut's formula follows Excel's rule for a move: its refs into the moved block follow the cells.
+describe('a cut landing its own formulas', () => {
+    function cutAndPaste(ctx: Context, from: Context['selections'], at: number[]) {
+        ctx.selections = from;
+        handleCopy(ctx, { cut: true });
+        const pending = consumePendingCopy();
+        ctx.selections = single(at[0], at[1]);
+        handlePaste(ctx, clipboardWith({ html: pending?.html ?? '' }));
+    }
+
+    it('rewrites a ref into the block and computes it where it landed', () => {
+        const ctx = makeCtx(8, 10);
+        const d = ctx.sheets[0].data!;
+        d[4][3] = { v: 10, m: '10', ct: { fa: 'General', t: 'n' } };
+        d[4][4] = { f: '=D5*2', v: 20, m: '20', ct: { fa: 'General', t: 'n' } };
+        cutAndPaste(ctx, [{ row: [4, 4], column: [3, 4], row_focus: 4, column_focus: 3 }], [2, 6]);
+
+        expect(d[2][7]?.f).toBe('=G3*2');
+        expect(d[2][7]?.v).toBe(20);
+        expect(d[4][4]).toBeNull();
+    });
+
+    it('keeps a ref outside the block where it pointed', () => {
+        const ctx = makeCtx(8, 10);
+        const d = ctx.sheets[0].data!;
+        d[0][0] = { v: 3, m: '3', ct: { fa: 'General', t: 'n' } };
+        d[4][4] = { f: '=A1*2', v: 6, m: '6', ct: { fa: 'General', t: 'n' } };
+        cutAndPaste(ctx, single(4, 4), [2, 6]);
+
+        expect(d[2][6]?.f).toBe('=A1*2');
+        expect(d[2][6]?.v).toBe(6);
     });
 });
 
@@ -502,6 +548,36 @@ describe('HTML-table paste — merges, borders, row height', () => {
         expect(d[1][0]).toBeNull();
         expect(d[2][0]).toBeNull();
         expect(ctx.sheets[0].config!.merge).toEqual({ '0_0': { r: 0, c: 0, rs: 2, cs: 2 } });
+        expect(ctx.warnDialog).toBe('Cannot perform this operation on merged cells');
+    });
+
+    it('replaces a merge it covers whole, as a paste of this tab does', () => {
+        const ctx = makeCtx(6, 6);
+        ctx.sheets[0].config = { merge: { '0_0': { r: 0, c: 0, rs: 2, cs: 2 } } };
+        ctx.sheets[0].data![0][0] = { v: 'merged', mc: { r: 0, c: 0, rs: 2, cs: 2 } };
+        ctx.sheets[0].data![0][1] = { mc: { r: 0, c: 0 } };
+        ctx.sheets[0].data![1][0] = { mc: { r: 0, c: 0 } };
+        ctx.sheets[0].data![1][1] = { mc: { r: 0, c: 0 } };
+        pasteHtml(ctx, '<table><tr><td>a</td><td>b</td></tr><tr><td>c</td><td>d</td></tr></table>');
+
+        const d = ctx.sheets[0].data!;
+        expect(ctx.sheets[0].config!.merge).toEqual({});
+        expect([d[0][0]?.v, d[0][1]?.v, d[1][0]?.v, d[1][1]?.v]).toEqual(['a', 'b', 'c', 'd']);
+        expect(d[1][1]?.mc).toBeUndefined();
+        expect(ctx.warnDialog).toBeUndefined();
+    });
+
+    // HTML ends a span at the table's edge, so a merge does too.
+    it('ends a rowspan or a colspan that runs past the table at its edge', () => {
+        const ctx = makeCtx();
+        pasteHtml(ctx, '<table><tr><td rowspan="5">tall</td><td>b</td></tr><tr><td colspan="9">wide</td></tr></table>');
+
+        expect(ctx.sheets[0].config!.merge).toEqual({ '0_0': { r: 0, c: 0, rs: 2, cs: 1 } });
+        const d = ctx.sheets[0].data!;
+        expect(d[0][0]?.v).toBe('tall');
+        expect(d[1][1]?.v).toBe('wide');
+        expect(d[1][1]?.mc).toBeUndefined();
+        expect(d[2][0]).toBeNull();
     });
 });
 

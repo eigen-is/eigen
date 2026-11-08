@@ -7,11 +7,11 @@ import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import type { GlobalCache } from '../types';
-import { carriedLines, carryCells } from './cell';
+import { carriedLines, moveCells } from './cell';
 import { colLocation, colLocationByIndex, rowLocation, rowLocationByIndex, sheetPoint } from './location';
 import { jfrefreshgrid } from './refresh';
 import { normalizeSelection } from './selection';
-import { hasPartMC } from './validation';
+import { hasPartMC, PART_MERGE_REFUSAL } from './validation';
 
 const dragCellThreshold = 8;
 // A drop this close to the cell area's right edge lands on the sheet's last columns.
@@ -167,7 +167,7 @@ export function onCellsMoveEnd(
     const last = ctx.selections[ctx.selections.length - 1];
 
     if (hasPartMC(ctx, last.row[0], last.row[1], last.column[0], last.column[1])) {
-        ctx.warnDialog = 'Cannot perform this operation on merged cells';
+        ctx.warnDialog = PART_MERGE_REFUSAL;
         return;
     }
 
@@ -197,17 +197,16 @@ export function onCellsMoveEnd(
     }
 
     if (hasPartMC(ctx, row_s, row_e, col_s, col_e)) {
-        ctx.warnDialog = 'Cannot perform this operation on merged cells';
+        ctx.warnDialog = PART_MERGE_REFUSAL;
         return;
     }
 
-    carryCells(
-        ctx,
-        carriedLines(ctx, ctx.currentSheetId, [last], false),
-        [{ row: row_s, column: col_s, height: row_e - row_s + 1, width: col_e - col_s + 1 }],
-        ({ source }) => source,
-        { cut: true },
-    );
+    moveCells(ctx, carriedLines(ctx, ctx.currentSheetId, [last], false), last, {
+        row: row_s,
+        column: col_s,
+        height: row_e - row_s + 1,
+        width: col_e - col_s + 1,
+    });
 
     // A conditional format over the moved cells moves with them.
     const rules = getSheet(ctx).conditionalFormatRules ?? [];

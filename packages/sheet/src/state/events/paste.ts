@@ -20,11 +20,11 @@ import type { Context } from '../context';
 import { getFlowdata, getSheetConfig, updateContextWithSheetData } from '../context';
 import { carrySides } from '../modules/border';
 import type { CarryTile } from '../modules/cell';
-import { carriedLines, carryCells, getQKBorder, landedRanges, setCellValue } from '../modules/cell';
+import { carriedLines, carryCells, getQKBorder, landedRanges, moveCells, setCellValue } from '../modules/cell';
 import { setFormulaCellInfo } from '../modules/formula-cache';
 import { computeFormula, execFunctionGroup } from '../modules/formula-exec';
 import { jfrefreshgrid } from '../modules/refresh';
-import { hasPartMC } from '../modules/validation';
+import { hasPartMC, PART_MERGE_REFUSAL } from '../modules/validation';
 import type { Selection } from '../types';
 import { getSheetIndex } from '../utils';
 import { SHEET_HOTKEYS } from './keyboard';
@@ -110,8 +110,7 @@ function pasteCut(ctx: Context, copyState: NonNullable<Context['copyState']>) {
     const d = roomFor(ctx, top, bottom, left, right);
     if (!d) return;
 
-    const tile = { row: top, column: left, height, width };
-    carryCells(ctx, lines, [tile], ({ source }) => source, { cut: true });
+    moveCells(ctx, lines, sourceRange, { row: top, column: left, height, width });
 
     last.row = [top, bottom];
     last.column = [left, right];
@@ -344,14 +343,11 @@ function pasteTable(ctx: Context, html: string) {
 
             cell.fc = td.style.color || styles.color;
 
-            const ht = td.style.textAlign || styles['text-align'] || 'left';
-            if (ht === 'center') {
-                cell.ht = 0;
-            } else if (ht === 'right') {
-                cell.ht = 2;
-            } else {
-                cell.ht = 1;
-            }
+            // A cell without one is left to its value, so a number lands on the right.
+            const ht = td.style.textAlign || styles['text-align'];
+            if (ht === 'center') cell.ht = 0;
+            else if (ht === 'right') cell.ht = 2;
+            else if (ht === 'left') cell.ht = 1;
 
             const vt = td.style.verticalAlign || styles['vertical-align'] || tdVerticalAlign || 'top';
             if (vt === 'middle') {
@@ -374,16 +370,9 @@ function pasteTable(ctx: Context, html: string) {
 
             if (isNil(data[r][c])) {
                 data[r][c] = cell;
-                let rowspan = parseInt(td.getAttribute('rowspan') ?? '1', 10);
-                let colspan = parseInt(td.getAttribute('colspan') ?? '1', 10);
-
-                if (Number.isNaN(rowspan)) {
-                    rowspan = 1;
-                }
-
-                if (Number.isNaN(colspan)) {
-                    colspan = 1;
-                }
+                // A span ends at the table's edge, as it does on the page.
+                const rowspan = Math.min(td.rowSpan, data.length - r);
+                const colspan = Math.min(td.colSpan, colLen - c);
 
                 const r_ab = anchor.row[0] + r;
                 const c_ab = anchor.column[0] + c;
@@ -575,10 +564,14 @@ function pasteFormula(ctx: Context, formulaStr: string) {
 
 // The grid a paste lands in, grown when the paste runs past its last row or column. Every paste asks here before it
 // writes, so a refused one ships no op and takes no undo step. Nothing comes back when the paste would land over part
-// of a merge, or would grow the sheet past its limits, which the notice says. The sheet's size grows with the grid,
+// of a merge, or would grow the sheet past its limits, and a notice says which. A paste that covers a merge whole
+// replaces it, as in Excel. The sheet's size grows with the grid,
 // because a stored snapshot keeps the size and a reader builds the grid at that size.
 function roomFor(ctx: Context, top: number, bottom: number, left: number, right: number): CellMatrix | undefined {
-    if (hasPartMC(ctx, top, bottom, left, right)) return undefined;
+    if (hasPartMC(ctx, top, bottom, left, right)) {
+        ctx.warnDialog = PART_MERGE_REFUSAL;
+        return undefined;
+    }
     const sheet = getSheet(ctx);
     const { data } = sheet;
     if (!data) return undefined;

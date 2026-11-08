@@ -20,6 +20,8 @@ export function diff(now: dayjs.ConfigType, then: dayjs.ConfigType) {
     return dayjs(now).diff(dayjs(then));
 }
 
+export const PART_MERGE_REFUSAL = 'Cannot perform this operation on merged cells';
+
 // Whether the range contains only part of a merged cell.
 export function hasPartMC(ctx: Context, r1: number, r2: number, c1: number, c2: number) {
     let ret = false;

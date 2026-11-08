@@ -10,6 +10,8 @@ import { formulaOperators, iscelldata } from './formula-utils';
 import { offsetCoordinate, offsetRange, sortLegs } from './parser/helper/cell';
 import { error } from './validation';
 
+type RefLeg = NonNullable<ReturnType<typeof extractLabel>>;
+
 // Shifts every ref in a formula by rowOffset rows and colOffset columns, as a copy or a fill does. The text comes back
 // without its leading `=`.
 export function functionCopy(txt: string, rowOffset: number, colOffset: number): string {
@@ -110,6 +112,39 @@ export function inlineNames(
     const walked = walkFormulaRefs(txt, ref, name);
     if (!inlined) return txt;
     return txt.startsWith('=') ? `=${walked}` : walked;
+}
+
+// The text of a formula a cut or a drag moved, by Excel's rule: a ref wholly inside the moved block follows its cells,
+// `$` or not, and any other ref still means the cell it meant, so on another sheet it names the one it came from.
+// `from` and `to` are the sheets' names. The text comes back without its leading `=`.
+export function moveFormulaRefs(
+    txt: string,
+    block: { row: readonly number[]; column: readonly number[] },
+    rowOffset: number,
+    colOffset: number,
+    from: string,
+    to: string,
+    findSheet: (name: string) => { name: string } | undefined,
+): string {
+    const inBlock = ([row, column]: RefLeg) =>
+        row.index >= block.row[0] &&
+        row.index <= block.row[1] &&
+        column.index >= block.column[0] &&
+        column.index <= block.column[1];
+    const moved = ([row, column]: RefLeg) =>
+        toLabel({ ...row, index: row.index + rowOffset }, { ...column, index: column.index + colOffset });
+    return walkFormulaRefs(txt, (ref) => {
+        const sheetEnd = ref.lastIndexOf('!') + 1;
+        if (sheetEnd > 0 && findSheet(unquoteSheetName(ref.slice(0, sheetEnd - 1)))?.name !== from) return ref;
+        const [startTxt, endTxt] = ref.slice(sheetEnd).split(':');
+        const start = extractLabel(startTxt);
+        const end = endTxt == null ? start : extractLabel(endTxt);
+        if (!start || !end || !inBlock(start) || !inBlock(end)) {
+            return sheetEnd === 0 && from !== to ? `${sheetRefName(from)}!${ref}` : ref;
+        }
+        const prefix = sheetEnd > 0 ? `${sheetRefName(to)}!` : '';
+        return endTxt == null ? prefix + moved(start) : `${prefix}${moved(start)}:${moved(end)}`;
+    });
 }
 
 // Moves a formula's refs for a row or column insert ('add') or delete ('del'), on the editor and in the op replay
