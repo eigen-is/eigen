@@ -9,6 +9,7 @@ import {
     readFileSync,
     rmSync,
     symlinkSync,
+    truncateSync,
     writeFileSync,
 } from 'node:fs';
 import { basename, join } from 'node:path';
@@ -47,6 +48,7 @@ import {
 import { restoreHome } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { appendInstallFiles, snapshotServer } from '../../lib/backup/snapshot-server';
+import { FILE_TYPEFLAG, headerChunks } from '../../lib/backup/tar';
 import { verifyFolder } from '../../lib/backup/verify';
 import { readServerArchive } from '../../lib/backup/verify-server-archive';
 import { SERVER_DATABASES } from '../../lib/config/paths';
@@ -76,6 +78,7 @@ const EMPTY_DIR = 'home/eigen.mail/Maildir/.Empty/cur';
 // Evaluated at registration time, so a machine without these tools skips the tests outright rather
 // than passing them without asserting anything.
 const HAS_TAR = Bun.which('tar') !== null;
+const MANIFEST_CAP = 256 * 1024 * 1024;
 const HAS_ZSTD = Bun.which('zstd') !== null;
 
 function syncUpdateMessage(doc: Y.Doc): Uint8Array {
@@ -447,7 +450,7 @@ describe('Backup pack and verify', () => {
                 writeFileSync(manifestPath, broken);
                 const record = await verifyFolder(folder);
                 expect(record.status).toBe('failed');
-                expect(record.failures).toEqual(['manifest.json is not a version 1 backup manifest']);
+                expect(record.failures).toEqual(['manifest.json is missing or not a version 1 backup manifest']);
             }
         },
         PACK_TIMEOUT_MS,
@@ -615,6 +618,17 @@ describe('Backup pack and verify', () => {
         },
         PACK_TIMEOUT_MS,
     );
+
+    // A header alone, since the cap goes by the size it declares: no body has to follow, and none is collected.
+    test('a manifest past the cap is refused by its size, before it is read', async () => {
+        const artifact = join(TEST_DATA_DIR, 'oversize.tar.zst');
+        const header = headerChunks('home-x/manifest.json', MANIFEST_CAP + 1, Date.now(), FILE_TYPEFLAG, 0o600);
+        writeFileSync(artifact, Bun.zstdCompressSync(Buffer.concat([...header])));
+        await expect(readArtifactManifest(artifact)).rejects.toMatchObject({
+            status: 400,
+            message: expect.stringContaining('this server reads'),
+        });
+    });
 
     test.skipIf(!HAS_ZSTD)('the artifact is a standard zstd frame', () => {
         // `zstd -t` decodes the whole frame and checks its checksums. Spawned straight, rather than
@@ -1153,6 +1167,21 @@ describe('The unpack bound', () => {
 // A home can hold tens of thousands of databases, and each quick_check blocks the thread. A restore verifies in the API,
 // so other requests run between every few databases.
 describe('verifyFolder', () => {
+    // The verify of a backup reads the manifest through the same cap, so a home past it finds out when it is backed up.
+    test('a folder whose manifest is past the cap is refused', async () => {
+        const folder = mkdtempSync(join(TEST_DATA_DIR, 'verify-cap-'));
+        writeFileSync(join(folder, 'manifest.json'), '');
+        truncateSync(join(folder, 'manifest.json'), MANIFEST_CAP + 1);
+        try {
+            await expect(verifyFolder(folder)).rejects.toMatchObject({
+                status: 400,
+                message: expect.stringContaining('this server reads'),
+            });
+        } finally {
+            rmSync(folder, { recursive: true, force: true });
+        }
+    });
+
     test('lets other work run while it checks the databases', async () => {
         const folder = mkdtempSync(join(TEST_DATA_DIR, 'verify-yield-'));
         const manifest: BackupManifest = {

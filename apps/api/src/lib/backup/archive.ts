@@ -270,12 +270,24 @@ export async function extractArtifact(source: ArtifactSource, targetDir: string,
     }
 }
 
+// The most of a manifest any reader holds in memory, about a million files' worth. The size comes from the archive.
+const MAX_MANIFEST_BYTES = 256 * 1024 * 1024;
+
+function refuseOversizeManifest(bytes: number): void {
+    if (bytes <= MAX_MANIFEST_BYTES) return;
+    throw new ApiError(
+        400,
+        `A backup manifest of ${formatFileSize(bytes)} is past the ${formatFileSize(MAX_MANIFEST_BYTES)} this server reads`,
+    );
+}
+
 // The manifest of the archive's single folder, without unpacking its files.
 export async function readArtifactManifest(source: ArtifactSource): Promise<BackupManifest> {
     const manifestGlob = new Bun.Glob(`*/${ARCHIVE_MANIFEST_FILE}`);
     let manifest: BackupManifest | null = null;
     for await (const entry of tarEntries(artifactBytes(source))) {
         if (!manifestGlob.match(entry.path)) continue;
+        refuseOversizeManifest(entry.size);
         manifest = parseBackupManifest(new TextDecoder().decode(await collect(entry.body)));
         break;
     }
@@ -284,6 +296,15 @@ export async function readArtifactManifest(source: ArtifactSource): Promise<Back
         throw new ApiError(400, `${name} is not an Eigen backup archive`);
     }
     return manifest;
+}
+
+// The manifest of an unpacked or staged folder, or null when it has none this build can read. A backup's own verify
+// reads through here, so a home past the cap finds out when it is backed up, not when it is restored.
+export function readManifestFile(folder: string): BackupManifest | null {
+    const manifestPath = path.join(folder, ARCHIVE_MANIFEST_FILE);
+    if (!fs.existsSync(manifestPath)) return null;
+    refuseOversizeManifest(fs.statSync(manifestPath).size);
+    return parseBackupManifest(fs.readFileSync(manifestPath, 'utf8'));
 }
 
 // The home folder inside an unpacked archive, with the manifest that describes it. Every caller gets the same
@@ -295,8 +316,7 @@ export function readUnpackedHome(
 ): { folder: string; manifest: BackupManifest } {
     const folder = path.join(unpackDir, buildHomeFolderName(ownerId));
     if (!fs.existsSync(folder)) throw new ApiError(400, `${artifactName} is a backup of another home`);
-    const manifestPath = path.join(folder, ARCHIVE_MANIFEST_FILE);
-    const manifest = fs.existsSync(manifestPath) ? parseBackupManifest(fs.readFileSync(manifestPath, 'utf8')) : null;
+    const manifest = readManifestFile(folder);
     if (!manifest) throw new ApiError(400, `${artifactName} carries no version 1 backup manifest`);
     if (manifest.ownerId !== ownerId) {
         throw new ApiError(400, `${artifactName} is a backup of another home (${manifest.ownerId})`);

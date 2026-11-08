@@ -9,12 +9,13 @@ import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import type { BackupEntry, BackupProgress, BackupVerifyRecord } from '@workspace/lib/types/backup';
 import { isCollabType } from '@workspace/lib/types/drive';
-import { listUnusableMountIds, parseBackupManifest } from '@workspace/lib/validation';
+import { listUnusableMountIds } from '@workspace/lib/validation';
 import * as Y from 'yjs';
 import { readYjsStateFromFile } from '../collab/yjs-loader';
 import { PATHS, SERVER_DATABASES } from '../config/paths';
 import { ApiError } from '../core/errors';
 import { hashFile } from '../storage/deadline';
+import { readManifestFile } from './archive';
 import {
     archivePaths,
     checkArchivedPathRows,
@@ -196,16 +197,12 @@ function countYjsBlobs(dbPath: string): number {
 // Every database is opened read-only: a verify never changes a byte of what it is checking.
 export async function verifyFolder(dir: string, onProgress?: BackupProgress): Promise<BackupVerifyRecord> {
     const checkedAt = new Date();
-    const manifestPath = path.join(dir, ARCHIVE_MANIFEST_FILE);
-    if (!fs.existsSync(manifestPath)) {
-        return { status: 'failed', checkedAt, failures: [`${ARCHIVE_MANIFEST_FILE} is missing`] };
-    }
-    const manifest = parseBackupManifest(await Bun.file(manifestPath).text());
+    const manifest = readManifestFile(dir);
     if (!manifest) {
         return {
             status: 'failed',
             checkedAt,
-            failures: [`${ARCHIVE_MANIFEST_FILE} is not a version 1 backup manifest`],
+            failures: [`${ARCHIVE_MANIFEST_FILE} is missing or not a version 1 backup manifest`],
         };
     }
     // Every path below is compared against this, so the folder's own real path is the baseline.
