@@ -208,7 +208,7 @@ It ships as one change, because every push already calls `sendToHome`. Moving ve
 4. Move the RSVP broadcast. Require the notification tag. Tag the unshare notification.
 5. Add the status field, the runtime-file entry and the docs: SCALABILITY.md, ACL.md, SYNC.md, DATABASE.md.
 
-"Team-removal collab read-revocation" in [ROADMAP.md](../ROADMAP.md) should use the outbox once it exists. It is a separate unit, and so is routing `mailboxDeliver`'s role-address loop when a cluster is built.
+"Team-removal collab read-revocation" in [ROADMAP.md](../ROADMAP.md) does not use the outbox. It closes open sockets, which only exist in memory, so a row would add nothing. Routing `mailboxDeliver`'s role-address loop is also separate, and comes when a cluster is built.
 
 ## Open questions
 
