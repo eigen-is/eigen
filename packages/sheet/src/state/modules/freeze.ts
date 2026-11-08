@@ -3,8 +3,7 @@
 // The sheet view calls initFreeze, for example when the sheet or its sizes change, and callers such as the headers and
 // the drag handlers use the rest.
 
-import { freezesColumns, freezesRows, SHEET_COLUMN_HEADER_HEIGHT, SHEET_ROW_HEADER_WIDTH } from '@workspace/lib/sheets';
-import { sortedIndex } from 'es-toolkit/compat';
+import { freezesColumns, freezesRows } from '@workspace/lib/sheets';
 import type { Context, Freezen, GlobalCache } from '..';
 import { colLocationByIndex, getSheetIndex, rowLocationByIndex } from '..';
 
@@ -29,8 +28,6 @@ export function initFreeze(ctx: Context, cache: GlobalCache, sheetId: string) {
                 pos: ctx.visibledatarow[row],
                 boundary: row + 1,
                 scroll: 0,
-                cumulative: ctx.visibledatarow.slice(row + 1),
-                edge: ctx.visibledatarow[row] - 2 + SHEET_COLUMN_HEADER_HEIGHT,
             },
         };
     }
@@ -41,13 +38,11 @@ export function initFreeze(ctx: Context, cache: GlobalCache, sheetId: string) {
                 pos: ctx.visibledatacolumn[column],
                 boundary: column + 1,
                 scroll: 0,
-                cumulative: ctx.visibledatacolumn.slice(column + 1),
-                edge: ctx.visibledatacolumn[column] - 2 + SHEET_ROW_HEADER_WIDTH,
             },
         };
     }
 
-    cache.freezen ||= {};
+    cache.freezen ??= {};
     cache.freezen[ctx.currentSheetId] = freezen;
 }
 
@@ -184,72 +179,31 @@ export function overlayRegionForCell(
     return regions.find((region) => region.pane === key) ?? regions[0];
 }
 
+// A selection drag whose far end has gone behind a frozen band scrolls back to the start, so the cells it reaches show.
+// The main pane starts at the band's width plus the scroll, and a far end past that is in view.
 export function scrollToFrozenRowCol(ctx: Context, freeze: Freezen | undefined) {
-    const selections = ctx.selections;
-    if (!selections) return;
+    const selection = ctx.selections?.at(-1);
+    if (!selection) return;
 
-    let row: number | undefined;
-    const { row_focus } = selections[0];
-    if (row_focus === selections[0].row[0]) {
-        [, row] = selections[0].row;
-    } else if (row_focus === selections[0].row[1]) {
-        [row] = selections[0].row;
-    }
-
-    let column: number | undefined;
-    const { column_focus } = selections[0];
-    if (column_focus === selections[0].column[0]) {
-        [, column] = selections[0].column;
-    } else if (column_focus === selections[0].column[1]) {
-        [column] = selections[0].column;
-    }
-
-    const verticalData = freeze?.vertical?.freezenverticaldata;
-    const horizontalData = freeze?.horizontal?.freezenhorizontaldata;
+    const column = farEnd(selection.column, selection.column_focus);
+    const row = farEnd(selection.row, selection.row_focus);
+    const columns = freeze?.vertical?.freezenverticaldata;
+    const rows = freeze?.horizontal?.freezenhorizontaldata;
 
     const request: { left?: number; top?: number } = {};
-
-    if (verticalData != null && column != null) {
-        let freezen_colindex = verticalData.boundary + sortedIndex(verticalData.cumulative, ctx.scrollLeft);
-
-        if (column >= ctx.visibledatacolumn.length) {
-            column = ctx.visibledatacolumn.length - 1;
-        }
-
-        if (freezen_colindex >= ctx.visibledatacolumn.length) {
-            freezen_colindex = ctx.visibledatacolumn.length - 1;
-        }
-
-        const column_px = ctx.visibledatacolumn[column];
-        const freezen_px = ctx.visibledatacolumn[freezen_colindex];
-
-        if (column_px <= freezen_px + verticalData.edge) {
-            request.left = 0;
-        }
+    if (columns && column != null && ctx.visibledatacolumn[column] <= columns.pos - columns.scroll + ctx.scrollLeft) {
+        request.left = 0;
     }
-
-    if (horizontalData != null && row != null) {
-        let freezen_rowindex = horizontalData.boundary + sortedIndex(horizontalData.cumulative, ctx.scrollTop);
-
-        if (row >= ctx.visibledatarow.length) {
-            row = ctx.visibledatarow.length - 1;
-        }
-
-        if (freezen_rowindex >= ctx.visibledatarow.length) {
-            freezen_rowindex = ctx.visibledatarow.length - 1;
-        }
-
-        const row_px = ctx.visibledatarow[row];
-        const freezen_px = ctx.visibledatarow[freezen_rowindex];
-
-        if (row_px <= freezen_px + horizontalData.edge) {
-            request.top = 0;
-        }
+    if (rows && row != null && ctx.visibledatarow[row] <= rows.pos - rows.scroll + ctx.scrollTop) {
+        request.top = 0;
     }
+    if (request.left != null || request.top != null) ctx.scrollRequest = request;
+}
 
-    if (request.left != null || request.top != null) {
-        ctx.scrollRequest = request;
-    }
+// The end of a selection's rows or columns away from its focus. A focus inside a merge is at neither end.
+function farEnd([first, last]: readonly number[], focus: number | undefined) {
+    if (focus === first) return last;
+    return focus === last ? first : undefined;
 }
 
 export function getFrozenHandleTop(ctx: Context) {

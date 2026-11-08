@@ -171,8 +171,6 @@ export type FreezenAxisData = {
     pos: number; // pixel position of the freeze boundary (visibledatarow/col at row_st/col_st)
     boundary: number; // first row/col index immediately past the freeze boundary
     scroll: number; // scroll offset captured at freeze init (currently always 0)
-    cumulative: number[]; // post-boundary cumulative pixel offsets, passed to sortedIndex to map scroll → row/col
-    edge: number; // viewport edge px: boundary pos − 2 + header dimension
 };
 
 export type Freezen = {
