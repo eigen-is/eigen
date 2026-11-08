@@ -1,7 +1,7 @@
 // The home archives in the backups folder: what the admin pane lists, how a name becomes a path, where an uploaded
-// archive lands, and what a delete takes with it. It also reads and writes the sidecar beside each archive, the
-// manifest and verify result the list shows. The backup routes and jobs call it, and so does a restore. The record
-// beside any archive, such as a server archive's, is written through writeRecord.
+// archive lands, the unpack with its room check, and what a delete takes with it. It also reads and writes the sidecar
+// beside each archive, the manifest and verify result the list shows. The backup routes and jobs call it, and so does a
+// restore. The record beside any archive, such as a server archive's, is written through writeRecord.
 
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -10,8 +10,8 @@ import type { BackupArtifact, BackupManifest, BackupVerifyRecord } from '@worksp
 import { BACKUP_ARTIFACT_EXTENSION, parseBackupArtifactName, parseBackupSidecar } from '@workspace/lib/validation';
 import { ApiError } from '../core';
 import { errnoOf, writeTempWithHash } from '../storage';
-import { ARCHIVE_MODE, readArtifactManifest } from './archive';
-import { backupsDirPath, getBackupTempPath, sidecarPath } from './paths';
+import { ARCHIVE_FOLDER_MODE, ARCHIVE_MODE, extractArtifact, readArtifactManifest, withUnpackSlack } from './archive';
+import { backupsDirPath, getBackupTempPath, roomShortfall, sidecarPath } from './paths';
 
 // One home's artifacts, newest first, read from the sidecars alone: opening an archive to answer a
 // page load would decompress the whole thing. An artifact with no sidecar (one copied in by hand)
@@ -162,10 +162,16 @@ export async function writeRecord(target: string, value: unknown): Promise<void>
     fs.renameSync(tempPath, target);
 }
 
-// What an artifact declares it holds, from the copy of its manifest in the sidecar. Only an artifact without one is
-// read for it, which decompresses the archive up to its manifest.
-export async function readDeclaredManifest(artifactPath: string): Promise<BackupManifest> {
-    return (await readSidecar(artifactPath))?.manifest ?? (await readArtifactManifest(artifactPath));
+// Unpacks an artifact once the disk it lands on has room for the bytes its manifest counts. The manifest comes from the
+// copy in the sidecar. Only an artifact without one is read for it, which decompresses the archive up to its manifest.
+export async function unpackArtifact(artifactPath: string, targetDir: string): Promise<void> {
+    const sidecar = await readSidecar(artifactPath);
+    const { counts } = sidecar?.manifest ?? (await readArtifactManifest(artifactPath));
+    fs.mkdirSync(targetDir, { recursive: true, mode: ARCHIVE_FOLDER_MODE });
+    const needed = withUnpackSlack(counts.bytes);
+    const shortfall = roomShortfall(`Unpacking ${path.basename(artifactPath)}`, needed, targetDir, 'its disk');
+    if (shortfall) throw new ApiError(507, shortfall);
+    await extractArtifact(artifactPath, targetDir);
 }
 
 // Null when there is no sidecar or it does not read. An artifact copied in by hand has none, and the list shows

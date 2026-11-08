@@ -17,8 +17,8 @@ import { clearHomeRestoring, evictHome, markHomeRestoring } from '../home/get-ho
 import { addRegistryEntry } from '../share/registry';
 import { getTeam } from '../team/team';
 import { getUserById } from '../user/user';
-import { extractArtifact, readUnpackedHome, unpackBound } from './archive';
-import { readDeclaredManifest, requireArtifact } from './artifacts';
+import { readUnpackedHome } from './archive';
+import { requireArtifact, unpackArtifact } from './artifacts';
 import { authRowsToRestore, restoreAuthRows } from './auth-rows';
 import { describeError } from './errors';
 import { resolveHomeDir } from './home-dir';
@@ -67,7 +67,7 @@ export async function restoreHome(
             // Beside the home, so the swap is a rename on one disk.
             const unpackDir = buildRestoreUnpackDir(homeDir, jobId);
             onProgress?.('extract', 0, 1);
-            await extractArtifact(artifactPath, unpackDir, unpackBound(await readDeclaredManifest(artifactPath)));
+            await unpackArtifact(artifactPath, unpackDir);
             onProgress?.('extract', 1, 1);
             const { folder, manifest } = readUnpackedHome(unpackDir, ownerId, artifactName);
             // A member of a whole-server archive that left out what only a restore of that archive puts back.

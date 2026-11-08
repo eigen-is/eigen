@@ -104,9 +104,7 @@ function isCounts(value: unknown): value is BackupManifest['counts'] {
         'files' in value &&
         typeof value.files === 'number' &&
         'bytes' in value &&
-        typeof value.bytes === 'number' &&
-        'dirs' in value &&
-        typeof value.dirs === 'number'
+        typeof value.bytes === 'number'
     );
 }
 

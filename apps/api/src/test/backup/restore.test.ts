@@ -1,16 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
 import * as nodeFs from 'node:fs';
-import {
-    existsSync,
-    mkdtempSync,
-    readdirSync,
-    rmSync,
-    statSync,
-    truncateSync,
-    utimesSync,
-    writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import * as nodeFsPromises from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import {
@@ -28,9 +19,9 @@ import { eq } from 'drizzle-orm';
 import { apikey as apikeyScheme, user as userScheme } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import * as archiveModule from '../../lib/backup/archive';
-import { packFolder, readArtifactManifest } from '../../lib/backup/archive';
+import { extractArtifact, packFolder, readArtifactManifest } from '../../lib/backup/archive';
 import { MAILDIR_ROOT } from '../../lib/backup/archive-layout';
-import { runArtifactVerify, runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
+import { runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
 import * as materializeModule from '../../lib/backup/materialize-mount';
 import * as pathsModule from '../../lib/backup/paths';
 import {
@@ -81,7 +72,7 @@ import {
     TEST_DATA_DIR,
     TEST_PNG_BYTES,
 } from '../setup';
-import { expectRealShape, expectRealShapeServed, realShapeHome, unpackWhole, waitForJob } from './backup-test-helpers';
+import { expectRealShape, expectRealShapeServed, realShapeHome, waitForJob } from './backup-test-helpers';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
@@ -94,8 +85,6 @@ const CHATS_FOLDER = 'chats';
 // folders exist only in the paths table. The harness's default mount is local-key (setup uses
 // 'local-id'), so both key shapes are restored here.
 const LOCAL_MOUNT_ID = 'restore-local';
-// A home of tens of thousands of folders is made, backed up, verified and restored in one test.
-const EMPTY_FOLDERS_TIMEOUT_MS = 120_000;
 
 // One artifact of the home as it stands now, in the backups folder restoreHome reads from.
 // `patch` doctors the unpacked folder before it is packed, which is how a restore is made to fail
@@ -1658,31 +1647,6 @@ describe('Backup round trip of a home that stores files by name', () => {
         await expectRealShapeServed(shape);
     });
 
-    // A mailbox has an empty `new/` and `tmp/` and a drive has empty folders, which the pack keeps as entries and the
-    // unpack charges each. Thousands of them pass what the slack and the reserve allow, so the manifest counts them.
-    test(
-        'a home of many empty folders backs up, verifies and restores within its own bound',
-        async () => {
-            const { user } = await realShapeHome();
-            const homeDir = join(TEST_DATA_DIR, 'home', user.id);
-            const folders = 20_000;
-            for (let index = 0; index < folders; index++) {
-                nodeFs.mkdirSync(join(homeDir, 'empty-folders', `${index % 100}`, `${index}`), { recursive: true });
-            }
-            const artifact = await backUp(user.id);
-            const verified = await waitForJob(
-                startBackupJob('verify', user.id, undefined, (started, onProgress) =>
-                    runArtifactVerify(artifact, started, onProgress),
-                ).id,
-            );
-            expect(verified.error).toBeUndefined();
-
-            await restoreHome(artifact, user.id, `restore-empty-folders-${Date.now()}`);
-            expect(existsSync(join(homeDir, 'empty-folders', '99', `${folders - 1}`))).toBe(true);
-        },
-        EMPTY_FOLDERS_TIMEOUT_MS,
-    );
-
     // Dovecot dates a message by its file's mtime: a restore that dated every file to itself would put every message
     // of the home at the restore in a client that sorts by received date.
     test('a restore puts a Maildir message back with its mtime, private', async () => {
@@ -1894,49 +1858,20 @@ describe('Backup restore of one home judges, then takes the home', () => {
             roomSpy.mockRestore();
         }
 
-        // The bound the unpack stops at, which counts the manifest and an allowance for every entry beside the bytes.
+        // The bytes the manifest counts, a tenth more and a reserve, on the disk the archive unpacks on.
         expect(checked).toEqual({
-            needed: archiveModule.unpackBound(manifest),
+            needed: archiveModule.withUnpackSlack(manifest.counts.bytes),
             dir: pathsModule.buildRestoreUnpackDir(homeDir, jobId),
         });
-        const manifestBytes = Buffer.byteLength(archiveModule.serializeManifest(manifest));
-        const entries = manifest.entries.length + manifest.counts.dirs;
-        expect(manifest.counts.dirs).toBeGreaterThan(0);
-        expect(checked?.needed).toBeGreaterThan(manifest.counts.bytes + manifestBytes + 4096 * entries);
         expect(existsSync(pathsModule.buildRestoreStagingDir(homeDir, jobId))).toBe(false);
         await expectNotTaken(user.id, before);
         rmSync(join(getBackupsDir(), artifact), { force: true });
     });
 
-    test('an archive whose files pass the bytes it declares is refused mid-unpack, and leaves nothing behind', async () => {
-        const artifact = await backup(user.id, new Date(Date.now() + 98_000), (manifest, folder) => {
-            manifest.counts.bytes = 0;
-            // Past the 64 MB reserve and the slack the unpack allows beyond what the manifest declares. Sparse zeros
-            // pack to almost nothing.
-            const padding = join(folder, 'home', 'padding.bin');
-            writeFileSync(padding, '');
-            truncateSync(padding, 80 * 1024 * 1024);
-        });
-        const before = await untakenState(user.id);
-        // The job removes its folder however it ends, so this is held off to see what the unpack itself left.
-        const spy = spyOn(recoveryModule, 'wipeRestoreStagingDir').mockImplementation(async () => {});
-        try {
-            await expect(restoreHome(artifact, user.id, `restore-oversized-${Date.now()}`)).rejects.toThrow(
-                /more than its manifest declares/,
-            );
-        } finally {
-            spy.mockRestore();
-        }
-
-        await expectNotTaken(user.id, before);
-        rmSync(join(getBackupsDir(), artifact), { force: true });
-    });
-
-    // A home can hold tens of thousands of files, and every other request waits while a transaction runs.
     test('putting a mount in place gives the event loop back between batches of files', async () => {
         const artifact = await backup(user.id, new Date(Date.now() + 99_000));
         const unpackDir = mkdtempSync(join(TEST_DATA_DIR, 'restore-batches-'));
-        await unpackWhole(join(getBackupsDir(), artifact), unpackDir);
+        await extractArtifact(join(getBackupsDir(), artifact), unpackDir);
         const { folder, manifest } = archiveModule.readUnpackedHome(unpackDir, user.id, artifact);
         const mountDir = join(folder, 'home', 'mounts', mountId);
         const db = openMountMetadata(join(mountDir, 'metadata.db'));
@@ -2072,8 +2007,8 @@ describe('Backup restore killed at any point', () => {
         const rename = nodeFs.renameSync;
         const spies = [
             spyOn(recoveryModule, 'wipeRestoreStagingDir').mockImplementation(async () => {}),
-            spyOn(archiveModule, 'extractArtifact').mockImplementation(async (source, target, maxBytes) => {
-                await extract(source, target, maxBytes);
+            spyOn(archiveModule, 'extractArtifact').mockImplementation(async (source, target) => {
+                await extract(source, target);
                 if (point === 'in the unpack') kill();
             }),
             spyOn(materializeModule, 'materializeMount').mockImplementation(async (dir, summary, stamp) => {

@@ -6,7 +6,7 @@
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { BackupManifest, ServerArchiveManifest } from '@workspace/lib/types/backup';
+import type { ServerArchiveManifest } from '@workspace/lib/types/backup';
 import { BACKUP_OWNER_ID, buildBackupStamp } from '@workspace/lib/validation';
 import { getDataRoot, homeDirUnder, ORG_HOMES_DIR, PATHS, SERVER_DIR, SERVER_RUNTIME_FILES } from '../config/paths';
 import { ApiError } from '../core/errors';
@@ -14,12 +14,10 @@ import { isUsableName } from '../mount/names';
 import type { HashedArchiveMember } from './archive';
 import {
     copyArchiveMember,
-    declaredUnpackBytes,
     extractArtifact,
     readArtifactManifest,
     readManifestFile,
     readUnpackedHome,
-    unpackBound,
     withUnpackSlack,
 } from './archive';
 import { archivePaths, readMountPathRows } from './archive-layout';
@@ -45,55 +43,30 @@ export type ServerArchiveFile = {
 // reconcile drops.
 type NotReplayed = { settled: number; missing: number };
 
-// What every member's step of the stage shares. `boundOf` is the most one member's unpack may write.
-type StageContext = {
-    dataDir: string;
-    unpackDir: string;
-    s3FromArchive: boolean;
-    stamp: string;
-    now: number;
-    boundOf: (member: HashedArchiveMember) => Promise<number>;
-};
+// What every member's step of the stage shares.
+type StageContext = { dataDir: string; unpackDir: string; s3FromArchive: boolean; stamp: string; now: number };
 
-// The manifest of each archive inside a server archive, the server member's and every home's, by member name. Each
-// is the last entry of its member, so reading one decompresses the whole member. The stage reads them once, for its
-// room check, and bounds each unpack by them.
-export type MemberManifests = ReadonlyMap<string, BackupManifest>;
-
-export async function readMemberManifests({ manifest, members }: ServerArchiveFile): Promise<MemberManifests> {
-    const manifests = new Map<string, BackupManifest>();
-    for (const name of [SERVER_ARCHIVE_SERVER_MEMBER, ...manifest.homes.flatMap((home) => home.member ?? [])]) {
-        const member = members.get(name);
-        if (member) manifests.set(name, await readArtifactManifest(member));
-    }
-    return manifests;
-}
-
-// What the stage takes on the data disk, at most: what each member's unpack declares, with the slack and the reserve
-// added once. The server member and each home declare it in their own manifest, and the rest are copied at their
-// size. Counted once: the stage streams each member out and renames what it unpacked into place. A caller that also
-// stages passes the manifests it read, so no member is decompressed for them twice.
-export async function stageBytesNeeded(archive: ServerArchiveFile, manifests?: MemberManifests): Promise<number> {
-    const declaredBy = manifests ?? (await readMemberManifests(archive));
+// What the stage takes on the data disk, at most: the bytes of each member, with the slack and the reserve added once.
+// The server member and each home count theirs in their own manifest, and the rest are copied at their size. Each
+// inner manifest is the last entry of its member, so reading one decompresses the whole member. Counted once: the stage
+// streams each member out and renames what it unpacked into place.
+export async function stageBytesNeeded({ manifest, members }: ServerArchiveFile): Promise<number> {
+    const unpacked = new Set([SERVER_ARCHIVE_SERVER_MEMBER, ...manifest.homes.flatMap((home) => home.member ?? [])]);
     let declared = 0;
-    for (const entry of archive.manifest.entries) {
-        const inner = declaredBy.get(entry.path);
-        declared += inner ? declaredUnpackBytes(inner) : entry.bytes;
+    for (const entry of manifest.entries) {
+        const member = members.get(entry.path);
+        const inner = member && unpacked.has(entry.path) ? await readArtifactManifest(member) : undefined;
+        declared += inner ? inner.counts.bytes : entry.bytes;
     }
     return withUnpackSlack(declared);
 }
 
 // Every member of the archive into `restoringDir`/data, each verified as it lands. Throws on the first one that
-// is refused; the caller takes the staged tree back. Each unpack stops at what its manifest declares: from
-// `manifests` when the caller read them for its room check, or read here.
+// is refused; the caller takes the staged tree back.
 export async function stageServerArchive(
     archive: ServerArchiveFile,
     restoringDir: string,
-    {
-        s3FromArchive,
-        onStep,
-        manifests,
-    }: { s3FromArchive: boolean; onStep: (step: string) => void; manifests?: MemberManifests },
+    { s3FromArchive, onStep }: { s3FromArchive: boolean; onStep: (step: string) => void },
 ): Promise<NotReplayed> {
     const context: StageContext = {
         dataDir: path.join(restoringDir, RESTORING_DATA_DIR),
@@ -101,7 +74,6 @@ export async function stageServerArchive(
         s3FromArchive,
         stamp: buildBackupStamp(new Date()),
         now: Math.floor(Date.now() / 1000),
-        boundOf: async (member) => unpackBound(manifests?.get(member.name) ?? (await readArtifactManifest(member))),
     };
     onStep("the server's own databases and settings");
     await stageServerMember(archive, context, path.join(context.unpackDir, SERVER_DIR));
@@ -137,12 +109,12 @@ export async function stageServerArchive(
 // restored server draws a new data epoch and every tab from before reloads.
 async function stageServerMember(
     archive: ServerArchiveFile,
-    { dataDir, boundOf }: StageContext,
+    { dataDir }: StageContext,
     unpackDir: string,
 ): Promise<void> {
     const member = archive.members.get(SERVER_ARCHIVE_SERVER_MEMBER);
     if (!member) throw new ApiError(400, `${archive.name} holds no ${SERVER_ARCHIVE_SERVER_MEMBER}`);
-    await extractArtifact(member, unpackDir, await boundOf(member));
+    await extractArtifact(member, unpackDir);
     const folder = path.join(unpackDir, buildServerFolderName(new Date(archive.manifest.createdAt)));
     if (readManifestFile(folder)?.kind !== 'server') {
         throw new ApiError(400, `${SERVER_ARCHIVE_SERVER_MEMBER} carries no server manifest`);
@@ -163,13 +135,13 @@ async function stageServerMember(
 async function stageHome(
     archive: ServerArchiveFile,
     home: ServerArchiveManifest['homes'][number] & { member: string },
-    { dataDir, unpackDir, s3FromArchive, stamp, now, boundOf }: StageContext,
+    { dataDir, unpackDir, s3FromArchive, stamp, now }: StageContext,
 ): Promise<NotReplayed> {
     if (!BACKUP_OWNER_ID.test(home.ownerId)) throw new ApiError(400, `${home.ownerId} is not a home id`);
     const member = archive.members.get(home.member);
     if (!member) throw new ApiError(400, `${archive.name} holds no ${home.member}`);
     const unpacked = path.join(unpackDir, home.ownerId);
-    await extractArtifact(member, unpacked, await boundOf(member));
+    await extractArtifact(member, unpacked);
     const { folder, manifest } = readUnpackedHome(unpacked, home.ownerId, home.member);
     requireVerified(await verifyFolder(folder), home.member);
     // --s3-from-archive trusts the outer level, so every home in the archive is captured at it.

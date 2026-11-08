@@ -51,7 +51,7 @@ const homeManifest: BackupManifest = {
     createdAt: '2026-09-30T02:03:04.000Z',
     appVersion: '0.3.1',
     server: { domain: 'example.org', orgId: 'org' },
-    counts: { databases: 1, files: 0, bytes: 10, dirs: 3 },
+    counts: { databases: 1, files: 0, bytes: 10 },
     level: 'full',
     mounts: [mount('drive', 'local')],
     entries: [{ path: 'home/mounts/drive/metadata.db', bytes: 10, sha256: 'a'.repeat(64) }],
@@ -72,8 +72,8 @@ describe('parseBackupManifest', () => {
         expect(parseBackupManifest(JSON.stringify({ ...homeManifest, counts }))).toBeNull();
     });
 
-    test('refuses a folder count that is not a number', () => {
-        const counts = { ...homeManifest.counts, dirs: '3' };
+    test('refuses a byte count that is not a number', () => {
+        const counts = { ...homeManifest.counts, bytes: '3' };
         expect(parseBackupManifest(JSON.stringify({ ...homeManifest, counts }))).toBeNull();
     });
 
