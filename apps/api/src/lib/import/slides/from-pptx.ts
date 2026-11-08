@@ -27,8 +27,7 @@ export type PptxDeck = {
     media: ImportedMedia[];
     warnings: TransformWarning[];
     // The page a Convert's new deck takes: the slide size nearest the file's p:sldSz, and the width that keeps the
-    // file's pt per px, its own width where the shapes match and PowerPoint's range allows. An Import's is the open
-    // deck's.
+    // file's pt per px. An Import's is the open deck's.
     page: SlidePage;
 };
 
@@ -36,11 +35,9 @@ export type PptxDeck = {
 // replace, whose deck takes the file's own.
 export type PptxOptions = { deck?: SlidePage; maxMediaBytes: number };
 
-// The read's work, charged through the lookups: children scanned where a lookup or a color isn't known yet, color
-// transforms applied, paragraph and run nodes and characters read, shapes walked, and a chart part's elements and
-// points for each color map it is painted with. Whatever a file repeats, or makes each cache key anew, the read does
-// no more than this. It is over ten times the corpus's most, 260,005 in a 369-slide deck.
-export const MAX_PPTX_WORK = 3_000_000;
+// The read's work, charged through the lookups for what a file can repeat, such as children scanned, color transforms,
+// text and chart points. Whatever a file repeats, the read does no more than this.
+const MAX_PPTX_WORK = 3_000_000;
 
 // PowerPoint's 4:3, 10 by 7.5 in, where the file states none.
 const DEFAULT_SLIDE_EMU = { cx: 9_144_000, cy: 6_858_000 };
@@ -86,7 +83,6 @@ function readDeck(bytes: Uint8Array, options: PptxOptions): PptxDeck {
         slideWidth: page.slideWidth,
         offset: { x: (frame.width - cx * scale) / 2, y: (frame.height - cy * scale) / 2 },
         slide: { width: cx * scale, height: cy * scale },
-        shapes: budget(MAX_ELEMENTS, IMPORT_MESSAGES.pptx.tooLarge),
         elements: budget(MAX_ELEMENTS, IMPORT_MESSAGES.pptx.tooLarge),
         weight: budget(MAX_PPTX_WEIGHT, IMPORT_MESSAGES.pptx.tooLarge),
         decorations: new Map(),

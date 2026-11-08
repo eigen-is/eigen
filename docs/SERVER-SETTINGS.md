@@ -22,7 +22,7 @@ The secret is made at first boot and never changes, so a session signed in right
 
 Every account's address was made on the mail domain, so on another one nobody can sign in. Setup records `MAIL_DOMAIN` as `mailDomain` in `config.json`. Once it is recorded, `./eigen setup` states it instead of asking and refuses a different `--mail-domain` (`apps/api/src/cli/configure.ts`).
 
-At boot `assertMailDomainUnchanged()` compares `MAIL_DOMAIN` with the recorded value. On a mismatch it exits in production, naming the value to put back, and warns in development. A `config.json` without `mailDomain` records it at the first boot whose `MAIL_DOMAIN` the owner's address is on. A boot it is not on records nothing, so a wrong value at that boot is never taken as the truth. An owner address on another domain only logs a warning.
+At boot `assertMailDomainUnchanged()` compares `MAIL_DOMAIN` with the recorded value. On a mismatch it exits in production, naming the value to put back, and warns in development.
 
 ## Renaming the organization renames its default team
 
@@ -78,7 +78,7 @@ Admins keep what the Users, Guests and team pages need. They read `GET /settings
 
 ## An admin password reset revokes every way in
 
-`PUT /settings/user/:userId/password` calls `resetUserPassword()` (`apps/api/src/lib/user/reset-password.ts`), the same path as `./eigen reset-password`. It signs the user out everywhere and revokes their app passwords, since those open IMAP, CalDAV and WebDAV without the password. It refuses a guest, who signs in with a code, and it refuses the owner unless the owner resets their own. better-auth's own `/admin/set-user-password` revokes nothing, so it is in `disabledPaths` (`apps/api/src/lib/auth/auth.ts`).
+`PUT /settings/user/:userId/password` calls `resetUserPassword()` (`apps/api/src/lib/user/reset-password.ts`), the same path as `./eigen reset-password`. It signs the user out everywhere, closes their collab sockets and revokes their app passwords, since those open IMAP, CalDAV and WebDAV without the password. An open IMAP session stays up until it drops, because Dovecot checks the password only at login, and so does the user's event stream. It refuses a guest, who signs in with a code, and it refuses the owner unless the owner resets their own. better-auth's own `/admin/set-user-password` revokes nothing, so it is in `disabledPaths` (`apps/api/src/lib/auth/auth.ts`).
 
 ## The Users page sizes homes without booting them
 

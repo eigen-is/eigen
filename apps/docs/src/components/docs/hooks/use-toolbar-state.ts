@@ -97,10 +97,8 @@ export function cellBackground(state: EditorState): string {
 // Each check walks every node a range spans, some 20 per transaction, and a collaborator's edit or caret is one too.
 const MAX_READ_RANGE = 10_000;
 
-// useEditor re-renders on no transaction, so the toolbar subscribes to what it draws, and a caret move updates it. The
-// selector reads the editor passed in, not the snapshot's: the toolbar follows a band's editor while it is edited, and
-// the snapshot keeps the last editor until the new one's first transaction. Unformatted text reads as the editor's
-// Normal, the doc's or a note's.
+// useEditor re-renders on no transaction, so the toolbar subscribes to what it draws. The selector reads the editor
+// passed in, not the snapshot's, which keeps the last band editor until the new one's first transaction.
 export function useToolbarState(editor: Editor): ToolbarState {
     return useEditorState({
         editor,
@@ -144,7 +142,7 @@ export function useToolbarState(editor: Editor): ToolbarState {
                 paragraphStyle: styles.size === 1 ? [...styles][0] : undefined,
                 mixedStyles: styles.size > 1,
                 inParagraph: selection.$from.parent.type.name === 'paragraph',
-                // getFontName also collapses the full stack a not-yet-normalized doc still carries.
+                // getFontName also reads a stored CSS stack as its font.
                 fontName: getFontName(getAttributes(state, 'textStyle')['fontFamily'] || '') || normal.font,
                 fontSize: fontSizes.size === 1 ? [...fontSizes][0] : undefined,
                 color: getAttributes(state, 'textStyle')['color'] || '',
@@ -153,7 +151,8 @@ export function useToolbarState(editor: Editor): ToolbarState {
                 italic: active('italic'),
                 underline: active('underline'),
                 highlight: active('highlight'),
-                // An unaligned paragraph's textAlign is null and reads as left; a range of mixed alignments reads as none.
+                // An unaligned paragraph's textAlign is null and reads as left; a range of mixed alignments reads as
+                // none.
                 alignment: alignments.size === 1 ? [...alignments][0] : undefined,
                 lineSpacing: format.lineSpacing,
                 paragraphSpacing: format.spacing,

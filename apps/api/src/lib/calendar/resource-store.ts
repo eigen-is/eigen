@@ -11,7 +11,6 @@ import { computeResourceEtag, readBlobTableSize, sanitizeResourceUri } from '../
 import type { LocalFilesystem } from '../core/local-filesystem';
 import { projectResource, serializeResource } from '../ical';
 import { uidOf } from '../ical/ical-parse';
-import { CALENDAR_DB_CONFIG } from './db-config';
 import * as schema from './schema';
 
 export type Tx = DatabaseTx<typeof schema>;
@@ -35,12 +34,7 @@ export function sanitizeEventUri(raw: string): string | null {
 
 // `homeFs` is rooted at the home folder, not at the calendar root.
 export async function readCalendarTotalSize(homeFs: LocalFilesystem): Promise<number> {
-    return readBlobTableSize(
-        homeFs.absolutePath(PATHS.CALENDAR.DB),
-        'resources',
-        'ics',
-        CALENDAR_DB_CONFIG.currentVersion,
-    );
+    return readBlobTableSize(homeFs.absolutePath(PATHS.CALENDAR.DB), 'resources', 'ics');
 }
 
 // ctag advances on each change, syncGen rotates on a recreated calendar so stale sync tokens are refused.

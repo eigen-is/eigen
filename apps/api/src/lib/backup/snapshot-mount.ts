@@ -12,17 +12,15 @@ import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
 import { errnoOf, isMissingObjectCause } from '../storage';
 import { stageManagedDbCopy } from '../versioning/snapshot';
-import { managedDbContainer, readMountPathRows, rowArchivePath, unreachableRows } from './archive-layout';
+import { archivePaths, managedDbContainer, readMountPathRows, unreachableRows } from './archive-layout';
 import { captureFile, captureUnlessGone, captureWrittenFile } from './capture';
 
 // One mount's data tree in an archive: the entries written, how many of them are Eigen's own
 // databases (a user's `notes.db` upload is a file), the ids the thumbnails are keyed by, and what it lacks.
 type MountSnapshot = { entries: BackupEntry[]; databases: number; pathIds: Set<string>; warning?: string };
 
-// A metadata-only capture of an s3 mount reads no object, so an open document's newest commits reach
-// the archive only through staging/: flushing stages them there with a pending row, which the
-// metadata.db staged after this names. It flushes every open database of the mount, such as a comment
-// thread's, not only those of one container.
+// Staged commits of an open document reach a metadata-only capture only through staging/, so flush every open database
+// of the mount first, comment threads' included.
 export async function flushOpenDocumentDbs(mount: Mount): Promise<void> {
     for (const pathId of [...mount.documentDbs.keys()]) {
         await withDocumentDb(mount, pathId, async (slot) => {
@@ -31,10 +29,8 @@ export async function flushOpenDocumentDbs(mount: Mount): Promise<void> {
     }
 }
 
-// A salvaged or hand-edited table can hold rows whose parent chain ends at a missing row or in a cycle, and a hand edit
-// or an older name rule rows whose name no path can hold. No path is theirs, so the archive's copy drops them before
-// anything reads it, as a live delete would, and the backup goes on with a warning per kind. A table whose root row is
-// gone holds nothing that can be placed. The live table is never touched.
+// Rows whose parent chain breaks or cycles have no path, so the archive's copy drops them with a warning per kind.
+// The live table is never touched.
 export function pruneUnreachableRows(mountId: string, metadataPath: string): string[] {
     const db = new Database(metadataPath, { readwrite: true, create: false });
     try {
@@ -45,9 +41,7 @@ export function pruneUnreachableRows(mountId: string, metadataPath: string): str
         if (dropped.length === rows.length) throw new Error(`mount ${mountId}: the table has no root row`);
         db.run('PRAGMA foreign_keys = ON');
         db.run('DELETE FROM paths WHERE id IN (SELECT value FROM json_each(?))', [JSON.stringify(dropped)]);
-        // A dropped folder takes its contents with it through the foreign key, and no list names them. Counted, not
-        // read from the delete's changes: Bun 1.4.4 counts only the statement's own rows, not the foreign-key
-        // cascade, and the cascade is what this wants.
+        // Counted, not read from the delete's changes: Bun does not count rows the foreign-key cascade removed.
         const left = db.query<{ count: number }, []>('SELECT COUNT(*) AS count FROM paths').get()?.count ?? 0;
         const inside = rows.length - dropped.length - left;
         console.warn(`[backup] mount ${mountId}: left out rows ${dropped.join(', ')} and ${inside} more inside them`);
@@ -67,10 +61,7 @@ export function pruneUnreachableRows(mountId: string, metadataPath: string): str
     }
 }
 
-// Copies every file the archived metadata.db knows about into `targetDir`, at the path its row gives, from wherever
-// the live mount keeps it now. A rename, move or trash since the copy changes the key, not the archive path. Walking
-// the table rather than the folder keeps `tmp/` and `staging/` out and `.trash/` and `versions/` in, on every backend.
-// snapshotMountThumbs copies the thumbnails, keyed by the ids this returns.
+// Walking the table, not the folder, keeps `tmp/` and `staging/` out and `.trash/` and `versions/` in on every backend.
 export async function snapshotMountData(
     mount: Mount,
     metadataPath: string,
@@ -80,6 +71,7 @@ export async function snapshotMountData(
 ): Promise<MountSnapshot> {
     const rows = readArchivedRows(metadataPath);
     const byId = new Map(rows.map((row) => [row.id, row]));
+    const archivePath = archivePaths(rows);
 
     const fileRows = rows.filter((row) => row.type === 'file');
     const entries: BackupEntry[] = [];
@@ -93,7 +85,7 @@ export async function snapshotMountData(
     const files: { id: string; captured: BackupEntry; updatedAt: Date }[] = [];
     for (const [index, row] of fileRows.entries()) {
         await eventLoopTurn();
-        const relPath = rowArchivePath(row, byId);
+        const relPath = archivePath(row);
         const destPath = path.join(targetDir, relPath);
         const entryPath = `${relPrefix}/${relPath}`;
         // The row stays, with no bytes, which a restore mirrors.
@@ -116,7 +108,8 @@ export async function snapshotMountData(
                     (await isGone()) ? null : stageManagedDbCopy(mount, row.id, destPath, 'open-handle-first'),
                 )
                 .catch(async (error: unknown) => {
-                    // Empty trash takes no path lock, so a row can still go between the check and the read.
+                    // A permanent delete from the trash locks the item it deletes, which can be a folder around this
+                    // container, so a row can still go between the check and the read.
                     const storageKey = await mount.findStorageKey(row.id);
                     if (storageKey !== null) rethrowStorageFailure(mount.id, storageKey, error);
                     fs.rmSync(destPath, { force: true });
@@ -136,18 +129,15 @@ export async function snapshotMountData(
                 }
             }
         } else {
-            // The path lock for the whole copy: an overwrite rewrites the file in place, so it and the copy wait for
-            // each other. The shared tree lock only until the file is open, so no rename moves the bytes between the
-            // key and the open, and a rename after it waits for no copy: captureFile opens before its first await.
+            // The path lock covers the whole copy because an overwrite rewrites in place. The shared tree lock
+            // covers only the open, so no rename moves the bytes between the key and the open.
             const entry = await mount.withPathLock(row.id, async () => {
                 const opened = await mount.withTreeShared(async () => {
                     const live = await mount.getPath(row.id);
                     const storageKey = await mount.findStorageKey(row.id);
                     if (!live || storageKey === null) return null;
                     const fail = (error: unknown) => rethrowStorageFailure(mount.id, storageKey, error);
-                    // Freshest first: the pending staged copy, then the stored object. Null for a row with no bytes on
-                    // record mirrors that absence. readKey asks pendingStagedCopy before its first await, so both
-                    // calls see the same staging.
+                    // Freshest first: the pending staged copy, then the stored object.
                     const fromStorage = !mount.pendingStagedCopy(storageKey);
                     const file = await mount.readKey(storageKey).catch(fail);
                     if (!file) {
@@ -174,16 +164,13 @@ export async function snapshotMountData(
         }
         onProgress?.('mount files', index + 1, fileRows.length);
     }
-    // A store with holes is archived with them; one that answered no read at all is an outage that reads as missing
-    // objects: an unmounted disk or an unreadable folder answers exists() with false, a wrong bucket answers a HEAD 404.
-    // A copy from an open handle, a crash temp or staging/ never asked the store, so it does not count.
+    // A store that answered no read is an outage that looks like missing objects (an unmounted disk says
+    // exists() false, a wrong bucket a HEAD 404). Copies from an open handle, a crash temp or staging/ never asked.
     if (lost.length > 0 && stored === 0) {
         throw new Error(`mount ${mount.id}: storage unreachable, no file with bytes on record was read from it`);
     }
 
-    // The archive lists no file it holds no bytes for. A row deleted for good since the copy leaves the archived
-    // metadata.db. So does the topmost folder or container above it that is gone too, unless it holds a live row
-    // or bytes the archive took, and so does everything under that folder.
+    // The archive lists no file it holds no bytes for, and a folder or container left with nothing live goes too.
     const live = new Set((await mount.db.select({ id: paths.id }).from(paths).all()).map((row) => row.id));
     const kept = new Set<string>();
     for (const row of rows) {
@@ -206,9 +193,8 @@ export async function snapshotMountData(
     try {
         db.run('PRAGMA foreign_keys = ON');
         db.transaction(() => {
-            // A file overwritten between the database copy and its read: its row takes the size, hash and date of
-            // the bytes the archive holds, as the overwrite gave the live one, and its search text is rebuilt from them.
-            // A row with no hash on record differs only by its size.
+            // A file overwritten since the database copy: its row takes the archived bytes' size, hash and date,
+            // and its search text is rebuilt. A row with no hash differs only by size.
             const rewrite = db.prepare<unknown, [number, string, number, string]>(
                 'UPDATE paths SET size = ?1, hash = ?2, updatedAt = ?3, contentDirty = 1 WHERE id = ?4 AND (size IS NOT ?1 OR (hash IS NOT NULL AND hash IS NOT ?2))',
             );
@@ -239,10 +225,8 @@ export async function snapshotMountData(
     };
 }
 
-// The rest of a metadata-only capture: staging/ as it stands, the bytes the bucket does not have yet,
-// under the names the pending rows of metadata.db give them. Nothing counts as a database: a staged
-// copy is a payload for the upload queue, not one this server opens. The ids are the file rows' of
-// the archived metadata.db, which the thumbnails are keyed by.
+// staging/ as it stands: the bytes the bucket does not have yet, named by the pending rows of metadata.db.
+// They are payloads for the upload queue, not databases this server opens.
 export async function snapshotMountStaging(
     mount: Mount,
     metadataPath: string,
@@ -253,10 +237,8 @@ export async function snapshotMountStaging(
     if (fs.existsSync(mount.stagingDir)) {
         for (const entry of fs.readdirSync(mount.stagingDir, { withFileTypes: true })) {
             if (!entry.isFile()) continue;
-            // A staged copy goes once its PUT acks (its bytes are in the bucket) or a newer copy
-            // supersedes it (UploadQueue.enqueueStaged), so one can vanish mid-copy. It is left out:
-            // the archived pending row then names a missing file, which reconcile drops, and a
-            // restore of this level takes the bucket as it is.
+            // A staged copy can vanish mid-copy once its PUT acks or a newer copy supersedes it, so it is left out.
+            // Reconcile drops the pending row that names it.
             const source = Bun.file(path.join(mount.stagingDir, entry.name));
             const captured = await captureUnlessGone(
                 source,
@@ -270,10 +252,8 @@ export async function snapshotMountStaging(
     return { entries, databases: 0, pathIds: new Set(rows.map((row) => row.id)) };
 }
 
-// Thumbnails are not derived data: they are generated once, when a file is uploaded, and never
-// regenerated. The drive route answers 404 for a file whose thumbnail is gone, so a restore
-// without them loses every thumbnail the home ever had. They are keyed by path id, which a restore
-// preserves. A thumbnail whose row is gone is an orphan no mount would ever serve and stays out.
+// Thumbnails are generated once and never again, and the drive route answers 404 without them, so the backup carries
+// them. A thumbnail whose row is gone stays out.
 export async function snapshotMountThumbs(
     thumbsDir: string,
     targetDir: string,

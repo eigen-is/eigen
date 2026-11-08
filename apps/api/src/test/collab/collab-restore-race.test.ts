@@ -1,7 +1,7 @@
 // Regression net for the collab/Yjs audit's chat-restore-wipe P1:
 // restoreContainer's replaceContainerDataDb rewrites a chat's data.db in place under the container
-// lock, while ChatRoom.open (run for every request by Drive.getChat) provisions a missing data.db
-// under that same lock. Posts racing a restore must leave one data.db and a coherent message set.
+// lock, while posts keep opening the room. Posts racing a restore must leave one data.db and a coherent
+// message set.
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { ChatMessage } from '@workspace/lib/types/chat';
 import type { DrivePath } from '@workspace/lib/types/drive';

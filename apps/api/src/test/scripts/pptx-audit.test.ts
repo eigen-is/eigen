@@ -134,7 +134,7 @@ describe('round trip', () => {
         // The changed text and the dropped picture are one stretch of elements: text pairs an element with its copy.
         const summary = fs.readFileSync(path.join(out, 'summary.md'), 'utf8');
         expect(summary).toContain(
-            '| mutated/deck.pptx | rectangle x | **unlisted** | 1 | slide 1 #0: 476250 → 481013 |',
+            '| mutated/deck.pptx | rectangle x | **unlisted** | 1 | slide 1 #0: 635000 → 641350 |',
         );
         expect(summary).toContain('| elements | **unlisted** | 1 | 1 |');
     }, 60_000);

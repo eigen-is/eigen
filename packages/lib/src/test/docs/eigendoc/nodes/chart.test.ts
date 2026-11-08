@@ -54,7 +54,7 @@ function chartsIn(html: string): Record<string, unknown>[] {
     return charts;
 }
 
-// An older tab deletes every attribute its schema doesn't declare, so the node declares every part from the start.
+// A tab deletes every attribute its schema doesn't declare, so the node declares every part from the start.
 test('the node declares an attribute for every part', () => {
     const attrs = Object.keys(getSchema(extensions).nodes['chart'].spec.attrs ?? {});
     expect(attrs).toEqual(expect.arrayContaining([...CHART_SPEC_PART_KEYS]));
@@ -276,7 +276,7 @@ describe('chartBox', () => {
         expect(chartBox({ width: 400, height: 250 })).toEqual({ width: 400, height: 250 });
     });
 
-    // A chart from before its size was stored, or a pasted one with none, draws at the size a new one is inserted at.
+    // A chart with no stored size, such as a pasted one, draws at the size a new one is inserted at.
     test('a side it does not store is the default', () => {
         expect(chartBox({})).toEqual(CHART_DEFAULT_SIZE);
         expect(chartBox({ width: 400, height: null })).toEqual({ width: 400, height: CHART_DEFAULT_SIZE.height });

@@ -2,9 +2,6 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import type { CommentEntry, DrivePath } from '@workspace/lib/types';
 import type { FileEvent } from '@workspace/lib/types/file-history';
 import type { Notification } from '@workspace/lib/types/notification';
-import { eq } from 'drizzle-orm';
-import { COMMENT_INDEX_DB_CONFIG } from '../../lib/chat/comment-db-config';
-import * as commentSchema from '../../lib/chat/comment-schema';
 import { getHome } from '../../lib/home';
 import { assertJson, authedRequest, driveGet, drivePost, drivePut, findOrFail, getTestContext } from '../setup';
 
@@ -47,14 +44,17 @@ describe('Comment assignee', () => {
         );
     }
 
-    async function assignedEvents(): Promise<FileEvent[]> {
-        const events = await assertJson<FileEvent[]>(
+    async function allEvents(): Promise<FileEvent[]> {
+        return assertJson<FileEvent[]>(
             await authedRequest(
                 ctx.alice.user.sessionToken,
                 `/drive/${ctx.alice.user.id}/${mountId}/path/${docId}/history`,
             ),
         );
-        return events.filter((e) => e.eventType === 'assigned');
+    }
+
+    async function assignedEvents(): Promise<FileEvent[]> {
+        return (await allEvents()).filter((e) => e.eventType === 'assigned');
     }
 
     beforeAll(async () => {
@@ -230,73 +230,38 @@ describe('Comment assignee', () => {
         expect(row.assignee).toBe(ghost);
     });
 
-    test('assigning on a REAL chat whose index row was deleted heals it (ensureComment)', async () => {
-        // Legacy case: a real .eigenchat thread predating row-seeding. Create it (seeding gives it a
-        // row), delete the row directly, then assign — ensureComment must re-create it, not 404.
-        await drivePost<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            `folder/${chatFolderId}/create/chat`,
-            { fileName: 'heal-flow' },
-        );
-        const healName = 'heal-flow.eigenchat';
-
+    test('a thread with no index row answers 404 to a status or assignee write, with no event and no notification', async () => {
+        // A drive call with no user seeds no row, which is the one way a thread goes without.
         const home = await getHome(ctx.alice.user.id);
-        const commentsDb = await home.drive.getChildByName(mountId, docId, 'comments.db');
-        await home.drive.withDatabase(mountId, COMMENT_INDEX_DB_CONFIG, commentsDb!.id, async (managed) => {
-            await managed.db.delete(commentSchema.comments).where(eq(commentSchema.comments.chatName, healName));
-        });
-        expect((await listComments()).some((r) => r.chatName === healName)).toBe(false);
+        const thread = await home.drive.create(mountId, chatFolderId, 'no-row', 'chat');
+        const eventsBefore = await allEvents();
 
-        const res = await patchAssignee(
+        const assign = await patchAssignee(
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
             mountId,
             docId,
-            healName,
+            thread.name,
             ctx.bob.user.email,
         );
-        expect(res.status).toBe(200);
-
-        const row = findOrFail(await listComments(), (r: CommentEntry) => r.chatName === healName);
-        expect(row.assignee).toBe(ctx.bob.user.email);
-    });
-
-    test('resolving a REAL chat whose index row was deleted heals it, so the resolve sticks', async () => {
-        await drivePost<DrivePath>(
+        const status = await authedRequest(
             ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            `folder/${chatFolderId}/create/chat`,
-            { fileName: 'resolve-heal' },
-        );
-        const healName = 'resolve-heal.eigenchat';
-
-        const home = await getHome(ctx.alice.user.id);
-        const commentsDb = await home.drive.getChildByName(mountId, docId, 'comments.db');
-        await home.drive.withDatabase(mountId, COMMENT_INDEX_DB_CONFIG, commentsDb!.id, async (managed) => {
-            await managed.db.delete(commentSchema.comments).where(eq(commentSchema.comments.chatName, healName));
-        });
-
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/collab/${ctx.alice.user.id}/${mountId}/${docId}/comments/${healName}/status`,
+            `/collab/${ctx.alice.user.id}/${mountId}/${docId}/comments/${thread.name}/status`,
             {
                 method: 'PATCH',
                 body: JSON.stringify({ status: 'resolved' }),
                 headers: { 'Content-Type': 'application/json' },
             },
         );
-        expect(res.status).toBe(200);
 
-        const row = findOrFail(await listComments(), (r: CommentEntry) => r.chatName === healName);
-        expect(row.status).toBe('resolved');
+        expect([assign.status, status.status]).toEqual([404, 404]);
+        expect((await allEvents()).length).toBe(eventsBefore.length);
+        const tag = `assigned:${ctx.alice.user.id}:${mountId}:${docId}:${thread.name}`;
+        expect((await notificationsFor(ctx.bob.user.id)).some((n) => n.tag === tag)).toBe(false);
     });
 
     test('assigning on a nonexistent chatName → 404, no row, no event, no notification', async () => {
-        // No .eigenchat exists under this name, so it can't be healed — the write must 404 rather
-        // than mint a phantom row + immutable 'assigned' event + dead-link notification.
+        // The write must 404 rather than mint a phantom row + immutable 'assigned' event + dead-link notification.
         const ghostName = 'ghost-thread.eigenchat';
         const res = await patchAssignee(
             ctx.alice.user.sessionToken,

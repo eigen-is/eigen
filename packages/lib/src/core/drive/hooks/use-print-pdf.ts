@@ -16,10 +16,8 @@ function printWithoutBands(fallback: () => void, reason: string): void {
     fallback();
 }
 
-// Print as Google prints: the server's PDF, which draws the headers, footers and page numbers browser print leaves
-// out, in a tab of its own to print from. A popup blocker allows the tab only inside the click or key press, so it
-// opens before the first await. `fallback` is browser print, for a tab whose edits the server may not have, a
-// blocked tab or a PDF that fails. A PDF that left something out says so, as a download does.
+// Print as Google prints: the server's PDF, in a tab of its own. A popup blocker allows the tab only inside the
+// click or key press, so it opens before the first await. `fallback` is browser print.
 export function usePrintPdf(fallback: () => void): {
     printPdf: (ownerId: string, mountId: string, pathId: string, canUsePdf: boolean) => Promise<void>;
 } {
@@ -48,7 +46,7 @@ export function usePrintPdf(fallback: () => void): {
                 }, TAB_CLOSED_POLL_MS);
             } catch (error) {
                 tab.close();
-                printWithoutBands(fallback, `The PDF failed: ${getErrorMessage(error)}`);
+                printWithoutBands(fallback, getErrorMessage(error));
             }
         },
         [fallback],

@@ -1,16 +1,18 @@
 # Testing
 
-> **TLDR:** Every workspace keeps its tests in `<workspace>/src/test/`. API tests drive the real Elysia app in process through `app.handle()` and Eden Treaty, with no HTTP server, and each API test file boots its own server in its own temp data dir. That isolation is what lets CI and `bun run check` run the suite on parallel workers. Run `bun run test` for the tests and `bun run check` for everything CI checks; the Docker harnesses in `docker/` prove the install, update and release path.
+> **TLDR:** Every workspace keeps its tests in `<workspace>/src/test/`. API tests drive the real Elysia app in process through `app.handle()` and Eden Treaty, with no HTTP server, and each API test file boots its own server in its own temp data dir, so CI and `bun run check` run the suite on parallel workers. `bun run test` runs the tests, `bun run check` everything CI checks, and the Docker harnesses in `docker/` prove the install, update and release path.
 
-This guide covers where tests live, how they run on a laptop and in CI, and what a release must pass before it is published. Read it before you write the first test in an area, touch CI or tag a release. The rules share one aim: a test passes or fails because of the code, never because of timing or of what ran before it. The things that surprise people: one API test file runs from `apps/api` with the preload ([§ One API test file](#one-api-test-file-runs-from-appsapi-with-the-preload)), a module mock outlives its test ([§ A module mock](#a-module-mock-lasts-for-the-rest-of-its-file)), storage faults are parked rather than slept through ([§ Storage faults](#storage-faults-are-parked-and-driven-never-slept-through)), and a release publishes only images the Docker harnesses installed and upgraded ([§ A release publishes](#a-release-publishes-only-the-images-its-gates-tested)).
+Read this before your first test in an area, a CI change or a release tag. A test passes or fails because of the code, never because of timing or what ran before it. The surprises: one API test file runs from `apps/api` with the preload ([§ One API test file](#one-api-test-file-runs-from-appsapi-with-the-preload)), a module mock outlives its test ([§ A module mock](#a-module-mock-lasts-for-the-rest-of-its-file)), storage faults are parked, not slept through ([§ Storage faults](#storage-faults-are-parked-and-driven-never-slept-through)), and a release publishes only images the Docker harnesses installed and upgraded ([§ A release publishes](#a-release-publishes-only-the-images-its-gates-tested)).
+
+Two gates are read only when they apply: before a change to the xlsx, docx or pptx writer, [EXPORT.md § Each Office writer has a corpus round-trip gate](EXPORT.md#each-office-writer-has-a-corpus-round-trip-gate); before you run a script in `docker/` or change the launcher, `apps/api/src/cli/configure.ts`, a Compose file or a Caddyfile, [TESTING-DOCKER.md](TESTING-DOCKER.md).
 
 ## Every test lives in its workspace's `src/test/`
 
-A test of one module mirrors its path: `packages/lib/src/vector/snap.ts` is tested by `packages/lib/src/test/vector/snap.test.ts`. A test of a feature end to end gets a feature folder, such as `apps/api/src/test/mail/`, which is most of the API suite: it boots a Home and drives the real API, so there is no module path to mirror. Shared harness files and `fixtures/` sit at the `src/test/` root. Grep the tree before you assume an area is untested.
+A module's test mirrors its path (`packages/lib/src/vector/snap.ts` → `packages/lib/src/test/vector/snap.test.ts`). An end-to-end feature test, most of the API suite, gets a feature folder such as `apps/api/src/test/mail/`. Shared harness files and `fixtures/` sit at the `src/test/` root. Grep the tree before you assume an area is untested.
 
-`bun scripts/check-test-layout.ts` enforces two rules: no test file outside `<workspace>/src/test/`, and every workspace with tests has a `test` script, because `bun --filter '*' test` silently skips a workspace without one. Add the script with the first test, not before: `bun test` exits 1 when it finds no test files.
+`bun scripts/check-test-layout.ts` fails on a test file outside `<workspace>/src/test/` and on a workspace with tests but no `test` script, which `bun --filter '*' test` silently skips. Add the script with the first test, not before: `bun test` exits 1 when it finds no test files.
 
-A fix or a feature in an app ships with a test in that app, at the contract level: what the user clicks and what the app then shows or sends. An app without a runner gets a `test` script and `happy-dom` in its devDependencies, its tests calling `installHappyDom()` from `@workspace/ui/test/happy-dom` as `apps/docs` does. Adding `happy-dom` this way is approved for every app; any other new package still needs the owner's yes.
+A fix or feature in an app ships with a test in that app, at the contract level: what the user clicks and what the app then shows or sends. An app without a runner gets a `test` script and `happy-dom` in its devDependencies, its tests calling `installHappyDom()` from `@workspace/ui/test/happy-dom` as `apps/docs` does. This `happy-dom` is approved for every app; any other new package still needs the owner's yes.
 
 `apps/api/src/test/transform-benchmark.ts` is the document-transform benchmark ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md#the-runner-logs-one-line-per-job-overload-included)), not a test.
 
@@ -22,126 +24,97 @@ Set up the checkout first ([CONTRIBUTING.md § Setting up your development envir
 cd apps/api && bun test --preload ./src/test/preload.ts ./src/test/drive/drive.test.ts -t "rename"
 ```
 
-Both parts matter. Without the preload, a file that imports `../lib` before `../setup` opens the checkout's own data root, where setup is done, and every test fails with `Setup already completed`. From the repo root, Bun loads the root `.env`, and its settings (`PRODUCTION` among them) change what the server answers. The API's `test` script takes no path argument, so a stray test file can't silently never run.
+Without the preload, a file that imports `../lib` before `../setup` opens the checkout's own data root and every test fails with `Setup already completed`. From the repo root, Bun loads the root `.env`, whose settings (`PRODUCTION` among them) change what the server answers. The API's `test` script takes no path argument, so no stray test file silently never runs.
 
-`bun test` reads the value of a flag it doesn't know as a name filter: `--concurrency 1` runs only the tests whose name holds "1". After you change a test command, check that the test count didn't drop.
+`bun test` reads an unknown flag's value as a name filter: `--concurrency 1` runs only tests whose name holds "1". After changing a test command, check that the test count didn't drop.
 
 ## `bun test` runs in UTC
 
-So a bug that only shows at local midnight passes. Run the date and sheet-engine suites once under `TZ=Europe/Amsterdam`, or set `process.env.TZ` in the test. Such a test puts back `originalTz ?? 'UTC'`: deleting `TZ` switches to the machine's zone and assigning `undefined` keeps the test's, and every later test in the process then runs in that zone.
+So a bug that only shows at local midnight passes. Run the date and sheet-engine suites once under `TZ=Europe/Amsterdam`, or set `process.env.TZ` in the test and put back `originalTz ?? 'UTC'`: deleting `TZ` switches every later test in the process to the machine's zone, and assigning `undefined` keeps the test's.
 
 ## Each API test file boots its own server
 
-`apps/api/src/test/test-env.ts` points `EIGEN_DATA_ROOT` at a fresh `data-test/test-<pid>-<random>` dir per worker, before any module opens its SQLite files. It prunes `data-test/` by age alone, because deleting a young dir would race a live sibling worker.
+`apps/api/src/test/test-env.ts` points `EIGEN_DATA_ROOT` at a fresh `data-test/test-<pid>-<random>` dir per worker, before any module opens its SQLite files, and prunes `data-test/` by age alone, since a young dir may be a live worker's.
 
-Setup is lazy: the setup wizard runs once per file, the first time a test awaits `ensureServer()`, `getTestContext()` or `authedRequest()` (`setup.ts`). `setup.ts` has no top-level `await`, because under `--isolate` an importing file would see it suspended mid-evaluation.
+Setup is lazy: the setup wizard runs once per file, when a test first awaits `ensureServer()`, `getTestContext()` or `authedRequest()` (`setup.ts`). `setup.ts` has no top-level `await`: under `--isolate` an importing file would see it suspended mid-evaluation.
 
-- A unit test that needs a setup side effect (the mail domain, the org owner, the auth schema) awaits one of those in a `beforeAll`. It can't count on another file having booted the server.
-- `await collectSSE(userId)` resolves once the Home is open and the listener attached. Never sleep before the action you want to observe.
-- A suite that sets `process.env` keys calls `restoreEnvAfterEach(keys)` (`env-test-helpers.ts`): `process.env` survives into the next file of the same worker.
-- Assertions count only what the test created. A Home has data before the test writes any (the user's own card and the default labels, from `Contacts.init`), and another test may add users, so an exact count such as `users.length === 3` breaks.
+- A unit test that needs a setup side effect (the mail domain, the org owner, the auth schema) awaits one of those in a `beforeAll`, never counting on another file having booted the server.
+- `await collectSSE(userId)` resolves once the Home is open and the listener attached. Never sleep before the action you observe.
+- A suite that sets `process.env` keys calls `restoreEnvAfterEach(keys)` (`env-test-helpers.ts`): `process.env` survives into the worker's next file.
+- Assertions count only what the test created: a Home has data before the test writes any (the user's own card and default labels, from `Contacts.init`), and other tests add users, so `users.length === 3` breaks.
 
 `getTestContext()` seeds Alice (the admin and org owner), Bob and Charlie, each with a session token and a typed Eden Treaty client.
 
 ## The preload clears the timers that pin a file's module graph
 
-Each Home's idle timeout and Elysia's sucrose cache sweep are unref'd timers whose callbacks reach the module graph, so they keep a finished file's whole app alive. The preload's `afterAll` clears them with `shutdownAllHomes()` and `clearSucroseCache(0)`; a `(fail) (unnamed) hook timed out` after the last file is that hook. `--isolate` needs Bun 1.4.1 or newer (`.bun-version`), since older Bun leaks every finished file's globals.
+Each Home's idle timeout and Elysia's sucrose cache sweep are unref'd timers whose callbacks keep a finished file's whole app alive. The preload's `afterAll` clears them with `shutdownAllHomes()` and `clearSucroseCache(0)`; a `(fail) (unnamed) hook timed out` after the last file is that hook. `--isolate` needs Bun 1.4.1 or newer (`.bun-version`): older Bun leaks every finished file's globals.
 
 A native Worker that outlives its test file crashes the parallel suite with `panic: NAPI FATAL ERROR: napi_define_properties`. Register such a job on its Mount, as `thumbnailJobs` does, so `closeAllDatabases` drains it. Never add `documentTransformRunner.close()` to the preload.
 
 ## Every package test file runs isolated, so file order doesn't matter
 
-Every workspace but the API runs `bun test --isolate`, so each file gets a fresh global, module graph and `process.env`. Without it a file inherits a module mock, a stubbed prototype or a changed `TZ` from earlier files, and since Bun orders files differently on Linux than on a Mac, such a leak passes locally and fails CI. Isolation costs up to twice the suite's time. A bare `bun test` over several files still shares one process (bunfig.toml has no isolation setting), so run package suites with `bun run test`, and keep each file's restores in place for that case.
+Every workspace but the API runs `bun test --isolate`: each file gets a fresh global, module graph and `process.env`, so no file inherits an earlier file's module mock, stubbed prototype or `TZ`. Such a leak passes on a Mac and fails CI, since Bun orders files differently on Linux. Isolation costs up to twice the suite's time. A bare `bun test` over several files still shares one process (bunfig.toml sets no isolation), so run package suites with `bun run test` and keep each file's restores in place.
 
 ## A module mock lasts for the rest of its file
 
-`mock.module` replaces a module for every later test of the file. A partial mock leaves the exports it omits `undefined`, so spread a copy of the real module into it and put the copy back in `afterAll`. It must be a copy (`const real = { ...(await import('…')) }`): `mock.module` rewrites a loaded module's exports in place, so the namespace itself holds the mock too. Give that `afterAll` a block body; one that returns the `mock.module` result makes the next mock of that module not take. Have a mocked hook return one object, not a fresh literal per call, or effects that depend on it re-run forever.
+`mock.module` replaces a module for every later test of the file. A partial mock leaves omitted exports `undefined`: spread a copy of the real module into it and put the copy back in `afterAll`. It must be a copy (`const real = { ...(await import('…')) }`), since `mock.module` rewrites the loaded module's exports in place. Give that `afterAll` a block body: returning the `mock.module` result makes the module's next mock not take. A mocked hook returns one object, not a fresh literal per call, or effects that depend on it re-run forever.
 
 Never mock `createFileRoute` or a route file: the route keeps the stub for the whole file. Render the real `routeTree` with `createRouter` and `createMemoryHistory` under the providers its pages need, and mock the hooks.
 
-The same goes for globals and the DOM:
+Globals and the DOM:
 
-- Restore, never delete, a global you didn't create. Every happy-dom `Window` of a file shares one set of element classes, so a getter stubbed on `HTMLElement.prototype` reaches every later test. A spy on a module's export is `mockRestore`d in `afterAll`.
+- Restore, never delete, a global you didn't create. A file's happy-dom `Window`s share one set of element classes, so a getter stubbed on `HTMLElement.prototype` reaches every later test. A spy on a module's export is `mockRestore`d in `afterAll`.
 - Load the UI after `installHappyDom()`, even to render a string: Radix picks its layout effect at load, and without a `document` its Select shows no value. A happy-dom `Window` needs a `url`, or `api.ts` throws at load.
-- happy-dom lays nothing out, so a virtualized list draws no row until the test gives `clientHeight` a value. It also runs an animation frame at once, before React has drawn: a Docs test wraps the action in `withBrowserFrames`, or waits for async product work with `waitUntil(holds, what)` (both in `apps/docs/src/test/fixtures/`), never a fixed sleep.
-- A module that keeps the first DOM object it made keeps the first stub too: the vector text measurer is stubbed through `stubCanvasMeasure` (`packages/ui/src/test/canvas-measure.ts`).
+- happy-dom lays nothing out, so a virtualized list draws no row until the test sets `clientHeight`. It runs an animation frame at once, before React has drawn: a Docs test wraps the action in `withBrowserFrames` or waits for async work with `waitUntil(holds, what)` (both in `apps/docs/src/test/fixtures/`), never a fixed sleep.
+- A module that keeps the first DOM object it made keeps the first stub too: stub the vector text measurer through `stubCanvasMeasure` (`packages/ui/src/test/canvas-measure.ts`).
 - Enter in a form field is `pressEnter(field)`, which clicks the form's first submit button, so nothing submits while it is disabled.
 - A failed `toBeNull()` on an element prints its whole tree, which takes seconds: assert on labels or titles.
 
 ## Resource bounds measure the child, and scale rather than time
 
-- A memory bound runs the work in a child process and reads `peakRss()` (`apps/api/src/lib/document/transform/peak-rss.ts`). On Linux a child's `maxRSS` starts at its parent's high-water mark, so CI's worker would read its own 1 GB.
-- A guard against a quadratic compares CPU at n with CPU at a fraction of n, never an absolute bound, because a CI runner is several times slower than a Mac.
-- A bound on what a hostile input costs reads `cpuClock()` (`apps/api/src/test/cpu-time.ts`), never the wall clock, which grows with every other process on the runner. A comparison of two costs takes each side's fastest of several runs, so a collector pause fails nothing.
-- A Bun Worker sees `TMPDIR` as its process started, so a private temp dir needs a child process. A child that hands back more than 64 KB writes it with `await Bun.write(Bun.stdout, …)`: once anything reads `process.stdout` (lib0 does, so anything that reaches yjs), Bun cuts a `console.log` into a pipe at 64 KB on exit.
+- A memory bound runs the work in a child process and reads `peakRss()` (`apps/api/src/lib/document/transform/peak-rss.ts`): on Linux a child's `maxRSS` starts at its parent's high-water mark, so CI's worker would read its own 1 GB.
+- A quadratic guard compares CPU at n with CPU at a fraction of n, never an absolute bound: a CI runner is several times slower than a Mac.
+- A bound on a hostile input's cost reads `cpuClock()` (`apps/api/src/test/cpu-time.ts`), never the wall clock. A comparison of two costs takes each side's fastest of several runs, so a collector pause fails nothing.
+- A Bun Worker sees `TMPDIR` as its process started, so a private temp dir needs a child process. A child that hands back more than 64 KB writes it with `await Bun.write(Bun.stdout, …)`: once anything reads `process.stdout` (lib0 does, so anything reaching yjs), Bun cuts a `console.log` into a pipe at 64 KB on exit.
 
 ## Slow and Linux-only suites run on CI
 
-A suite that takes tens of seconds skips unless `CI` or `EIGEN_SLOW_TESTS=1` is set. The demo seeder contract test (`server/seed-demo.test.ts`) is one: run it after you touch `apps/api/src/scripts/demo/` or a reader it decodes with. The doc round trip (`import/doc/round-trip.test.ts`) runs a few hundred random seeds locally, more with `EIGEN_SLOW_TESTS`, and a different slice on each CI run.
+A suite that takes tens of seconds skips unless `CI` or `EIGEN_SLOW_TESTS=1` is set. The demo seeder contract test (`server/seed-demo.test.ts`) is one: run it after touching `apps/api/src/scripts/demo/` or a reader it decodes with. The doc round trip (`import/doc/round-trip.test.ts`) runs a few hundred random seeds locally, more with `EIGEN_SLOW_TESTS`, and a different slice on each CI run.
 
-macOS refuses `setrlimit` for the data segment, so the transform's memory limit is tested on Linux only ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md#a-child-runs-under-the-machines-memory)). To run those tests on a Mac, use an `oven/bun` container with a copy of the checkout and its own `bun install --frozen-lockfile`, since the Mac's `node_modules` holds macOS binaries.
-
-## Each Office writer has a corpus round-trip gate
-
-A change to the xlsx, docx or pptx writer passes the `roundtrip` mode of `apps/api/src/scripts/xlsx-audit.ts`, `docx-audit.ts` or `pptx-audit.ts`. Each corpus file is imported, written by our writer, imported again, and the two imports compared. What differs only by identity (media names, chart series ids, validation rule ids) is compared by what it means. A difference the format's `LISTED` table explains, with a predicate over the writer's own helpers and a reason, is listed; any other fails the run, as do a crash and a cut. Each file runs in a child under a time and memory cap, so a hang is a result. The shared runner is `office-audit.ts`, and `--writer <module>` runs another writer, which is how each script's test plants a broken one. The corpora are private, so keep the output outside the repo, and run one at a time: a heavy file's child peaks at several GB.
-
-```bash
-bun apps/api/src/scripts/xlsx-audit.ts roundtrip <corpus dir...> --out /tmp/xlsx-roundtrip
-```
-
-A refactor that must not change what a writer writes proves it byte for byte. The writers are deterministic, so `--dump <dir>` before and after the change, then `diff -rq` the two dirs.
+macOS refuses `setrlimit` for the data segment, so the transform's memory limit is tested on Linux only ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md#a-child-runs-under-the-machines-memory)). On a Mac, run those tests in an `oven/bun` container with a copy of the checkout and its own `bun install --frozen-lockfile`, since the Mac's `node_modules` holds macOS binaries.
 
 ## Storage faults are parked and driven, never slept through
 
-The drive resilience suites run on doubles at the `src/test/` root, each listing what it fakes in its header. A sleep races the code it waits for, so every fault is held and released by the test:
+The drive resilience suites run on doubles at the `src/test/` root, each listing what it fakes in its header. The test holds and releases every fault:
 
-- `FaultStorage` (`fault-storage-helpers.ts`) wraps a real `LocalStorage` whose writes and `exists()` can fail, stall, hang or be parked. Hold a PUT with `parkWrites` and `waitForParked`, never `writeDelayMs` and `Bun.sleep`. A `FaultMount`'s upload queue never retries on its own; the test drives each retry with `drainPendingUploads({ flushNow: true })`, so a backoff timer can't fire into a later step.
-- A read fault needs `fake-s3-server.ts`: `S3Storage.read()` returns a lazy `S3File`, so a stalled GET happens inside Bun's client, where `FaultStorage` never sees it.
+- `FaultStorage` (`fault-storage-helpers.ts`) wraps a real `LocalStorage` whose writes and `exists()` can fail, stall, hang or be parked. Hold a PUT with `parkWrites` and `waitForParked`, never `writeDelayMs` and `Bun.sleep`. A `FaultMount`'s upload queue never retries on its own: the test drives each retry with `drainPendingUploads({ flushNow: true })`, so no backoff timer fires into a later step.
+- A read fault needs `fake-s3-server.ts`: `S3Storage.read()` returns a lazy `S3File`, so a stalled GET happens inside Bun's client, out of `FaultStorage`'s sight.
 - A test that waits out a storage deadline shrinks it with `setStorageTimeoutMs` and restores it after; `settlesWithin` bounds the wait.
 - A test that the event loop stays free counts turns with `countLoopTurns` (`setup.ts`), never time. Inside `expect(...).rejects` a `setImmediate` turn can take up to a second, which is why `eventLoopTurn` (`apps/api/src/lib/core/stream.ts`) schedules a second, empty immediate.
-- The CalDAV and CardDAV stores keep their truth in a BLOB, so they need no double: `breakTransaction(domain)` (`db-test-helpers.ts`) throws inside the transaction, and the test asserts the previous bytes and projection survived.
+- The CalDAV and CardDAV stores keep their truth in a BLOB and need no double: `breakTransaction(domain)` (`db-test-helpers.ts`) throws inside the transaction, and the test asserts the previous bytes and projection survived.
 
 `home-test-helpers.ts` is the one fake-Home harness: `openTestHome(create, dir, user)` builds a domain class such as `Contacts` over a temp directory without a booted app, and its `reopen()` simulates a restart.
 
-## The Docker harnesses install Eigen as a stranger does
-
-The scripts in `docker/` are not part of `bun run test`. Each copies the tracked files as the working tree has them into a scratch folder (`git add` a new file to include it) and runs `./eigen` there from a `docker:cli` container with no Bun, as its own Compose project on `127.0.0.1` ports 18000-18999. So a harness never touches your `data/` or a stack you run. Every harness sources `docker/probe-lib.sh`, which runs Compose as root, because a release install's `.env.production` is root's and a Linux host's harness user can't read it (Docker Desktop hides this).
-
-Docker's two image stores treat a moved tag differently: Docker Desktop's containerd store drops `repo@sha256:<old>`, while Linux's classic store keeps it as a digest-only image that `docker image ls` shows only with `--all`. So the launcher pulls a pinned image back by digest before it reads one, and a launcher change runs on both stores: the Mac gate is containerd, CI's ubuntu classic.
-
-Run them one at a time, since two can pick the same subnet; `./docker/test-all.sh` runs them in turn. Each script's header lists what it probes. `HARNESS_KEEP=1` leaves the scratch install up.
-
-| Harness | What it proves |
-|---|---|
-| `test-launcher.sh` | The launcher alone under dash, BusyBox and the host `sh`, with a stub `docker`, and the installer `apps/index/public/install`. No stack. |
-| `test-cli.sh` | The operator commands and their refusals, on installs made as another uid and as root. |
-| `test-interactive.sh` | The questions as a person answers them, typed by `expect`. |
-| `test-deployments.sh` | Every `COMPOSE_PROFILES` shape and a custom subnet. Run it before merging a change to `eigen`, `apps/api/src/cli/configure.ts`, a Compose file or a Caddyfile. |
-| `test-host-proxies.sh` | nginx, Caddy and Apache in front of `eigen-static` with the snippets setup writes. |
-| `test-release.sh` | The release gate: the previous published release is installed, seeded, updated to this one and rolled back, then update, rollback and breaking releases run in a registry of its own. |
-| `test-boot.sh` | The arm64 gate: the candidate images answer `/eigen/health`. Needs a candidate on ghcr.io, so `test-all.sh` skips it. |
-| `test-mail-hardening.sh` | The mail hardening of [MAIL.md § Submission is held to the login's own address](MAIL.md#submission-is-held-to-the-logins-own-address). `PROBES=2,3,4` runs a subset. |
-
 ## CI
 
-`.github/workflows/check.yml` runs on a push to `main`, `develop`, `release-*` or `ci-*` (a branch for work on the workflow itself) and on a pull request to `main` or `develop`. Its jobs run side by side:
+`.github/workflows/check.yml` runs on a push to `main`, `develop`, `release-*` or `ci-*` (for work on the workflow itself) and on a pull request to `main` or `develop`. Its jobs run side by side:
 
-- `checks` runs the gates of `bun run check` except the API suite, then the package suites one after another with `bun --filter '!@apps/api' test --timeout 30000`.
-- `api 1/3` to `api 3/3` run the API suite in three shards of four isolated workers each, split by the per-file times in `apps/api/src/test/timings.json` so the shards take about as long. Only these jobs install the PDF engine.
-- `api-files` fails unless the shards together ran every API test file, because a file no shard ran would fail no run.
+- `checks`: the gates of `bun run check` except the API suite, then the package suites in turn with `bun --filter '!@apps/api' test --timeout 30000`.
+- `api 1/3` to `api 3/3`: the API suite in three shards of four isolated workers each, balanced by the per-file times in `apps/api/src/test/timings.json`. Only these install the PDF engine.
+- `api-files` fails unless the shards together ran every API test file.
 - `launcher` runs `docker/test-launcher.sh`.
 
-`bun run check` (`scripts/check.ts`) runs the same gates and every workspace's suite locally, all at once, the API's on eight isolated workers. So it sees the isolation CI sees: a test that leans on what an earlier file left behind fails both. Every step runs to its end and the summary names each failure. It runs under `--no-env-file`, because the root `.env.development` would hand every suite `PRODUCTION` and `MAIL_DOMAIN`. The gates are dedupe, lint, typecheck, home imports, test layout, docs links (a relative link or a backtick'd `apps/`, `packages/`, `docker/` or `scripts/` path that doesn't exist), the ratcheting standards check ([CODE-STANDARDS.md § Standards Gates](CODE-STANDARDS.md#standards-gates)) and the primitives index.
+`bun run check` (`scripts/check.ts`) runs the same gates and every workspace's suite locally, all at once, the API's on eight isolated workers, so a test that leans on an earlier file's leftovers fails both. Every step runs to its end and the summary names each failure. It runs under `--no-env-file`, since the root `.env.development` would hand every suite `PRODUCTION` and `MAIL_DOMAIN`. The gates: dedupe, lint, typecheck, home imports, test layout, docs links (a relative link or a backtick'd `apps/`, `packages/`, `docker/` or `scripts/` path that doesn't exist), the ratcheting standards check ([CODE-STANDARDS.md § Standards Gates](CODE-STANDARDS.md#standards-gates)) and the primitives index.
 
-`bun run test:api` instead runs the API suite in one process that holds every Home of the run, so a file can fail on what an earlier one left while CI stays green. Leave behind nothing a later file reads: server settings, archives in the backups folder, a socket at a fixed path, a home no backup can verify or a stray s3 mount. A server backup test, which verifies every home and lists every archive, is the usual victim.
+`bun run test:api` instead runs the API suite in one process holding every Home of the run, so a file can fail on an earlier one's leftovers while CI stays green. Leave nothing a later file reads: server settings, archives in the backups folder, a socket at a fixed path, a home no backup can verify, a stray s3 mount. A server backup test, which verifies every home and lists every archive, is the usual victim.
 
-`bun dedupe --check` fails when `bun.lock` holds two versions of a package one version could satisfy. Two copies of `@codemirror/language` or of Radix's dismissable layer break at runtime without an error. Run `bun dedupe` and commit the lockfile.
+`bun dedupe --check` fails when `bun.lock` holds two versions of a package one version could satisfy: two copies of `@codemirror/language` or of Radix's dismissable layer break at runtime without an error. Run `bun dedupe` and commit the lockfile.
 
-- The 30 s per-test timeout is for CI and the check, where the cores are busy; a file run by hand keeps bun's 5 s, so a slow test is caught where it is written.
-- `SQLITE_IOERR_VNODE` in a sandboxed run is the sandbox: run it again outside before you call it a failure. A loaded or sleeping machine fakes timeouts, so check `uptime`, don't run a second suite beside the check, and use `caffeinate -ims bun run check` on a Mac.
-- Under `GITHUB_ACTIONS` the preload prints each worker's RSS after every file. Exit code 143 is an out-of-memory kill, and since `bun --filter` buffers output, the last test in the log is not the culprit.
+- The 30 s per-test timeout is for CI and the check, with busy cores; a file run by hand keeps bun's 5 s, so a slow test is caught where it is written.
+- `SQLITE_IOERR_VNODE` in a sandboxed run is the sandbox: rerun outside before calling it a failure. A loaded or sleeping machine fakes timeouts: check `uptime`, run no second suite beside the check, and use `caffeinate -ims bun run check` on a Mac.
+- Under `GITHUB_ACTIONS` the preload prints each worker's RSS after every file. Exit code 143 is an out-of-memory kill; `bun --filter` buffers output, so the last test in the log is not the culprit.
 
-Refresh the timings after a batch of new API test files: each shard uploads its times as the artifact `api-shard-<i>`.
+Refresh the timings after a batch of new API test files; each shard uploads its times as the artifact `api-shard-<i>`:
 
 ```bash
 gh run download <run id> -p 'api-shard-*' -D /tmp/api-shards
@@ -150,33 +123,32 @@ jq -s '{version: 1, files: (map(.files) | add | to_entries | sort_by(.key) | fro
 
 ## Work lands on develop, and main moves only for a release
 
-Every change merges to `develop`, and a pull request targets it. `main` moves only when the owner says so, by a fast-forward (`git switch main && git merge --ff-only develop`), and a push to it publishes the `:main` images. So `:main` and the release tags carry only code the owner chose to ship. A release bumps the version and its CHANGELOG section on `develop`, fast-forwards `main` and tags `main`; `bun run release` prints the commands.
+Every change and pull request targets `develop`. `main` moves only on the owner's word, by a fast-forward (`git switch main && git merge --ff-only develop`), and a push to it publishes the `:main` images, so `:main` and the release tags carry only code the owner chose to ship. A release bumps the version and its CHANGELOG section on `develop`, fast-forwards `main` and tags `main`; `bun run release` prints the commands.
 
 ## A GitHub release says what changed in a few lines
 
-`bun run release publish` posts the intro paragraph of the version's CHANGELOG section and a link to the whole section, and refuses a section with no intro. The page is read by people who don't know Eigen yet, so a list of every bullet loses them; the [changelog skill](../.claude/skills/changelog/SKILL.md) says how the intro reads.
+`bun run release publish` posts the intro paragraph of the version's CHANGELOG section and a link to the whole section, and refuses a section with no intro. Its readers don't know Eigen yet, so it lists no bullets; the [changelog skill](../.claude/skills/changelog/SKILL.md) says how the intro reads.
 
 ## A release publishes only the images its gates tested
 
 `.github/workflows/publish.yml` runs on a `v*` tag and a push to `main`, and fails on anything else. It builds every image for linux/amd64 and linux/arm64 under a candidate tag (`candidate-<version or main>-<platform>`), which is no version, `latest` or `main`, so the launcher refuses it.
 
-On a tag, `docker/test-release.sh` updates the previous published release to the amd64 candidates and rolls it back, and `docker/test-boot.sh` boots the arm64 candidates. Before it publishes, the workflow checks each candidate's build stamp and takes it by digest, so a candidate another run built is never published. Only when every image is built and both gates pass do the candidates become the `<version>` index, copied to `:latest` unless a newer stable release is out (a prerelease or a backport leaves `:latest` alone). A failed build or gate leaves no partial release.
+On a tag, `docker/test-release.sh` updates the previous published release to the amd64 candidates and rolls it back, and `docker/test-boot.sh` boots the arm64 candidates. Before publishing, the workflow checks each candidate's build stamp and takes it by digest, so a candidate another run built is never published. Only when every image is built and both gates pass do the candidates become the `<version>` index, copied to `:latest` unless a newer stable release is out (a prerelease or a backport leaves `:latest` alone). A failed build or gate leaves no partial release.
 
 - A version already published fails the gate: a release is never published twice.
-- In CI, the gate fails when no release before this one is published, unless none is published at all: only the first release has none to update.
+- In CI the gate fails when no earlier release is published, unless none is published at all: only the first release has none to update.
 - A release whose `CHANGELOG.md` lists breaking changes under its own `## [<version>]` heading fails too, since `./eigen update` refuses it on every install. Run the workflow on its tag with `breaking: true` to publish it anyway; that run fails if the release lists no breaking change.
 
 A push to `main` runs no gates and publishes `:main`. A newer push waits for a running build and replaces a queued one, so a cancel never leaves `:main` half promoted. In CI arm64 only boots; its update and rollback are proven by the harnesses on an Apple Silicon Mac.
 
 ## Dependencies are bumped right after a release tag
 
-Bump them and read `bun audit` right after a `v*` tag, never in the days before one, so an upstream break surfaces with weeks to fix it rather than hours. Run `bun update --recursive` (a plain run updates only the root's dependencies), then `bun dedupe`. The one exception before a tag is a security fix the owner asks for, bumped on its own.
+Bump them and read `bun audit` right after a `v*` tag, never in the days before one, so an upstream break surfaces with weeks to fix it. Run `bun update --recursive` (a plain run updates only the root's dependencies), then `bun dedupe`. The one exception before a tag is a security fix the owner asks for, bumped on its own.
 
-better-auth refuses to boot when `apps/api/auth-schema.ts` misses a plugin's column, so a better-auth minor that adds one lands with the column, the DDL in `apps/api/src/lib/setup/setup.ts` and `ensureAuthSchemaColumns` together ([DATABASE.md](DATABASE.md)).
+better-auth refuses to boot when `apps/api/auth-schema.ts` misses a plugin's column, so a better-auth minor that adds one lands together with the column, the DDL in `apps/api/src/lib/setup/setup.ts` and `ensureAuthSchemaColumns` ([DATABASE.md](DATABASE.md)).
 
 ## See also
 
 - [CONTRIBUTING.md](CONTRIBUTING.md): setting up a checkout and the pre-commit hook
 - [DEMO_MODE.md](DEMO_MODE.md): the demo seeder that `server/seed-demo.test.ts` pins
-- [SELF-HOSTING.md](SELF-HOSTING.md): the install, update and rollback the Docker harnesses probe
 - The [verify-in-browser skill](../.claude/skills/verify-in-browser/SKILL.md): proving a change in the running dev app

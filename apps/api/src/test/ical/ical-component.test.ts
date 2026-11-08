@@ -1064,11 +1064,11 @@ describe('structural edits', () => {
 });
 
 // A structural edit names a VEVENT the resource has to hold. A caller handing over a row the file
-// cannot place — an occurrence nothing overrides, a legacy key that names no date, an override-only
+// cannot place — an occurrence nothing overrides, a row that names no occurrence, an override-only
 // body — is a bug in the store, not a resource to rewrite.
 describe('refusals', () => {
     const overrideOnly = () => parseResource(serializeResource(buildResource([OVERRIDE])));
-    const unkeyable = { ...OVERRIDE, recurrenceDate: 'not a date' };
+    const unkeyed = { ...OVERRIDE, recurrenceDate: null };
 
     test('patchEvent refuses an occurrence the resource does not hold', () => {
         expect(() => patchEvent(buildResource([MASTER]), '2026-05-20', { title: 'x' }, CTX)).toThrow(
@@ -1077,11 +1077,11 @@ describe('refusals', () => {
     });
 
     test('putOverride refuses an override that names no occurrence', () => {
-        expect(() => putOverride(buildResource([MASTER]), MASTER, unkeyable)).toThrow('names no occurrence');
+        expect(() => putOverride(buildResource([MASTER]), MASTER, unkeyed)).toThrow('names no occurrence');
     });
 
     test('addExclusion refuses an exclusion that names no occurrence', () => {
-        expect(() => addExclusion(buildResource([MASTER]), MASTER, unkeyable, CTX)).toThrow('names no occurrence');
+        expect(() => addExclusion(buildResource([MASTER]), MASTER, unkeyed, CTX)).toThrow('names no occurrence');
     });
 
     test('addExclusion refuses a resource with no master VEVENT', () => {

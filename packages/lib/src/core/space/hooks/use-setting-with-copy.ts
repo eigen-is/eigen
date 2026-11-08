@@ -18,7 +18,7 @@ export type SettingWithCopy<T> = {
     read: (settings: UserSettings) => T | undefined;
     // The settings change that stores a value.
     patch: (value: T) => UserSettings;
-    // Undefined when the copy holds no valid value, such as one an older build wrote.
+    // Undefined when the copy holds no valid value: browser storage holds whatever was last written to it.
     parse: (copy: string) => T | undefined;
     serialize: (value: T) => string;
 };

@@ -9,6 +9,7 @@ import type { CalendarEvent, CalendarEventOccurrence } from '@workspace/lib/type
 import type ICAL from 'ical.js';
 import { getHome } from '../../lib/home';
 import { parseIcs, parseResource, serializeEventForImip } from '../../lib/ical';
+import { storedEvents } from '../calendar-test-helpers';
 import { basicAuth, davRequest } from '../dav-test-helpers';
 import { app, assertJson, authedRequest, eventually, findOrFail, getTestContext } from '../setup';
 
@@ -166,10 +167,7 @@ describe('CalDAV round-trip fidelity', () => {
             const before = snapshot(veventOf(await getIcs('rt-kitchen.ics')));
 
             const home = await getHome(userId);
-            const stored = findOrFail(
-                await home.calendar.getRawEvents(calendarId),
-                (e) => e.uid === 'rt-kitchen@client',
-            );
+            const stored = findOrFail(storedEvents(home.calendar, calendarId), (e) => e.uid === 'rt-kitchen@client');
             const res = await authedRequest(
                 ctx.alice.user.sessionToken,
                 `/calendar/${userId}/calendars/${calendarId}/events/${stored.id}`,
@@ -232,7 +230,7 @@ describe('CalDAV round-trip fidelity', () => {
 
         async function storedRow(uid: string): Promise<CalendarEvent> {
             const home = await getHome(userId);
-            return findOrFail(await home.calendar.getRawEvents(calendarId), (e) => e.uid === uid);
+            return findOrFail(storedEvents(home.calendar, calendarId), (e) => e.uid === uid);
         }
 
         // A form save: the title beside the times it rendered, labelled with the browser's zone.
@@ -652,7 +650,7 @@ describe('CalDAV round-trip fidelity', () => {
         });
 
         // Audit #C, TZID flavor: the rid must be in the MASTER's timezone form even though the
-        // stored exception row may carry a different (or legacy null) timezone.
+        // stored exception row may carry a different (or null) timezone.
         test('moved override of a TZID series echoes the rid in the master timezone', async () => {
             const body = vcal(
                 VTZ_NY,
@@ -811,41 +809,7 @@ describe('CalDAV round-trip fidelity', () => {
         });
     });
 
-    // Rows written before the route validated recurrenceDate can hold a full ISO datetime or
-    // arbitrary text (the schema accepted any string). App-side expansion truncates to the date
-    // part and treats unparseable keys as inert (calendar.ts getEventsInRange); serving must do
-    // the same — one bad row must never 500 the resource GET or every REPORT touching its UID.
-    describe('legacy recurrenceDate rows', () => {
-        test('an exception keyed by a full ISO datetime serves with the truncated-key RECURRENCE-ID', async () => {
-            const calendar = (await getHome(userId)).calendar;
-            const master = await calendar.createEvent(calendarId, {
-                title: 'Legacy key series',
-                startTime: new Date('2026-06-02T03:00:00Z'), // Jun 1 23:00 America/New_York
-                endTime: new Date('2026-06-02T03:50:00Z'),
-                allDay: false,
-                rrule: 'FREQ=DAILY;COUNT=5',
-                timezone: 'America/New_York',
-                uid: 'legacy-rid@eigen',
-                createByUserId: userId,
-            });
-            await calendar.createEvent(calendarId, {
-                title: 'Legacy key series (moved)',
-                startTime: new Date('2026-06-05T10:00:00Z'),
-                endTime: new Date('2026-06-05T10:50:00Z'),
-                allDay: false,
-                timezone: 'America/New_York',
-                parentEventId: master.id,
-                recurrenceDate: '2026-06-04T03:00:00.000Z', // legacy form: an instant, not a wall date
-                uid: master.uid,
-                createByUserId: userId,
-            });
-
-            const ics = await getIcs(master.uri); // pre-fix: 500 (RRule.between throws on the raw key)
-            // The truncated key '2026-06-04' names the Jun 4 23:00 NY occurrence — the same
-            // instance the app-side expansion substitutes for this row.
-            expect(ics).toContain('RECURRENCE-ID;TZID=America/New_York:20260604T230000');
-        });
-
+    describe('unkeyable recurrenceDate', () => {
         test('an occurrence key the file cannot name is refused at the write boundary', async () => {
             const calendar = (await getHome(userId)).calendar;
             const master = await calendar.createEvent(calendarId, {
@@ -1115,7 +1079,11 @@ describe('CalDAV round-trip fidelity', () => {
             );
             expect(res.status).toBe(201);
 
-            const stored = (await (await getHome(userId)).calendar.getEventByUri(calendarId, uri))!;
+            const home = await getHome(userId);
+            const stored = findOrFail(
+                storedEvents(home.calendar, calendarId),
+                (e) => e.uri === uri && !e.parentEventId,
+            );
             expect(stored.data?.organizer?.userId).toBe('');
             expect(stored.data?.organizerEventId).toBeUndefined();
             expect(stored.data?.color).toBeUndefined();

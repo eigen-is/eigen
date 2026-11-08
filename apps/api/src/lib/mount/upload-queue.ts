@@ -16,14 +16,12 @@ import { getShutdownDrainDeadline, getUploadSemaphore, uploadBackoffMs } from '.
 
 type Db = BunSQLiteDatabase<typeof schema>;
 
-// The PUTs of one key that timed out but may still land (see trackOrphan). It counts those not settled
-// yet, says whether a cancel ran meanwhile, and keeps the bytes of the last ack, which go up again over a
-// late landing. isDatabase keeps the kind of that copy, so a restored plain file is not checked as a database.
+// PUTs of one key that timed out but may still land. `lastAcked` is sent again over a late landing, with its
+// `isDatabase` kind.
 type OrphanState = { count: number; canceled: boolean; isDatabase: boolean; lastAcked?: Buffer };
 
-// The longest one PUT may take. A request lost in the network would otherwise never end. The drain loop
-// would wait for it, its place in the destination's limit would stay taken, and backoff would never start,
-// so four such hangs would stop every mount that shares the limit. It is long, so a slow PUT completes.
+// A request lost in the network would otherwise never end and keep its place in the destination's limit; four hangs
+// would stop every mount sharing it. Long enough that a slow PUT completes.
 export const UPLOAD_PUT_TIMEOUT_MS = 120_000;
 
 export type UploadQueueDeps = {
@@ -40,13 +38,8 @@ export type UploadQueueDeps = {
     hold?: () => () => void;
 };
 
-// Each pending upload is a row in metadata.db's pending_uploads and a frozen staged copy on disk. The
-// queue drains them through the destination's limit. A failed upload backs off and schedules its own
-// retry, so there is no global sweep. A writer, such as a sync, a close or a version snapshot, stages a
-// copy and calls enqueueStaged. A home restore writes its rows directly, and the mount's init picks them
-// up. A delete or a restore calls cancel, the mount's open calls reconcile, and its close calls close.
-// A PUT on the wire is a user of the Home, so the queue holds the Home while one runs. An idle close then
-// never meets a PUT. A Home that closes refuses the hold, and from then on the queue starts no PUT.
+// A PUT on the wire holds the Home, so an idle close never meets one. A Home that closes refuses the hold, and from
+// then on the queue starts no PUT.
 export class UploadQueue {
     private readonly db: Db;
     private readonly storage: StorageBackend;
@@ -91,21 +84,18 @@ export class UploadQueue {
         return row?.c ?? 0;
     }
 
-    // Runs when the mount opens. It drains every pending upload again, after a restart or a Home that
-    // reopened, and deletes the staged copies no row points to, which a crash before the row insert
-    // leaves. It runs before the mount's tmp sweep, so a staged copy it keeps is not deleted.
+    // Deletes the staged copies no row points to, which a crash before the row insert leaves.
     public reconcile(): void {
         const rows = this.db.select().from(pendingUploads).all();
         const referenced = new Set<string>();
         for (const row of rows) {
-            const staging = this.resolveStagingPath(row.stagingPath);
-            if (fs.existsSync(staging)) {
-                referenced.add(path.basename(staging));
+            if (fs.existsSync(this.resolveStagingPath(row.stagingPath))) {
+                referenced.add(row.stagingPath);
             } else {
                 // The staged copy is gone, after a crash between the two deletes of an ack or after a
                 // restore of the whole server. The row goes too.
                 console.warn(
-                    `[sync] dropping pending upload for ${row.storageKey}: staged copy ${path.basename(staging)} is gone`,
+                    `[sync] dropping pending upload for ${row.storageKey}: staged copy ${row.stagingPath} is gone`,
                 );
                 this.db.delete(pendingUploads).where(eq(pendingUploads.storageKey, row.storageKey)).run();
             }
@@ -121,11 +111,8 @@ export class UploadQueue {
         }
     }
 
-    // Stops the queue when its mount closes: no drain or retry starts after this. Then it waits up to
-    // waitMs for the PUTs still on the wire. An idle close finds none, because each one holds the Home.
-    // A forced close, such as an eviction for a restore, may find some. The Home may reopen at once, and
-    // an old PUT that landed after the new queue acked would overwrite the newer bytes. Leftover rows
-    // replay on the next mount open. For a graceful shutdown, call drain({flushNow}) first.
+    // Waits up to waitMs for the PUTs still on the wire. A forced close, such as an eviction for a restore, may find
+    // some, and an old PUT that lands after the reopened queue's ack would overwrite newer bytes.
     public async close(waitMs = this.putTimeoutMs): Promise<void> {
         this.closing = true;
         if (this.retryTimer) {
@@ -155,13 +142,11 @@ export class UploadQueue {
         return row ? this.resolveStagingPath(row.stagingPath) : null;
     }
 
-    // Records a staged copy as the pending upload of storageKey and starts a drain. isDatabase says what
-    // the copy holds: a managed database, which gets the SQLite header check before its PUT, or a plain
-    // file, which only a restore stages. The row is written before this returns. The newest copy wins.
-    // The copy it replaces is deleted, unless its PUT runs, and then the upload deletes it when it ends.
+    // isDatabase says what the copy holds: a managed database gets the SQLite header check before its PUT, a plain file
+    // (only a restore stages one) does not.
     public enqueueStaged(storageKey: string, stagingPath: string, isDatabase: boolean): void {
         // Only the file name is stored, so the staged copy is still found after the data folder moved,
-        // such as to a new host. An absolute path would miss there, and reconcile would drop the row.
+        // such as to a new host.
         const stored = path.basename(stagingPath);
         const now = Date.now();
         const prevStaging = this.getPendingStagingPath(storageKey);
@@ -179,10 +164,8 @@ export class UploadQueue {
         this.drain().catch((err) => console.error(`[sync] drain failed for ${this.label}:`, err));
     }
 
-    // Cancels the pending upload of storageKey and deletes its staged copy. A permanent delete and a chat
-    // restore call it, so a queued PUT can't bring back an object they removed. performUpload reads the
-    // row again right before and after its PUT, so a cancel during the PUT still stops it, and the object
-    // it brought back is deleted.
+    // A permanent delete and a chat restore call it, so a queued PUT can't bring back an object they removed.
+    // performUpload reads the row again around its PUT, so a cancel during the PUT still stops it.
     public async cancel(storageKey: string): Promise<void> {
         const orphan = this.orphans.get(storageKey);
         if (orphan) {
@@ -196,9 +179,7 @@ export class UploadQueue {
         if (staging) await bestEffortUnlink(staging);
     }
 
-    // Drains the due pending uploads through the destination's limit. A failed PUT moves the next attempt
-    // of its row into the future, so the loop skips it and never spins on a dead backend. flushNow makes
-    // every row due at once, for the shutdown flush and for tests.
+    // A failed PUT moves its row's next attempt into the future, so the loop never spins on a dead backend.
     public async drain(opts: { flushNow?: boolean } = {}): Promise<void> {
         if (opts.flushNow) this.db.update(pendingUploads).set({ nextAttemptAt: Date.now() }).run();
         if (this.draining) return this.draining;
@@ -245,10 +226,8 @@ export class UploadQueue {
         }, delayMs);
     }
 
-    // PUTs one staged copy to its storage key. It reads the row again right before the PUT, so a cancel or
-    // a newer copy since the loop read it stops the upload. After an ack it deletes the row, if it is still
-    // this copy's, and the staged copy. When a cancel came during the PUT, it deletes the object the PUT
-    // brought back. A failed PUT backs the row off and keeps both for a retry. It never throws.
+    // Reads the row again right before the PUT, so a cancel or a newer copy since the loop read it stops the upload. It
+    // never throws.
     private async performUpload(
         storageKey: string,
         storedStaging: string,
@@ -272,13 +251,11 @@ export class UploadQueue {
             if (!this.closing) this.deletePendingRow(storageKey, storedStaging);
             return;
         }
-        // Only a managed database has a header to check, and a VACUUM INTO copy without one is a disk
-        // fault. A restore's plain files, such as PNGs, PDFs and text, have none, and dropping them here
-        // would lose most of a restored s3 mount.
+        // Only a managed database has a header to check, and a VACUUM INTO copy without one is a disk fault. A
+        // restore's plain files, such as PNGs and PDFs, have none.
         if (isDatabase && !isSqliteFile(stagingPath)) {
-            // Uploading this copy would put garbage over the good object, so it is dropped. The object
-            // keeps its last good bytes, the loss is the writes in this copy, and the next sync stages
-            // again from the live temp. During a teardown both stay, and the next open drops them.
+            // Uploading this copy would put garbage over the good object, so it is dropped and the next sync stages
+            // again. During a teardown both stay, and the next open drops them.
             console.error(`[sync] dropping corrupt staged copy for ${storageKey} (${stagingPath})`);
             if (this.closing) return;
             this.deletePendingRow(storageKey, storedStaging);
@@ -286,9 +263,8 @@ export class UploadQueue {
             return;
         }
 
-        // close() may have run during the awaits above, and no PUT starts after it. A Home that refuses the
-        // hold is closing, and its close stops this queue next. The queue stops now, so the close's final
-        // syncs only stage, and the next open sends their rows.
+        // close() may have run during the awaits above. A Home that refuses the hold is closing, so the queue stops now
+        // and the close's final syncs only stage.
         if (this.closing) return;
         if (!this.holdHome()) {
             this.closing = true;
@@ -302,10 +278,7 @@ export class UploadQueue {
         let timeout: ReturnType<typeof setTimeout> | undefined;
         try {
             const start = Bun.nanoseconds();
-            // StorageBackend.write takes no abort signal, so a race bounds it. A timeout counts as a
-            // failed PUT, never as an ack, and the row backs off. The request may still land at any later
-            // time, so the timeout also tracks it as an orphan. An ack or a cancel of this key before it
-            // settles is then repeated once it does (see trackOrphan).
+            // StorageBackend.write takes no abort signal, so a race bounds it; a timeout tracks it as an orphan.
             // Promise.try turns a throw into a rejection, so a PUT that never started still ends its hold.
             const write = Promise.try(() => this.storage.write(storageKey, file));
             this.liveWrites.add(write);
@@ -317,9 +290,8 @@ export class UploadQueue {
                 new Promise<never>((_, reject) => {
                     timeout = setTimeout(() => {
                         const orphan = this.trackOrphan(storageKey, write, isDatabase);
-                        // A cancel during this PUT found no orphan to flag, because it is tracked
-                        // only now. During an upload a missing row can only mean a cancel: acks run
-                        // one at a time, and a newer copy keeps the row. So the flag is set here.
+                        // A cancel during this PUT found no orphan to flag, since it is tracked only now. A missing row
+                        // mid-upload can only be a cancel: acks run one at a time and a newer copy keeps the row.
                         if (!this.closing && this.getPendingStagingPath(storageKey) === null) {
                             orphan.canceled = true;
                         }
@@ -348,9 +320,8 @@ export class UploadQueue {
         const stillCurrent = after === stagingPath;
 
         if (putOk && after === null) {
-            // A permanent delete or a chat restore canceled the row during the PUT, which brought a
-            // deleted object back, so it is deleted again. The key is a UUID that is never used again, so
-            // no new object can be hit. A row that points at a newer copy was replaced, not canceled.
+            // A cancel during the PUT means it brought a deleted object back, so it is deleted again. The key is a UUID
+            // that is never used again, so no new object can be hit.
             if (!(await this.storage.delete(storageKey))) {
                 console.warn(`[sync] PUT for canceled ${storageKey} landed and its object stays behind`);
             }
@@ -368,9 +339,8 @@ export class UploadQueue {
         // An ack of the current row clears the row. In every case left, the staged copy is not needed.
         if (putOk && stillCurrent) {
             if (orphansAtStart && !this.orphans.has(storageKey)) {
-                // Every orphan of this key settled during this PUT. A landed one may have committed after
-                // it, because the order of settling says nothing about the order of commits. So the row
-                // and the staged copy stay, and the PUT runs again at once, after the orphan's commit.
+                // Every orphan of this key settled during this PUT, and a landed one may have committed after it, since
+                // the order of settling says nothing about the order of commits. So the PUT runs again at once.
                 console.warn(`[sync] orphan settled during PUT of ${storageKey}, uploading again`);
                 this.db
                     .update(pendingUploads)
@@ -397,9 +367,8 @@ export class UploadQueue {
         await bestEffortUnlink(stagingPath);
     }
 
-    // Every PUT asks for the hold, so a closing Home refuses the next one with its 503, and one hold is
-    // enough for them all. At shutdown every Home is closing, yet the flush still uploads: the process
-    // ends next, so no Home can reopen under a late PUT.
+    // One hold covers every PUT, and a closing Home refuses the next one with its 503. At shutdown every Home is
+    // closing, yet the flush still uploads: the process ends next.
     private holdHome(): boolean {
         if (!this.hold) return true;
         let release: () => void;
@@ -428,11 +397,8 @@ export class UploadQueue {
             .run();
     }
 
-    // A PUT that outlived its timeout is an orphan. Its request keeps running and may land after a newer
-    // PUT of the key acked, which rolls the object back, for good if nothing syncs again. Or it lands
-    // after a cancel and brings a deleted object back. It is tracked until it settles, so orphanSettled
-    // can repair both. A request may hang for good, so it stays on the wire, holding the Home and keeping
-    // close() waiting, for one more PUT timeout at most. That is the time close() gives it to land.
+    // A PUT that outlived its timeout may still land, rolling the object back past a newer ack or bringing a deleted
+    // one back. It is tracked until it settles so orphanSettled can repair both, and holds the Home one timeout more.
     private trackOrphan(storageKey: string, write: Promise<number>, isDatabase: boolean): OrphanState {
         let orphan = this.orphans.get(storageKey);
         if (!orphan) {
@@ -457,9 +423,7 @@ export class UploadQueue {
         if (orphan.count > 0) return;
         this.orphans.delete(storageKey);
         if (orphan.canceled) {
-            // The key was deleted for good while this PUT ran, and one that landed brought the object
-            // back. It is deleted again. The key is a UUID that is never used again, so no new object
-            // can be hit.
+            // The key is a UUID that is never used again, so deleting the object again hits no new object.
             if (landed) {
                 console.error(`[sync] orphaned PUT for ${storageKey} landed after cancel, deleting the object again`);
             }
@@ -468,9 +432,8 @@ export class UploadQueue {
             });
             return;
         }
-        // No ack was kept. Either nothing acked over the orphans, and a pending row uploads again on its
-        // own. Or an ack runs right now, and its performUpload uploads again when it finds the orphans
-        // gone. A landing is logged, so a PUT that landed past its timeout can still be found.
+        // Either nothing acked over the orphans and a pending row uploads again on its own, or an ack runs right now
+        // and its performUpload uploads again when it finds the orphans gone.
         if (!orphan.lastAcked) {
             if (landed) {
                 console.warn(
@@ -502,10 +465,8 @@ export class UploadQueue {
         }
     }
 
-    // Turns a row's stagingPath into an absolute path. A new row stores only the file name, so a data
-    // folder that moved still finds its staged copies. An older row may hold an absolute path, which passes.
     private resolveStagingPath(stored: string): string {
-        return path.isAbsolute(stored) ? stored : path.join(this.stagingDir, stored);
+        return path.join(this.stagingDir, stored);
     }
 }
 

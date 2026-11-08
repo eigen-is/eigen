@@ -12,10 +12,10 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api';
 import { admin, organization, twoFactor } from 'better-auth/plugins';
 import { defaultAc, userAc } from 'better-auth/plugins/admin/access';
-import { and, eq, notInArray, or } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import * as authSchema from '../../../auth-schema';
-import { isProduction, isTest } from '../config/env';
+import { isProduction } from '../config/env';
 import { getServerDataPath, SERVER_DATABASES } from '../config/paths';
 import {
     getAuthSecret,
@@ -28,7 +28,7 @@ import {
 import { ApiError } from '../core';
 import { composeOtpEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
-import { reconcileSharesForNewTeamMember, reconcileSharesForNewUser } from '../share';
+import { reconcileShares } from '../share';
 import { getTeamExists } from '../team';
 import { getOrgRole, getUserById, isGuest } from '../user';
 import { ensureAuthSchemaColumns } from './auth-schema-columns';
@@ -99,7 +99,7 @@ export const auth = betterAuth({
                         console.error(`Failed to auto-join new user ${user.id} to default org:`, error);
                     }
                     try {
-                        await reconcileSharesForNewUser(user);
+                        await reconcileShares(user);
                     } catch (error) {
                         console.error(`Failed to reconcile shares for new user ${user.id}:`, error);
                     }
@@ -112,9 +112,8 @@ export const auth = betterAuth({
                 },
             },
             delete: {
-                // Every better-auth deletion passes here while the user row still exists, so Eigen's whole
-                // teardown runs here. A member row left behind would break listMembers for the whole org. The
-                // import is lazy because delete-user imports this file directly, so a static import would be a cycle.
+                // Every better-auth deletion passes here while the user row exists, so the whole teardown runs here.
+                // The import is lazy because delete-user imports this file.
                 before: async (deleted) => {
                     const user = await getUserById(deleted.id);
                     if (!user) return;
@@ -125,6 +124,7 @@ export const auth = betterAuth({
                 after: async (user) => {
                     const { clearHomeDeleting } = await import('../home/get-home');
                     clearHomeDeleting(user.id);
+                    await enforceReadAccessAfterMembershipChange();
                 },
             },
         },
@@ -165,9 +165,8 @@ export const auth = betterAuth({
         ipAddress: { ipAddressHeaders: ['x-real-ip', 'x-forwarded-for'] },
     },
     rateLimit: {
-        // Eigen sets PRODUCTION=1, not NODE_ENV, so better-auth would never turn this on by itself. The general
-        // limit stays loose, because the server's own limiter handles broad abuse and a low one would throttle
-        // get-session for an office behind one address. The credential endpoints get a hard limit.
+        // On by hand, since better-auth keys it to NODE_ENV and Eigen sets PRODUCTION. Loose but for the credential
+        // endpoints, because a low limit would throttle get-session for an office behind one address.
         enabled: true,
         window: 60,
         max: 1000,
@@ -190,13 +189,13 @@ export const auth = betterAuth({
         }),
         // Only these two roles may be set. A guest's role is written by the guest sign-in alone.
         admin({ roles: { admin: eigenAdminRole, user: userAc } }),
-        // Eigen uses the organization plugin for its data model only, the members, teams and roles, and not for
-        // its invitations, so no sendInvitationEmail is wired. People arrive through the waitlist or an admin. The
-        // user-create hook joins them to the default org and team, and the admin UI adds them to other teams.
+        // For the members, teams and roles only: people arrive through the waitlist or an admin, never its invitations.
         organization({
             // Eigen has one org. A user who could create another would own it and get past requireAdmin.
             // Setup creates the default org as a server call without a session, which this does not block.
             allowUserToCreateOrganization: false,
+            // Deleting the one org would wreck the install, and nothing calls it.
+            disableOrganizationDeletion: true,
             // Default caps the org at 100 members and fails every later user creation in the create hook.
             // The function form lifts the cap without turning the plugin's list-query limit into Infinity.
             membershipLimit: () => Number.POSITIVE_INFINITY,
@@ -205,8 +204,12 @@ export const auth = betterAuth({
             },
             organizationHooks: {
                 afterAddTeamMember: async ({ teamMember }) => {
-                    await reconcileSharesForNewTeamMember(teamMember.userId, teamMember.teamId);
+                    const user = await getUserById(teamMember.userId);
+                    if (user) await reconcileShares(user, teamMember.teamId);
                 },
+                afterRemoveTeamMember: enforceReadAccessAfterMembershipChange,
+                // A member's team rows go with the member row, and better-auth calls no team hook for them.
+                afterRemoveMember: enforceReadAccessAfterMembershipChange,
                 // The team row still exists here, and a throw keeps it, as user.delete.before does for a user.
                 // The default team holds the org-wide drive every member joins, and its teardown can't be undone.
                 beforeDeleteTeam: async ({ team }) => {
@@ -222,6 +225,7 @@ export const auth = betterAuth({
                     // Lazy imports to avoid the static cycle (home-relay → get-home → team → auth).
                     const { clearHomeDeleting } = await import('../home/get-home');
                     clearHomeDeleting(teamOwnerId(team.id));
+                    await enforceReadAccessAfterMembershipChange();
                     const { pushTeamAvatar } = await import('../home/home-relay');
                     await pushTeamAvatar(team.id, null);
                 },
@@ -236,11 +240,15 @@ export const auth = betterAuth({
     appName: 'eigen',
     baseURL: process.env['API_URL'],
     basePath: '/auth',
-    // set-user-password revokes no sessions or app passwords, so admins reset through PUT
-    // /settings/user/:userId/password instead. Impersonation would hand an admin any member's session. Eigen
-    // offers no bans: a ban ends the browser sessions, but the app passwords would keep working.
-    disabledPaths: ['/admin/set-user-password', '/admin/impersonate-user', '/admin/ban-user', '/admin/unban-user'],
-    logger: { disabled: isTest() },
+    // set-user-password revokes no sessions or app passwords, impersonation hands an admin a member's session, a ban
+    // leaves the app passwords working, and a member who leaves the one org joins again at the next sign-in.
+    disabledPaths: [
+        '/admin/set-user-password',
+        '/admin/impersonate-user',
+        '/admin/ban-user',
+        '/admin/unban-user',
+        '/organization/leave',
+    ],
     secret: getAuthSecret(),
 });
 
@@ -255,26 +263,15 @@ export function getTrustedOrigins(): string[] {
 let authDrizzleDb: ReturnType<typeof drizzle> | undefined;
 
 export function getAuthDrizzleDb(): ReturnType<typeof drizzle> {
-    if (!authDrizzleDb) {
-        authDrizzleDb = drizzle(getServerDataPath(SERVER_DATABASES.users), {
-            schema: authSchema,
-        });
-    }
+    authDrizzleDb ??= drizzle(getServerDataPath(SERVER_DATABASES.users), { schema: authSchema });
     return authDrizzleDb;
 }
 
-// Deletes the auth rows that point at a user and that better-auth leaves, such as memberships, 2FA and app
-// passwords. The memberships of users who are already gone go too, so a server that collected such rows from older
-// raw better-auth deletions heals at its next delete.
+// The auth rows better-auth leaves behind, such as memberships, 2FA and app passwords.
 export function authDeleteUserReferences(userId: string): void {
     const db = getAuthDrizzleDb();
-    const userIds = db.select({ id: authSchema.user.id }).from(authSchema.user);
-    db.delete(authSchema.member)
-        .where(or(eq(authSchema.member.userId, userId), notInArray(authSchema.member.userId, userIds)))
-        .run();
-    db.delete(authSchema.teamMember)
-        .where(or(eq(authSchema.teamMember.userId, userId), notInArray(authSchema.teamMember.userId, userIds)))
-        .run();
+    db.delete(authSchema.member).where(eq(authSchema.member.userId, userId)).run();
+    db.delete(authSchema.teamMember).where(eq(authSchema.teamMember.userId, userId)).run();
     db.delete(authSchema.twoFactor).where(eq(authSchema.twoFactor.userId, userId)).run();
     db.delete(authSchema.apikey).where(eq(authSchema.apikey.referenceId, userId)).run();
 }
@@ -304,6 +301,13 @@ async function busyHomeAsConflict(run: () => unknown): Promise<void> {
     }
 }
 
+// A socket checks read only when it opens, and the membership row that gave the read is gone by now. The import is
+// lazy for the same cycle as the team hooks. Nothing below it throws, so a removal never fails over it.
+async function enforceReadAccessAfterMembershipChange(): Promise<void> {
+    const { enforceReadAccessOnLoadedHomes } = await import('../home/get-home');
+    await enforceReadAccessOnLoadedHomes();
+}
+
 // Joins the default org that setup pinned in the config, and its default team. The sign-up hook and every sign-in
 // call it, so an account whose join failed at sign-up gets in at its next sign-in instead of staying outside the org.
 async function ensureDefaultOrgMembership(userId: string): Promise<void> {
@@ -320,7 +324,8 @@ async function ensureDefaultOrgMembership(userId: string): Promise<void> {
     if (membership) return;
 
     // Guests hold accounts and sign in, but never join the org.
-    if (isGuest(await getUserById(userId))) return;
+    const user = await getUserById(userId);
+    if (!user || isGuest(user)) return;
 
     // addMember refuses a team that is gone, org join included, so a deleted default team must not reach it.
     const teamId = defaultTeamId && (await getTeamExists(defaultTeamId)) ? defaultTeamId : undefined;
@@ -335,7 +340,7 @@ async function ensureDefaultOrgMembership(userId: string): Promise<void> {
     if (!teamId) return;
     // addMember skips afterAddTeamMember.
     try {
-        await reconcileSharesForNewTeamMember(userId, teamId);
+        await reconcileShares(user, teamId);
     } catch (error) {
         console.error(`Failed to reconcile default team shares for user ${userId}:`, error);
     }

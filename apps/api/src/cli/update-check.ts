@@ -20,17 +20,13 @@ const plainLinks = (text: string) => text.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, 
 export const UPDATE_CHECK_OPTIONS = {
     from: { type: 'string' },
     'accept-breaking': { type: 'boolean' },
-    // The launcher of 0.4.1 and before asks it for the level of its pre-update backup, which is always Full now. It
-    // goes once an update from 0.4.1 is no longer supported.
-    level: { type: 'boolean' },
 } as const;
-export const UPDATE_CHECK_USAGE = `Usage: update-check --from <version> [--accept-breaking | --level]
+export const UPDATE_CHECK_USAGE = `Usage: update-check --from <version> [--accept-breaking]
 
 Prints what changed between <version> and this image's version, from its CHANGELOG.md.
 A breaking change is asked about on a terminal and refused elsewhere (run by ./eigen update).
 
-  --accept-breaking   Go ahead despite breaking changes
-  --level             Print only level=full, the level of the backup an older launcher makes first`;
+  --accept-breaking   Go ahead despite breaking changes`;
 
 export async function updateCheck(
     flags: ReturnType<typeof parseArgs<{ options: typeof UPDATE_CHECK_OPTIONS }>>['values'],
@@ -45,11 +41,6 @@ export async function updateCheck(
         );
     }
 
-    // What changed since `from` up to this image.
-    if (flags.level) {
-        console.log('level=full');
-        return;
-    }
     const notes = releaseNotes(readFileSync(CHANGELOG_PATH, 'utf8'), from, VERSION);
     for (const { version, intro, breaking } of notes) {
         console.log(glyphLine('active', `Eigen ${version}`));
@@ -86,7 +77,7 @@ function breakingLines(lines: string[]): string[] {
 }
 
 // The CHANGELOG sections after `from` up to `to`, oldest first, with their intro and their (breaking) lines.
-export function releaseNotes(changelog: string, from: string, to: string): ReleaseNote[] {
+function releaseNotes(changelog: string, from: string, to: string): ReleaseNote[] {
     const sections = changelog.split(/^## /m).flatMap((section) => {
         const [heading = '', ...lines] = section.split('\n');
         const version = HEADING.exec(heading)?.[1];

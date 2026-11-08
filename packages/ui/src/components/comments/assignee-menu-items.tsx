@@ -1,3 +1,6 @@
+// The Assign to submenu of a comment or a sticky: "Me", Unassigned, then the members who can read the document. The
+// comment menu draws it.
+
 import { usePublicUsers } from '@workspace/lib/public';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { CircleSlash, UserPlus } from 'lucide-react';
@@ -11,8 +14,8 @@ type AssigneeMenuItemsProps = {
     onAssign: (email: string | null) => void;
 };
 
-// Members render as real menu items (not a cmdk list) so arrow-key roving reaches them and the
-// mobile drill-in page stays navigable; Radix menu typeahead covers the search the list used to have.
+// Real menu items, not a cmdk list, so arrow keys reach them and the mobile drill-in page stays navigable. Radix's
+// typeahead is the search.
 export function AssigneeMenuItems({ members, currentUserEmail, assignee, onAssign }: AssigneeMenuItemsProps) {
     // The current user is pinned as a "Me" row, so drop their named row below.
     const me = currentUserEmail.toLowerCase();

@@ -1,10 +1,12 @@
+// The small app badge on a notification's avatar in the bell: a notification's type, and its path type when it has
+// one, decide the icon and the color.
+
 import { EIGEN_DOC_ICONS } from '@workspace/lib/eigendoc-icons';
 import type { DrivePathType } from '@workspace/lib/types/drive';
 import { getEigenDocInfoByType, isFolderType } from '@workspace/lib/types/drive';
 import type { LucideIcon } from 'lucide-react';
 import { AlertTriangle, Calendar, File, Folder, Mail, MessageSquare } from 'lucide-react';
 
-// Notification type (+ path type when known) → app icon + color for the bell avatar badge (spec § App badge).
 function pathTypeBadge(pathType: DrivePathType): { icon: LucideIcon; colorVar: string } {
     const info = getEigenDocInfoByType(pathType);
     if (info) return { icon: EIGEN_DOC_ICONS[info.type], colorVar: info.colorVar };
@@ -30,7 +32,7 @@ function badgeFor(type: string, pathType?: DrivePathType): { icon: LucideIcon; c
         case 'admin-alert':
             return { icon: AlertTriangle, colorVar: '--app-admin-color' };
         default:
-            // share, unshare, access-request, file-event, and any legacy type.
+            // share, unshare, access-request, file-event, and any type this build doesn't know.
             return pathType ? pathTypeBadge(pathType) : { icon: Folder, colorVar: '--app-drive-color' };
     }
 }

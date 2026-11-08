@@ -1,7 +1,7 @@
 // The home archives in the backups folder: what the admin pane lists, how a name becomes a path, where an uploaded
-// archive lands, and what a delete takes with it. It also reads and writes the sidecar beside each archive, the
-// manifest and verify result the list shows. The backup routes and jobs call it, and so does a restore. The record
-// beside any archive, such as a server archive's, is written through writeRecord.
+// archive lands, the unpack with its room check, and what a delete takes with it. It also reads and writes the sidecar
+// beside each archive, the manifest and verify result the list shows. The backup routes and jobs call it, and so does a
+// restore. The record beside any archive, such as a server archive's, is written through writeRecord.
 
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -10,12 +10,11 @@ import type { BackupArtifact, BackupManifest, BackupVerifyRecord } from '@worksp
 import { BACKUP_ARTIFACT_EXTENSION, parseBackupArtifactName, parseBackupSidecar } from '@workspace/lib/validation';
 import { ApiError } from '../core';
 import { errnoOf, writeTempWithHash } from '../storage';
-import { ARCHIVE_MODE, readArtifactManifest } from './archive';
-import { backupsDirPath, getBackupTempPath, sidecarPath } from './paths';
+import { ARCHIVE_FOLDER_MODE, ARCHIVE_MODE, extractArtifact, readArtifactManifest, withUnpackSlack } from './archive';
+import { backupsDirPath, getBackupTempPath, roomShortfall, sidecarPath } from './paths';
 
-// One home's artifacts, newest first, read from the sidecars alone: opening an archive to answer a
-// page load would decompress the whole thing. An artifact with no sidecar (one copied in by hand)
-// lists as unverified with no manifest until a verify job writes one.
+// Read from the sidecars alone, since opening an archive would decompress the whole thing. One with no sidecar lists
+// as unverified until a verify job writes one.
 export async function listArtifacts(ownerId: string): Promise<BackupArtifact[]> {
     const dir = backupsDirPath();
     if (!fs.existsSync(dir)) return [];
@@ -78,17 +77,13 @@ export function requireArtifact(name: string): { artifactPath: string; ownerId: 
 // is read, when the link lands, and when a filesystem with no links falls back to a rename.
 const ALREADY_THERE = 'That artifact is already in the backups folder';
 
-// An uploaded archive, from a body the route has only checked the length of to a listed artifact
-// with a sidecar: stream it into staging, land it under its final name, and read the manifest out
-// of what landed. The whole sequence is here rather than in the route because every step of it can
-// leave a file behind.
+// Every step of this sequence can leave a file behind, so all of it is here and not in the route.
 export async function landUpload(body: ReadableStream<Uint8Array>, name: string, declared: number): Promise<void> {
     const { artifactPath, ownerId } = resolveArtifact(name);
     if (fs.existsSync(artifactPath)) throw new ApiError(409, ALREADY_THERE);
 
-    // Staged next to the backups folder so the landing below is one filesystem operation: an
-    // interrupted upload never leaves a short archive under a name the list would offer for
-    // restore. writeTempWithHash streams the body into the temp file, and its sha256 goes unused.
+    // Staged next to the backups folder so the landing is one filesystem operation, and an interrupted upload never
+    // leaves a short archive under a name the list would offer for restore.
     const tempPath = getBackupTempPath(BACKUP_ARTIFACT_EXTENSION);
     try {
         // Made before the first byte, since the stream writes into the file it finds and keeps its mode.
@@ -108,9 +103,8 @@ export async function landUpload(body: ReadableStream<Uint8Array>, name: string,
         }
         await writeSidecar(artifactPath, manifest, { status: 'unverified', failures: [] });
     } catch (error) {
-        // An archive nothing can read is not an artifact; keeping it would put a row in the list
-        // that every later action fails on. Only the file this request landed goes: the sidecar,
-        // if there is one, belongs to whatever wrote it.
+        // An archive nothing can read is no artifact. Only the file this request landed goes, not a sidecar someone
+        // else wrote.
         fs.rmSync(artifactPath, { force: true });
         if (error instanceof ApiError) throw error;
         // Anything that is not a readable .tar.zst fails deep inside the decompressor.
@@ -118,10 +112,8 @@ export async function landUpload(body: ReadableStream<Uint8Array>, name: string,
     }
 }
 
-// Lands an uploaded body under its final name without overwriting an artifact that appeared while
-// the body was streaming (another upload of the same name, or a job's own pack). A hard link fails
-// when the name is taken, which is the point. Not every filesystem has links: a ./backups bind
-// mount from CIFS/SMB rejects link outright, and there a check-then-rename is the best on offer.
+// A hard link fails when the name is taken, so an artifact that appeared mid-stream is never overwritten.
+// A CIFS/SMB bind mount rejects links outright, and there check-then-rename is the best on offer.
 function landUploadedArtifact(tempPath: string, artifactPath: string): void {
     try {
         fs.linkSync(tempPath, artifactPath);
@@ -162,15 +154,21 @@ export async function writeRecord(target: string, value: unknown): Promise<void>
     fs.renameSync(tempPath, target);
 }
 
-// What an artifact declares it holds, from the copy of its manifest in the sidecar. Only an artifact without one is
-// read for it, which decompresses the archive up to its manifest.
-export async function readDeclaredManifest(artifactPath: string): Promise<BackupManifest> {
-    return (await readSidecar(artifactPath))?.manifest ?? (await readArtifactManifest(artifactPath));
+// Unpacks an artifact once the disk it lands on has room for the bytes its manifest counts. The manifest comes from the
+// copy in the sidecar. Only an artifact without one is read for it, which decompresses the archive up to its manifest.
+export async function unpackArtifact(artifactPath: string, targetDir: string): Promise<void> {
+    const sidecar = await readSidecar(artifactPath);
+    const { counts } = sidecar?.manifest ?? (await readArtifactManifest(artifactPath));
+    fs.mkdirSync(targetDir, { recursive: true, mode: ARCHIVE_FOLDER_MODE });
+    const needed = withUnpackSlack(counts.bytes);
+    const shortfall = roomShortfall(`Unpacking ${path.basename(artifactPath)}`, needed, targetDir, 'its disk');
+    if (shortfall) throw new ApiError(507, shortfall);
+    await extractArtifact(artifactPath, targetDir);
 }
 
 // Null when there is no sidecar or it does not read. An artifact copied in by hand has none, and the list shows
 // it as unverified until a verify job writes one.
-export async function readSidecar(
+async function readSidecar(
     artifactPath: string,
 ): Promise<{ manifest: BackupManifest; verify: BackupVerifyRecord } | null> {
     const text = await Bun.file(sidecarPath(artifactPath))

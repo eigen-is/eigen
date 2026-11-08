@@ -20,8 +20,7 @@ import { MOUNT_DB_CONFIG } from '../mount/db-config';
 import { readMountTotalSize } from '../mount/helpers';
 import { getEigenDb } from '../share/db';
 import { shareRegistry } from '../share/schema';
-import { serializeManifest } from './archive';
-import { HOME_DATABASE_PATHS, HOME_DATABASES, MAILDIR_ROOT } from './archive-layout';
+import { HOME_DATABASES, MAILDIR_ROOT } from './archive-layout';
 import { readAuthRows } from './auth-rows';
 import { captureFile, captureUnlessGone, captureWrittenFile, countEntries } from './capture';
 import { readHomeMounts } from './enumerate-homes';
@@ -46,9 +45,8 @@ import {
     snapshotMountThumbs,
 } from './snapshot-mount';
 
-// What a capture of the home at `level` stages at most, read off its folder without opening the home. The
-// server backup's room check sizes every home with it before it starts. Full is every local byte. Full + S3 adds
-// each s3 mount's objects.
+// At most what a capture at `level` stages, read off the folder without opening the home, for the server backup's room
+// check.
 export async function captureBytes(homeDir: string, level: BackupLevel): Promise<number> {
     const local = await treeBytes(homeDir);
     if (level === 'full') return local;
@@ -80,9 +78,8 @@ export async function snapshotHome(
         fs.mkdirSync(path.dirname(stagedPath(relPath)), { recursive: true });
         managed.stageCopy(stagedPath(relPath));
     };
-    // A database is counted when it is recorded, so a user's upload called `notes.db` counts as a file, as verify
-    // sees it too. It is hashed only once nothing changes it any more: a mount's walk deletes from its metadata.db
-    // the rows it found deleted for good.
+    // A user's upload called `notes.db` counts as a file, as verify sees it. Hashed only once nothing changes it, since
+    // a mount's walk deletes rows from its metadata.db.
     let databases = 0;
     const recordDatabase = async (relPath: string): Promise<void> => {
         entries.push(await captureWrittenFile(stagedPath(relPath), archiveHomePath(relPath)));
@@ -190,7 +187,7 @@ export async function snapshotHome(
     // The home outside its mounts and its databases.
     const tree = listFileTree(home.homeDir, isSkippedHomeDir);
     // A home database missing from HOME_DATABASES would be dropped from every archive in silence.
-    const unlisted = tree.databases.find((rel) => !HOME_DATABASE_PATHS.has(rel));
+    const unlisted = tree.databases.find((rel) => !HOME_DATABASES.some(([, relPath]) => relPath === rel));
     if (unlisted) throw new Error(`snapshotHome: unlisted home database ${unlisted} — add it to HOME_DATABASES`);
     for (const rel of tree.dirs) fs.mkdirSync(stagedPath(rel), { recursive: true });
     const taken = new Set(tree.files);
@@ -250,20 +247,19 @@ export async function snapshotHome(
         createdAt: new Date().toISOString(),
         appVersion: config.version,
         server: { domain: config.domain, orgId: config.orgId },
-        counts: countEntries(entries, databases, folder),
+        counts: countEntries(entries, databases),
         level,
         mounts: mountSummaries,
         entries,
         ...(warnings.length > 0 && { warnings }),
     };
-    await Bun.write(path.join(folder, ARCHIVE_MANIFEST_FILE), serializeManifest(manifest));
+    await Bun.write(path.join(folder, ARCHIVE_MANIFEST_FILE), JSON.stringify(manifest, null, 2));
     onProgress?.('done', 1, 1);
     return manifest;
 }
 
-// The folders the walk of the home leaves out. `mounts/` is walked from its paths tables instead, by
-// snapshotMountData. A mailbox's `tmp/` delivery spool holds only half-written deliveries. Both are matched on the
-// path from the home root, never on the folder name, because a deeper folder called `mounts` is somebody's own.
+// mounts/ is walked from its paths tables instead, and a mailbox's tmp/ holds only half-written deliveries.
+// Both match on the path from the home root, since a deeper folder called `mounts` is somebody's own.
 function isSkippedHomeDir(rel: string): boolean {
     if (rel === PATHS.DRIVE.ROOT) return true;
     return path.basename(rel) === PATHS.MAIL.TMP && rel.startsWith(`${MAILDIR_ROOT}/`);

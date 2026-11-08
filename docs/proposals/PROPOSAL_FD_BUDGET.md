@@ -9,10 +9,10 @@ This proposal keeps Eigen from failing silently when the process runs out of fil
 During the 2026-07-04 slow-share investigation, sharing a path to a 26-member team fanned out
 `drive:acl-change` to 26 recipient Homes. On a dev machine with macOS's default `ulimit -n 256`,
 the fan-out crashed with `SQLITE_IOERR_VNODE` mid-delivery and **silently skipped recipients** —
-the per-recipient `catch` in `queueACLFanOut` (`../../apps/api/src/lib/drive/acl-propagation.ts`) logs
+the per-recipient `catch` in `sendToUserHomes` (`../../apps/api/src/lib/home/home-relay.ts`) logs
 and moves on. Nothing told the operator the process was out of file descriptors.
 
-The fan-out is bounded now (`FAN_OUT_CONCURRENCY = 8` semaphore in `acl-propagation.ts`), and
+The fan-outs through `sendToUserHomes` are bounded now (`deliveryBudget`, a semaphore of eight), and
 `../../docker-compose.yml` pins the limit for the `eigen-api` service:
 
 ```yaml
@@ -216,11 +216,11 @@ other half left for sockets, document DBs, and multi-mount variance. Pinned comp
 
 ### Composition with the home-relay outbox
 
-`PROPOSAL_HOME_RELAY_OUTBOX.md` (being written concurrently) adds a **global home-open
-concurrency budget** — a bound on *in-flight opens* (flow). The LRU cap bounds *resident homes*
-(stock). They compose without coordination: a fan-out opens at most `budget` homes concurrently,
-each install may evict the least-recently-used resident, so residency overshoots N by at most
-the open budget. The outbox's per-seam predecessor is today's `FAN_OUT_CONCURRENCY` semaphore.
+`PROPOSAL_HOME_RELAY_OUTBOX.md` runs every push under one **budget of eight deliveries** — a bound
+on *in-flight opens* (flow). Pulls don't pass it. The LRU cap bounds *resident homes* (stock). They
+compose without coordination: a fan-out opens at most `budget` homes concurrently, each install
+may evict the least-recently-used resident, so residency overshoots N by at most the open budget
+plus any concurrent pulls. The budget today is `deliveryBudget` in `home-relay.ts`.
 
 ## Failure honesty
 

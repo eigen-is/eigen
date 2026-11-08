@@ -2,7 +2,7 @@
 
 This proposal lets Eigen's Mail app work on a mailbox the user already has at another provider, instead of only on Eigen's own mail server.
 
-**Status:** not built. The seam it plugs into exists: `MailStore` (`apps/api/src/lib/mail/mail-store.ts`) has one implementation, `MaildirStore`, and there is no `ImapStore`. It depends on [PROPOSAL_SSO.md](PROPOSAL_SSO.md), which is not built either. [ROADMAP-POST-1.md](../ROADMAP-POST-1.md) keeps its row.
+**Status:** not built. `MaildirStore` (`apps/api/src/lib/mail/maildir-store.ts`) is the only store and has no interface yet, and there is no `ImapStore`. It depends on [PROPOSAL_SSO.md](PROPOSAL_SSO.md), which is not built either. [ROADMAP-POST-1.md](../ROADMAP-POST-1.md) keeps its row.
 
 > **TLDR**: Most people who try Eigen already have email somewhere — Microsoft 365, Google Workspace, Fastmail, Migadu, mailbox.org, their own dovecot. Today Eigen offers them one switch, `MAIL_ENABLED=0`, which drops the Mail app and all inbound calendar handling. This proposal adds a second `MailStore` implementation, **`ImapStore`**, so the Mail app becomes a client of the mailbox the user already has: the provider stays the MX, the source of truth and the spam filter; Eigen reads over IMAP, sends over the provider's SMTP submission, and keeps only a summary cache. Read state, flags and moves are the provider's, so Eigen and the user's other mail clients always agree. Authentication is **OAuth, reusing the token from SSO sign-in** (SASL XOAUTH2) — Eigen stores no mail password. IMAP is the one protocol every provider speaks, it needs no tenant admin rights and no publicly reachable host, and the storage seam it plugs into already exists. Cost: **1,200–1,500 LOC**, SSO first.
 
@@ -27,7 +27,7 @@ This proposal lets Eigen's Mail app work on a mailbox the user already has at an
 
 | Piece | Where | State |
 |---|---|---|
-| Storage backend seam | `MailStore`, `apps/api/src/lib/mail/mail-store.ts` | 28 methods, one implementation (`MaildirStore`). New mail reaches `Mail` through the store's `received` callback, which a remote backend would feed from IMAP IDLE |
+| Storage backend seam | `MaildirStore`, `apps/api/src/lib/mail/maildir-store.ts` | 28 methods the Mail class calls; an interface comes out of them with this work. New mail reaches `Mail` through the store's `received` callback, which a remote backend would feed from IMAP IDLE |
 | Store construction | `apps/api/src/lib/home/user-home.ts` | `new Mail(this, new MaildirStore(this))`, unconditional — the single line backend selection touches |
 | Summary index | `emails` table, `apps/api/src/lib/mail/schema.ts` | Subject, addresses, a short text excerpt, flags, mailbox. Lists and search run on it; full messages are parsed lazily. An IMAP store fills the same table from `ENVELOPE` + a body excerpt |
 | Hosted-mailboxes switch | `isMailEnabled()`, `apps/api/src/lib/config/env.ts` | Rides to the FE as `mailEnabled` on `GET /p/config`; every Mail entry point disappears when off |

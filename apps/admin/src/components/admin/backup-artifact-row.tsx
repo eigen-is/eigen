@@ -42,10 +42,6 @@ export function VerifyFailures({ verify }: { verify: BackupVerifyRecord }) {
     return <VerifyLines lines={verify.failures} tone="destructive" />;
 }
 
-export function VerifyWarnings({ verify }: { verify: BackupVerifyRecord }) {
-    return <VerifyLines lines={verify.warnings ?? []} tone="warning" />;
-}
-
 type BackupArtifactRowProps = {
     icon?: LucideIcon;
     createdAt: Date;

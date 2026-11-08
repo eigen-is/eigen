@@ -141,17 +141,31 @@ PK: `(fromUserId, targetIdentifier)`. No share data, just the pair. Reconciliati
 - **Guest signs in**: every successful OTP verification ([GUEST-ACCESS.md](GUEST-ACCESS.md))
 - **Team member added**: `organizationHooks.afterAddTeamMember` on the `organization()` plugin in `apps/api/src/lib/auth/auth.ts`, and the org join itself for the default team, since `addMember` skips that hook ([ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md#every-new-user-joins-the-default-team))
 
-On new user, `reconcileSharesForNewUser()` (`apps/api/src/lib/share/reconciliation.ts`) runs, per source:
+Each trigger calls `reconcileShares(user, teamId?)` (`apps/api/src/lib/share/reconciliation.ts`), which reads the registry for the user's own address, or for the `team_<id>` they joined when it gets a `teamId`. Per source it runs:
 
-1. `pullCalendarShares()`: shared calendar entries
-2. `pullSharedPaths()`: shared drive paths
-3. `pullPendingInvitations()`: calendar invites (creates linked event copies)
+1. `pullSharedPaths()`: shared drive paths
+2. `pullCalendarShares()`: shared calendar entries, with the strongest permission the user holds by address or through any of their teams. The newcomer has already joined the default team when their address reconciles, so asking by address alone would store a weaker permission than the team gives.
+3. `pullPendingInvitations()`: calendar invites (creates linked event copies), without a `teamId` only. An invitation names an address, never a team, and an existing user got theirs when it was sent, so a team join pulls none: a pull would bring back an invitation the member had removed.
 
-A home without a calendar (a guest's) skips steps 1 and 3. On new team member, `reconcileSharesForNewTeamMember()` runs steps 1 and 2 only (no pending invitations) and delivers through `sendToHome`, since it writes another user's home.
+Every delivery goes through `sendToHome`, which opens the user's home for that one message. So a home that goes idle and closes during a slow pull reopens for the next delivery, and the run holds no Home of its own. A guest's home has no calendar, so a guest runs neither calendar pull: each scans the owner's calendar, and the relay would drop the result.
 
 A source can be a team: a share on a team drive path records `team_<id>` as `fromUserId`. Reconciliation resolves it through the team (`getTeam`), not as a user id, and delivers drive paths only, attributed to the team name, since a team has no calendars or invitations to pull. Without this, a guest granted a team-owned document gets in but never sees it in **Shared with me**, and neither does a user who joins a granted team later.
 
 User deletion cleans the registry: see [ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md#deleting-a-user-runs-one-teardown-from-every-entry-point).
+
+### A deleted owner's rows leave at the recipient's next listing
+
+Deleting a user or a team reaches into no other home, so the `shared_paths` rows in recipients' homes outlive the owner and could only answer 404 when opened. So `listSharedWithMe` and `listSharedWithMeByMimeType` (`apps/api/src/lib/drive/shared-with-me.ts`) look up each distinct owner of the rows they read, delete the rows of an owner that no longer exists, and return the rest. There is no relay message, no notification and no background job, and the same step heals an earlier deletion and a lost push. It costs one `users3.db` lookup per distinct owner per listing, about 85 µs each, on the event loop.
+
+Only a clean "not found" deletes. A lookup that throws fails the listing with every row in place, and an owner id that is neither a user nor a team is never judged.
+
+The Watched view doesn't take this step. `aggregateWatches` asks each owner in `listSharedOwnerIds` and treats a failure as an empty list, which it needs anyway for an owner whose home is mid-restore, so a deleted owner adds nothing to the view.
+
+A restore of a deleted owner pushes nothing. A recipient who listed at any time between the deletion and the end of the restore has lost the row, though the owner's ACL still lets them in. The row returns at the next change that pushes that path, such as an ACL change or a rename, as a new share with a bell row. This is the accepted cost of cleaning up on read.
+
+### An ACL entry naming a deleted person stays
+
+A deletion leaves the entries naming that person on other owners' paths on purpose, so a restored user gets their shares back. The cost is that a new account taking that address inherits those entries for now. It is a known open gap, tracked in the "A new account can take a deleted user's email address" row of [ROADMAP.md](ROADMAP.md).
 
 ### Share Emails
 

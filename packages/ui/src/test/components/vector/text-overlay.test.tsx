@@ -65,8 +65,8 @@ async function commitTyped(typed: string, initialText = ''): Promise<string> {
 }
 
 // The overlay must commit what the reader keeps: labelText caps BYTES (a CJK label is three bytes a
-// character, so a UTF-16 maxLength is the wrong unit) and lines. Anything past either cap used to be
-// stored and then silently dropped by every peer's read.
+// character, so a UTF-16 maxLength is the wrong unit) and lines. Anything past either cap every peer's
+// read would drop.
 test('a label past the byte cap commits truncated to what the reader keeps', async () => {
     const typed = '茶'.repeat(4096);
     const committed = await commitTyped(typed);

@@ -303,6 +303,53 @@ describe('Protocol Auth', () => {
         });
     });
 
+    // Dovecot opens the Maildir after a login it was told is good, and its INBOX autocreate makes the missing
+    // folders. So while a restore swaps the home's folder, or a deletion removes it, the check must not say yes.
+    describe('the mail server check while the home is shut', () => {
+        const email = 'protocol-shut-home@test.eigen.is';
+        const password = 'testpassword123';
+        let owner: TestUser;
+        let getHomeModule: typeof import('../../lib/home/get-home');
+
+        beforeAll(async () => {
+            owner = await createTestUser(email, password, 'Protocol Shut Home');
+            getHomeModule = await import('../../lib/home/get-home');
+        });
+
+        async function verify(withPassword: string): Promise<number> {
+            const res = await app.handle(
+                new Request('http://localhost/internal/auth/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password: withPassword }),
+                }),
+            );
+            return res.status;
+        }
+
+        test('answers 503 during a restore, and 200 once it is done', async () => {
+            getHomeModule.markHomeRestoring(owner.id);
+            try {
+                expect(await verify(password)).toBe(503);
+                // A wrong password is still refused as one, so the client asks for it again.
+                expect(await verify('wrongpassword')).toBe(401);
+            } finally {
+                getHomeModule.clearHomeRestoring(owner.id);
+            }
+            expect(await verify(password)).toBe(200);
+        });
+
+        test('answers 404 during a deletion, and 200 once the mark clears', async () => {
+            getHomeModule.markHomeDeleting(owner.id);
+            try {
+                expect(await verify(password)).toBe(404);
+            } finally {
+                getHomeModule.clearHomeDeleting(owner.id);
+            }
+            expect(await verify(password)).toBe(200);
+        });
+    });
+
     // -- 2FA hard-gate: primary password must never bypass 2FA over protocol auth --
 
     describe('2FA-enabled accounts', () => {

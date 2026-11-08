@@ -452,10 +452,9 @@ describe('Drive content-index', () => {
         expect(contentDirty()).toBe(0);
     });
 
-    // The write path sets the bit, awaits ancestor invalidation, then reaches the
-    // queue. The generation must already be bumped when the bit lands: an extract
-    // completing inside that await would otherwise compare equal generations and
-    // clear the bit the newer write just set.
+    // The write path sets the bit, then awaits ancestor invalidation before it kicks
+    // the queue. An extract completing inside that await must not clear the bit the
+    // newer write just set.
     test('a file write landing while its extract completes keeps the row dirty', async () => {
         const file = new File([new TextEncoder().encode('genracestale body')], 'gen-race.txt', {
             type: 'text/plain',

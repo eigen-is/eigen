@@ -421,7 +421,7 @@ describe('two editors on one chart, each through its own panel', () => {
         }
     });
 
-    // y-tiptap writes the attributes of a node it edits, and deletes those its schema doesn't declare: an older tab
+    // y-tiptap writes the attributes of a node it edits, and deletes those its schema doesn't declare: a tab of another build
     // drops a part this build adds on its next edit of the chart.
     test('an editor whose schema lacks a part deletes it on its next edit of the chart', async () => {
         const a = await mount();

@@ -1,5 +1,10 @@
+// The Y.Doc and y-websocket provider behind every collab editor, such as a doc, a sheet or a board. A host calls
+// useCollabDoc for one document and gets the live doc and its connection state. The hook also decides what each close
+// code does to the tab: reconnect, wait and retry, stop for good, or reload.
+
 import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import {
+    COLLAB_ACCESS_LOST_CLOSE,
     COLLAB_EPOCH_MESSAGE,
     COLLAB_HOME_REPLACED_CLOSE,
     COLLAB_STORAGE_GONE_CLOSE,
@@ -12,22 +17,20 @@ import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 import { reloadReplacedHome } from '../../home/reload-replaced-home';
 
-// All five hosts want the same provider behavior, so the options live here rather than per app. Sibling tabs sync over
-// BroadcastChannel only once the server named its data epoch, on a channel of that epoch (see the epoch handler).
+// Sibling tabs sync over BroadcastChannel only once the server named its data epoch, on a channel of that epoch.
 const WS_PROVIDER_OPTIONS = { resyncInterval: 5000, disableBc: true } as const;
 
 // How long to stay disconnected after a storage-unavailable close before trying again.
 const STORAGE_RETRY_MS = 5_000;
 
-// A dropped socket normally reconnects within ~100ms, and the storage retry cycle reports
-// 'connected' for a tick every 5s. Hold the offline verdict this long so neither flashes the icon.
+// A dropped socket normally reconnects at once, and the storage retry cycle reports 'connected' for a tick. Hold the
+// offline verdict this long so neither flashes the icon.
 const OFFLINE_GRACE_MS = 1_500;
 
 export type CollabDocContext = {
     doc: Y.Doc;
     provider: WebsocketProvider;
-    // Null unless the host declared an `undoScope`; docs (y-prosemirror history) and sheets (engine
-    // op-stack) own undo elsewhere, so they get none.
+    // Null unless the host declared an `undoScope`; docs and sheets own undo elsewhere.
     undoManager: Y.UndoManager | null;
 };
 
@@ -35,18 +38,13 @@ export type UseCollabDocOptions = {
     ownerId: string;
     mountId: string;
     pathId: string;
-    // Shared types the UndoManager should track, resolved against the live doc. Default trackedOrigins
-    // (no options): any non-null transaction origin escapes capture. Omit → no UndoManager. The return
-    // type is Y.UndoManager's own `typeScope` param, so hosts hand back Y.Map/Y.Array roots directly.
-    // Existing escape sentinels: NORMALIZE_ORIGIN (shared repairs, collab/normalize-refs) and vector's
-    // private UNTRACKED_ORIGIN (useCanvasDoc) — reuse one of those before inventing another.
+    // Shared types the UndoManager tracks, or none without this. A transaction with a non-null origin escapes it, so
+    // reuse an origin such as NORMALIZE_ORIGIN before inventing another.
     undoScope?: (doc: Y.Doc) => ConstructorParameters<typeof Y.UndoManager>[0];
-    // Runs once per doc creation, inside the lifecycle effect, after doc/provider/undoManager exist.
-    // Attach observers and seed initial React state here; return a cleanup that unregisters them — it
-    // runs before the UndoManager/provider/doc are destroyed, matching the hand-rolled teardown order.
+    // Runs once per doc creation, to attach observers and seed React state. Its cleanup runs before the UndoManager,
+    // the provider and the doc are destroyed.
     onInit?: (ctx: CollabDocContext) => (() => void) | undefined;
-    // Runs on every provider 'sync' event. `synced` is already tracked by the hook; use this for
-    // sync-gated work (seed-if-empty, snapshot load).
+    // Runs on every provider 'sync' event, for sync-gated work such as a seed-if-empty or a snapshot load.
     onSync?: (ctx: CollabDocContext, synced: boolean) => void;
 };
 
@@ -61,11 +59,8 @@ export type CollabDoc = {
     synced: boolean;
     // Socket down after first load and not a storage outage; drives the toolbar's offline icon.
     offline: boolean;
-    // LATCHED first-load flag: false at doc creation, true after the FIRST synced=true for this doc
-    // instance, and reset only on teardown / pathId swap. Gate the initial loading screen on THIS,
-    // not `synced` — a mid-session WS blip (synced → false → true) must not unmount the editor
-    // (destroying y-prosemirror undo history / transient selection); the mounted doc converges on
-    // reconnect. The pathId-swap loading gate still works: the cleanup resets it before the new doc.
+    // Latched on the first sync of this doc and reset only on teardown. Gate the loading screen on this, not `synced`,
+    // because a blip must not unmount the editor and its undo history.
     loaded: boolean;
     // The server closed with COLLAB_STORAGE_UNAVAILABLE_CLOSE and the hook is retrying; cleared on sync.
     storageUnavailable: boolean;
@@ -87,14 +82,13 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
     const [storageUnavailable, setStorageUnavailable] = useState(false);
     const [storageGone, setStorageGone] = useState(false);
     const [unsyncedEdits, setUnsyncedEdits] = useState(false);
-    const [homeReplaced, setHomeReplaced] = useState(false);
+    const [reloadNow, setReloadNow] = useState<(() => void) | null>(null);
 
     const docRef = useRef<Y.Doc | null>(null);
     // A local update went out after the last completed handshake, so the server may still lack it.
     const pendingUpdateRef = useRef(false);
 
-    // Host config held in refs so its identity never re-runs the lifecycle effect: the doc/provider
-    // are keyed STRICTLY on (ownerId, mountId, pathId).
+    // Refs, so a new host callback never re-runs the lifecycle effect: the doc is keyed on the document's ids alone.
     const undoScopeRef = useRef(options.undoScope);
     undoScopeRef.current = options.undoScope;
     const onInitRef = useRef(options.onInit);
@@ -112,9 +106,8 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
         const wsUrl = getCollabWebSocketUrl(ownerId, mountId, pathId);
         const nextProvider = new WebsocketProvider(wsUrl, '', nextDoc, WS_PROVIDER_OPTIONS);
 
-        // Every reconnect names the epoch this doc loaded under; the server closes one that names another with
-        // COLLAB_HOME_REPLACED_CLOSE, so a tab that outlived a whole-server restore reloads instead of merging back.
-        // A tab from before the restore must not hand its state to a reloaded one either, so the channel carries it.
+        // Every reconnect names the epoch this doc loaded under, so a tab that outlived a whole-server restore reloads
+        // instead of merging back. The channel carries it too, so that tab can't hand its state to a reloaded one.
         nextProvider.messageHandlers[COLLAB_EPOCH_MESSAGE] = (_encoder, decoder) => {
             if (nextProvider.params['epoch']) return;
             const epoch = decoding.readVarString(decoder);
@@ -129,8 +122,6 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
 
         const handleSync = (isSynced: boolean) => {
             setSynced(isSynced);
-            // Latch on the first successful sync; never cleared here (only in teardown below), so a
-            // later disconnect leaves `loaded` true and the editor stays mounted.
             if (isSynced) {
                 setLoaded(true);
                 pendingUpdateRef.current = false;
@@ -158,31 +149,28 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
         };
         nextProvider.on('status', handleStatus);
 
-        // y-websocket only forwards local updates over an open socket, and nothing from the server
-        // arrives while it is down — so every update applied meanwhile (local, or relayed by a
-        // sibling tab over BroadcastChannel) is one the server may still lack. Provider-origin
-        // updates are ones y-websocket applied itself, so they are never ours to deliver.
+        // Every update applied while the socket is down, a sibling tab's included, is one the server may still lack.
+        // Updates y-websocket applied itself, with the provider as origin, are never ours to deliver.
         const handleUpdate = (_update: Uint8Array, origin: unknown) => {
             if (origin !== nextProvider) pendingUpdateRef.current = true;
             if (!nextProvider.wsconnected) setUnsyncedEdits(true);
         };
         nextDoc.on('update', handleUpdate);
 
-        // y-websocket reconnects after every close with a backoff capped at 2.5s (4400-4499 stops it on its own).
-        // It emits this event before arming that timer, so disconnect() here cancels it and we reconnect after a
-        // pause. disconnect() re-enters with a null event, which the code checks ignore.
+        // y-websocket emits this before arming its reconnect, so disconnect() here cancels it. 4400-4499 stops it on
+        // its own. disconnect() re-enters with a null event, which the code checks ignore.
         let retryTimer: ReturnType<typeof setTimeout> | undefined;
         const handleConnectionClose = (event: CloseEvent | null) => {
-            if (event?.code === COLLAB_HOME_REPLACED_CLOSE) {
-                // A restore replaced the document on the server. Reconnecting would sync the copy
-                // this tab still holds in memory back over it and silently undo the restore, so the
-                // provider stays down and the page reloads onto the restored document. Unsynced edits
-                // are dropped with it — they belong to a document that no longer exists, and leaving
-                // the guard armed would put a "leave without saving?" prompt in front of the reload.
+            if (event?.code === COLLAB_HOME_REPLACED_CLOSE || event?.code === COLLAB_ACCESS_LOST_CLOSE) {
+                // A reconnect would sync this tab's copy back over a restore, or be refused with these edits after a
+                // lost read. The unsynced edits go too, because the armed guard would prompt in front of the reload.
                 pendingUpdateRef.current = false;
                 setUnsyncedEdits(false);
                 nextProvider.disconnect();
-                setHomeReplaced(true);
+                // The session is read once per page load, so only a reload takes a deleted user to sign-in.
+                const reload =
+                    event.code === COLLAB_HOME_REPLACED_CLOSE ? reloadReplacedHome : () => window.location.reload();
+                setReloadNow(() => reload);
                 return;
             }
             if (event?.code === COLLAB_STORAGE_GONE_CLOSE) {
@@ -219,9 +207,8 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
             nextProvider.off('connection-close', handleConnectionClose);
             clearTimeout(offlineTimer);
             clearTimeout(retryTimer);
-            // Host teardown first (unobserve, flush-on-unmount), then destroy the framework objects
-            // provider→doc (provider.destroy detaches its own doc listener). The effect re-runs on a
-            // pathId switch without an unmount, so skipping any of this leaks the old doc/provider.
+            // Host teardown first, then the framework objects. The effect re-runs on a pathId switch without an
+            // unmount, so skipping any of this leaks the old doc and provider.
             cleanupInit?.();
             nextUndoManager?.destroy();
             nextProvider.destroy();
@@ -235,8 +222,8 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
 
     // After the commit that disarmed UnsyncedEditsGuard: a reload inside the close handler would still meet its prompt.
     useEffect(() => {
-        if (homeReplaced) reloadReplacedHome();
-    }, [homeReplaced]);
+        reloadNow?.();
+    }, [reloadNow]);
 
     return {
         doc,

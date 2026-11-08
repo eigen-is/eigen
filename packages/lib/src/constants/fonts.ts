@@ -52,9 +52,8 @@ const SYSTEM_FALLBACKS: Record<EigenFont['category'], string> = {
 // The stack of a <math>: the bundled math face, then the browser's own math font.
 export const MATH_FONT_STACK = [...MATH_FAMILIES.map((family) => `'${family}'`), 'math'].join(', ');
 
-// Order is load-bearing. A sheet cell's `ff` may be an index into this list, so a new font goes at the end. [0] is the
-// default in docs and sheets; the canvas has its own, DEFAULT_FONT_FAMILY. A foreign font maps to the first font of its
-// category.
+// Order is load-bearing: a sheet cell's `ff` may be an index into this list, so a new font goes at the end. [0] is the
+// default in docs and sheets; the canvas has its own.
 export const EIGEN_FONTS: readonly EigenFont[] = [
     {
         name: 'Inter',
@@ -133,35 +132,29 @@ export function nextFontSize(size: number, by: 1 | -1): number {
 // so an unknown one falls back instead of reaching a CSS declaration.
 export const EIGEN_FONT_NAMES: readonly string[] = EIGEN_FONTS.map((font) => font.name);
 
-// A font name as the CSS that draws it. A sheet cell may name a font Eigen doesn't bundle, which the browser may lack,
-// so the stack of the bundled font it maps to follows it, else the document font's. The emoji face holds the digits,
-// # and * for its keycaps, and a stack without a text face before it would draw them there.
+// A sheet cell may name a font Eigen doesn't bundle, so the stack of the bundled font it maps to follows the name. The
+// emoji face holds the digits, # and * for its keycaps, so a stack without a text face before it would draw them there.
 export function getFontFamily(fontName: string): string {
     const bundled = EIGEN_FONTS.find((font) => font.name === fontName);
     if (bundled) return fontStack(bundled);
     return `'${fontName}', ${getFontFamily(bundledFont(fontName) ?? DOCUMENT_FONT)}`;
 }
 
-// A stored font as the CSS that draws it, such as the docs `textStyle` mark's `fontFamily`. A name expands to its
-// stack. Any other value passes through unchanged, because an older doc may store a whole stack, which draws as it
-// did until an editable load collapses it to its name. Unlike getFontFamily, this must not wrap an unknown value, or
-// a stored stack would be wrapped twice.
+// A name expands to its stack; any other value, such as a whole stack a doc stores, passes through. Unlike
+// getFontFamily this must not wrap an unknown value, or a stored stack would be wrapped twice.
 export function fontNameToCss(value: string): string {
     const bundled = EIGEN_FONTS.find((font) => font.name === value);
     return bundled ? fontStack(bundled) : value;
 }
 
-// Every CSS stack Eigen writes for text: the bundled family, then the emoji and CJK faces, then the system's faces of
-// its category. The fallback faces' slices cover disjoint characters, so their order never decides which face draws a
-// glyph.
+// The fallback faces' slices cover disjoint characters, so their order never decides which face draws a glyph.
 function fontStack(font: EigenFont): string {
     const families = [font.name, ...TEXT_FALLBACK_FAMILIES].map((family) => `'${family}'`);
     return [...families, SYSTEM_FALLBACKS[font.category]].join(', ');
 }
 
-// The reverse, for a paste, an import and the load that collapses old stacks: a bundled font given as its name or as
-// its stack, in any quotes, becomes its name. Any other value comes back unchanged, so fontNameToCss draws it as it
-// was.
+// The reverse, for a paste, an import and a mark that stores a stack. Any other value comes back unchanged, so
+// fontNameToCss draws it as it was.
 export function getFontName(value: string): string {
     const first = value.match(/^\s*['"]?([^'",]+)['"]?/)?.[1]?.trim();
     const match = first ? EIGEN_FONTS.find((font) => font.name === first) : undefined;

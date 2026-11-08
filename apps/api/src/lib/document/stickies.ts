@@ -25,21 +25,13 @@ export async function readStickiesContent(mount: Mount, drivePath: DrivePath): P
 
     const tasks: StickiesContent['tasks'] = [];
     for (const [, card] of getItemMapRoot(doc, 'tasks')) {
-        if (card instanceof Y.Map)
-            tasks.push({ title: stringField(card, 'title'), description: stringField(card, 'description') });
+        if (card instanceof Y.Map) tasks.push({ title: card.get('title'), description: card.get('description') });
     }
 
     const columns: StickiesContent['columns'] = [];
     for (const [, column] of getItemMapRoot(doc, 'columns')) {
-        if (column instanceof Y.Map) columns.push({ title: stringField(column, 'title') });
+        if (column instanceof Y.Map) columns.push({ title: column.get('title') });
     }
 
     return { tasks, columns };
-}
-
-// The fields of a card or column are untyped in the Y.Map root. This reader keeps only the ones the
-// editor writes as plain strings.
-function stringField(item: Y.Map<unknown>, field: string): string | undefined {
-    const value = item.get(field);
-    return typeof value === 'string' ? value : undefined;
 }

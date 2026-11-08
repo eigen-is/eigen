@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import type { SeriesEdit } from '../../../core/calendar/calendar-utils';
 import {
     formatEventWhen,
     getEventsForDay,
     isInvitationFromOthers,
     isSeriesOccurrence,
     normalizeTimezone,
+    occurrenceDateToString,
     rruleToText,
     seriesEditFromOccurrence,
     viewerTimeZone,
@@ -166,6 +166,14 @@ describe('formatEventWhen', () => {
     });
 });
 
+describe('occurrenceDateToString', () => {
+    test('pads the year to four digits, as a recurrence key does', () => {
+        const date = new Date(Date.UTC(2000, 2, 7));
+        date.setUTCFullYear(500);
+        expect(occurrenceDateToString(date)).toBe('0500-03-07');
+    });
+});
+
 describe('rruleToText', () => {
     test('says a recurrence in words', () => {
         expect(rruleToText('FREQ=WEEKLY;BYDAY=SU')).toBe('every week on Sunday');
@@ -202,6 +210,7 @@ describe('rruleToText', () => {
 describe('seriesEditFromOccurrence', () => {
     // A weekly 09:00–10:00 series from 2 Nov, opened on the 9 Nov occurrence.
     const master = { startTime: new Date('2026-11-02T09:00:00Z'), endTime: new Date('2026-11-02T10:00:00Z') };
+    type SeriesEdit = Parameters<typeof seriesEditFromOccurrence>[0];
     const occurrence: SeriesEdit = {
         title: 'Weekly Sync',
         description: null,

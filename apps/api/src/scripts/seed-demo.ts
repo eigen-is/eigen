@@ -20,13 +20,12 @@ import { XLSX_MIME } from '@workspace/lib/constants/mime';
 import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
 import { stripTagsServer } from '@workspace/lib/html';
 import { formatReplyQuote } from '@workspace/lib/mail/reply-quote';
-import { commentAssignedTag } from '@workspace/lib/notification/tags';
 import type { Attendee, CalendarEvent, EventData } from '@workspace/lib/types/calendar';
 import type { ChatAttachment } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { CreateContactInput } from '@workspace/lib/types/contact';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { DRIVE_MIME_FOLDER, DRIVE_TYPE_FOLDER, stripEigenExtension, VCARD_MIMES } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_FOLDER, DRIVE_TYPE_FOLDER, VCARD_MIMES } from '@workspace/lib/types/drive';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import { toAttachmentReference } from '@workspace/lib/types/drive-reference';
 import { JSDOM } from 'jsdom';
@@ -234,7 +233,7 @@ async function main(): Promise<void> {
     const { drainACLFanOuts } = await import('../lib/drive/acl-propagation');
     const { commitEigendocImport } = await import('../lib/document/doc');
     const { docSchema } = await import('../lib/document/doc-schema');
-    const { pushTeamAvatar, sendToHome } = await import('../lib/home/home-relay');
+    const { pushTeamAvatar } = await import('../lib/home/home-relay');
     const { generateImagePreview } = await import('../lib/shared/thumbnails');
     const { renderAttachmentPills } = await import('../lib/mailer/mail-template');
     const { createVCard } = await import('../lib/vcard');
@@ -514,7 +513,7 @@ async function main(): Promise<void> {
         teamDocs.set(doc.name, docPath);
         await uploadMedia(teamDrive, teamMountId, docPath, doc.media ?? [], author);
 
-        // Comment threads are chats inside the container's chat/ subfolder (see assertCommentChatExists).
+        // Comment threads are chats inside the container's chat/ subfolder.
         const chatFolder = await teamDrive.getChildByName(teamMountId, docPath.id, CONTAINER_CHAT_FOLDER);
         if (!chatFolder) throw new Error(`chat/ subfolder missing for ${docPath.name}`);
         const docJson = htmlToDocJson(docSchema(), doc.html);
@@ -561,22 +560,6 @@ async function main(): Promise<void> {
             const commentAuthor = lookup(userByKey, spec.author);
             const assignee = userForRole(spec.assignTo);
             await teamDrive.assignComment(teamMountId, docPath.id, chatName, assignee.email, commentAuthor, card.title);
-            // The bell notification is the assign route's job, not Drive's, so the seeder sends it too.
-            await sendToHome(assignee.id, {
-                type: 'notification',
-                notification: {
-                    type: 'assigned',
-                    actorEmail: commentAuthor.email,
-                    title: `${commentAuthor.name} assigned you a comment on "${stripEigenExtension(docPath.name)}"`,
-                    tag: commentAssignedTag({
-                        ownerId: `team_${teamId}`,
-                        mountId: teamMountId,
-                        pathId: docPath.id,
-                        chatName,
-                    }),
-                    details: { pathType: docPath.type },
-                },
-            });
         }
         await teamDrive.flushContainerDb(teamMountId, docPath.id);
     }
@@ -682,10 +665,7 @@ async function main(): Promise<void> {
         for (const rootName of ['tasks', 'columns']) {
             for (const [, entry] of getItemMapRoot(board.doc, rootName)) {
                 if (!(entry instanceof Y.Map)) continue;
-                const creator = entry.get('creator');
-                if (typeof creator === 'string' && !creator.includes('@')) entry.set('creator', emailFor(creator));
-                // The baked createdAt is the day the fixture was made, weeks before the replies.
-                entry.set('createdAt', boardCreatedAt);
+                entry.set('creator', emailFor(entry.get('creator')));
             }
         }
         const tasksMap = getItemMapRoot(board.doc, 'tasks');

@@ -1,12 +1,7 @@
-// The data epoch is a stamp that changes when a restore replaces a home's data or an update replaces
-// the code. An open browser tab remembers the stamp it started with. The event stream announces the
-// current one and a collab socket checks it when it connects; when it differs, the tab reloads. Without
-// it, a tab that was open (or offline) during a restore would sync its old state back over the restored
-// data, and a tab from before an update would write old structures to the new server.
-//
-// The stamp is the server's part, the build's commit, then the home's part. The server's part changes
-// when the whole server is restored, the commit with every update, the home's part when only that home
-// is restored.
+// The data epoch is a stamp that changes when a restore replaces a home's data or an update replaces the code. An open
+// tab remembers the stamp it started with. The event stream announces the current one and a collab socket checks it
+// when it connects; when it differs, the tab reloads. Without it, a tab open during a restore would sync its old state
+// back over the restored data, and a tab from before an update would write old structures to the new server.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { parseStringRecord } from '@workspace/lib/validation';
@@ -24,21 +19,6 @@ let homeEpochsSaved: Promise<void> = Promise.resolve();
 
 const serverFs = new LocalFilesystem(getServerDataPath());
 
-// A file that can't be read counts as "no restores yet": the tabs of a restored home then reload
-// one more time, which is better than every event stream and collab socket failing. The next
-// restore writes the file whole again.
-function readHomeEpochs(file: string): Record<string, string> {
-    if (!existsSync(file)) return {};
-    const epochs = parseStringRecord(readFileSync(file, 'utf8'));
-    if (!epochs) console.error(`[data-epoch] ${file} does not parse, so every home starts without an epoch of its own`);
-    return epochs ?? {};
-}
-
-function loadHomeEpochs(): Map<string, string> {
-    homeEpochs ??= new Map(Object.entries(readHomeEpochs(getServerDataPath(SERVER_RUNTIME_FILES.homeEpochs))));
-    return homeEpochs;
-}
-
 export function getDataEpoch(ownerId: string): string {
     if (!serverEpoch) {
         const file = getServerDataPath(SERVER_RUNTIME_FILES.epoch);
@@ -49,17 +29,41 @@ export function getDataEpoch(ownerId: string): string {
             serverFs.writeAtomic(SERVER_RUNTIME_FILES.epoch, serverEpoch).catch(console.error);
         }
     }
-    return serverEpoch + (getBuildCommit() ?? '') + (loadHomeEpochs().get(ownerId) ?? '');
+    return serverEpoch + (getBuildCommit() ?? '') + (getHomeDataEpoch(ownerId) ?? '');
 }
 
-// Called by a restore of one home, after its data is back in place.
+export function getHomeDataEpoch(ownerId: string): string | undefined {
+    return loadHomeEpochs().get(ownerId);
+}
+
 export async function rotateHomeDataEpoch(ownerId: string): Promise<void> {
+    await setHomeDataEpoch(ownerId, crypto.randomUUID());
+}
+
+// Undefined for a home with no stamp of its own. Memory changes even when the save fails: a file left behind costs one
+// more reload at the next restart, and the next save writes all of it again.
+export async function setHomeDataEpoch(ownerId: string, epoch: string | undefined): Promise<void> {
     const epochs = loadHomeEpochs();
-    epochs.set(ownerId, crypto.randomUUID());
+    if (epoch === undefined) epochs.delete(ownerId);
+    else epochs.set(ownerId, epoch);
     // A failed earlier save is that restore's error; this save still runs.
     const save = homeEpochsSaved
         .catch(() => {})
         .then(() => serverFs.writeAtomic(SERVER_RUNTIME_FILES.homeEpochs, JSON.stringify(Object.fromEntries(epochs))));
     homeEpochsSaved = save;
     await save;
+}
+
+function loadHomeEpochs(): Map<string, string> {
+    homeEpochs ??= new Map(Object.entries(readHomeEpochs(getServerDataPath(SERVER_RUNTIME_FILES.homeEpochs))));
+    return homeEpochs;
+}
+
+// A file that can't be read counts as "no restores yet": the tabs of a restored home reload once more, which beats
+// every event stream and collab socket failing.
+function readHomeEpochs(file: string): Record<string, string> {
+    if (!existsSync(file)) return {};
+    const epochs = parseStringRecord(readFileSync(file, 'utf8'));
+    if (!epochs) console.error(`[data-epoch] ${file} does not parse, so every home starts without an epoch of its own`);
+    return epochs ?? {};
 }

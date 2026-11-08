@@ -22,7 +22,7 @@ type TestDirective = {
     beforeAck?: boolean;
     signal?: NodeJS.Signals;
     heap?: 'objects' | 'strings' | 'buffers';
-    mediaNames?: unknown[];
+    mediaNames?: string[];
 };
 
 // The scriptable child reads its script off `test`, the one field a production request
@@ -58,19 +58,6 @@ function pngMedia(buffers: ArrayBuffer[]): ExportMedia[] {
 
 function makeImportRequest(directive: TestDirective = {}, data: ArrayBuffer = new ArrayBuffer(0)): TestRequest {
     return { kind: 'import', sourceFormat: 'xlsx', targetType: 'eigensheets', maxMediaBytes: 0, data, test: directive };
-}
-
-// The only result arm with a nested payload of its own: the extracted docx images.
-function makeDocImportRequest(directive: TestDirective = {}): TestRequest {
-    return {
-        kind: 'import',
-        sourceFormat: 'docx',
-        targetType: 'eigendoc',
-        publicOrigin: undefined,
-        maxMediaBytes: 0,
-        data: new ArrayBuffer(0),
-        test: directive,
-    };
 }
 
 // The production limits per kind. Tests about lifecycle rather than admission run
@@ -377,46 +364,11 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
-    test('a malformed child response resolves a structured error', async () => {
+    test('a child message that is no reply resolves a structured error', async () => {
         const runner = makeRunner();
         const malformed = await runner.run(makeRequest({ behavior: 'malformed' }), PREVIEW_OPTIONS);
         expect(malformed.ok).toBe(false);
         if (!malformed.ok) expect(malformed.error.code).toBe('invalid-response');
-        await runner.close();
-    });
-
-    test('a half-valid response ({ok:true} without result) resolves instead of hanging', async () => {
-        const runner = makeRunner();
-        const halfValid = await runner.run(makeRequest({ behavior: 'malformed-ok' }), PREVIEW_OPTIONS);
-        expect(halfValid.ok).toBe(false);
-        if (!halfValid.ok) expect(halfValid.error.code).toBe('invalid-response');
-        await runner.close();
-    });
-
-    // Nested junk inside a valid envelope: settle() reads warning codes and image byte
-    // lengths after the job left `active`, so a throw there would strand the requester
-    // and leave the queue unstarted. The follow-up job proves the queue still drains.
-    test('a response with malformed warnings resolves instead of hanging', async () => {
-        const runner = makeRunner();
-        const malformed = runner.run(makeRequest({ behavior: 'malformed-warnings' }), PREVIEW_OPTIONS);
-        const queued = runner.run(makeRequest(), PREVIEW_OPTIONS);
-
-        const [first, second] = await Promise.all([malformed, queued]);
-        expect(first.ok).toBe(false);
-        if (!first.ok) expect(first.error.code).toBe('invalid-response');
-        expect(second.ok).toBe(true);
-        await runner.close();
-    });
-
-    test('a docx import response with malformed images resolves instead of hanging', async () => {
-        const runner = makeRunner();
-        const malformed = runner.run(makeDocImportRequest({ behavior: 'import-doc-malformed-images' }), EXPORT_OPTIONS);
-        const queued = runner.run(makeRequest(), PREVIEW_OPTIONS);
-
-        const [first, second] = await Promise.all([malformed, queued]);
-        expect(first.ok).toBe(false);
-        if (!first.ok) expect(first.error.code).toBe('invalid-response');
-        expect(second.ok).toBe(true);
         await runner.close();
     });
 
@@ -428,14 +380,6 @@ describe('DocumentTransformRunner', () => {
             expect(failed.error.code).toBe('transform-failed');
             expect(failed.error.status).toBe(422);
         }
-        await runner.close();
-    });
-
-    test('a document error with a non-HTTP status is a malformed response', async () => {
-        const runner = makeRunner();
-        const failed = await runner.run(makeRequest({ behavior: 'document-error-bad-status' }), PREVIEW_OPTIONS);
-        expect(failed.ok).toBe(false);
-        if (!failed.ok) expect(failed.error.code).toBe('invalid-response');
         await runner.close();
     });
 
@@ -506,15 +450,12 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
-    test.each([
-        ['a job that offers none', undefined, ['a']],
-        ['names that are not strings', async () => [], [1]],
-    ])('a child that asks for media on %s is an invalid response', async (_, prepareMedia, mediaNames) => {
+    test('a child that asks for media on a job that offers none is an invalid response', async () => {
         const runner = makeRunner();
-        const response = await runner.run(makeExportRequest({ behavior: 'export-echo-media', mediaNames }), {
-            ...EXPORT_OPTIONS,
-            prepareMedia,
-        });
+        const response = await runner.run(
+            makeExportRequest({ behavior: 'export-echo-media', mediaNames: ['a'] }),
+            EXPORT_OPTIONS,
+        );
         expect(errorCode(response)).toBe('invalid-response');
         await runner.close();
     });
@@ -564,36 +505,12 @@ describe('DocumentTransformRunner', () => {
         },
     );
 
-    test('an export response without export bytes resolves as invalid-response', async () => {
-        const runner = makeRunner();
-        const malformed = await runner.run(makeExportRequest({ behavior: 'export-malformed' }), EXPORT_OPTIONS);
-        expect(malformed.ok).toBe(false);
-        if (!malformed.ok) expect(malformed.error.code).toBe('invalid-response');
-        await runner.close();
-    });
-
     test('import bytes are copied to the child and the snapshot returns intact', async () => {
         const runner = makeRunner();
         const data = new Uint8Array([1, 2, 3, 4, 5, 6]).buffer;
         const response = await runner.run(makeImportRequest({ behavior: 'import-ok' }, data), EXPORT_OPTIONS);
         expect(data.byteLength).toBe(6); // the sender keeps its own
         expect(JSON.parse(importSnapshot(response)).received).toBe(6);
-        await runner.close();
-    });
-
-    test('an import response without snapshot bytes resolves as invalid-response', async () => {
-        const runner = makeRunner();
-        const malformed = await runner.run(makeImportRequest({ behavior: 'import-malformed' }), EXPORT_OPTIONS);
-        expect(malformed.ok).toBe(false);
-        if (!malformed.ok) expect(malformed.error.code).toBe('invalid-response');
-        await runner.close();
-    });
-
-    test('a sheets import response whose weight is no count resolves as invalid-response', async () => {
-        const runner = makeRunner();
-        const unweighed = await runner.run(makeImportRequest({ behavior: 'import-unweighed' }), EXPORT_OPTIONS);
-        expect(unweighed.ok).toBe(false);
-        if (!unweighed.ok) expect(unweighed.error.code).toBe('invalid-response');
         await runner.close();
     });
 

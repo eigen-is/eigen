@@ -424,46 +424,6 @@ describe('Delete user', () => {
         expect(res.status).toBe(403);
         expect(existsSync(homePath)).toBe(true);
     });
-
-    test('user deletion sweeps membership rows orphaned by past deletions', async () => {
-        const { auth, getAuthDrizzleDb } = await import('../../lib/auth/auth');
-        const { member } = await import('../../../auth-schema');
-        const { getServerConfig } = await import('../../lib/config/server-config');
-        const orgId = getServerConfig()!.orgId;
-        const db = getAuthDrizzleDb();
-
-        // Forge the orphan class found in the wild: a member row whose user is gone
-        db.insert(member)
-            .values({
-                id: 'orphaned-member-row',
-                organizationId: orgId,
-                userId: 'ghost-user-id',
-                role: 'member',
-                createdAt: new Date(),
-            })
-            .run();
-        const brokenRes = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/auth/organization/list-members?organizationId=${orgId}&limit=${EVERY_MEMBER}`,
-        );
-        expect(brokenRes.status).toBe(500);
-
-        // Deleting any user through the real route heals the org
-        const signUp = await auth.api.signUpEmail({
-            body: { email: 'sweep-trigger@test.eigen.is', password: 'testpassword123', name: 'Sweep Trigger' },
-        });
-        const delRes = await authedRequest(ctx.alice.user.sessionToken, `/settings/user/${signUp.user.id}`, {
-            method: 'DELETE',
-        });
-        expect(delRes.status).toBe(200);
-
-        expect(db.select().from(member).where(eq(member.userId, 'ghost-user-id')).all()).toHaveLength(0);
-        const listRes = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/auth/organization/list-members?organizationId=${orgId}&limit=${EVERY_MEMBER}`,
-        );
-        expect(listRes.status).toBe(200);
-    });
 });
 
 describe("Delete user: the home's bucket objects", () => {

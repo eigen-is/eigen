@@ -8,6 +8,7 @@ import {
     putResource,
     resourceRowOf,
     resourceTextOf,
+    storedEvents,
     vevent,
 } from '../calendar-test-helpers';
 import { breakTransaction } from '../db-test-helpers';
@@ -23,7 +24,7 @@ describe('moveEvent', () => {
 
     const seriesOf = async (harness: TestHome<Calendar>, calendarId: string, uid: string, uri: string) => {
         await putResource(harness.instance, calendarId, uri, vcal(vevent(uid, 'Movable')));
-        return (await harness.instance.getRawEvents(calendarId)).find((e) => e.uid === uid)!;
+        return storedEvents(harness.instance, calendarId).find((e) => e.uid === uid)!;
     };
 
     test('the blob and its rows re-home together, under the same ids', async () => {

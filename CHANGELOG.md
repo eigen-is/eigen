@@ -11,9 +11,11 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 ### Changed
 
 - **Moving a formula in Sheets** — a formula cut to another tab keeps reading the cells it read, as in Excel: `=A1*2` cut from One to Two becomes `=One!A1*2`, and a cell that moved along with it is still followed
+- **Uploading a backup** — only the owner can upload an archive in the **Backup** section of a user or team in Admin. Other admins still back up, download and restore
 - **GIFs stand still in lists** — in Drive's grid, on Stickies card covers and in the slide list of Slides, an animated GIF or WebP shows its first frame. It still plays in a file's details in Drive, in Quick preview, on the slide itself and in present mode. A deck full of GIFs opens faster, because the slide list loads small stills instead of every animation. Pictures uploaded before this keep playing in lists until the file changes
 - **Deleted comments** — a link, notification, activity entry or search result for a deleted comment opens it as "This comment was deleted" under its grayed title, with nothing to reply to, resolve or assign
 - **Copies in Drive** — a copy or Duplicate of a document leaves out the images and comments deleted from the original
+- **Folder depth in Drive** — folders nest at most 256 levels deep, in Drive and over WebDAV. A deeper tree you already have stays readable
 - **Comments in Sheets** — the comments pane lists the comments on every tab, with the tab's name, such as Sheet2 · B2. Deleting a comment removes it from every cell it sits on, and a duplicated tab starts without comments
 - **Undo in Sheets** — once someone else edits the spreadsheet, you can no longer undo or redo your last insert or delete of rows or columns, your last added, duplicated, deleted or renamed tab, or anything before it. What you did after it still undoes. When someone else renames a tab, you can no longer undo or redo anything before that
 - **Renaming a tab in Sheets** — formulas, formula rules, dropdown lists and links that name the tab follow its new name, as in Excel, and undo renames it back
@@ -48,6 +50,17 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Paste past the last row in Sheets** — a paste that adds rows to a workbook full of formulas no longer pauses to read them all again
 - **A tab opened for the first time in Sheets** — arrow keys and typing work at once, on A1, without a click first
 - **Downloading an empty spreadsheet** — a spreadsheet nobody edited downloads with its blank sheet
+- **Downloads that fail** — downloading or printing a document from Docs, Sheets, Slides or Vector that is too big to export says "Export failed: the document is too big, or it used too much memory" instead of "Internal server error"
+- **Mail apps during a restore** — a mail app that signs in while an account is being restored or deleted is told to try again later, so it can no longer make the restore fail and keep the account offline
+- **Sending in Chat and comments** — a send that fails keeps its text and files, and a slash command such as /help leaves your attachments waiting. Send stays off until the room has loaded, so a message can't go out without its files
+- **Changing room in Chat** — what you were about to send is cleared when you change room, so it can't go to the wrong one
+- **Two people editing in Calendar** — editing, moving or deleting an event someone else just changed is refused instead of overwriting their change
+- **A refused Save** — in Calendar, Contacts and Personal info in Space, a Save refused because the item changed elsewhere keeps what you typed and takes the other fields from the server
+- **Removing someone with a document open** — removing someone from a team or an organization, or deleting their account, cuts them off at once from the documents they can no longer read. A password reset does too
+- **Losing access to an open document** — in Docs, Sheets, Slides, Vector and Stickies, the page switches to "You need access" at once, or to sign-in if your account was deleted, instead of leaving an editor where typing goes nowhere
+- **Shared with me** — items of a deleted person or team no longer show
+- **Restoring a deleted account or team** — a restore of a deleted team, or of a deleted user whose address another account now holds, is refused before it changes anything. A restore that fails no longer reloads open tabs, so they keep their unsaved edits
+- **Deleting during an upload** — on local storage, deleting a file while an upload of the same name runs no longer loses the new file
 
 ## [0.4.2] - 2026-11-03
 

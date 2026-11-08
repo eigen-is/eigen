@@ -1,8 +1,9 @@
-// Everything a chat room view needs, in one hook: the messages in order, the members, the attachments
-// waiting to be sent, and the send handler, which also runs slash commands such as /help or /invite.
-// A chat file and a comment thread on a document both render through it.
+// Everything a chat room view needs, in one hook: the messages in order, the members, the attachments waiting to be
+// sent, and the send handler, which also runs slash commands such as /help or /invite. Such a command leaves the
+// attachments waiting. A chat file and a comment thread on a document both render through it. Its state belongs to one
+// room, so the component that calls it is keyed by the chat's id.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { CONTAINER_MEDIA_FOLDER } from '../../../constants/container';
 import type { ChatAttachment, ChatMessage, RoomMember } from '../../../types/chat';
 import { isAttachmentReference } from '../../../types/chat';
@@ -51,12 +52,6 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string, co
     const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
     const [pendingDriveAttachments, setPendingDriveAttachments] = useState<ChatAttachment[]>([]);
     const lastWhisperFromRef = useRef<string | null>(null);
-
-    useEffect(() => {
-        setLocalMessages([]);
-        setPendingDriveAttachments([]);
-        lastWhisperFromRef.current = null;
-    }, [chatId]);
 
     const chatName = chatPath ? stripEigenExtension(chatPath.name) : 'Chat';
 
@@ -137,86 +132,86 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string, co
         );
     }, []);
 
+    // Resolves to whether the message took the files. A command that runs here takes nothing, so the composer keeps them.
     const handleSendMessage = useCallback(
-        async (rawContent: string, files?: readonly File[]) => {
-            if (!rawContent.trim() && (!files || files.length === 0) && pendingDriveAttachments.length === 0) return;
-
-            let attachments: ChatAttachment[] | undefined;
-
-            if (pendingDriveAttachments.length > 0) {
-                attachments = [...pendingDriveAttachments];
-                setPendingDriveAttachments([]);
-            }
-
-            if (files && files.length > 0 && chatPath && mediaFolder) {
-                const uploaded = await Promise.all(
-                    files.map((file) => uploadFile.mutateAsync({ parentId: mediaFolder.id, file })),
-                );
-                attachments = [...(attachments ?? []), ...uploaded.map((u) => u.name)];
+        async (rawContent: string, files?: readonly File[]): Promise<boolean> => {
+            if (!rawContent.trim() && (!files || files.length === 0) && pendingDriveAttachments.length === 0) {
+                return false;
             }
 
             if (isUnknownCommand(rawContent)) {
                 addLocalMessage(`Unknown command: ${rawContent.split(' ')[0]}\nType /help to see available commands.`);
-                return;
+                return false;
             }
 
+            let message: { content: string; type?: 'whisper'; whisperTo?: string } = { content: rawContent };
             const local = getLocalCommand(rawContent);
-            if (local) {
-                switch (local.kind) {
-                    case 'error': {
-                        addLocalMessage(local.error);
-                        return;
+            switch (local?.kind) {
+                case 'error': {
+                    addLocalMessage(local.error);
+                    return false;
+                }
+                case 'help': {
+                    const lines = COMMANDS_HELP.map((c) => `  ${c.cmd}  —  ${c.desc}`).join('\n');
+                    addLocalMessage(`Available commands:\n${lines}`);
+                    return false;
+                }
+                case 'inspect': {
+                    addLocalMessage(`inspect:${local.target}`);
+                    return false;
+                }
+                case 'whoami': {
+                    if (user?.email) addLocalMessage(`inspect:${user.email}`);
+                    return false;
+                }
+                case 'invite': {
+                    const inviteError = validateEmailTarget(local.target, 'Invite');
+                    if (inviteError) {
+                        addLocalMessage(inviteError);
+                        return false;
                     }
-                    case 'help': {
-                        const lines = COMMANDS_HELP.map((c) => `  ${c.cmd}  —  ${c.desc}`).join('\n');
-                        addLocalMessage(`Available commands:\n${lines}`);
-                        return;
+                    const result = await inviteToChat.mutateAsync({ email: local.target });
+                    addLocalMessage(
+                        result.alreadyHasAccess
+                            ? `${local.target} already has access.`
+                            : `You invited ${local.target}.`,
+                    );
+                    return false;
+                }
+                case 'reply': {
+                    const target = findLastWhisperFrom();
+                    if (!target) {
+                        addLocalMessage('No one has whispered to you yet.');
+                        return false;
                     }
-                    case 'inspect': {
-                        addLocalMessage(`inspect:${local.target}`);
-                        return;
-                    }
-                    case 'whoami': {
-                        if (user?.email) addLocalMessage(`inspect:${user.email}`);
-                        return;
-                    }
-                    case 'reply': {
-                        const target = findLastWhisperFrom();
-                        if (!target) {
-                            addLocalMessage('No one has whispered to you yet.');
-                            return;
-                        }
-                        lastWhisperFromRef.current = target;
-                        await postMessage.mutateAsync({
-                            content: local.content,
-                            type: 'whisper',
-                            whisperTo: target,
-                            attachments,
-                        });
-                        return;
-                    }
-                    case 'invite': {
-                        if (!chatPath) return;
-                        const inviteError = validateEmailTarget(local.target, 'Invite');
-                        if (inviteError) {
-                            addLocalMessage(inviteError);
-                            return;
-                        }
-                        const result = await inviteToChat.mutateAsync({ email: local.target });
-                        if (result?.alreadyHasAccess) {
-                            addLocalMessage(`${local.target} already has access.`);
-                        } else {
-                            addLocalMessage(`You invited ${local.target}.`);
-                        }
-                        return;
-                    }
+                    lastWhisperFromRef.current = target;
+                    message = { content: local.content, type: 'whisper', whisperTo: target };
                 }
             }
 
-            await postMessage.mutateAsync({ content: rawContent, attachments });
+            setPendingDriveAttachments([]);
+            try {
+                const uploaded: string[] = [];
+                if (files && files.length > 0) {
+                    // The composer is disabled until the folder is known.
+                    if (!mediaFolder) throw new Error('A room takes files only once its media folder is known');
+                    const results = await Promise.all(
+                        files.map((file) => uploadFile.mutateAsync({ parentId: mediaFolder.id, file })),
+                    );
+                    uploaded.push(...results.map((u) => u.name));
+                }
+                const attachments = [...pendingDriveAttachments, ...uploaded];
+                await postMessage.mutateAsync({
+                    ...message,
+                    attachments: attachments.length > 0 ? attachments : undefined,
+                });
+                return true;
+            } catch (error) {
+                setPendingDriveAttachments((next) => [...pendingDriveAttachments, ...next]);
+                throw error;
+            }
         },
         [
-            chatPath,
             mediaFolder,
             pendingDriveAttachments,
             uploadFile.mutateAsync,
@@ -232,8 +227,6 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string, co
         () => [...messages, ...localMessages].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()),
         [messages, localMessages],
     );
-
-    const mediaFolderId = mediaFolder?.id ?? null;
 
     const handleDeleteMessage = useCallback(
         (messageId: string) => deleteMessage.mutateAsync(messageId),
@@ -252,9 +245,10 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string, co
         chatPath,
         roomMembers,
         readOnly,
-        disabled: postMessage.isPending || uploadFile.isPending,
+        // Until the media folder is known, a staged file has nowhere to go.
+        disabled: postMessage.isPending || uploadFile.isPending || !mediaFolder,
         currentUserEmail: user?.email ?? '',
-        mediaFolderId,
+        mediaFolderId: mediaFolder?.id ?? null,
         handleSendMessage,
         handleEditMessage,
         handleDeleteMessage,

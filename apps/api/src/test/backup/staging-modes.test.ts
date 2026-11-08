@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { chmodSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { getBackupStagingDir, getBackupTempPath, getStagingRoot, wipeBackupStagingDir } from '../../lib/backup/paths';
+import { getBackupStagingDir, wipeBackupStagingDir } from '../../lib/backup/paths';
 import { pullHomeSnapshot } from '../../lib/home/home-relay';
 import type { TestContext } from '../setup';
 import { getTestContext, TEST_DATA_DIR } from '../setup';
@@ -11,6 +11,7 @@ import { getTestContext, TEST_DATA_DIR } from '../setup';
 // writes there is out of reach of other users on the host while it runs, whatever the umask gives each file.
 describe('Backup staging modes', () => {
     const backupsDir = join(TEST_DATA_DIR, 'backups-staging-modes');
+    const stagingRoot = join(backupsDir, '.staging');
     let ctx: TestContext;
     let previousBackupsDir: string | undefined;
     let previousUmask: number;
@@ -58,7 +59,7 @@ describe('Backup staging modes', () => {
         const staging = getBackupStagingDir(jobId);
         try {
             await pullHomeSnapshot(ctx.alice.user.id, staging, {});
-            expect(modeOf(getStagingRoot())).toBe(0o700);
+            expect(modeOf(stagingRoot)).toBe(0o700);
             expect(modeOf(staging)).toBe(0o700);
             const staged = filesUnder(staging);
             expect(staged.map((file) => file.slice(staging.length))).toContainEqual(
@@ -71,14 +72,6 @@ describe('Backup staging modes', () => {
         }
     }, 60_000);
 
-    test('a staging root an older build left open is closed on its first use', () => {
-        mkdirSync(getStagingRoot(), { recursive: true });
-        chmodSync(getStagingRoot(), 0o755);
-        const tempPath = getBackupTempPath('.json');
-        expect(modeOf(getStagingRoot())).toBe(0o700);
-        expect(modeOf(dirname(tempPath))).toBe(0o700);
-    });
-
     // The launcher gives backups/ the operator's group with the setgid bit, so a folder made in it takes that group,
     // and on Linux the bit too. Folders staged under it go into data/, which must get neither.
     test('a setgid backups/ passes no setgid bit into staging', () => {
@@ -87,11 +80,11 @@ describe('Backup staging modes', () => {
         chmodSync(backupsDir, 0o2750);
         try {
             // What a mkdir in backups/ makes on Linux. macOS ignores the bit on a folder, so it is set by hand.
-            rmSync(getStagingRoot(), { recursive: true, force: true });
-            mkdirSync(getStagingRoot(), { mode: 0o700 });
-            chmodSync(getStagingRoot(), 0o2700);
+            rmSync(stagingRoot, { recursive: true, force: true });
+            mkdirSync(stagingRoot, { mode: 0o700 });
+            chmodSync(stagingRoot, 0o2700);
             const staging = getBackupStagingDir('staging-modes-setgid');
-            expect(fullModeOf(getStagingRoot())).toBe(0o700);
+            expect(fullModeOf(stagingRoot)).toBe(0o700);
             expect(fullModeOf(staging)).toBe(0o700);
             expect(fullModeOf(backupsDir)).toBe(0o2750);
         } finally {

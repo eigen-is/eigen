@@ -23,7 +23,7 @@ import {
     reUploadImage,
 } from '@workspace/lib/clipboard';
 import { userColor } from '@workspace/lib/constants/colors';
-import { FOOTNOTE_FONT_SIZE, getFontName } from '@workspace/lib/constants/fonts';
+import { FOOTNOTE_FONT_SIZE } from '@workspace/lib/constants/fonts';
 import type { BandRoot, StoryNode } from '@workspace/lib/docs/eigendoc';
 import {
     BAND_EXCLUDED_NODES,
@@ -52,7 +52,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { renderPresenceCaret } from '@workspace/ui/components/collab';
 import { common, createLowlight } from 'lowlight';
 import type { DependencyList } from 'react';
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
 import { insertEigenItems, writeDocsClipboard } from './clipboard';
@@ -107,35 +107,6 @@ function swapFigureMediaName(editor: Editor, pendingName: string, newName: strin
     });
 }
 
-// The textStyle `fontFamily` attr is an EIGEN_FONTS name, but a stored doc may hold a full CSS stack and
-// y-prosemirror hydrates without parseHTML, so this pass collapses a known stack to its name on editable
-// load. renderHTML maps the name back to the same stack. Kept out of the undo history.
-function normalizeFontFamilyMarks(editor: Editor) {
-    const markType = editor.schema.marks.textStyle;
-    if (!markType) return;
-    const targets: { from: number; to: number; attrs: Record<string, unknown> }[] = [];
-    editor.state.doc.descendants((node, pos) => {
-        if (!node.isText) return;
-        const mark = node.marks.find((m) => m.type === markType);
-        if (!mark) return;
-        const family = mark.attrs.fontFamily;
-        if (typeof family !== 'string' || !family) return;
-        const canon = getFontName(family);
-        if (canon === family) return;
-        targets.push({ from: pos, to: pos + node.nodeSize, attrs: { ...mark.attrs, fontFamily: canon } });
-    });
-    if (targets.length === 0) return;
-    editor.commands.command(({ tr, dispatch }) => {
-        for (const { from, to, attrs } of targets) {
-            tr.addMark(from, to, markType.create(attrs));
-        }
-        // A story's text takes its name too, a change to a story the body otherwise never makes.
-        tr.setMeta('addToHistory', false).setMeta(STORY_EDIT, true);
-        if (dispatch) dispatch(tr);
-        return true;
-    });
-}
-
 // The image paths every docs editor shares. Each takes the editor it acts on as a getter, read again once an upload
 // settles: the body's editor is built anew when its handlers change, so the name swaps in whichever holds the doc then.
 export function useDocMedia(path: DrivePath) {
@@ -159,9 +130,8 @@ export function useDocMedia(path: DrivePath) {
         mediaFolderId,
         resolveMediaPath,
         uploadImage,
-        // A vector SVG payload (or a pasted SVG document) lands as a figure through the exact image-upload path:
-        // stored in media/, served as-is, rendered by <image>. Its images are name-referenced (eigen-media:);
-        // materialize re-uploads each into our media/ and rewrites the svg's refs before it's stored.
+        // A pasted SVG lands as a figure through the image-upload path. Its images are name-referenced (eigen-media:),
+        // so materialize re-uploads each into our media/ and rewrites the refs before the svg is stored.
         uploadSvg: async (editor: () => Editor | null, { svg, items }: ClassifiedSvg, settle = editor) => {
             if (!mediaFolderId) return;
             const file = await materializeClipboardSvg(svg, items, mediaFolderId, uploadFile.mutateAsync);
@@ -266,9 +236,8 @@ type DocEditorTarget =
     // A band: its root, y-tiptap's own undo over it, no comments, and Esc to leave it. Esc is the band's own key, so
     // the find bar and a dialog, which hold focus, keep theirs.
     | { field: BandRoot; onLeave: () => void }
-    // The open story, a footnote's note or a text box: no root of its own, as the body's editor holds the story and
-    // the story's edits forward into it. Its undo is the body's, comments don't reach it, and Esc leaves it. A note
-    // draws at the footnote size, a box in the doc's Normal.
+    // The open story, a footnote's note or a text box: no root of its own, as the body's editor holds the story. Its
+    // undo is the body's, comments don't reach it, and Esc leaves it.
     | { body: () => Editor | null; onLeave: () => void; story: StoryNode };
 
 type DocEditorOptions = {
@@ -316,9 +285,8 @@ export function docEditorOptions({
     const note = 'story' in target;
     const story = note ? target.story : null;
     const cardIds = band || note ? () => NO_CARDS : target.cardIds;
-    // The page map, not the page on screen: an update that changes the content and the page together reaches the
-    // editor before React draws the new page. A band prints in the body's column. Tables and indents keep within it,
-    // and a positioned figure on its paper.
+    // The page map, not the page on screen: an update that changes the content and the page together reaches the editor
+    // before React draws the new page.
     const page = () => pagePx(readPageSetup(yDoc.getMap(PAGE_ROOT).toJSON()));
     const textColumnWidth = () => pageColumnWidth(page());
     const paperWidth = () => page().width;
@@ -342,9 +310,8 @@ export function docEditorOptions({
         });
     return {
         editable,
-        // y-tiptap writes nothing while the doc reads as one empty paragraph, unless an earlier update saw other
-        // content. It draws the root as it builds its plugin view, before its update can see that. One update as the
-        // view mounts shows it what the root holds, so an edit that empties a root that held something is saved.
+        // y-tiptap writes nothing while the doc reads as one empty paragraph unless an earlier update saw content.
+        // One update at mount shows it the root, so an edit that empties a root is saved.
         onMount: ({ editor }) => editor.view.updateState(editor.state),
         extensions: [
             // A story's own doc holds its paragraphs. A nested note or box stays in the schema, as a peer may send one.
@@ -463,11 +430,8 @@ export function docEditorOptions({
                 }
 
                 if (paste.eigen) {
-                    // Images and charts take this path, images for the cross-mount re-upload, a docs copy's
-                    // through its own HTML; text only when text/html is marker-only (a canvas text copy), so a
-                    // sheets table still parses in PM. Claimed only with an item this editor can place, or ⌘V
-                    // on a bare `elements` item is dead. A band and a note place no chart, as their Insert
-                    // menus offer none.
+                    // Claimed only with an item this editor can place (a band and a note place no chart), or ⌘V on a
+                    // bare `elements` item is dead. Text comes here only if marker-only, so a sheets table still parses.
                     const items =
                         band || note ? paste.eigen.items.filter((i) => i.type !== 'chart') : paste.eigen.items;
                     const hasAtom = items.some((i) => i.type === 'image' || i.type === 'chart');
@@ -529,9 +493,8 @@ export function useDocEditor(
         deps,
     );
     editorRef.current = editor;
-    // TipTap keeps an editor's editable flag across renders, so write access lost or gained while the doc is open, and
-    // a band entered or left, reach it here. It runs before paint, so an editor never draws a frame as editable once
-    // it lost write access.
+    // TipTap keeps an editor's editable flag across renders, so write access gained or lost and a band entered or left
+    // reach it here, before paint.
     useLayoutEffect(() => {
         editor.setEditable(editable, false);
         // A node view reads the flag as it renders and nothing re-renders it, so a selected image would keep its grips.
@@ -540,12 +503,10 @@ export function useDocEditor(
             editor.view.dispatch(editor.state.tr.setSelection(Selection.near(selection.$from)));
         }
     }, [editor, editable]);
-    // A story's images and fonts are the body's, which sweeps and collapses them.
+    // A story's images are the body's, which sweeps them.
     const sweeps = options.editable && !('story' in options.target);
 
-    // Sweep zombie placeholders left behind by a tab close or reload mid-upload. Snapshot the pending
-    // figure mediaNames; a completed upload has swapped the name, so the stale name no longer matches.
-    // A viewer's deletion would be dropped by the server.
+    // Only editors sweep: a viewer's deletion would be dropped by the server.
     useZombieMediaSweep({
         ready: sweeps,
         scan: () => {
@@ -567,21 +528,11 @@ export function useDocEditor(
         },
     });
 
-    // One-shot: collapse any legacy full-stack fontFamily marks to their EIGEN_FONTS name once the
-    // synced doc is open for editing. The parent gates this subtree on first sync, so the content is
-    // present at mount; idempotent, so a canWrite flip re-running it is a no-op.
-    useEffect(() => {
-        if (!sweeps) return;
-        normalizeFontFamilyMarks(editor);
-    }, [editor, sweeps]);
-
     return editor;
 }
 
-// The four bands' editors, kept as long as the doc is open and all on the page, hidden or not: an editor binds to its
-// root once its view mounts, and a preset numbers a band the page doesn't show, an upload settles after its band was
-// left.
-// Only the band being edited is editable; the others draw as they print.
+// The four bands' editors stay for as long as the doc is open, all on the page, hidden or not: an editor binds to its
+// root once its view mounts, and a preset numbers a band the page doesn't show. Only the band being edited is editable.
 export function useBandEditors({
     editing,
     onLeave,

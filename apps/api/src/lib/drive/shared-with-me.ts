@@ -1,20 +1,22 @@
 // Each home keeps its own copy of the paths other owners shared with it, so "Shared with me" reads
 // one local table. When an owner changes who may see a path, that change is pushed into this home,
-// and receiveSharedPathChange adds, updates or removes the row and tells the user. This file is the
-// only one that reads or writes that table. Drive calls it with its shared database.
+// and receiveSharedPathChange adds, updates or removes the row and tells the user. Deleting an owner
+// pushes nothing, so a listing drops the rows of an owner who no longer exists. This file is the only
+// one that reads or writes that table. Drive calls it with its shared database.
 
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
 import { getEigenDocInfoByType, isFolderType, stripEigenExtension } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import type { Home } from '../home';
-import { actorDisplayName, getMemberships } from '../user';
+import { actorDisplayName, getMemberships, getOwnerExists } from '../user';
 import { matchesACL } from './acl';
 import * as sharedSchema from './sharedschema';
 import { buildDriveEvent } from './sse-events';
 
 type SharedDb = BunSQLiteDatabase<typeof sharedSchema>;
+type SharedPathRow = typeof sharedSchema.sharedPaths.$inferSelect;
 
 export async function receiveSharedPathChange(
     sharedDb: SharedDb,
@@ -91,47 +93,62 @@ export async function receiveSharedPathChange(
 }
 
 export async function listSharedWithMe(sharedDb: SharedDb): Promise<DrivePath[]> {
-    const results = await sharedDb.select().from(sharedSchema.sharedPaths).all();
-    return results.map(sharedRowToDrivePath);
+    const rows = sharedDb.select().from(sharedSchema.sharedPaths).all();
+    return (await dropRowsOfDeletedOwners(sharedDb, rows)).map(sharedRowToDrivePath);
 }
 
 // The owners who shared at least one path with this home. The Watched view asks each of them for
 // the user's watched paths, so it doesn't have to load every shared path first.
-export async function listSharedOwnerIds(sharedDb: SharedDb): Promise<string[]> {
-    const results = await sharedDb
+export function listSharedOwnerIds(sharedDb: SharedDb): string[] {
+    const rows = sharedDb
         .selectDistinct({ ownerId: sharedSchema.sharedPaths.ownerId })
         .from(sharedSchema.sharedPaths)
         .all();
-    return results.map((r) => r.ownerId);
+    return rows.map((row) => row.ownerId);
 }
 
 export async function listSharedWithMeByMimeType(sharedDb: SharedDb, mimeType: string): Promise<DrivePath[]> {
-    const results = await sharedDb
+    const rows = sharedDb
         .select()
         .from(sharedSchema.sharedPaths)
         .where(eq(sharedSchema.sharedPaths.mimeType, mimeType))
         .all();
-    return results.map(sharedRowToDrivePath);
+    return (await dropRowsOfDeletedOwners(sharedDb, rows)).map(sharedRowToDrivePath);
 }
 
-function sharedRowToDrivePath(r: typeof sharedSchema.sharedPaths.$inferSelect): DrivePath {
+// The delete waits for every lookup, so a lookup that throws fails the listing and leaves every row.
+async function dropRowsOfDeletedOwners(sharedDb: SharedDb, rows: readonly SharedPathRow[]): Promise<SharedPathRow[]> {
+    const deleted = new Set<string>();
+    for (const ownerId of new Set(rows.map((row) => row.ownerId))) {
+        if (!(await getOwnerExists(ownerId))) deleted.add(ownerId);
+    }
+    if (deleted.size > 0) {
+        sharedDb
+            .delete(sharedSchema.sharedPaths)
+            .where(inArray(sharedSchema.sharedPaths.ownerId, [...deleted]))
+            .run();
+    }
+    return rows.filter((row) => !deleted.has(row.ownerId));
+}
+
+function sharedRowToDrivePath(row: SharedPathRow): DrivePath {
     return {
-        id: r.id,
-        mountId: r.mountId,
-        name: r.name,
-        type: r.type,
-        parentId: r.parentId,
-        ownerId: r.ownerId,
-        mimeType: r.mimeType,
-        size: r.size ?? 0,
+        id: row.id,
+        mountId: row.mountId,
+        name: row.name,
+        type: row.type,
+        parentId: row.parentId,
+        ownerId: row.ownerId,
+        mimeType: row.mimeType,
+        size: row.size,
         hash: null,
-        thumbnail: r.thumbnail,
-        acl: r.acl,
-        visibility: r.visibility ?? 'private',
-        sharingRestricted: r.sharingRestricted,
-        details: r.details ?? null,
+        thumbnail: row.thumbnail,
+        acl: row.acl,
+        visibility: row.visibility,
+        sharingRestricted: row.sharingRestricted,
+        details: row.details,
         trashedAt: null,
-        createdAt: r.createdAt ?? new Date(),
-        updatedAt: r.updatedAt ?? new Date(),
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
     };
 }

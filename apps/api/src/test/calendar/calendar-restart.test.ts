@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { rmSync } from 'node:fs';
-import { CALENDAR_TEST_ROOT, makeCalendar, resourceTextOf } from '../calendar-test-helpers';
+import { CALENDAR_TEST_ROOT, makeCalendar, resourceTextOf, storedEvents } from '../calendar-test-helpers';
 
 describe('calendar restart', () => {
     beforeAll(() => {
@@ -17,7 +17,7 @@ describe('calendar restart', () => {
             allDay: false,
         });
         const ctag = (await harness.instance.getCalendarById(cal.id))!.ctag;
-        const uri = (await harness.instance.getRawEvents(cal.id))[0].uri;
+        const uri = storedEvents(harness.instance, cal.id)[0].uri;
         const stored = await resourceTextOf(harness.instance, cal.id, uri);
 
         const restarted = await harness.reopen();
@@ -26,7 +26,7 @@ describe('calendar restart', () => {
             expect(reopened?.name).toBe('Work');
             // A ctag that reset would tell every CalDAV client the collection rewound.
             expect(reopened?.ctag).toBe(ctag);
-            const rows = await restarted.instance.getRawEvents(cal.id);
+            const rows = storedEvents(restarted.instance, cal.id);
             expect(rows.map((r) => r.title)).toEqual(['Standup']);
             expect(rows[0].uid).toBe(event.uid);
             // The bytes are the resource, so a restart serves back exactly what the write stored.

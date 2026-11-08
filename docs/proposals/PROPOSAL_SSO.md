@@ -52,8 +52,8 @@ The auth foundation already fits; all of the following was re-verified against s
 
 - `../../apps/api/src/lib/auth/auth.ts` runs better-auth with the `organization` (teams enabled),
   `admin`, `twoFactor` and `apiKey` plugins, and a `databaseHooks.user.create.after` hook that
-  adds any newly-created non-guest user to the default org (`authAddUserToDefaultOrg`, role
-  `member`) and reconciles pending shares (`reconcileSharesForNewUser` in
+  adds any newly-created non-guest user to the default org (`ensureDefaultOrgMembership`, role
+  `member`) and reconciles pending shares (`reconcileShares` in
   `../../apps/api/src/lib/share/reconciliation.ts`). A JIT-created SSO user goes through the same
   create path, so org membership and share reconciliation come for free.
 - **Home provisioning is lazy, not waitlist-driven.** The waitlist (`../../apps/api/src/lib/waitlist/waitlist.ts`, `registerFromInvite`) only calls `auth.api.createUser` and signs the user in — it creates *no* Home. The Home, maildir, default mount and quota all materialize on the first `getHome(userId)` (`../../apps/api/src/lib/home/get-home.ts` → `Home.init()`, where `UserHome.loadSettings` seeds the default mount from server settings, then `Drive.init()` + `Mail.init()` etc.; quotas are resolved at read time by `resolveUserQuotas`). `getHome` is idempotent and concurrent-safe (`createAsyncSingleton` + install-race retry loop). An SSO user is therefore provisioned exactly like a waitlist user: on their first authenticated request.
@@ -85,8 +85,7 @@ import { sso } from '@better-auth/sso';
 sso({
     // Org membership is handled by the existing user.create.after hook, which fires for
     // JIT-created SSO users too. Keep the plugin's own org provisioning OFF so the two
-    // paths can't both call addMember — authAddUserToDefaultOrg throws ApiError(500) on
-    // an addMember failure, which would fail the whole SSO login on a duplicate insert.
+    // paths can't both call addMember for one user.
     organizationProvisioning: { disabled: true },
 }),
 ```

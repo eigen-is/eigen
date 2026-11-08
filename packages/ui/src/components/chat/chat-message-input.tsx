@@ -1,11 +1,25 @@
+// The composer under a chat room or a comment thread: the message box, the files staged with it, and the lists that
+// complete an @-mention or a slash command. It clears as soon as a message goes, and the room's send handler decides
+// where it goes. If that send fails, the text and files come back, and a slash command that runs in the browser
+// leaves the files it had no use for.
+
+import { rethrowUntoasted } from '@workspace/lib/api-error';
 import { COMMANDS_HELP, commandNeedsSpace, SLASH_COMMANDS } from '@workspace/lib/chat';
 import type { ChatAttachment, RoomMember } from '@workspace/lib/types/chat';
 import { Paperclip, Send } from 'lucide-react';
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import {
+    forwardRef,
+    useCallback,
+    useEffect,
+    useImperativeHandle,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
 import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
 import { useSuggestions } from '../../hooks/use-suggestions';
-import { cn } from '../../lib/utils';
 import { AttachmentDraftChips } from '../attachment/attachment-draft-chips';
 import { Button } from '../button';
 import { ChatPlayerSuggest } from './chat-player-suggest';
@@ -17,33 +31,29 @@ export type ChatMessageInputHandle = {
 };
 
 type ChatMessageInputProps = {
-    onSend: (rawContent: string, files?: File[]) => void;
-    disabled?: boolean;
-    readOnly?: boolean;
-    placeholder?: string;
-    readOnlyMessage?: string;
-    roomMembers?: RoomMember[];
-    currentUserEmail?: string;
-    messageCount?: number;
-    className?: string;
+    // Resolves to whether the send took the files.
+    onSend: (rawContent: string, files?: File[]) => Promise<boolean>;
+    disabled: boolean;
+    readOnly: boolean;
+    placeholder: string;
+    roomMembers: RoomMember[];
+    currentUserEmail: string;
+    messageCount: number;
     onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>, content: string) => boolean | undefined;
-    // When omitted, the paperclip button is hidden (the input renders without file-attach support).
-    onAttachClick?: () => void;
-    driveAttachments?: ChatAttachment[];
-    onRemoveDriveAttachment?: (attachment: ChatAttachment) => void;
+    onAttachClick: () => void;
+    driveAttachments: readonly ChatAttachment[];
+    onRemoveDriveAttachment: (attachment: ChatAttachment) => void;
 };
 
 export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageInputProps>(function ChatMessageInput(
     {
         onSend,
-        disabled = false,
-        readOnly = false,
-        placeholder = 'Type a message...',
-        readOnlyMessage = 'You have read-only access to this chat',
-        roomMembers = [],
-        currentUserEmail = '',
-        messageCount = 0,
-        className,
+        disabled,
+        readOnly,
+        placeholder,
+        roomMembers,
+        currentUserEmail,
+        messageCount,
         onKeyDown: onKeyDownProp,
         onAttachClick,
         driveAttachments,
@@ -55,11 +65,11 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
     const [files, setFiles] = useState<File[]>([]);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-    useImperativeHandle(ref, () => ({
-        addFiles: (newFiles) => setFiles((prev) => [...prev, ...newFiles]),
-    }));
+    const stageFiles = useCallback((staged: File[]) => setFiles((prev) => [...prev, ...staged]), []);
 
-    const hasDriveAttachments = !!driveAttachments && driveAttachments.length > 0;
+    useImperativeHandle(ref, () => ({ addFiles: stageFiles }), [stageFiles]);
+
+    const canSend = (content.trim() !== '' || files.length > 0 || driveAttachments.length > 0) && !disabled;
 
     const focusTextarea = useCallback(() => {
         if (!readOnly) textareaRef.current?.focus();
@@ -72,16 +82,32 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
         return () => window.removeEventListener('focus', onFocus);
     }, [messageCount, focusTextarea]);
 
+    // Height follows the text however it changed: typed, completed from a list, or put back after a failed send.
+    useLayoutEffect(() => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+        textarea.style.height = 'auto';
+        textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+    }, [content]);
+
     const handleSend = () => {
-        if ((!content.trim() && files.length === 0 && !hasDriveAttachments) || disabled) return;
-        onSend(content.trim(), files.length > 0 ? files : undefined);
+        if (!canSend) return;
+        // The box cleared at once, so the user may have started the next message.
+        const restoreFiles = () => setFiles((next) => (next.length > 0 ? next : files));
+        onSend(content.trim(), files.length > 0 ? files : undefined)
+            .then((filesTaken) => {
+                if (!filesTaken) restoreFiles();
+            })
+            .catch((error: unknown) => {
+                setContent((next) => next || content);
+                restoreFiles();
+                rethrowUntoasted(error);
+            });
         setContent('');
         setFiles([]);
-        if (textareaRef.current) textareaRef.current.style.height = 'auto';
         setTimeout(focusTextarea, 0);
     };
 
-    // ── @ mention suggest ───────────────────────────────────────────────
     const atQuery = getAtSuggestQuery(content);
     const suggestOpen = atQuery !== null;
 
@@ -101,10 +127,8 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
         });
     }, []);
 
-    // acceptShiftEnter matches historic behavior where shift+Enter also committed the
-    // @-mention; the slash suggests below intentionally let shift+Enter through as a newline.
-    // passthroughWhenEmpty lets `@foo` with no matches keep its text and send normally on
-    // Enter, rather than being silently stripped by a commit on an empty list.
+    // Shift+Enter commits an @-mention but is a newline in the slash lists below. With no matches, Enter sends
+    // `@foo` as typed, where a commit on the empty list would strip it.
     const atSuggest = useSuggestions({
         visible: suggestOpen,
         onSelect: handlePlayerSelect,
@@ -113,16 +137,9 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
         passthroughWhenEmpty: true,
     });
 
-    // ── Slash command suggest ───────────────────────────────────────────
-    const getSlashQuery = (): string | null => {
-        const trimmed = content.trim();
-        if (!trimmed.startsWith('/')) return null;
-        if (trimmed.indexOf(' ') > 0) return null;
-        return trimmed;
-    };
-
-    const slashQuery = getSlashQuery();
-    const slashSuggestOpen = slashQuery !== null && slashQuery.length > 0 && !SLASH_COMMANDS.includes(slashQuery);
+    const trimmedContent = content.trim();
+    const slashQuery = trimmedContent.startsWith('/') && !trimmedContent.includes(' ') ? trimmedContent : null;
+    const slashSuggestOpen = slashQuery !== null && !SLASH_COMMANDS.includes(slashQuery);
 
     const handleSlashSelect = useCallback((command: string) => {
         setContent(command + (commandNeedsSpace(command) ? ' ' : ''));
@@ -137,17 +154,11 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
         passthroughWhenEmpty: true,
     });
 
-    // ── Slash target suggest (emote/whisper/invite targets) ─────────────
     const slashTarget = getSlashTargetQuery(content);
     const slashTargetOpen = slashTarget !== null && !slashSuggestOpen;
 
     const slashTargetMembers = useMemo(() => {
-        if (!slashTarget) return [];
-        if (slashTarget.mode === 'contacts') {
-            // For /invite: show contacts not already in room (handled by ChatPlayerSuggest with includeContacts)
-            return [];
-        }
-        // For emotes/whisper/inspect: room members minus self
+        if (!slashTarget || slashTarget.mode === 'contacts') return [];
         const selfEmail = currentUserEmail.toLowerCase();
         return roomMembers.filter((m) => m.email.toLowerCase() !== selfEmail);
     }, [slashTarget, roomMembers, currentUserEmail]);
@@ -181,19 +192,14 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
         passthroughWhenEmpty: true,
     });
 
-    // ── Keyboard handling ───────────────────────────────────────────────
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        // Slash and target are mutually exclusive (target is gated on !slashSuggestOpen), but
-        // target and @-mention can both match at once — e.g. typing `/whisper @al`. Target
-        // takes precedence so Tab/Enter commits the member, not the @-prefixed username.
+        // A target list and the @-mention list can both match, as in `/whisper @al`. The target goes first, so
+        // Tab or Enter commits the member and not the @-prefixed username.
         if (slashSuggest.handleKeyDown(e)) return;
         if (targetSuggest.handleKeyDown(e)) return;
         if (atSuggest.handleKeyDown(e)) return;
 
-        if (onKeyDownProp) {
-            const handled = onKeyDownProp(e, content);
-            if (handled) return;
-        }
+        if (onKeyDownProp?.(e, content)) return;
 
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
@@ -201,45 +207,37 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
         }
     };
 
-    const removeFile = (index: number) => {
-        setFiles((prev) => prev.filter((_, i) => i !== index));
-    };
-
-    const stageFiles = useCallback((staged: File[]) => setFiles((prev) => [...prev, ...staged]), []);
     const { targetProps } = useFileDropTarget(stageFiles, !disabled);
     const { onPaste } = useFilePasteTarget(stageFiles, !disabled);
 
     if (readOnly) {
         return (
-            <div className={cn('border-t app-gutter-x py-3', className)}>
-                <p className="text-xs text-muted-foreground text-center py-2">{readOnlyMessage}</p>
+            <div className="border-t app-gutter-x py-3">
+                <p className="text-xs text-muted-foreground text-center py-2">You have read-only access to this chat</p>
             </div>
         );
     }
 
     return (
-        <div className={cn('border-t app-gutter-x py-3', className)} {...targetProps}>
+        <div className="border-t app-gutter-x py-3" {...targetProps}>
             <AttachmentDraftChips
-                items={[...(driveAttachments ?? []), ...files]}
+                items={[...driveAttachments, ...files]}
                 className="mb-2"
                 onRemove={(i) => {
-                    const driveLen = driveAttachments?.length ?? 0;
-                    if (i < driveLen) onRemoveDriveAttachment?.((driveAttachments ?? [])[i]);
-                    else removeFile(i - driveLen);
+                    if (i < driveAttachments.length) onRemoveDriveAttachment(driveAttachments[i]);
+                    else setFiles((prev) => prev.filter((_, f) => f !== i - driveAttachments.length));
                 }}
             />
             <div className="flex items-end gap-2 relative">
-                {onAttachClick && (
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="shrink-0 h-10 w-10 text-muted-foreground hover:text-foreground"
-                        onClick={onAttachClick}
-                        disabled={disabled}
-                    >
-                        <Paperclip className="h-4 w-4" />
-                    </Button>
-                )}
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="shrink-0 h-10 w-10 text-muted-foreground hover:text-foreground"
+                    onClick={onAttachClick}
+                    disabled={disabled}
+                >
+                    <Paperclip className="h-4 w-4" />
+                </Button>
                 <ChatPlayerSuggest
                     query={atQuery || ''}
                     roomMembers={roomMembers}
@@ -261,7 +259,7 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
                     />
                 )}
                 <ChatSlashSuggest
-                    query={slashQuery || ''}
+                    query={slashQuery ?? ''}
                     commandsHelp={COMMANDS_HELP}
                     onSelect={handleSlashSelect}
                     visible={slashSuggestOpen}
@@ -271,11 +269,7 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
                 <textarea
                     ref={textareaRef}
                     value={content}
-                    onChange={(e) => {
-                        setContent(e.target.value);
-                        e.target.style.height = 'auto';
-                        e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
-                    }}
+                    onChange={(e) => setContent(e.target.value)}
                     role="combobox"
                     aria-expanded={slashSuggest.isActive || targetSuggest.isActive || atSuggest.isActive}
                     onKeyDown={handleKeyDown}
@@ -284,12 +278,7 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
                     rows={1}
                     className="flex-1 min-w-0 resize-none rounded-lg border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring min-h-[40px] max-h-[120px] leading-[1.125]"
                 />
-                <Button
-                    size="icon"
-                    onClick={handleSend}
-                    disabled={(!content.trim() && files.length === 0 && !hasDriveAttachments) || disabled}
-                    className="shrink-0 h-10 w-10"
-                >
+                <Button size="icon" onClick={handleSend} disabled={!canSend} className="shrink-0 h-10 w-10">
                     <Send className="h-4 w-4" />
                 </Button>
             </div>

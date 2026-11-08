@@ -21,6 +21,32 @@ type CommentThreadProps = {
     className?: string;
 };
 
+export function CommentThread({ ownerId, mountId, pathId, chatName, className }: CommentThreadProps) {
+    const { resolveChatId } = useMediaResolver();
+    const chatId = resolveChatId(chatName);
+
+    // A name the listing lacks waits for the listing's refetch, with the loading line the message list shows. If the
+    // thread is gone, the card reads deleted and the dialog shows that instead of this thread.
+    if (!chatId) {
+        return (
+            <div className={cn('h-[50vh] min-h-0', className)}>
+                <LoadingState />
+            </div>
+        );
+    }
+
+    return (
+        <CommentThreadInner
+            key={chatId}
+            ownerId={ownerId}
+            mountId={mountId}
+            pathId={pathId}
+            chatId={chatId}
+            className={className}
+        />
+    );
+}
+
 function CommentThreadInner({
     ownerId,
     mountId,
@@ -83,24 +109,5 @@ function CommentThreadInner({
                 onPickFromDevice={(files) => inputRef.current?.addFiles(files)}
             />
         </div>
-    );
-}
-
-export function CommentThread({ ownerId, mountId, pathId, chatName, className }: CommentThreadProps) {
-    const { resolveChatId } = useMediaResolver();
-    const chatId = resolveChatId(chatName);
-
-    // A name the listing lacks waits for the listing's refetch, with the loading line the message list shows. If the
-    // thread is gone, the card reads deleted and the dialog shows that instead of this thread.
-    if (!chatId) {
-        return (
-            <div className={cn('h-[50vh] min-h-0', className)}>
-                <LoadingState />
-            </div>
-        );
-    }
-
-    return (
-        <CommentThreadInner ownerId={ownerId} mountId={mountId} pathId={pathId} chatId={chatId} className={className} />
     );
 }

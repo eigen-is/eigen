@@ -10,7 +10,12 @@ const CALENDAR = '/dav/calendars/alice/personal/';
 
 describe('davPutResponse', () => {
     test('a create answers 201 with the quoted etag and a Location under the collection', () => {
-        const res = davPutResponse({ ok: true, id: 'r1', etag: 'abc', created: true }, 'CARD', BOOK, 'a@b.vcf');
+        const res = davPutResponse(
+            { ok: true, id: 'r1', etag: 'abc', created: true, unchanged: false },
+            'CARD',
+            BOOK,
+            'a@b.vcf',
+        );
         expect(res.status).toBe(201);
         expect(res.headers.get('ETag')).toBe('"abc"');
         // @ is pchar-legal, so the emitted href carries it raw.
@@ -18,7 +23,12 @@ describe('davPutResponse', () => {
     });
 
     test('a replace answers 204 with the etag and no Location', () => {
-        const res = davPutResponse({ ok: true, id: 'r1', etag: 'abc', created: false }, 'CARD', BOOK, 'x.vcf');
+        const res = davPutResponse(
+            { ok: true, id: 'r1', etag: 'abc', created: false, unchanged: false },
+            'CARD',
+            BOOK,
+            'x.vcf',
+        );
         expect(res.status).toBe(204);
         expect(res.headers.get('ETag')).toBe('"abc"');
         expect(res.headers.get('Location')).toBeNull();
@@ -106,7 +116,12 @@ describe('davPutResponse', () => {
             `<C:no-uid-conflict><D:href>${CALENDAR}held.ics</D:href></C:no-uid-conflict>`,
         );
 
-        const created = davPutResponse({ ok: true, id: 'r1', etag: 'abc', created: true }, 'C', CALENDAR, 'mine.ics');
+        const created = davPutResponse(
+            { ok: true, id: 'r1', etag: 'abc', created: true, unchanged: false },
+            'C',
+            CALENDAR,
+            'mine.ics',
+        );
         expect(created.headers.get('Location')).toBe(`${CALENDAR}mine.ics`);
     });
 });

@@ -41,7 +41,7 @@ The ETag is the SHA-256 of the stored bytes, hashed once at the write and stored
 
 ## A PUT parses before the lock and decides inside it
 
-`putCard` (`contacts/dav-store.ts`) checks the body ceiling, transcodes and parses before it takes the lock. None of that depends on stored state, so a 5 MiB parse makes no other writer wait. `If-Match` and `If-None-Match` are evaluated inside the lock, against the row the write replaces. Two racing `If-Match` PUTs serialize, and the loser gets 412. The calendar store does the same in the same place.
+`putCard` (`contacts/dav-store.ts`) checks the body ceiling, transcodes and parses before it takes the lock. None of that depends on stored state, so a 5 MiB parse makes no other writer wait. `If-Match` and `If-None-Match` are evaluated inside the lock, against the row the write replaces. Two racing `If-Match` PUTs serialize, and the loser gets 412. A PUT of the bytes already stored commits nothing and moves no ctag, as in CalDAV, and still answers the stored ETag when the body was kept verbatim.
 
 A UID is required and can't change. A UID another card owns is a 409 `no-uid-conflict` naming that card's href, never a raw constraint error. `parseVCardLines` refuses a second `BEGIN:VCARD`, so one PUT is one card.
 

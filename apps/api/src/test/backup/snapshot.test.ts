@@ -13,7 +13,7 @@ import * as Y from 'yjs';
 import { twoFactor as twoFactorScheme } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { treeBytes } from '../../lib/backup/file-tree';
-import { buildArtifactName, buildHomeFolderName } from '../../lib/backup/paths';
+import { buildHomeFolderName, freeArtifactName } from '../../lib/backup/paths';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import { docUpdates } from '../../lib/collab/schema';
@@ -690,7 +690,7 @@ describe('Backup artifact names', () => {
     test('round-trips a user and a team ownerId', () => {
         const at = new Date('2026-09-09T14:03:07Z');
         for (const ownerId of ['a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'team_abc123']) {
-            const name = buildArtifactName(ownerId, at);
+            const name = freeArtifactName(ownerId, at);
             expect(name).toBe(`home-${ownerId}-20260909-140307.tar.zst`);
             const parsed = parseBackupArtifactName(name);
             expect(parsed).not.toBeNull();

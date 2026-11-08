@@ -15,6 +15,7 @@ import { Mount } from '../../lib/mount/mount';
 import { isExiftoolCandidate } from '../../lib/preview/exiftool-preview';
 import {
     EML_FORMAT,
+    getScreenPreview,
     getTextPreview,
     getVCardPreview,
     ICS_FORMAT,
@@ -406,30 +407,21 @@ describe('isExiftoolCandidate', () => {
     });
 });
 
-describe('pruneOldVersions', () => {
-    test('removes prior versions of a path, keeps the current file and other paths', async () => {
-        const { pruneOldVersions } = await import('../../lib/preview/preview-cache');
-        const { existsSync, mkdirSync } = await import('node:fs');
+// Each write leaves one version of a path behind, whatever its kind, and never touches another path's.
+describe('a written preview', () => {
+    test('prunes the older versions of its path and keeps other paths', async () => {
+        const bytes = Buffer.from('current');
+        const { mount, path } = await previewMount('prune-old-versions', 'notes.txt', 'text/plain', bytes);
+        const other = `00000000-0000-0000-0000-000000000000-100.${TEXT_FORMAT}.json`;
+        writeFileSync(join(mount.previewsDir, `${path.id}-100.screen.webp`), 'x');
+        writeFileSync(join(mount.previewsDir, `${path.id}-100.${VCARD_FORMAT}.json`), '{}');
+        writeFileSync(join(mount.previewsDir, other), '{}');
 
-        const dir = mkdtempSync('/tmp/eigen-prune-test-');
-        mkdirSync(dir, { recursive: true });
-
-        // pathIds are UUIDs (contain dashes) — the prefix match must not bleed across paths.
-        const id = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
-        const other = '00000000-0000-0000-0000-000000000000';
-        const keep = `${id}-200.json`;
-
-        await Bun.write(`${dir}/${id}-100.json`, '{}'); // older text version
-        await Bun.write(`${dir}/${id}-150.screen.webp`, 'x'); // older image version
-        await Bun.write(`${dir}/${keep}`, '{}'); // current version
-        await Bun.write(`${dir}/${other}-100.json`, '{}'); // a different path
-
-        await pruneOldVersions(dir, id, keep);
-
-        expect(existsSync(`${dir}/${id}-100.json`)).toBe(false);
-        expect(existsSync(`${dir}/${id}-150.screen.webp`)).toBe(false);
-        expect(existsSync(`${dir}/${keep}`)).toBe(true);
-        expect(existsSync(`${dir}/${other}-100.json`)).toBe(true);
+        expect((await getTextPreview(mount, path))?.value.body).toContain('current');
+        const ofPath = () => readdirSync(mount.previewsDir).filter((name) => name.startsWith(`${path.id}-`));
+        for (let i = 0; i < 40 && ofPath().length > 1; i++) await Bun.sleep(25);
+        expect(ofPath()).toEqual([`${path.id}-${path.updatedAt.getTime()}.${TEXT_FORMAT}.json`]);
+        expect(readdirSync(mount.previewsDir)).toContain(other);
     });
 });
 
@@ -442,6 +434,21 @@ function createGetLocalDatabase(baseDir: string) {
         await db.open(0);
         return db;
     };
+}
+
+async function previewMount(name: string, fileName: string, mimeType: string, bytes: Uint8Array) {
+    const tmpDir = mkdtempSync(`/tmp/eigen-${name}-`);
+    const mount = new Mount(
+        'test-owner-id',
+        tmpDir,
+        createTestMountConfig(name, 'local-key'),
+        createGetLocalDatabase(tmpDir),
+    );
+    await mount.init();
+    const root = await mount.getRootFolder();
+    if (!root) throw new Error('no root folder');
+    const fileId = await mount.createFile(root.id, fileName, mimeType, bytes.length, bytes);
+    return { mount, path: await mount.getActivePath(fileId) };
 }
 
 describe('getTextPreview (stale-while-revalidate)', () => {
@@ -555,6 +562,70 @@ describe('getTextPreview (stale-while-revalidate)', () => {
         expect(served?.value.body).toContain('plain text pretending to be a deck');
         // And it is labelled as what it is: the deck mode would draw this body inside a slide frame.
         expect(served?.value.mode).toBe('plaintext');
+    });
+});
+
+// A folder grid asks for one file's preview many times at once: whatever its kind, it is built once and then read back.
+describe('one generation per preview', () => {
+    test('two requests for an uncached image start one generation, and a cached one starts none', async () => {
+        const { mount, path } = await previewMount('one-image-generation', 'photo.png', 'image/png', TEST_PNG_BYTES);
+        const readFile = spyOn(mount, 'readFile');
+        try {
+            const [a, b] = await Promise.all([getScreenPreview(mount, path, ''), getScreenPreview(mount, path, '')]);
+            expect(a?.type).toBe('image');
+            expect(b?.type).toBe('image');
+            expect(readFile).toHaveBeenCalledTimes(1);
+
+            expect((await getScreenPreview(mount, path, ''))?.type).toBe('image');
+            expect(readFile).toHaveBeenCalledTimes(1);
+        } finally {
+            readFile.mockRestore();
+        }
+    });
+
+    test('two requests for an uncached text preview start one generation, and a cached one starts none', async () => {
+        const bytes = Buffer.from('shared body');
+        const { mount, path } = await previewMount('one-text-generation', 'notes.txt', 'text/plain', bytes);
+        const readBytes = spyOn(mount, 'readBytes');
+        try {
+            const [a, b] = await Promise.all([getTextPreview(mount, path), getTextPreview(mount, path)]);
+            expect(a?.value.body).toContain('shared body');
+            expect(b?.value.body).toContain('shared body');
+            expect(readBytes).toHaveBeenCalledTimes(1);
+
+            const cached = await getTextPreview(mount, path);
+            expect(cached?.stale).toBe(false);
+            expect(readBytes).toHaveBeenCalledTimes(1);
+        } finally {
+            readBytes.mockRestore();
+        }
+    });
+
+    test('a stale body is served at once while it regenerates', async () => {
+        const bytes = Buffer.from('version one');
+        const { mount, path } = await previewMount('one-stale-regeneration', 'notes.txt', 'text/plain', bytes);
+        await getTextPreview(mount, { ...path, updatedAt: new Date(1000) });
+        await mount.writeFile(path.id, Buffer.from('version two'));
+        const edited = { ...path, updatedAt: new Date(2000) };
+
+        const readBytes = spyOn(mount, 'readBytes');
+        try {
+            const served = await Promise.all([getTextPreview(mount, edited), getTextPreview(mount, edited)]);
+            for (const stale of served) {
+                expect(stale?.stale).toBe(true);
+                expect(stale?.value.body).toContain('version one');
+            }
+            let fresh = await getTextPreview(mount, edited);
+            for (let i = 0; i < 40 && fresh?.stale !== false; i++) {
+                await Bun.sleep(25);
+                fresh = await getTextPreview(mount, edited);
+            }
+            expect(fresh?.value.body).toContain('version two');
+            // A second request whose stale read outlasted the first regeneration starts one more.
+            expect(readBytes.mock.calls.length).toBeLessThanOrEqual(2);
+        } finally {
+            readBytes.mockRestore();
+        }
     });
 });
 

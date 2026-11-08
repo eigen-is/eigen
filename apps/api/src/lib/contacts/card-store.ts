@@ -9,7 +9,6 @@ import type { Tx as DatabaseTx } from '../core';
 import { computeResourceEtag, readBlobTableSize, sanitizeResourceUri } from '../core';
 import type { LocalFilesystem } from '../core/local-filesystem';
 import type { ParsedCard } from '../vcard/types';
-import { CONTACTS_DB_CONFIG } from './db-config';
 import * as schema from './schema';
 
 export type Tx = DatabaseTx<typeof schema>;
@@ -49,13 +48,7 @@ export function sanitizeCardUri(raw: string): string | null {
 export async function readContactsTotalSize(homeFs: LocalFilesystem): Promise<number> {
     // The avatars are counted whether or not any card is: a photo outlives the card it was cropped for.
     const avatars = await homeFs.dirSize(`${PATHS.CONTACTS.ROOT}/${PATHS.CONTACTS.AVATARS}`);
-    const cards = readBlobTableSize(
-        homeFs.absolutePath(PATHS.CONTACTS.DB),
-        'contacts',
-        'vcard',
-        CONTACTS_DB_CONFIG.currentVersion,
-    );
-    return avatars + cards;
+    return avatars + readBlobTableSize(homeFs.absolutePath(PATHS.CONTACTS.DB), 'contacts', 'vcard');
 }
 
 // Hashed by the photo bytes, so a superseded photo's cache falls out of reference and the sweep reclaims it.
@@ -68,12 +61,6 @@ const PHOTO_HASH = '[0-9a-f]{8}'; // avatarCacheName's hash suffix
 
 // Allowlisting the two served webp names refuses separators, `..` and control characters by construction.
 export const AVATAR_FILENAME = new RegExp(`^${CONTACT_ID}(-${PHOTO_HASH})?\\.webp$`);
-const OWN_PHOTO_CACHE = new RegExp(`^${PHOTO_HASH}\\.webp$`);
-
-// Another row may still reference a staged or legacy name, so only a card's own hash cache is safe to unlink.
-export function isCardPhotoCacheOf(contactId: string, filename: string): boolean {
-    return filename.startsWith(`${contactId}-`) && OWN_PHOTO_CACHE.test(filename.slice(contactId.length + 1));
-}
 
 // Staged beside the served webp: the exact PHOTO bytes a save embeds verbatim for Apple, never served itself.
 const STAGED_EMBED_FORMATS = {

@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
+import { COLLAB_ACCESS_LOST_CLOSE } from '@workspace/lib/constants/collab';
 import type { ServerWebSocket } from 'elysia/ws/bun';
 import * as encoding from 'lib0/encoding';
 import * as awarenessProtocol from 'y-protocols/awareness';
@@ -610,7 +611,7 @@ describe('Collab', () => {
             // Owner revokes Bob's read (empty ACL). Bob must be disconnected; Alice must stay.
             await aliceHome.drive.updateACL(aliceMountId, docId, [], undefined, undefined, aliceUser);
 
-            expect(bobConn.closedWith?.code).toBe(1008);
+            expect(bobConn.closedWith?.code).toBe(COLLAB_ACCESS_LOST_CLOSE);
             expect(aliceConn.closedWith).toBeNull();
             expect(collab.connectionCount).toBe(baseline + 1);
 
@@ -768,7 +769,7 @@ describe('Collab', () => {
 
             // Read is now gone at the new location, and Bob's socket is closed for it.
             expect(await aliceHome.drive.canRead(aliceMountId, movingDoc.id, bobUser)).toBe(false);
-            expect(bobConn.closedWith?.code).toBe(1008);
+            expect(bobConn.closedWith?.code).toBe(COLLAB_ACCESS_LOST_CLOSE);
             expect(aliceConn.closedWith).toBeNull();
             expect(collab.connectionCount).toBe(baseline + 1);
 

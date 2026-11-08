@@ -140,6 +140,8 @@ Dovecot's passdb runs `docker/dovecot/eigen-checkpassword`, which posts to `/int
 
 **The exit code tells a wrong password from a broken server.** A 401, 403 or 429 exits 1, Dovecot's "auth failed": the client gets `535` and asks for the password. A connection failure or any other status exits 111, "temporary failure": Postfix answers `454 4.7.0` and clients retry. A 200 with no `userId` is 111 too, because an answer the script can't read is a broken API, and never an open door. That is why the script reads the HTTP status instead of using `curl -f`, which exits the same way for a 401 as for a 500. A refused password mapped to 111 would also lose failures: Dovecot re-runs or drops the helper, so some attempts would never reach the failure limiter.
 
+**A home that is being restored or deleted gets no yes.** After a 200 Dovecot opens the user's Maildir, and creating the inbox creates every missing folder above it. In the middle of a restore's two renames that remakes the home folder, which then blocks the second rename, and after a deletion it brings the deleted user's folder back. So the route asks `refuseShutHome` (`apps/api/src/lib/home/get-home.ts`) once the password is right: a restore answers 503 and a deletion 404, which the script exits 111 on, and the client retries. A wrong password still gets its 401 first, so the client asks for it as it would at any other time.
+
 The script sends the client's address as `ip`, from `TCPREMOTEIP`. Dovecot's `IP` variable is the local address, so using it would key the limiter on the server. For a submission login the client is the SMTP client, which Postfix hands to Dovecot as `rip`. The variable is unset for internal sessions such as `doveadm`, and then the field is left out.
 
 ## See also

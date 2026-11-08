@@ -10,7 +10,6 @@ import {
 import * as customGeometryModule from '../../../lib/import/slides/custom-geometry';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
 import { presetGeometry } from '../../../lib/import/slides/preset-geometry';
-import { MAX_GROUP_DEPTH } from '../../../lib/import/slides/shapes';
 import type { PptxFixture } from '../../fixtures/pptx';
 import {
     box,
@@ -37,6 +36,8 @@ import {
     textBox,
     xfrm,
 } from '../../fixtures/pptx';
+
+const MAX_GROUP_DEPTH = 32;
 
 // A slide's shape tree as canvas elements: geometry, groups, kinds, paint, pictures and what is dropped.
 

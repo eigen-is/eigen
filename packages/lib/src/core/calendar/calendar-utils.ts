@@ -65,7 +65,7 @@ export function getDaysInRange(startDate: Date, endDate: Date): Date[] {
     return days;
 }
 
-export function getEventsForDay(events: CalendarEventOccurrence[], day: Date): CalendarEventOccurrence[] {
+export function getEventsForDay(events: readonly CalendarEventOccurrence[], day: Date): CalendarEventOccurrence[] {
     return events.filter((e) => {
         if (e.allDay) {
             const dayUtcMs = Date.UTC(day.getFullYear(), day.getMonth(), day.getDate());
@@ -92,12 +92,14 @@ export function formatEventTime(event: CalendarEventOccurrence): string {
     return formatTime(event.startTime);
 }
 
-// The grid lays events out with local Date getters, so every surface labelling a zone-less event must resolve it here too.
+// The grid lays events out with local Date getters, so every surface labelling a zone-less event must resolve it here
+// too.
 export function viewerTimeZone(): string {
     return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
-// Intl knows no Windows zone name, and dropping one expands an Outlook series in UTC, breaking its wall time at the next DST change.
+// Intl knows no Windows zone name, and dropping one expands an Outlook series in UTC, breaking its wall time at the next
+// DST change.
 const ZONE_ANSWERS = new Map<string, string | null>();
 const MAX_ZONE_ANSWERS = 64;
 
@@ -121,7 +123,7 @@ export function normalizeTimezone(timezone: string | null | undefined): string |
     return answer;
 }
 
-// fallbackTimeZone is explicit: the browser passes viewerTimeZone(), iMIP mail passes 'UTC' because the server's zone is a lie.
+// fallbackTimeZone is explicit because the server's own zone is a lie, so mail written there passes 'UTC'.
 export function formatEventWhen(
     start: Date,
     end: Date,
@@ -157,8 +159,8 @@ export function formatEventWhen(
 
 export function getCalendarColor(
     event: CalendarEventOccurrence,
-    calendars: CalendarItem[],
-    sharedCalendars?: SharedCalendar[],
+    calendars: readonly CalendarItem[],
+    sharedCalendars?: readonly SharedCalendar[],
 ): string {
     if (event.data?.color) return event.data.color;
     const cal = calendars.find((c) => c.id === event.calendarId);
@@ -192,7 +194,8 @@ export function isInvitationFromOthers(event: { data?: EventData | null }, owner
     return organizer.email.toLowerCase() !== ownerEmail.toLowerCase();
 }
 
-// An empty or absent list on an override means its series' guests, so a guest added to the series later reaches every occurrence.
+// An empty or absent list on an override means its series' guests, so a guest added to the series later reaches every
+// occurrence.
 export function heldAttendees(
     override: { data?: EventData | null } | null | undefined,
     series: { data?: EventData | null } | null | undefined,
@@ -211,18 +214,13 @@ export function getInviteStatus(event: CalendarEventOccurrence, userEmail?: stri
 
 export const WEEKDAY_HEADERS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
-export function parseOccurrenceDate(value: unknown): Date {
-    if (value instanceof Date) return value;
-    const str = String(value);
-    if (str.length === 10) return new Date(`${str}T00:00:00Z`);
-    return new Date(str);
+export function parseOccurrenceDate(value: string): Date {
+    return new Date(`${value}T00:00:00Z`);
 }
 
-export function occurrenceDateToString(value: unknown): string {
-    if (value instanceof Date) {
-        return `${value.getUTCFullYear()}-${String(value.getUTCMonth() + 1).padStart(2, '0')}-${String(value.getUTCDate()).padStart(2, '0')}`;
-    }
-    return String(value).substring(0, 10);
+export function occurrenceDateToString(value: Date): string {
+    const pad = (n: number, width: number) => String(n).padStart(width, '0');
+    return `${pad(value.getUTCFullYear(), 4)}-${pad(value.getUTCMonth() + 1, 2)}-${pad(value.getUTCDate(), 2)}`;
 }
 
 // rrule spells ordinals by a lookup that stops at the 31st, so a day of the year comes out as "131th".
@@ -248,7 +246,7 @@ export function rruleToText(rrule: string | null): string | null {
     }
 }
 
-export type SeriesEdit = {
+type SeriesEdit = {
     title: string;
     description: string | null;
     location: string | null;
@@ -295,6 +293,5 @@ export function truncateRRule(rruleStr: string, beforeDate: Date): string {
     until.setUTCHours(23, 59, 59, 0);
     options.until = until;
     delete options.count;
-    const result = new RRule(options).toString();
-    return result.replace(/^RRULE:/, '');
+    return new RRule(options).toString().replace(/^RRULE:/, '');
 }

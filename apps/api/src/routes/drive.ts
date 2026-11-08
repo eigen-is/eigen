@@ -5,12 +5,19 @@
 // requireSelf instead.
 
 import { MAX_SEND_RECIPIENTS } from '@workspace/lib/constants/mail';
-import type { DriveAccessCheckResult, DrivePath, ImportResult } from '@workspace/lib/types/drive';
+import type {
+    DocumentImportOptions,
+    DriveAccessCheckResult,
+    DriveImportSource,
+    DrivePath,
+    ImportResult,
+} from '@workspace/lib/types/drive';
 import { EXPORT_SUMMARY_HEADER, isContainerType, isConvertTarget } from '@workspace/lib/types/drive';
-import type { FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
+import type { ClientFileEventInput, FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
+import { CARD_TITLE_MAX_LENGTH } from '@workspace/lib/types/file-history';
 import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
-import type { ElysiaCustomStatusResponse } from 'elysia';
+import type { ElysiaCustomStatusResponse, Static } from 'elysia';
 import { Elysia, t } from 'elysia';
 import { requireNonGuest, requireSelf } from '../lib/auth/access';
 import { getUploadMaxSize } from '../lib/config/enforcement';
@@ -47,12 +54,8 @@ import {
 import { getThumbnail } from '../lib/shared/thumbnails';
 import { SNAPSHOT_NAME_FORMAT } from '../lib/versioning/timestamp';
 import { betterAuth } from './auth';
-import {
-    clientFileEventBody,
-    documentImportFromDriveSchema,
-    documentImportSchema,
-    eigenDocTypeSchema,
-} from './shared-schemas';
+import type { TypesEqual } from './shared-schemas';
+import { eigenDocTypeSchema, importFromDriveSchema } from './shared-schemas';
 
 // The longest free-text note a share route takes, such as a mail to the collaborators or an access
 // request. A longer note is never stored or mailed.
@@ -60,6 +63,46 @@ const MAX_SHARE_MESSAGE_LENGTH = 12000;
 
 // Preview and thumb URLs carry updatedAt, so a content change is a new URL and the entry can live a day.
 const PREVIEW_MAX_AGE_SECONDS = 86400;
+
+// How File › Import… writes into the open document: the upload's query, the Drive pick's body beside its source.
+const documentImportSchema = t.Object({
+    mode: t.Union([t.Literal('insert'), t.Literal('replace')]),
+    afterFrameId: t.Optional(t.String({ maxLength: 64 })),
+});
+const _documentImportSchemaMatchesType: TypesEqual<Static<typeof documentImportSchema>, DocumentImportOptions> = true;
+void _documentImportSchemaMatchesType;
+
+// An intersection as the one object type a schema's Static is, which TypesEqual tells apart.
+type Flatten<T> = { [K in keyof T]: T[K] };
+
+// The Drive pick's body: the file it reads, and how it comes in.
+const documentImportFromDriveSchema = t.Object({
+    ...importFromDriveSchema.properties,
+    ...documentImportSchema.properties,
+});
+const _documentImportFromDriveSchemaMatchesType: TypesEqual<
+    Static<typeof documentImportFromDriveSchema>,
+    Flatten<DriveImportSource & DocumentImportOptions>
+> = true;
+void _documentImportFromDriveSchemaMatchesType;
+
+// One object per event type, so the identity guard below can hold it against ClientFileEventInput.
+const CARD_TEXT = { maxLength: CARD_TITLE_MAX_LENGTH };
+const stickyCardDetails = t.Object({
+    card: t.String(CARD_TEXT),
+    toColumn: t.String(CARD_TEXT),
+    cardId: t.String(CARD_TEXT),
+});
+const clientFileEventBody = t.Union([
+    t.Object({ eventType: t.Literal('sticky-added'), details: stickyCardDetails }),
+    t.Object({ eventType: t.Literal('sticky-moved'), details: stickyCardDetails }),
+    t.Object({
+        eventType: t.Literal('sticky-removed'),
+        details: t.Object({ card: t.String(CARD_TEXT), cardId: t.String(CARD_TEXT) }),
+    }),
+]);
+const _clientFileEventBodyMatchesType: TypesEqual<Static<typeof clientFileEventBody>, ClientFileEventInput> = true;
+void _clientFileEventBodyMatchesType;
 
 export const driveRouter = new Elysia({ name: 'drive' })
     .use(betterAuth)
@@ -209,9 +252,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
                     // A file copied to another mount is uploaded there, and the upload picks its free name.
                     if (!sameMount && !isContainerType(source.type)) return await copy(desired);
 
-                    // Any other copy gets a free name in the target folder here and not in Drive.copyPath, because a
-                    // WebDAV COPY overwrites or answers 409 instead. Drive.copyPath checks the target's limits and
-                    // refuses a copy into its own subtree, for WebDAV too.
+                    // A WebDAV COPY overwrites or answers 409 instead, so the free name is picked here and not in
+                    // Drive.copyPath, which checks the target's limits and its own subtree for both.
                     return await withFreeName(folderIn(target.mount, body.targetParentId), desired, copy);
                 });
             });
@@ -229,9 +271,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/export/:format',
         async ({ params, request, user, set, server }) => {
-            // The response sends nothing while the job waits in the queue and its Worker runs. That can
-            // take longer than any idle timeout Bun allows, so this request switches it off. The
-            // request's signal still fires when the client really disconnects.
+            // The response sends nothing while the job queues and runs, which can outlast any idle timeout Bun allows,
+            // so it is switched off for this request. The signal still fires on a real disconnect.
             server?.timeout(request, 0);
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
@@ -259,9 +300,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             return await drive.withHomeHeld(async () => {
                 const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
-                // No abort signal on purpose. A page reload aborts every fetch, and a large workbook takes a
-                // minute of transform time. So the conversion finishes anyway, and the new file shows up
-                // through the drive's SSE refresh. The previews take no signal for the same reason.
+                // No abort signal on purpose: a page reload aborts every fetch, and a large workbook takes a minute, so
+                // the conversion finishes anyway and shows up through the drive's SSE refresh.
                 return await convertToDocument(drive, mount, path, targetType, user, maxSize);
             });
         },
@@ -493,9 +533,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
         async ({ params, body, user }) => {
             requireNonGuest(user);
             const drive = await getSharedDrive(params.ownerId, user);
-            // The server merges the change onto the ACL as it is now, so two people sharing at once
-            // can't undo each other's entries. The user is passed as the actor of the share emails.
-            // On another owner's drive, SharedDrive ignores it and uses its own user.
+            // The server merges the change onto the ACL as it is now, so two people sharing at once can't undo each
+            // other. On another owner's drive SharedDrive ignores the user and uses its own.
             await drive.updateACLDelta(
                 params.mountId,
                 params.pathId,
@@ -590,9 +629,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
             // A guest can't be given a share, so there is nothing to request, the same as on the other
             // share routes.
             requireNonGuest(user);
-            // This skips SharedDrive on purpose, because the caller has no access yet, which is why they
-            // ask. propagateAccessRequest only notifies the owner through the home relay. It never
-            // reads the path for the requester or answers with its data.
+            // This skips SharedDrive on purpose, since the caller has no access yet. propagateAccessRequest only
+            // notifies the owner through the home relay and never reads the path for the requester.
             await propagateAccessRequest(
                 params.ownerId,
                 params.mountId,

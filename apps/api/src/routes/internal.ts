@@ -5,6 +5,7 @@
 import { Elysia, t } from 'elysia';
 import { requireLocalhost } from '../lib/auth/access';
 import { verifyProtocolAuth } from '../lib/auth/protocol-auth';
+import { refuseShutHome } from '../lib/home';
 import { alertOwner } from '../lib/user/alert-owner';
 
 export const internalRouter = new Elysia({ name: 'internal' })
@@ -12,9 +13,10 @@ export const internalRouter = new Elysia({ name: 'internal' })
         '/internal/auth/verify',
         async ({ body, request, server }) => {
             requireLocalhost(request, server);
-            // `ip` is the mail client's address, forwarded by eigen-checkpassword from dovecot's
-            // `TCPREMOTEIP`. Without it the limiter only ever sees the docker bridge peer.
             const user = await verifyProtocolAuth(body.email, body.password, body.ip);
+            // After a yes Dovecot creates the Maildir's missing folders, which would remake a home that a restore or a
+            // deletion is moving. The mail server takes this refusal as a temporary failure, so the client retries.
+            refuseShutHome(user.id);
             return { userId: user.id, email: user.email };
         },
         {
@@ -26,9 +28,7 @@ export const internalRouter = new Elysia({ name: 'internal' })
             }),
         },
     )
-    // Queue-backlog alert from the postfix container's queue-monitor.sh: the queue lives on a
-    // private volume, so the API can't count it. A notification and not mail, because mail about a
-    // jammed queue would sit in that queue.
+    // The queue lives on the mail container's private volume, so the API can't count it and is told instead.
     .post(
         '/internal/mail/queue-alert',
         async ({ body, request, server }) => {

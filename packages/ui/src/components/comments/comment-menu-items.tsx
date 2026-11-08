@@ -1,3 +1,6 @@
+// The rows of a comment's or a sticky's menu: view, edit, color, assign, resolve or reopen, and delete, or Add when
+// nothing has a comment yet. A card's own menu draws them alone; a host's menu, such as a cell's, draws them in its groups.
+
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
@@ -54,8 +57,8 @@ export function CommentMenuItems({
         );
     }
     const { card, entry } = item;
-    // Missing entry = unseeded legacy thread, open and unassigned (matchesCommentFilter's rule);
-    // its first message or assignment seeds it server-side.
+    // A missing entry is a thread with no row, open and unassigned (matchesCommentFilter's rule). Its first message
+    // adds the row.
     const chatName = card.chatName;
     const status = entry?.status ?? 'open';
     const view = onOpen && (

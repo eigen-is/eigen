@@ -783,7 +783,10 @@ describe('runs', () => {
     test('a reply that is no eigendoc is a crash', async () => {
         const dir = await corpus('malformed', { 'a.docx': await buildDocxWithBody(paragraph('first')) });
         const stub = path.join(fs.mkdtempSync(path.join(scratch, 'importer-')), 'malformed.ts');
-        await Bun.write(stub, 'export async function docxToPmJson() { return { json: null, media: [] }; }');
+        await Bun.write(
+            stub,
+            'export async function docxToPmJson() { return { json: null, media: [], style: { font: "Inter" } }; }',
+        );
         const out = path.join(scratch, 'out-malformed');
         const meta = await runAudit({ corpus: dir, out, importer: stub, name: 'malformed', timeoutMs: 5000 });
         const result = JSON.parse(fs.readFileSync(path.join(out, 'files/a.docx.json'), 'utf8'));

@@ -1,8 +1,10 @@
+// The page that adds a contact: ContactEdit's form over a blank card. A Save opens the new contact beside the list.
+
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { emptyContact } from '@workspace/lib/constants/contact';
 import { useAddContact } from '@workspace/lib/contacts';
+import type { CreateContactInput } from '@workspace/lib/types/contact';
 import { Column, ColumnLayout } from '@workspace/ui';
-import type { ContactFormValues } from '../components/contacts/contact-edit';
 import { ContactEdit, ContactEditToolbar } from '../components/contacts/contact-edit';
 
 export const Route = createFileRoute('/_auth/new')({
@@ -13,40 +15,22 @@ function NewContactRoute() {
     const navigate = useNavigate();
     const addContactMutation = useAddContact();
 
-    const handleSave = async (data: ContactFormValues) => {
-        const contactData = {
-            ...data,
-            firstName: data.firstName || '',
-            lastName: data.lastName || '',
-            labels: data.labels || [],
-            avatar: data.avatar ?? '',
-        };
-
-        const newId = await addContactMutation.mutateAsync(contactData);
-
+    const handleSave = async (data: CreateContactInput) => {
+        const contactId = await addContactMutation.mutateAsync(data);
         navigate({
             to: '/$filterType/$filterId',
-            params: {
-                filterType: 'book',
-                filterId: 'all',
-            },
-            search: newId && typeof newId === 'string' ? { contactId: newId } : {},
+            params: { filterType: 'book', filterId: 'all' },
+            search: { contactId },
         });
     };
 
     const handleCancel = () => {
-        navigate({
-            to: '/$filterType/$filterId',
-            params: {
-                filterType: 'book',
-                filterId: 'all',
-            },
-        });
+        navigate({ to: '/$filterType/$filterId', params: { filterType: 'book', filterId: 'all' } });
     };
 
     return (
         <ColumnLayout mobileColumn="editor">
-            <Column id="editor" width="flex" onBack={handleCancel} toolbar={<ContactEditToolbar isNew={true} />}>
+            <Column id="editor" width="flex" onBack={handleCancel} toolbar={<ContactEditToolbar isNew />}>
                 <ContactEdit contact={emptyContact} onSave={handleSave} onCancel={handleCancel} />
             </Column>
         </ColumnLayout>

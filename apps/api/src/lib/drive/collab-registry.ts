@@ -1,8 +1,9 @@
 // The collab documents that are open in one Drive, such as docs that someone edits right now. It opens
-// each document once, however many people connect, and closes it again. When sharing changes, it
-// closes the connections of people who may no longer read.
+// each document once, however many people connect, and closes it again. When sharing or a membership
+// changes, it walks the open documents, which close the connections of people who may no longer read.
 
 import { isCollabType, isContainerType } from '@workspace/lib/types/drive';
+import type { AsyncSingleton } from '../../utils/singleton';
 import { createAsyncSingleton } from '../../utils/singleton';
 import { CollabDocument } from '../collab/collab-document';
 import { ApiError } from '../core';
@@ -10,16 +11,15 @@ import type { Mount } from '../mount';
 import type { Drive } from './drive';
 
 export class CollabRegistry {
-    private readonly documents = new Map<string, () => Promise<CollabDocument>>();
+    private readonly documents = new Map<string, AsyncSingleton<CollabDocument>>();
     // Set by destructAll. A document opened after it would never be destructed, and closing the mount
     // next would close its database under it.
     private destructed = false;
     // The mounts destructMount swept, for the same reason. A mount that comes back is a new Mount, so
     // its documents open again.
     private readonly closedMounts = new WeakSet<Mount>();
-    // The keys of a path that is moving to the trash, and of everything under it. The trash closes their
-    // databases before it marks them trashed, so a document opened in between would lose its edits. A
-    // key counts the trashes that guard it, because two trashes of nested paths can overlap.
+    // The keys of a path moving to the trash, and of everything under it: a document opened after the trash closed its
+    // database would lose its edits. A key counts the trashes that guard it, because nested trashes can overlap.
     private readonly trashing = new Map<string, number>();
 
     public constructor(private readonly ownerId: string) {}
@@ -70,19 +70,16 @@ export class CollabRegistry {
         }
     }
 
-    // Whether the path is on its way to the trash, on its own or with a folder above it. The folders above
-    // count too, because a subfolder created after the trash began has no mark of its own. A move asks
-    // this inside the transaction of its row write, so the folders it reads are those the move sees.
+    // The folders above count too, because a subfolder created after the trash began has no mark of its own. A move
+    // asks inside the transaction of its row write, so the folders it reads are those the move sees.
     public isTrashing(mount: Mount, pathId: string): boolean {
         // Most moves run while nothing is trashed, and then the walk up the folders is not needed.
         if (this.trashing.size === 0) return false;
         return [pathId, ...mount.collectAncestorIds(pathId)].some((id) => this.trashing.has(this.key(mount.id, id)));
     }
 
-    // Runs a trash of the path and refuses every open at or below it until the trash is done. The
-    // refused socket tries again, and by then the path is in the trash, so it gets a 404. A move into
-    // any folder below the path is refused too (isTrashing). A document that a restore or a create puts
-    // in after the keys are read isn't refused, so the trash closes it itself.
+    // Refuses every open at or below the path until the trash is done. The refused socket tries again and gets a 404. A
+    // document that a restore or a create puts in after the keys are read isn't refused, so the trash closes it itself.
     public async whileTrashing(mount: Mount, pathId: string, trash: () => Promise<void>): Promise<void> {
         const keys = [pathId, ...mount.collectDescendantIds(pathId)].map((id) => this.key(mount.id, id));
         for (const key of keys) this.trashing.set(key, (this.trashing.get(key) ?? 0) + 1);
@@ -97,28 +94,35 @@ export class CollabRegistry {
         }
     }
 
-    // Checks read access again for every open document at or below the path. Read access comes from
-    // the whole chain of folders, so a check per connection also catches a share taken away from a
-    // folder above the document. Comparing the removed ACL entries would miss that.
+    // Read comes from the whole chain of folders, so a check per connection also catches a share taken away from a
+    // folder above the document, which comparing the removed ACL entries would miss.
     public async enforceReadAccessBelow(mount: Mount, pathId: string): Promise<void> {
         const path = await mount.getPath(pathId);
         if (!path) return;
 
         if (isCollabType(path.type)) {
-            // Only an open document has connections to check.
-            const getter = this.documents.get(this.key(mount.id, pathId));
-            if (!getter) return;
-            try {
-                const doc = await getter();
-                await doc.enforceReadAccess();
-            } catch (error) {
-                console.error(`Failed to enforce read access on ${pathId}:`, error);
-            }
+            await this.visitIfOpen(this.key(mount.id, pathId), (document) => document.enforceReadAccess());
         } else if (isContainerType(path.type)) {
             const children = await mount.listFolderAll(pathId);
             for (const child of children) {
                 await this.enforceReadAccessBelow(mount, child.id);
             }
+        }
+    }
+
+    public async forEachOpenDocument(visit: (document: CollabDocument) => Promise<void>): Promise<void> {
+        for (const key of this.documents.keys()) await this.visitIfOpen(key, visit);
+    }
+
+    // A document that is still loading has no connections yet, and its load can take as long as a download, so
+    // nothing waits for it. One document that fails must not stop the walk over the others.
+    private async visitIfOpen(key: string, visit: (document: CollabDocument) => Promise<void>): Promise<void> {
+        const document = this.documents.get(key)?.peek();
+        if (!document) return;
+        try {
+            await visit(document);
+        } catch (error) {
+            console.error(`Failed to check the connections of ${key}:`, error);
         }
     }
 

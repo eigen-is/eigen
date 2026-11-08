@@ -6,7 +6,7 @@ category: Backups
 tags: [admin, backup, restore, server]
 related: [admin/back-up-home, admin/restore-home]
 order: 92
-updated: 2026-11-03
+updated: 2026-11-08
 ---
 
 A backup made from the **Backup** section in Admin is a single archive of one user or one team. This page lists what goes into that archive, what stays out, how Eigen checks it, and where the panel's limits are. To make or restore a backup, see [Back up a user or team](/support/admin/back-up-home) and [Restore a user or team](/support/admin/restore-home).
@@ -57,7 +57,7 @@ An archive holds every file, every mail, saved passwords, and any S3 keys the ac
 Eigen checks every archive after it is made, again whenever you click **Verify**, and once more at the start of every restore. Three checks run in order:
 
 1. **Files**: every file in the archive has exactly the size and checksum recorded for it, and there is nothing extra.
-2. **Databases**: each of Eigen's own databases passes an integrity check.
+2. **Databases**: each of Eigen's own databases passes an integrity check, and none is from a newer Eigen than this server.
 3. **Documents**: a sample of the largest documents is opened and decoded to confirm the content reads back.
 
 Each archive shows one of three badges:

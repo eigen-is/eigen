@@ -9,7 +9,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { eq } from 'drizzle-orm';
 import { ApiError, storageGone } from '../core';
 import { CONTAINER_DATA_DB } from '../mount/container-dbs';
-import { closeInSlot, withDocumentDb } from '../mount/document-db';
+import { closeInSlot, documentDbPath, withDocumentDb } from '../mount/document-db';
 import { isViableRecoveryTemp } from '../mount/helpers';
 import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
@@ -22,26 +22,26 @@ import { selectSnapshotsToPrune } from './retention';
 import { formatSnapshotTimestamp } from './timestamp';
 import { VERSIONS_FOLDER_NAME } from './versions-folder';
 
-// Which copy of a managed database a snapshot reads first. stageManagedDbCopy says when each one applies.
+// Which copy of a managed database a snapshot reads first: a tick or a close reuses what its sync just staged, and
+// everyone else, with nothing staged for them, takes the open database or the crash temp.
 type CopyOrder = 'staged-first' | 'open-handle-first';
 
-// Copies the container's data.db into its versions folder, then prunes by the retention policy. It takes
-// the container lock itself, so a manual save and the snapshot before a restore wait for each other, and
-// no caller has to remember the lock. A save the user asked for must never be skipped, so it waits for the
-// lock. The snapshots of the sync tick and of a close go through trySnapshotContainerDataDb instead.
+// Copies the container's data.db into its versions folder, then prunes by the retention policy. A save the user
+// asked for must never be skipped, so it waits for the container lock.
 export async function snapshotContainerDataDb(
     mount: Mount,
     containerId: string,
     policy: RetentionPolicy,
 ): Promise<DrivePath> {
-    return mount.withPathLock(containerId, () => takeSnapshot(mount, containerId, policy, 'open-handle-first'));
+    return mount.withPathLock(containerId, async () => {
+        // Brings data.db's stored object, row and search index up to this version now, not at the next tick.
+        await mount.flushContainerDb(containerId);
+        return takeSnapshot(mount, containerId, policy, 'open-handle-first');
+    });
 }
 
-// The snapshot of the sync tick and of a close, ManagedDatabase's onSnapshot. It runs inside a close that
-// holds the database's slot, or inside a tick that a close waits for. A holder of the container lock may
-// wait for that slot, so this only tries the lock. A skip loses at most one version, never bytes, because
-// the sync has staged them. A tick that skipped tries again on the next one, because snapshotIfDue only
-// moves on after 'taken'.
+// ManagedDatabase's onSnapshot, inside a close that holds the slot or a tick that a close or a flush waits for. A
+// holder of the container lock may wait for that slot, so this only tries the lock.
 export async function trySnapshotContainerDataDb(
     mount: Mount,
     containerId: string,
@@ -62,16 +62,6 @@ async function takeSnapshot(
     const dataDb = await mount.getChildByName(containerId, CONTAINER_DATA_DB);
     if (!dataDb) throw new ApiError(404, `data.db not found in container ${containerId}`);
 
-    // The flush brings data.db's stored object, row and search index up to this version now, not at the
-    // next tick. The tick and close snapshots must not wait for the slot, because they run inside that close.
-    if (order === 'open-handle-first') {
-        await withDocumentDb(mount, dataDb.id, async (slot) => {
-            await slot.db?.flush();
-        });
-    } else {
-        await mount.documentDbs.get(dataDb.id)?.db?.flush();
-    }
-
     let versions = await mount.getChildByName(containerId, VERSIONS_FOLDER_NAME);
     if (!versions) {
         const newId = await mount.createFolder(containerId, VERSIONS_FOLDER_NAME);
@@ -84,8 +74,6 @@ async function takeSnapshot(
     // Two snapshots in the same millisecond hold the same state, so the second returns the first.
     const existing = await mount.getChildByName(versions.id, snapshotName);
     if (existing) return existing;
-    // On s3 the version's upload is queued, so a close-time snapshot never waits on the bucket. A local
-    // mount writes it before this returns.
     const versionPathId = mount.uploadQueue
         ? await snapshotDataDbToVersionStaged(mount, mount.uploadQueue, dataDb, versions.id, snapshotName, order)
         : await snapshotDataDbToVersionLocal(mount, dataDb, versions.id, snapshotName, order);
@@ -105,8 +93,8 @@ async function takeSnapshot(
     return copy;
 }
 
-// The s3 version snapshot. It copies the freshest local copy of data.db, creates the version's row and
-// queues its upload, so a close-time snapshot never waits on the bucket. The caller holds the container lock.
+// The s3 version snapshot. It copies the freshest copy of data.db, creates the version's row and queues its
+// upload. The caller holds the container lock.
 async function snapshotDataDbToVersionStaged(
     mount: Mount,
     queue: UploadQueue,
@@ -151,15 +139,8 @@ async function snapshotDataDbToVersionLocal(
     }
 }
 
-// Copies the current bytes of a container's managed database to destPath, from the freshest source, and
-// says where they came from. Only a copy of the stored object shows that storage answers. It returns null
-// when nothing is left to copy, and the version snapshot then answers 410. That happens when the container
-// was deleted or a version pruned since the caller read its row, or when the stored object is gone.
-// 'staged-first' is the order of the tick and close snapshots. Their caller has just flushed the open
-// database into a staged copy, and reusing it saves a second VACUUM INTO. 'open-handle-first' is the order
-// of a backup and of a manual or pre-restore snapshot. Nothing was flushed, so the open database, or else
-// the crash temp of an unclean shutdown, holds the newest writes. It first waits for an open or a close of
-// that database.
+// Copies the current bytes of a container's managed database to destPath, and says where they came from. Only a
+// copy of the stored object shows that storage answers. Null: nothing is left to copy, and a version answers 410.
 export async function stageManagedDbCopy(
     mount: Mount,
     pathId: string,
@@ -173,20 +154,21 @@ export async function stageManagedDbCopy(
                 slot.db.stageCopy(destPath);
                 return true;
             }
-            if (!mount.needsTempCopy) return false;
-            // This runs inside the slot, because an open adopts, rewrites or removes this temp, and only the
-            // slot puts the two in order.
+            // This runs inside the slot, because an open adopts, rewrites or removes what an unclean shutdown left,
+            // and only the slot puts the two in order. Its newest bytes can be read only through SQLite.
             const row = await mount.getPath(pathId);
             if (!row) return false;
-            const temp = mount.getTempPath(pathId);
-            if (!isViableRecoveryTemp(temp, row.size ?? 0)) return false;
-            // Read-write: a readonly open of a WAL database with no -wal and no -shm fails.
-            const db = new Database(temp, { readwrite: true, create: false });
+            const file = documentDbPath(mount, pathId, await mount.getStorageKey(pathId));
+            if (!isViableRecoveryTemp(file, row.size ?? 0)) return false;
+            // On local-key with no -wal the stored file is whole, and the read below copies it as it is.
+            if (!mount.needsTempCopy && !fs.existsSync(`${file}-wal`)) return false;
+            // Read-write: a readonly open of a WAL database with no -wal and no -shm fails. The close folds a -wal in.
+            const db = new Database(file, { readwrite: true, create: false });
             db.fileControl(constants.SQLITE_FCNTL_PERSIST_WAL, 0);
             try {
                 db.run('VACUUM INTO ?', [destPath]);
             } catch (error) {
-                throw new Error(`mount ${mount.id}: crash temp of ${pathId} at ${temp} cannot be copied`, {
+                throw new Error(`mount ${mount.id}: leftover database ${pathId} at ${file} cannot be copied`, {
                     cause: error,
                 });
             } finally {
@@ -226,20 +208,15 @@ export async function stageManagedDbCopy(
     });
 }
 
-// Replaces the bytes of the container's data.db with the file at `sourcePath`, a snapshot the caller
-// grabbed into tmp/ (downloadToTemp) before the pre-restore snapshot could prune it. The row stays, so a
-// backup's copy of metadata.db never sees the container without one. It takes the container lock, so a
-// snapshot can't read a half-written data.db. The close and the write run in one slot call, so no open
-// comes in between.
+// Replaces the bytes of the container's data.db with a file in tmp/. The row stays, so a backup's copy of metadata.db
+// never sees the container without one. The close and the write run in one slot call, so no open comes in between.
 export async function replaceContainerDataDb(mount: Mount, containerId: string, sourcePath: string): Promise<void> {
     return mount.withPathLock(containerId, async () => {
         const dataDb = await mount.getChildByName(containerId, CONTAINER_DATA_DB);
         if (!dataDb) throw new ApiError(404, `data.db not found in container ${containerId}`);
         const { size, hash } = await hashFile(sourcePath);
         await withDocumentDb(mount, dataDb.id, async (slot) => {
-            // The close waits for the holders of the database, such as a request that still reads it. It
-            // takes no final snapshot, because these bytes are about to go and a snapshot would take this
-            // container lock again.
+            // No final snapshot: these bytes are about to go, and a snapshot would take this container lock again.
             await closeInSlot(slot, dataDb.id, { skipFinalSnapshot: true });
             // The next open would adopt a crash temp over the new bytes.
             await mount.cleanupTemp(dataDb.id);
@@ -252,9 +229,13 @@ export async function replaceContainerDataDb(mount: Mount, containerId: string, 
                     fs.copyFileSync(sourcePath, staging);
                     mount.uploadQueue.enqueueStaged(storageKey, staging, true);
                 } else {
-                    // On local-key the object is the database file itself. Written over in place, it would hand
-                    // SQLite a stale vnode (SQLITE_IOERR_VNODE) at the next open, so it gets a new inode.
-                    if (!mount.needsTempCopy) await mount.storage.delete(storageKey);
+                    // On local-key the object is the database file itself. Written over in place it hands SQLite a
+                    // stale vnode (SQLITE_IOERR_VNODE) at the next open, and an old -wal would replay over the new bytes.
+                    if (!mount.needsTempCopy) {
+                        for (const file of [`${storageKey}-wal`, `${storageKey}-shm`, storageKey]) {
+                            await mount.storage.delete(file);
+                        }
+                    }
                     await mount.storage.write(storageKey, Bun.file(sourcePath));
                 }
             });

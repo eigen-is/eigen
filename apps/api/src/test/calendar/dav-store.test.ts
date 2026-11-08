@@ -4,7 +4,7 @@ import { eq, sql } from 'drizzle-orm';
 import type { Calendar } from '../../lib/calendar/calendar';
 import { EVENT_MAX_BYTES } from '../../lib/calendar/resource-store';
 import * as schema from '../../lib/calendar/schema';
-import { CALENDAR_TEST_ROOT, makeCalendar, resourceTextOf } from '../calendar-test-helpers';
+import { CALENDAR_TEST_ROOT, makeCalendar, resourceTextOf, storedEvents } from '../calendar-test-helpers';
 import type { TestHome } from '../home-test-helpers';
 import { vcal } from '../ics-test-helpers';
 
@@ -110,17 +110,19 @@ describe('putResource', () => {
         expect(await resourceTextOf(harness.instance, calendarId, 'Case-Fold.ics')).toContain('SUMMARY:First');
     });
 
-    test('a PUT of what is already stored bumps no ctag', async () => {
+    test('a PUT of what is already stored bumps no ctag and announces nothing', async () => {
         const harness = await makeCalendar();
         const calendarId = await defaultCalendarId(harness);
         await put(harness.instance, calendarId, 'same.ics', vcal(event('same@eigen', 'Same')));
         const stored = await resourceTextOf(harness.instance, calendarId, 'same.ics');
         const ctag = (await harness.instance.getCollection(calendarId))!.ctag;
+        harness.broadcasts.length = 0;
 
         const result = await put(harness.instance, calendarId, 'same.ics', stored);
 
-        expect(result).toMatchObject({ ok: true, created: false });
+        expect(result).toMatchObject({ ok: true, created: false, unchanged: true });
         expect((await harness.instance.getCollection(calendarId))!.ctag).toBe(ctag);
+        expect(harness.broadcasts).toEqual([]);
     });
 
     test('a put answers with the id of the row it landed on, a rewrite included', async () => {
@@ -132,7 +134,7 @@ describe('putResource', () => {
         const rewritten = await put(harness.instance, calendarId, 'landed.ics', vcal(event('landed@eigen', 'Again')));
 
         expect(created).toMatchObject({ ok: true, id: stored.id, created: true });
-        expect(rewritten).toMatchObject({ ok: true, id: stored.id, created: false });
+        expect(rewritten).toMatchObject({ ok: true, id: stored.id, created: false, unchanged: false });
     });
 
     test('a linked copy takes the alarms a client sends, never the Eigen lines inside them', async () => {
@@ -172,6 +174,46 @@ describe('putResource', () => {
         expect(stored).not.toContain('forged-by-the-client');
     });
 
+    test('a linked copy refuses a body whose occurrence no key can name, and keeps its bytes', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const calendarId = await defaultCalendarId(harness);
+        await put(calendar, calendarId, 'linked.ics', vcal(event('linked@eigen', 'Linked')));
+        calendar.db
+            .update(schema.resources)
+            .set({
+                ics: sql`CAST(replace(CAST(${schema.resources.ics} AS TEXT), 'SUMMARY:Linked', 'SUMMARY:Linked\r\nX-EIGEN-ORGANIZER-EVENT:organizer-1') AS BLOB)`,
+            })
+            .where(eq(schema.resources.uri, 'linked.ics'))
+            .run();
+        const before = await resourceTextOf(calendar, calendarId, 'linked.ics');
+
+        // 31 December 9999 23:00Z is already 1 January 10000 in Tokyo.
+        const result = await put(
+            calendar,
+            calendarId,
+            'linked.ics',
+            vcal(
+                [
+                    'BEGIN:VEVENT',
+                    'UID:linked@eigen',
+                    'DTSTART;TZID=Asia/Tokyo:20260401T100000',
+                    'RRULE:FREQ=WEEKLY',
+                    'END:VEVENT',
+                ],
+                [
+                    'BEGIN:VEVENT',
+                    'UID:linked@eigen',
+                    'RECURRENCE-ID:99991231T230000Z',
+                    'DTSTART:99991231T230000Z',
+                    'END:VEVENT',
+                ],
+            ),
+        );
+        expect(result).toMatchObject({ ok: false, error: 'invalid' });
+        expect(await resourceTextOf(calendar, calendarId, 'linked.ics')).toBe(before);
+    });
+
     test('a resource with two masters for one UID is refused, where an override-only one stands alone', async () => {
         const harness = await makeCalendar();
         const calendarId = await defaultCalendarId(harness);
@@ -192,7 +234,7 @@ describe('putResource', () => {
             ]),
         );
         expect(result.ok).toBe(true);
-        const detached = (await harness.instance.getRawEvents(calendarId)).find((r) => r.uid === 'detached@eigen')!;
+        const detached = storedEvents(harness.instance, calendarId).find((r) => r.uid === 'detached@eigen')!;
         expect(detached.recurrenceDate).toBe('2026-04-08');
         expect(detached.parentEventId).toBeNull();
 
@@ -227,7 +269,7 @@ describe('an override names its parent', () => {
         const source = await defaultCalendarId(harness);
         const other = (await harness.instance.createCalendar({ name: 'Other', color: '#2563eb' })).id;
         await put(harness.instance, source, 'series.ics', recurring('parented@eigen'));
-        const parent = (await harness.instance.getRawEvents(source))[0];
+        const parent = storedEvents(harness.instance, source)[0];
 
         await expect(
             harness.instance.createEvent(other, {
@@ -246,7 +288,7 @@ describe('an override names its parent', () => {
         const harness = await makeCalendar();
         const calendarId = await defaultCalendarId(harness);
         await put(harness.instance, calendarId, 'series.ics', recurring('override-twice@eigen'));
-        const parent = (await harness.instance.getRawEvents(calendarId))[0];
+        const parent = storedEvents(harness.instance, calendarId)[0];
         const override = (title: string) =>
             harness.instance.createEvent(calendarId, {
                 title,
@@ -260,7 +302,7 @@ describe('an override names its parent', () => {
         await override('First take');
         await override('Second take');
 
-        const exceptions = (await harness.instance.getRawEvents(calendarId)).filter((e) => e.parentEventId);
+        const exceptions = storedEvents(harness.instance, calendarId).filter((e) => e.parentEventId);
         expect(exceptions.map((e) => e.title)).toEqual(['Second take']);
         expect(await harness.instance.listResources(calendarId)).toHaveLength(1);
     });

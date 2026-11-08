@@ -1,3 +1,7 @@
+// A Stickies board's Yjs doc as the state its components read: readBoard lists the columns and their cards, and the
+// hook opens the doc, seeds a new board, runs the shared ref repair on sync, and adds a column. The board component
+// calls it; the cards themselves go through the shared comment-card code.
+
 import { useAuth } from '@workspace/lib/auth';
 import { getIdArray, getIdArrayRoot, getItemMapRoot, useCollabDoc } from '@workspace/lib/collab';
 import { writeCardToDoc } from '@workspace/lib/comments';
@@ -16,15 +20,11 @@ const WELCOME_CARD = {
         'Drag this sticky to another column to get started. You can add more stickies with the "Add a sticky" button.',
 };
 
-// Reuse the previous column object when its fields are unchanged, so memoized
-// columns skip re-rendering when an edit elsewhere on the board rebuilds state.
+// Reuse the previous column object when its fields are unchanged, so memoized columns skip re-rendering when an edit
+// elsewhere on the board rebuilds state.
 function sameColumn(a: ColumnItem, b: ColumnItem): boolean {
     return (
-        a.title === b.title &&
-        a.creator === b.creator &&
-        a.createdAt === b.createdAt &&
-        a.taskIds.length === b.taskIds.length &&
-        a.taskIds.every((id, i) => id === b.taskIds[i])
+        a.title === b.title && a.taskIds.length === b.taskIds.length && a.taskIds.every((id, i) => id === b.taskIds[i])
     );
 }
 
@@ -34,19 +34,14 @@ export function readBoard(doc: Y.Doc): BoardData {
     const columns: Record<string, ColumnItem> = {};
     for (const [id, columnMap] of getItemMapRoot(doc, 'columns')) {
         if (!(columnMap instanceof Y.Map)) continue;
+        // A peer's non-string title would crash the column's render and the board's search.
         const title = columnMap.get('title');
-        const creator = columnMap.get('creator');
-        const createdAt = columnMap.get('createdAt');
         columns[id] = {
             id,
             title: typeof title === 'string' ? title : '',
             taskIds: (getIdArray(columnMap, 'taskIds')?.toArray() ?? []).filter(
                 (taskId) => tasksMap.get(taskId) instanceof Y.Map,
             ),
-            creator: typeof creator === 'string' ? creator : '',
-            // Stable fallback — a per-refresh Date.now() would defeat sameColumn for
-            // legacy columns that predate the createdAt field. Nothing renders it.
-            createdAt: typeof createdAt === 'number' ? createdAt : 0,
         };
     }
     const columnOrder = getIdArrayRoot(doc, 'columnOrder')
@@ -59,13 +54,11 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
     const [board, setBoard] = useState<BoardData>({ columns: {}, columnOrder: [] });
     const [isAddColumnDialogOpen, setIsAddColumnDialogOpen] = useState(false);
 
-    // Latched so normalize + seed run once per doc (reset in onInit on every pathId switch), not on
-    // every 'sync' reconnect.
+    // Normalize and seed run once per doc, not on every reconnect's 'sync'.
     const initializedRef = useRef(false);
 
     const { user } = useAuth();
-    // Read the live email inside onSync (held in a ref by the shared hook) so an auth change never
-    // tears down the live board — the doc is keyed strictly on ownerId/mountId/pathId.
+    // A ref, because an auth change must not tear down the live board: the doc is keyed on its path alone.
     const userEmailRef = useRef(user?.email);
     userEmailRef.current = user?.email;
     const createChat = useCreateDriveItem('chat');
@@ -96,7 +89,6 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
             const chatName = await createCardChat();
 
             if (columnsMap.size > 0) return;
-            const now = Date.now();
 
             doc.transact(() => {
                 const columnOrderArray = getIdArrayRoot(doc, 'columnOrder');
@@ -109,7 +101,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
                     color: EIGEN_STICKIES_COLORS[0][1].value,
                     chatName,
                     creator: userEmail,
-                    createdAt: now,
+                    createdAt: Date.now(),
                 });
 
                 const columnIds: string[] = [];
@@ -123,7 +115,6 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
                     if (index === 0) taskIds.push([taskId]);
                     columnYMap.set('taskIds', taskIds);
                     columnYMap.set('creator', userEmail);
-                    columnYMap.set('createdAt', now);
                     columnsMap.set(columnId, columnYMap);
                 }
 
@@ -181,7 +172,6 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         onSync: ({ doc }, synced) => {
             if (!synced || initializedRef.current) return;
             initializedRef.current = true;
-            // normalizeBoard runs BEFORE the empty-check + seeding, once per pathId.
             normalizeBoard(doc);
             if (doc.getMap('columns').size === 0) {
                 initializeDefaultBoard(doc, userEmailRef.current || 'user@localhost').catch(console.error);
@@ -189,9 +179,8 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         },
     });
 
-    // Seal discrete ops (column add, card delete) as their own undo step — a stopCapturing() bracket
-    // stops Y.UndoManager from merging into the previous step within its 500ms captureTimeout (vector's
-    // discipline, adopted in U6e). Held in a ref so the `[]`-deps callback reads the live manager.
+    // A stopCapturing bracket seals a column add or a card delete as its own undo step, or Y.UndoManager merges it
+    // into the previous one within its 500 ms captureTimeout. A ref, so the `[]`-deps callback reads the live manager.
     const undoManagerRef = useRef(undoManager);
     undoManagerRef.current = undoManager;
 
@@ -208,7 +197,6 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
             newColumnMap.set('title', title);
             newColumnMap.set('taskIds', new Y.Array());
             newColumnMap.set('creator', user?.email || '');
-            newColumnMap.set('createdAt', Date.now());
             columnsMap.set(columnId, newColumnMap);
             columnOrderArray.push([columnId]);
         });
@@ -219,8 +207,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
     const deleteCardFromBoard = useCallback((cardId: string) => {
         if (!docRef.current) return;
         const doc = docRef.current;
-        // Walk columns + remove the tasks entry in one transact: single undo step, no orphan
-        // column refs. The `.eigenchat` + comments.db row persist for undo / version revert.
+        // One transaction, so ⌘Z restores both. The card's chat and comments.db row stay for an undo or a revert.
         undoManagerRef.current?.stopCapturing();
         doc.transact(() => {
             const columnsMap = getItemMapRoot(doc, 'columns');

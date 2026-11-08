@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import * as nodeFs from 'node:fs';
 import {
     cpSync,
     existsSync,
@@ -16,13 +17,14 @@ import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/valida
 import { auth } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
 import { withHomeSlot } from '../../lib/backup/jobs';
-import { buildArtifactName, buildHomeFolderName, getBackupsDir } from '../../lib/backup/paths';
+import { buildHomeFolderName, freeArtifactName, getBackupsDir, isRestoreStagingName } from '../../lib/backup/paths';
 import * as recoveryModule from '../../lib/backup/recovery';
-import { recoverInterruptedRestores } from '../../lib/backup/recovery';
+import { recoverBackupsAfterRestart } from '../../lib/backup/recovery';
 import { restoreHome, restoreSafetyCopy } from '../../lib/backup/restore';
 import { deleteSafetyCopy, listSafetyCopies } from '../../lib/backup/safety-copy';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { updateServerSettings } from '../../lib/config/server-settings';
+import { getDataEpoch } from '../../lib/home/data-epoch';
 import { evictHome, getHome } from '../../lib/home/get-home';
 import * as mountHelpers from '../../lib/mount/helpers';
 import type { Mount } from '../../lib/mount/mount';
@@ -43,9 +45,12 @@ import type { TestUser } from '../setup';
 import {
     assertJson,
     authedRequest,
+    createTestUser,
     createTestUserOnStorage,
+    driveGetList,
     driveUpload,
     eventually,
+    firstMountId,
     getTestContext,
     openMountMetadata,
     TEST_DATA_DIR,
@@ -167,7 +172,7 @@ describe('Backup safety copies of an s3 home', () => {
 
         const staging = mkdtempSync(join(TEST_DATA_DIR, 'safety-s3-backup-'));
         await snapshotHome(home, staging);
-        artifact = buildArtifactName(userId, new Date());
+        artifact = freeArtifactName(userId, new Date());
         await packFolder(join(staging, buildHomeFolderName(userId)), join(getBackupsDir(), artifact));
         rmSync(staging, { recursive: true, force: true });
 
@@ -384,7 +389,7 @@ describe('Backup restore of a safety copy that does not survive its checks', () 
 
         const staging = mkdtempSync(join(TEST_DATA_DIR, 'safety-rollback-backup-'));
         await snapshotHome(await getHome(userId), staging);
-        artifact = buildArtifactName(userId, new Date());
+        artifact = freeArtifactName(userId, new Date());
         await packFolder(join(staging, buildHomeFolderName(userId)), join(getBackupsDir(), artifact));
         rmSync(staging, { recursive: true, force: true });
 
@@ -402,13 +407,13 @@ describe('Backup restore of a safety copy that does not survive its checks', () 
         rmSync(join(getBackupsDir(), artifact), { force: true });
     });
 
-    // A process killed after the copy is in place and before the completion note: the next boot finds no note and a
+    // A process killed after the copy is in place and before the marker goes: the next boot finds the marker and a
     // folder at the home's path. That folder is the pristine copy, so it goes back under its own name.
-    test('a safety-copy restore killed before its completion note is put back under the copy name at boot', async () => {
+    test('a safety-copy restore killed before its marker goes is put back under the copy name at boot', async () => {
         const [copy] = safetyCopies(userId);
         const jobId = `safety-killed-${Date.now()}`;
         const spies = [
-            spyOn(recoveryModule, 'writeRestoreCompleteMarker').mockImplementation(() => {}),
+            spyOn(recoveryModule, 'dropRestoringMarker').mockImplementation(() => {}),
             spyOn(recoveryModule, 'wipeRestoreStagingDir').mockImplementation(async () => {}),
         ];
         try {
@@ -416,7 +421,7 @@ describe('Backup restore of a safety copy that does not survive its checks', () 
         } finally {
             for (const spy of spies) spy.mockRestore();
         }
-        recoverInterruptedRestores();
+        await recoverBackupsAfterRestart();
 
         expect(safetyCopies(userId)).toEqual([copy]);
         expect(safetyCopies(userId, FAILED_RESTORE_SUFFIX)).toEqual([]);
@@ -471,6 +476,69 @@ describe('Backup restore of a safety copy that does not survive its checks', () 
             rmSync(aside, { recursive: true, force: true });
             rmSync(copyDir, { recursive: true, force: true });
         }
+    });
+});
+
+describe('Backup restore of a safety copy that fails mid-swap', () => {
+    let user: TestUser;
+    let homeDir: string;
+    let mountId: string;
+    let rootId: string;
+    let copy: string;
+
+    beforeAll(async () => {
+        await getTestContext();
+        user = await createTestUser('safety-midswap@test.eigen.is', PASSWORD, 'Safety Midswap');
+        homeDir = join(TEST_DATA_DIR, 'home', user.id);
+        mountId = await firstMountId(user.sessionToken, user.id);
+        rootId = (
+            await assertJson<DrivePath>(await authedRequest(user.sessionToken, `/drive/${user.id}/${mountId}/root`))
+        ).id;
+        await evictHome(user.id);
+        copy = `${user.id}${PRE_RESTORE_SUFFIX}20200101-000000`;
+        cpSync(homeDir, join(TEST_DATA_DIR, 'home', copy), { recursive: true });
+        // Only the home as it stands holds this, so it tells the home from the copy.
+        await driveUpload(user.sessionToken, user.id, mountId, rootId, new File(['live'], 'live.txt'));
+    });
+
+    afterAll(() => {
+        rmSync(join(TEST_DATA_DIR, 'home', copy), { recursive: true, force: true });
+    });
+
+    async function rootNames(): Promise<string[]> {
+        const items = await driveGetList(user.sessionToken, user.id, mountId, `folder/${rootId}`);
+        return items.map((item) => item.name);
+    }
+
+    // The job undoes its own failure, so the next boot finds nothing to finish and the tabs nothing to reload for.
+    test('a restore that fails at the install puts both folders back, and the next boot changes nothing', async () => {
+        const FAILED = new Error('failed by the test');
+        const epoch = getDataEpoch(user.id);
+        let failed = false;
+        const rename = nodeFs.renameSync;
+        const renameSpy = spyOn(nodeFs, 'renameSync').mockImplementation((from, to) => {
+            if (!failed && to === homeDir) {
+                failed = true;
+                throw FAILED;
+            }
+            rename(from, to);
+        });
+        try {
+            await expect(restoreSafetyCopy(user.id, copy, `safety-midswap-${Date.now()}`)).rejects.toBe(FAILED);
+        } finally {
+            renameSpy.mockRestore();
+        }
+
+        const homes = readdirSync(join(TEST_DATA_DIR, 'home')).sort();
+        const besideHome = homes.filter((name) => name.startsWith(`${user.id}.`) || isRestoreStagingName(name));
+        expect(besideHome).toEqual([copy]);
+        expect(getDataEpoch(user.id)).toBe(epoch);
+        expect(await rootNames()).toContain('live.txt');
+
+        await recoverBackupsAfterRestart();
+
+        expect(readdirSync(join(TEST_DATA_DIR, 'home')).sort()).toEqual(homes);
+        expect(await rootNames()).toContain('live.txt');
     });
 });
 
