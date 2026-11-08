@@ -34,7 +34,7 @@ export function FxEditor() {
     const [focused, setFocused] = useState(false);
     const lastKeyDownEventRef = useRef<KeyboardEvent>(null);
     const [isOnHiddenRowCol, setIsOnHiddenRowCol] = useState<boolean>(false);
-    const firstSelection = context.selections?.[0];
+    const selection = context.selections?.at(-1);
     const recentText = useRef('');
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: re-renders fx box only on real cell/sheet/selection changes — derived helpers are read fresh from `context`
@@ -47,9 +47,9 @@ export function FxEditor() {
         if (!fxInput) return;
         const d = getFlowdata(context);
         let value = '';
-        if (firstSelection) {
-            const r = firstSelection.row_focus;
-            const c = firstSelection.column_focus;
+        if (selection) {
+            const r = selection.row_focus;
+            const c = selection.column_focus;
             if (r == null || c == null) return;
 
             const cell = d?.[r]?.[c];
