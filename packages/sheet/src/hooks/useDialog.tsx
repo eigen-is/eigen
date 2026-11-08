@@ -11,7 +11,7 @@ import type { DialogProps } from '../context/modal';
 import { DialogPropsContext, ModalContext } from '../context/modal';
 
 export function useDialog() {
-    const { showModal, showNonModal, hideModal } = useContext(ModalContext);
+    const { showModal, showNonModal, pickerOpen } = useContext(ModalContext);
 
     // A message with OK, or a yes or no whose onOk runs on OK. The notice closes itself, so onOk only does the work.
     const showNotice = useCallback(
@@ -24,7 +24,7 @@ export function useDialog() {
         [showModal],
     );
 
-    return { showDialog: showModal, showNotice, showNonModalDialog: showNonModal, hideDialog: hideModal };
+    return { showDialog: showModal, showNotice, showNonModalDialog: showNonModal, pickerOpen };
 }
 
 // The open and close of the dialog in the slot, for its FormDialog to spread.

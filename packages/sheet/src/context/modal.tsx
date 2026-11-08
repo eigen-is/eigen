@@ -1,4 +1,4 @@
-// The sheet's one dialog slot, which useDialog opens and closes. A dialog in it draws its own FormDialog and takes its
+// The sheet's one dialog slot, which useDialog opens. A dialog in it draws its own FormDialog and takes its
 // open and close from the slot's DialogPropsContext, and the focus goes back to the grid when it closes. The range
 // picker is the one exception: it leaves the grid usable to pick on and can open at a point on screen, so the slot
 // draws a shell around it. Either way the slot keeps a dialog's mouse events from the React handlers above it.
@@ -15,14 +15,9 @@ type NonModalOptions = {
     width?: number;
     // The point on screen where the shell's top-left corner opens, kept on screen. Centered when absent.
     anchor?: ViewportPoint;
-    // Runs once when the picker leaves the slot, so a caller that holds state for the open picker, such as the flag
-    // that keeps the cell editor out of the way, resets it in one place. The reason says how it left: 'closed' by
-    // Cancel or Escape, or 'replaced' by another dialog, such as a notice or the dialog the picker's OK opens again.
-    // Only a close may open a dialog, because on 'replaced' the slot already holds the next one.
-    onClose?: (reason: CloseReason) => void;
+    // Escape leaves the shell open until this opens the next dialog, as the picker's Cancel button does.
+    onEscape: () => void;
 };
-
-type CloseReason = 'replaced' | 'closed';
 
 const DEFAULT_WIDTH = 500;
 
@@ -73,38 +68,25 @@ const STOP_MOUSE_EVENTS = { onMouseDown: stop, onMouseMove: stop, onMouseUp: sto
 type ModalContextType = {
     showModal: (content: React.ReactNode) => void;
     showNonModal: (content: React.ReactNode, options: NonModalOptions) => void;
-    hideModal: () => void;
+    // Whether the slot holds the range picker, which the cell editor and the link card stay out of the way of.
+    pickerOpen: boolean;
 };
 
 const ModalContext = React.createContext<ModalContextType>({
     showModal: () => {},
     showNonModal: () => {},
-    hideModal: () => {},
+    pickerOpen: false,
 });
 
 function ModalProvider({ children }: { children?: React.ReactNode }) {
     const [state, setState] = useState<ModalState | null>(null);
     const lastId = useRef(0);
 
-    // A ref, not `state`: hideModal must stay identity-stable for its consumers, and it has to see the opening that
-    // holds the slot right now.
-    const openingRef = useRef<{ id: number; onClose?: NonModalOptions['onClose'] } | null>(null);
-
     const open = useCallback((content: React.ReactNode, nonModal?: NonModalOptions) => {
-        const replaced = openingRef.current;
         lastId.current += 1;
-        const id = lastId.current;
-        openingRef.current = { id, onClose: nonModal?.onClose };
-        setState({ id, content, nonModal });
-        replaced?.onClose?.('replaced');
+        setState({ id: lastId.current, content, nonModal });
     }, []);
     const showModal = useCallback((content: React.ReactNode) => open(content), [open]);
-    const hideModal = useCallback(() => {
-        const opening = openingRef.current;
-        openingRef.current = null;
-        setState(null);
-        opening?.onClose?.('closed');
-    }, []);
 
     const refocusGrid = useCellEditorRefocus();
     const openId = state?.id;
@@ -112,16 +94,17 @@ function ModalProvider({ children }: { children?: React.ReactNode }) {
         () => ({
             open: true,
             onOpenChange: (o) => {
-                if (!o && openingRef.current?.id === openId) hideModal();
+                if (!o && lastId.current === openId) setState(null);
             },
             // Radix runs this a moment after the dialog is gone, so a dialog opened in its place, such as a confirm,
             // already has the focus and keeps it.
             onCloseAutoFocus: refocusGrid,
         }),
-        [hideModal, openId, refocusGrid],
+        [openId, refocusGrid],
     );
 
-    const providerValue = useMemo(() => ({ showModal, showNonModal: open, hideModal }), [hideModal, open, showModal]);
+    const pickerOpen = state?.nonModal != null;
+    const providerValue = useMemo(() => ({ showModal, showNonModal: open, pickerOpen }), [open, pickerOpen, showModal]);
 
     return (
         <ModalContext.Provider value={providerValue}>
@@ -130,7 +113,7 @@ function ModalProvider({ children }: { children?: React.ReactNode }) {
                 // Keyed by the opening, so each one mounts its fields fresh, even the same dialog opened twice. The
                 // slot unmounts a closed dialog at once, so no empty shell lingers while it would fade out.
                 (state.nonModal ? (
-                    <NonModalShell key={state.id} options={state.nonModal} onClose={hideModal}>
+                    <NonModalShell key={state.id} options={state.nonModal}>
                         {state.content}
                     </NonModalShell>
                 ) : (
@@ -143,12 +126,10 @@ function ModalProvider({ children }: { children?: React.ReactNode }) {
 }
 
 function NonModalShell({
-    options: { width = DEFAULT_WIDTH, anchor },
-    onClose,
+    options: { width = DEFAULT_WIDTH, anchor, onEscape },
     children,
 }: {
     options: NonModalOptions;
-    onClose: () => void;
     children: React.ReactNode;
 }) {
     const [placement, setPlacement] = useState<ViewportPoint>();
@@ -174,7 +155,7 @@ function NonModalShell({
             open
             modal={false}
             onOpenChange={(o) => {
-                if (!o) onClose();
+                if (!o) onEscape();
             }}
         >
             <DialogContent

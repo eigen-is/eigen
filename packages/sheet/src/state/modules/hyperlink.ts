@@ -96,7 +96,6 @@ export function removeHyperlink(ctx: Context, r: number, c: number) {
 }
 
 export function showLinkCard(ctx: Context, r: number, c: number, isEditing = false, isMouseDown = false) {
-    if (ctx.rangePickerOpen) return;
     if (`${r}_${c}` === ctx.linkCard?.rc) return;
     const link = getCellHyperlink(ctx, r, c);
     const cell = getFlowdata(ctx)?.[r]?.[c];
