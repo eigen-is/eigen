@@ -43,7 +43,7 @@ const { useCreateEvent, useDeleteEvent, useMoveEvent, useUpdateEvent } = await i
 const { calendarKeys } = await import('../../../../core/calendar/hooks/keys');
 
 const stale = { data: null, error: { status: 412, value: 'Event was changed elsewhere' }, status: 412 };
-const STALE_TOAST = 'error: This event changed elsewhere. Anything you typed is kept. Check it and try again.';
+const STALE_TOAST = 'error: This event changed elsewhere. Check it and try again.';
 const event = { calendarId: 'work', id: 'e1', etag: 'v1' };
 const override = {
     calendarId: 'work',

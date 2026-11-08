@@ -34,9 +34,9 @@ import {
     invalidateSharedCalendarUpdated,
 } from './keys';
 
-// An event write echoes the etag its dialog holds, and a 412 means the event changed elsewhere first. Edit event keeps
-// what was typed, and a delete has nothing typed.
-const STALE_WRITE_TOAST = 'This event changed elsewhere. Anything you typed is kept. Check it and try again.';
+// An event write echoes the etag its dialog holds, and a 412 means the event changed elsewhere first. A dialog may have
+// nothing typed, such as a delete's, so the toast promises nothing about typing.
+const STALE_WRITE_TOAST = 'This event changed elsewhere. Check it and try again.';
 
 // --- Calendar CRUD ---
 

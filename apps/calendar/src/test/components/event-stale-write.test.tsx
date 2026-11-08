@@ -285,7 +285,7 @@ const pickRecurringAction = async (id: string) => {
     await act(async () => document.querySelector<HTMLElement>(`[role="dialog"] label[for="recurring-${id}"]`)?.click());
 };
 
-const STALE_TOAST = 'This event changed elsewhere. Anything you typed is kept. Check it and try again.';
+const STALE_TOAST = 'This event changed elsewhere. Check it and try again.';
 
 async function openPanel() {
     ({ unmount } = await renderInDocument(createElement(CalendarPage)));
