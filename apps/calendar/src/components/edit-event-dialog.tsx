@@ -1,9 +1,8 @@
-// The Edit event dialog: every field of an existing event and its guests. Save, or Enter in the title, saves the
-// change. A change to a repeating event first asks which occurrences it applies to. A move to another owner's calendar
-// that loses something, such as a series' changed occurrences, warns first. An invitation from someone else only lets
-// you pick the calendar that holds it. It opens over an event, such as from the event detail dialog, which mounts it
-// anew for each opening. A field shows what the user changed, else the event as it is now, so a refetch or a refused
-// Save moves only what nobody touched.
+// The Edit event dialog: every field of an existing event and its guests. A change to a repeating event first asks
+// which occurrences it applies to, and a move to another owner's calendar that loses something warns first. An
+// invitation from someone else only lets you pick the calendar that holds it. It opens over an event, such as from the
+// event detail dialog, which mounts it anew for each opening. A field shows what the user changed, else the event as it
+// is now, so a refetch or a refused Save moves only what nobody touched.
 
 import { useAuth } from '@workspace/lib/auth';
 import {

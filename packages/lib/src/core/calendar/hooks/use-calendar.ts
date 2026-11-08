@@ -17,7 +17,6 @@ import type {
     CalendarOption,
     CreateEventInput,
     EventData,
-    FreeBusyBlock,
     SharedCalendar,
     UpdateCalendarInput,
     UpdateEventInput,
@@ -260,36 +259,33 @@ export function useAllSharedCalendarEvents(sharedCalendars: SharedCalendar[], fr
                     ['event-range']({ from: String(from) })({ to: String(to) })
                     .get();
                 if (response.error) throw new AppError(response);
-                const data = response.data;
-                if (sc.permission === 'free-busy') {
-                    return (data as FreeBusyBlock[]).map(
-                        (block): CalendarEventOccurrence => ({
-                            id: '',
-                            calendarId: sc.calendarId,
-                            uid: '',
-                            uri: '',
-                            title: block.allDay ? 'Busy' : formatFreeBusyTitle(block.endTime),
-                            description: null,
-                            location: null,
-                            startTime: block.startTime,
-                            endTime: block.endTime,
-                            allDay: block.allDay,
-                            rrule: null,
-                            timezone: null,
-                            parentEventId: null,
-                            recurrenceDate: null,
-                            status: block.status,
-                            sequence: 0,
-                            etag: '',
-                            data: null,
-                            createByUserId: null,
-                            createdAt: new Date(0),
-                            updatedAt: new Date(0),
-                            occurrenceDate: occurrenceDateToString(block.startTime),
-                        }),
-                    );
-                }
-                return (data as CalendarEventOccurrence[]).map(withOccurrenceDay);
+                return response.data.map((item): CalendarEventOccurrence => {
+                    if ('etag' in item) return withOccurrenceDay(item);
+                    return {
+                        id: '',
+                        calendarId: sc.calendarId,
+                        uid: '',
+                        uri: '',
+                        title: item.allDay ? 'Busy' : formatFreeBusyTitle(item.endTime),
+                        description: null,
+                        location: null,
+                        startTime: item.startTime,
+                        endTime: item.endTime,
+                        allDay: item.allDay,
+                        rrule: null,
+                        timezone: null,
+                        parentEventId: null,
+                        recurrenceDate: null,
+                        status: item.status,
+                        sequence: 0,
+                        etag: '',
+                        data: null,
+                        createByUserId: null,
+                        createdAt: new Date(0),
+                        updatedAt: new Date(0),
+                        occurrenceDate: occurrenceDateToString(item.startTime),
+                    };
+                });
             },
             staleTime: STALE_TIME.TWO_MINUTES,
             enabled: from > 0 && to > 0,

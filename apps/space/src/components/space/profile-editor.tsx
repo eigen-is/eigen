@@ -76,7 +76,7 @@ export function ProfileEditor() {
                 <div className="flex justify-center mb-8">
                     <AvatarEditor
                         name={contact ? `${contact.firstName} ${contact.lastName}` : ''}
-                        email={contact?.email?.[0]}
+                        email={contact?.email[0]}
                         imageUrl={avatar || ''}
                         onRemove={avatar ? () => setAvatar(null) : undefined}
                         onUpload={uploadAvatar}
@@ -136,8 +136,8 @@ export function ProfileEditor() {
 
 function formValues(contact: Contact): ProfileFormValues {
     return {
-        firstName: contact.firstName || '',
-        lastName: contact.lastName || '',
+        firstName: contact.firstName,
+        lastName: contact.lastName,
         avatar: contact.avatar || null,
     };
 }

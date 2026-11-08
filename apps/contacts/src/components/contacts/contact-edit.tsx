@@ -165,7 +165,7 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                             <div className="flex justify-center mb-8">
                                 <AvatarEditor
                                     name={`${contact.firstName} ${contact.lastName}`}
-                                    email={contact.email?.[0]}
+                                    email={contact.email[0]}
                                     imageUrl={avatar ?? ''}
                                     onRemove={avatar ? () => setAvatar(null) : undefined}
                                     onUpload={uploadAvatar}
