@@ -114,14 +114,12 @@ export const ColumnHeader: React.FC = () => {
 
     const onColSizeHandleDoubleClick = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-            const canvas = refs.canvas.current;
-            if (!canvas) return;
             setContext((draftCtx) => {
-                autoFitColumnWidth(draftCtx, hoverLocation.col_index, canvas);
+                autoFitColumnWidth(draftCtx, hoverLocation.col_index);
             });
             e.stopPropagation();
         },
-        [hoverLocation.col_index, refs.canvas, setContext],
+        [hoverLocation.col_index, setContext],
     );
 
     const onColFreezeHandleMouseDown = useCallback(

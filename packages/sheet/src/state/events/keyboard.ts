@@ -43,9 +43,9 @@ export const SHEET_HOTKEYS = {
 } as const satisfies Record<string, Hotkey>;
 
 // Enter and Tab commit the open edit and select the edited cell, then each moves on from it.
-function commitEdit(ctx: Context, cellInput: HTMLDivElement, canvas?: CanvasRenderingContext2D) {
+function commitEdit(ctx: Context, cellInput: HTMLDivElement) {
     const [r, c] = ctx.editingCellPosition;
-    updateCell(ctx, r, c, cellInput, undefined, canvas);
+    updateCell(ctx, r, c, cellInput);
     ctx.selections = [
         {
             row: [r, r],
@@ -56,16 +56,20 @@ function commitEdit(ctx: Context, cellInput: HTMLDivElement, canvas?: CanvasRend
     ];
 }
 
-export function handleGlobalEnter(
-    ctx: Context,
-    cellInput: HTMLDivElement,
-    e: KeyboardEvent,
-    canvas?: CanvasRenderingContext2D,
-) {
+// Whether a key changes an editor's text, or only moves or commands: Backspace, Space and Delete do, and so does a
+// key past the system keys that is no function key, NumLock or numpad equals. Of the Ctrl keys only a paste does.
+export function typesIntoEditor(e: KeyboardEvent) {
+    const key = e.keyCode;
+    if (key === 8 || key === 32 || key === 46) return true;
+    if (e.ctrlKey) return key === 86;
+    return !e.altKey && key > 46 && !(key >= 112 && key <= 123) && key !== 144 && key !== 108;
+}
+
+export function handleGlobalEnter(ctx: Context, cellInput: HTMLDivElement, e: KeyboardEvent) {
     if ((e.altKey || e.metaKey) && ctx.editingCellPosition.length > 0) {
         e.preventDefault();
     } else if (ctx.editingCellPosition.length > 0) {
-        commitEdit(ctx, cellInput, canvas);
+        commitEdit(ctx, cellInput);
         moveHighlightCell(ctx, 'down', 1, 'rangeOfSelect');
         e.preventDefault();
     } else if ((ctx.selections?.length ?? 0) > 0) {
@@ -338,7 +342,6 @@ export function handleGlobalKeyDown(
     fxInput: HTMLDivElement | null | undefined,
     e: KeyboardEvent,
     cache: GlobalCache,
-    canvas?: CanvasRenderingContext2D,
 ) {
     ctx.selectionActive = false;
     const kcode = e.keyCode;
@@ -389,9 +392,9 @@ export function handleGlobalKeyDown(
         e.preventDefault();
     } else if (kstr === 'Enter') {
         if (!allowEdit) return;
-        handleGlobalEnter(ctx, cellInput, e, canvas);
+        handleGlobalEnter(ctx, cellInput, e);
     } else if (kstr === 'Tab') {
-        if (ctx.editingCellPosition.length > 0) commitEdit(ctx, cellInput, canvas);
+        if (ctx.editingCellPosition.length > 0) commitEdit(ctx, cellInput);
         moveHighlightCell(ctx, 'right', e.shiftKey ? -1 : 1, 'rangeOfSelect');
         e.preventDefault();
     } else if (kstr === 'F2') {
@@ -427,33 +430,13 @@ export function handleGlobalKeyDown(
         e.preventDefault();
     } else if (kstr === 'ArrowUp' || kstr === 'ArrowDown' || kstr === 'ArrowLeft' || kstr === 'ArrowRight') {
         handleArrowKey(ctx, e);
-    } else if (
-        // Allow printable input through to the cell input box. Reject:
-        // function keys (F1-F12 = 112-123), modifier/system keys (kcode <= 46
-        // except backspace/space/delete/0), NumLock (144), Numpad equals (108),
-        // and modified key combos handled elsewhere — but always allow
-        // Backspace (8), Space (32), Delete (46) and key 0.
-        !(
-            (kcode >= 112 && kcode <= 123) ||
-            kcode <= 46 ||
-            kcode === 144 ||
-            kcode === 108 ||
-            e.ctrlKey ||
-            e.altKey ||
-            (e.shiftKey && (kcode === 37 || kcode === 38 || kcode === 39 || kcode === 40))
-        ) ||
-        kcode === 8 ||
-        kcode === 32 ||
-        kcode === 46 ||
-        kcode === 0
-    ) {
+    } else if (typesIntoEditor(e) || kcode === 0) {
         if (!allowEdit) return;
         // With no selection a typed key has no cell to open, so it must not land in the hidden editor either. A key
         // typed into another field of the workbook, such as a toolbar input, still reaches that field.
         if (isEmpty(ctx.selections)) {
             if (e.target === cellInput) e.preventDefault();
-        } else if (kstr !== 'CapsLock' && kcode !== 18) {
-            // Activate the input box and forward the keypress to it.
+        } else {
             const last = ctx.selections?.at(-1);
             if (last?.row_focus == null || last.column_focus == null) return;
             ctx.editingCellPosition = [last.row_focus, last.column_focus];

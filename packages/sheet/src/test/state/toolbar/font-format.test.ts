@@ -14,25 +14,12 @@ import { clearMeasureTextCache } from '../../../state/modules/text';
 import { handleTextSize, updateFormat } from '../../../state/modules/toolbar';
 import type { Cell, SheetConfig } from '../../../state/types';
 import { contextFactory } from '../factories/context';
+import { stubMeasuringCanvas } from '../factories/measuring-canvas';
 
 enablePatches();
 
 const win = installHappyDom();
-
-// Only `font` and `measureText` are read on the auto-height path.
-function measuringCanvas(): CanvasRenderingContext2D {
-    const canvas = {
-        font: '11px Arial',
-        textAlign: 'start',
-        textBaseline: 'top',
-        measureText: (text: string) => ({
-            width: text.length * 7,
-            actualBoundingBoxAscent: 22,
-            actualBoundingBoxDescent: 8,
-        }),
-    };
-    return canvas as unknown as CanvasRenderingContext2D;
-}
+stubMeasuringCanvas(win, 22, 8);
 
 function sizedContext(): Context {
     const config: SheetConfig = { columnlen: { 0: 73 } };
@@ -66,7 +53,7 @@ describe('state/modules/toolbar — font-size auto-height', () => {
     test('the grown row height lands on the sheet the grid measures from', () => {
         clearMeasureTextCache();
         const [grown] = produceWithPatches(sizedContext(), (ctx: Context) => {
-            handleTextSize(ctx, cellInput(), 36, measuringCanvas());
+            handleTextSize(ctx, cellInput(), 36);
         });
 
         expect(grown.sheets[0].config?.rowlen?.[0]).toBeGreaterThan(19);
@@ -75,7 +62,7 @@ describe('state/modules/toolbar — font-size auto-height', () => {
     test('a following column resize does not discard it', () => {
         clearMeasureTextCache();
         const [grown] = produceWithPatches(sizedContext(), (ctx: Context) => {
-            handleTextSize(ctx, cellInput(), 36, measuringCanvas());
+            handleTextSize(ctx, cellInput(), 36);
         });
         const grownHeight = grown.sheets[0].config?.rowlen?.[0];
 
@@ -95,13 +82,23 @@ describe('state/modules/toolbar — wrap auto-height', () => {
         ctx.sheets[0].data = [[cell]];
         const [wrapped] = produceWithPatches(ctx, (draft: Context) => {
             const d = getFlowdata(draft);
-            if (d) updateFormat(draft, cellInput(), d, 'tb', 'wrap', measuringCanvas());
+            if (d) updateFormat(draft, cellInput(), d, 'tb', 'wrap');
         });
         return wrapped.sheets[0].config?.rowlen?.[0] ?? 0;
     }
 
     const rich = (...texts: string[]): Cell => ({
         ct: { fa: 'General', t: 'inlineStr', s: texts.map((v, index) => ({ v, bl: index % 2 })) },
+    });
+
+    test('Clip and Overflow leave the row alone', () => {
+        for (const mode of ['clip', 'overflow']) {
+            const [unwrapped] = produceWithPatches(sizedContext(), (draft: Context) => {
+                const d = getFlowdata(draft);
+                if (d) updateFormat(draft, cellInput(), d, 'tb', mode);
+            });
+            expect(unwrapped.sheets[0].config?.rowlen?.[0]).toBeUndefined();
+        }
     });
 
     // Fitting the row lays out every line, not only those that fit the row it has.

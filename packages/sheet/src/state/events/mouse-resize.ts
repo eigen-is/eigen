@@ -8,7 +8,7 @@ import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import { deselectFloatingObject, israngeseleciton } from '../modules';
 import { colLocation, rowLocation } from '../modules/location';
-import { getFontSet } from '../modules/text';
+import { getFontSet, measuringContext } from '../modules/text';
 import type { GlobalCache } from '../types';
 import { getSheetIndex } from '../utils';
 
@@ -205,12 +205,10 @@ export function handleRowFreezeHandleMouseDown(
     e.stopPropagation();
 }
 
-export function autoFitColumnWidth(ctx: Context, colIndex: number, canvas: HTMLCanvasElement) {
+export function autoFitColumnWidth(ctx: Context, colIndex: number) {
     const flowdata = getFlowdata(ctx);
-    if (!flowdata) return;
-
-    const renderCtx = canvas.getContext('2d');
-    if (!renderCtx) return;
+    const measuring = measuringContext();
+    if (!flowdata || !measuring) return;
 
     const padding = 14;
     let maxWidth = 10;
@@ -229,10 +227,8 @@ export function autoFitColumnWidth(ctx: Context, colIndex: number, canvas: HTMLC
         const text = String(display);
         if (!text) continue;
 
-        const fontset = getFontSet(cell);
-        renderCtx.font = fontset;
-        const measured = renderCtx.measureText(text);
-        const width = measured.width + padding;
+        measuring.font = getFontSet(cell);
+        const width = measuring.measureText(text).width + padding;
         if (width > maxWidth) maxWidth = width;
     }
 

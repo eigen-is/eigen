@@ -25,11 +25,13 @@ import { clearMeasureTextCache } from '../../../state/modules/text';
 import type { CellMatrix, SheetConfig } from '../../../state/types';
 import { filterPatch } from '../../../state/utils/patch';
 import { contextFactory } from '../factories/context';
+import { stubMeasuringCanvas } from '../factories/measuring-canvas';
 
 enablePatches();
 
 // The auto-height tests below commit through a real editor element.
 const win = installHappyDom();
+stubMeasuringCanvas(win);
 
 describe('state/modules/cell — getInlineStringHTML', () => {
     function inlineCell(runs: { v: string; fc?: string }[]): CellMatrix {
@@ -97,21 +99,6 @@ describe('state/modules/cell — getCellValue / getFormulaHtml', () => {
 // or the row keeps its old height and the text stays clipped. Driving updateCell through
 // produceWithPatches is what exposes a write that never lands.
 describe('state/modules/cell — updateCell auto-height', () => {
-    // Only `font` and `measureText` are read on the auto-height path.
-    function measuringCanvas(): CanvasRenderingContext2D {
-        const canvas = {
-            font: '11px Arial',
-            textAlign: 'start',
-            textBaseline: 'top',
-            measureText: (text: string) => ({
-                width: text.length * 7,
-                actualBoundingBoxAscent: 8,
-                actualBoundingBoxDescent: 3,
-            }),
-        };
-        return canvas as unknown as CanvasRenderingContext2D;
-    }
-
     // The commit path handleGlobalEnter takes: the editor's text, newlines and all.
     function multilineInput(): HTMLDivElement {
         const input = win.document.createElement('div');
@@ -136,7 +123,7 @@ describe('state/modules/cell — updateCell auto-height', () => {
     test('the grown row height lands on the sheet the grid measures from', () => {
         clearMeasureTextCache();
         const [grown] = produceWithPatches(editContext(), (ctx: Context) => {
-            updateCell(ctx, 0, 0, multilineInput(), undefined, measuringCanvas());
+            updateCell(ctx, 0, 0, multilineInput());
         });
 
         expect(grown.sheets[0].config?.rowlen?.[0]).toBeGreaterThan(19);
@@ -146,7 +133,7 @@ describe('state/modules/cell — updateCell auto-height', () => {
         clearMeasureTextCache();
         const base = editContext();
         const [grown, patches] = produceWithPatches(base, (ctx: Context) => {
-            updateCell(ctx, 0, 0, multilineInput(), undefined, measuringCanvas());
+            updateCell(ctx, 0, 0, multilineInput());
         });
 
         const synced = applyPatches(base, filterPatch(patches));
@@ -160,7 +147,7 @@ describe('state/modules/cell — updateCell auto-height', () => {
         expect(ctx.sheets[0].data![0][1]?.v).toBe('Cherry!');
         const input = win.document.createElement('div');
         input.innerHTML = '<span style="font-weight: bold;">Kiwi</span>';
-        updateCell(ctx, 0, 0, input as unknown as HTMLDivElement, undefined, measuringCanvas());
+        updateCell(ctx, 0, 0, input as unknown as HTMLDivElement);
         // The workbook applies the recomputed values after the edit, as here.
         groupValuesRefresh(ctx);
         expect(ctx.sheets[0].data![0][0]?.ct?.t).toBe('inlineStr');

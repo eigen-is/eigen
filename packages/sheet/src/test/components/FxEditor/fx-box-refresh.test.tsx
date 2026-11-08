@@ -1,11 +1,12 @@
 // The fx box shows the focused cell's content, and an undo of an edit to that cell moves nothing
 // else: same sheet, same selection, new value. So the refresh cannot key off the selection having
-// changed — it has to follow the cell.
+// changed — it has to follow the cell. Enter commits through the grid's own Enter, so the row grows to the text.
 
 import { expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
+import { stubMeasuringCanvas } from '../../state/factories/measuring-canvas';
 
-installHappyDom();
+stubMeasuringCanvas(installHappyDom());
 
 const { act, createElement, createRef } = await import('react');
 const { createRoot } = await import('react-dom/client');
@@ -14,6 +15,7 @@ const { FxEditor } = await import('../../../components/FxEditor');
 const { defaultContext, defaultSettings } = await import('../../../state');
 const { FormulaCache } = await import('../../../state');
 type Context = import('../../../state').Context;
+type SetContext = (recipe: (ctx: Context) => void) => void;
 
 const refs = {
     globalCache: {
@@ -46,7 +48,7 @@ function contextShowing(cell: { v?: number; m?: string; f?: string }, editing = 
     };
 }
 
-function render(root: ReturnType<typeof createRoot>, context: Context) {
+function render(root: ReturnType<typeof createRoot>, context: Context, setContext: SetContext = () => {}) {
     return act(async () => {
         root.render(
             createElement(
@@ -55,7 +57,7 @@ function render(root: ReturnType<typeof createRoot>, context: Context) {
                     value: {
                         context,
                         getContext: () => context,
-                        setContext: () => {},
+                        setContext,
                         settings: defaultSettings,
                         refs,
                         handleUndo: () => {},
@@ -97,6 +99,48 @@ test('a peer edit landing mid-keystroke leaves the open edit alone', async () =>
     box.innerHTML = '=SUM(';
     await render(root, contextShowing({ v: 7, m: '7' }, true));
     expect(box.innerHTML).toBe('=SUM(');
+
+    await act(async () => root.unmount());
+    container.remove();
+});
+
+test('Enter commits the text, grows the row and selects the cell below', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const context = contextShowing({}, true);
+    context.sheets[0].data = [[{ v: 'x', m: 'x', ct: { fa: 'General', t: 'g' } }], [null]];
+
+    await render(root, context, (recipe) => recipe(context));
+    const box = container.querySelector('#sheet-functionbox-cell');
+    if (!(box instanceof HTMLElement)) throw new Error('fx box did not render');
+    box.innerHTML = 'line one\nline two\nline three';
+    await act(async () => {
+        box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+
+    expect(context.sheets[0].config?.rowlen?.[0]).toBeGreaterThan(context.defaultrowlen);
+    expect(context.selections?.[0].row_focus).toBe(1);
+    expect(context.editingCellPosition).toEqual([]);
+
+    await act(async () => root.unmount());
+    container.remove();
+});
+
+test('Alt+Enter leaves the edit open', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    const context = contextShowing({ v: 2, m: '2' }, true);
+
+    await render(root, context, (recipe) => recipe(context));
+    const box = container.querySelector('#sheet-functionbox-cell');
+    if (!box) throw new Error('fx box did not render');
+    await act(async () => {
+        box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', altKey: true, bubbles: true }));
+    });
+
+    expect(context.editingCellPosition).toEqual([0, 0]);
 
     await act(async () => root.unmount());
     container.remove();

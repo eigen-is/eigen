@@ -33,6 +33,7 @@ import {
     rememberEditorSelection,
     SHEET_HOTKEYS,
     typeStyledText,
+    typesIntoEditor,
     valueShowEs,
 } from '../../state';
 import { ContentEditable } from './ContentEditable';
@@ -212,41 +213,23 @@ export const InputBox: React.FC = () => {
         (__: unknown, isBlur?: boolean) => {
             if (inputRef.current) loadCellFont(editingCell, inputRef.current.innerText);
             const e = lastKeyDownEventRef.current;
-            if (!e) return;
-            const kcode = e.keyCode;
-            if (!kcode) return;
+            if (!e?.keyCode || !typesIntoEditor(e)) return;
 
-            if (
-                !(
-                    (kcode >= 112 && kcode <= 123) ||
-                    kcode <= 46 ||
-                    kcode === 144 ||
-                    kcode === 108 ||
-                    e.ctrlKey ||
-                    e.altKey ||
-                    (e.shiftKey && (kcode === 37 || kcode === 38 || kcode === 39 || kcode === 40))
-                ) ||
-                kcode === 8 ||
-                kcode === 32 ||
-                kcode === 46 ||
-                (e.ctrlKey && kcode === 86)
-            ) {
-                setContext((draftCtx) => {
-                    if (
-                        (draftCtx.formulaCache.rangestart ||
-                            draftCtx.formulaCache.rangedrag_column_start ||
-                            draftCtx.formulaCache.rangedrag_row_start ||
-                            israngeseleciton(draftCtx)) &&
-                        isBlur
-                    )
-                        return;
-                    const input = refs.cellInput.current;
-                    if (!input || draftCtx.allowEdit === false) {
-                        return;
-                    }
-                    handleFormulaInput(draftCtx, refs.fxInput.current, input, kcode, preText.current);
-                });
-            }
+            setContext((draftCtx) => {
+                if (
+                    (draftCtx.formulaCache.rangestart ||
+                        draftCtx.formulaCache.rangedrag_column_start ||
+                        draftCtx.formulaCache.rangedrag_row_start ||
+                        israngeseleciton(draftCtx)) &&
+                    isBlur
+                )
+                    return;
+                const input = refs.cellInput.current;
+                if (!input || draftCtx.allowEdit === false) {
+                    return;
+                }
+                handleFormulaInput(draftCtx, refs.fxInput.current, input, e.keyCode, preText.current);
+            });
         },
         [editingCell, refs.cellInput, refs.fxInput, setContext],
     );
