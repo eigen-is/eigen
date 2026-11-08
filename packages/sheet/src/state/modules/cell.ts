@@ -14,13 +14,14 @@ import {
     rangesOverlap,
     SHEET_DEFAULT_FONT_SIZE,
 } from '@workspace/lib/sheets';
-import { cloneDeep, isNil, isNumber, isPlainObject, isString } from 'es-toolkit/compat';
+import { cloneDeep, isNil, isPlainObject, isString } from 'es-toolkit/compat';
 import { sheetFinder, sheetRefName } from '../../engine/a1-notation';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
 import {
     booleanDisplay,
     cellWrapsText,
     dropRuns,
+    formulaResultType,
     generalAlign,
     numberDisplay,
     parseCellInput,
@@ -153,11 +154,10 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
     }
     if (!d) return;
 
-    // A deep copy would lose the cell properties set at initialization.
     let cell = d[r][c];
 
     // biome-ignore lint/suspicious/noExplicitAny: tracks v's shape (scalar or cell.v from a patch)
-    let vupdate: any;
+    let value: any;
 
     if (isPlainObject(v)) {
         if (isNil(cell)) {
@@ -175,20 +175,20 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
         }
 
         if (isPlainObject(v.v)) {
-            vupdate = v.v.v;
+            value = v.v.v;
         } else {
-            vupdate = v.v;
+            value = v.v;
         }
     } else {
-        vupdate = v;
+        value = v;
     }
 
     // A rich write, runs with no value or formula, brings its runs; any other write drops the cell's.
-    if (cell != null && !(isPlainObject(v) && isNil(v.f) && isRealNull(vupdate) && richText(v) !== undefined)) {
+    if (cell != null && !(isPlainObject(v) && isNil(v.f) && isRealNull(value) && richText(v) !== undefined)) {
         dropRuns(cell);
     }
 
-    if (isRealNull(vupdate)) {
+    if (isRealNull(value)) {
         if (cell != null && isPlainObject(cell)) {
             delete cell.m;
             delete cell.v;
@@ -201,68 +201,56 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
         return;
     }
 
-    // 1. Is null
-    // 2. Data from a pivot table, which may be a bare string or number.
-    if (isRealNull(cell) || ((isString(cell) || isNumber(cell)) && cell === v)) {
-        cell = {};
+    cell ??= {};
+
+    if (!isNil(cell.f)) {
+        writeFormulaResult(cell, value);
+        d[r][c] = cell;
+        return;
     }
 
-    if (!cell) return;
+    const text = value.toString();
 
-    const vupdateStr = vupdate.toString();
-
-    // A formula's text result stays text however it reads (=TEXT(5,"000") is "005"), as recalc stores it.
-    if (!isNil(cell.f) && isString(vupdate) && !valueIsError(vupdate)) {
-        cell.v = vupdate;
-        cell.m = vupdate;
-        cell.ct ??= { fa: 'General', t: 'g' };
-    } else if (vupdateStr.substr(0, 1) === "'") {
-        cell.m = vupdateStr.substr(1);
+    if (text.substr(0, 1) === "'") {
+        cell.m = text.substr(1);
         cell.ct = { fa: '@', t: 's' };
-        cell.v = vupdateStr.substr(1);
+        cell.v = text.substr(1);
         cell.qp = 1;
     } else if (cell.qp === 1) {
-        cell.m = vupdateStr;
+        cell.m = text;
         cell.ct = { fa: '@', t: 's' };
-        cell.v = vupdateStr;
-    } else if (vupdateStr.toUpperCase() === 'TRUE' && (isNil(cell.ct?.fa) || cell.ct?.fa !== '@')) {
+        cell.v = text;
+    } else if (text.toUpperCase() === 'TRUE' && (isNil(cell.ct?.fa) || cell.ct?.fa !== '@')) {
         cell.m = booleanDisplay(true);
         cell.ct = { fa: 'General', t: 'b' };
         cell.v = true;
-    } else if (vupdateStr.toUpperCase() === 'FALSE' && (isNil(cell.ct?.fa) || cell.ct?.fa !== '@')) {
+    } else if (text.toUpperCase() === 'FALSE' && (isNil(cell.ct?.fa) || cell.ct?.fa !== '@')) {
         cell.m = booleanDisplay(false);
         cell.ct = { fa: 'General', t: 'b' };
         cell.v = false;
     } else if (
-        vupdateStr.substr(-1) === '%' &&
-        isRealNum(vupdateStr.substring(0, vupdateStr.length - 1)) &&
+        text.substr(-1) === '%' &&
+        isRealNum(text.substring(0, text.length - 1)) &&
         (isNil(cell.ct?.fa) || cell.ct?.fa !== '@')
     ) {
         cell.ct = { fa: '0%', t: 'n' };
-        cell.v = vupdateStr.substring(0, vupdateStr.length - 1) / 100;
-        cell.m = vupdate;
-    } else if (valueIsError(vupdate) && (!isNil(cell.f) || cell.ct?.fa !== '@')) {
-        // Typed into a text-formatted cell, an error is text, as in Excel. A formula's error is an error in any format.
-        cell.m = vupdateStr;
+        cell.v = text.substring(0, text.length - 1) / 100;
+        cell.m = value;
+    } else if (valueIsError(value) && cell.ct?.fa !== '@') {
+        // Typed into a text-formatted cell, an error is text, as in Excel.
+        cell.m = text;
         if (!isNil(cell.ct)) {
             cell.ct.t = 'e';
         } else {
             cell.ct = { fa: 'General', t: 'e' };
         }
-        cell.v = vupdate;
+        cell.v = value;
     } else {
-        if (!isNil(cell.f) && isPlainNumber(vupdate) && !ID_CARD_NUMBER.test(vupdateStr)) {
-            cell.v = Number(vupdate);
-            if (isNil(cell.ct)) {
-                cell.ct = { fa: 'General', t: 'n' };
-            }
-
-            cell.m = numberDisplay(cell.v, cell.ct.fa);
-        } else if (!isNil(cell.ct) && cell.ct.fa === '@') {
-            cell.m = vupdateStr;
-            cell.v = vupdate;
-        } else if (cell.ct != null && cell.ct.t === 'd' && isString(vupdate)) {
-            const mask = parseCellInput(vupdate);
+        if (!isNil(cell.ct) && cell.ct.fa === '@') {
+            cell.m = text;
+            cell.v = value;
+        } else if (cell.ct != null && cell.ct.t === 'd' && isString(value)) {
+            const mask = parseCellInput(value);
             if (mask[1].t !== 'd' || mask[1].fa === cell.ct.fa) {
                 [cell.m, cell.ct, cell.v] = mask;
             } else {
@@ -270,31 +258,42 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
                 cell.m = numberDisplay(cell.v, cell.ct.fa);
             }
         } else if (!isNil(cell.ct) && !isNil(cell.ct.fa) && cell.ct.fa !== 'General') {
-            if (isPlainNumber(vupdate)) {
-                vupdate = Number(vupdate);
+            if (isPlainNumber(value)) {
+                value = Number(value);
             }
 
-            const mask = numberDisplay(vupdate, cell.ct.fa);
+            const mask = numberDisplay(value, cell.ct.fa);
 
-            if (mask === vupdate) {
+            if (mask === value) {
                 // A format the updated value can't take is replaced by the value's own.
-                [cell.m, cell.ct, cell.v] = parseCellInput(vupdate);
+                [cell.m, cell.ct, cell.v] = parseCellInput(value);
             } else {
                 cell.m = mask;
-                cell.v = vupdate;
+                cell.v = value;
             }
         } else {
-            if (isPlainNumber(vupdate) && !ID_CARD_NUMBER.test(vupdateStr)) {
-                cell.v = Number(vupdate);
+            if (isPlainNumber(value) && !ID_CARD_NUMBER.test(text)) {
+                cell.v = Number(value);
                 cell.ct = { fa: 'General', t: 'n' };
                 cell.m = numberDisplay(cell.v);
             } else {
-                [cell.m, cell.ct, cell.v] = parseCellInput(vupdate);
+                [cell.m, cell.ct, cell.v] = parseCellInput(value);
             }
         }
     }
 
     d[r][c] = cell;
+}
+
+// A formula's result takes the value's type and shows in the cell's format, which outlives it. Text stays text however
+// it reads (=TEXT(5,"000") is "005"), as recalc stores it.
+function writeFormulaResult(cell: Cell, value: Cell['v']) {
+    const ct = (cell.ct ??= { fa: 'General' });
+    cell.v = value;
+    if (typeof value === 'number') cell.m = numberDisplay(value, ct.fa);
+    else if (typeof value === 'boolean') cell.m = booleanDisplay(value);
+    else cell.m = String(value);
+    ct.t = formulaResultType(ct.fa, value);
 }
 
 export function getRealCellValue(r: number, c: number, data: CellMatrix, attr?: keyof Cell) {

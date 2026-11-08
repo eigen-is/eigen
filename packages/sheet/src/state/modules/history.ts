@@ -1,8 +1,9 @@
 // What ⌘Z and ⌘⇧Z do in this tab. An edit is recorded as an entry of immer patches that names its sheet by id. Undo and
 // redo take the context and an entry and return the next context and the batch to send. A cell or field entry skips a
-// target a peer changed since and recalculates the formulas it writes back. A structural entry, such as a row op or a
-// rename, leaves the stacks at a peer's first batch, so it always finds the workbook as it left it, and it applies
-// exactly the ops it sends, through applyOpBatch, as its peers will. The Workbook keeps the stacks.
+// target a peer changed since and recalculates the formulas it writes back. A structural entry, such as a row op, a
+// rename or a paste that grew the grid, leaves the stacks at a peer's first batch, so it always finds the workbook as
+// it left it. A row or sheet step applies exactly the ops it sends, through applyOpBatch, as its peers will. The
+// Workbook keeps the stacks.
 
 import type { MergeCell } from '@workspace/lib/sheets';
 import { parseCellKey } from '@workspace/lib/sheets';
@@ -33,7 +34,7 @@ import { setCellValue } from './cell';
 import { withoutDeletedFloatingEdits } from './floating';
 import { snapshotContext } from './formula-cache';
 import { computeFormula, execFunctionGroup } from './formula-exec';
-import { isStructural } from './history-shift';
+import { namesStructuralOp, unitOf } from './history-shift';
 import { settleCurrentSheet, shiftSheetOrders } from './sheet';
 
 type Step = { ctx: Context; ops: Op[] };
@@ -65,20 +66,20 @@ export function recordEntry(
     };
 }
 
-// How far back undo reaches. A structural entry may hold whole cell matrices, so fewer of those stay.
+// How far back undo reaches. A row, column or sheet entry may hold whole cell matrices, so fewer of those stay.
 const MAX_ENTRIES = 200;
-const MAX_STRUCTURAL_ENTRIES = 10;
+const MAX_STRUCTURAL_OP_ENTRIES = 10;
 
 // Puts an edit's entry on the undo stack and drops the oldest entries past those limits. Only the oldest ever go: an
 // entry fits the grid as the entries above it leave it, so one dropped from the middle would misplace the rest.
 export function pushEntry(stack: History[], entry: History) {
     stack.push(entry);
     let keep = Math.min(stack.length, MAX_ENTRIES);
-    let structural = 0;
+    let structuralOps = 0;
     for (let i = stack.length - 1; i >= stack.length - keep; i -= 1) {
-        if (!isStructural(stack[i])) continue;
-        structural += 1;
-        if (structural > MAX_STRUCTURAL_ENTRIES) keep = stack.length - 1 - i;
+        if (!namesStructuralOp(stack[i])) continue;
+        structuralOps += 1;
+        if (structuralOps > MAX_STRUCTURAL_OP_ENTRIES) keep = stack.length - 1 - i;
     }
     stack.splice(0, stack.length - keep);
 }
@@ -290,11 +291,6 @@ function stillWritten(ctx: Context, apply: Patch[], written: Patch[]): Patch[] {
     for (const [key, { unit, patches }] of writes) if (!holds(ctx, unit, patches)) changed.add(find(key));
     if (changed.size === 0) return apply;
     return apply.filter((patch) => !changed.has(find(JSON.stringify(unitOf(patch.path)))));
-}
-
-// A cell, a config map's entry, or one link, rule, image or chart: what a peer's write and yours collide on.
-function unitOf(path: (string | number)[]) {
-    return path.slice(0, path[2] === 'data' || path[2] === 'config' ? 5 : 4);
 }
 
 // The target holds what the entry wrote when writing it again changes nothing.

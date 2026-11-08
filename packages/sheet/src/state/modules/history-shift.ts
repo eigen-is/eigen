@@ -1,7 +1,8 @@
-// How a peer's batch changes this tab's pending undos. Any batch ends your own structural entries, such as a row op
-// or a rename, and with them everything older (dropStructuralEntries). A row or column op then moves what is left, the
-// cell and field entries: shiftEntries moves their paths and values as the op moves the live sheets, so an undo lands
-// where its cell now is. The Workbook's applyOp runs both, and a RowColMove also moves the open editor along an op.
+// How a peer's batch changes this tab's pending undos. Any batch ends your own structural entries, such as a row op, a
+// rename or a paste that grew the grid, and with them everything older (dropStructuralEntries). A row or column op then
+// moves what is left, the cell and field entries: shiftEntries moves their paths and values as the op moves the live
+// sheets, so an undo lands where its cell now is. The Workbook's applyOp runs both, and a RowColMove also moves the
+// open editor along an op.
 
 import type { MergeCell, SheetChart } from '@workspace/lib/sheets';
 import type { Patch } from 'immer';
@@ -81,7 +82,14 @@ export function dropStructuralEntries(entries: History[]): History[] {
     return entries.slice(entries.findLastIndex(isStructural) + 1);
 }
 
-export function isStructural({ options }: History): boolean {
+function isStructural(entry: History): boolean {
+    return (
+        namesStructuralOp(entry) || entry.patches.some(writesListLength) || entry.inversePatches.some(writesListLength)
+    );
+}
+
+// A row, column or sheet op, as opposed to an edit that ships its own patches.
+export function namesStructuralOp({ options }: History): boolean {
     return Boolean(
         options.insertRowColOp ||
             options.deleteRowColOp ||
@@ -89,6 +97,18 @@ export function isStructural({ options }: History): boolean {
             options.deletedSheet ||
             options.renamedSheet,
     );
+}
+
+// Immer records a list that grew or shrank, such as the grid in a paste past its edge or the conditional format rules,
+// as a write of its `length`. Stepping that back cuts off what a peer appended, and no per-target check can see it. A
+// list inside one target, such as a rule's ranges, is that target's write.
+function writesListLength({ path }: Patch): boolean {
+    return path.at(-1) === 'length' && path.length === unitOf(path).length;
+}
+
+// A cell, a config map's entry, or one link, rule, image or chart: what a peer's write and yours collide on.
+export function unitOf(path: (string | number)[]) {
+    return path.slice(0, path[2] === 'data' || path[2] === 'config' ? 5 : 4);
 }
 
 // A peer's row or column op moves your entries on its sheet, and the formula text that points at it on any sheet. An
