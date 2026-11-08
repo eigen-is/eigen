@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, data-validation, dropdown, rules]
 related: [sheets/enter-and-edit-data, sheets/conditional-formatting]
 order: 50
-updated: 2026-11-02
+updated: 2026-11-08
 ---
 
 Data validation lets you control what goes into a cell. You can add a dropdown list so people pick from a fixed set of options, or write a rule that rejects a value if it falls outside a range, does not match a pattern, or fails another condition.
@@ -84,7 +84,7 @@ When you copy or cut cells and paste them in the same browser tab, their rules c
 
 A row or column you insert inside a rule's range gets the rule. One you insert above or right below the range doesn't.
 
-An edit that would break one rule into too many separate pieces isn't made. Pasting a cell with a rule and one without down a long column does that, since the rule would land on every other row. Sheets leaves the sheet as it was and shows "This edit would make a data validation rule too complex." The same goes for a fill, a move and the format painter.
+A rule can't be broken into too many separate pieces. Pasting a cell with a rule and one without down a long column can reach that limit, since the rule would land on every other row. The cells still land, but past the limit they get no rule. An edit that would cut an existing rule into too many pieces removes that rule. The same goes for a fill, a move and the format painter.
 
 <div class="eigen-callout">
 

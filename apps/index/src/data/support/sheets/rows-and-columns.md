@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, rows, columns, resize]
 related: [sheets/create-and-edit, sheets/enter-and-edit-data]
 order: 80
-updated: 2026-09-13
+updated: 2026-11-08
 ---
 
 You can add and remove rows and columns at any point, and adjust their size to fit your data. All of these actions are available from the menu bar or by right-clicking directly on the grid.
@@ -89,6 +89,6 @@ To bring them back, click a row number or column letter near the hidden rows or 
 
 <div class="eigen-callout">
 
-A sheet can have at most 10,000 rows and 1,000 columns. Inserting rows or columns beyond these limits is blocked.
+A sheet can have at most 10,000 rows and 1,000 columns. Inserting rows or columns beyond these limits is blocked, and a paste that would go past them isn't made and shows a notice.
 
 </div>

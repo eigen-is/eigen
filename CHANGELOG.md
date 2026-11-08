@@ -14,6 +14,11 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Deleted comments** — a link, notification, activity entry or search result for a deleted comment opens it as "This comment was deleted" under its grayed title, with nothing to reply to, resolve or assign
 - **Copies in Drive** — a copy or Duplicate of a document leaves out the images and comments deleted from the original
 - **Comments in Sheets** — the comments pane lists the comments on every tab, with the tab's name, such as Sheet2 · B2. Deleting a comment removes it from every cell it sits on, and a duplicated tab starts without comments
+- **Undo in Sheets** — once someone else edits the spreadsheet, you can no longer undo or redo your last insert or delete of rows or columns, your last added, duplicated, deleted or renamed tab, or anything before it. What you did after it still undoes
+- **Renaming a tab in Sheets** — formulas, formula rules, dropdown lists and links that name the tab follow its new name, as in Excel, and undo renames it back
+- **Paste from a menu in Sheets** — **Edit › Paste** and the right-click **Paste** paste what is on the clipboard, from any app. Where the browser blocks that, a notice says to press ⌘V (Ctrl+V on Windows and Linux)
+- **Pasting edited cells in Sheets** — if you edit cells after copying them, a paste in the same tab brings them as they are now
+- **Validation limits in Sheets** — an edit that would push a validation rule past its limit goes through, and the cells past it get no rule
 - **Default drive size reaches existing users** — raising **Default mount (MB)** in Admin's server settings now gives every user's drive the new size at once, not only users who sign in for the first time. Lowering it shrinks no one's drive
 
 ### Fixed
@@ -21,6 +26,17 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Restoring in Slides and Vector** — restoring an earlier version of a deck or drawing brings back the comments deleted since, as Docs and Sheets do. Their replies stay as they are now
 - **Version history in other tabs** — after a restore or a Delete history, another tab open on the same document shows the new list of versions at once
 - **Pictures cropped in Google Slides** — a picture that Google Slides cropped to fit its box, such as a logo, no longer comes in squashed when you convert or import the deck
+- **Validation rules and formats in Sheets** — a rule checks a cell's value, not its text: a date in any format, a number shown as 50% and an unchanged formula pass, and an imported "any date" rule no longer refuses every date
+- **Row and column changes while others edit in Sheets** — a rename, tab color, link, freeze or filter someone sets while you insert or delete rows stays
+- **Filters while others edit in Sheets** — a filter someone else changes no longer leaves rows hidden for good after your next filter edit
+- **Refused edits in Sheets** — Delete on part of a merged cell shows a notice, a paste past the sheet's size limit says so, and a paste refused over part of a merge changes nothing
+- **Long text in Sheets** — wrapped text grows its row however you confirm it, from the formula bar or by clicking elsewhere too
+- **Clicks and drags in Sheets** — the link card over a frozen pane shows the link you point at, dragging a formula's range picks the right rows, and a move near the bottom of the grid no longer snaps to the last row
+- **Date shortcut in Sheets** — Ctrl+Shift+; on a filled cell no longer wipes it, so Escape brings back what was there
+- **Formulas in Sheets** — `A1 : B2` with spaces recalculates, a formula reading a tab nobody opened stays current, and undoing a replace restores the formulas that read those cells
+- **Paste past the last row in Sheets** — a paste that adds rows to a workbook full of formulas no longer pauses to read them all again
+- **A tab opened for the first time in Sheets** — arrow keys and typing work at once, on A1, without a click first
+- **Downloading an empty spreadsheet** — a spreadsheet nobody edited downloads with its blank sheet
 
 ## [0.4.2] - 2026-11-03
 

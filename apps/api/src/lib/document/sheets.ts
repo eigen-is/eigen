@@ -32,8 +32,8 @@ import type * as Y from 'yjs';
 // and the sheets keep the values they hold.
 export const SERVER_RECALC_BUDGET = {
     // The slots the dependency index lists each range in (dependencySlots), the range cut to its sheet. A range lies in
-    // the 64 × 16 blocks it meets. A range down every row of its sheet, such as a whole column, takes one slot per
-    // column instead. A range across every column, such as a whole row, takes one slot per row. No workbook of the
+    // the 64 × 16 blocks it meets. Cut to its sheet, a long range from the top takes one slot per column instead, and
+    // one from the left takes one slot per row, as layoutOf decides by shape. No workbook of the
     // 1,062-file corpus needs more than 68.8 million (3.3 s), and this is four times that.
     maxDependencySlots: 280_000_000,
     // The entries the lookups of the formula cells visit in the index, whether each range covers the cell or not. They
