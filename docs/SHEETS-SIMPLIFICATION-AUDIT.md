@@ -484,4 +484,5 @@ Wave 3, the redesigns, in [§ If we built it today](#if-we-built-it-today)'s ord
 **Run state.** Started 2026-11-08 on `sheets-audit` in the worktree `eigen-sheets`, cut from `develop` at `d55da56c1`. This section is the resume point: what merged, what was ruled out and why, and what comes next.
 
 - This run also takes the API audit's T2 and X2 (the other session agreed). Don't edit `API-SIMPLIFICATION-AUDIT.md` on this branch, because that session keeps editing it: tell it when T2 or X2 lands, and it strikes them. Its X2 ruling: a flat cap, the runner's deadline and its memory limit, and a timeout or out-of-memory is an accepted outcome. X2 joins Wave 2.
+- The owner allows an implementer to hand mechanical work (a grep sweep, rewiring similar test call sites, running a suite) to a cheaper sub-agent: Sonnet, or Haiku for a lookup, at low or medium effort. The implementer keeps Step 0, the design, the diff read and the commit. A sub-agent uses the implementer's worktree with no isolation option, one editing at a time, and never commits.
 - Wave 1 is running. Merged: nothing yet. Running: S1, U2, E9, D3, R4. F1 starts when a slot frees.
