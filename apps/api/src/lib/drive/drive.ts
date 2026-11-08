@@ -1253,6 +1253,7 @@ export class Drive {
         });
         const eventType = status === 'resolved' ? 'resolved' : 'reopened';
         await this.recordFileEvent(mountId, pathId, user, { eventType, details: { card, chatName } });
+        broadcastCommentIndexUpdated(this, this.owner.id, mountId, pathId).catch(() => {});
     }
 
     // ---- Collab documents and versions ----

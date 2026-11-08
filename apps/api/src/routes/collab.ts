@@ -16,7 +16,6 @@ import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
 import { Elysia, t } from 'elysia';
 import type { ServerWebSocket } from 'elysia/ws/bun';
 import { withCommentIndex } from '../lib/chat';
-import { broadcastCommentIndexUpdated } from '../lib/chat/sse-events';
 import type { CollabDocument } from '../lib/collab/collab-document';
 import { collabEpochMessage } from '../lib/collab/epoch';
 import { startLoadingHeartbeat } from '../lib/collab/loading-heartbeat';
@@ -90,11 +89,7 @@ export const collabRouter = new Elysia({
         '/collab/:ownerId/:mountId/:pathId/comments/:chatName/status',
         async ({ params, body, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
-                throw new ApiError(403, 'No write permission');
-            }
             await drive.setCommentStatus(params.mountId, params.pathId, params.chatName, body.status, user, body.title);
-            broadcastCommentIndexUpdated(drive, params.ownerId, params.mountId, params.pathId).catch(() => {});
             return { success: true };
         },
         {
@@ -110,9 +105,6 @@ export const collabRouter = new Elysia({
         '/collab/:ownerId/:mountId/:pathId/comments/:chatName/assignee',
         async ({ params, body, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
-                throw new ApiError(403, 'No write permission');
-            }
             await drive.assignComment(params.mountId, params.pathId, params.chatName, body.assignee, user, body.title);
             return { success: true };
         },

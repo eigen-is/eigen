@@ -2,6 +2,8 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import type { CommentEntry, DrivePath } from '@workspace/lib/types';
 import type { FileEvent } from '@workspace/lib/types/file-history';
 import type { Notification } from '@workspace/lib/types/notification';
+import type { SSEvent } from '@workspace/lib/types/sse';
+import { SSEventType } from '@workspace/lib/types/sse';
 import { getHome } from '../../lib/home';
 import { assertJson, authedRequest, driveGet, drivePost, drivePut, findOrFail, getTestContext } from '../setup';
 
@@ -258,6 +260,37 @@ describe('Comment assignee', () => {
         expect((await allEvents()).length).toBe(eventsBefore.length);
         const tag = `assigned:${ctx.alice.user.id}:${mountId}:${docId}:${thread.name}`;
         expect((await notificationsFor(ctx.bob.user.id)).some((n) => n.tag === tag)).toBe(false);
+    });
+
+    test("a status change on the owner's drive tells the document's open tabs", async () => {
+        const home = await getHome(ctx.alice.user.id);
+        const heard: SSEvent[] = [];
+        const listener = (event: SSEvent) => heard.push(event);
+        home.subscribeSSE(listener);
+        try {
+            await home.drive.setCommentStatus(mountId, docId, chatName, 'resolved', home.user);
+            await home.drive.setCommentStatus(mountId, docId, chatName, 'open', home.user);
+            await Bun.sleep(50);
+        } finally {
+            home.unsubscribeSSE(listener);
+        }
+        expect(heard.filter((event) => event.type === SSEventType.CHAT_COMMENT_INDEX_UPDATED).length).toBe(2);
+    });
+
+    test('the owner writing to a path that does not exist gets a 404, with no write check in the way', async () => {
+        const write = (field: string, body: object) =>
+            authedRequest(
+                ctx.alice.user.sessionToken,
+                `/collab/${ctx.alice.user.id}/${mountId}/nonexistent-id/comments/${chatName}/${field}`,
+                {
+                    method: 'PATCH',
+                    body: JSON.stringify(body),
+                    headers: { 'Content-Type': 'application/json' },
+                },
+            );
+        const status = await write('status', { status: 'resolved' });
+        const assignee = await write('assignee', { assignee: null });
+        expect([status.status, assignee.status]).toEqual([404, 404]);
     });
 
     test('assigning on a nonexistent chatName → 404, no row, no event, no notification', async () => {
