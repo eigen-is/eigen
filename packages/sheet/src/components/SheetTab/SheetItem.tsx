@@ -66,13 +66,15 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
         const input = editable.current;
         if (input) {
             try {
-                setContext((draftCtx) => editSheetName(draftCtx, input));
+                setContext((draftCtx) => editSheetName(draftCtx, input), {
+                    renameSheetOp: { id, name: input.innerText, from: sheet.name },
+                });
             } catch (e) {
                 if (e instanceof Error) showNotice(e.message);
             }
         }
         setEditing(false);
-    }, [setContext, showNotice]);
+    }, [id, sheet.name, setContext, showNotice]);
 
     const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLSpanElement>) => {
         // The blur may open a notice whose OK button takes the focus at once, and the browser would send this Enter's
@@ -224,8 +226,7 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
             if (editing || isDropPlaceholder) return;
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                // Stop the key bubbling to the workbook grid handler (Space would otherwise start editing
-                // the focused cell); mirrors the rename-span handler below.
+                // Space reaching the workbook grid would start editing the focused cell.
                 e.stopPropagation();
                 selectSheet();
             }
@@ -258,7 +259,6 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
             onDrop={onDrop}
             onDragStart={onDragStart}
             draggable={context.allowEdit && !editing}
-            key={sheet.id}
             className={cn(
                 'relative flex shrink-0 items-center outline-hidden',
                 isDropPlaceholder ? 'w-8' : 'cursor-pointer px-2 text-xs',

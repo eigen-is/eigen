@@ -25,6 +25,7 @@ import {
     inverseRowColOptions,
     opToPatch,
     patchToOp,
+    renameSheetOps,
     rowColMarker,
     sheetOrder,
     storedCopy,
@@ -43,7 +44,7 @@ type Step = { ctx: Context; ops: Op[]; refused?: 'undo' | 'redo' };
 
 // What setContextWithProduce keeps of one edit. Its options are the ones the edit's batch is built from. A sheet
 // delete adds the deleted sheet to them and keeps nothing else, because its undo and redo are ops and its patches
-// would hold the whole sheet list twice.
+// would hold the whole sheet list twice. A rename keeps only its options too, since its undo and redo rename again.
 export function recordEntry(
     before: Context,
     after: Context,
@@ -51,6 +52,7 @@ export function recordEntry(
     inversePatches: Patch[],
     options: PatchOptions,
 ): History {
+    if (options.renameSheetOp) return { patches: [], inversePatches: [], options };
     if (options.deleteSheetOp) {
         const { id } = options.deleteSheetOp;
         const sheet = before.sheets.find((s) => s.id === id);
@@ -130,6 +132,8 @@ export function undoEntry(ctx: Context, entry: History): Step {
     if (options?.insertRowColOp || options?.deleteRowColOp) {
         return rowColStep(ctx, entry.patches, entry.inversePatches, inverseRowColOptions(options) ?? {}, 'undo');
     }
+    if (options?.renameSheetOp)
+        return applyBatch(ctx, renameSheetOps(options.renameSheetOp.id, options.renameSheetOp.from));
     return patchStep(ctx, entry.inversePatches, entry.patches);
 }
 
@@ -155,6 +159,8 @@ export function redoEntry(ctx: Context, entry: History): Step {
     if (options?.insertRowColOp || options?.deleteRowColOp) {
         return rowColStep(ctx, entry.inversePatches, entry.patches, options, 'redo');
     }
+    if (options?.renameSheetOp)
+        return applyBatch(ctx, renameSheetOps(options.renameSheetOp.id, options.renameSheetOp.name));
     return patchStep(ctx, entry.patches, entry.inversePatches);
 }
 

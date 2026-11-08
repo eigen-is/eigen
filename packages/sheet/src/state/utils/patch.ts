@@ -1,6 +1,6 @@
 // Converts between the editor's immer patches and the ops it sends to peers. patchToOp names each sheet by id and
-// swaps the matrices a row or column op rewrote for the op itself, with the sheet fields no receiver derives.
-// addSheetOps and deleteSheetOps build a sheet's add and delete batches, the add with the sheet's cells as stored.
+// swaps the matrices a row or column op or a rename rewrote for the op itself, with the sheet fields no receiver
+// derives. addSheetOps and deleteSheetOps build a sheet's add and delete batches, the add with its cells as stored.
 // filterPatch keeps what belongs on the wire, and opToPatch turns a peer's ops back into patches on this client's sheet
 // indices.
 
@@ -10,6 +10,7 @@ import { cloneDeep, isEqual, isNumber, partition } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import { dataToCelldata } from '../../engine/celldata';
 import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
+import type { RenameSheetOp } from '../../engine/sheet-name';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import type { Op, Sheet } from '../types';
@@ -25,6 +26,8 @@ export type PatchOptions = {
     // The deleted sheet as it stood, with its cells stored. recordEntry adds it to the options it returns, for the
     // delete's batch and its undo, so a sheet delete's batch is built from the entry's options.
     deletedSheet?: Sheet;
+    // `from` is the name an undo puts back.
+    renameSheetOp?: RenameSheetOp & { from: string };
 };
 
 // The `mc` stamps of every merge in a row or column step's whole config. The merge map alone doesn't draw a merge:
@@ -154,9 +157,16 @@ export function rowColMarker({ insertRowColOp, deleteRowColOp }: PatchOptions): 
     return undefined;
 }
 
+// A rename as its one op. Every receiver's engine rewrites the text naming the sheet on the sheets it holds, so a
+// workbook's formulas stay off the wire and a peer's row op sent at the same time can't misplace a write.
+export function renameSheetOps(id: string, name: string): Op[] {
+    return [{ op: 'renameSheet', id, path: [], value: { name } }];
+}
+
 // The batch an edit sends. A row or column op ships its marker instead of the matrices it rewrote; an undo or redo of
 // one passes the step history built.
 export function patchToOp(ctx: Context, patches: Patch[], options: PatchOptions = {}, step?: RowColStep): Op[] {
+    if (options.renameSheetOp) return renameSheetOps(options.renameSheetOp.id, options.renameSheetOp.name);
     let ops = patches.map((p) => {
         const op: Op = {
             op: p.op,

@@ -13,6 +13,8 @@ import { gridSize } from './defaults';
 import type { DeleteRowColOp, InsertRowColOp } from './rowcol';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from './rowcol';
 import { normalizeSheetConfig } from './sheet-config';
+import type { RenameSheetOp } from './sheet-name';
+import { applySheetRename } from './sheet-name';
 
 // immer's patch plugin is global, and enabling it twice is harmless. Enabling it here means every caller of
 // replaySheetsOps has it without a setup step of its own.
@@ -56,6 +58,8 @@ export function replaySheetsOps(
                     result = applySheetsInsertRowCol(result, insertRowColOf(op));
                 } else if (op.op === 'deleteRowCol') {
                     result = applySheetsDeleteRowCol(result, deleteRowColOf(op));
+                } else if (op.op === 'renameSheet') {
+                    result = applySheetRename(result, renameSheetOf(op));
                 }
             }
             const normalOps = batch.filter((op) => op.op === 'add' || op.op === 'remove' || op.op === 'replace');
@@ -91,6 +95,12 @@ export function deleteRowColOf(op: Op): DeleteRowColOp {
     const value = asDeleteValue(op.value);
     if (!value || !op.id) throw new Error('deleteRowCol op has a malformed value');
     return { ...value, id: op.id };
+}
+
+export function renameSheetOf(op: Op): RenameSheetOp {
+    const name = isRecord(op.value) ? op.value.name : undefined;
+    if (typeof name !== 'string' || !op.id) throw new Error('renameSheet op has a malformed value');
+    return { id: op.id, name };
 }
 
 function asInsertValue(v: unknown): InsertValue | null {

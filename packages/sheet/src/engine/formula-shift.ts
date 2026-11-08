@@ -1,8 +1,9 @@
 // Rewrites the references in a formula's text without parsing it: a copy or a fill shifts its relative refs, an inserted
 // or deleted row or column moves the refs past it, a renamed sheet renames them, and an xlsx import replaces each
-// defined name with what it refers to. One character walker finds the refs and the names for all of them. It needs no
-// sheet state, so the editor and the server share it, for example in the op replay and the xlsx import.
+// defined name with what it refers to. One character walker finds the refs and the names for all of them. It reads
+// only plain sheets, so the editor and the server share it, for example in the op replay and the xlsx import.
 
+import type { Sheet } from '@workspace/lib/sheets';
 import { a1RangeRef, extractLabel, parseA1Range, sheetRefName, toLabel, unquoteSheetName } from './a1-notation';
 import { formulaOperators, iscelldata } from './formula-utils';
 import { offsetCoordinate, offsetRange, sortLegs } from './parser/helper/cell';
@@ -14,10 +15,9 @@ export function functionCopy(txt: string, rowOffset: number, colOffset: number):
     return walkFormulaRefs(txt, (ref) => shiftRef(ref, rowOffset, colOffset));
 }
 
-// Points every ref naming a renamed sheet at its new name, `Sheet1!A1` → `'Sheet1(Copy)'!A1`: Import… renames an
-// imported tab whose name the workbook holds. `findSheet` reads a ref's name against the sheets of the formula's
-// workbook, as a sheetFinder over them does, and `renames` maps the name of each renamed one to its new name. A
-// leading `=` is kept.
+// Points every ref naming a renamed sheet at its new name, `Sheet1!A1` → `'Sheet1(Copy)'!A1`, as a tab rename and
+// Import… do. `findSheet` reads a ref's name against the sheets of the formula's workbook, as a sheetFinder over them
+// does, and `renames` maps the name of each renamed one to its new name. A leading `=` is kept.
 export function renameSheetRefs(
     txt: string,
     findSheet: (name: string) => { name: string } | undefined,
@@ -31,6 +31,55 @@ export function renameSheetRefs(
         return name === undefined ? ref : `${sheetRefName(name)}${ref.slice(sheetEnd)}`;
     });
     return txt.startsWith('=') ? `=${renamed}` : renamed;
+}
+
+// The sheet with `rewrite` run over the formula text it holds: its cells, as a matrix or as stored ones where a sheet
+// has no matrix, such as any sheet a joiner's batch doesn't name, and its formula rules. A sheet whose text stays comes
+// back as the same object, and an untouched row keeps its object.
+export function rewriteSheetFormulas<S extends Sheet>(sheet: S, rewrite: (txt: string) => string): S {
+    let next = sheet;
+    if (sheet.data) {
+        let data: typeof sheet.data | null = null;
+        for (let r = 0; r < sheet.data.length; r += 1) {
+            const row = sheet.data[r];
+            if (!row) continue;
+            for (let c = 0; c < row.length; c += 1) {
+                const cell = row[c];
+                if (!cell?.f) continue;
+                const f = rewrite(cell.f);
+                if (f === cell.f) continue;
+                data ??= [...sheet.data];
+                if (data[r] === row) data[r] = [...row];
+                data[r][c] = { ...cell, f };
+            }
+        }
+        if (data) next = { ...next, data };
+    } else if (sheet.celldata) {
+        let celldata: typeof sheet.celldata | null = null;
+        for (let i = 0; i < sheet.celldata.length; i += 1) {
+            const entry = sheet.celldata[i];
+            if (!entry.v?.f) continue;
+            const f = rewrite(entry.v.f);
+            if (f === entry.v.f) continue;
+            celldata ??= [...sheet.celldata];
+            celldata[i] = { ...entry, v: { ...entry.v, f } };
+        }
+        if (celldata) next = { ...next, celldata };
+    }
+
+    const rules = sheet.conditionalFormatRules;
+    if (!rules) return next;
+    let newRules: typeof rules | null = null;
+    for (let i = 0; i < rules.length; i += 1) {
+        const rule = rules[i];
+        if (rule.type !== 'default' || rule.conditionName !== 'formula') continue;
+        const txt = String(rule.conditionValue[0]);
+        const rewritten = rewrite(txt);
+        if (rewritten === txt) continue;
+        newRules ??= [...rules];
+        newRules[i] = { ...rule, conditionValue: [rewritten] };
+    }
+    return newRules ? { ...next, conditionalFormatRules: newRules } : next;
 }
 
 // Replaces each defined name in a formula with the text `resolve` gives for it, as an xlsx import does, since the
@@ -232,10 +281,12 @@ function refOf(token: string, onRef: (ref: string) => string, onName: (token: st
     const legs = splitUnquoted(token, ':');
     if (splitUnquoted(token, '!').length > 2) {
         if (legs.length !== 2 || legs.some((leg) => splitUnquoted(leg, '!').length !== 2)) return token;
-        const second = legs[1].slice(0, legs[1].lastIndexOf('!') + 1);
-        const moved = refOf(`${legs[0]}:${legs[1].slice(second.length)}`, onRef, onName);
+        const sheetEnd = legs[1].lastIndexOf('!') + 1;
+        const moved = refOf(`${legs[0]}:${legs[1].slice(sheetEnd)}`, onRef, onName);
         const colon = moved.lastIndexOf(':');
-        return colon < 0 ? moved : `${moved.slice(0, colon + 1)}${second}${moved.slice(colon + 1)}`;
+        if (colon < 0) return moved;
+        const prefix = moved.slice(0, moved.lastIndexOf('!') + 1);
+        return `${moved.slice(0, colon + 1)}${prefix}${moved.slice(colon + 1)}`;
     }
     const sheetEnd = token.lastIndexOf('!') + 1;
     const chained = token.slice(sheetEnd).split(':');

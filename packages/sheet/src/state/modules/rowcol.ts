@@ -168,14 +168,10 @@ export function moveCountPastHiddenRowCol(ctx: Context, key: string): number {
     return count;
 }
 
-// Writes the engine's result back one sheet and one field at a time, never `ctx.sheets = ...` or a whole sheet.
-// A whole write makes immer emit one replace that carries the whole workbook, and collab would ship it on every
-// edit. Undoing a whole sheet would also put back its images and charts over a peer's later changes. A moved chart
-// gets only the fields that changed, and a keyed part of its spec one entry at a time. So a peer's move or delete
-// of that chart, or its edit of another entry, survives, and the undo puts back only the entries the op moved. A
-// validation rule the op moved or dropped is written whole under its id, so a rule a peer added or deleted meanwhile
-// stays as the peer left it.
-function writeBackSheets(ctx: Context, sheets: Sheet[]) {
+// Writes the engine's result back one sheet and one field at a time, never `ctx.sheets = ...` or a whole sheet: immer
+// would emit one replace that carries the workbook. A chart and a validation rule go per object, so a peer's edit of
+// another one survives.
+export function writeBackSheets(ctx: Context, sheets: Sheet[]) {
     for (const [i, next] of sheets.entries()) {
         const sheet: Record<string, unknown> = ctx.sheets[i];
         for (const [key, value] of Object.entries(next)) {

@@ -1,7 +1,54 @@
-// The name a sheet takes when the workbook already holds its own, such as a copy the tab menu's Duplicate makes or a
-// tab Import… brings. It is DOM-free, so the editor and the API name copies alike.
+// A sheet's name: the one it takes when the workbook already holds its own, such as a copy the tab menu's Duplicate
+// makes or a tab Import… brings, and a rename, which every text naming the sheet follows. It is DOM-free, so the editor
+// names copies as the API does, and a live tab renames as the op replay does.
 
-import { MAX_SHEET_NAME_LENGTH, sheetNameKey } from './a1-notation';
+import type { Sheet } from '@workspace/lib/sheets';
+import { MAX_SHEET_NAME_LENGTH, sheetFinder, sheetNameKey } from './a1-notation';
+import { renameSheetRefs, rewriteSheetFormulas } from './formula-shift';
+import { iscelldata } from './formula-utils';
+
+export type RenameSheetOp = { id: string; name: string };
+
+// Whether a sheet other than `id` holds the name. A name is taken in any case, as Excel compares names.
+export function sheetNameTaken(sheets: readonly Sheet[], id: string, name: string): boolean {
+    const key = sheetNameKey(name);
+    return sheets.some((sheet) => sheet.id !== id && sheetNameKey(sheet.name) === key);
+}
+
+// The sheets with one renamed and every text naming it pointed at the new name: formulas, formula rules, list sources
+// and links. A chart ref names its sheet by id and needs nothing.
+export function applySheetRename<S extends Sheet>(sheets: S[], { id, name }: RenameSheetOp): S[] {
+    const target = sheets.find((sheet) => sheet.id === id);
+    if (!target) return sheets;
+    // Of two renames to one name, the later in the log fails on every reader. Both would repoint formulas at one sheet.
+    if (sheetNameTaken(sheets, id, name)) throw new Error('Another sheet already has this name');
+    const findSheet = sheetFinder(sheets);
+    const renames = new Map([[target.name, name]]);
+    const rename = (txt: string) => renameSheetRefs(txt, findSheet, renames);
+    return sheets.map((sheet) => {
+        let next = rewriteSheetFormulas(sheet.id === id ? { ...sheet, name } : sheet, rename);
+        let dataValidations: Sheet['dataValidations'] | null = null;
+        for (const [key, entry] of Object.entries(sheet.dataValidations ?? {})) {
+            const { rule } = entry;
+            if (rule.type !== 'dropdown' || !iscelldata(rule.value1)) continue;
+            const value1 = rename(rule.value1);
+            if (value1 === rule.value1) continue;
+            dataValidations ??= { ...sheet.dataValidations };
+            dataValidations[key] = { ...entry, rule: { ...rule, value1 } };
+        }
+        if (dataValidations) next = { ...next, dataValidations };
+        let hyperlink: Sheet['hyperlink'] | null = null;
+        for (const [key, link] of Object.entries(sheet.hyperlink ?? {})) {
+            let { linkAddress } = link;
+            if (link.linkType === 'cellrange') linkAddress = rename(linkAddress);
+            else if (link.linkType === 'sheet' && findSheet(linkAddress) === target) linkAddress = name;
+            if (linkAddress === link.linkAddress) continue;
+            hyperlink ??= { ...sheet.hyperlink };
+            hyperlink[key] = { ...link, linkAddress };
+        }
+        return hyperlink ? { ...next, hyperlink } : next;
+    });
+}
 
 // "Sheet1(Copy)", then "Sheet1(Copy2)", past the highest copy number taken, within the 31 characters a sheet name may
 // have. A name is taken in any case, as Excel compares names.

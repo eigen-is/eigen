@@ -7,7 +7,7 @@
 import { cloneDeep } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import { applyPatches, current, produce } from 'immer';
-import { deleteRowColOf, insertRowColOf, isNewSheet, isRowColOp } from '../../engine/replay-ops';
+import { deleteRowColOf, insertRowColOf, isNewSheet, isRowColOp, renameSheetOf } from '../../engine/replay-ops';
 import { shiftRangeForDelete, shiftRangeForInsert } from '../../engine/rowcol';
 import type { Context } from '../context';
 import type { Op, Selection, Sheet } from '../types';
@@ -18,7 +18,7 @@ import { createFilterOptions } from './filter';
 import { registerSheetFormulas } from './formula-cache';
 import { rowColMove } from './history-shift';
 import { deleteRowCol, insertRowCol } from './rowcol';
-import { addSheet, deleteSheet, initSheetData, leaveCurrentSheet } from './sheet';
+import { addSheet, deleteSheet, initSheetData, leaveCurrentSheet, renameSheet } from './sheet';
 
 // A row or column op the batch applied, with the sheets it was applied to.
 type AppliedRowCol = { op: Op; sheets: Sheet[] };
@@ -78,6 +78,8 @@ export function applyOpBatch(
                 } else if (op.op === 'deleteSheet' && id) {
                     deleteSheet(draft, id, true);
                     if (moveView && id === draft.currentSheetId) leaveCurrentSheet(draft);
+                } else if (op.op === 'renameSheet') {
+                    renameSheet(draft, renameSheetOf(op));
                 }
             }
             [patches] = opToPatch(draft, ops);
