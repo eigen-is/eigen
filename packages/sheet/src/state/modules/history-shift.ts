@@ -1,8 +1,7 @@
-// How a peer's row or column op moves this tab's pending undos. The op moves what sits on the rows of the sheet it
-// names, such as cells, merges and validation rules, and the formula text that points at it on every sheet.
-// shiftEntries moves an undo entry's paths and values the same way, so an undo lands where its cell now is. The
-// Workbook's applyOp runs it for each such op in a peer's batch, and undo's repair reads a RowColMove to find where a
-// cell was before an op.
+// How a peer's batch changes this tab's pending undos. Any batch ends your own sheet, row and column entries, and with
+// them everything older (dropStructuralEntries). A row or column op then moves what is left, the cell and field
+// entries: shiftEntries moves their paths and values as the op moves the live sheets, so an undo lands where its cell
+// now is. The Workbook's applyOp runs both, and a RowColMove also moves the open editor along an applied op.
 
 import type { MergeCell, SheetChart } from '@workspace/lib/sheets';
 import type { Patch } from 'immer';
@@ -11,9 +10,6 @@ import { mapChartRefs } from '../../engine/chart-data';
 import { functionStrChange } from '../../engine/formula-shift';
 import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
 import {
-    applySheetsDeleteRowCol,
-    applySheetsInsertRowCol,
-    RowColError,
     shiftCellKeyedForDelete,
     shiftCellKeyedForInsert,
     shiftKeyedMapForDelete,
@@ -24,10 +20,9 @@ import {
     shiftRangeForInsert,
     shiftValidations,
 } from '../../engine/rowcol';
-import type { CalcChainEntry, Cell, CellMatrix, SingleRange } from '../../engine/types';
+import type { CalcChainEntry, Cell, SingleRange } from '../../engine/types';
 import type { History, Op, Sheet, SheetValidation } from '../types';
 import type { PatchOptions } from '../utils';
-import { inverseRowColOptions } from '../utils';
 
 // What one row or column op does to the indices on its axis, with the engine's shifter for each kind of map.
 type RowColMove = {
@@ -35,8 +30,6 @@ type RowColMove = {
     type: 'row' | 'column';
     // Where an index ends up, or null for a row or column the op deletes.
     to: (index: number) => number | null;
-    // Where an index the op left was before it, or null for a row or column the op inserts.
-    from: (index: number) => number | null;
     formula: (
         text: string,
         sheetName: string,
@@ -48,10 +41,8 @@ type RowColMove = {
     cellKeyed: <T>(map: Record<string, T>) => Record<string, T>;
     // Where a range ends up, or null for one the op deletes.
     range: (range: SingleRange) => SingleRange | null;
-    sheets: <S extends Sheet>(sheets: S[]) => S[];
 };
 
-// The move of an undo entry's own row or column op.
 export function rowColMove({ insertRowColOp, deleteRowColOp }: PatchOptions = {}): RowColMove | undefined {
     if (insertRowColOp) return insertMove(insertRowColOp);
     if (deleteRowColOp) return deleteMove(deleteRowColOp);
@@ -65,14 +56,12 @@ function insertMove(op: InsertRowColOp): RowColMove {
         id,
         type,
         to: (i) => (i < at ? i : i + count),
-        from: (i) => (i < at ? i : i < at + count ? null : i - count),
         formula: (text, name, onTargetSheet, findSheet) =>
             functionStrChange(text, 'add', axisName(type), direction, index, count, name, onTargetSheet, findSheet),
         merge: (merge) => shiftMergeForInsert({ merge }, type, index, count, direction),
         keyed: (map) => shiftKeyedMapForInsert(map, index, count, direction),
         cellKeyed: (map) => shiftCellKeyedForInsert(map, type, index, count, direction),
         range: (range) => shiftRangeForInsert(range, op),
-        sheets: (sheets) => applySheetsInsertRowCol(sheets, op),
     };
 }
 
@@ -83,26 +72,29 @@ function deleteMove(op: DeleteRowColOp): RowColMove {
         id,
         type,
         to: (i) => (i < start ? i : i > end ? i - count : null),
-        from: (i) => (i < start ? i : i + count),
         formula: (text, name, onTargetSheet, findSheet) =>
             functionStrChange(text, 'del', axisName(type), null, start, count, name, onTargetSheet, findSheet),
         merge: (merge) => shiftMergeForDelete({ merge }, type, start, count),
         keyed: (map) => shiftKeyedMapForDelete(map, start, end),
         cellKeyed: (map) => shiftCellKeyedForDelete(map, type, start, end),
         range: (range) => shiftRangeForDelete(range, op),
-        sheets: (sheets) => applySheetsDeleteRowCol(sheets, op),
     };
 }
 
+// A sheet, row or column entry records whole fields and matrices of the grid it found and left, so it can only step on
+// that grid. Each entry below it fits the grid as it leaves it, so those go too, on the undo and the redo stack alike.
+export function dropStructuralEntries(entries: History[]): History[] {
+    const newest = entries.findLastIndex(({ options }) => {
+        return options?.insertRowColOp || options?.deleteRowColOp || options?.addSheetOp || options?.deleteSheetOp;
+    });
+    return entries.slice(newest + 1);
+}
+
 // A peer's row or column op moves your entries' cells, merges, borders, links, validation rules and row or column sizes
-// on its sheet, and the formula text that points at it on any sheet, a deleted sheet's included. An entry the op makes
-// meaningless is dropped: one that writes inside deleted rows or columns or cuts a merge, a range or a whole config on
-// the op's sheet, a chart's data on that sheet, or your own row or column op there.
-//
-// Each entry fits the grid as the entries above it on its stack leave it: an undo entry was recorded before the row
-// ops above it were made, and a redo entry after the row ops above it are redone. So once your own row or column op
-// is dropped, the entries below it first take that op's move on an undo stack, or its inverse on a redo stack.
-export function shiftEntries(entries: History[], marker: Op, sheets: Sheet[], stack: 'undo' | 'redo'): History[] {
+// on its sheet, and the formula text that points at it on any sheet. An entry the op makes meaningless is dropped: one
+// that writes inside deleted rows or columns or cuts a merge, a range or a whole config on the op's sheet, or a chart's
+// data on that sheet.
+export function shiftEntries(entries: History[], marker: Op, sheets: Sheet[]): History[] {
     const { id } = marker;
     const target = sheets.find((sheet) => sheet.id === id);
     if (id == null || !target) return entries;
@@ -110,21 +102,8 @@ export function shiftEntries(entries: History[], marker: Op, sheets: Sheet[], st
     if (marker.op === 'insertRowCol') move = insertMove({ ...marker.value, id });
     else if (marker.op === 'deleteRowCol') move = deleteMove({ ...marker.value, id });
     else return entries;
-    let shifters = [new Shifter(move, target.name, sheets)];
-    const shifted: History[] = [];
-    for (let i = entries.length - 1; i >= 0; i -= 1) {
-        const entry = entries[i];
-        const own = entry.options?.insertRowColOp ?? entry.options?.deleteRowColOp;
-        if (own?.id === id) {
-            const dropped = rowColMove(stack === 'undo' ? entry.options : inverseRowColOptions(entry.options));
-            if (dropped) shifters = [new Shifter(dropped, target.name, sheets), ...shifters];
-            continue;
-        }
-        let next: History | null = entry;
-        for (const shifter of shifters) next = next && shifter.entry(next);
-        if (next) shifted.push(next);
-    }
-    return shifted.reverse();
+    const shifter = new Shifter(move, target.name, sheets);
+    return entries.flatMap((entry) => shifter.entry(entry) ?? []);
 }
 
 function axisName(type: 'row' | 'column') {
@@ -149,16 +128,11 @@ class Shifter {
     }
 
     public entry(entry: History): History | null {
-        const own = entry.options?.insertRowColOp ?? entry.options?.deleteRowColOp;
-        if (own?.id === this.id) return null;
         const patches = this.patches(entry.patches);
         const inversePatches = this.patches(entry.inversePatches);
         if (!patches || !inversePatches) return null;
-        const options = this.deletedSheet(entry.options);
-        if (patches === entry.patches && inversePatches === entry.inversePatches && options === entry.options) {
-            return entry;
-        }
-        return { ...entry, patches, inversePatches, options };
+        if (patches === entry.patches && inversePatches === entry.inversePatches) return entry;
+        return { ...entry, patches, inversePatches };
     }
 
     private patches(patches: Patch[]): Patch[] | null {
@@ -173,8 +147,7 @@ class Shifter {
 
     private patch(patch: Patch): Patch | null {
         const [root, sheet, field, ...rest] = patch.path;
-        if (root !== 'sheets') return patch;
-        if (field == null) return sheet == null ? patch : this.addedSheet(patch);
+        if (root !== 'sheets' || field == null) return patch;
         if (field === 'charts') return this.chartNamesSheet(patch) ? null : patch;
         if (sheet !== this.id) return field === 'data' ? this.otherSheetData(patch, rest.length) : patch;
         if (field === 'data') return this.dataPatch(patch, rest);
@@ -185,47 +158,15 @@ class Shifter {
         return POSITION_FREE_FIELDS.has(field) ? patch : null;
     }
 
-    // A sheet a redo adds back, such as a copy: its formulas may point at the op's sheet.
-    private addedSheet(patch: Patch): Patch {
-        if (!('value' in patch) || patch.value == null) return patch;
-        const sheet: Sheet = patch.value;
-        const next = { ...sheet };
-        if (sheet.data) next.data = this.otherMatrix(sheet.data);
-        if (sheet.celldata) next.celldata = this.celldata(sheet.celldata);
-        return next.data === sheet.data && next.celldata === sheet.celldata ? patch : { ...patch, value: next };
-    }
-
-    // A deleted sheet keeps its cells in the entry's options, for its undo; their formulas may point at the op's sheet.
-    private deletedSheet(options: PatchOptions | undefined) {
-        const deleted = options?.deletedSheet;
-        if (!options || !deleted?.celldata) return options;
-        const celldata = this.celldata(deleted.celldata);
-        return celldata === deleted.celldata ? options : { ...options, deletedSheet: { ...deleted, celldata } };
-    }
-
-    private celldata(celldata: NonNullable<Sheet['celldata']>) {
-        const shifted = celldata.map((entry) => {
-            const v = this.otherCell(entry.v);
-            return v === entry.v ? entry : { ...entry, v };
-        });
-        return shifted.every((entry, i) => entry === celldata[i]) ? celldata : shifted;
-    }
-
-    // A cell, row or matrix on another sheet moves nothing but the formula text that points at the op's sheet.
+    // A cell or row on another sheet moves nothing but the formula text that points at the op's sheet.
     private otherSheetData(patch: Patch, depth: number): Patch {
         if (!('value' in patch)) return patch;
         const { value } = patch;
         let next = value;
-        if (depth === 0 && Array.isArray(value)) next = this.otherMatrix(value);
-        else if (depth === 1 && Array.isArray(value)) next = this.otherRow(value);
+        if (depth === 1 && Array.isArray(value)) next = this.otherRow(value);
         else if (depth === 2) next = this.otherCell(value);
         else if (depth === 3 && patch.path[5] === 'f' && typeof value === 'string') next = this.formula(value, false);
         return next === value ? patch : { ...patch, value: next };
-    }
-
-    private otherMatrix(matrix: CellMatrix): CellMatrix {
-        const shifted = matrix.map((row) => this.otherRow(row));
-        return shifted.every((row, i) => row === matrix[i]) ? matrix : shifted;
     }
 
     private otherRow(row: (Cell | null)[]): (Cell | null)[] {
@@ -240,7 +181,6 @@ class Shifter {
     }
 
     private dataPatch(patch: Patch, [r, c, ...below]: (string | number)[]): Patch | null {
-        if (r == null) return this.matrixPatch(patch);
         const { type, to } = this.move;
         const position = type === 'row' ? r : c;
         if (typeof r !== 'number' || typeof position !== 'number') return null;
@@ -252,33 +192,6 @@ class Shifter {
         if (!('value' in patch)) return at(patch, path, undefined);
         const value = this.cellValue(patch.value, below, position);
         return value === undefined ? null : at(patch, path, value);
-    }
-
-    // A whole matrix on the op's sheet, which a row or column op on another sheet records when it rewrites formulas
-    // here. It moves as the live matrix does; a merge it cuts drops the entry.
-    private matrixPatch(patch: Patch): Patch | null {
-        if (!('value' in patch) || !Array.isArray(patch.value)) return null;
-        let data: CellMatrix | undefined;
-        try {
-            [{ data }] = this.move.sheets([{ id: this.id, name: this.name, data: patch.value }]);
-        } catch (e) {
-            if (!(e instanceof RowColError)) throw e;
-            return null;
-        }
-        if (!data) return null;
-        const { type, from } = this.move;
-        const merged: CellMatrix = [];
-        for (const [r, row] of data.entries()) {
-            const cells: CellMatrix[number] = [];
-            for (const [c, cell] of row.entries()) {
-                const position = from(type === 'row' ? r : c);
-                const mc = cell?.mc && position != null ? this.mergeRef(cell.mc, position) : cell?.mc;
-                if (cell?.mc && !mc) return null;
-                cells.push(cell && mc !== cell.mc ? { ...cell, mc } : cell);
-            }
-            merged.push(cells.every((cell, i) => cell === row[i]) ? row : cells);
-        }
-        return { ...patch, value: merged };
     }
 
     // A cell, a row of cells, or a cell's field, as the op leaves it; undefined when a merge it holds is cut.

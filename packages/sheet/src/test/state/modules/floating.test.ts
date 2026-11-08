@@ -27,7 +27,7 @@ import {
     replaceImageMediaName,
     replaceMediaNameInHistory,
 } from '../../../state/modules/image';
-import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
+import { insertRowCol } from '../../../state/modules/rowcol';
 import { deleteSheet } from '../../../state/modules/sheet';
 import type { Op } from '../../../state/types';
 import type { PatchOptions } from '../../../state/utils/patch';
@@ -288,28 +288,6 @@ const withGrid = () =>
 const insertOp = { type: 'row', index: 0, count: 2, direction: 'lefttop', id: S } as const;
 
 describe('row and column ops over floating objects', () => {
-    const deleteOp = { type: 'row', start: 3, end: 6, id: S } as const;
-    const peerEdits = (ctx: Context) => {
-        insertImage(ctx, 'new.png', 40, 30);
-        deleteFloatingObject(ctx, { kind: 'image', id: 'i1' });
-        updateFloatingBox(ctx, { kind: 'chart', id: 'c1' }, { x: 300 });
-    };
-
-    test.each([
-        ['insert', (ctx: Context) => insertRowCol(ctx, insertOp), { insertRowColOp: insertOp }],
-        ['delete', (ctx: Context) => deleteRowCol(ctx, deleteOp), { deleteRowColOp: deleteOp }],
-    ] as const)("undoing a row %s keeps a peer's later insert, delete and move, everywhere", (_, recipe, options) => {
-        const base = withGrid();
-        const op = author(base, recipe, options);
-        const peerEdit = author(receive(base, op.ops), peerEdits);
-        const { ctx: undone, ops: undoOps } = undoEntry(receive(op.next, peerEdit.ops), op.entry);
-        const expected = objects(peerEdit.next.sheets);
-        expect(Object.keys(expected[0].images!)).toHaveLength(1);
-        expect(objects(undone.sheets)).toEqual(expected);
-        expect(objects(receive(peerEdit.next, undoOps).sheets)).toEqual(expected);
-        expect(objects(join(base, [op.ops, peerEdit.ops, undoOps]))).toEqual(expected);
-    });
-
     test("a row insert racing a peer's image insert keeps the image, everywhere", () => {
         const base = withGrid();
         const op = author(base, (ctx) => insertRowCol(ctx, insertOp), { insertRowColOp: insertOp });

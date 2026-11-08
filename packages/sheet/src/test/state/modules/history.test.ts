@@ -11,7 +11,6 @@ import { generateAPIs } from '../../../components/Workbook/api';
 import { dataToCelldata } from '../../../engine/celldata';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
 import type { Cell } from '../../../engine/types';
-import { setColumnWidth } from '../../../state/api/rowcol';
 import { copySheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { applyDataValidation } from '../../../state/modules/data-validation';
@@ -122,6 +121,7 @@ const deleteRows = (start: number, end: number, id = ONE) => {
     return [(ctx: Context) => deleteRowCol(ctx, op), { deleteRowColOp: op }] as const;
 };
 const removeSheet = (id: string) => [(ctx: Context) => deleteSheet(ctx, id), { deleteSheetOp: { id } }] as const;
+type Structural = readonly [(ctx: Context) => void, Parameters<typeof tabEdit>[2]];
 
 describe("undo after a peer's row, column or sheet change lands on your cell", () => {
     test("a peer's row insert above moves the undo with the cell", () => {
@@ -175,45 +175,6 @@ describe("undo after a peer's row, column or sheet change lands on your cell", (
         s.undo(s.a);
         expect(cellAt(s.a, 'B3')?.v).toBe('first');
         expect(view(s.a.ctx.sheets)[0].cells.map((c) => c.v?.v)).toEqual(['first']);
-        expectAgree(s);
-    });
-
-    // Your entries below your own row op were recorded without it. A peer's row op on its sheet drops that op's
-    // entry, so they take the op's move first.
-    test("a peer's row op that drops your row insert leaves your older undo on its cells", () => {
-        const old = (r: number) => text(`old${r}`);
-        const s = session(workbook({ B10: old(10), B11: old(11), B12: old(12), B13: old(13), B14: old(14) }));
-        s.edit(s.a, (ctx) => {
-            for (let r = 9; r <= 13; r += 1) typedAt(`B${r + 1}`, 'x')(ctx);
-        });
-        s.edit(s.a, ...insertRows(2, 2));
-        s.edit(s.b, ...insertRows(0, 1));
-        expect(s.a.history.undoList).toHaveLength(1);
-        s.undo(s.a);
-        expect([13, 14, 15, 16, 17].map((r) => cellAt(s.a, `B${r}`)?.v)).toEqual([
-            'old10',
-            'old11',
-            'old12',
-            'old13',
-            'old14',
-        ]);
-        expectAgree(s);
-    });
-
-    test("a peer's row op that drops your undone row insert leaves your later redo on its cells", () => {
-        const old = (r: number) => text(`old${r}`);
-        const s = session(workbook({ B8: old(8), B9: old(9), B10: old(10), B11: old(11), B12: old(12) }));
-        s.edit(s.a, ...insertRows(2, 2));
-        s.edit(s.a, (ctx) => {
-            for (let r = 9; r <= 13; r += 1) typedAt(`B${r + 1}`, 'x')(ctx);
-        });
-        s.undo(s.a);
-        s.undo(s.a);
-        s.edit(s.b, ...insertRows(0, 1));
-        expect(s.a.history.redoList).toHaveLength(1);
-        s.redo(s.a);
-        expect([9, 10, 11, 12, 13].map((r) => cellAt(s.a, `B${r}`)?.v)).toEqual(['x', 'x', 'x', 'x', 'x']);
-        expect(cellAt(s.a, 'B14')).toBeNull();
         expectAgree(s);
     });
 
@@ -309,46 +270,7 @@ describe("a peer's batch shifts the undo stacks once it applied", () => {
     });
 });
 
-describe("undo after a peer's row op on another sheet keeps formulas pointing at the moved rows", () => {
-    test('a row delete brings back a formula with its reference moved', () => {
-        const s = session(workbook({ A5: { f: '=Two!A10', v: 0, m: '0' } }));
-        s.edit(s.a, ...deleteRows(4, 4));
-        s.edit(s.b, ...insertRows(2, 2, TWO));
-        s.undo(s.a);
-        expect(cellAt(s.a, 'A5')?.f).toBe('=Two!A12');
-        expectAgree(s);
-    });
-
-    test('a sheet delete brings back a formula with its reference moved', () => {
-        const s = session(workbook({}, { A1: { f: '=One!A10', v: 0, m: '0' } }));
-        s.edit(s.a, ...removeSheet(TWO));
-        s.edit(s.b, ...insertRows(2, 2));
-        s.undo(s.a);
-        expect(view(s.a.ctx.sheets)[2].cells[0].v?.f).toBe('=One!A12');
-        expectAgree(s);
-    });
-
-    test('a redone copy brings back its formula with its reference moved', () => {
-        const s = session(workbook({}, { A1: { f: '=One!A10', v: 0, m: '0' } }));
-        s.edit(s.a, (ctx) => copySheet(ctx, TWO), { addSheetOp: true });
-        s.undo(s.a);
-        s.edit(s.b, ...insertRows(2, 2));
-        s.redo(s.a);
-        expect(cells(s.a.ctx.sheets[3])[0].v?.f).toBe('=One!A12');
-        expectAgree(s);
-    });
-
-    test("your row insert stays undoable after a peer's row insert on a sheet whose formulas it moved", () => {
-        const s = session(workbook({ A10: { v: 1, m: '1' } }, { A5: { f: '=One!A10', v: 1, m: '1' } }));
-        s.edit(s.a, ...insertRows(2, 1));
-        expect(cellAt(s.a, 'A5', TWO)?.f).toBe('=One!A11');
-        s.edit(s.b, ...insertRows(0, 2, TWO));
-        s.undo(s.a);
-        expect(cellAt(s.a, 'A10')?.v).toBe(1);
-        expect(cellAt(s.a, 'A7', TWO)?.f).toBe('=One!A10');
-        expectAgree(s);
-    });
-
+describe("undo after a peer's row op keeps a field its entry wrote", () => {
     test("a sheet's first link stays undoable after a peer's row insert", () => {
         const s = session(workbook({ B5: text('link') }));
         s.edit(s.a, (ctx) => saveHyperlink(ctx, 4, 1, 'link', 'webpage', 'https://eigen.is'));
@@ -356,6 +278,178 @@ describe("undo after a peer's row op on another sheet keeps formulas pointing at
         s.undo(s.a);
         expect(s.a.ctx.sheets[0].hyperlink ?? {}).toEqual({});
         expectAgree(s);
+    });
+});
+
+// A peer's batch ends your own sheet, row and column entries and everything older, on both stacks. What is newer stays
+// and still follows the peer's rows.
+describe("a peer's batch ends your row, column and sheet undo", () => {
+    const peerTypes = (s: ReturnType<typeof session>) => s.edit(s.b, typedAt('H40', 'peer', THREE));
+
+    const kinds: [string, Structural][] = [
+        ['row insert', insertRows(4, 1)],
+        ['column insert', insertColumns(4, 1)],
+        ['row delete', deleteRows(4, 4)],
+        ['sheet delete', removeSheet(TWO)],
+        ['sheet add', [(ctx: Context) => addSheet(ctx), { addSheetOp: true }]],
+    ];
+    test.each(kinds)('a %s and everything older leave the undo stack, the newer stay', (_, structural) => {
+        const s = session(workbook({ B2: text('old'), B3: text('old') }));
+        s.edit(s.a, typedAt('B2', 'older'));
+        s.edit(s.a, ...structural);
+        s.edit(s.a, typedAt('B3', 'newer'));
+        expect(s.a.history.undoList).toHaveLength(3);
+        peerTypes(s);
+        expect(s.a.history.undoList).toHaveLength(1);
+        s.undo(s.a);
+        expect(cellAt(s.a, 'B3')?.v).toBe('old');
+        expect(cellAt(s.a, 'B2')?.v).toBe('older');
+        const sent = s.batches.length;
+        s.undo(s.a);
+        expect(s.batches.length).toBe(sent);
+        expect(cellAt(s.a, 'B2')?.v).toBe('older');
+        expectAgree(s);
+    });
+
+    test('a structural entry and what redoes after it leave the redo stack, the entry on top stays', () => {
+        const s = session(workbook({ B2: text('old') }));
+        s.edit(s.a, typedAt('C5', 'below'));
+        s.edit(s.a, ...insertRows(2, 1));
+        s.edit(s.a, typedAt('B2', 'above'));
+        s.undo(s.a);
+        s.undo(s.a);
+        s.undo(s.a);
+        expect(s.a.history.redoList).toHaveLength(3);
+        peerTypes(s);
+        expect(s.a.history.redoList).toHaveLength(1);
+        s.redo(s.a);
+        expect(cellAt(s.a, 'C5')?.v).toBe('below');
+        expect(s.a.history.redoList).toHaveLength(0);
+        expectAgree(s);
+    });
+
+    test('a batch on any sheet ends it, and an entry older on another sheet goes too', () => {
+        const s = session(workbook());
+        s.edit(s.a, typedAt('A1', 'x', TWO));
+        s.edit(s.a, ...insertRows(2, 1));
+        s.edit(s.b, typedAt('A1', 'peer', THREE));
+        expect(s.a.history.undoList).toEqual([]);
+    });
+
+    test('a batch that fails ends nothing', () => {
+        const s = session(workbook());
+        s.edit(s.a, ...insertRows(2, 1));
+        tabReceive(s.a, [{ op: 'replace', id: ONE, path: ['data', 999, 999, 'v'], value: 1 }]);
+        expect(s.a.history.undoList).toHaveLength(1);
+        s.undo(s.a);
+        expect(s.a.ctx.sheets[0].data).toHaveLength(40);
+        expectAgree(s);
+    });
+
+    test("your newer cell undo follows a peer's row insert after your own row op left the stack", () => {
+        const s = session(workbook({ B10: text('old') }));
+        s.edit(s.a, ...insertRows(2, 1));
+        s.edit(s.a, typedAt('B11', 'new'));
+        s.edit(s.b, ...insertRows(0, 2));
+        expect(s.a.history.undoList).toHaveLength(1);
+        s.undo(s.a);
+        expect(cellAt(s.a, 'B13')?.v).toBe('old');
+        expectAgree(s);
+    });
+});
+
+// With no peer's batch since, an undo gives back exactly the workbook before the op, and a redo the one after it.
+describe('working alone', () => {
+    const merge = { r: 7, c: 0, rs: 2, cs: 2 };
+    const rich = () => {
+        const base = workbook(
+            {
+                A4: num(1),
+                A5: num(2),
+                A6: num(3),
+                B1: { ...num(6), f: '=SUM(A4:A6)' },
+                C1: { ...num(2), f: '=A5' },
+                A8: { v: 'm', m: 'm', mc: merge },
+                B8: { mc: { r: 7, c: 0 } },
+                A9: { mc: { r: 7, c: 0 } },
+                B9: { mc: { r: 7, c: 0 } },
+            },
+            { A1: { ...num(6), f: '=SUM(One!A4:A6)' }, A2: { ...num(3), f: '=One!A6' } },
+        );
+        return produce(base, (ctx: Context) => {
+            const [one] = ctx.sheets;
+            one.config = { ...one.config, merge: { '7_0': merge }, rowlen: { 4: 40 } };
+            one.hyperlink = { '4_0': { linkType: 'webpage', linkAddress: 'https://eigen.is' } };
+            one.dataValidations = {
+                a: {
+                    ranges: [{ row: [3, 5], column: [0, 0] }],
+                    rule: { type: 'dropdown', type2: '', value1: 'a', value2: '' },
+                },
+            };
+        });
+    };
+    const shown = (t: Tab) =>
+        t.ctx.sheets
+            .toSorted((x, y) => (x.order ?? 0) - (y.order ?? 0))
+            .map(({ id, order, data, config, hyperlink, dataValidations, calcChain, row, column }) => ({
+                id,
+                order,
+                data,
+                config,
+                hyperlink: hyperlink ?? {},
+                dataValidations,
+                calcChain: new Set(calcChain?.map(({ r, c, id: sheet }) => `${r}_${c}_${sheet}`)),
+                row,
+                column,
+            }));
+
+    const kinds: [string, Structural][] = [
+        ['a row insert', insertRows(4, 2)],
+        ['a column insert', insertColumns(0, 2)],
+        ['a row delete', deleteRows(4, 5)],
+        ['a sheet delete', removeSheet(TWO)],
+    ];
+    test.each(kinds)('%s goes back and forth exactly, on both tabs and for a joiner', (_, structural) => {
+        const s = session(rich());
+        const before = shown(s.a);
+        s.edit(s.a, ...structural);
+        const after = shown(s.a);
+        for (let round = 0; round < 2; round += 1) {
+            s.undo(s.a);
+            expect(shown(s.a)).toEqual(before);
+            expect(s.b.ctx.sheets[0].data).toEqual(s.a.ctx.sheets[0].data);
+            expectAgree(s);
+            s.redo(s.a);
+            expect(shown(s.a)).toEqual(after);
+            expectAgree(s);
+        }
+    });
+
+    test('a long run undoes and redoes whole, every entry staying on its stack', () => {
+        const s = session(rich());
+        const before = shown(s.a);
+        s.edit(s.a, typedAt('D2', 'one'));
+        s.edit(s.a, ...insertRows(1, 1));
+        s.edit(s.a, typedAt('D4', 'two'));
+        s.edit(s.a, ...deleteRows(5, 6));
+        s.edit(s.a, ...removeSheet(TWO));
+        s.edit(s.a, typedAt('E1', 'three'));
+        const after = shown(s.a);
+        for (let i = 0; i < 6; i += 1) s.undo(s.a);
+        expect(shown(s.a)).toEqual(before);
+        expect(s.a.history).toMatchObject({ undoList: [], redoList: { length: 6 } });
+        expectAgree(s);
+        for (let i = 0; i < 6; i += 1) s.redo(s.a);
+        expect(shown(s.a)).toEqual(after);
+        expectAgree(s);
+    });
+
+    test('an undo ships only the fields the op wrote', () => {
+        const t = tab(rich());
+        tabEdit(t, ...insertRows(4, 1));
+        const fields = tabUndo(t).flatMap(({ path }) => (path.length === 1 ? [path[0]] : []));
+        expect(fields).toContain('config');
+        for (const field of ['name', 'color', 'hide', 'order']) expect(fields).not.toContain(field);
     });
 });
 
@@ -523,15 +617,6 @@ test("a redone formula stays in the recalc list at its place after a peer's row 
 });
 
 describe('a structural undo or redo applies exactly what it sends', () => {
-    test("undoing your row insert keeps a peer's edit below it", () => {
-        const s = session(workbook());
-        s.edit(s.a, ...insertRows(4, 1));
-        s.edit(s.b, typedAt('D20', 'peer'));
-        s.undo(s.a);
-        expect(cellAt(s.a, 'D19')?.v).toBe('peer');
-        expectAgree(s);
-    });
-
     // A formula cell as the engine leaves it, which is what an undo's recalculation writes back.
     const formula = (f: string, v: number): Cell => ({ ...num(v), f });
     const sums = () =>
@@ -547,80 +632,30 @@ describe('a structural undo or redo applies exactly what it sends', () => {
             { A1: formula('=SUM(One!A4:A8)', 10), A2: formula('=One!A6', 3) },
         );
 
-    test("undoing your row delete brings the cells and formulas back and keeps a peer's edit", () => {
+    test('undoing your row delete brings the cells and formulas back', () => {
         const base = sums();
         const s = session(base);
         s.edit(s.a, ...deleteRows(4, 5));
         expect(cellAt(s.a, 'C1')?.f).toContain('#REF!');
-        s.edit(s.b, typedAt('F30', 'peer'));
         s.undo(s.a);
         for (const a1 of ['A4', 'A5', 'A6', 'A8', 'B1', 'C1']) expect(cellAt(s.a, a1)).toEqual(cellAt(tab(base), a1));
         for (const a1 of ['A1', 'A2']) expect(cellAt(s.a, a1, TWO)).toEqual(cellAt(tab(base), a1, TWO));
-        expect(cellAt(s.a, 'F32')?.v).toBe('peer');
         expectAgree(s);
         s.redo(s.a);
-        expect(cellAt(s.a, 'F30')?.v).toBe('peer');
         expect(cellAt(s.a, 'A6')?.v).toBe(4);
         expectAgree(s);
     });
 
-    test('a formula a peer rewrote after your row delete keeps the peer’s text when you undo', () => {
-        const s = session(sums());
-        s.edit(s.a, ...deleteRows(4, 5));
-        s.edit(s.b, typedAt('C1', '=A4'));
-        s.undo(s.a);
-        expect(cellAt(s.a, 'C1')?.f).toBe('=A4');
-        expectAgree(s);
-    });
-
-    // The step ships the sheet's fields whole, so they must be the live ones with the marker applied, not the ones the
-    // entry recorded at the op.
-    test("undoing your row insert keeps a peer's later column width", () => {
-        const s = session(workbook());
-        s.edit(s.a, ...insertRows(4, 1));
-        s.edit(s.b, (ctx) => setColumnWidth(ctx, { 2: 250 }));
-        s.undo(s.a);
-        for (const sheets of [s.a.ctx.sheets, s.b.ctx.sheets, s.joiner()]) {
-            expect(sheets[0].config?.columnlen).toEqual({ 2: 250 });
-        }
-    });
-
-    test("undoing your row insert keeps a peer's later merge, and the joiner agrees on its cells", () => {
-        const s = session(workbook({ A1: text('x') }));
-        s.edit(s.a, ...insertRows(4, 1));
-        s.edit(
-            s.b,
-            on(ONE, (ctx) => mergeCells(ctx, ONE, [{ row: [20, 21], column: [0, 1] }], 'merge-all')),
-        );
-        s.undo(s.a);
-        expect(s.a.ctx.sheets[0].config?.merge).toEqual({ '19_0': { r: 19, c: 0, rs: 2, cs: 2 } });
-        expect(cellAt(s.a, 'B21')?.mc).toEqual({ r: 19, c: 0 });
-        expectAgree(s);
-    });
-
-    test("undoing your row delete keeps a peer's later formula recalculating", () => {
-        const s = session(workbook({ A1: { v: 1, m: '1', ct: { fa: 'General', t: 'n' } }, A5: text('gone') }));
-        s.edit(s.a, ...deleteRows(4, 5));
-        s.edit(s.b, typedAt('D20', '=A1*2'));
-        s.undo(s.a);
-        for (const t of [s.a, s.b]) expect(t.ctx.sheets[0].calcChain).toContainEqual({ r: 21, c: 3, id: ONE });
-        s.edit(s.b, typedAt('A1', '7'));
-        for (const t of [s.a, s.b]) expect(cellAt(t, 'D22')?.v).toBe(14);
-        expectAgree(s);
-    });
-
-    test("undoing your row delete brings back the deleted rows' height and link, and keeps a peer's later width", () => {
+    test("undoing your row delete brings back the deleted rows' height and link", () => {
         const base = produce(workbook({ B5: text('link') }), (ctx: Context) => {
             ctx.sheets[0].config = { ...ctx.sheets[0].config, rowlen: { 4: 40 } };
             ctx.sheets[0].hyperlink = { '4_1': { linkType: 'webpage', linkAddress: 'https://eigen.is' } };
         });
         const s = session(base);
         s.edit(s.a, ...deleteRows(4, 5));
-        s.edit(s.b, (ctx) => setColumnWidth(ctx, { 2: 250 }));
         s.undo(s.a);
         for (const sheets of [s.a.ctx.sheets, s.b.ctx.sheets, s.joiner()]) {
             expect(sheets[0].config?.rowlen).toEqual({ 4: 40 });
-            expect(sheets[0].config?.columnlen).toEqual({ 2: 250 });
             expect(sheets[0].hyperlink).toEqual(base.sheets[0].hyperlink);
         }
         expectAgree(s);
@@ -635,16 +670,6 @@ describe('a structural undo or redo applies exactly what it sends', () => {
         for (const sheets of [s.a.ctx.sheets, s.b.ctx.sheets, s.joiner()]) {
             expect(cells(sheets[3])[0].v?.f).toBe('=One!A5');
         }
-        expectAgree(s);
-    });
-
-    test("undoing your row delete recalculates the formulas it brings back from a peer's later input", () => {
-        const s = session(workbook({ A1: num(1), B6: { f: '=A1*2', v: 2, m: '2' } }));
-        s.edit(s.a, ...deleteRows(5, 5));
-        s.edit(s.b, typedAt('A1', '10'));
-        s.undo(s.a);
-        for (const t of [s.a, s.b]) expect(cellAt(t, 'B6')?.v).toBe(20);
-        expect(s.joiner()[0].data?.[5]?.[1]?.v).toBe(20);
         expectAgree(s);
     });
 
@@ -672,45 +697,6 @@ describe('a structural undo or redo applies exactly what it sends', () => {
         s.a.ctx = produce(s.a.ctx, (ctx: Context) => changeSheet(ctx, TWO));
         s.undo(s.a);
         for (const a1 of ['A4', 'A5', 'A6', 'A8']) expect(cellAt(s.a, a1)).toEqual(cellAt(tab(base), a1));
-        expectAgree(s);
-    });
-
-    test("redoing a sheet delete keeps a peer's edit on another sheet", () => {
-        const s = session(workbook({}, { A1: text('two') }));
-        s.edit(s.a, ...removeSheet(TWO));
-        s.undo(s.a);
-        s.edit(s.b, typedAt('A1', 'peer', THREE));
-        s.redo(s.a);
-        expect(cellAt(s.a, 'A1', THREE)?.v).toBe('peer');
-        expect(view(s.a.ctx.sheets).map((x) => x.id)).toEqual([ONE, THREE]);
-        expectAgree(s);
-    });
-
-    test("undoing a redone sheet delete brings the sheet back with a peer's edit made before the redo", () => {
-        const s = session(workbook({}, { A1: text('two') }));
-        s.edit(s.a, ...removeSheet(TWO));
-        s.undo(s.a);
-        s.edit(s.b, typedAt('B2', 'peer', TWO));
-        s.redo(s.a);
-        s.undo(s.a);
-        expect(view(s.a.ctx.sheets)[2].cells).toEqual([
-            { r: 0, c: 0, v: text('two') },
-            { r: 1, c: 1, v: text('peer') },
-        ]);
-        expectAgree(s);
-    });
-
-    test('redoing a sheet delete a peer already made leaves the sheet deleted after your next undo', () => {
-        const s = session(workbook({}, { A1: text('two') }));
-        s.edit(s.a, ...removeSheet(TWO));
-        s.undo(s.a);
-        s.edit(s.b, typedAt('B2', 'peer', TWO));
-        s.edit(s.b, ...removeSheet(TWO));
-        s.redo(s.a);
-        s.undo(s.a);
-        for (const sheets of [s.a.ctx.sheets, s.b.ctx.sheets, s.joiner()]) {
-            expect(view(sheets).map((x) => x.id)).toEqual([ONE, THREE]);
-        }
         expectAgree(s);
     });
 
@@ -954,18 +940,7 @@ describe('shiftEntries', () => {
             null,
         ],
         ['a whole config drops the entry', rows(2, 2), replace(at('config'), {}), null],
-        [
-            'a whole matrix moves with the rows',
-            rows(1, 1),
-            replace(at('data'), [[{ v: 1 }], [null], [{ f: '=A2' }]]),
-            replace(at('data'), [[{ v: 1 }], [null], [null], [{ f: '=A3' }]]),
-        ],
-        [
-            'a whole matrix on another sheet moves its formulas that read One',
-            rows(1, 1),
-            replace(['sheets', TWO, 'data'], [[{ f: '=One!A2+A2' }]]),
-            replace(['sheets', TWO, 'data'], [[{ f: '=One!A3+A2' }]]),
-        ],
+        ['a whole matrix drops the entry', rows(1, 1), replace(at('data'), [[{ v: 1 }]]), null],
         [
             'a whole row moves with a row insert',
             rows(2, 2),
@@ -1039,22 +1014,13 @@ describe('shiftEntries', () => {
         ],
         ['the name stays', rows(2, 2), replace(at('name'), 'Uno'), replace(at('name'), 'Uno')],
     ])('%s', (_, marker, patch, expected) => {
-        const [shifted] = shiftEntries([{ patches: [patch], inversePatches: [] }], marker, sheets, 'undo');
+        const [shifted] = shiftEntries([{ patches: [patch], inversePatches: [] }], marker, sheets);
         expect<Patch | null>(shifted?.patches[0] ?? null).toEqual(expected);
-    });
-
-    test('drops your own row or column entry on the same sheet, and keeps one on another', () => {
-        const own = (id: string): History => ({
-            patches: [],
-            inversePatches: [],
-            options: { insertRowColOp: { type: 'row', index: 0, count: 1, direction: 'lefttop', id } },
-        });
-        expect(shiftEntries([own(ONE), own(TWO)], rows(2, 2), sheets, 'undo')).toEqual([own(TWO)]);
     });
 
     test('returns an entry the marker does not touch as it is', () => {
         const entry: History = { patches: [replace(at('data', 1, 1), { v: 1 })], inversePatches: [] };
-        expect(shiftEntries([entry], rows(2, 2), sheets, 'undo')[0]).toBe(entry);
+        expect(shiftEntries([entry], rows(2, 2), sheets)[0]).toBe(entry);
     });
 });
 
@@ -1105,20 +1071,6 @@ describe('validation rules on two tabs and a joiner', () => {
         s.redo(s.a);
         expect(column(s.a, 0, 12)).toEqual(applied);
         expect(rules(s.b)).toEqual(rules(s.a));
-        expect(s.joiner()[0].dataValidations).toEqual(rules(s.a));
-    });
-
-    test("an undo and a redo of a row insert keep a peer's later cut of the rule the insert grew", () => {
-        const s = session(ruled());
-        s.edit(s.a, ...insertRows(2, 2));
-        s.edit(s.b, (ctx) => clearValidations(ctx.sheets[0], { row: [8, 11], column: [0, 0] }));
-        s.undo(s.a);
-        const cut = [...repeat('dropdown', 6), ...repeat(null, 4)];
-        for (const t of [s.a, s.b]) expect(column(t, 0, 10)).toEqual(cut);
-        expect(s.joiner()[0].dataValidations).toEqual(rules(s.a));
-        s.redo(s.a);
-        const regrown = [...repeat('dropdown', 8), ...repeat(null, 4)];
-        for (const t of [s.a, s.b]) expect(column(t, 0, 12)).toEqual(regrown);
         expect(s.joiner()[0].dataValidations).toEqual(rules(s.a));
     });
 
@@ -1222,6 +1174,12 @@ describe('validation rules on two tabs and a joiner', () => {
         );
         for (const validations of [rules(a), rules(b), joined]) expect(Object.keys(validations ?? {})).toEqual(['a']);
         expect(joined).toEqual(rules(b));
+    });
+
+    test('an undo of a row insert keeps a cut of a rule the peer sent at once', () => {
+        const { b, joined } = raceUndo((ctx) => clearValidations(ctx.sheets[0], { row: [8, 10], column: [0, 0] }));
+        const cut = [{ row: [0, 6], column: [0, 0] }];
+        for (const validations of [rules(b), joined]) expect(rangesOfA(validations)).toEqual(cut);
     });
 
     test('an undo and a redo of a row insert leave a rule a peer deleted meanwhile deleted', () => {

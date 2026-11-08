@@ -303,7 +303,7 @@ describe("a row or column op racing a peer's unfreeze", () => {
     });
 
     test.each(cases)(
-        '%s applies its batch on every client and in the replay, the grid sizes agree, and its undo applies',
+        '%s applies its batch on every client and in the replay, and the grid sizes agree',
         (_, recipe, options, after) => {
             const base = frozenContext();
             const op = author(base, recipe, options);
@@ -319,15 +319,6 @@ describe("a row or column op racing a peer's unfreeze", () => {
                 join(base, [unfreeze.ops, op.ops]),
             ]) {
                 expect(size(sheets)).toEqual([...after]);
-            }
-
-            const { ctx: undone, ops: undoOps } = undoEntry(onA, op.entry);
-            for (const sheets of [
-                undone.sheets,
-                receive(onB, undoOps).sheets,
-                join(base, [op.ops, unfreeze.ops, undoOps]),
-            ]) {
-                expect(size(sheets)).toEqual([4, 4]);
             }
         },
     );
