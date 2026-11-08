@@ -70,7 +70,15 @@ A CalDAV PUT replaces the whole resource, under the preconditions and the linked
 
 `touch` owns the revision fields. `LAST-MODIFIED` is always now. `DTSTAMP` is the applying message's stamp or the clock, but a local edit never moves it on an attendee's copy, where it orders the organizer's next message. `SEQUENCE` bumps only when the organizer makes a scheduling change to an event with attendees. An attendee copy takes the organizer's number instead, because a bump of its own would outrank the organizer's next update.
 
-The web app sends no etag on an update, so two tabs editing one event last-write-win ([ROADMAP.md](ROADMAP.md)).
+## A web write carries the etag it loaded
+
+Two clients editing one event don't last-write-win. Every web write sends the etag its dialog loaded: an update and a move in the body, a delete as a query parameter, and an override's creation in its body. A series and its overrides are one resource and so one etag, which is why a new override is judged against its master. `assertEtag` (`events.ts`) judges inside `writeLock`, against the etag the write replaces, and a mismatch is a 412. The field is optional on the routes, because CalDAV and non-browser callers load none, and a call that crosses homes for a shared calendar passes it along. A move changes no bytes and so no etag, and a move elsewhere doesn't refuse a form opened before it.
+
+A 412 reloads the events and tells the user (`onEtagWriteError`). `useEventDetailState` holds the clicked occurrence but hands the dialog the current list's copy, so a retry from the panel or its delete confirmation sends the reloaded etag. An occurrence that has left the list, because a save just truncated its series or it moved out of the view, stays on screen as clicked, so a running save keeps its dialog. Its writes stay refused until it is reopened, which is accepted as rare.
+
+Edit event doesn't take that etag. The live one can advance mid-edit, and sending it would overwrite the newer write with the fields' older values. The form loads its fields and its etag together when it mounts, the panel mounts it anew for each opening, and a refetch changes neither, so typed edits survive one. A save over a real change elsewhere is refused and remounts the form on the current event, as the toast says, which drops what was typed. This is the contacts form's rule ([CONTACTS.md](CONTACTS.md)) without its "reload?" banner.
+
+A save of two writes takes the etag the first one answered: an update and then a move, or a truncate and then the new series. It keeps that etag if the second fails, so a retry isn't refused over its own first write. A move to another owner's calendar creates the copy before the delete is judged, so a refused delete leaves the copy beside the reloaded original.
 
 ## ical.js is the one serializer, and an edit touches only what it changes
 

@@ -5,7 +5,7 @@ type: how-to
 tags: [calendar, events, recurring, attendees]
 related: [calendar/get-started, calendar/invite-people, calendar/recurring-events]
 order: 30
-updated: 2026-11-02
+updated: 2026-11-08
 ---
 
 You can create an event from the sidebar or by clicking any day in the calendar, then fill in the date, time, guests, and other details. This article covers creating an event, editing it, and deleting it.
@@ -37,6 +37,8 @@ The **New event** form opens as a dialog. Fill in the fields you need:
 
 On an event someone else invited you to, the details are grayed out, because only the organizer can change them. You can still move it to a different calendar, and you can [respond to the invitation](/support/calendar/respond-to-invitation).
 
+If the event changes elsewhere while you edit it, for example on your phone or by someone you share the calendar with, what you typed stays in the form. If you save anyway, your save is refused. A message tells you the event changed elsewhere and has been reloaded, and the form switches to the newer version, so you can make your change again on top of theirs.
+
 ### Editing a recurring event
 
 When you save changes to a recurring event, Calendar asks which occurrences to update:
@@ -52,6 +54,8 @@ Choose the option that matches what you want, then click **OK**.
 1. Click the event to open its detail panel.
 2. Click the bin icon in the bottom-left corner.
 3. Confirm the deletion. For recurring events, Calendar asks the same scope question as when editing: you can remove this occurrence, this and following, or the whole series.
+
+If the event changed elsewhere since it last loaded, the deletion is refused and a message says so. The event reloads, so check it and confirm again.
 
 <div class="eigen-callout">
 

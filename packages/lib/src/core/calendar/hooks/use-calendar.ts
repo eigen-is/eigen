@@ -1,7 +1,8 @@
 // The Calendar app's queries and mutations: the owner's calendars and events, the calendars shared with them,
 // RSVPs and free/busy. A mutation refetches what it changed through the calendar keys' invalidators, and a
-// failure toasts through onMutationError. Helpers such as useCalendarOptions list the owner's own calendars and
-// the shared ones they may write to, for a picker.
+// failure toasts through onMutationError, except that an event write refused for its stale etag reloads the events
+// and says so. Helpers such as useCalendarOptions list the owner's own calendars and the shared ones they may write
+// to, for a picker.
 
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { calendarApi } from '@workspace/lib/api';
@@ -22,7 +23,7 @@ import type {
     UpdateSharedCalendarInput,
 } from '@workspace/lib/types/calendar';
 import { useCallback, useMemo } from 'react';
-import { AppError, onMutationError } from '../../api-error';
+import { AppError, onEtagWriteError, onMutationError } from '../../api-error';
 import { usePublicUser, usePublicUsers } from '../../public';
 import { formatFreeBusyTitle, isInvitationFromOthers, occurrenceDateToString } from '../calendar-utils';
 import {
@@ -32,6 +33,9 @@ import {
     invalidateEventList,
     invalidateSharedCalendarUpdated,
 } from './keys';
+
+// An event write echoes the etag its dialog loaded, and a 412 means the event changed elsewhere first.
+const STALE_WRITE_TOAST = 'This event changed elsewhere. It has been reloaded — please redo your edit.';
 
 // --- Calendar CRUD ---
 
@@ -131,7 +135,7 @@ export function useCreateEvent(ownerId: string) {
             return response.data;
         },
         onSuccess: () => invalidateEventList(queryClient, ownerId),
-        onError: onMutationError,
+        onError: (error) => onEtagWriteError(error, STALE_WRITE_TOAST, () => invalidateEventList(queryClient, ownerId)),
     });
 }
 
@@ -145,7 +149,7 @@ export function useUpdateEvent(ownerId: string) {
             return response.data;
         },
         onSuccess: () => invalidateEventList(queryClient, ownerId),
-        onError: onMutationError,
+        onError: (error) => onEtagWriteError(error, STALE_WRITE_TOAST, () => invalidateEventList(queryClient, ownerId)),
     });
 }
 
@@ -153,13 +157,16 @@ export function useDeleteEvent(ownerId: string) {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async ({ calendarId, id }: Pick<UpdateEventInput, 'id' | 'calendarId'>) => {
-            const response = await calendarApi({ ownerId }).calendars({ calId: calendarId }).events({ id }).delete();
+        mutationFn: async ({ calendarId, id, etag }: Pick<UpdateEventInput, 'id' | 'calendarId' | 'etag'>) => {
+            const response = await calendarApi({ ownerId })
+                .calendars({ calId: calendarId })
+                .events({ id })
+                .delete({}, { query: { etag } });
             if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: () => invalidateEventList(queryClient, ownerId),
-        onError: onMutationError,
+        onError: (error) => onEtagWriteError(error, STALE_WRITE_TOAST, () => invalidateEventList(queryClient, ownerId)),
     });
 }
 
@@ -171,20 +178,22 @@ export function useMoveEvent(ownerId: string) {
             calendarId,
             id,
             targetCalendarId,
+            etag,
         }: {
             calendarId: string;
             id: string;
             targetCalendarId: string;
+            etag: string;
         }): Promise<CalendarEvent> => {
             const response = await calendarApi({ ownerId })
                 .calendars({ calId: calendarId })
                 .events({ id })
-                .move.put({ targetCalendarId });
+                .move.put({ targetCalendarId, etag });
             if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: () => invalidateEventList(queryClient, ownerId),
-        onError: onMutationError,
+        onError: (error) => onEtagWriteError(error, STALE_WRITE_TOAST, () => invalidateEventList(queryClient, ownerId)),
     });
 }
 

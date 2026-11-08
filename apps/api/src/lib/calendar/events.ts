@@ -78,6 +78,14 @@ export function writeComponent(calendar: Calendar, resource: StoredResource, com
     });
 }
 
+// Caller holds the write lock, so the etag judged is the one the write replaces. A series and its overrides share one
+// resource and so one etag. A caller that loaded none, such as a script, writes unconditionally.
+function assertEtag(resource: StoredResource, expectedEtag: string | undefined): void {
+    if (expectedEtag !== undefined && expectedEtag !== resource.etag) {
+        throw new ApiError(412, 'Event was changed elsewhere');
+    }
+}
+
 // Caller holds the write lock: the bytes it mutates are the bytes the commit overwrites.
 async function editResource(
     calendar: Calendar,
@@ -194,6 +202,7 @@ async function writeOverride(
     }
     const resource = resourceOf(calendar, parent.id);
     if (!resource) throw new ApiError(404, 'Event not found');
+    assertEtag(resource, input.etag);
     // A RECURRENCE-ID and an EXDATE are both written from this key.
     if (!input.recurrenceDate) throw new ApiError(400, 'Invalid occurrence date');
 
@@ -307,9 +316,7 @@ async function patchStoredEvent(
 
     const resource = resourceOf(calendar, id);
     if (!resource) throw new ApiError(404, 'Event not found');
-    if (expectedEtag !== undefined && expectedEtag !== resource.etag) {
-        throw new ApiError(412, 'Event was changed elsewhere');
-    }
+    assertEtag(resource, expectedEtag);
 
     // Cancelling an override replaces it with an EXDATE: Thunderbird drops a STATUS:CANCELLED override from its next PUT, which brings the occurrence back.
     if (existing.parentEventId && input.status === 'cancelled') {
@@ -349,8 +356,14 @@ async function patchStoredEvent(
     return { updated: eventById(calendar, id)!, existing };
 }
 
-export async function deleteEvent(calendar: Calendar, calendarId: string, id: string, user?: User): Promise<void> {
-    const existing = await calendar.writeLock.run(() => eraseStoredEvent(calendar, calendarId, id));
+export async function deleteEvent(
+    calendar: Calendar,
+    calendarId: string,
+    id: string,
+    user?: User,
+    expectedEtag?: string,
+): Promise<void> {
+    const existing = await calendar.writeLock.run(() => eraseStoredEvent(calendar, calendarId, id, expectedEtag));
     if (!existing) return;
 
     const invitation = isInvitationFromOthers(existing, calendar.home.user.email) ? existing.data : null;
@@ -384,7 +397,12 @@ export async function deleteEvent(calendar: Calendar, calendarId: string, id: st
 }
 
 // Caller holds the write lock; the row it answers with is what the decline or cancellation mail is composed from.
-async function eraseStoredEvent(calendar: Calendar, calendarId: string, id: string): Promise<CalendarEvent | null> {
+async function eraseStoredEvent(
+    calendar: Calendar,
+    calendarId: string,
+    id: string,
+    expectedEtag?: string,
+): Promise<CalendarEvent | null> {
     const existing = eventById(calendar, id);
     // Idempotent, and the event is not evaluated further for a resource that no longer exists.
     if (!existing) return null;
@@ -392,6 +410,7 @@ async function eraseStoredEvent(calendar: Calendar, calendarId: string, id: stri
     if (existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
     const resource = resourceOf(calendar, id);
     if (!resource) throw new ApiError(404, 'Event not found');
+    assertEtag(resource, expectedEtag);
 
     if (existing.parentEventId) {
         // A synthetic exclusion row carries no data of its own, so the link is the master's to state.
@@ -417,6 +436,7 @@ export async function moveEvent(
     calendarId: string,
     id: string,
     targetCalendarId: string,
+    expectedEtag?: string,
 ): Promise<CalendarEvent> {
     const moved = await calendar.writeLock.run(async () => {
         const existing = eventById(calendar, id);
@@ -426,6 +446,7 @@ export async function moveEvent(
         if (!calendar.calendarRow(targetCalendarId)) throw new ApiError(404, 'Calendar not found');
         const resource = resourceOf(calendar, id);
         if (!resource) throw new ApiError(404, 'Event not found');
+        assertEtag(resource, expectedEtag);
         // The target holding this UID would throw on its UNIQUE index.
         if (uidHolder(calendar, targetCalendarId, resource.uid)) {
             throw new ApiError(409, 'The target calendar already holds this event');

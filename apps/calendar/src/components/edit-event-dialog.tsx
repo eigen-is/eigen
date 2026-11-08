@@ -1,8 +1,10 @@
 // The Edit event dialog: every field of an existing event and its guests. Save, or Enter in the title, saves the
 // change. A change to a repeating event first asks which occurrences it applies to. A move to another owner's calendar
 // that loses something, such as a series' changed occurrences, warns first. An invitation from someone else only lets
-// you pick the calendar that holds it. It opens over an event, such as from the event detail dialog.
+// you pick the calendar that holds it. It opens over an event, such as from the event detail dialog, which mounts it
+// anew for each opening, so the fields start from the event as it is then.
 
+import { isStaleWrite } from '@workspace/lib/api-error';
 import { useAuth } from '@workspace/lib/auth';
 import {
     heldAttendees,
@@ -23,7 +25,7 @@ import {
     useUpdateEvent,
     viewerTimeZone,
 } from '@workspace/lib/calendar';
-import type { Attendee, CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
+import type { Attendee, CalendarEventOccurrence } from '@workspace/lib/types/calendar';
 import { ConfirmDialog, FormDialog, FormDialogForm } from '@workspace/ui';
 import { AttendeeList } from '@workspace/ui/components/calendar';
 import { UsersRound } from 'lucide-react';
@@ -38,58 +40,53 @@ import { toTimeString } from './time-select';
 type EditEventDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    event: CalendarEventOccurrence | null;
+    event: CalendarEventOccurrence;
     ownerUserId?: string;
-    calendars?: CalendarItem[];
-    sharedCalendars?: SharedCalendar[];
+    // Remounts the dialog on the current event. After a 412 the toast says it reloaded, so the fields follow.
+    onReload: () => void;
 };
 
-export function EditEventDialog({
-    open,
-    onOpenChange,
-    event,
-    ownerUserId,
-    calendars: calendarsProp,
-    sharedCalendars: sharedCalendarsProp,
-}: EditEventDialogProps) {
+export function EditEventDialog({ open, onOpenChange, event, ownerUserId, onReload }: EditEventDialogProps) {
     const { user } = useAuth();
     const ownerId = user?.id ?? '';
     const eventOwnerId = ownerUserId || ownerId;
 
-    const { data: fetchedCalendars = [] } = useCalendars(ownerId);
-    const { data: fetchedSharedCalendars = [] } = useSharedCalendars(ownerId);
-    const calendars = calendarsProp ?? fetchedCalendars;
-    const sharedCalendars = sharedCalendarsProp ?? fetchedSharedCalendars;
+    const { data: calendars = [] } = useCalendars(ownerId);
+    const { data: sharedCalendars = [] } = useSharedCalendars(ownerId);
 
     const calendarOptions = useCalendarOptions(ownerId, calendars, sharedCalendars);
 
     // The fields live here, not in a child that mounts with the dialog as New event's do. Edit event hides behind the
     // recurring choice or the move warning, and a cancel there brings it back with the edits still in it.
-    const [title, setTitle] = useState('');
-    const [description, setDescription] = useState('');
-    const [location, setLocation] = useState('');
-    const [allDay, setAllDay] = useState(false);
-    const [startDate, setStartDate] = useState('');
-    const [startTime, setStartTime] = useState('');
-    const [endDate, setEndDate] = useState('');
-    const [endTime, setEndTime] = useState('');
-    const [rruleString, setRruleString] = useState<string | null>(null);
-    const [attendees, setAttendees] = useState<Attendee[]>([]);
-    const [selectedCalKey, setSelectedCalKey] = useState('');
+    const loadedTimes = fieldTimes(event);
+    const [title, setTitle] = useState(event.title);
+    const [description, setDescription] = useState(event.description ?? '');
+    const [location, setLocation] = useState(event.location ?? '');
+    const [allDay, setAllDay] = useState(event.allDay);
+    const [startDate, setStartDate] = useState(loadedTimes.startDate);
+    const [startTime, setStartTime] = useState(loadedTimes.startTime);
+    const [endDate, setEndDate] = useState(loadedTimes.endDate);
+    const [endTime, setEndTime] = useState(loadedTimes.endTime);
+    const [rruleString, setRruleString] = useState(event.rrule);
+    // Null until the user changes them: the guests can arrive with the series, and the choices with their queries.
+    const [editedAttendees, setEditedAttendees] = useState<Attendee[] | null>(null);
+    const [pickedCalKey, setPickedCalKey] = useState<string | null>(null);
     const [showRecurringDialog, setShowRecurringDialog] = useState(false);
     const [showMoveConfirm, setShowMoveConfirm] = useState(false);
 
     // The calendar a cross-home move already created its copy in. A retry after a failed source delete must not create
     // that copy twice, nor send its invitations again. A retry into another calendar still creates the copy there.
     const createdDestinationRef = useRef<string | null>(null);
-    useEffect(() => {
-        if (open) createdDestinationRef.current = null;
-    }, [open]);
 
+    // The etag these fields answer to, not the live event's: a refetch can advance that mid-edit, and sending it would
+    // overwrite the newer write with the older fields. A save that writes moves it on to what its own write answered.
+    const loadedEtag = useRef(event.etag);
+
+    const currentCal =
+        calendarOptions.find((c) => c.id === event.calendarId && c.ownerId === eventOwnerId) ?? calendarOptions[0];
+    const selectedCalKey = pickedCalKey ?? (currentCal ? calendarKey(currentCal) : '');
     const selectedCal = calendarOptions.find((c) => calendarKey(c) === selectedCalKey);
-    const calendarChanged = event
-        ? selectedCal?.id !== event.calendarId || selectedCal?.ownerId !== eventOwnerId
-        : false;
+    const calendarChanged = selectedCal?.id !== event.calendarId || selectedCal?.ownerId !== eventOwnerId;
 
     const updateEvent = useUpdateEvent(eventOwnerId);
     const createEvent = useCreateEvent(selectedCal?.ownerId || eventOwnerId);
@@ -99,44 +96,20 @@ export function EditEventDialog({
     // A series is saved on its master, and only the master's own row says which date the series starts on.
     const { data: master } = useEvent(
         eventOwnerId,
-        event?.calendarId ?? '',
-        event ? event.parentEventId || event.id : '',
-        open && !!event && isSeriesOccurrence(event),
+        event.calendarId,
+        event.parentEventId || event.id,
+        open && isSeriesOccurrence(event),
     );
 
+    const staleWrite = [updateEvent, createEvent, deleteEventOnSource, moveEvent].some((write) =>
+        isStaleWrite(write.error),
+    );
+    const followReload = staleWrite && event.etag !== loadedEtag.current;
     useEffect(() => {
-        if (event && open) {
-            setTitle(event.title);
-            setDescription(event.description ?? '');
-            setLocation(event.location ?? '');
-            setAllDay(event.allDay);
-            setRruleString(event.rrule);
-            setAttendees(heldAttendees(event, master));
+        if (followReload) onReload();
+    }, [followReload, onReload]);
 
-            const currentCal =
-                calendarOptions.find((c) => c.id === event.calendarId && c.ownerId === eventOwnerId) ??
-                calendarOptions[0];
-            setSelectedCalKey(currentCal ? calendarKey(currentCal) : '');
-
-            if (event.allDay) {
-                // An all-day event runs from UTC midnight to the UTC midnight after its last day.
-                const utcDay = (date: Date) =>
-                    toLocalDateString(new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-                setStartDate(utcDay(event.startTime));
-                setEndDate(utcDay(new Date(event.endTime.getTime() - 86400_000)));
-                setStartTime('00:00');
-                setEndTime('00:00');
-            } else {
-                setStartDate(toLocalDateString(event.startTime));
-                setStartTime(toTimeString(event.startTime));
-                setEndDate(toLocalDateString(event.endTime));
-                setEndTime(toTimeString(event.endTime));
-            }
-        }
-    }, [event, master, open, calendarOptions, eventOwnerId]);
-
-    if (!event) return null;
-
+    const attendees = editedAttendees ?? heldAttendees(event, master);
     const isRecurring = !!event.rrule;
     // An override of one occurrence carries no rule of its own: sending one back saves over the whole series.
     const isOverride = !!event.parentEventId;
@@ -187,11 +160,18 @@ export function EditEventDialog({
         if (calendarChanged && selectedCal) {
             if (selectedCal.ownerId === eventOwnerId) {
                 // The server-owned move carries the exception children and the organizer link, and fires no decline.
-                await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, ...seriesUpdates });
+                const updated = await updateEvent.mutateAsync({
+                    id: targetId,
+                    calendarId: event.calendarId,
+                    etag: loadedEtag.current,
+                    ...seriesUpdates,
+                });
+                loadedEtag.current = updated.etag;
                 await moveEvent.mutateAsync({
                     calendarId: event.calendarId,
                     id: targetId,
                     targetCalendarId: selectedCal.id,
+                    etag: updated.etag,
                 });
             } else {
                 // Two Homes have no atomic move. The event is recreated, then deleted, and the organizer link and the
@@ -200,11 +180,20 @@ export function EditEventDialog({
                     await createEvent.mutateAsync({ calendarId: selectedCal.id, ...updates });
                     createdDestinationRef.current = selectedCalKey;
                 }
-                await deleteEventOnSource.mutateAsync({ id: targetId, calendarId: event.calendarId });
+                await deleteEventOnSource.mutateAsync({
+                    id: targetId,
+                    calendarId: event.calendarId,
+                    etag: loadedEtag.current,
+                });
                 createdDestinationRef.current = null;
             }
         } else if (action === 'all') {
-            await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, ...seriesUpdates });
+            await updateEvent.mutateAsync({
+                id: targetId,
+                calendarId: event.calendarId,
+                etag: loadedEtag.current,
+                ...seriesUpdates,
+            });
         } else if (action === 'this') {
             await createEvent.mutateAsync({
                 calendarId: event.calendarId,
@@ -212,11 +201,18 @@ export function EditEventDialog({
                 rrule: null,
                 parentEventId: targetId,
                 recurrenceDate: occurrenceDateToString(event.occurrenceDate),
+                etag: loadedEtag.current,
             });
         } else if (action === 'this-and-following') {
             if (event.rrule) {
                 const truncated = truncateRRule(event.rrule, parseOccurrenceDate(event.occurrenceDate));
-                await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, rrule: truncated });
+                const updated = await updateEvent.mutateAsync({
+                    id: targetId,
+                    calendarId: event.calendarId,
+                    etag: loadedEtag.current,
+                    rrule: truncated,
+                });
+                loadedEtag.current = updated.etag;
             }
             await createEvent.mutateAsync({ calendarId: event.calendarId, ...updates });
         }
@@ -281,7 +277,7 @@ export function EditEventDialog({
                         rruleString={rruleString}
                         setRruleString={setRruleString}
                         selectedCalKey={selectedCalKey}
-                        setSelectedCalKey={setSelectedCalKey}
+                        setSelectedCalKey={setPickedCalKey}
                         calendarOptions={calendarOptions}
                         recurrenceStartDate={new Date(`${startDate}T00:00:00`)}
                         timezone={event.timezone || viewerTimeZone()}
@@ -303,7 +299,7 @@ export function EditEventDialog({
                                     <div className="flex-1">
                                         <AttendeeEditor
                                             attendees={attendees}
-                                            onChange={setAttendees}
+                                            onChange={setEditedAttendees}
                                             currentUserEmail={user?.email}
                                         />
                                         {isPartOfSeries && attendees.length === 0 && (
@@ -337,4 +333,24 @@ export function EditEventDialog({
             />
         </>
     );
+}
+
+// An all-day event runs from UTC midnight to the UTC midnight after its last day.
+function fieldTimes(event: CalendarEventOccurrence) {
+    if (!event.allDay) {
+        return {
+            startDate: toLocalDateString(event.startTime),
+            startTime: toTimeString(event.startTime),
+            endDate: toLocalDateString(event.endTime),
+            endTime: toTimeString(event.endTime),
+        };
+    }
+    const utcDay = (date: Date) =>
+        toLocalDateString(new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+    return {
+        startDate: utcDay(event.startTime),
+        startTime: '00:00',
+        endDate: utcDay(new Date(event.endTime.getTime() - 86400_000)),
+        endTime: '00:00',
+    };
 }

@@ -62,6 +62,9 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const [showRsvpScopeDialog, setShowRsvpScopeDialog] = useState(false);
     const [pendingRsvpStatus, setPendingRsvpStatus] = useState<'accepted' | 'declined' | 'tentative' | null>(null);
     const [editOpen, setEditOpen] = useState(false);
+    // A bump remounts Edit event on the current event, so its fields and the etag they load with re-seed together.
+    const [editMount, setEditMount] = useState(0);
+    const remountEdit = () => setEditMount((mount) => mount + 1);
     const deleteEvent = useDeleteEvent(eventOwnerId);
     const createEvent = useCreateEvent(eventOwnerId);
     const updateEvent = useUpdateEvent(eventOwnerId);
@@ -94,7 +97,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
         if (isLinkedEvent && isPartOfSeries) {
             const eventId = event.parentEventId || event.id;
             if (action === 'all') {
-                await deleteEvent.mutateAsync({ id: eventId, calendarId: event.calendarId });
+                await deleteEvent.mutateAsync({ id: eventId, calendarId: event.calendarId, etag: event.etag });
             } else {
                 await rsvp.mutateAsync({
                     calendarId: event.calendarId,
@@ -111,6 +114,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                     await updateEvent.mutateAsync({
                         id: event.id,
                         calendarId: event.calendarId,
+                        etag: event.etag,
                         status: 'cancelled',
                     });
                 } else if (isRecurring) {
@@ -123,9 +127,10 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                         parentEventId: event.id,
                         recurrenceDate: occurrenceDateToString(event.occurrenceDate),
                         status: 'cancelled',
+                        etag: event.etag,
                     });
                 } else {
-                    await deleteEvent.mutateAsync({ id: event.id, calendarId: event.calendarId });
+                    await deleteEvent.mutateAsync({ id: event.id, calendarId: event.calendarId, etag: event.etag });
                 }
             } else if (action === 'this-and-following') {
                 if (event.rrule) {
@@ -133,11 +138,16 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                     await updateEvent.mutateAsync({
                         id: event.parentEventId || event.id,
                         calendarId: event.calendarId,
+                        etag: event.etag,
                         rrule: truncated,
                     });
                 }
             } else {
-                await deleteEvent.mutateAsync({ id: event.parentEventId || event.id, calendarId: event.calendarId });
+                await deleteEvent.mutateAsync({
+                    id: event.parentEventId || event.id,
+                    calendarId: event.calendarId,
+                    etag: event.etag,
+                });
             }
         }
         // The panel closes only after the delete is done. If it fails, the confirm dialog stays open for a retry.
@@ -145,7 +155,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     };
 
     const handleNonRecurringDelete = async () => {
-        await deleteEvent.mutateAsync({ id: event.id, calendarId: event.calendarId });
+        await deleteEvent.mutateAsync({ id: event.id, calendarId: event.calendarId, etag: event.etag });
         onOpenChange(false);
     };
 
@@ -258,7 +268,10 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                                         <TooltipButton
                                             icon={Pencil}
                                             tooltipText="Edit event"
-                                            onClick={() => setEditOpen(true)}
+                                            onClick={() => {
+                                                remountEdit();
+                                                setEditOpen(true);
+                                            }}
                                         />
                                         <TooltipButton
                                             icon={Trash2}
@@ -314,6 +327,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
             />
 
             <EditEventDialog
+                key={editMount}
                 open={editOpen}
                 onOpenChange={(editing) => {
                     setEditOpen(editing);
@@ -321,6 +335,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                 }}
                 event={event}
                 ownerUserId={sharedCalendar?.ownerUserId}
+                onReload={remountEdit}
             />
 
             <ProgressDialog open={isExporting} title="Exporting event" />

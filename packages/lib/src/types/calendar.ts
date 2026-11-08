@@ -103,11 +103,14 @@ export type CreateEventInput = {
     recurrenceDate?: string | null;
     status?: 'confirmed' | 'tentative' | 'cancelled';
     data?: EventData | null;
+    // The etag of the master an override is written into, as its dialog loaded it.
+    etag?: string;
 };
 
 export type UpdateEventInput = {
     calendarId: string;
     id: string;
+    etag: string;
     title?: string;
     startTime?: Date;
     endTime?: Date;

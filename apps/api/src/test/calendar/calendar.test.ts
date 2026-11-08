@@ -2824,3 +2824,173 @@ describe('rebuildProjection', () => {
         expect((await calendar.getCollection(calendarId))!.ctag).toBe(ctagBefore);
     });
 });
+
+// The etag names the whole resource, so a stale one refuses any write to it, and a caller who sends none writes as before.
+describe('A stale etag on a delete, a move or a new override', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let calId: string;
+    let otherCalId: string;
+
+    const ownerUrl = () => `/calendar/${ctx.alice.user.id}`;
+    const json = (method: string, body: object): RequestInit => ({
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+    const asAlice = (url: string, init?: RequestInit) => authedRequest(ctx.alice.user.sessionToken, url, init);
+    const eventUrl = (id: string) => `${ownerUrl()}/calendars/${calId}/events/${id}`;
+    const newCalendar = async (name: string) =>
+        (await assertJson<CalendarItem>(await asAlice(`${ownerUrl()}/calendars`, json('POST', { name })))).id;
+    const newEvent = async (fields: object = {}) =>
+        assertJson<CalendarEvent>(
+            await asAlice(
+                `${ownerUrl()}/calendars/${calId}/events`,
+                json('POST', {
+                    title: 'Original',
+                    startTime: '2026-09-01T09:00:00Z',
+                    endTime: '2026-09-01T10:00:00Z',
+                    allDay: false,
+                    ...fields,
+                }),
+            ),
+        );
+    // Another client's edit: the etag the first one loaded no longer holds.
+    const editElsewhere = (id: string) => asAlice(eventUrl(id), json('PUT', { title: 'Edited elsewhere' }));
+    const stored = async (id: string) => assertJson<CalendarEvent>(await asAlice(eventUrl(id)));
+    const overrideBody = (parentEventId: string, etag?: string) => ({
+        title: 'One occurrence',
+        startTime: '2026-09-08T11:00:00Z',
+        endTime: '2026-09-08T12:00:00Z',
+        allDay: false,
+        parentEventId,
+        recurrenceDate: '2026-09-08',
+        etag,
+    });
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        calId = await newCalendar('Etag source');
+        otherCalId = await newCalendar('Etag target');
+        for (const id of [calId, otherCalId]) {
+            await asAlice(
+                `${ownerUrl()}/calendars/${id}`,
+                json('PUT', { shares: [{ targetId: ctx.bob.user.email, permission: 'write' }] }),
+            );
+        }
+    });
+
+    test('a delete with a stale etag is refused and leaves the event, a current one deletes it', async () => {
+        const loaded = await newEvent();
+        await editElsewhere(loaded.id);
+
+        const refused = await asAlice(`${eventUrl(loaded.id)}?etag=${loaded.etag}`, { method: 'DELETE' });
+        expect(refused.status).toBe(412);
+        const current = await stored(loaded.id);
+        expect(current.title).toBe('Edited elsewhere');
+
+        const deleted = await asAlice(`${eventUrl(loaded.id)}?etag=${current.etag}`, { method: 'DELETE' });
+        expect(deleted.status).toBe(200);
+        expect((await asAlice(eventUrl(loaded.id))).status).toBe(404);
+    });
+
+    test('a delete with no etag still deletes, for a caller that loaded none', async () => {
+        const loaded = await newEvent();
+        await editElsewhere(loaded.id);
+        expect((await asAlice(eventUrl(loaded.id), { method: 'DELETE' })).status).toBe(200);
+        expect((await asAlice(eventUrl(loaded.id))).status).toBe(404);
+    });
+
+    test("a delete of an occurrence's override is judged against the resource it lives in", async () => {
+        const series = await newEvent({ rrule: 'FREQ=WEEKLY;COUNT=4' });
+        const override = await assertJson<CalendarEvent>(
+            await asAlice(`${ownerUrl()}/calendars/${calId}/events`, json('POST', overrideBody(series.id))),
+        );
+        await editElsewhere(series.id);
+
+        const refused = await asAlice(`${eventUrl(override.id)}?etag=${override.etag}`, { method: 'DELETE' });
+        expect(refused.status).toBe(412);
+        expect((await stored(override.id)).status).toBe('confirmed');
+    });
+
+    test('a move with a stale etag is refused and leaves the event, a current one moves it', async () => {
+        const loaded = await newEvent();
+        await editElsewhere(loaded.id);
+
+        const refused = await asAlice(
+            `${eventUrl(loaded.id)}/move`,
+            json('PUT', { targetCalendarId: otherCalId, etag: loaded.etag }),
+        );
+        expect(refused.status).toBe(412);
+        const current = await stored(loaded.id);
+        expect(current.calendarId).toBe(calId);
+
+        const moved = await assertJson<CalendarEvent>(
+            await asAlice(
+                `${eventUrl(loaded.id)}/move`,
+                json('PUT', { targetCalendarId: otherCalId, etag: current.etag }),
+            ),
+        );
+        expect(moved.calendarId).toBe(otherCalId);
+    });
+
+    test('the etag an update answers with passes the move that follows it', async () => {
+        const loaded = await newEvent();
+        const updated = await assertJson<CalendarEvent>(
+            await asAlice(eventUrl(loaded.id), json('PUT', { title: 'Saved first', etag: loaded.etag })),
+        );
+        const moved = await assertJson<CalendarEvent>(
+            await asAlice(
+                `${eventUrl(loaded.id)}/move`,
+                json('PUT', { targetCalendarId: otherCalId, etag: updated.etag }),
+            ),
+        );
+        expect(moved.calendarId).toBe(otherCalId);
+    });
+
+    test('a new override is judged against its master, and it stales the etag it was written with', async () => {
+        const series = await newEvent({ rrule: 'FREQ=WEEKLY;COUNT=4' });
+        const url = `${ownerUrl()}/calendars/${calId}/events`;
+        await editElsewhere(series.id);
+
+        const refused = await asAlice(url, json('POST', overrideBody(series.id, series.etag)));
+        expect(refused.status).toBe(412);
+        const range = `${ownerUrl()}/calendars/${calId}/event-range/1788825600/1788998400`;
+        const occurrences = await assertJson<CalendarEventOccurrence[]>(await asAlice(range));
+        expect(occurrences.filter((o) => o.parentEventId === series.id)).toEqual([]);
+
+        const current = await stored(series.id);
+        const override = await assertJson<CalendarEvent>(
+            await asAlice(url, json('POST', overrideBody(series.id, current.etag))),
+        );
+        expect(override.parentEventId).toBe(series.id);
+
+        const again = await asAlice(url, json('POST', overrideBody(series.id, current.etag)));
+        expect(again.status).toBe(412);
+    });
+
+    test('a new override with no etag still writes, for a caller that loaded none', async () => {
+        const series = await newEvent({ rrule: 'FREQ=WEEKLY;COUNT=4' });
+        await editElsewhere(series.id);
+        const override = await assertJson<CalendarEvent>(
+            await asAlice(`${ownerUrl()}/calendars/${calId}/events`, json('POST', overrideBody(series.id))),
+        );
+        expect(override.parentEventId).toBe(series.id);
+    });
+
+    test("a share's writer crossing into the owner's home is judged the same way", async () => {
+        const asBob = (url: string, init?: RequestInit) => authedRequest(ctx.bob.user.sessionToken, url, init);
+        const loaded = await newEvent();
+        await editElsewhere(loaded.id);
+
+        const staleDelete = await asBob(`${eventUrl(loaded.id)}?etag=${loaded.etag}`, { method: 'DELETE' });
+        expect(staleDelete.status).toBe(412);
+        const staleMove = await asBob(
+            `${eventUrl(loaded.id)}/move`,
+            json('PUT', { targetCalendarId: otherCalId, etag: loaded.etag }),
+        );
+        expect(staleMove.status).toBe(412);
+
+        const current = await stored(loaded.id);
+        expect((await asBob(`${eventUrl(loaded.id)}?etag=${current.etag}`, { method: 'DELETE' })).status).toBe(200);
+    });
+});

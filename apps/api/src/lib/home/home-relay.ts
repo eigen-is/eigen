@@ -335,9 +335,10 @@ export async function deleteEventAt(
     calendarId: string,
     eventId: string,
     user: User,
+    expectedEtag?: string,
 ): Promise<void> {
     const home = await getHome(ownerUserId);
-    await home.calendar.deleteEvent(calendarId, eventId, user);
+    await home.calendar.deleteEvent(calendarId, eventId, user, expectedEtag);
 }
 
 export async function moveEventAt(
@@ -345,9 +346,10 @@ export async function moveEventAt(
     calendarId: string,
     eventId: string,
     targetCalendarId: string,
+    expectedEtag?: string,
 ): Promise<CalendarEvent> {
     const home = await getHome(ownerUserId);
-    return home.calendar.moveEvent(calendarId, eventId, targetCalendarId);
+    return home.calendar.moveEvent(calendarId, eventId, targetCalendarId, expectedEtag);
 }
 
 // --- Teams ---

@@ -77,7 +77,7 @@ const idle = { mutateAsync: mock(async (_input: unknown) => {}), isPending: fals
 const notFromOthers = () => false;
 const fromOthers = () => true;
 let isFromOthers = notFromOthers;
-const updateEvent = { mutateAsync: mock(async (_input: UpdateEventInput) => {}), isPending: false };
+const updateEvent = { mutateAsync: mock(async (_input: UpdateEventInput) => ({ etag: '2' })), isPending: false };
 const deleteEvent = { mutateAsync: mock(async (_input: unknown) => {}), isPending: false };
 // Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts the originals back.
 const realAuth = { ...(await import('@workspace/lib/auth')) };
@@ -122,7 +122,7 @@ let unmount = async () => {};
 afterEach(() => unmount());
 beforeEach(() => {
     updateEvent.mutateAsync.mockReset();
-    updateEvent.mutateAsync.mockImplementation(async () => {});
+    updateEvent.mutateAsync.mockImplementation(async () => ({ etag: '2' }));
     idle.mutateAsync.mockReset();
     idle.mutateAsync.mockImplementation(async () => {});
     deleteEvent.mutateAsync.mockReset();
@@ -136,7 +136,7 @@ beforeEach(() => {
 
 async function open(event = dentist, ownerUserId?: string) {
     ({ unmount } = await renderInDocument(
-        createElement(EditEventDialog, { open: true, onOpenChange, event, ownerUserId }),
+        createElement(EditEventDialog, { open: true, onOpenChange, event, ownerUserId, onReload: () => {} }),
     ));
 }
 
@@ -213,7 +213,7 @@ test('Enter in the title saves the event and closes the dialog', async () => {
 
 test('while a save runs, its buttons are disabled and Cancel and Escape wait for it', async () => {
     let finish = () => {};
-    updateEvent.mutateAsync.mockImplementation(() => new Promise<void>((resolve) => (finish = resolve)));
+    updateEvent.mutateAsync.mockImplementation(() => new Promise((resolve) => (finish = () => resolve({ etag: '2' }))));
     await open();
     await save();
     expect([button('Cancel').disabled, button('Save').disabled]).toEqual([true, true]);
