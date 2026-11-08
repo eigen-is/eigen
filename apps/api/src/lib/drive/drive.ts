@@ -782,13 +782,8 @@ export class Drive {
         const root = await mount.getRootFolder();
         if (!root) throw new Error(`Mount '${mountId}' has no root folder`);
 
-        // getChildByName ignores case, so this one lookup also finds an old `Chats`.
         const existing = await mount.getChildByName(root.id, CHATS_FOLDER_NAME);
-        if (existing) {
-            if (existing.type !== DRIVE_TYPE_FOLDER) return root.id;
-            if (existing.name !== CHATS_FOLDER_NAME) await this.renamePath(mountId, existing.id, CHATS_FOLDER_NAME);
-            return existing.id;
-        }
+        if (existing) return existing.type === DRIVE_TYPE_FOLDER ? existing.id : root.id;
 
         // Drive.createFolder tells other tabs about the new folder. Two first chats at once both try to
         // create it, and the one that loses the race uses the folder of the winner.
