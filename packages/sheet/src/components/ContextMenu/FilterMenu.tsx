@@ -19,6 +19,7 @@ import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
 import type { Context, FilterColor, FilterConditionName, FilterDate, FilterValue } from '../../state';
 import {
+    api,
     clearFilter,
     FILTER_CONDITION_ITEMS,
     filterConditionArity,
@@ -28,7 +29,6 @@ import {
     saveFilter,
     sortFilterRange,
 } from '../../state';
-import { getSheet } from '../../state/api/common';
 
 type ColorKind = 'bgColors' | 'fcColors';
 
@@ -273,7 +273,7 @@ export const FilterMenu: React.FC = () => {
         setShowSubMenu(false);
         dateTreeExpandState.current = {};
         const menu = filterContextMenu;
-        const saved = getSheet(contextRef.current).filter?.[menu.col - menu.startCol];
+        const saved = api.getSheet(contextRef.current).filter?.[menu.col - menu.startCol];
         hiddenRows.current = Object.keys(saved?.rowhidden ?? {}).map(Number);
         const res = getFilterColumnValues(contextRef.current, menu.col, menu.startRow, menu.endRow, menu.startCol);
         setData(omit(res, ['datesUncheck', 'valuesUncheck']));

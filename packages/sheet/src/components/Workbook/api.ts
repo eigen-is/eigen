@@ -80,11 +80,8 @@ export function generateAPIs(
             return accepted;
         },
 
-        // Puts the workbook back to `base`, sheets an earlier getAllSheets returned, and applies `batches` on it in
-        // order. The tab's view moved with the batches it applied before, so only the `fresh` ones move it again. A
-        // fresh batch that moves a sheet's rows ahead of an applied one that moves them leaves the tab unable to tell
-        // where its selection on that sheet went, so it goes, and on the current sheet the editor too. The undo and redo
-        // entries fit an order that is gone, so both stacks empty. True when every batch applied.
+        // Only the `fresh` batches move the view again. A fresh batch that moves rows ahead of an applied one loses
+        // the selection there, and the undo and redo entries fit an order that is gone, so both stacks empty.
         replayOps: (base: Sheet[], batches: Op[][], fresh: ReadonlySet<Op[]>): boolean => {
             let accepted = true;
             const { currentSheetId } = getContext();

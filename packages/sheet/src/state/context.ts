@@ -15,6 +15,7 @@ import { FormulaCache } from './modules';
 import type { CellGlyph } from './modules/cell-glyph';
 import type { FloatingRef } from './modules/floating';
 import { normalizeSelection } from './modules/selection';
+import type { Hooks } from './settings';
 import type {
     FilterOptions,
     GlobalCache,
@@ -37,13 +38,14 @@ export type FunctionCandidate = {
     d?: string;
 };
 
-type RefValues = {
+export type RefValues = {
     globalCache: GlobalCache;
     cellInput: MutableRefObject<HTMLDivElement | null>;
     fxInput: MutableRefObject<HTMLDivElement | null>;
     canvas: MutableRefObject<HTMLCanvasElement | null>;
     cellArea: MutableRefObject<HTMLDivElement | null>;
     workbookContainer: MutableRefObject<HTMLDivElement | null>;
+    hooks: MutableRefObject<Hooks>;
 };
 
 export type Context = {
@@ -288,9 +290,7 @@ function calcRowColSize(ctx: Context, rowCount: number, colCount: number) {
     let ch_width = 0;
     for (let c = 0; c < colCount; c += 1) {
         let width = columnlen?.[c] || defaultcollen;
-        // Clamp a very wide imported default column width for layout only. This is a
-        // geometry recompute — persisting the clamp would ship an op and take an undo
-        // entry from a render pass, on every client independently.
+        // Clamp for layout only: persisting it would ship an op and an undo entry from a render pass.
         if (!columnlen?.[c] && firstRow?.[c] && width > 300) width = 300;
         if (colhidden?.[c] == null) ch_width += width;
         visibledatacolumn.push(ch_width);

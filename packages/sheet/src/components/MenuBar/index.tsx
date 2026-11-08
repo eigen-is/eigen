@@ -23,9 +23,8 @@ type Props = {
     ref?: Ref<HTMLDivElement>;
 };
 
-// The bar is a size container, so the icon row folds by the bar's own width. A panel beside the workbook narrows it too.
-// Below 512px the menus get less padding, so the host's menus and the bar's fit beside the share buttons. On a 360px
-// phone they fit beside the kebab.
+// The bar is a size container, so the icon row folds by the bar's own width, also when a panel narrows it.
+// Below 512px the menus get less padding, so they fit beside the share buttons.
 export function WorkbookMenuBar({ leftItems, rightItems, ref }: Props) {
     const { context } = useContext(WorkbookContext);
     const { focusFindBarRef, onCloseAutoFocus: refocusFindBar } = useFindBarRefocus();

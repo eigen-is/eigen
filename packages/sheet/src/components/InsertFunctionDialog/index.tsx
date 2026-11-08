@@ -12,7 +12,7 @@ import { useContext, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialogProps } from '../../hooks/useDialog';
 import type { FormulaFunctionEntry } from '../../state';
-import { FUNCTION_CATEGORIES, FUNCTION_LIST, openCellEditor } from '../../state';
+import { FUNCTION_CATEGORIES, FUNCTION_LIST, functionCallHtml, openCellEditor } from '../../state';
 
 // Each function with its name and description in lower case, so a search ignores case without lowering them per key.
 const SEARCHABLE_FUNCTIONS = FUNCTION_LIST.map((fn) => ({
@@ -52,7 +52,7 @@ export function InsertFunctionDialog() {
             const last = ctx.selections?.at(-1);
             const r = last?.row_focus ?? last?.row[0] ?? 0;
             const c = last?.column_focus ?? last?.column[0] ?? 0;
-            const html = `<span dir="auto" class="sheet-formula-text-color">=</span><span dir="auto" class="sheet-formula-text-color">${name}</span><span dir="auto" class="sheet-formula-text-color">(</span>`;
+            const html = `${functionCallHtml(name)}`;
             openCellEditor(ctx, r, c, { html, caret: name.length + 2 });
             ctx.functionHint = name;
             ctx.functionCandidates = [];

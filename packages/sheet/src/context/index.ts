@@ -4,40 +4,23 @@
 // `getContext()`. A host render changes none of this, so the parts behind a memo stay as they are.
 
 import React from 'react';
-import type { Context, GlobalCache, Hooks, PatchOptions } from '../state';
+import type { Context, GlobalCache, PatchOptions, RefValues } from '../state';
 import { defaultContext } from '../state';
-
-export type RefValues = {
-    globalCache: GlobalCache;
-    cellInput: React.MutableRefObject<HTMLDivElement | null>;
-    fxInput: React.MutableRefObject<HTMLDivElement | null>;
-    canvas: React.MutableRefObject<HTMLCanvasElement | null>;
-    cellArea: React.MutableRefObject<HTMLDivElement | null>;
-    workbookContainer: React.MutableRefObject<HTMLDivElement | null>;
-    hooks: React.MutableRefObject<Hooks>;
-};
 
 export type SetContextOptions = {
     // Skip patch generation entirely: no op emitted to peers AND no undo entry.
     noHistory?: boolean;
-    // Emit the collaborative op but record NO local undo entry. For technical fixups a user never
-    // undoes as their own step — the pending→real image mediaName swap and the paste-flow height
-    // correction — so a single paste stays one ⌘Z. Distinct from noHistory, which skips op emission too.
+    // Emit the op but record no undo entry, so a technical fixup (such as a paste height correction) stays one ⌘Z.
+    // Unlike noHistory, peers still get the op.
     noUndo?: boolean;
 } & PatchOptions;
 
-const defaultScrollListeners = new Set<() => void>();
 const defaultGlobalCache: GlobalCache = {
     undoList: [],
     redoList: [],
     scrollLeft: 0,
     scrollTop: 0,
-    scrollListeners: defaultScrollListeners,
-    notifyScrollListeners: () => {
-        for (const fn of defaultScrollListeners) {
-            fn();
-        }
-    },
+    scrollListeners: new Set(),
 };
 
 const defaultRefs: RefValues = {

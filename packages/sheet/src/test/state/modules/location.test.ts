@@ -34,10 +34,10 @@ const ROW = 20;
 
 const FROZEN: Freezen = {
     vertical: {
-        freezenverticaldata: { pos: COLUMN, boundary: 1, scroll: 0, cumulative: [], edge: 0 },
+        freezenverticaldata: { pos: COLUMN, boundary: 1, scroll: 0 },
     },
     horizontal: {
-        freezenhorizontaldata: { pos: 2 * ROW, boundary: 2, scroll: 0, cumulative: [], edge: 0 },
+        freezenhorizontaldata: { pos: 2 * ROW, boundary: 2, scroll: 0 },
     },
 };
 
@@ -251,7 +251,7 @@ describe('a freeze line drop', () => {
         return ctx.sheets[0].frozen;
     };
     const frozenTwoColumns: Freezen = {
-        vertical: { freezenverticaldata: { pos: 2 * COLUMN, boundary: 2, scroll: 0, cumulative: [], edge: 0 } },
+        vertical: { freezenverticaldata: { pos: 2 * COLUMN, boundary: 2, scroll: 0 } },
     };
     const twoColumns = { type: 'rangeColumn', range: { row_focus: 0, column_focus: 1 } } as const;
 

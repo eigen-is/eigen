@@ -115,9 +115,8 @@ export function restoreEditorSelection(input: HTMLElement) {
     else input.focus({ preventScroll: true });
 }
 
-// Puts the caret `at` characters into the editor's text, or at its end, and keeps it for restoreEditorSelection. A
-// dialog that writes into the editor, such as Insert function, needs the kept one. Placing the caret moves the focus to
-// the editor, the dialog's focus trap takes it back, and in a text field that takes the selection along.
+// Puts the caret `at` characters into the editor's text, or at its end, and keeps it for restoreEditorSelection.
+// A dialog's focus trap takes the focus, and in a text field the selection, from the editor, so it needs the kept one.
 export function placeEditorCaret(input: HTMLElement, at: number | 'end') {
     const offset = at === 'end' ? textOffset(input, input, input.childNodes.length) : at;
     savedSelections.set(input, [offset, offset]);

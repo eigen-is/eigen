@@ -14,6 +14,7 @@ import { ChevronDown } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
+import { useCellEditorRefocus } from '../../hooks/useCellEditorRefocus';
 import { useDialog } from '../../hooks/useDialog';
 import type { Sheet } from '../../state';
 import {
@@ -40,7 +41,7 @@ type Props = {
 };
 
 export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => {
-    const { context, setContext } = useContext(WorkbookContext);
+    const { context, setContext, refs } = useContext(WorkbookContext);
     const [editing, setEditing] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const editable = useRef<HTMLSpanElement>(null);
@@ -48,15 +49,32 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
     const { showNotice } = useDialog();
 
     useEffect(() => {
-        if (!editable.current || !editing) return;
+        const name = editable.current;
+        if (!name || !editing) return;
+        name.focus();
         const range = document.createRange();
-        range.selectNodeContents(editable.current);
-        if (range.startContainer && document.body.contains(range.startContainer)) {
-            const selection = window.getSelection();
-            selection?.removeAllRanges();
-            selection?.addRange(range);
-        }
+        range.selectNodeContents(name);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
     }, [editing]);
+
+    // Radix would refocus the menu's trigger and its typeahead would take the next keys, so the grid takes them.
+    // Rename starts here, so that the closing menu can't take the focus from the name.
+    const refocusGrid = useCellEditorRefocus();
+    const renamePicked = useRef(false);
+    const onMenuCloseAutoFocus = useCallback(
+        (event: Event) => {
+            if (!renamePicked.current) {
+                refocusGrid(event);
+                return;
+            }
+            renamePicked.current = false;
+            event.preventDefault();
+            setEditing(true);
+        },
+        [refocusGrid],
+    );
 
     // A refused name throws out of the write, which then applies nothing, and the notice opens outside the recipe.
     const onBlur = useCallback(() => {
@@ -71,15 +89,19 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
         setEditing(false);
     }, [id, setContext, showNotice]);
 
-    const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLSpanElement>) => {
-        // The blur may open a notice whose OK button takes the focus at once, and the browser would send this Enter's
-        // keypress on to that button and close the notice.
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            editable.current?.blur();
-        }
-        e.stopPropagation();
-    }, []);
+    const onKeyDown = useCallback(
+        (e: React.KeyboardEvent<HTMLSpanElement>) => {
+            // The blur may open a notice whose OK button takes the focus at once, and the browser would send this
+            // Enter's keypress on to that button and close the notice. Otherwise the next keys go to the grid.
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                editable.current?.blur();
+                refs.cellInput.current?.focus({ preventScroll: true });
+            }
+            e.stopPropagation();
+        },
+        [refs.cellInput],
+    );
 
     const onDragStart = useCallback(
         (e: React.DragEvent<HTMLDivElement>) => {
@@ -140,7 +162,13 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
         <MenuSections
             create={
                 <>
-                    <DropdownMenuItem onClick={() => setEditing(true)}>Rename</DropdownMenuItem>
+                    <DropdownMenuItem
+                        onClick={() => {
+                            renamePicked.current = true;
+                        }}
+                    >
+                        Rename
+                    </DropdownMenuItem>
                     <DropdownMenuItem
                         onClick={() => {
                             if (context.allowEdit === false) return;
@@ -311,7 +339,12 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
                             <ChevronDown width={12} height={12} aria-hidden="true" />
                         </span>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent side="top" align="start" collisionPadding={8}>
+                    <DropdownMenuContent
+                        side="top"
+                        align="start"
+                        collisionPadding={8}
+                        onCloseAutoFocus={onMenuCloseAutoFocus}
+                    >
                         {menuItems}
                     </DropdownMenuContent>
                 </DropdownMenu>

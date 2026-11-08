@@ -10,15 +10,16 @@ import { formulaOperators, iscelldata } from './formula-utils';
 import { offsetCoordinate, offsetRange, sortLegs } from './parser/helper/cell';
 import { error } from './validation';
 
+type RefLeg = NonNullable<ReturnType<typeof extractLabel>>;
+
 // Shifts every ref in a formula by rowOffset rows and colOffset columns, as a copy or a fill does. The text comes back
 // without its leading `=`.
 export function functionCopy(txt: string, rowOffset: number, colOffset: number): string {
     return walkFormulaRefs(txt, (ref) => shiftRef(ref, rowOffset, colOffset));
 }
 
-// Points every ref naming a renamed sheet at its new name, `Sheet1!A1` → `'Sheet1(Copy)'!A1`, as a tab rename and
-// Import… do. `findSheet` reads a ref's name against the sheets of the formula's workbook, as a sheetFinder over them
-// does, and `renames` maps the name of each renamed one to its new name. A leading `=` is kept.
+// Points every ref naming a renamed sheet at its new name, `Sheet1!A1` → `'Sheet1(Copy)'!A1`.
+// `renames` maps the name of each renamed sheet to its new name. A leading `=` is kept.
 export function renameSheetRefs(
     txt: string,
     findSheet: (name: string) => { name: string } | undefined,
@@ -34,9 +35,8 @@ export function renameSheetRefs(
     return txt.startsWith('=') ? `=${renamed}` : renamed;
 }
 
-// The sheet with `rewrite` run over the formula text it holds: its cells, as a matrix or as stored ones where a sheet
-// has no matrix, such as any sheet a joiner's batch doesn't name, and its formula rules. A sheet whose text stays comes
-// back as the same object, and an untouched row keeps its object.
+// The sheet with `rewrite` run over the formula text in its cells and formula rules.
+// A sheet whose text stays comes back as the same object, and an untouched row keeps its object.
 export function rewriteSheetFormulas<S extends Sheet>(sheet: S, rewrite: (txt: string) => string): S {
     let next = sheet;
     if (sheet.data) {
@@ -112,6 +112,36 @@ export function inlineNames(
     return txt.startsWith('=') ? `=${walked}` : walked;
 }
 
+// The text of a formula a cut or a drag moved, by Excel's rule: a ref wholly inside the moved block follows its cells,
+// `$` or not, and any other ref stays. `from` and `to` are the sheets' names. The text comes back without its `=`.
+export function moveFormulaRefs(
+    txt: string,
+    block: { row: readonly number[]; column: readonly number[] },
+    rowOffset: number,
+    colOffset: number,
+    from: string,
+    to: string,
+    findSheet: (name: string) => { name: string } | undefined,
+): string {
+    const inBlock = ([row, column]: RefLeg) =>
+        row.index >= block.row[0] &&
+        row.index <= block.row[1] &&
+        column.index >= block.column[0] &&
+        column.index <= block.column[1];
+    const moved = ([row, column]: RefLeg) =>
+        toLabel({ ...row, index: row.index + rowOffset }, { ...column, index: column.index + colOffset });
+    return walkFormulaRefs(txt, (ref) => {
+        const sheetEnd = ref.lastIndexOf('!') + 1;
+        if (sheetEnd > 0 && findSheet(unquoteSheetName(ref.slice(0, sheetEnd - 1)))?.name !== from) return ref;
+        const [startTxt, endTxt] = ref.slice(sheetEnd).split(':');
+        const start = extractLabel(startTxt);
+        const end = endTxt == null ? start : extractLabel(endTxt);
+        if (!start || !end || !inBlock(start) || !inBlock(end)) return ref;
+        const prefix = sheetEnd > 0 ? `${sheetRefName(to)}!` : '';
+        return endTxt == null ? prefix + moved(start) : `${prefix}${moved(start)}:${moved(end)}`;
+    });
+}
+
 // Moves a formula's refs for a row or column insert ('add') or delete ('del'), on the editor and in the op replay
 // alike. `stindex` is the first row or column the op touches and `step` how many. `orient` says whether an insert at
 // `stindex` moves a ref that starts there. `targetSheet` names the sheet the op runs on, and `onTargetSheet` says
@@ -159,10 +189,8 @@ export function detectAbsolute(txt: string): [boolean, boolean] {
     ];
 }
 
-// The character walker every reader here shares. It drops one leading `=`, then reads the text as leaves and the
-// structure between them: brackets, strings, commas and the operators. A leaf `iscelldata` reads as a ref goes to
-// `onRef`, which returns its replacement. Any other leaf, such as a name or a number, goes to `onName`, which keeps it
-// by default. A function's name is no leaf, and neither is a string.
+// The character walker every reader here shares. It drops one leading `=` and reads the text as leaves and structure.
+// A leaf `iscelldata` reads as a ref goes to `onRef`; any other leaf goes to `onName`. A function name is no leaf.
 function walkFormulaRefs(
     txt: string,
     onRef: (ref: string) => string,

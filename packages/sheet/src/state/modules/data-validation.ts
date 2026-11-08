@@ -57,7 +57,7 @@ const OPTION_LABEL: Record<string, string> = {
 type CellValueForValidation = string | number | boolean | null | undefined;
 
 export function getDropdownList(ctx: Context, txt: string) {
-    const list: (string | number | boolean)[] = [];
+    const list = new Set<string | number | boolean>();
     if (iscelldata(txt)) {
         const range = getcellrange(ctx, txt);
         const data = getSheet(ctx, { id: range?.sheetId }).data;
@@ -66,32 +66,30 @@ export function getDropdownList(ctx: Context, txt: string) {
             for (let c = range.column[0]; c <= range.column[1]; c += 1) {
                 const cell = data[r]?.[c];
                 const value = cellValue(cell);
-                if (!cell || !value) continue;
-                const item = cellDisplay(cell) || value;
-                if (!list.includes(item)) list.push(item);
+                if (cell && value) list.add(cellDisplay(cell) || value);
             }
         }
     } else {
         for (const item of txt.split(',')) {
-            if (item.length > 0 && !list.includes(item)) list.push(item);
+            if (item.length > 0) list.add(item);
         }
     }
-    return list;
+    return [...list];
 }
 
 export function validateCellData(ctx: Context, item: DataValidationRule, value: CellValueForValidation) {
     const { type, type2, value1, value2 } = item;
     if (type === 'dropdown') {
-        const list = getDropdownList(ctx, value1).map(String);
+        const list = new Set(getDropdownList(ctx, value1).map(String));
 
         // A rule that allows several values stores them comma-separated, and each one must be on the list.
         if (type2 && value != null && value !== '') {
             return String(value)
                 .split(',')
-                .every((i) => list.includes(i));
+                .every((i) => list.has(i));
         }
 
-        return value != null && list.includes(String(value));
+        return value != null && list.has(String(value));
     }
     if (type === 'checkbox') {
         return true;
@@ -243,7 +241,7 @@ export function checkboxRect(box: Rect, horizonAlign: number, verticalAlign: num
 // The rule that governs one cell on the current sheet, as getCellHyperlink finds a cell's link.
 export function getCellDataValidation(ctx: Context, r: number, c: number) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
-    if (index == null || index < 0) return undefined;
+    if (index == null) return undefined;
     return validationAt(ctx.sheets[index].dataValidations, r, c);
 }
 
@@ -272,7 +270,7 @@ export function checkboxChange(ctx: Context, r: number, c: number) {
     setCellValue(ctx, r, c, d, checked ? item.value2 : item.value1);
     // The write must recalculate the formulas that depend on this cell. The mousedown has not moved the selection here
     // yet, so the toggled cell is named.
-    jfrefreshgrid(ctx, d, [{ row: [r, r], column: [c, c] }]);
+    jfrefreshgrid(ctx, [{ row: [r, r], column: [c, c] }]);
     return true;
 }
 
@@ -330,7 +328,7 @@ export function applyDataValidation(ctx: Context, range: SingleRange, item: Data
             seeded = true;
         }
     }
-    if (seeded) jfrefreshgrid(ctx, d, [seededRange]);
+    if (seeded) jfrefreshgrid(ctx, [seededRange]);
 }
 
 // The range the dialog's text names. A whole column such as B:B runs to the grid's last row, as Excel stores it, so
@@ -512,7 +510,7 @@ export function setDropdownValue(ctx: Context, value: string, arr: string[]) {
         ctx.validationListOpen = false;
     }
     setCellValue(ctx, rowIndex, colIndex, d, nextValue);
-    jfrefreshgrid(ctx, null, undefined);
+    jfrefreshgrid(ctx);
 }
 
 // What is wrong with the values a data-validation draft compares against, such as a list with no options or a

@@ -27,8 +27,7 @@ export function applySheetRename<S extends Sheet>(sheets: S[], { id, name }: Ren
 }
 
 // The sheet with every text that names a renamed sheet pointed at its new name: formulas, formula rules, list sources
-// and links. A chart ref names its sheet by id and needs nothing. `findSheet` and `renames` are as renameSheetRefs takes
-// them. Text that stays keeps its object.
+// and links. A chart ref names its sheet by id and needs nothing. Text that stays keeps its object.
 export function renameSheetTexts<S extends Sheet>(
     sheet: S,
     findSheet: (name: string) => { name: string } | undefined,

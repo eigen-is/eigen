@@ -33,7 +33,6 @@ function press(
         scrollLeft: 0,
         scrollTop: 0,
         scrollListeners: new Set(),
-        notifyScrollListeners: () => {},
         pressClosedMenu,
     };
     const container = document.createElement('div');

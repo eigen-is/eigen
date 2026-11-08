@@ -29,9 +29,14 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Validation rules and formats in Sheets** — a rule checks a cell's value, not its text: a date shown in another format, a number shown as 50% and an unchanged formula pass, and an imported "any date" rule no longer refuses every date
 - **Row and column changes while others edit in Sheets** — a rename, tab color or link someone sets while you insert or delete rows stays
 - **Filters while others edit in Sheets** — a filter someone else changes no longer leaves rows hidden for good after your next filter edit
-- **Refused edits in Sheets** — Delete on part of a merged cell shows a notice, a paste past the sheet's size limit says so, and a paste refused over part of a merge changes nothing
-- **Long text in Sheets** — wrapped text grows its row however you confirm it, from the formula bar or by clicking elsewhere too
+- **Refused edits in Sheets** — Delete on part of a merged cell shows a notice, a paste past the sheet's size limit says so, and a paste over part of a merge says it can't and changes nothing
+- **Long text in Sheets** — wrapped text grows its row to fit every line, however you confirm it, from the formula bar or by clicking elsewhere too
 - **Clicks and drags in Sheets** — the link card over a frozen pane shows the link you point at, dragging a formula's range picks the right rows, and a move near the bottom of the grid no longer snaps to the last row
+- **Selecting in Sheets** — dragging a selection beside a frozen pane keeps the view where it is, and a row or column header no longer stays highlighted after its right-click menu
+- **Tab menus in Sheets** — after a pick from a tab's menu your keys go to the grid, so a typed word no longer runs a menu row such as Hide, and Rename lets you type the name at once
+- **Cutting and moving formulas in Sheets** — a formula you cut or drag follows the cells that moved with it, so `=D5*2` moved together with D5 keeps its value
+- **Pasting tables in Sheets** — numbers from a table with no alignment of its own land on the right, and a cell spanning past the table's last row pastes instead of failing
+- **Several selected ranges in Sheets** — the cell editor and the formula bar show the cell you are editing, in the last range you selected
 - **Date shortcut in Sheets** — Ctrl+Shift+; on a filled cell no longer wipes it, so Escape brings back what was there
 - **Formulas in Sheets** — `A1 : B2` with spaces recalculates, a formula reading a tab nobody opened stays current, and undoing a replace restores the formulas that read those cells
 - **Paste past the last row in Sheets** — a paste that adds rows to a workbook full of formulas no longer pauses to read them all again

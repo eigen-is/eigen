@@ -49,18 +49,15 @@ export function iscelldata(txt: string): boolean {
     return RANGE_END.test(start) && RANGE_END.test(end);
 }
 
-// What resolving a reference reads: the sheet each name reads, and the references resolved so far, as the editor's
-// formulaCache keeps them. A walk over many formulas builds one, so the name lookup and the cache serve every formula.
-// The server's recalc and the editor's formula map each build theirs.
+// What resolving a reference reads: the sheet each name reads, and the references resolved so far.
+// A walk over many formulas builds one, so the name lookup and the cache serve every formula.
 export type WalkContext = {
     findSheet: (name: string) => Pick<Sheet, 'id'> | undefined;
     cellTextToIndexList: Record<string, FormulaDependency>;
 };
 
-// The cells a reference covers, or null when it is none or names a sheet that isn't there. An end with no row spans
-// every row and an end with no column every column, as the engine reads it. The answer is kept in
-// `cellTextToIndexList`: by the reference's text when it names a sheet, by `${reference}_${formulaSheetId}` when it
-// doesn't.
+// The cells a reference covers, or null when it is none or names a sheet that isn't there. An end with no row or
+// column spans them all. Kept in `cellTextToIndexList` by its text, or `${reference}_${formulaSheetId}` with no sheet.
 export function resolveCellRange(
     { findSheet, cellTextToIndexList }: WalkContext,
     reference: string,

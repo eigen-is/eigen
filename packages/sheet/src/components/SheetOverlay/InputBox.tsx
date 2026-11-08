@@ -45,9 +45,10 @@ export const InputBox: React.FC = () => {
     const inputRef = useRef<HTMLDivElement>(null);
     const lastKeyDownEventRef = useRef<KeyboardEvent>(null);
     const [isOnHiddenRowCol, setIsOnHiddenRowCol] = useState<boolean>(false);
-    const firstSelection = context.selections?.[0];
-    const focusRow = firstSelection?.row_focus;
-    const focusColumn = firstSelection?.column_focus;
+    // The editor opens on the last selected range, so its box and style follow that one.
+    const selection = context.selections?.at(-1);
+    const focusRow = selection?.row_focus;
+    const focusColumn = selection?.column_focus;
     const preText = useRef('');
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: cell-style memo keyed on sheet/file/cellUpdate; reads helpers off `context` directly
@@ -58,7 +59,7 @@ export const InputBox: React.FC = () => {
             return getStyleByCell(context, flowdata, focusRow, focusColumn);
         }
         return {};
-    }, [context.sheets, context.currentSheetId, context.editingCellPosition, firstSelection]);
+    }, [context.sheets, context.currentSheetId, context.editingCellPosition, selection]);
 
     // Here and not in cancelNormalSelected, because a peer's batch that fails rolls its close back, and the typed text
     // must survive that. A layout effect, so it can't run after the write of the next opener.
@@ -192,14 +193,13 @@ export const InputBox: React.FC = () => {
         <div
             className="sheet-input-box"
             style={
-                firstSelection && !pickerOpen
+                selection && !pickerOpen
                     ? {
-                          left: firstSelection.left,
-                          top: firstSelection.top,
+                          left: selection.left,
+                          top: selection.top,
                           zIndex: context.editingCellPosition.length === 0 ? -1 : 19,
-                          // A closed editor stays focusable at its cell, because hiding it would break focus and
-                          // focus off-screen scrolls the grid. It must not take clicks, or its stopPropagation would
-                          // swallow them. An open one needs an explicit auto, since the pane-region wrapper sets none.
+                          // A closed editor stays focusable at its cell, as focus off-screen scrolls the grid.
+                          // It takes no clicks, or its stopPropagation would swallow them. Open needs an explicit auto.
                           opacity: context.editingCellPosition.length === 0 ? 0 : 1,
                           pointerEvents: context.editingCellPosition.length === 0 ? 'none' : 'auto',
                           display: 'block',
@@ -212,10 +212,10 @@ export const InputBox: React.FC = () => {
             <div
                 className="sheet-input-box-inner"
                 style={
-                    firstSelection
+                    selection
                         ? {
-                              minWidth: firstSelection?.width || 0,
-                              minHeight: firstSelection?.height || 0,
+                              minWidth: selection.width || 0,
+                              minHeight: selection.height || 0,
                               ...inputBoxStyle,
                           }
                         : {}

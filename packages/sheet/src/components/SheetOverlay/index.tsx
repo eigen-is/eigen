@@ -120,7 +120,7 @@ export const SheetOverlay: React.FC = () => {
         if (!el) return;
         refs.globalCache.scrollLeft = el.scrollLeft;
         refs.globalCache.scrollTop = el.scrollTop;
-        refs.globalCache.notifyScrollListeners();
+        for (const follow of refs.globalCache.scrollListeners) follow();
     }, [refs.cellArea, refs.globalCache]);
 
     const onLeftTopClick = useCallback(() => {
@@ -249,8 +249,8 @@ export const SheetOverlay: React.FC = () => {
         }
     }, [context.warnDialog]);
 
-    // Keyed on scrollRequest, a fresh object per request, not on the scrollLeft and scrollTop mirror: syncScroll updates
-    // that on every recipe, which would rewind a scroll in progress.
+    // Keyed on scrollRequest, not on the scrollLeft and scrollTop mirror: syncScroll updates that on every recipe,
+    // which would rewind a scroll in progress.
     useEffect(() => {
         const req = context.scrollRequest;
         const el = refs.cellArea.current;
@@ -331,14 +331,12 @@ export const SheetOverlay: React.FC = () => {
 
     const computedCellValue = cellValue();
 
-    // One overlay region per frozen pane. The passive visuals render into every region, and each region's clip shows its
-    // portion. A stateful singleton renders into the one region that holds its anchor cell.
+    // One overlay region per frozen pane. Passive visuals render into every region, and its clip shows its portion.
+    // A stateful singleton renders into the one region that holds its anchor cell.
     const freeze = refs.globalCache.freezen?.[context.currentSheetId];
     const regions = computeOverlayRegions(freeze, context.cellmainWidth, context.cellmainHeight);
-    const firstSel = context.selections?.[0];
     const lastSel = context.selections?.at(-1);
-    const editorRegion = overlayRegionForCell(regions, freeze, firstSel?.row_focus ?? 0, firstSel?.column_focus ?? 0);
-    const dvRegion = overlayRegionForCell(regions, freeze, lastSel?.row_focus ?? 0, lastSel?.column_focus ?? 0);
+    const focusRegion = overlayRegionForCell(regions, freeze, lastSel?.row_focus ?? 0, lastSel?.column_focus ?? 0);
     const linkRegion = context.linkCard
         ? overlayRegionForCell(regions, freeze, context.linkCard.r, context.linkCard.c)
         : regions[0];
@@ -403,7 +401,7 @@ export const SheetOverlay: React.FC = () => {
                 >
                     <div className="sheet-cell-overlay-layer">
                         {/* Before the passive regions, so it paints under the selection tints. */}
-                        <OverlayRegion {...dvRegion}>
+                        <OverlayRegion {...focusRegion}>
                             <DropdownList />
                         </OverlayRegion>
                         {regions.map(({ pane, ...rect }) => (
@@ -412,7 +410,7 @@ export const SheetOverlay: React.FC = () => {
                                 {pane === 'main' && <FloatingObjects />}
                             </OverlayRegion>
                         ))}
-                        <OverlayRegion {...editorRegion}>
+                        <OverlayRegion {...focusRegion}>
                             <InputBox />
                         </OverlayRegion>
                         {/* A popup pins with its anchor's pane but never clips, since it overflows the pane. */}
@@ -422,8 +420,8 @@ export const SheetOverlay: React.FC = () => {
                             width={0}
                             height={0}
                             clip={false}
-                            fixedLeft={dvRegion.fixedLeft}
-                            fixedTop={dvRegion.fixedTop}
+                            fixedLeft={focusRegion.fixedLeft}
+                            fixedTop={focusRegion.fixedTop}
                         >
                             <ValidationHintCard />
                         </OverlayRegion>

@@ -485,9 +485,8 @@ export function getColMerge(ctx: Context, cIndex: number, r1: number, r2: number
     return [str, end];
 }
 
-// Advances the focused cell by `index` along `postion`, across merges on both ends. When the destination is not a
-// merge, the selection keys its new range off the clamped cursor and a formula range off the moved anchor, which
-// `indexFromMove` selects.
+// Advances the focused cell by `index` along `postion`, across merges on both ends.
+// Off a merge, a selection keys its range off the clamped cursor and a formula range off the moved anchor.
 type HighlightCellWalk = {
     row: number | undefined;
     row_pre: number | undefined;

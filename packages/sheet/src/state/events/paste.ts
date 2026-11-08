@@ -7,35 +7,32 @@ import { formatForDisplay } from '@tanstack/react-hotkeys';
 import { bundledFontOfStack, readCssFontSize } from '@workspace/lib/constants/fonts';
 import type { CellBorderSides, ConditionalFormatRule } from '@workspace/lib/sheets';
 import { BORDER_SIDE_CSS, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
-import { cloneDeep, forEach, includes, isEmpty, isNil, times, trim } from 'es-toolkit/compat';
+import { cloneDeep, includes, isEmpty, isNil, times, trim } from 'es-toolkit/compat';
 import { createArrayResolver } from '../../engine/cell-resolver';
 import { cfSplitRange, withCfRanges } from '../../engine/conditional-format';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { numberDisplay, parseCellInput } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
-import type { Cell, CellMatrix, SingleRange } from '../../engine/types';
+import type { Cell, CellMatrix } from '../../engine/types';
 import { setRowHeight } from '../api';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
-import { getFlowdata, getSheetConfig, updateContextWithSheetData } from '../context';
+import { getFlowdata, getSheetConfig } from '../context';
 import { carrySides } from '../modules/border';
 import type { CarryTile } from '../modules/cell';
-import { carriedLines, carryCells, getQKBorder, landedRanges, setCellValue } from '../modules/cell';
-import { setFormulaCellInfo } from '../modules/formula-cache';
-import { computeFormula, execFunctionGroup } from '../modules/formula-exec';
-import { jfrefreshgrid } from '../modules/refresh';
-import { hasPartMC } from '../modules/validation';
-import type { Selection } from '../types';
+import { carriedLines, carryCells, getQKBorder, landedRanges, moveCells, setCellValue } from '../modules/cell';
+import { computeFormula } from '../modules/formula-exec';
+import { jfrefreshgrid, recomputeCells } from '../modules/refresh';
+import { hasPartMC, PART_MERGE_REFUSAL } from '../modules/validation';
+import type { FormulaCell } from '../types';
 import { getSheetIndex } from '../utils';
 import { SHEET_HOTKEYS } from './keyboard';
 
 // What a paste reads of the clipboard: a paste event's DataTransfer, or one a menu row filled.
 type PastedData = { getData: (type: string) => string; files: ArrayLike<File> };
 
-// The one paste of the grid, from a paste event or a menu row. A paste is the workbook's own copy exactly when the
-// clipboard's table carries its id, and then it lands the live cells with their formulas and formats. A copy whose sheet
-// is gone pastes as a table. An image file goes to the app's fit-to-pane insert and upload, as the Insert menu and an OS
-// drop run it.
+// The one paste of the grid. It is the workbook's own copy only when the clipboard's table carries its id.
+// An image file goes to the app's insert and upload.
 export function handlePaste(ctx: Context, clipboardData: PastedData, onImageFile?: (file: File) => void) {
     // A paste into several ranges is not supported.
     if (ctx.allowEdit === false || (ctx.selections?.length ?? 0) > 1) return;
@@ -105,13 +102,10 @@ function pasteCut(ctx: Context, copyState: NonNullable<Context['copyState']>) {
     const right = left + width - 1;
 
     const sheet = getSheet(ctx);
-    const rowsBefore = sheet.data?.length ?? 0;
-    const columnsBefore = sheet.data?.[0]?.length ?? 0;
     const d = roomFor(ctx, top, bottom, left, right);
     if (!d) return;
 
-    const tile = { row: top, column: left, height, width };
-    carryCells(ctx, lines, [tile], ({ source }) => source, { cut: true });
+    moveCells(ctx, lines, sourceRange, { row: top, column: left, height, width });
 
     last.row = [top, bottom];
     last.column = [left, right];
@@ -144,29 +138,28 @@ function pasteCut(ctx: Context, copyState: NonNullable<Context['copyState']>) {
         );
     }
 
-    // The formulas that read either range recompute, each queued once. A moved formula carries its old value, so it is
-    // evaluated where it now lives.
+    // A moved formula carries its old value, so it is evaluated where it now lives.
     const resolver = createArrayResolver(ctx.sheets);
-    const queued = new Map<string, { r: number; c: number; id: string }>();
-    const queue = (id: string, { row, column }: SingleRange, evaluate: boolean) => {
-        for (let r = row[0]; r <= row[1]; r += 1) {
-            for (let c = column[0]; c <= column[1]; c += 1) {
-                const cell = evaluate ? d[r]?.[c] : undefined;
-                if (cell?.f != null) {
-                    [cell.v] = computeFormula(ctx, cell.f, { id, resolver });
-                    cell.m = numberDisplay(cell.v, cell.ct?.fa);
-                }
-                setFormulaCellInfo(ctx, { r, c, id });
-                if (!queued.has(`${r}_${c}_${id}`)) queued.set(`${r}_${c}_${id}`, { r, c, id });
+    const landed: FormulaCell[] = [];
+    for (let r = top; r <= bottom; r += 1) {
+        for (let c = left; c <= right; c += 1) {
+            const cell = d[r]?.[c];
+            if (cell?.f != null) {
+                [cell.v] = computeFormula(ctx, cell.f, { resolver });
+                cell.m = numberDisplay(cell.v, cell.ct?.fa);
             }
+            landed.push({ r, c, id: ctx.currentSheetId });
         }
-    };
-    queue(copySheetId, sourceRange, false);
-    queue(ctx.currentSheetId, targetRange, true);
+    }
+    const emptied: FormulaCell[] = [];
+    for (let r = sourceRange.row[0]; r <= sourceRange.row[1]; r += 1) {
+        for (let c = sourceRange.column[0]; c <= sourceRange.column[1]; c += 1) {
+            emptied.push({ r, c, id: copySheetId });
+        }
+    }
 
-    if (d.length > rowsBefore || d[0].length > columnsBefore) updateContextWithSheetData(ctx, d);
     ctx.selections = [{ row: targetRange.row, column: targetRange.column }];
-    execFunctionGroup(ctx, [...queued.values()]);
+    recomputeCells(ctx, [...emptied, ...landed]);
     // A cut moves its cells once. The clipboard still holds them, and a next paste lands them as a table.
     ctx.copyState = undefined;
     ctx.formulaRangeSelections = [];
@@ -240,7 +233,7 @@ function pasteCopy(ctx: Context, copyState: NonNullable<Context['copyState']>) {
     last.row = [minh, maxh];
     last.column = [minc, maxc];
 
-    jfrefreshgrid(ctx, d, ctx.selections);
+    jfrefreshgrid(ctx);
 }
 
 // An HTML table from another program, or from a copy of another tab, with the cells' styles as the HTML carries them.
@@ -248,8 +241,7 @@ function pasteTable(ctx: Context, html: string) {
     const anchor = ctx.selections?.[0];
     if (!anchor) return;
 
-    // Parse into an inert document, never a live <div>: a live element's innerHTML loads <img> and fires its onerror even
-    // while detached.
+    // Parse into an inert document, never a live <div>: a detached element's innerHTML still loads <img>.
     const parsed = new DOMParser().parseFromString(html, 'text/html');
 
     const trList = parsed.querySelectorAll('table tr');
@@ -257,28 +249,17 @@ function pasteTable(ctx: Context, html: string) {
         return;
     }
 
-    const data = new Array(trList.length);
     let colLen = 0;
-    forEach(trList[0].querySelectorAll('td'), (td) => {
-        let colspan = td.colSpan;
-        if (Number.isNaN(colspan)) {
-            colspan = 1;
-        }
-        colLen += colspan;
-    });
+    for (const td of trList[0].querySelectorAll('td')) colLen += td.colSpan;
+    const data: CellMatrix = Array.from({ length: trList.length }, () => new Array(colLen));
 
-    for (let i = 0; i < data.length; i += 1) {
-        data[i] = new Array(colLen);
-    }
-
-    let r = 0;
     const borderInfo: Record<string, CellBorderSides> = {};
     const styleRules = readStyleRules(parsed.querySelector('style')?.textContent ?? '');
     const tdVerticalAlign = styleRules.get('td')?.['vertical-align'];
 
     const currentRowlen = getSheetConfig(ctx)?.rowlen ?? {};
     const rowHeights: Record<number, number> = {};
-    forEach(trList, (tr) => {
+    for (const [r, tr] of [...trList].entries()) {
         let c = 0;
         const targetR = anchor.row[0] + r;
 
@@ -290,7 +271,7 @@ function pasteTable(ctx: Context, html: string) {
             }
         }
 
-        forEach(tr.querySelectorAll('td'), (td) => {
+        for (const td of tr.querySelectorAll('td')) {
             const cell: Cell = {};
             const txt = td.innerText || td.innerHTML;
             if (trim(txt).length === 0) {
@@ -344,14 +325,11 @@ function pasteTable(ctx: Context, html: string) {
 
             cell.fc = td.style.color || styles.color;
 
-            const ht = td.style.textAlign || styles['text-align'] || 'left';
-            if (ht === 'center') {
-                cell.ht = 0;
-            } else if (ht === 'right') {
-                cell.ht = 2;
-            } else {
-                cell.ht = 1;
-            }
+            // A cell without one is left to its value, so a number lands on the right.
+            const ht = td.style.textAlign || styles['text-align'];
+            if (ht === 'center') cell.ht = 0;
+            else if (ht === 'right') cell.ht = 2;
+            else if (ht === 'left') cell.ht = 1;
 
             const vt = td.style.verticalAlign || styles['vertical-align'] || tdVerticalAlign || 'top';
             if (vt === 'middle') {
@@ -367,66 +345,68 @@ function pasteTable(ctx: Context, html: string) {
             while (c < colLen && !isNil(data[r][c])) {
                 c += 1;
             }
+            if (c === colLen) break;
 
-            if (c === colLen) {
-                return true;
-            }
+            data[r][c] = cell;
+            // A span ends at the table's edge, as it does on the page.
+            const rowspan = Math.min(td.rowSpan, data.length - r);
+            const colspan = Math.min(td.colSpan, colLen - c);
+            const r_ab = anchor.row[0] + r;
+            const c_ab = anchor.column[0] + c;
 
-            if (isNil(data[r][c])) {
-                data[r][c] = cell;
-                let rowspan = parseInt(td.getAttribute('rowspan') ?? '1', 10);
-                let colspan = parseInt(td.getAttribute('colspan') ?? '1', 10);
-
-                if (Number.isNaN(rowspan)) {
-                    rowspan = 1;
-                }
-
-                if (Number.isNaN(colspan)) {
-                    colspan = 1;
-                }
-
-                const r_ab = anchor.row[0] + r;
-                const c_ab = anchor.column[0] + c;
-
-                for (let rp = 0; rp < rowspan; rp += 1) {
-                    for (let cp = 0; cp < colspan; cp += 1) {
-                        const onEdge = {
-                            t: rp === 0,
-                            b: rp === rowspan - 1,
-                            l: cp === 0,
-                            r: cp === colspan - 1,
-                        };
-                        for (const [side, css] of BORDER_SIDE_CSS) {
-                            const shorthand = onEdge[side] ? td.style.getPropertyValue(`border-${css}`) : '';
-                            if (isEmpty(shorthand) || shorthand.slice(0, 3).toLowerCase() === '0px') continue;
-                            (borderInfo[`${r + rp}_${c + cp}`] ??= {})[side] = getQKBorder(
-                                td.style.getPropertyValue(`border-${css}-width`),
-                                td.style.getPropertyValue(`border-${css}-style`),
-                                td.style.getPropertyValue(`border-${css}-color`),
-                            );
-                        }
-
-                        if (rp === 0 && cp === 0) {
-                            continue;
-                        }
-
-                        data[r + rp][c + cp] = { mc: { r: r_ab, c: c_ab } };
+            for (let rp = 0; rp < rowspan; rp += 1) {
+                for (let cp = 0; cp < colspan; cp += 1) {
+                    const onEdge = {
+                        t: rp === 0,
+                        b: rp === rowspan - 1,
+                        l: cp === 0,
+                        r: cp === colspan - 1,
+                    };
+                    for (const [side, css] of BORDER_SIDE_CSS) {
+                        const shorthand = onEdge[side] ? td.style.getPropertyValue(`border-${css}`) : '';
+                        if (isEmpty(shorthand) || shorthand.slice(0, 3).toLowerCase() === '0px') continue;
+                        (borderInfo[`${r + rp}_${c + cp}`] ??= {})[side] = getQKBorder(
+                            td.style.getPropertyValue(`border-${css}-width`),
+                            td.style.getPropertyValue(`border-${css}-style`),
+                            td.style.getPropertyValue(`border-${css}-color`),
+                        );
                     }
-                }
 
-                if (rowspan > 1 || colspan > 1) {
-                    const first = { rs: rowspan, cs: colspan, r: r_ab, c: c_ab };
-                    data[r][c].mc = first;
+                    if (rp > 0 || cp > 0) data[r + rp][c + cp] = { mc: { r: r_ab, c: c_ab } };
                 }
             }
-            c += 1;
-            return true;
-        });
 
-        r += 1;
-    });
+            if (rowspan > 1 || colspan > 1) cell.mc = { rs: rowspan, cs: colspan, r: r_ab, c: c_ab };
+            c += 1;
+        }
+    }
     ctx.formulaRangeSelections = [];
-    landTable(ctx, anchor, data, borderInfo, rowHeights);
+
+    const top = anchor.row[0];
+    const bottom = top + data.length - 1;
+    const left = anchor.column[0];
+    const right = left + colLen - 1;
+    const d = roomFor(ctx, top, bottom, left, right);
+    if (!d) return;
+
+    setRowHeight(ctx, rowHeights);
+    const cfg = (getSheet(ctx).config ??= {});
+    const merge = (cfg.merge ??= {});
+    const borders = (cfg.borderInfo ??= {});
+    for (let h = top; h <= bottom; h += 1) {
+        for (let c = left; c <= right; c += 1) {
+            const replaced = d[h][c]?.mc;
+            if (replaced?.rs != null) delete merge[`${replaced.r}_${replaced.c}`];
+
+            const value = data[h - top][c - left] ?? null;
+            d[h][c] = value;
+            if (value?.mc?.rs != null) merge[`${h}_${c}`] = { r: h, c, rs: value.mc.rs, cs: value.mc.cs ?? 1 };
+            carrySides(borders, h, c, borderInfo[`${h - top}_${c - left}`]);
+        }
+    }
+
+    ctx.selections = [{ row: [top, bottom], column: [left, right] }];
+    jfrefreshgrid(ctx);
 }
 
 // Reads a pasted <style> block into each rule's declarations, keyed by selector. Office wraps the block in an
@@ -450,77 +430,6 @@ function readStyleRules(css: string): Map<string, Record<string, string>> {
         }
     }
     return rules;
-}
-
-// Lands a parsed table at its anchor. borderInfo's keys are `${row}_${col}` within the table.
-function landTable(
-    ctx: Context,
-    anchor: Selection,
-    data: CellMatrix,
-    borderInfo: Record<string, CellBorderSides>,
-    rowHeights: Record<number, number>,
-) {
-    const minh = anchor.row[0];
-    const maxh = minh + data.length - 1;
-    const minc = anchor.column[0];
-    const maxc = minc + data[0].length - 1;
-
-    const d = roomFor(ctx, minh, maxh, minc, maxc);
-    if (!d) return;
-
-    setRowHeight(ctx, rowHeights);
-    const cfg = (getSheet(ctx).config ??= {});
-    cfg.merge ??= {};
-    cfg.borderInfo ??= {};
-
-    const offsetMC: Record<string, [number, number]> = {};
-    for (let h = minh; h <= maxh; h += 1) {
-        const x = d[h];
-
-        for (let c = minc; c <= maxc; c += 1) {
-            const replaced = x[c];
-            if (replaced?.mc) {
-                if ('rs' in replaced.mc) {
-                    delete cfg.merge[`${replaced.mc.r}_${replaced.mc.c}`];
-                }
-                delete replaced.mc;
-            }
-
-            const value = data[h - minh]?.[c - minc] ?? null;
-            x[c] = value;
-
-            const cellMc = x[c]?.mc;
-            if (value != null && cellMc) {
-                const valueMc = value.mc;
-                if (cellMc.rs != null && valueMc != null) {
-                    cellMc.r = h;
-                    cellMc.c = c;
-
-                    cfg.merge[`${cellMc.r}_${cellMc.c}`] = {
-                        r: cellMc.r,
-                        c: cellMc.c,
-                        rs: cellMc.rs,
-                        cs: cellMc.cs ?? 1,
-                    };
-
-                    offsetMC[`${valueMc.r}_${valueMc.c}`] = [cellMc.r, cellMc.c];
-                } else if (valueMc != null) {
-                    x[c] = {
-                        mc: {
-                            r: offsetMC[`${valueMc.r}_${valueMc.c}`][0],
-                            c: offsetMC[`${valueMc.r}_${valueMc.c}`][1],
-                        },
-                    };
-                }
-            }
-
-            carrySides(cfg.borderInfo, h, c, borderInfo[`${h - minh}_${c - minc}`]);
-        }
-    }
-
-    ctx.selections = [{ row: [minh, maxh], column: [minc, maxc] }];
-
-    jfrefreshgrid(ctx, null, undefined);
 }
 
 // Plain text, tabs between columns and newlines between rows. A line with fewer columns than the first is left out.
@@ -550,7 +459,7 @@ function pasteText(ctx: Context, text: string) {
     selection.row = [top, bottom];
     selection.column = [left, right];
 
-    jfrefreshgrid(ctx, null, undefined);
+    jfrefreshgrid(ctx);
 }
 
 function pasteFormula(ctx: Context, formulaStr: string) {
@@ -570,15 +479,16 @@ function pasteFormula(ctx: Context, formulaStr: string) {
     cell.v = val;
     cell.f = formulaStr;
 
-    jfrefreshgrid(ctx, d, [{ row: [r, r], column: [c, c] }]);
+    jfrefreshgrid(ctx, [{ row: [r, r], column: [c, c] }]);
 }
 
-// The grid a paste lands in, grown when the paste runs past its last row or column. Every paste asks here before it
-// writes, so a refused one ships no op and takes no undo step. Nothing comes back when the paste would land over part
-// of a merge, or would grow the sheet past its limits, which the notice says. The sheet's size grows with the grid,
-// because a stored snapshot keeps the size and a reader builds the grid at that size.
+// The grid a paste lands in, grown when the paste runs past it; undefined when the paste is refused, before any op.
+// The sheet's size grows too, because a reader builds the grid at the stored size.
 function roomFor(ctx: Context, top: number, bottom: number, left: number, right: number): CellMatrix | undefined {
-    if (hasPartMC(ctx, top, bottom, left, right)) return undefined;
+    if (hasPartMC(ctx, top, bottom, left, right)) {
+        ctx.warnDialog = PART_MERGE_REFUSAL;
+        return undefined;
+    }
     const sheet = getSheet(ctx);
     const { data } = sheet;
     if (!data) return undefined;

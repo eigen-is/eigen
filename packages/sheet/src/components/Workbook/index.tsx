@@ -27,12 +27,21 @@ import { isTypingTarget } from '@workspace/ui/hooks/is-typing-target';
 import { isEqual } from 'es-toolkit/compat';
 import { enablePatches, produce, produceWithPatches } from 'immer';
 import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import type { RefValues, SetContextOptions } from '../../context';
+import type { SetContextOptions } from '../../context';
 import { WorkbookContext } from '../../context';
 import { ModalProvider } from '../../context/modal';
 import { createArrayResolver } from '../../engine/cell-resolver';
 import { copySheetChartSpec, resolveRangeChartData, seriesName } from '../../engine/chart-data';
-import type { ChartPanelState, Context, GlobalCache, Hooks, Op, Settings, Sheet as SheetType } from '../../state';
+import type {
+    ChartPanelState,
+    Context,
+    GlobalCache,
+    Hooks,
+    Op,
+    RefValues,
+    Settings,
+    Sheet as SheetType,
+} from '../../state';
 import {
     applySheetView,
     COPY_ACTION_TABLE_MARKER,
@@ -106,30 +115,6 @@ function activeFloating(ctx: Context): { image?: SheetImage; chart?: SheetChart 
     };
 }
 
-// The workbook a mount opens on, with A1 selected. Each sheet is copied one level deep, and its cells stay shared: a
-// deep copy of a large import takes about a second. The init writes only a sheet's own fields and keeps a matrix the
-// sheet has, so a remount can run it again on the same data, and the shared cells, which immer freezes, are never
-// written. Nothing is computed: a stored sheet carries its computed values, and an edit computes the formulas it affects.
-function loadWorkbook(refs: RefValues, { data, allowEdit, commentCards }: Settings): Context {
-    const ctx = defaultContext(refs);
-    ctx.allowEdit = allowEdit ?? true;
-    ctx.commentCards = commentCards;
-    ctx.sheets = data.map((sheet) => ({ ...sheet, id: sheet.id ?? crypto.randomUUID() }));
-    ensureUniqueSheetIds(ctx.sheets);
-    for (const sheet of ctx.sheets) initSheetData(sheet);
-    ctx.currentSheetId = firstVisibleSheetId(ctx) ?? '';
-    applySheetView(ctx);
-    return ctx;
-}
-
-const concatProducer = (...producers: ((ctx: Context) => void)[]) => {
-    return (ctx: Context) => {
-        for (const producer of producers) {
-            producer(ctx);
-        }
-    };
-};
-
 export const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
     (
         {
@@ -148,16 +133,12 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         const hooksRef = useRef<Hooks>({});
         hooksRef.current = hooks ?? {};
         const { resolveMediaPath } = useMediaResolver();
-        const scrollListeners = useRef(new Set<() => void>());
         const globalCache = useRef<GlobalCache>({
             undoList: [],
             redoList: [],
             scrollLeft: 0,
             scrollTop: 0,
-            scrollListeners: scrollListeners.current,
-            notifyScrollListeners: () => {
-                for (const fn of scrollListeners.current) fn();
-            },
+            scrollListeners: new Set(),
         });
         const cellInput = useRef<HTMLDivElement>(null);
         const fxInput = useRef<HTMLDivElement>(null);
@@ -179,7 +160,19 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             [],
         );
 
-        const [context, setContext] = useState(() => loadWorkbook(refs, { data, allowEdit, commentCards }));
+        // Sheets are copied one level deep and their cells stay shared, as a deep copy of a large import is slow.
+        // The init writes only a sheet's own fields, so the cells, which immer freezes, are never written.
+        const [context, setContext] = useState(() => {
+            const ctx = defaultContext(refs);
+            ctx.allowEdit = allowEdit;
+            ctx.commentCards = commentCards;
+            ctx.sheets = data.map((sheet) => ({ ...sheet, id: sheet.id ?? crypto.randomUUID() }));
+            ensureUniqueSheetIds(ctx.sheets);
+            for (const sheet of ctx.sheets) initSheetData(sheet);
+            ctx.currentSheetId = firstVisibleSheetId(ctx) ?? '';
+            applySheetView(ctx);
+            return ctx;
+        });
         // The workbook with every write so far. A write lands here at its call, and React renders it a moment later.
         // A read outside render, such as the host's getFlowdata or a paste, reads it here, so it sees an edit made just
         // before.
@@ -199,21 +192,21 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 const base = contextRef.current;
                 // The scroll position lives in globalCache, so a scroll tick doesn't render every reader of the
                 // context. A recipe that reads it, such as a click on a cell, gets it copied in here.
-                const syncScroll = (ctx: Context) => {
+                const withScroll = (ctx: Context) => {
                     ctx.scrollLeft = globalCache.current.scrollLeft;
                     ctx.scrollTop = globalCache.current.scrollTop;
+                    recipe(ctx);
                 };
 
                 // A write that records no history, such as a drag that moves the selection, skips the patches, which
                 // cost time on every change and which the selection would never ship anyway.
                 if (options.noHistory) {
-                    commit(produce(base, concatProducer(syncScroll, recipe)));
+                    commit(produce(base, withScroll));
                     return;
                 }
 
-                const [result, patches, inversePatches] = produceWithPatches(base, concatProducer(syncScroll, recipe));
+                const [result, patches, inversePatches] = produceWithPatches(base, withScroll);
                 commit(result);
-                if (patches.length === 0) return;
                 const filteredPatches = filterPatch(patches);
                 const filteredInversePatches = filterPatch(inversePatches);
                 if (filteredInversePatches.length === 0) return;
@@ -266,8 +259,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             if (step.ops.length > 0) onOp?.(step.ops);
         }, [commit, onOp]);
 
-        // A changed right opens or closes the grid's controls, and a card's new colour repaints its corner mark. Both take
-        // a new context, which every reader and the painter follow.
+        // A changed right opens or closes the grid's controls, and a card's new colour repaints its corner mark.
+        // Both take a new context, which every reader and the painter follow.
         useEffect(() => {
             setContextWithProduce(
                 (ctx) => {
@@ -329,11 +322,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 // Eigen or SVG content, so the paste goes to handlePaste, which knows its own copy.
                 const paste = classifyPaste(clipboardData, { internalMarkerText: COPY_ACTION_TABLE_MARKER });
 
-                // A Vector selection or a pasted SVG document becomes one floating image, through the app's image
-                // file path. It goes before the split into Eigen items, so a Vector selection lands as one image and
-                // not as its separate items. An SVG with images names them as eigen-media references, so it goes to
-                // onPasteSvgFile, which stores each image before the SVG. An SVG without images goes to
-                // onPasteImageFile.
+                // An SVG goes before the split into Eigen items, so a Vector selection lands as one image.
+                // One with images names them as eigen-media references, so onPasteSvgFile stores them first.
                 if (paste.svg) {
                     const svgImageItems = paste.svg.items.filter(
                         (item): item is EigenClipboardImageItem => item.type === 'image',
@@ -352,9 +342,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 }
 
                 if (paste.eigen) {
-                    // A mixed Eigen payload splits by kind. Image and chart items become floating objects, and text
-                    // items land in cells, all in one paste. The app inserts the images itself, at their copied size
-                    // and re-uploaded from another mount, so they paste only when its hook is set.
+                    // Image and chart items become floating objects and text items land in cells, in one paste.
+                    // The app inserts the images itself, so they paste only when its hook is set.
                     const { onPasteEigenImage } = hooks;
                     const imageItems = onPasteEigenImage
                         ? paste.eigen.items.filter((item): item is EigenClipboardImageItem => item.type === 'image')
@@ -554,13 +543,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         );
 
         const i = getSheetIndex(context, context.currentSheetId);
-        if (i == null) {
-            return null;
-        }
-        const sheet = context.sheets?.[i];
-        if (!sheet) {
-            return null;
-        }
+        if (i == null) return null;
 
         return (
             <WorkbookContext.Provider value={providerValue}>
@@ -605,7 +588,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             />
                             <FxEditor />
                         </div>
-                        <Sheet sheet={sheet} />
+                        <Sheet sheet={context.sheets[i]} />
                         <SheetTab />
                         <FilterMenu />
                     </div>

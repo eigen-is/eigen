@@ -24,9 +24,7 @@ export {
     unquoteSheetName,
 } from './parser/helper/cell';
 
-// Excel's rule for a sheet name: a length limit, characters it refuses, and no quote at either end. A tab rename
-// refuses a name that breaks it and says so in SHEET_NAME_RULE, a peer's rename op with one fails its batch, and the
-// xlsx writer repairs one.
+// Excel's rule for a sheet name: a length limit, characters it refuses, and no quote at either end.
 export const MAX_SHEET_NAME_LENGTH = 31;
 const FORBIDDEN_CHARACTERS = ['\\', '/', '?', '*', '[', ']', ':'];
 export const SHEET_NAME_FORBIDDEN = new RegExp(`[${FORBIDDEN_CHARACTERS.map((c) => `\\${c}`).join('')}]`, 'g');

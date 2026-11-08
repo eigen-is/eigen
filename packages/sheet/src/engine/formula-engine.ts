@@ -1,5 +1,6 @@
 // The formula engine the editor and the server's recalc share. It owns one Parser, answers its cell and range reads
-// from the CellResolver, and turns each result into a cell value, a display string and a type. An error a cell holds reads back as an error, so ISERROR and IFERROR see it.
+// from the CellResolver, and turns each result into a cell value, a display string and a type. An error a cell holds
+// reads back as an error, so ISERROR and IFERROR see it.
 // Every range read is clamped to the sheet's grid and counted against maxCellsRead.
 
 import { DependencyIndex } from './dependency-index';
@@ -104,9 +105,8 @@ export class FormulaEngine {
             readRange: (start, end) => this.readRange(start, end, sheetId, resolver),
         });
 
-        // The engine has no spill, so an array result, such as a bare range or TRANSPOSE, keeps its top-left
-        // value. That is the value Excel's spill anchor holds, so a recalc of an imported anchor lands on Excel's.
-        // The value may be an error a cell holds, as in `=A1:B2`.
+        // The engine has no spill, so an array result keeps its top-left value, the one Excel's spill anchor holds.
+        // That value may be an error a cell holds, as in `=A1:B2`.
         let result = evaluated;
         while (Array.isArray(result)) result = result[0];
         const failure = result instanceof Error ? (errorParser(result.message) ?? errorParser(ERROR)) : error;
@@ -159,9 +159,8 @@ export class FormulaEngine {
         const emptyCol = startCol === -1 || endCol === -1;
         if (emptyRow && emptyCol) throw Error(ERROR_REF);
 
-        // The grid bounds every range, explicit endpoints included, because an unclamped `A1:XFD1048576`, a
-        // shape real xlsx files carry, is 17 billion cells. So `ROWS(A1:A100)` answers the grid's row count,
-        // as `ROWS(A:A)` does.
+        // The grid bounds every range, explicit endpoints included, because an unclamped `A1:XFD1048576` is 17 billion
+        // cells. So `ROWS(A1:A100)` answers the grid's row count, as `ROWS(A:A)` does.
         const sheetData = resolver.getSheetData(sheetId);
         const lastRow = (sheetData?.length ?? 0) - 1;
         const lastCol = this.widthOf(resolver, sheetId, sheetData) - 1;

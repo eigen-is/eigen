@@ -13,9 +13,7 @@ export type CommentInfo = {
     entry: CommentEntry | undefined;
 };
 
-// The selected chart, on the current sheet; every sheet's name, for its data range; the categories and series
-// names its range resolves to, which name a pie's slices and the series rows; and whether its resolved data has
-// more points than the sketch draws.
+// The selected chart with the data its range resolves to, for the chart panel.
 export type ChartPanelState = {
     chart: SheetChart;
     sheetId: string;

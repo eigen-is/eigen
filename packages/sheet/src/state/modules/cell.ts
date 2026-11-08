@@ -15,6 +15,7 @@ import {
     SHEET_DEFAULT_FONT_SIZE,
 } from '@workspace/lib/sheets';
 import { cloneDeep, isNil, isNumber, isPlainObject, isString } from 'es-toolkit/compat';
+import { sheetFinder } from '../../engine/a1-notation';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
 import {
     booleanDisplay,
@@ -26,6 +27,7 @@ import {
     richText,
 } from '../../engine/format';
 import { isFormula } from '../../engine/formula-engine';
+import { moveFormulaRefs } from '../../engine/formula-shift';
 import { iscelldata } from '../../engine/formula-utils';
 import type { Cell, CellMatrix, FormulaDependency } from '../../engine/types';
 import { getSheet } from '../api/common';
@@ -49,7 +51,7 @@ import {
     sameRunStyle,
 } from './inline-string';
 import { recomputeCells } from './refresh';
-import { getCellTextInfo, measuringContext } from './text';
+import { growRowToFit } from './text';
 import { ID_CARD_NUMBER, isPlainNumber, isRealNull, isRealNum, valueIsError } from './validation';
 import { addValidation, clearValidations, validationAt } from './validation-rules';
 
@@ -643,28 +645,10 @@ export function updateCell(
 
     const written = d[r][c];
     if (written && ((cellWrapsText(written) && written.v) || isInlineStringCell(written))) {
-        const { defaultrowlen } = ctx;
-
-        const cfg = (sheet.config ??= {});
-        if (!(cfg.columnlen?.[c] && cfg.rowlen?.[r])) {
-            const cellWidth = cfg.columnlen?.[c] || ctx.defaultcollen;
-
-            const measuring = measuringContext();
-            const textInfo = measuring && getCellTextInfo(written, measuring, { r, c, cellWidth });
-
-            let currentRowLen = defaultrowlen;
-            if (textInfo?.textHeightAll != null) {
-                currentRowLen = textInfo.textHeightAll + 2;
-            }
-
-            if (currentRowLen > defaultrowlen && !cfg.customHeight?.[r]) {
-                if (isNil(cfg.rowlen)) cfg.rowlen = {};
-                cfg.rowlen[r] = currentRowLen;
-            }
-        }
+        growRowToFit(ctx, (sheet.config ??= {}), written, r, c);
     }
 
-    recomputeCells(ctx, [{ r, c, id: ctx.currentSheetId }], d);
+    recomputeCells(ctx, [{ r, c, id: ctx.currentSheetId }]);
 }
 
 export function getOrigincell(ctx: Context, r: number, c: number, i: string) {
@@ -995,9 +979,8 @@ export function carryCells(
     rules.sort(([a], [b]) => compareValidationIds(a, b));
     const linkMap = cloneDeep(from.hyperlink) ?? {};
 
-    // A source cell without a rule takes the destination's away, as Excel does. The tiles are joined first, so a block
-    // pasted down a column clears the rules once. On the same sheet the landed cells join the rule itself, and on
-    // another sheet they become a rule of their own.
+    // A source cell without a rule takes the destination's away, as Excel does.
+    // Tiles are joined first, so a block pasted down a column clears once.
     if (cut) clearValidations(from, block);
     const landing = tiles.map(({ row, column, height, width }) => ({
         row: [row, row + height - 1],
@@ -1066,6 +1049,27 @@ export function carryCells(
             }
         }
     }
+}
+
+// A cut or a drag: the block `range` lands once, its source clears, and each formula in it follows the move.
+export function moveCells(ctx: Context, lines: CarriedLines, range: SingleRange, tile: CarryTile) {
+    const from = getSheet(ctx, { id: lines.sheetId }).name;
+    const to = getSheet(ctx).name;
+    const findSheet = sheetFinder(ctx.sheets);
+    const rowOffset = tile.row - range.row[0];
+    const colOffset = tile.column - range.column[0];
+    carryCells(
+        ctx,
+        lines,
+        [tile],
+        ({ source }) => {
+            if (source?.f != null) {
+                source.f = `=${moveFormulaRefs(source.f, range, rowOffset, colOffset, from, to, findSheet)}`;
+            }
+            return source;
+        },
+        { cut: true },
+    );
 }
 
 // Where the cells of a range land in one tile: a range for each run of carried rows and columns it covers. A whole

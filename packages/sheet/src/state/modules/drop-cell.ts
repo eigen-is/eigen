@@ -4,7 +4,6 @@
 
 import dayjs from 'dayjs';
 import { cloneDeep, pick } from 'es-toolkit/compat';
-import { current, isDraft } from 'immer';
 import { createArrayResolver } from '../../engine/cell-resolver';
 import { cfSplitRange } from '../../engine/conditional-format';
 import { numberDisplay, parseCellInput, update } from '../../engine/format';
@@ -1989,8 +1988,7 @@ export function updateDropCell(ctx: Context) {
         }
     }
 
-    // A plain matrix keeps registering the filled formulas off the draft proxies.
-    jfrefreshgrid(ctx, isDraft(d) ? current(d) : d, ctx.selections);
+    jfrefreshgrid(ctx);
 }
 
 // Excel refuses a fill that would split or overwrite a merge.

@@ -68,9 +68,8 @@ export function replaceHtml(temp: string, dataarry: Record<string, string | numb
     });
 }
 
-// A header click selects a whole row or column, and writing every cell of it would ship a patch per cell. So a whole
-// axis stops at the last cell that holds something. A range the user dragged out stays as selected, which is why the
-// header-select flags say what is whole, never the extent.
+// A whole row or column stops at its last used cell, or writing it would ship a patch per cell.
+// A dragged range stays as selected.
 export function clipToUsedExtent(ctx: Context, selections: Selection[]): Selection[] {
     const wholeRows = selections.map((s) => s.column_select === true);
     const wholeColumns = selections.map((s) => s.row_select === true);
