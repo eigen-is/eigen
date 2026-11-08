@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { COLLAB_ACCESS_LOST_CLOSE } from '@workspace/lib/constants/collab';
+import { COLLAB_ACCESS_LOST_CLOSE, COLLAB_ACCESS_LOST_REASON } from '@workspace/lib/constants/collab';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import * as decoding from 'lib0/decoding';
@@ -28,7 +28,7 @@ import {
 // Read is checked when a collab socket opens, so a membership that goes must close the sockets that lost read with it,
 // on every loaded home, whichever way better-auth removed the row. Needs a real listening server.
 
-const REVOKED = { code: COLLAB_ACCESS_LOST_CLOSE, reason: 'Access revoked' };
+const REVOKED = { code: COLLAB_ACCESS_LOST_CLOSE, reason: COLLAB_ACCESS_LOST_REASON };
 
 let ctx: Awaited<ReturnType<typeof getTestContext>>;
 let orgId: string;

@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
     COLLAB_ACCESS_LOST_CLOSE,
+    COLLAB_ACCESS_LOST_REASON,
     COLLAB_EPOCH_MESSAGE,
     COLLAB_HOME_REPLACED_CLOSE,
     COLLAB_HOME_REPLACED_REASON,
@@ -143,6 +144,6 @@ describe('Collab data epoch', () => {
         const opened = await open(`?epoch=${getDataEpoch(ownerId)}`, ctx.bob.user.sessionToken);
         expect(opened.synced).toBe(false);
         expect(opened.epoch).toBeNull();
-        expect(opened.close).toEqual({ code: COLLAB_ACCESS_LOST_CLOSE, reason: 'Access denied' });
+        expect(opened.close).toEqual({ code: COLLAB_ACCESS_LOST_CLOSE, reason: COLLAB_ACCESS_LOST_REASON });
     });
 });

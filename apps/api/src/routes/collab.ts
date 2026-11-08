@@ -4,6 +4,7 @@
 
 import {
     COLLAB_ACCESS_LOST_CLOSE,
+    COLLAB_ACCESS_LOST_REASON,
     COLLAB_HOME_REPLACED_CLOSE,
     COLLAB_HOME_REPLACED_REASON,
     COLLAB_STORAGE_GONE_CLOSE,
@@ -27,7 +28,7 @@ import { getSharedDrive } from '../lib/drive';
 import type { DriveLike } from '../lib/drive/get-drive';
 import { getDataEpoch } from '../lib/home/data-epoch';
 import { sendToHome } from '../lib/home/home-relay';
-import { getUserByEmail, getUserById } from '../lib/user';
+import { getUserByEmail } from '../lib/user';
 import { keepWebSocketAlive } from '../utils/websockets';
 import { betterAuth } from './auth';
 
@@ -206,7 +207,7 @@ export const collabRouter = new Elysia({
                     return;
                 }
                 if (!(await drive.canRead(mountId, pathId, user))) {
-                    ws.close(COLLAB_ACCESS_LOST_CLOSE, 'Access denied');
+                    ws.close(COLLAB_ACCESS_LOST_CLOSE, COLLAB_ACCESS_LOST_REASON);
                     return;
                 }
                 // Only a user who may read holds the Home, until cleanupSession lets go. A Home that closes anyway,
@@ -229,11 +230,7 @@ export const collabRouter = new Elysia({
 
                 // A removal or an ACL change during the load found no connection to close, and one after the subscribe
                 // finds this one. A frame that waits for `opened` finds no document once the session is cleaned up.
-                const current = await getUserById(user.id);
-                if (!current || !(await drive.canRead(mountId, pathId, current))) {
-                    ws.close(COLLAB_ACCESS_LOST_CLOSE, 'Access revoked');
-                    cleanupSession(session, rawWs);
-                }
+                if (!(await document.keepsReadAccess(rawWs))) cleanupSession(session, rawWs);
             } catch (err) {
                 const status = err instanceof ApiError ? err.status : 500;
                 // A refusal, such as a document in the trash, is expected on every reconnect, so it gets one line.
