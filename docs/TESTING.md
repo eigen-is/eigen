@@ -4,6 +4,8 @@
 
 Read this before your first test in an area, a CI change or a release tag. A test passes or fails because of the code, never because of timing or what ran before it. The surprises: one API test file runs from `apps/api` with the preload ([§ One API test file](#one-api-test-file-runs-from-appsapi-with-the-preload)), a module mock outlives its test ([§ A module mock](#a-module-mock-lasts-for-the-rest-of-its-file)), storage faults are parked, not slept through ([§ Storage faults](#storage-faults-are-parked-and-driven-never-slept-through)), and a release publishes only images the Docker harnesses installed and upgraded ([§ A release publishes](#a-release-publishes-only-the-images-its-gates-tested)).
 
+Two gates are read only when they apply: before a change to the xlsx, docx or pptx writer, [EXPORT.md § Each Office writer has a corpus round-trip gate](EXPORT.md#each-office-writer-has-a-corpus-round-trip-gate); before you run a script in `docker/` or change the launcher, `apps/api/src/cli/configure.ts`, a Compose file or a Caddyfile, [TESTING-DOCKER.md](TESTING-DOCKER.md).
+
 ## Every test lives in its workspace's `src/test/`
 
 A module's test mirrors its path (`packages/lib/src/vector/snap.ts` → `packages/lib/src/test/vector/snap.test.ts`). An end-to-end feature test, most of the API suite, gets a feature folder such as `apps/api/src/test/mail/`. Shared harness files and `fixtures/` sit at the `src/test/` root. Grep the tree before you assume an area is untested.
@@ -81,16 +83,6 @@ A suite that takes tens of seconds skips unless `CI` or `EIGEN_SLOW_TESTS=1` is 
 
 macOS refuses `setrlimit` for the data segment, so the transform's memory limit is tested on Linux only ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md#a-child-runs-under-the-machines-memory)). On a Mac, run those tests in an `oven/bun` container with a copy of the checkout and its own `bun install --frozen-lockfile`, since the Mac's `node_modules` holds macOS binaries.
 
-## Each Office writer has a corpus round-trip gate
-
-A change to the xlsx, docx or pptx writer passes the `roundtrip` mode of `apps/api/src/scripts/xlsx-audit.ts`, `docx-audit.ts` or `pptx-audit.ts`: each corpus file is imported, written by our writer, imported again, and the two imports compared. Identity-only differences (media names, chart series ids, validation rule ids) compare by meaning. A difference the format's `LISTED` table explains, with a predicate over the writer's own helpers and a reason, is listed; any other fails the run, as do a crash and a cut. Each file runs in a child under a time and memory cap, so a hang is a result. The shared runner is `office-audit.ts`; `--writer <module>` runs another writer, which is how each script's test plants a broken one. The corpora are private, so keep the output outside the repo. Run one at a time: a heavy file's child peaks at several GB.
-
-```bash
-bun apps/api/src/scripts/xlsx-audit.ts roundtrip <corpus dir...> --out /tmp/xlsx-roundtrip
-```
-
-A refactor that must not change a writer's output proves it byte for byte: the writers are deterministic, so `--dump <dir>` before and after, then `diff -rq` the two dirs.
-
 ## Storage faults are parked and driven, never slept through
 
 The drive resilience suites run on doubles at the `src/test/` root, each listing what it fakes in its header. The test holds and releases every fault:
@@ -102,25 +94,6 @@ The drive resilience suites run on doubles at the `src/test/` root, each listing
 - The CalDAV and CardDAV stores keep their truth in a BLOB and need no double: `breakTransaction(domain)` (`db-test-helpers.ts`) throws inside the transaction, and the test asserts the previous bytes and projection survived.
 
 `home-test-helpers.ts` is the one fake-Home harness: `openTestHome(create, dir, user)` builds a domain class such as `Contacts` over a temp directory without a booted app, and its `reopen()` simulates a restart.
-
-## The Docker harnesses install Eigen as a stranger does
-
-The scripts in `docker/` are not part of `bun run test`. Each copies the tracked files as the working tree has them into a scratch folder (`git add` a new file to include it) and runs `./eigen` there from a `docker:cli` container with no Bun, as its own Compose project on `127.0.0.1` ports 18000-18999, so it never touches your `data/` or a running stack. Every harness sources `docker/probe-lib.sh`, which runs Compose as root: a release install's `.env.production` is root's, and a Linux host's harness user can't read it (Docker Desktop hides this).
-
-On a moved tag, Docker Desktop's containerd store drops `repo@sha256:<old>`, while Linux's classic store keeps it as a digest-only image that `docker image ls` shows only with `--all`. So the launcher pulls a pinned image back by digest before it reads one, and a launcher change runs on both stores: the Mac gate is containerd, CI's ubuntu classic.
-
-Run them one at a time, since two can pick the same subnet; `./docker/test-all.sh` runs them in turn. Each script's header lists what it probes; `HARNESS_KEEP=1` leaves the scratch install up.
-
-| Harness | What it proves |
-|---|---|
-| `test-launcher.sh` | The launcher alone under dash, BusyBox and the host `sh`, with a stub `docker`, and the installer `apps/index/public/install`. No stack. |
-| `test-cli.sh` | The operator commands and their refusals, on installs made as another uid and as root. |
-| `test-interactive.sh` | The questions as a person answers them, typed by `expect`. |
-| `test-deployments.sh` | Every `COMPOSE_PROFILES` shape and a custom subnet. Run it before merging a change to `eigen`, `apps/api/src/cli/configure.ts`, a Compose file or a Caddyfile. |
-| `test-host-proxies.sh` | nginx, Caddy and Apache in front of `eigen-static` with the snippets setup writes. |
-| `test-release.sh` | The release gate: the previous published release is installed, seeded, updated to this one and rolled back, then update, rollback and breaking releases run in a registry of its own. |
-| `test-boot.sh` | The arm64 gate: the candidate images answer `/eigen/health`. Needs a candidate on ghcr.io, so `test-all.sh` skips it. |
-| `test-mail-hardening.sh` | The mail hardening of [MAIL.md § Submission is held to the login's own address](MAIL.md#submission-is-held-to-the-logins-own-address). `PROBES=2,3,4` runs a subset. |
 
 ## CI
 
@@ -178,5 +151,4 @@ better-auth refuses to boot when `apps/api/auth-schema.ts` misses a plugin's col
 
 - [CONTRIBUTING.md](CONTRIBUTING.md): setting up a checkout and the pre-commit hook
 - [DEMO_MODE.md](DEMO_MODE.md): the demo seeder that `server/seed-demo.test.ts` pins
-- [SELF-HOSTING.md](SELF-HOSTING.md): the install, update and rollback the Docker harnesses probe
 - The [verify-in-browser skill](../.claude/skills/verify-in-browser/SKILL.md): proving a change in the running dev app

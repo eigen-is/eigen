@@ -150,6 +150,7 @@ Every Eigen document is a Drive folder with its own `data.db` and `media/`. The 
 | **App build** | `vite.shared.config.ts` | `createAppConfig()`, every app's Vite config; chunk groups name third-party packages only, since a workspace-package group drags its ui and lib imports into every page |
 | **Release** | `scripts/release.ts` | `bun run release` bumps the version and drafts the GitHub Release ([TESTING.md](TESTING.md#a-github-release-says-what-changed-in-a-few-lines)) |
 | **Release gate** | `docker/test-release.sh`, `.github/workflows/publish.yml` | Updates the previous release to the candidate images and back before they publish ([TESTING.md](TESTING.md#a-release-publishes-only-the-images-its-gates-tested)) |
+| **Docker harnesses** | `docker/test-*.sh`, `docker/probe-lib.sh` | Install Eigen in a scratch folder and probe the install, update and release path, apart from `bun run test` ([TESTING-DOCKER.md](TESTING-DOCKER.md)) |
 
 ## Package boundaries
 
