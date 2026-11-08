@@ -24,7 +24,7 @@ test('a component re-renders with each notice and each change of the stream', as
     await act(async () =>
         handleRestartNoticeSSEvent({
             type: SSEventType.SERVER_RESTART_NOTICE,
-            notice: { reason: 'rollback', msLeft: 60_000, message: null },
+            notice: { reason: 'rollback', msLeft: 60_000, msSinceAnnounced: 0, message: null },
         }),
     );
     await act(async () => setStreamDown(true));

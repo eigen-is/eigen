@@ -22,17 +22,16 @@ export function handleRestartNoticeSSEvent(event: SSEvent): void {
     const { reason, message, msLeft, msSinceAnnounced } = event.notice;
     const now = Date.now();
     const deadline = now + msLeft;
-    // An older API does not say when it announced, so the tab takes the moment it first heard.
-    const announcedAt = msSinceAnnounced === undefined ? undefined : now - msSinceAnnounced;
+    const heardAt = now - msSinceAnnounced;
     const held = state.notice;
     const near = (a: number, b: number) => Math.abs(a - b) < SAME_NOTICE_MS;
     const repeated =
         held?.reason === reason &&
         held.message === message &&
         near(held.deadline, deadline) &&
-        (announcedAt === undefined || near(held.heardAt, announcedAt));
+        near(held.heardAt, heardAt);
     if (repeated) return;
-    publish({ ...state, notice: { reason, message, deadline, heardAt: announcedAt ?? now } });
+    publish({ ...state, notice: { reason, message, deadline, heardAt } });
 }
 
 export function setStreamDown(streamDown: boolean): void {
