@@ -8,6 +8,7 @@ import type { Op, Sheet, SheetWithCalcChain } from '@workspace/lib/sheets';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
 import { applyPatches, enablePatches } from 'immer';
+import { isSheetName } from './a1-notation';
 import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
 import type { DeleteRowColOp, InsertRowColOp } from './rowcol';
@@ -97,9 +98,12 @@ export function deleteRowColOf(op: Op): DeleteRowColOp {
     return { ...value, id: op.id };
 }
 
+// A rename writes its name into every formula naming the tab, so a long one would run the reader out of memory.
 export function renameSheetOf(op: Op): RenameSheetOp {
-    const name = isRecord(op.value) ? op.value.name : undefined;
-    if (typeof name !== 'string' || !op.id) throw new Error('renameSheet op has a malformed value');
+    const { name } = isRecord(op.value) ? op.value : { name: undefined };
+    if (typeof name !== 'string' || !isSheetName(name) || !op.id) {
+        throw new Error('renameSheet op has a malformed value');
+    }
     return { id: op.id, name };
 }
 

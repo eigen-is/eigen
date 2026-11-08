@@ -44,13 +44,13 @@ export {
     update,
 } from './format';
 export { FormulaEngine } from './formula-engine';
-export { functionCopy, inlineNames, renameSheetRefs } from './formula-shift';
+export { functionCopy, inlineNames } from './formula-shift';
 export { iscelldata } from './formula-utils';
 export { DOTTED_FUNCTIONS } from './parser/evaluate-by-operator/operator/formula-function';
 export { recalcSheets, sheetsNeedRecalc } from './recalc';
 export { replaySheetsOps, withMaterializedData } from './replay-ops';
 export { normalizeSheetConfig } from './sheet-config';
-export { copySheetName } from './sheet-name';
+export { copySheetName, renameSheetTexts } from './sheet-name';
 export type {
     CalcChainEntry,
     CellResolver,

@@ -18,10 +18,9 @@ import { DRIVE_TYPE_SHEETS } from '@workspace/lib/types/drive';
 import {
     copySheetName,
     createDefaultSheets,
-    iscelldata,
     mapChartRefs,
     recalcSheets,
-    renameSheetRefs,
+    renameSheetTexts,
     replaySheetsOps,
     sheetFinder,
     sheetNameKey,
@@ -144,33 +143,14 @@ export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string, current: She
     });
     const ids = new Map(imported.map((sheet, i) => [sheet.id, fresh[i].id]));
     const findImported = sheetFinder(imported);
-    const rename = (txt: string) => renameSheetRefs(txt, findImported, renames);
 
-    const added = imported.map((sheet, i): Op => {
+    const added = imported.map((source, i): Op => {
         const { id, name } = fresh[i];
+        const sheet = renameSheetTexts(source, findImported, renames);
         for (const { v } of sheet.celldata ?? []) {
-            if (typeof v?.f === 'string') v.f = rename(v.f);
             if (v?.hl) v.hl.id = id;
         }
         for (const entry of sheet.calcChain ?? []) entry.id = id;
-        for (const rule of sheet.conditionalFormatRules ?? []) {
-            if (rule.type === 'default' && rule.conditionName === 'formula') {
-                rule.conditionValue = rule.conditionValue.map((value) =>
-                    typeof value === 'string' ? rename(value) : value,
-                );
-            }
-        }
-        for (const { rule } of Object.values(sheet.dataValidations ?? {})) {
-            if (rule.type === 'dropdown' && iscelldata(rule.value1)) rule.value1 = rename(rule.value1);
-        }
-        for (const link of Object.values(sheet.hyperlink ?? {})) {
-            if (link.linkType === 'sheet') {
-                const target = findImported(link.linkAddress);
-                link.linkAddress = (target && renames.get(target.name)) ?? link.linkAddress;
-            } else if (link.linkType === 'cellrange') {
-                link.linkAddress = rename(link.linkAddress);
-            }
-        }
         const charts = Object.fromEntries(
             Object.entries(sheet.charts ?? {}).map(([key, chart]) => [
                 key,

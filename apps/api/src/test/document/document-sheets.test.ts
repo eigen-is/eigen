@@ -838,6 +838,20 @@ describe('document/sheets — appendSheetsToYjs', () => {
         appendSheetsToYjs(doc, snapshotJson, readLiveSheets(doc));
     }
 
+    test('a taken name with a ! in it is renamed, and the formula naming it follows', () => {
+        const doc = new Y.Doc();
+        const own: Sheet[] = [{ id: 'own', name: 'Q1!', order: 0, celldata: [], config: {} }];
+        doc.getMap('state').set('snapshot', encodeSheetsSnapshot(own, { computed: true }));
+        const imported: Sheet[] = [
+            { id: 'a', name: 'Q1!', order: 0, celldata: [{ r: 0, c: 0, v: { v: 5, m: '5' } }], config: {} },
+            { id: 'b', name: 'Uses', order: 1, celldata: [{ r: 0, c: 0, v: { f: "='Q1!'!A1", v: 5 } }], config: {} },
+        ];
+        append(doc, encodeSheetsSnapshot(imported, { computed: true }));
+        const { sheets } = readSheetsFromDoc(doc, { recalc: false });
+        expect(sheets.map((sheet) => sheet.name)).toEqual(['Q1!', 'Q1!(Copy)', 'Uses']);
+        expect(sheets[2].celldata?.[0].v?.f).toBe("='Q1!(Copy)'!A1");
+    });
+
     test("the sheets arrive as one batch of addSheet ops under fresh ids, after the workbook's own", () => {
         const doc = workbook();
         const pending: Op[] = [{ op: 'replace', id: 'own', path: ['name'], value: 'Data' }];

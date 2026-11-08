@@ -1,16 +1,14 @@
 // What ⌘Z and ⌘⇧Z do in this tab. An edit is recorded as an entry of immer patches that names its sheet by id. Undo and
 // redo take the context and an entry and return the next context and the batch to send. A cell or field entry skips a
-// target a peer changed since and recalculates the formulas it writes back. A sheet, row or column entry leaves the
-// stacks at a peer's first batch, so it always finds the grid as it left it, and it applies exactly the ops it sends,
-// through applyOpBatch, as its peers will. The Workbook keeps the stacks.
+// target a peer changed since and recalculates the formulas it writes back. A structural entry, such as a row op or a
+// rename, leaves the stacks at a peer's first batch, so it always finds the workbook as it left it, and it applies
+// exactly the ops it sends, through applyOpBatch, as its peers will. The Workbook keeps the stacks.
 
 import type { MergeCell } from '@workspace/lib/sheets';
 import { parseCellKey } from '@workspace/lib/sheets';
 import { get, isEqual } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import { applyPatches, produce, produceWithPatches } from 'immer';
-import { celldataToData } from '../../engine/celldata';
-import { isRowColOp } from '../../engine/replay-ops';
 import type { Cell, CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
@@ -33,13 +31,15 @@ import { setCellValue } from './cell';
 import { withoutDeletedFloatingEdits } from './floating';
 import { createContextResolver, snapshotContext } from './formula-cache';
 import { execFunctionGroup, execfunction, groupValuesRefresh } from './formula-exec';
+import { isStructural } from './history-shift';
 import { settleCurrentSheet, shiftSheetOrders } from './sheet';
 
 type Step = { ctx: Context; ops: Op[] };
 
 // What setContextWithProduce keeps of one edit. Its options are the ones the edit's batch is built from. A sheet
 // delete adds the deleted sheet to them and keeps nothing else, because its undo and redo are ops and its patches
-// would hold the whole sheet list twice. A rename keeps only its options too, since its undo and redo rename again.
+// would hold the whole sheet list twice. A rename adds its two names and keeps nothing else, since its undo and redo
+// rename again. A row or column op keeps what its undo brings back, because its redo is its marker again.
 export function recordEntry(
     before: Context,
     after: Context,
@@ -47,7 +47,13 @@ export function recordEntry(
     inversePatches: Patch[],
     options: PatchOptions,
 ): History {
-    if (options.renameSheetOp) return { patches: [], inversePatches: [], options };
+    if (options.renameSheetOp) {
+        const { id } = options.renameSheetOp;
+        const from = before.sheets.find((s) => s.id === id)?.name;
+        const to = after.sheets.find((s) => s.id === id)?.name;
+        const renamedSheet = from != null && to != null ? { id, from, to } : undefined;
+        return { patches: [], inversePatches: [], options: { ...options, renamedSheet } };
+    }
     if (options.deleteSheetOp) {
         const { id } = options.deleteSheetOp;
         const sheet = before.sheets.find((s) => s.id === id);
@@ -58,37 +64,32 @@ export function recordEntry(
         };
     }
     return {
-        patches: bySheetId(patches, after.sheets),
+        patches: rowColMarker(options) ? [] : bySheetId(patches, after.sheets),
         inversePatches: bySheetId(inversePatches, before.sheets),
         options,
     };
 }
 
-// How far back undo reaches. A row, column or sheet entry holds whole cell matrices, so fewer of those stay.
+// How far back undo reaches. A structural entry may hold whole cell matrices, so fewer of those stay.
 const MAX_ENTRIES = 200;
-const MAX_WHOLE_MATRIX_ENTRIES = 10;
+const MAX_STRUCTURAL_ENTRIES = 10;
 
 // Puts an edit's entry on the undo stack and drops the oldest entries past those limits. Only the oldest ever go: an
 // entry fits the grid as the entries above it leave it, so one dropped from the middle would misplace the rest.
 export function pushEntry(stack: History[], entry: History) {
     stack.push(entry);
     let keep = Math.min(stack.length, MAX_ENTRIES);
-    let whole = 0;
+    let structural = 0;
     for (let i = stack.length - 1; i >= stack.length - keep; i -= 1) {
-        if (!holdsWholeMatrices(stack[i])) continue;
-        whole += 1;
-        if (whole > MAX_WHOLE_MATRIX_ENTRIES) keep = stack.length - 1 - i;
+        if (!isStructural(stack[i])) continue;
+        structural += 1;
+        if (structural > MAX_STRUCTURAL_ENTRIES) keep = stack.length - 1 - i;
     }
     stack.splice(0, stack.length - keep);
 }
 
-function holdsWholeMatrices({ patches, inversePatches, options }: History): boolean {
-    const whole = ({ path }: Patch) => path.length === 2 || (path.length === 3 && path[2] === 'data');
-    return options?.deletedSheet != null || patches.some(whole) || inversePatches.some(whole);
-}
-
 // Runs the newest entry of `from` and moves it onto `to`: an undo takes it from the undo stack to the redo stack, and a
-// redo back.
+// redo back. An entry that did nothing leaves both, because stepping it back would apply what never was undone.
 export function stepNewestEntry(
     ctx: Context,
     from: History[],
@@ -99,7 +100,7 @@ export function stepNewestEntry(
     if (!entry) return undefined;
     const next = step(ctx, entry);
     from.pop();
-    to.push(entry);
+    if (next.ops.length > 0) to.push(entry);
     return next;
 }
 
@@ -114,10 +115,11 @@ export function undoEntry(ctx: Context, entry: History): Step {
         const sheet = added && ctx.sheets.find((s) => s.id === added.id);
         return sheet ? sheetStep(ctx, (sheets) => deleteSheetOps(sheet, sheets)) : { ctx, ops: [] };
     }
-    if (options?.insertRowColOp || options?.deleteRowColOp) {
-        return rowColStep(ctx, entry.inversePatches, inverseRowColOptions(options) ?? {});
+    const marker = options && rowColMarker(inverseRowColOptions(options));
+    if (marker) return undoRowCol(ctx, marker, entry.inversePatches);
+    if (options?.renamedSheet) {
+        return batchStep(ctx, renameSheetOps(options.renamedSheet.id, options.renamedSheet.from));
     }
-    if (options?.renameSheetOp) return renameStep(ctx, options.renameSheetOp.id, options.renameSheetOp.from);
     return patchStep(ctx, entry.inversePatches, entry.patches);
 }
 
@@ -131,10 +133,9 @@ export function redoEntry(ctx: Context, entry: History): Step {
         const added = addedSheet(entry);
         return added ? sheetStep(ctx, (sheets) => addSheetOps(added, sheets)) : { ctx, ops: [] };
     }
-    if (options?.insertRowColOp || options?.deleteRowColOp) {
-        return rowColStep(ctx, entry.patches, options);
-    }
-    if (options?.renameSheetOp) return renameStep(ctx, options.renameSheetOp.id, options.renameSheetOp.name);
+    const marker = options && rowColMarker(options);
+    if (marker) return batchStep(ctx, [marker]);
+    if (options?.renamedSheet) return batchStep(ctx, renameSheetOps(options.renamedSheet.id, options.renamedSheet.to));
     return patchStep(ctx, entry.patches, entry.inversePatches);
 }
 
@@ -169,8 +170,8 @@ function atSheetIndex(ctx: Context, patches: Patch[]): Patch[] {
     return resolved;
 }
 
-function renameStep(ctx: Context, id: string, name: string): Step {
-    const ops = renameSheetOps(id, name);
+// A batch that says all it does, such as a rename or a row op's redo, runs here as it does on a peer.
+function batchStep(ctx: Context, ops: Op[]): Step {
     const applied = applyOpBatch(ctx, ops);
     return applied ? { ctx: produce(applied.ctx, settleCurrentSheet), ops } : { ctx, ops: [] };
 }
@@ -246,63 +247,44 @@ function recalculate(ctx: Context, patches: Patch[]) {
     ctx.formulaCache.execFunctionGlobalData = null;
 }
 
-// A row or column entry: the marker moves the grid, and `target`, the entry's side to reach, gives what the marker alone
-// would not bring back, which is the fields the op wrote and a repair of the cells. The batch is the marker and those,
-// and the live context gets only the ops. The marker's run is the step's own, so the repair is what it leaves undone.
-function rowColStep(ctx: Context, target: Patch[], options: PatchOptions): Step {
-    const marker = rowColMarker(options);
-    const moved = marker && applyOpBatch(ctx, [marker]);
+// The marker moves the grid back, and the batch is the marker and what it did not bring back of the fields and cells
+// the entry recorded. The live context gets only those ops, so it ends as a peer does.
+function undoRowCol(ctx: Context, marker: Op, recorded: Patch[]): Step {
+    const moved = applyOpBatch(ctx, [marker]);
     if (!moved) return { ctx, ops: [] };
-    const fields: Record<string, unknown> = {};
-    for (const { path, value } of target) {
-        const [, id, field] = path;
-        if (path.length === 3 && id === marker.id && typeof field === 'string') fields[field] = value;
-    }
-    // A write the marker already made stays off the wire, so a receiver keeps its own shift of a batch on its way.
-    const patches = atSheetIndex(ctx, target).filter(
-        ({ path, value }) => path.length === 3 || !isEqual(get(moved.ctx, path), value),
-    );
-    const ops = patchToOp(ctx, patches, options, { fields, repair: repairOps(moved.ctx, patches) });
-    const applied = applyOpBatch(
-        moved.ctx,
-        ops.filter((op) => !isRowColOp(op)),
-        false,
-    );
-    return applied ? { ctx: produce(applied.ctx, settleCurrentSheet), ops } : { ctx, ops: [] };
+    const restored = restoreOps(moved.ctx, recorded);
+    const applied = applyOpBatch(moved.ctx, restored, false);
+    return applied ? { ctx: produce(applied.ctx, settleCurrentSheet), ops: [marker, ...restored] } : { ctx, ops: [] };
 }
 
-// The cells the marker left different from the matrices the entry restores, such as rows a delete took and a formula it
-// made #REF! or shrank, on any sheet.
-function repairOps(moved: Context, patches: Patch[]): Op[] {
+// A write the marker already made stays off the wire, so a receiver keeps its own shift of a batch on its way.
+function restoreOps(moved: Context, recorded: Patch[]): Op[] {
     const ops: Op[] = [];
-    for (const [index, rows] of matrices(patches)) {
-        const sheet = moved.sheets[index];
-        const after = sheet.data ?? celldataToData(sheet.celldata ?? [], 0, 0);
-        for (let r = 0; r < rows.length; r += 1) {
-            if (rows[r] === after[r]) continue;
-            const width = Math.max(rows[r]?.length ?? 0, after[r]?.length ?? 0);
-            for (let c = 0; c < width; c += 1) {
-                const cell = rows[r]?.[c] ?? null;
-                if (!isEqual(cell, after[r]?.[c] ?? null)) {
-                    ops.push({ op: 'replace', id: sheet.id, path: ['data', r, c], value: cell });
-                }
-            }
-        }
+    for (const { op, path, value } of recorded) {
+        const [, id, ...rest] = path;
+        const sheet = moved.sheets.find((s) => s.id === id);
+        if (!sheet) continue;
+        if (rest.length === 1 && rest[0] === 'data') ops.push(...repairOps(sheet, value));
+        else if (!isEqual(get(sheet, rest), value)) ops.push({ op, id: sheet.id, path: rest, value });
     }
     return ops;
 }
 
-// The whole matrices a row or column entry records, by sheet index. A sheet that holds only its stored cells has no
-// matrix, so the entry records those.
-function matrices(patches: Patch[]) {
-    const found = new Map<number, CellMatrix>();
-    for (const { path, value } of patches) {
-        const [, index, field] = path;
-        if (path.length !== 3 || typeof index !== 'number') continue;
-        if (field === 'data') found.set(index, value);
-        else if (field === 'celldata') found.set(index, celldataToData(value, 0, 0));
+// The cells the marker left different from the recorded matrix, such as rows a delete took and a formula it made #REF!.
+function repairOps(sheet: Sheet, recorded: CellMatrix): Op[] {
+    const ops: Op[] = [];
+    const after = sheet.data ?? [];
+    for (let r = 0; r < recorded.length; r += 1) {
+        if (recorded[r] === after[r]) continue;
+        const width = Math.max(recorded[r]?.length ?? 0, after[r]?.length ?? 0);
+        for (let c = 0; c < width; c += 1) {
+            const cell = recorded[r]?.[c] ?? null;
+            if (!isEqual(cell, after[r]?.[c] ?? null)) {
+                ops.push({ op: 'replace', id: sheet.id, path: ['data', r, c], value: cell });
+            }
+        }
     }
-    return found;
+    return ops;
 }
 
 // What a person wrote into a cell: a formula's value, its display text and its value type are the engine's.
