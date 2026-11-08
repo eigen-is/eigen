@@ -46,6 +46,10 @@ export async function materializeMount(
     const metadataPath = requireMetadataDb(homeDir, summary);
     const mountDir = requireMountDir(homeDir, summary.id);
     const dataDir = path.join(mountDir, PATHS.DRIVE.DATA_DIR);
+    // A key may spell another row's archive path, such as a file named exactly another's `{id}.{ext}`, so every file
+    // moves out of the archive's tree into a new data/ and none lands on bytes still waiting to move.
+    const archivedDir = `${dataDir}.archived`;
+    if (fs.existsSync(dataDir)) fs.renameSync(dataDir, archivedDir);
     const isPathBased = summary.storageType === 'local';
     const isRemote = summary.storageType === 's3';
 
@@ -75,7 +79,7 @@ export async function materializeMount(
         const managedPaths = new Set(managed.map((entry) => entry.path));
         const placeFile = (row: MountPathRow): void => {
             const archived = archivePath(row);
-            const source = inData(archived);
+            const source = inMountData(archivedDir, summary.id, archived);
             // A bucket's objects did not move aside with the folder: every row gets a fresh key, even one with
             // no bytes, so no upload lands on an object the `.pre-restore-` copy still names.
             if (isRemote) {
@@ -101,10 +105,7 @@ export async function materializeMount(
                     .run();
                 return;
             }
-            // On a path-based mount the key is the archive path unless migration v7 renamed a deduplicated
-            // row's name and left its `file`, which reads go by.
-            const target = inData(key);
-            if (target !== source) movePath(source, target);
+            movePath(source, inData(key));
         };
         // A transaction per batch: a VACUUM INTO copy journals and fsyncs every statement on its own, and this is two
         // per file.
@@ -115,14 +116,8 @@ export async function materializeMount(
                 for (const row of files.slice(start, start + FILES_PER_BATCH)) placeFile(row);
             })();
         }
-        if (isRemote) {
-            // Every byte is in staging until its PUT acks; the by-path tree as well would double the disk.
-            await fsp.rm(dataDir, { recursive: true, force: true });
-            return [];
-        }
-        // What is left under data/ after a local-key move is the archive's by-path folders, which
-        // that backend has no use for. A path-based mount keeps them: they are its layout.
-        if (!isPathBased) await pruneEmptyDirs(dataDir);
+        await fsp.rm(archivedDir, { recursive: true, force: true });
+        if (isRemote) return [];
         return managed.map((entry) => ({
             filePath: inData(storageKeyOf(entry.row, byId, isPathBased)),
             config: entry.config,
@@ -345,16 +340,4 @@ function inMountData(dataDir: string, mountId: string, relPath: string): string 
     const abs = resolveInside(dataDir, relPath);
     if (!abs) throw new ApiError(400, `Mount ${mountId} names a path that leaves it: ${relPath}`);
     return abs;
-}
-
-// Depth-first, directories only: a leftover file means the tree and the paths table disagree, and
-// deleting it would be the restore losing bytes.
-async function pruneEmptyDirs(dir: string): Promise<void> {
-    if (!fs.existsSync(dir)) return;
-    for (const entry of await fsp.readdir(dir, { withFileTypes: true })) {
-        if (!entry.isDirectory()) continue;
-        const child = path.join(dir, entry.name);
-        await pruneEmptyDirs(child);
-        if ((await fsp.readdir(child)).length === 0) await fsp.rmdir(child);
-    }
 }

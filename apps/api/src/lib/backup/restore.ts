@@ -43,9 +43,6 @@ import { putHomeBack, wipeRestoreStagingDir, writeRestoreCompleteMarker, writeRe
 import { forgetSafetyCopySize, resolveSafetyCopy } from './safety-copy';
 import { requireVerified, verifyFolder } from './verify';
 
-// One picture from the archive's avatar folder, read into memory while the archive is judged.
-type RestoredAvatar = { name: string; bytes: Uint8Array };
-
 // What a restore does once the home is out of everyone's hands and its folder is aside: put the new
 // folder at `homeDir`. The step that prepared it returns it, so it closes over whatever that step judged.
 type InstallHome = () => Promise<void>;
@@ -88,12 +85,10 @@ export async function restoreHome(
                 unpackedHome,
                 carried.map((summary) => summary.id),
             );
-            // The rows outside the home folder are judged before the home is taken. The avatar is read now because
-            // the staging folder is gone by the time it is written.
+            // The rows outside the home folder are judged before the home is taken.
             const judged = {
                 authRows: authRowsToRestore(ownerId, manifest, folder),
                 shares: readShares(folder),
-                avatars: await readAvatars(ownerId, folder),
             };
             // An s3 mount's restored files take fresh keys from this stamp. The job id makes it this restore's alone,
             // even when the clock steps back to a second another restore of this home used.
@@ -102,8 +97,12 @@ export async function restoreHome(
                 await materializeMount(unpackedHome, summary, keyStamp);
                 onProgress?.('mounts', index + 1, carried.length);
             }
-            // The archive's `home/` is the home folder, one for one.
-            const install: InstallHome = async () => fs.renameSync(unpackedHome, homeDir);
+            const install: InstallHome = async () => {
+                // The archive's `home/` is the home folder, one for one.
+                fs.renameSync(unpackedHome, homeDir);
+                // Before the job removes the staging folder that holds it.
+                await restoreAvatars(ownerId, folder);
+            };
             return { install, judged };
         },
         // The new folder of a restore that failed after its swap is not trusted as a home: it keeps a name of its
@@ -114,13 +113,6 @@ export async function restoreHome(
     // missing, so a failure here fails the job with the home restored, and a retry finishes it.
     if (identity.authRows) restoreAuthRows(ownerId, identity.authRows);
     for (const row of identity.shares) await addRegistryEntry(ownerId, row.targetIdentifier);
-    // An avatar goes back only where the server has none, so a picture the user changed after the backup is not
-    // quietly reverted.
-    for (const avatar of identity.avatars) {
-        const target = path.join(getAvatarsDir(), avatar.name);
-        if (fs.existsSync(target)) continue;
-        await Bun.write(target, avatar.bytes);
-    }
     onProgress?.('done', 1, 1);
 }
 
@@ -187,20 +179,19 @@ function readShares(folder: string): BackupShare[] {
     return rows;
 }
 
-// The name comes from the archive and lands in the server-wide avatars folder, so only `{ownerId}.{ext}` passes, or
-// a hostile archive could plant a picture for somebody who has none.
-async function readAvatars(ownerId: string, folder: string): Promise<RestoredAvatar[]> {
+// The name lands in the server-wide avatars folder, so only `{ownerId}.{ext}` passes. An avatar goes back only where
+// the server has none, so a picture the user changed after the backup is not quietly reverted.
+async function restoreAvatars(ownerId: string, folder: string): Promise<void> {
     const avatarDir = path.join(folder, ARCHIVE_AVATAR_DIR);
-    if (!fs.existsSync(avatarDir)) return [];
-    const avatars: RestoredAvatar[] = [];
+    if (!fs.existsSync(avatarDir)) return;
     for (const name of fs.readdirSync(avatarDir)) {
         if (path.parse(name).name !== ownerId) {
             console.warn(`[backup] ${ownerId}: ${name} in the archive is not this user's avatar, not restored`);
             continue;
         }
-        avatars.push({ name, bytes: await Bun.file(path.join(avatarDir, name)).bytes() });
+        const target = path.join(getAvatarsDir(), name);
+        if (!fs.existsSync(target)) await fsp.copyFile(path.join(avatarDir, name), target);
     }
-    return avatars;
 }
 
 // The replacement is judged while the home still serves, so a refusal costs nobody a page.

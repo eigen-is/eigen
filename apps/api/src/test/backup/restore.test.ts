@@ -1357,6 +1357,64 @@ describe('Backup restore of the avatar', () => {
         expect(existsSync(join(getAvatarsDir(), `${foreign}.webp`))).toBe(false);
         rmSync(join(getBackupsDir(), artifact), { force: true });
     });
+
+    // An avatar can be far larger than what it compresses to, and a restore runs in the API.
+    test('copies the picture without reading it into memory', async () => {
+        await getTestContext();
+        const user = await createTestUser('restore-avatar-copy@test.eigen.is', PASSWORD, 'Restore Avatar Copy');
+        await authedRequest(user.sessionToken, `/drive/${user.id}/mounts`);
+        const own = join(getAvatarsDir(), `${user.id}.webp`);
+        await Bun.write(own, TEST_PNG_BYTES);
+        const artifact = await backup(user.id, new Date());
+        rmSync(own, { force: true });
+
+        const file = Bun.file;
+        const spy = spyOn(Bun, 'file').mockImplementation((...args: Parameters<typeof Bun.file>) => {
+            const opened = file(...args);
+            if (String(args[0]).endsWith(`${ARCHIVE_AVATAR_DIR}/${user.id}.webp`)) {
+                opened.bytes = () => Promise.reject(new Error('the avatar was read into memory'));
+            }
+            return opened;
+        });
+        try {
+            await restoreHome(artifact, user.id, `restore-avatar-copy-${Date.now()}`);
+        } finally {
+            spy.mockRestore();
+        }
+        expect(new Uint8Array(await Bun.file(own).arrayBuffer())).toEqual(TEST_PNG_BYTES);
+        rmSync(own, { force: true });
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+    });
+});
+
+describe('Backup restore of a flat-key mount', () => {
+    test("a file named exactly another file's key keeps its own bytes, and so does that file", async () => {
+        await getTestContext();
+        const user = await createTestUser('restore-key-name@test.eigen.is', PASSWORD, 'Restore Key Name');
+        const mountId = await firstMountId(user.sessionToken, user.id);
+        const rootId = (
+            await assertJson<DrivePath>(await authedRequest(user.sessionToken, `/drive/${user.id}/${mountId}/root`))
+        ).id;
+        const upload = (bytes: string, name: string) =>
+            driveUpload<DrivePath>(user.sessionToken, user.id, mountId, rootId, new File([bytes], name));
+        const first = await upload('the first file', 'first.txt');
+        const home = await getHome(user.id);
+        const mount = home.drive.getMounts().find((candidate) => candidate.id === mountId)!;
+        const firstKey = (await mount.db.select().from(paths).where(eq(paths.id, first.id)).get())!.file;
+        const second = await upload('the second file', firstKey);
+        const content = async (id: string) => {
+            const res = await authedRequest(user.sessionToken, `/drive/${user.id}/${mountId}/file/${id}/download`);
+            return res.text();
+        };
+
+        const artifact = await backup(user.id, new Date());
+        await restoreHome(artifact, user.id, `restore-key-name-${Date.now()}`);
+
+        expect(await content(first.id)).toBe('the first file');
+        expect(await content(second.id)).toBe('the second file');
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+        removeSafetyCopies(user.id);
+    });
 });
 
 describe('Backup restore of a disabled mount', () => {
