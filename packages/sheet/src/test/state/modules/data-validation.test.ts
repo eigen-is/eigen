@@ -1,8 +1,7 @@
 // Data-validation runtime paths the xlsx importer relies on. The dominant
 // imported shape is a dropdown whose value1 is a live quoted cross-sheet
 // $-anchored range ref ('MASTER DATA'!$B$2:$B$4) — getDropdownList must keep
-// resolving it by sheet NAME. Date rules carry YYYY-MM-DD operand strings,
-// the format validateCellData parses via isdatetime + dayjs.
+// resolving it by sheet NAME. Date rules carry YYYY-MM-DD operand strings.
 
 import { describe, expect, test } from 'bun:test';
 import {
@@ -11,6 +10,7 @@ import {
     REFERENCE_COLUMN_COUNT,
     REFERENCE_ROW_COUNT,
 } from '@workspace/lib/sheets';
+import { dateToSerial } from '../../../engine/parser/helper/number';
 import type { Context } from '../../../state/context';
 import {
     applyDataValidation,
@@ -40,7 +40,7 @@ import {
     validationLookup,
 } from '../../../state/modules/validation-rules';
 import type { Cell, DataValidationDraft, DataValidationRule } from '../../../state/types';
-import { contextFactory } from '../factories/context';
+import { contextFactory, workbookContextFactory } from '../factories/context';
 import { cellsWithRules, validationsByCell } from '../factories/validations';
 
 describe('getDropdownList', () => {
@@ -63,7 +63,9 @@ describe('getDropdownList', () => {
 });
 
 describe('validateCellData', () => {
-    test('parses the importer date operand format (YYYY-MM-DD)', () => {
+    const serial = (date: string) => dateToSerial(new Date(date.replace(/-/g, '/')));
+
+    test('a date rule compares serials, and its operands are YYYY-MM-DD', () => {
         const ctx = contextFactory() as Context;
         const rule: DataValidationRule = {
             type: 'date',
@@ -71,8 +73,16 @@ describe('validateCellData', () => {
             value1: '2024-01-01',
             value2: '2024-12-31',
         };
-        expect(validateCellData(ctx, rule, '2024-06-15')).toBe(true);
-        expect(validateCellData(ctx, rule, '2025-06-15')).toBe(false);
+        expect(validateCellData(ctx, rule, serial('2024-06-15'))).toBe(true);
+        expect(validateCellData(ctx, rule, serial('2025-06-15'))).toBe(false);
+        expect(validateCellData(ctx, rule, 'not a date')).toBe(false);
+    });
+
+    // Excel's "date >= 1/1/1900" stores serial 1, which the importer writes as 1899-12-31.
+    test('an imported any-date rule passes every date', () => {
+        const ctx = workbookContextFactory();
+        const rule: DataValidationRule = { type: 'date', type2: 'noEarlierThan', value1: '1899-12-31', value2: '' };
+        expect(validateCellData(ctx, rule, serial('2024-06-15'))).toBe(true);
     });
 });
 
@@ -661,6 +671,12 @@ describe('getValidationHint', () => {
             left: 74,
             top: 40,
         });
+    });
+
+    test('a list rule reads what the cell shows, as its items are text', () => {
+        const rule: DataValidationRule = { type: 'dropdown', type2: '', value1: '1,2', value2: '' };
+        expect(getValidationHint(hintContext(rule, { v: 1, m: '1' }), 1, 1)).toBeUndefined();
+        expect(getValidationHint(hintContext(rule, { v: 1 }), 1, 1)).toBeUndefined();
     });
 
     test('phrases each remaining rule type as a sentence', () => {

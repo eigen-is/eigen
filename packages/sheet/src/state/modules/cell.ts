@@ -35,7 +35,7 @@ import type { Range, RangeOrWholeAxis, Selection, SingleRange } from '../types';
 import { getSheetIndex, rgbToHex } from '../utils';
 import { carrySides, getBorderInfoCompute } from './border';
 import { checkCF, getComputeMap } from './condition-format';
-import { describeValidationRule, validateCellData } from './data-validation';
+import { describeValidationRule, inputPassesRule } from './data-validation';
 import { setFormulaCellInfo } from './formula-cache';
 import { functionHTMLGenerate } from './formula-editor';
 import { delFunctionGroup, execFunctionGroup, execfunction, getcellrange } from './formula-exec';
@@ -551,10 +551,9 @@ export function updateCell(
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
 
-    // Data validation: block input when the entered data is invalid
     const sheet = getSheet(ctx);
     const rule = validationAt(sheet.dataValidations, r, c);
-    if (rule?.prohibitInput && !validateCellData(ctx, rule, inputText)) {
+    if (rule?.prohibitInput && !inputPassesRule(ctx, rule, flowdata[r][c], inputText)) {
         cancelNormalSelected(ctx);
         ctx.warnDialog = describeValidationRule(rule, 'invalid');
         return;

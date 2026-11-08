@@ -1,3 +1,52 @@
+// A rule that prohibits input reads a commit as the write will, and text the editor was seeded with changes nothing.
+describe('state/modules/cell — updateCell under a prohibiting rule', () => {
+    function commit(rule: DataValidationRule, cell: Cell | null, text: string) {
+        const data: CellMatrix = [[cell]];
+        const dataValidations = validationsByCell({ '0_0': { ...rule, prohibitInput: true } });
+        const ctx = workbookContextFactory({
+            currentSheetId: 'id_1',
+            sheets: [{ name: 'sheet', id: 'id_1', order: 0, data, dataValidations }],
+        });
+        const input = document.createElement('div');
+        input.innerText = text;
+        updateCell(ctx, 0, 0, input);
+        return { warned: ctx.warnDialog, written: data[0][0] };
+    }
+    const rule = (type: string, type2: string, value1: string): DataValidationRule => ({
+        type,
+        type2,
+        value1,
+        value2: '',
+    });
+
+    test('a date shown as dd/MM/yyyy commits unchanged', () => {
+        const date = { v: 45306, m: '15/01/2024', ct: { fa: 'dd/MM/yyyy', t: 'd' } };
+        const { warned, written } = commit(rule('date', 'laterThan', '2020-01-01'), date, '15/01/2024');
+        expect(warned).toBeUndefined();
+        expect(written?.v).toBe(45306);
+    });
+
+    test('an unchanged formula, and Enter on an empty cell, are no input', () => {
+        const formula = { v: 3, m: '3', f: '=1+2' };
+        expect(commit(rule('number', 'lessThan', '1'), formula, '=1+2').warned).toBeUndefined();
+        expect(commit(rule('number', 'lessThan', '1'), null, '').warned).toBeUndefined();
+    });
+
+    test('typed text is read as the write reads it', () => {
+        expect(commit(rule('number', 'moreThanThe', '1000'), null, '1,234.50').written?.v).toBe(1234.5);
+        expect(commit(rule('number', 'lessThan', '1'), null, '50%').written?.v).toBe(0.5);
+        expect(commit(rule('date', 'laterThan', '2020-01-01'), null, '2024-06-15').warned).toBeUndefined();
+    });
+
+    test('a value that fails is refused, and the cell keeps its own', () => {
+        const number = { v: 5, m: '5' };
+        const { warned, written } = commit(rule('number', 'moreThanThe', '3'), number, '2');
+        expect(warned).toBe('Input must be a number greater than 3.');
+        expect(written?.v).toBe(5);
+        expect(commit(rule('date', 'laterThan', '2020-01-01'), null, '15/01/2024').warned).toContain('Date must be');
+    });
+});
+
 // Cell text is a schemaless CRDT string — authored by any collaborator, or carried
 // in from an uploaded xlsx — and getInlineStringHTML writes it into the formula bar
 // and the in-cell editor through innerHTML. The package used to guard those writes
@@ -22,10 +71,11 @@ import {
 } from '../../../state/modules/cell';
 import { groupValuesRefresh } from '../../../state/modules/formula-exec';
 import { clearMeasureTextCache } from '../../../state/modules/text';
-import type { CellMatrix, SheetConfig } from '../../../state/types';
+import type { Cell, CellMatrix, DataValidationRule, SheetConfig } from '../../../state/types';
 import { filterPatch } from '../../../state/utils/patch';
-import { contextFactory } from '../factories/context';
+import { contextFactory, workbookContextFactory } from '../factories/context';
 import { stubMeasuringCanvas } from '../factories/measuring-canvas';
+import { validationsByCell } from '../factories/validations';
 
 enablePatches();
 

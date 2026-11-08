@@ -9,8 +9,8 @@ import { describe, expect, test } from 'bun:test';
 import type { Context } from '../../../state/context';
 import { cellGlyphAt, cellIndicatorRect } from '../../../state/modules/cell-glyph';
 import { cellTextBox, dropdownChevronRect } from '../../../state/modules/data-validation';
-import type { DataValidationRule } from '../../../state/types';
-import { contextFactory } from '../factories/context';
+import type { Cell, DataValidationRule } from '../../../state/types';
+import { contextFactory, workbookContextFactory } from '../factories/context';
 import { validationsByCell } from '../factories/validations';
 
 const LIST_RULE: DataValidationRule = { type: 'dropdown', type2: '', value1: 'Red,Green,Blue', value2: '' };
@@ -62,6 +62,32 @@ describe('cellGlyphAt', () => {
 
         ctx.sheets[0].data![0][0] = { v: 5, m: '5' };
         expect(cellGlyphAt(ctx, 1, 5)).toBeUndefined();
+    });
+
+    test('a number rule reads the value, not the text a format shows', () => {
+        const glyphOver = (rule: DataValidationRule, cell: Cell) =>
+            cellGlyphAt(
+                workbookContextFactory({
+                    currentSheetId: 'id_1',
+                    visibledatarow: [20],
+                    visibledatacolumn: [74],
+                    sheets: [
+                        {
+                            name: 'sheet',
+                            id: 'id_1',
+                            order: 0,
+                            data: [[cell]],
+                            dataValidations: validationsByCell({ '0_0': rule }),
+                        },
+                    ],
+                }),
+                1,
+                5,
+            );
+        const shownFormatted = { v: 1234.5, m: '1,234.50', ct: { fa: '#,##0.00', t: 'n' } };
+        expect(glyphOver(NUMBER_RULE, shownFormatted)).toBeUndefined();
+        const under1 = { type: 'number', type2: 'lessThan', value1: '1', value2: '' };
+        expect(glyphOver(under1, { v: 0.5, m: '50%', ct: { fa: '0%', t: 'n' } })).toBeUndefined();
     });
 
     test('an empty validated cell paints no invalid mark, so it answers none', () => {
