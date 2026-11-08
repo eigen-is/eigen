@@ -130,7 +130,6 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
     if (isRecurring) moveLossReasons.push("modified occurrences of the series won't move");
 
     const write = async (action: RecurringAction) => {
-        const etag = heldEtag;
         const { start, end } = buildEventTimes(allDay, startDate, endDate, startTime, endTime);
 
         const data = { ...event.data, attendees: attendees.length > 0 ? attendees : undefined };
@@ -168,7 +167,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
                 const updated = await updateEvent.mutateAsync({
                     id: targetId,
                     calendarId: event.calendarId,
-                    etag,
+                    etag: heldEtag,
                     ...seriesUpdates,
                 });
                 holdEtag(updated.etag);
@@ -182,10 +181,19 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
                 // Two Homes have no atomic move. The event is recreated, then deleted, and the organizer link and the
                 // overrides stay behind.
                 await createEvent.mutateAsync({ calendarId: selectedCal.id, ...updates });
-                await deleteEventOnSource.mutateAsync({ id: targetId, calendarId: event.calendarId, etag });
+                await deleteEventOnSource.mutateAsync({
+                    id: targetId,
+                    calendarId: event.calendarId,
+                    etag: heldEtag,
+                });
             }
         } else if (action === 'all') {
-            await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, etag, ...seriesUpdates });
+            await updateEvent.mutateAsync({
+                id: targetId,
+                calendarId: event.calendarId,
+                etag: heldEtag,
+                ...seriesUpdates,
+            });
         } else if (action === 'this') {
             await createEvent.mutateAsync({
                 calendarId: event.calendarId,
@@ -193,7 +201,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
                 rrule: null,
                 parentEventId: targetId,
                 recurrenceDate: event.occurrenceDate,
-                etag,
+                etag: heldEtag,
             });
         } else if (action === 'this-and-following') {
             if (event.rrule) {
@@ -201,7 +209,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
                 const updated = await updateEvent.mutateAsync({
                     id: targetId,
                     calendarId: event.calendarId,
-                    etag,
+                    etag: heldEtag,
                     rrule: truncated,
                 });
                 holdEtag(updated.etag);

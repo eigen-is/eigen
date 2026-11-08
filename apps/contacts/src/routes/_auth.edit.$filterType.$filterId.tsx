@@ -6,7 +6,6 @@ import { useContacts, useUpdateContact } from '@workspace/lib/contacts';
 import type { CreateContactInput } from '@workspace/lib/types/contact';
 import { Column, ColumnLayout, LoadingState } from '@workspace/ui';
 import { useEffect } from 'react';
-import type { ContactFormValues } from '../components/contacts/contact-edit';
 import { ContactEdit, ContactEditToolbar } from '../components/contacts/contact-edit';
 
 export const Route = createFileRoute('/_auth/edit/$filterType/$filterId')({
@@ -36,15 +35,8 @@ function EditContactRoute() {
     const backToContact = () =>
         navigate({ to: '/$filterType/$filterId', params: { filterType, filterId }, search: { contactId } });
 
-    const handleSave = async (data: ContactFormValues, etag: string) => {
-        const contactData: CreateContactInput = {
-            ...data,
-            firstName: data.firstName || '',
-            lastName: data.lastName || '',
-            labels: data.labels || [],
-            avatar: data.avatar ?? '',
-        };
-        await updateContactMutation.mutateAsync({ id: contactId, ...contactData, etag });
+    const handleSave = async (data: CreateContactInput, etag: string) => {
+        await updateContactMutation.mutateAsync({ id: contactId, ...data, etag });
         backToContact();
     };
 

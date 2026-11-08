@@ -101,25 +101,25 @@ export function useMeContact() {
     });
 }
 
-// Eden Treaty serializes bodies as JSON, so this multipart upload is a raw fetch. It returns the stored avatar path.
-async function uploadContactAvatarRequest(ownerId: string, file: File): Promise<string> {
-    const formData = new FormData();
-    formData.append('file', file);
-    const res = await fetch(getContactsAvatarUploadUrl(ownerId), {
-        method: 'POST',
-        body: formData,
-        credentials: 'include',
-    });
-    if (!res.ok) throw new AppError({ status: res.status, error: { status: res.status, value: await res.text() } });
-    return await res.text();
-}
-
 export function useUploadContactAvatar() {
     const { user } = useAuth();
     const ownerId = user?.id ?? '';
 
     return useMutation({
-        mutationFn: (file: File) => uploadContactAvatarRequest(ownerId, file),
+        // Eden Treaty serializes bodies as JSON, so this multipart upload is a raw fetch. It returns the avatar's path.
+        mutationFn: async (file: File): Promise<string> => {
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await fetch(getContactsAvatarUploadUrl(ownerId), {
+                method: 'POST',
+                body: formData,
+                credentials: 'include',
+            });
+            if (!res.ok) {
+                throw new AppError({ status: res.status, error: { status: res.status, value: await res.text() } });
+            }
+            return await res.text();
+        },
         onError: onMutationError,
     });
 }

@@ -44,13 +44,11 @@ function onEventWriteError(queryClient: QueryClient, ownerId: string) {
         onEtagWriteError(error, STALE_WRITE_TOAST, () => invalidateEventList(queryClient, ownerId));
 }
 
-// Eden's reviver makes a UTC-midnight Date of a bare YYYY-MM-DD, for a year of 19xx or 20xx only, and a range read keeps
-// its timestamps revived. So what the type promises holds only from here on, whichever of the two arrived.
+// Eden's reviver makes a UTC-midnight Date of a bare YYYY-MM-DD, for a year of 19xx or 20xx only, and a range read
+// needs its timestamps revived. So what the type promises holds only from here on, whichever of the two arrived.
 function withOccurrenceDay(event: CalendarEventOccurrence): CalendarEventOccurrence {
     return { ...event, occurrenceDate: occurrenceDateToString(new Date(event.occurrenceDate)) };
 }
-
-// --- Calendar CRUD ---
 
 export function useCalendars(ownerId: string, enabled = true) {
     return useQuery({
@@ -107,9 +105,7 @@ export function useDeleteCalendar(ownerId: string) {
     });
 }
 
-// --- Event CRUD ---
-
-export function useEvents(ownerId: string, from: number, to: number, enabled = true) {
+export function useEvents(ownerId: string, from: number, to: number) {
     return useQuery({
         queryKey: calendarKeys.eventRange(ownerId, from, to),
         queryFn: async (): Promise<CalendarEventOccurrence[]> => {
@@ -120,7 +116,7 @@ export function useEvents(ownerId: string, from: number, to: number, enabled = t
             return response.data.map(withOccurrenceDay);
         },
         staleTime: STALE_TIME.TWO_MINUTES,
-        enabled: !!ownerId && enabled && from > 0 && to > 0,
+        enabled: !!ownerId && from > 0 && to > 0,
     });
 }
 
@@ -247,7 +243,7 @@ export function useCalendarAccess(ownerId: string, calendarId: string, enabled =
     });
 }
 
-export function useAllSharedCalendarEvents(sharedCalendars: SharedCalendar[], from: number, to: number) {
+export function useAllSharedCalendarEvents(sharedCalendars: readonly SharedCalendar[], from: number, to: number) {
     const visibleShared = sharedCalendars.filter((sc) => sc.visible);
 
     const results = useQueries({
@@ -298,8 +294,6 @@ export function useAllSharedCalendarEvents(sharedCalendars: SharedCalendar[], fr
     return { data: allEvents, isLoading };
 }
 
-// --- Shared calendars ---
-
 export function useSharedCalendars(ownerId: string, enabled = true) {
     return useQuery({
         queryKey: calendarKeys.sharedCalendars(ownerId),
@@ -314,7 +308,7 @@ export function useSharedCalendars(ownerId: string, enabled = true) {
 }
 
 // A team the viewer is not in still resolves to a name; an unresolved one keeps the calendar's name, never `team_<id>`.
-export function useSharedCalendarLabel(sharedCalendars: SharedCalendar[]): (sc: SharedCalendar) => string {
+export function useSharedCalendarLabel(sharedCalendars: readonly SharedCalendar[]): (sc: SharedCalendar) => string {
     const teamOwnerIds = useMemo(
         () => [
             ...new Set(
@@ -340,8 +334,8 @@ export function useSharedCalendarLabel(sharedCalendars: SharedCalendar[]): (sc: 
 
 export function useCalendarOptions(
     ownerId: string,
-    calendars: CalendarItem[],
-    sharedCalendars: SharedCalendar[],
+    calendars: readonly CalendarItem[],
+    sharedCalendars: readonly SharedCalendar[],
 ): CalendarOption[] {
     const label = useSharedCalendarLabel(sharedCalendars);
 
@@ -388,8 +382,6 @@ export function useDeleteSharedCalendar(ownerId: string) {
         onError: onMutationError,
     });
 }
-
-// --- RSVP ---
 
 export function useRsvp(ownerId: string) {
     const queryClient = useQueryClient();

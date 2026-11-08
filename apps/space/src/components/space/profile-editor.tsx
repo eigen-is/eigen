@@ -20,7 +20,7 @@ import { z } from 'zod';
 
 const formSchema = z.object({
     firstName: z.string().min(1, 'First name is required'),
-    lastName: z.string().optional(),
+    lastName: z.string(),
     avatar: z.string().nullable(),
 });
 
@@ -54,7 +54,7 @@ export function ProfileEditor() {
             await updateContactMutation.mutateAsync({
                 ...contact,
                 firstName: data.firstName,
-                lastName: data.lastName || '',
+                lastName: data.lastName,
                 avatar: data.avatar || '',
                 etag: heldEtag,
             });

@@ -41,7 +41,7 @@ type ChatMessageInputProps = {
     messageCount: number;
     onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>, content: string) => boolean | undefined;
     onAttachClick: () => void;
-    driveAttachments: ChatAttachment[];
+    driveAttachments: readonly ChatAttachment[];
     onRemoveDriveAttachment: (attachment: ChatAttachment) => void;
 };
 

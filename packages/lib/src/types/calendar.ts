@@ -79,6 +79,7 @@ export type CalendarEvent = {
 };
 
 export type CalendarEventOccurrence = CalendarEvent & {
+    // The occurrence's key in its series, a YYYY-MM-DD day that stays when the occurrence moves.
     occurrenceDate: string;
 };
 
