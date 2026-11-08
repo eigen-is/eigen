@@ -11,7 +11,7 @@ const { createRoot } = await import('react-dom/client');
 const { produce } = await import('immer');
 const { WorkbookContext } = await import('../../../context');
 const { InputBox } = await import('../../../components/SheetOverlay/InputBox');
-const { defaultContext, defaultSettings, committedRuns, FormulaCache } = await import('../../../state');
+const { defaultContext, defaultSettings, committedRuns, FormulaCache, openCellEditor } = await import('../../../state');
 type Context = import('../../../state').Context;
 
 const refs = {
@@ -200,11 +200,12 @@ test('a caret format does not carry into the next cell the editor opens on', asy
     update((ctx) => {
         ctx.editingCellPosition = [];
     });
+    expect(input.textContent).toBe('');
     // The next cell opens with its caret at the end, where the format waited in the last one.
     update((ctx) => {
         ctx.sheets[0].data = [[null, { v: 'hello ', m: 'hello ' }]];
         ctx.selections = [{ row: [0, 0], column: [1, 1], row_focus: 0, column_focus: 1 }];
-        ctx.editingCellPosition = [0, 1];
+        openCellEditor(ctx, 0, 1, { caret: 'end' });
     });
     expect(input.textContent).toBe('hello ');
     const typing = new InputEvent('beforeinput', { inputType: 'insertText', data: 'x', cancelable: true });

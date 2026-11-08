@@ -10,7 +10,7 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import { Window } from 'happy-dom';
 import type { Context } from '../../../state/context';
 import { handleGlobalKeyDown, typesIntoEditor } from '../../../state/events/keyboard';
-import type { Cell, DataValidationRule, GlobalCache, SingleRange } from '../../../state/types';
+import type { Cell, DataValidationRule, SingleRange } from '../../../state/types';
 import { contextFactory } from '../factories/context';
 import { validationsByCell } from '../factories/validations';
 
@@ -69,7 +69,7 @@ function keyDown(
         },
         stopPropagation() {},
     } as unknown as KeyboardEvent;
-    handleGlobalKeyDown(ctx, input, null, e, {} as GlobalCache);
+    handleGlobalKeyDown(ctx, input, null, e);
     return prevented;
 }
 
@@ -262,6 +262,42 @@ describe('handleGlobalKeyDown — Tab while editing', () => {
         keyDown(ctx, 'Tab', { cellInput, shiftKey: true });
         expect(ctx.sheets[0].data?.[1][1]?.v).toBe('north');
         expect(ctx.selections?.[0]).toMatchObject({ row_focus: 1, column_focus: 0 });
+    });
+});
+
+// Ctrl+Shift+; puts the date and time into the closed editor. Nothing is written until the edit commits.
+describe('handleGlobalKeyDown — the date shortcut', () => {
+    function filled() {
+        const ctx = listContext(null);
+        const data = ctx.sheets[0].data;
+        if (data) data[1][1] = { v: 'keep', m: 'keep' };
+        const cellInput = win.document.createElement('div') as unknown as HTMLDivElement;
+        ctx.getRefs().cellInput.current = cellInput;
+        return { ctx, cellInput };
+    }
+
+    test('opens with the date and leaves the cell as it was, so Escape restores it', () => {
+        const { ctx, cellInput } = filled();
+        keyDown(ctx, ':', { ctrlKey: true, shiftKey: true, cellInput });
+        expect(ctx.editingCellPosition).toEqual([1, 1]);
+        expect(cellInput.textContent).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+        expect(ctx.sheets[0].data?.[1][1]?.v).toBe('keep');
+    });
+
+    test('a typed key opens the filled cell empty, for the key to type over, and writes nothing', () => {
+        const { ctx, cellInput } = filled();
+        keyDown(ctx, 'x', { cellInput });
+        expect(ctx.editingCellPosition).toEqual([1, 1]);
+        expect(cellInput.textContent).toBe('');
+        expect(ctx.sheets[0].data?.[1][1]?.v).toBe('keep');
+    });
+
+    test('a read-only viewer opens nothing', () => {
+        const { ctx, cellInput } = filled();
+        ctx.allowEdit = false;
+        keyDown(ctx, ':', { ctrlKey: true, shiftKey: true, cellInput });
+        expect(ctx.editingCellPosition).toEqual([]);
+        expect(ctx.sheets[0].data?.[1][1]?.v).toBe('keep');
     });
 });
 

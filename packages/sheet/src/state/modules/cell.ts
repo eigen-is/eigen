@@ -1115,10 +1115,6 @@ export function carriedSpan(lines: readonly number[], i: number, limit: number, 
     return n;
 }
 
-export function setEditingCell(ctx: Context, row_index: number, col_index: number) {
-    ctx.editingCellPosition = [row_index, col_index];
-}
-
 export function getDataBySelectionNoCopy(ctx: Context, range: Selection) {
     if (!range?.row || range.row.length === 0) return [];
     const data = [];

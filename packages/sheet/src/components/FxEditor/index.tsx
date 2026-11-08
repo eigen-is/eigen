@@ -17,6 +17,7 @@ import {
     isSelectionOnHiddenRowCol,
     loadCellFont,
     moveHighlightCell,
+    openCellEditor,
     rangeHightlightselected,
     typesIntoEditor,
     valueShowEs,
@@ -82,11 +83,10 @@ export function FxEditor() {
             setContext((draftCtx) => {
                 const last = draftCtx.selections?.at(-1);
                 if (last?.row_focus == null || last.column_focus == null) return;
-                draftCtx.editingCellPosition = [last.row_focus, last.column_focus];
-                refs.globalCache.doNotFocus = true;
+                openCellEditor(draftCtx, last.row_focus, last.column_focus);
             });
         }
-    }, [context.selections, context.sheets, context.currentSheetId, refs.globalCache, setContext]);
+    }, [context.selections, context.sheets, context.currentSheetId, setContext]);
 
     const formulaAutocomplete = useFormulaAutocomplete({ targetRef: refs.fxInput, enabled: focused });
 

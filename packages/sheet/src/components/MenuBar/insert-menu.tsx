@@ -138,13 +138,7 @@ export function InsertMenu() {
                                 setContext((ctx) => {
                                     const cellInput = refs.cellInput.current;
                                     if (!cellInput) return;
-                                    autoSelectionFormula(
-                                        ctx,
-                                        cellInput,
-                                        refs.fxInput.current,
-                                        formula,
-                                        refs.globalCache,
-                                    );
+                                    autoSelectionFormula(ctx, cellInput, refs.fxInput.current, formula);
                                 });
                             }}
                         >

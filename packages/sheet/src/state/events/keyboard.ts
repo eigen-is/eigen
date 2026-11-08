@@ -14,12 +14,13 @@ import { moveCountPastHiddenRowCol } from '..';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import { cancelNormalSelected, updateCell } from '../modules/cell';
+import { openCellEditor } from '../modules/cell-editor';
 import { cellFocus, checkboxChange, getCellDataValidation } from '../modules/data-validation';
 import { fillFromEdge } from '../modules/drop-cell';
 import { handleFormulaInput } from '../modules/formula-editor';
 import { moveHighlightCell, moveHighlightRange, selectAll } from '../modules/selection';
 import { handleBold, handleItalic, handleUnderline } from '../modules/toolbar';
-import type { GlobalCache, Selection } from '../types';
+import type { Selection } from '../types';
 import { getSheetIndex } from '../utils';
 import { clearSelectedContents } from './clear';
 import { handleCopy, handleCut } from './copy';
@@ -75,7 +76,7 @@ export function handleGlobalEnter(ctx: Context, cellInput: HTMLDivElement, e: Ke
     } else if ((ctx.selections?.length ?? 0) > 0) {
         const last = ctx.selections?.at(-1);
         if (last?.row_focus == null || last.column_focus == null) return;
-        ctx.editingCellPosition = [last.row_focus, last.column_focus];
+        openCellEditor(ctx, last.row_focus, last.column_focus, { caret: 'end' });
         e.preventDefault();
     }
 }
@@ -192,7 +193,6 @@ const floatingObjectSelected = (ctx: Context) => ctx.activeObject != null;
 
 export function handleWithCtrlOrMetaKey(
     ctx: Context,
-    cache: GlobalCache,
     e: KeyboardEvent,
     cellInput: HTMLDivElement,
     fxInput: HTMLDivElement | null | undefined,
@@ -208,16 +208,11 @@ export function handleWithCtrlOrMetaKey(
             // Ctrl + Shift + Arrow: extend selection toward next edge
             handleControlPlusArrowKey(ctx, e, true);
         } else if ([';', '"', ':', "'"].includes(e.key)) {
-            const last = ctx.selections?.[ctx.selections.length - 1];
-            if (!last || last.row_focus == null || last.column_focus == null) return;
+            const last = ctx.selections?.at(-1);
+            if (ctx.allowEdit === false || last?.row_focus == null || last.column_focus == null) return;
 
-            const row_index = last.row_focus;
-            const col_index = last.column_focus;
-            updateCell(ctx, row_index, col_index, cellInput);
-            ctx.editingCellPosition = [row_index, col_index];
-
-            cache.ignoreWriteCell = true;
-            cellInput.innerText = dayjs().format('YYYY-MM-DD HH:mm:ss');
+            const html = dayjs().format('YYYY-MM-DD HH:mm:ss');
+            openCellEditor(ctx, last.row_focus, last.column_focus, { html, caret: 'end' });
             handleFormulaInput(ctx, fxInput, cellInput, e.keyCode);
         }
     } else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
@@ -341,7 +336,6 @@ export function handleGlobalKeyDown(
     cellInput: HTMLDivElement,
     fxInput: HTMLDivElement | null | undefined,
     e: KeyboardEvent,
-    cache: GlobalCache,
 ) {
     ctx.selectionActive = false;
     const kcode = e.keyCode;
@@ -403,10 +397,10 @@ export function handleGlobalKeyDown(
             return;
         }
 
-        const last = ctx.selections?.[ctx.selections.length - 1];
-        if (!last || last.row_focus == null || last.column_focus == null) return;
+        const last = ctx.selections?.at(-1);
+        if (last?.row_focus == null || last.column_focus == null) return;
 
-        ctx.editingCellPosition = [last.row_focus, last.column_focus];
+        openCellEditor(ctx, last.row_focus, last.column_focus, { caret: 'end' });
         e.preventDefault();
     } else if (kstr === 'Escape' && ctx.editingCellPosition.length > 0) {
         cancelNormalSelected(ctx);
@@ -417,7 +411,7 @@ export function handleGlobalKeyDown(
         // shared find bar's document-level Escape hotkey can dismiss it.
         return;
     } else if (e.ctrlKey || e.metaKey) {
-        handleWithCtrlOrMetaKey(ctx, cache, e, cellInput, fxInput);
+        handleWithCtrlOrMetaKey(ctx, e, cellInput, fxInput);
         return;
     } else if (
         e.shiftKey &&
@@ -439,9 +433,7 @@ export function handleGlobalKeyDown(
         } else {
             const last = ctx.selections?.at(-1);
             if (last?.row_focus == null || last.column_focus == null) return;
-            ctx.editingCellPosition = [last.row_focus, last.column_focus];
-            cache.overwriteCell = true;
-
+            openCellEditor(ctx, last.row_focus, last.column_focus, { html: '' });
             handleFormulaInput(ctx, fxInput, cellInput, kcode);
         }
     }

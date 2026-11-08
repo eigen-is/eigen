@@ -22,7 +22,8 @@ import {
     rangeHightlightselected,
     rangeSetValue,
 } from '../modules';
-import { cancelFunctionrangeSelected, mergeBorder, mergeMoveMain, setEditingCell, updateCell } from '../modules/cell';
+import { cancelFunctionrangeSelected, mergeBorder, mergeMoveMain, updateCell } from '../modules/cell';
+import { openCellEditor } from '../modules/cell-editor';
 import type { CellGlyph } from '../modules/cell-glyph';
 import { cellGlyphAt } from '../modules/cell-glyph';
 import { getFilterButtonAtPosition } from '../modules/filter';
@@ -486,7 +487,7 @@ export function handleCellAreaDoubleClick(ctx: Context, e: MouseEvent, cellArea:
         col_index = column_focus;
     }
 
-    setEditingCell(ctx, row_index, col_index);
+    openCellEditor(ctx, row_index, col_index, { caret: 'end' });
 }
 
 // True when a selection holds the cell at (row, column). A null row asks about a whole column, and a null column about a
