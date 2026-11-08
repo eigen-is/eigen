@@ -4,7 +4,6 @@
 // updates when formulas change, and rebuild-after-reset.
 
 import { describe, expect, it, spyOn } from 'bun:test';
-import type { Patch } from 'immer';
 import { enablePatches, isDraft, produceWithPatches } from 'immer';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
@@ -17,7 +16,7 @@ import {
     warmFormulaCellInfoMap,
 } from '../../../state/modules/formula-exec';
 import { insertRowCol } from '../../../state/modules/rowcol';
-import { addSheet, deleteSheet } from '../../../state/modules/sheet';
+import { addSheet, deleteSheet, renameSheet } from '../../../state/modules/sheet';
 import { contextFactory } from '../factories/context';
 
 enablePatches();
@@ -357,9 +356,6 @@ describe('execFunctionGroup — references resolved before the sheets changed', 
             })),
         }) as Context;
     }
-    const peerBatch = (ctx: Context, patches: Patch[]) =>
-        ctx.formulaCache.updateFormulaCache(ctx, { patches, inversePatches: [] }, 'redo');
-    const renameOne: Patch = { op: 'replace', path: ['sheets', 0, 'name'], value: 'Gone' };
     const growOne = (ctx: Context) =>
         insertRowCol(ctx, { type: 'row', index: 3, count: 4, direction: 'rightbottom', id: 'id_1' });
 
@@ -389,37 +385,30 @@ describe('execFunctionGroup — references resolved before the sheets changed', 
         expect(ctx.sheets[0].data?.[0][1]?.v).toBe(100);
     });
 
-    it('a sheet name reads the sheet a peer renamed to it', () => {
+    it('a sheet name that read no sheet reads the sheet renamed to it', () => {
         const ctx = workbook('=Old!A1');
         warmFormulaCellInfoMap(ctx);
-        ctx.sheets[0].name = 'Old';
-        ctx.formulaCache.updateFormulaCache(
-            ctx,
-            { patches: [{ op: 'replace', path: ['sheets', 0, 'name'], value: 'Old' }], inversePatches: [] },
-            'redo',
-        );
+        renameSheet(ctx, { id: 'id_1', name: 'Old' });
         editCell(ctx, 0, 0, 7, 'id_1');
         expect(ctx.sheets[1].data?.[0][1]?.v).toBe(7);
     });
 
-    // Before the batch the map holds no formula, while a hyperlink or a validation rule already resolved One!A1.
-    it('a formula a peer writes as it renames the sheet the formula names reads no sheet', () => {
-        const ctx = workbook();
+    // A rename points the formula at the new name, so the formula keeps reading the sheet.
+    it('a formula that names a renamed sheet follows it, and the map builds again', () => {
+        const ctx = workbook('=One!A1');
         warmFormulaCellInfoMap(ctx);
         getcellrange(ctx, 'One!A1');
-        ctx.sheets[0].name = 'Gone';
-        ctx.sheets[1].data?.[0].splice(1, 1, { f: '=One!A1' });
-        peerBatch(ctx, [{ op: 'replace', path: ['sheets', 1, 'data', 0, 1], value: { f: '=One!A1' } }, renameOne]);
+        renameSheet(ctx, { id: 'id_1', name: 'Gone' });
+        expect(ctx.sheets[1].data?.[0][1]?.f).toBe('=Gone!A1');
         expect(ctx.formulaCache.formulaCellInfoMap).toBeNull();
         setFormulaCellInfo(ctx, { r: 0, c: 1, id: 'id_2' });
-        expect(ctx.formulaCache.formulaCellInfoMap?.r0c1iid_2?.formulaDependency).toEqual([]);
+        expect(ctx.formulaCache.formulaCellInfoMap?.r0c1iid_2?.formulaDependency).toHaveLength(1);
     });
 
     it('a sheet name another caller resolved reads no sheet once a peer renames it, before the map is built', () => {
         const ctx = workbook();
         expect(getcellrange(ctx, 'One!A1')?.sheetId).toBe('id_1');
-        ctx.sheets[0].name = 'Gone';
-        peerBatch(ctx, [renameOne]);
+        renameSheet(ctx, { id: 'id_1', name: 'Gone' });
         expect(getcellrange(ctx, 'One!A1')).toBeNull();
     });
 
@@ -430,8 +419,7 @@ describe('execFunctionGroup — references resolved before the sheets changed', 
         ctx.formulaCache.resetEngine();
         ctx.sheets[0].name = 'Old';
         getcellrange(ctx, 'Old!A1');
-        ctx.sheets[0].name = 'One';
-        peerBatch(ctx, [{ op: 'replace', path: ['sheets', 0, 'name'], value: 'One' }]);
+        renameSheet(ctx, { id: 'id_1', name: 'One' });
         expect(getcellrange(ctx, 'Old!A1')).toBeNull();
     });
 });

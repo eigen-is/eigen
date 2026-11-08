@@ -58,7 +58,7 @@ export type CellWithRowAndCol = {
 // `value` stays `any` because the editor passes a cell, a sheet, a row or column op or a calc chain through it,
 // with no field that says which.
 export type Op = {
-    op: 'replace' | 'remove' | 'add' | 'insertRowCol' | 'deleteRowCol' | 'addSheet' | 'deleteSheet';
+    op: 'replace' | 'remove' | 'add' | 'insertRowCol' | 'deleteRowCol' | 'addSheet' | 'deleteSheet' | 'renameSheet';
     id?: string;
     path: (string | number)[];
     // biome-ignore lint/suspicious/noExplicitAny: see comment above

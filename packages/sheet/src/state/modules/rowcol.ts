@@ -161,7 +161,7 @@ export function moveCountPastHiddenRowCol(ctx: Context, key: string): number {
 
 // Writes the engine's result back one sheet and one field at a time, a chart and a validation rule one at a time, so
 // the undo entry immer records puts back only what the op moved and leaves a peer's later changes alone.
-function writeBackSheets(ctx: Context, sheets: Sheet[]) {
+export function writeBackSheets(ctx: Context, sheets: Sheet[]) {
     for (const [i, next] of sheets.entries()) {
         const sheet: Record<string, unknown> = ctx.sheets[i];
         for (const [key, value] of Object.entries(next)) {

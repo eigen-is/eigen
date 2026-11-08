@@ -18,7 +18,7 @@ import { sheetFinder } from './a1-notation';
 import { mapChartRefs } from './chart-data';
 import { withCfRanges } from './conditional-format';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from './defaults';
-import { functionStrChange } from './formula-shift';
+import { functionStrChange, rewriteSheetFormulas } from './formula-shift';
 import type { ExtendedSheetConfig, FilterEntry, ShiftedSheet, SingleRange } from './types';
 
 export type InsertRowColOp = {
@@ -225,9 +225,9 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
 ): S[] {
     const targetName = sheets[targetIndex].name;
     const findSheet = sheetFinder(sheets);
-    return sheets.map((sheet, sheetIndex) => {
-        const shift = (txt: string) =>
-            functionStrChange(
+    return sheets.map((sheet, sheetIndex) =>
+        rewriteSheetFormulas(sheet, (txt) => {
+            const shifted = functionStrChange(
                 txt,
                 op,
                 type === 'row' ? 'row' : 'col',
@@ -238,58 +238,9 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
                 sheetIndex === targetIndex,
                 findSheet,
             );
-
-        let newSheet = sheet;
-
-        if (sheet.data) {
-            let newData: typeof sheet.data | null = null;
-            for (let r = 0; r < sheet.data.length; r += 1) {
-                const row = sheet.data[r];
-                if (!row) continue;
-                for (let c = 0; c < row.length; c += 1) {
-                    const cell = row[c];
-                    if (!cell?.f) continue;
-                    const newF = `=${shift(cell.f.startsWith('=') ? cell.f.slice(1) : cell.f)}`;
-                    if (newF === cell.f) continue;
-                    newData ??= [...sheet.data];
-                    if (newData[r] === row) newData[r] = [...row];
-                    newData[r][c] = { ...cell, f: newF };
-                }
-            }
-            if (newData) newSheet = { ...newSheet, data: newData };
-        } else if (sheet.celldata) {
-            // A sheet without its matrix, such as any sheet a joiner's batch doesn't name, holds only its stored
-            // cells. Its formulas move too, or a joiner and the server read them at the old rows.
-            let newCelldata: typeof sheet.celldata | null = null;
-            for (let i = 0; i < sheet.celldata.length; i += 1) {
-                const entry = sheet.celldata[i];
-                const f = entry.v?.f;
-                if (!f) continue;
-                const newF = `=${shift(f.startsWith('=') ? f.slice(1) : f)}`;
-                if (newF === f) continue;
-                newCelldata ??= [...sheet.celldata];
-                newCelldata[i] = { ...entry, v: { ...entry.v, f: newF } };
-            }
-            if (newCelldata) newSheet = { ...newSheet, celldata: newCelldata };
-        }
-
-        const rules = sheet.conditionalFormatRules;
-        if (rules) {
-            let newRules: typeof rules | null = null;
-            for (let i = 0; i < rules.length; i += 1) {
-                const cf = rules[i];
-                if (cf.type !== 'default' || cf.conditionName !== 'formula') continue;
-                const txt = String(cf.conditionValue[0]);
-                const shifted = txt.startsWith('=') ? `=${shift(txt.slice(1))}` : shift(txt);
-                if (shifted === txt) continue;
-                newRules ??= [...rules];
-                newRules[i] = { ...cf, conditionValue: [shifted] };
-            }
-            if (newRules) newSheet = { ...newSheet, conditionalFormatRules: newRules };
-        }
-
-        return newSheet;
-    });
+            return txt.startsWith('=') ? `=${shifted}` : shifted;
+        }),
+    );
 }
 
 // A chart ref names its sheet by id, so an op on one sheet moves the refs to it on every sheet's

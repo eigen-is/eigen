@@ -11,7 +11,7 @@ Like ROADMAP and the proposals, this doc holds only open work: strike a finding 
 - Adding tests is fine when they add real value. Lines are judged on production code.
 - The goal is cleaner and simpler code. A product loss that removes a whole mechanism is welcome; there is no backward compatibility to keep, stored formats included.
 - [U2](#u2) is accepted: once another user edits, your own row, column or sheet insert or delete can no longer be undone. Pick the simplest cut rule that removes the machinery; a peer batch on that sheet, or any peer batch, are both fine. U1 is folded into U2, and U3 (the alternative if U2 were declined) is ruled out.
-- A tab rename rewrites the formulas that name the tab, as Excel does ([E9](#e9)). It is one `renameSheet` op kind, which every reader applies, not a cell write per formula: 107 bytes on the wire against 14.6 MB on 100,000 rewritten formulas.
+- A tab rename rewrites the formulas that name the tab, as Excel does. It is one `renameSheet` op kind, which every reader applies, not a cell write per formula: 107 bytes on the wire against 14.6 MB on 100,000 rewritten formulas.
 - The batch of product calls, all as recommended:
   - [D2](#d2) yes: sort moves borders, links and validation with their rows, fill copies links, and a paste adds no duplicate rule.
   - [D4](#d4) yes: fill drops Chinese numeral and weekday series and the geometric guess.
@@ -52,7 +52,6 @@ Each comes from reading or tracing the code, not from running it, unless it says
 | The link card over a frozen column of a scrolled sheet shows the cell scrolled underneath; a row-header drag while composing a formula picks rows offset by the grid's page top minus 70 px | [R3](#r3) | Offsets read; outcome traced |
 | Date validation compares a typed date's serial `v` against `YYYY-MM-DD` text, so the hint likely says "Date must be…" on every valid date | [F1](#f1) | Traced; check in the browser |
 | The first formula typed on an uncomputed sheet ships chain entries, so the server treats that sheet as computed and its export skips the recalc | [E1](#e1) | Traced |
-| Renaming a tab doesn't rewrite the formulas that name it (`=One!A1` then reads nothing); Excel rewrites them. Only the API import calls `renameSheetRefs` | [E9](#e9) | Read; a test pins the current behaviour |
 
 ## Shortlist
 
@@ -69,7 +68,6 @@ The best payoff per unit of risk, with no redesign. **Product** marks a finding 
 | [R2](#r2) + [R3](#r3) | One measuring context; one pointer-to-cell function | ~140 + ~10 test, four bugs | low-med | no | nothing |
 | [E2](#e2) | The import recalcs once; no `computed` flag, no export recalc | ~90 + ~150 test | low | small | a failed import later shrunk below the budget isn't recomputed at export |
 | [U2](#u2) | Structural undo only until a peer edits | ~170 + ~410 test, the three-way merge, the refusal pile, half the shifter | med | decided | after a collaborator's edit, your row, column or sheet op can't be undone |
-| [E9](#e9) | A tab rename rewrites the formulas that name it | adds ~30, fixes a bug | low-med | decided | nothing |
 
 ## If we built it today
 
@@ -206,11 +204,6 @@ Lost: nothing. ~80 LOC + ~40 test, low-medium risk, medium-high confidence. [E7]
 
 <a id="e6"></a>**E6. Fork scaffolding in formula state.**
 `SheetInfo.calculationChain` and `dynamicArrayCompute` (the only caller of `getSheets()` reads ids), `Sheet.dynamicArray`/`dynamicArray_compute` (never written), `FormulaCellInfo.children` (never read), `formulaDependency` (tests only), `color` (DFS state on long-lived nodes), `execfunction`'s nine positional parameters, `Parser`'s `tiny-emitter` for two reads (pass functions, drop the dependency), `createContextResolver` re-implementing `createArrayResolver`, and `ID_CARD_NUMBER` keeping an 18-digit Chinese ID as text (small product). Pattern 6. ~150 LOC + ~60 test, low risk, high confidence.
-
-<a id="e9"></a>**E9. A tab rename doesn't rewrite the formulas that name the tab. Decided: fix it.**
-`renameSheetRefs` (`engine/formula-shift.ts`) has one caller, the API's Import… (`apps/api/src/lib/document/sheets.ts`). Renaming a tab in the editor leaves `=One!A1` naming a sheet that no longer exists, and `formula-recalc.test.ts` pins that it "reads no sheet". Excel and Google rewrite them.
-Simpler: the rename recipe runs `renameSheetRefs` over every formula on every sheet that names the old name, and recomputes the rewritten cells, so the batch carries the rename and the cell writes together, as a row op's formula rewrite does. Also cover the other places a sheet name sits in formula text: conditional-format and validation formulas and chart refs (chart refs name sheets by id, so check rather than assume). Undo of the rename gets the inverse writes from its patches. Drop the exact-name reset on rename only if nothing else needs it.
-Lost: nothing. ~30 LOC added + ~40 test, low-medium risk (a rename on a big workbook writes every formula that names it; measure on the 125k-formula workbook), high confidence.
 
 <a id="e7"></a>**E7. Redesign: the commit works out the formula map and the recompute from the edit's patches, as undo already does.**
 20 `jfrefreshgrid`/`execFunctionGroup` calls in 11 files, 7 explicit `setFormulaCellInfo` calls, `refresh.ts`. The template exists: `patchStep` in `history.ts` runs `applyPatches` → `updateFormulaCache(patches)` → `produceWithPatches(recalculate(patches))`.
@@ -439,7 +432,7 @@ Wave 1 (nothing lost, or decided):
 |---|---|---|
 | Op log | [S3](#s3), [S7](#s7), [S8](#s8) | `state/utils/patch.ts`, `state/modules/sheet.ts`, `engine/replay-ops.ts`, `use-sheet.ts` |
 | Undo | [U2](#u2) | `history.ts`, `history-shift.ts`, `Workbook/api.ts`  |
-| Formulas | [E9](#e9), [E3](#e3), [E6](#e6), then [E4](#e4), [E5](#e5) | `engine/formula-shift.ts`, `engine/recalc.ts`, `formula-*` |
+| Formulas | [E3](#e3), [E6](#e6), then [E4](#e4), [E5](#e5) | `engine/formula-shift.ts`, `engine/recalc.ts`, `formula-*` |
 | Editing | [D1](#d1), [D7](#d7), [D5](#d5) | `state/api/*`, `paste.ts`, `clipboard.ts`, `filter.ts` |
 | Render and input | [R2](#r2), [R3](#r3), then [R6](#r6), [R7](#r7) | `state/context.ts`, `context/modal.tsx`, `state/events/*`, `SheetOverlay/*` |
 | Rules | [F1](#f1) (with `alternateFormatRules`), then [F3](#f3) once ruled | `protection.ts`, `validation*.ts`, `DataValidation/*` |
@@ -454,6 +447,7 @@ Wave 3, the redesigns, in [§ If we built it today](#if-we-built-it-today)'s ord
 
 - This run also takes the API audit's T2 and X2 (the other session agreed). Don't edit `API-SIMPLIFICATION-AUDIT.md` on this branch, because that session keeps editing it: tell it when T2 or X2 lands, and it strikes them. Its X2 ruling: a flat cap, the runner's deadline and its memory limit, and a timeout or out-of-memory is an accepted outcome. X2 joins Wave 2.
 - The owner allows an implementer to hand mechanical work (a grep sweep, rewiring similar test call sites, running a suite) to a cheaper sub-agent: Sonnet, or Haiku for a lookup, at low or medium effort. The implementer keeps Step 0, the design, the diff read and the commit. A sub-agent uses the implementer's worktree with no isolation option, one editing at a time, and never commits.
-- Wave 1 is running. Merged: S1, R5, R4 (`ctx.rowHeaderWidth` and `columnHeaderHeight` stay for R3 to inline), D3 (the ref's `setSelection` stays: 13 test callers and no other door to the stored selection copy; S7 may remove it). In cold review: E9, U2, F1. Running: D1, S3, R2. D1 also clears the fake copy state: since D3, `getSheet` treats an empty id as a bad id, so a menu Paste after a cancelled format painter (`dataSheetId: ''`) throws until D1 lands.
+- Wave 1 is running. Merged: S1, R5, R4 (`ctx.rowHeaderWidth` and `columnHeaderHeight` stay for R3 to inline), D3 (the ref's `setSelection` stays: 13 test callers and no other door to the stored selection copy; S7 may remove it). E9 (its review fixes are still to come; see below). In cold review: U2, F1. Running: D1, S3, R2, E3. D1 also clears the fake copy state: since D3, `getSheet` treats an empty id as a bad id, so a menu Paste after a cancelled format painter (`dataSheetId: ''`) throws until D1 lands.
 - Open for the wave's docs unit: SHEETS.md and SHEETS-TODO.md statements S1, R5 and the units in review make false; the help center and CHANGELOG for U2 (undo limit), E9 (rename rewrites formulas), R4 and S1's fixes. Each unit's report names them, and the orchestrator's merge list holds them.
+- E9's review fixes, to dispatch after U2 merges: a boundary check for the op through one shared `isSheetName`, since a 1 MB name over 200 formulas made 201 MB of JSON in the replay; a `!` in a name; a rename joins U2's structural rule, so undo neither overwrites a peer's rename nor silently does nothing; one list of the texts that name a sheet, shared with `appendSheetsToYjs`; the rename op takes its id from the recipe. The reviewer's first finding, a row op shipping `name`, went with S1 and U2; check it on the merged code.
 - For the closing review: D3 deleted the API insert and delete tests as covered by `rowcol.test.ts` and `rowcol-ops` without comparing assertions. `state/modules/cell.ts` got only a light pass; `carryCells` could split out.

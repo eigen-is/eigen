@@ -177,12 +177,6 @@ export class FormulaCache {
 
     public updateFormulaCache(ctx: Context, history: History, type: 'undo' | 'redo') {
         const patches = type === 'undo' ? history.inversePatches : history.patches;
-        // A renamed sheet changes which sheet a sheet name reads, so the map is built again on next use. The reset
-        // also drops the references other callers resolved, which matters even when no map is built yet.
-        if (patches.some(({ path }) => path[0] === 'sheets' && path[2] === 'name')) {
-            this.formulaCellInfoMap = null;
-            return;
-        }
         // An unbuilt map reads the patched cells when it builds.
         const map = this.formulaCellInfoMap;
         if (map == null) return;

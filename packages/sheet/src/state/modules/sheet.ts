@@ -9,7 +9,6 @@ import {
     SHEET_NAME_END_QUOTES,
     SHEET_NAME_FORBIDDEN,
     SHEET_NAME_RULE,
-    sheetNameKey,
 } from '../../engine/a1-notation';
 import { celldataToData } from '../../engine/celldata';
 import {
@@ -20,6 +19,8 @@ import {
     MAX_SHEET_ROW_COUNT,
 } from '../../engine/defaults';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
+import type { RenameSheetOp } from '../../engine/sheet-name';
+import { applySheetRename, sheetNameTaken } from '../../engine/sheet-name';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { firstVisibleSheetId, updateContextWithSheetData } from '../context';
@@ -27,6 +28,8 @@ import type { Sheet } from '../types';
 import { generateRandomSheetName, getSheetIndex, sheetOrder } from '../utils';
 import { cancelNormalSelected } from './cell';
 import { applySheetFilter } from './filter';
+import { snapshotContext } from './formula-cache';
+import { writeBackSheets } from './rowcol';
 
 export function storeSheetSelections(ctx: Context) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
@@ -211,13 +214,19 @@ export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
 
     if (index == null || ctx.sheets[index].name === txt) return;
 
-    if (ctx.sheets.some((sheet, i) => i !== index && sheetNameKey(sheet.name) === sheetNameKey(txt))) {
+    const { id } = ctx.sheets[index];
+    if (sheetNameTaken(ctx.sheets, id, txt)) {
         editable.innerText = oldtxt;
         throw new Error('Another sheet already has this name');
     }
 
-    ctx.sheets[index].name = txt;
-    // A formula's sheet name may now read this sheet, or no sheet.
+    renameSheet(ctx, { id, name: txt });
+}
+
+// The walk reads a plain snapshot, since reading each formula through a draft is slow. A name that read no sheet may
+// read this one now, so the formula map is built again.
+export function renameSheet(ctx: Context, op: RenameSheetOp) {
+    writeBackSheets(ctx, applySheetRename(snapshotContext(ctx).sheets, op));
     ctx.formulaCache.formulaCellInfoMap = null;
 }
 
