@@ -15,10 +15,6 @@ import { SheetOverlay } from '../SheetOverlay';
 // What the canvas shows. When only the scroll changed since, scrollFrame moves it instead of drawing it again.
 type DrawnFrame = { ctx: Context; freeze: Freezen | undefined; scroll: ScrollPos };
 
-// ---------------------------------------------------------------------------
-// Stable serialization for object-type dependency values
-// ---------------------------------------------------------------------------
-
 function useStableJson(value: unknown): string {
     const json = JSON.stringify(value ?? null);
     const ref = useRef(json);
@@ -26,15 +22,7 @@ function useStableJson(value: unknown): string {
     return ref.current;
 }
 
-// ---------------------------------------------------------------------------
-// Memoized overlay
-// ---------------------------------------------------------------------------
-
 const MemoizedSheetOverlay = memo(SheetOverlay);
-
-// ---------------------------------------------------------------------------
-// Sheet component
-// ---------------------------------------------------------------------------
 
 type Props = {
     sheet: SheetType;
@@ -43,7 +31,7 @@ type Props = {
 export const Sheet: React.FC<Props> = ({ sheet }) => {
     const { data } = sheet;
     const placeholderRef = useRef<HTMLDivElement>(null);
-    const { context, setContext, refs, settings } = useContext(WorkbookContext);
+    const { context, setContext, refs } = useContext(WorkbookContext);
 
     const contextRef = useRef(context);
     contextRef.current = context;
@@ -80,13 +68,11 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
         setContext((draftCtx) => {
             const canvas = refs.canvas.current;
             if (!canvas) return;
-            if (settings.devicePixelRatio === 0) {
-                draftCtx.devicePixelRatio = window.devicePixelRatio;
-            }
+            draftCtx.devicePixelRatio = window.devicePixelRatio;
             updateContextWithSheetData(draftCtx, sheetData);
             updateContextWithCanvas(draftCtx, canvas, placeholder);
         });
-    }, [refs.canvas, setContext, settings.devicePixelRatio]);
+    }, [refs.canvas, setContext]);
 
     // Window resize covers devicePixelRatio changes, the observer container-only ones (panels, un-hiding).
     // No feedback loop: the placeholder is sized by its flex parent, canvas and overlay are absolute.
@@ -104,7 +90,6 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
 
     // A switch derives the new sheet's geometry in its own recipe, so a changed sheet id skips the pass.
     const geometrySheetId = useRef<string | undefined>(undefined);
-    // Recalculate row/col info when data or config dimensions change
     // biome-ignore lint/correctness/useExhaustiveDependencies: keys rowlen/columnlen/rowhidden/colhidden are JSON-stable derived from sheet.config; the source object refs would re-fire on identity churn
     useEffect(() => {
         if (!data) return;
@@ -125,28 +110,16 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
         setContext((draftCtx) => updateContextWithCanvas(draftCtx, canvas, placeholder));
     }, [refs.canvas, setContext]);
 
-    // Recalculate freeze data when sheet or freeze config changes
     // biome-ignore lint/correctness/useExhaustiveDependencies: freeze re-init only on sheet switch / freeze config / row-col visibility change; passing the whole `context` would re-init on every cell edit
     useEffect(() => {
         initFreeze(context, refs.globalCache, context.currentSheetId);
     }, [refs.globalCache, sheet.frozen, context.currentSheetId, context.visibledatacolumn, context.visibledatarow]);
-
-    // -----------------------------------------------------------------------
-    // Canvas redraw – rAF-throttled, reads scroll from globalCache.
-    //
-    // Triggers:
-    //   1. context changes (cell edits, selection, etc.) → useEffect
-    //   2. scroll changes (native cellArea scroll) → globalCache scroll listener
-    //   3. a font that finishes loading, or a canvas bitmap the browser restores → their listeners
-    // All call scheduleRedraw which coalesces to one paint per frame.
-    // -----------------------------------------------------------------------
 
     const scheduleRedraw = useCallback(() => {
         cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = requestAnimationFrame(() => {
             if (!visibleRef.current) return;
             const ctx = contextRef.current;
-            if (ctx.groupValuesRefreshData.length > 0) return;
             const canvas = refs.canvas.current;
             if (!canvas) return;
             const freeze = refs.globalCache.freezen?.[sheet.id];
@@ -180,13 +153,11 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
         };
     }, [refs.canvas, scheduleRedraw]);
 
-    // Redraw on context changes (non-scroll: cell edits, selection, etc.)
     // biome-ignore lint/correctness/useExhaustiveDependencies: full `context` is the trigger — any change should redraw the canvas
     useEffect(() => {
         scheduleRedraw();
     }, [context, scheduleRedraw]);
 
-    // Redraw on scroll changes (from globalCache listener, bypasses React)
     useEffect(() => {
         const { scrollListeners } = refs.globalCache;
         scrollListeners.add(scheduleRedraw);
@@ -195,7 +166,6 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
         };
     }, [refs.globalCache, scheduleRedraw]);
 
-    // Cancel pending rAF on unmount
     useEffect(() => {
         return () => cancelAnimationFrame(rafIdRef.current);
     }, []);

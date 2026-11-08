@@ -1,5 +1,5 @@
-// The hovered column's menu arrow shows only on a column the sheet lets you edit, and follows a protection change
-// while the same column stays hovered.
+// The hovered column's menu arrow shows only while the user may edit, and follows a change of rights while the
+// same column stays hovered.
 
 import { afterEach, expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -10,7 +10,7 @@ const { act, createElement, createRef } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { WorkbookContext } = await import('../../../context');
 const { ColumnHeader } = await import('../../../components/SheetOverlay/ColumnHeader');
-const { defaultContext, defaultSettings } = await import('../../../state');
+const { defaultContext } = await import('../../../state');
 type GlobalCache = import('../../../state').GlobalCache;
 type Context = import('../../../state').Context;
 type SheetConfig = import('../../../state').SheetConfig;
@@ -21,7 +21,6 @@ const globalCache: GlobalCache = {
     scrollLeft: 0,
     scrollTop: 0,
     scrollListeners: new Set<() => void>(),
-    notifyScrollListeners: () => {},
 };
 const refs = {
     globalCache,
@@ -30,6 +29,7 @@ const refs = {
     canvas: createRef<HTMLCanvasElement | null>(),
     cellArea: createRef<HTMLDivElement | null>(),
     workbookContainer: createRef<HTMLDivElement | null>(),
+    hooks: { current: {} },
 };
 
 let cleanup: (() => Promise<void>) | undefined;
@@ -49,7 +49,7 @@ function contextWith(config: SheetConfig): Context {
     };
 }
 
-test('a protection change while the same column stays hovered hides its menu arrow', async () => {
+test('losing edit rights while the same column stays hovered hides its menu arrow', async () => {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
@@ -63,10 +63,11 @@ test('a protection change while the same column stays hovered hides its menu arr
                             context,
                             getContext: () => context,
                             setContext: () => {},
-                            settings: defaultSettings,
+                            aspectLocked: false,
                             refs,
                             handleUndo: () => {},
                             handleRedo: () => {},
+                            pasteClipboard: () => {},
                         },
                     },
                     createElement(ColumnHeader),
@@ -78,6 +79,7 @@ test('a protection change while the same column stays hovered hides its menu arr
         container.remove();
     };
 
+    refs.cellArea.current = document.createElement('div');
     await render(contextWith({}));
     const header = container.querySelector('.sheet-col-header');
     if (!(header instanceof HTMLElement)) throw new Error('no column header');
@@ -86,7 +88,7 @@ test('a protection change while the same column stays hovered hides its menu arr
     });
     expect(container.querySelector('.header-arrow')).not.toBeNull();
 
-    await render(contextWith({ colReadOnly: { 0: 1 } }));
+    await render({ ...contextWith({}), allowEdit: false });
     expect(container.querySelector('.sheet-col-header-hover')).not.toBeNull();
     expect(container.querySelector('.header-arrow')).toBeNull();
 });

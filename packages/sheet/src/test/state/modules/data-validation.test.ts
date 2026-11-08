@@ -1,8 +1,7 @@
 // Data-validation runtime paths the xlsx importer relies on. The dominant
 // imported shape is a dropdown whose value1 is a live quoted cross-sheet
 // $-anchored range ref ('MASTER DATA'!$B$2:$B$4) — getDropdownList must keep
-// resolving it by sheet NAME. Date rules carry YYYY-MM-DD operand strings,
-// the format validateCellData parses via isdatetime + dayjs.
+// resolving it by sheet NAME. Date rules carry YYYY-MM-DD operand strings.
 
 import { describe, expect, test } from 'bun:test';
 import {
@@ -11,6 +10,7 @@ import {
     REFERENCE_COLUMN_COUNT,
     REFERENCE_ROW_COUNT,
 } from '@workspace/lib/sheets';
+import { dateToSerial } from '../../../engine/parser/helper/number';
 import type { Context } from '../../../state/context';
 import {
     applyDataValidation,
@@ -35,12 +35,11 @@ import {
 import {
     addValidation,
     clearValidations,
-    ValidationLimitError,
     validationAt,
     validationLookup,
 } from '../../../state/modules/validation-rules';
-import type { Cell, DataValidationDraft, DataValidationRule } from '../../../state/types';
-import { contextFactory } from '../factories/context';
+import type { Cell, DataValidationDraft, DataValidationRule, Sheet } from '../../../state/types';
+import { contextFactory, workbookContextFactory } from '../factories/context';
 import { cellsWithRules, validationsByCell } from '../factories/validations';
 
 describe('getDropdownList', () => {
@@ -63,7 +62,9 @@ describe('getDropdownList', () => {
 });
 
 describe('validateCellData', () => {
-    test('parses the importer date operand format (YYYY-MM-DD)', () => {
+    const serial = (date: string) => dateToSerial(new Date(date.replace(/-/g, '/')));
+
+    test('a date rule compares serials, and its operands are YYYY-MM-DD', () => {
         const ctx = contextFactory() as Context;
         const rule: DataValidationRule = {
             type: 'date',
@@ -71,8 +72,16 @@ describe('validateCellData', () => {
             value1: '2024-01-01',
             value2: '2024-12-31',
         };
-        expect(validateCellData(ctx, rule, '2024-06-15')).toBe(true);
-        expect(validateCellData(ctx, rule, '2025-06-15')).toBe(false);
+        expect(validateCellData(ctx, rule, serial('2024-06-15'))).toBe(true);
+        expect(validateCellData(ctx, rule, serial('2025-06-15'))).toBe(false);
+        expect(validateCellData(ctx, rule, 'not a date')).toBe(false);
+    });
+
+    // Excel's "date >= 1/1/1900" stores serial 1, which the importer writes as 1899-12-31.
+    test('an imported any-date rule passes every date', () => {
+        const ctx = workbookContextFactory();
+        const rule: DataValidationRule = { type: 'date', type2: 'noEarlierThan', value1: '1899-12-31', value2: '' };
+        expect(validateCellData(ctx, rule, serial('2024-06-15'))).toBe(true);
     });
 });
 
@@ -329,23 +338,35 @@ describe('the rule over a cell', () => {
 });
 
 // The dialog's range box names a column header's selection as B:B, and a whole column runs to the grid's last row.
-// Every peer, the server and a reload drop a rule past the caps, so a writer refuses an edit that would make one.
+// Every peer, the server and a reload drop a rule past the caps, so a writer never makes one: the edit goes through
+// and the rule forgets the cells.
 describe('a write past the caps', () => {
     const rule = { type: 'dropdown', type2: '', value1: 'a,b', value2: '' };
+    const capSheet = (): Sheet => ({ name: 'sheet', id: 'id_1', order: 0 });
 
-    test('a clear that would split a rule past the ranges a rule may hold throws', () => {
-        const ctx = contextFactory() as Context;
-        const [sheet] = ctx.sheets;
+    test('a clear that would split a rule past the ranges a rule may hold drops the rule', () => {
+        const sheet = capSheet();
         const rows = Array.from({ length: MAX_VALIDATION_RANGES }, (_, i) => ({ row: [2 * i, 2 * i], column: [0, 2] }));
-        sheet.dataValidations = { v: { ranges: rows, rule } };
-        expect(() => clearValidations(sheet, { row: [0, 0], column: [1, 1] })).toThrow(ValidationLimitError);
+        sheet.dataValidations = {
+            v: { ranges: rows, rule },
+            other: { ranges: [{ row: [0, 0], column: [5, 5] }], rule },
+        };
         clearValidations(sheet, { row: [0, 0], column: [0, 0] });
         expect(sheet.dataValidations.v.ranges).toHaveLength(MAX_VALIDATION_RANGES);
+        clearValidations(sheet, { row: [2, 2], column: [1, 1] });
+        expect(Object.keys(sheet.dataValidations)).toEqual(['other']);
     });
 
-    test('a new rule on a sheet that holds as many rules as a sheet may throws, and a grown one does not', () => {
-        const ctx = contextFactory() as Context;
-        const [sheet] = ctx.sheets;
+    test('a rule at the ranges a rule may hold keeps them and stops extending', () => {
+        const sheet = capSheet();
+        const rows = Array.from({ length: MAX_VALIDATION_RANGES }, (_, i) => ({ row: [2 * i, 2 * i], column: [0, 0] }));
+        sheet.dataValidations = { v: { ranges: rows, rule } };
+        addValidation(sheet, 'v', rule, [{ row: [0, 0], column: [5, 5] }]);
+        expect(sheet.dataValidations.v.ranges).toEqual(rows);
+    });
+
+    test('a new rule on a sheet that holds as many rules as a sheet may is left out, and a grown one is not', () => {
+        const sheet = capSheet();
         sheet.dataValidations = Object.fromEntries(
             Array.from({ length: MAX_VALIDATIONS }, (_, i) => [
                 `v${i}`,
@@ -353,7 +374,8 @@ describe('a write past the caps', () => {
             ]),
         );
         const range = { row: [0, 0], column: [5, 5] };
-        expect(() => addValidation(sheet, 'new', rule, [range])).toThrow(ValidationLimitError);
+        addValidation(sheet, 'new', rule, [range]);
+        expect(sheet.dataValidations.new).toBeUndefined();
         addValidation(sheet, 'v0', rule, [range]);
         expect(sheet.dataValidations.v0.ranges).toContainEqual(range);
     });
@@ -588,8 +610,6 @@ const draft = (rule: Partial<DataValidationDraft>): DataValidationDraft => ({
     rangeTxt: 'A1:A3',
     value1: '',
     value2: '',
-    validity: '',
-    remote: false,
     prohibitInput: false,
     hintShow: false,
     hintValue: '',
@@ -665,6 +685,12 @@ describe('getValidationHint', () => {
         });
     });
 
+    test('a list rule reads what the cell shows, as its items are text', () => {
+        const rule: DataValidationRule = { type: 'dropdown', type2: '', value1: '1,2', value2: '' };
+        expect(getValidationHint(hintContext(rule, { v: 1, m: '1' }), 1, 1)).toBeUndefined();
+        expect(getValidationHint(hintContext(rule, { v: 1 }), 1, 1)).toBeUndefined();
+    });
+
     test('phrases each remaining rule type as a sentence', () => {
         const cases: [DataValidationRule, Cell, string][] = [
             [
@@ -701,6 +727,23 @@ describe('getValidationHint', () => {
         for (const [rule, cell, text] of cases) {
             expect(getValidationHint(hintContext(rule, cell), 1, 1)?.text).toBe(text);
         }
+    });
+
+    // 2024-06-15 is serial 45458. A date shows the text of its format, so the check reads the serial.
+    test('a date passes its rule whatever format it shows', () => {
+        const rule: DataValidationRule = { type: 'date', type2: 'between', value1: '2024-01-01', value2: '2024-12-31' };
+        const shown = (m: string, v: number): Cell => ({ v, m, ct: { fa: 'd mmm yyyy', t: 'd' } });
+        expect(getValidationHint(hintContext(rule, shown('15 Jun 2024', 45458)), 1, 1)).toBeUndefined();
+        expect(getValidationHint(hintContext(rule, shown('2024-06-15', 45458)), 1, 1)).toBeUndefined();
+        expect(getValidationHint(hintContext(rule, shown('15 Jun 2025', 45823)), 1, 1)?.text).toBe(
+            'Date must be between 2024-01-01 and 2024-12-31.',
+        );
+    });
+
+    test('a plain number under a date rule is read as a serial, and text that is no date fails', () => {
+        const rule: DataValidationRule = { type: 'date', type2: 'laterThan', value1: '2024-01-01', value2: '' };
+        expect(getValidationHint(hintContext(rule, { v: 45458, m: '45458' }), 1, 1)).toBeUndefined();
+        expect(getValidationHint(hintContext(rule, { v: 'soon', m: 'soon' }), 1, 1)?.kind).toBe('invalid');
     });
 
     test('shows the author prompt verbatim, markup and all — React renders it as text', () => {

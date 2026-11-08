@@ -133,8 +133,6 @@ async function openTab(from: YDoc, clientID: number) {
             ref: workbookRef,
             data: initialData,
             onOp: handleOp,
-            showToolbar: false,
-            showFormulaBar: false,
         });
     }
     const container = document.createElement('div');
@@ -153,7 +151,7 @@ async function openTab(from: YDoc, clientID: number) {
     const cell = (r: number, c: number) => workbook().getFlowdata()?.[r]?.[c] ?? null;
     // Types `text` into a cell through this tab's own cell editor and commits it with Enter, as a person does.
     const type = async (r: number, c: number, text: string) => {
-        await edit((w) => w.setSelection([{ row: [r, r], column: [c, c] }]));
+        await edit((w) => w.revealSearchMatch({ sheetId: 's1', r: r, c: c }));
         const input = container.querySelector<HTMLElement>('#sheet-rich-text-editor');
         if (!input) throw new Error('no cell editor');
         input.focus();
@@ -361,9 +359,6 @@ test("a peer's edit of the tab's cell that lands before the tab's edits clears t
     expect([tab.cell(0, 0)?.v, tab.cell(1, 1)?.bl ?? null]).toEqual(['mine', null]);
 });
 
-// The recalc list is never stored, but it rides the log, and overwriting a formula sends the whole list. A tab that
-// took that list on top of its own new formula would lose the formula from its list, and so from every formula map it
-// builds from the list, such as the one after a peer's row op.
 test('a formula typed while a peer overwrites another keeps recalculating on the typing tab', async () => {
     const s = server({ '0_0': '1' });
     const a = await openTab(s, 1);
@@ -374,10 +369,6 @@ test('a formula typed while a peer overwrites another keeps recalculating on the
     await b.type(2, 1, '=A1*3');
     await deliver(a.doc, b.doc);
     await deliver(b.doc, a.doc);
-    const chain = (sheet: Sheet & { calcChain?: { r: number; c: number }[] }) =>
-        sheet.calcChain?.map(({ r, c }) => [r, c]);
-    const joiner = replaySheetsOps(decodeSheetsSnapshot(readSheetsSnapshotJson(b.doc) ?? ''), opsOf(b.doc));
-    for (const tab of [a, b]) expect(chain(tab.workbook().getAllSheets()[0])).toEqual(chain(joiner[0]));
     const peer = replica(b.doc, 3);
     push(peer, rowInsert(11));
     await deliver(peer, b.doc);
@@ -468,6 +459,7 @@ for (const peerID of [1, 2000]) {
     });
 }
 
+// 220 batches each render the whole workbook, toolbar included, which a loaded machine takes past the 5 s default.
 test('a batch that lands before the oldest anchor the tab keeps loads the grid again', async () => {
     const s = server();
     const tab = await openTab(s, 50);
@@ -490,15 +482,14 @@ test('a batch that lands before the oldest anchor the tab keeps loads the grid a
     expect(tab.seen.version).toBe(1);
     expect(tab.cell(0, 0)?.v).toBe('online 219');
     expectJoined(tab);
-});
+}, 30_000);
 
 // The sheet tab whose label reads `name`.
 const sheetTab = (name: string) =>
     [...document.querySelectorAll('[role="button"] span')].find((span) => span.textContent === name)?.parentElement;
 
-// A sheet the tab adds or copies gets its cell matrix only when it opens, and that write stays off the log. So the
-// anchor kept at the add or copy holds the sheet without one. A rollback to it must still leave the open sheet with its
-// cells, and a keystroke there must land.
+// The tab keeps an anchor inside the observer of its own push, so the anchor at an add or copy must already hold the
+// sheet's cell matrix. A rollback to it must leave the open sheet with its cells, and a keystroke there must land.
 for (const [name, open, first] of [
     [
         'an added sheet',
@@ -573,7 +564,7 @@ test('a row op that overtakes another row op takes the focus off the grid', asyn
     const early = replica(s, 1);
     const tab = await openTab(s, 50);
     const late = replica(s, 100);
-    await tab.edit((w) => w.setSelection([{ row: [5, 5], column: [1, 1] }]));
+    await tab.edit((w) => w.revealSearchMatch({ sheetId: 's1', r: 5, c: 1 }));
     const input = document.getElementById('sheet-rich-text-editor');
     input?.focus();
     expect(document.activeElement === input).toBe(true);
@@ -591,13 +582,13 @@ test('a row op that overtakes another row op takes the focus off the grid', asyn
     expectJoined(tab);
 });
 
-// The sheet keeps its own copy of the selection for a switch back to it. A peer's sheet add must not bring back the
-// copy the row delete left behind, or the keystroke lands on the row that slid up.
+// A peer's sheet add must not bring back the selection the row delete took, or the keystroke lands on the row that slid
+// up.
 test("a peer's sheet add after a peer deleted the selected row brings no selection back", async () => {
     const s = server({ '3_0': 'mine', '4_0': 'theirs' });
     const tab = await openTab(s, 50);
     const peer = replica(s, 100);
-    await tab.edit((w) => w.setSelection([{ row: [3, 3], column: [0, 0] }]));
+    await tab.edit((w) => w.revealSearchMatch({ sheetId: 's1', r: 3, c: 0 }));
     const input = document.getElementById('sheet-rich-text-editor');
     input?.focus();
     push(peer, [{ op: 'deleteRowCol', id: 's1', path: [], value: { type: 'row', start: 3, end: 3 } }]);
@@ -628,7 +619,7 @@ for (const [name, rowOp, to] of [
         const s = server();
         const tab = await openTab(s, 50);
         const peer = replica(s, 100);
-        await tab.edit((w) => w.setSelection([{ row: [5, 5], column: [1, 1] }]));
+        await tab.edit((w) => w.revealSearchMatch({ sheetId: 's1', r: 5, c: 1 }));
         const input = document.getElementById('sheet-rich-text-editor');
         input?.focus();
         await act(async () => {

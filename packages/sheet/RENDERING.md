@@ -1,6 +1,6 @@
 # Sheet Rendering Architecture
 
-> **TLDR:** The sheet grid is one HTML5 canvas under a stack of React DOM overlays. The canvas paints cells, gridlines, borders and the cell glyphs, and redraws at most once per animation frame. Everything a user clicks or types into (the headers, the selection, the cell editor, images, cards) is React DOM over the canvas, in pane regions that scroll and clip in step with it. The browser does the scrolling natively, and the workbook surface stays light in dark mode. What the grid's data means, and why its glyphs behave as they do, is in [SHEETS.md](../../docs/SHEETS.md).
+> **TLDR:** The sheet grid is one HTML5 canvas under a stack of React DOM overlays. The canvas paints cells, gridlines, borders, the cell glyphs and the header labels, and redraws at most once per animation frame. Everything a user clicks or types into (the headers, the selection, the cell editor, images, cards) is React DOM over the canvas, in pane regions that scroll and clip in step with it. The browser does the scrolling natively, and the workbook surface stays light in dark mode. What the grid's data means, and why its glyphs behave as they do, is in [SHEETS.md](../../docs/SHEETS.md).
 
 These are the rendering notes of `packages/sheet`, Eigen's fork of fortune-sheet. Read them before you change how cells paint, where an overlay lines up with the canvas, or how the grid scrolls. The sections start with the component tree and the technology each layer uses, then walk the layers from the canvas up, and end with scrolling, the z-index stack and the patterns that keep a redraw cheap.
 
@@ -77,15 +77,14 @@ It is not interactive. The overlay handles every mouse event.
 
 **Files**: `SheetOverlay/ColumnHeader.tsx`, `SheetOverlay/RowHeader.tsx`
 
-The headers are React divs, not canvas. They render:
+The labels (A, B, C… and 1, 2, 3…) are canvas paint (`state/render/headers.ts`). Everything over them is React divs:
 
-- the labels (A, B, C… and 1, 2, 3…);
 - the hover highlight (semi-transparent, `z-index: 11`) and the selected column or row highlight (light blue, `z-index: 10`);
 - the resize handle (`.sheet-cols-change-size` / `.sheet-rows-change-size`);
 - the freeze drag handle at the freeze boundary;
 - in the column header only, the hover dropdown arrow (lucide `ChevronDown` in a `.header-arrow` span), which opens the column context menu. The autofilter buttons are canvas paint instead ([§ 6](#6-filter-buttons-canvas)).
 
-Headers are not scroll containers. They use the body overlays' pane region model ([§ Scrolling](#scrolling)) one axis at a time: each header holds `OverlayRegion` viewports derived by `computeColumnHeaderRegions` / `computeRowHeaderRegions` (`freeze.ts`). With a freeze there is a band pinned to the freeze-time scroll and a main band that translates from the scroll bus. The main band's clip cuts the hover and selected highlights, and their bottom or right border, at the freeze boundary, in step with the canvas pane draw. Selected highlights render into every region, clipped per pane. The hover highlight and the resize handle render only into the region that holds the hovered column or row. The freeze drag handle alone stays on a plain wrapper translated from the bus (`translateX(-scrollLeft)` / `translateY(-scrollTop)`), with its `+scroll` pinning, because a freeze drag moves it imperatively in live content coordinates. The hit test reads the live offset from `globalCache`.
+Headers are not scroll containers. They use the body overlays' pane region model ([§ Scrolling](#scrolling)) one axis at a time: each header holds `OverlayRegion` viewports derived by `computeColumnHeaderRegions` / `computeRowHeaderRegions` (`freeze.ts`). With a freeze there is a band pinned to the freeze-time scroll and a main band that translates from the scroll bus. The main band's clip cuts the hover and selected highlights, and their bottom or right border, at the freeze boundary, in step with the canvas pane draw. Selected highlights render into every region, clipped per pane. The hover highlight and the resize handle render only into the region that holds the hovered column or row. The freeze drag handle alone stays on a plain wrapper translated from the bus (`translateX(-scrollLeft)` / `translateY(-scrollTop)`), with its `+scroll` pinning, because a freeze drag moves it imperatively in live content coordinates. A header's hit test goes through `sheetPoint`, as the cell area's does ([§ Scrolling](#scrolling)).
 
 ### 3. Cell Selection: The Blue Rectangle (React DOM)
 
@@ -197,7 +196,7 @@ Scrolling is the browser's own. `cellArea` (`overflow: auto`, holding a full-siz
 - The bus has three kinds of subscriber: the canvas redraw (`Sheet`, coalesced per animation frame), the headers' freeze-handle `transform` wrappers (`ColumnHeader` / `RowHeader`), and one `transform` per pane region (`OverlayRegion`, body and header regions alike).
 - A programmatic scroll (back to top, restoring a sheet's position on a switch, following the selection, a freeze reset) writes `cellArea.scrollLeft/scrollTop`, and the native `scroll` event then syncs the bus.
 - `overscroll-behavior: none` turns off the macOS rubber-band bounce, which the canvas, redrawn per animation frame, can't follow. It also stops the scroll from chaining to the page.
-- The mouse hit test reads `ctx.scrollLeft/scrollTop`, which `setContextWithProduce` syncs from `globalCache` at the top of every recipe.
+- Every mouse hit test goes through `sheetPoint` (`state/modules/location.ts`), which measures the event from the cell area's rect, with its live scroll and the frozen panes, whatever element received it. A recipe that needs the scroll alone reads `ctx.scrollLeft/scrollTop`, which `setContextWithProduce` syncs from `globalCache` at the top of every recipe.
 
 **The body overlay layer.** The body overlays (selection box, cell editor, presence, fill handle, formula range visuals, search highlights, images, link and validation cards) do not scroll natively. They live in a `position: sticky` layer (`.sheet-cell-overlay-layer`), the first child of `cellArea`: a 0×0 anchor pinned to the scrollport origin at compositor speed. It holds up to four pane region viewports (`OverlayRegion`) that mirror how the canvas draws frozen panes: main, frozen-rows band, frozen-columns band and corner. Each region is a `position: absolute` div at a fixed viewport rect with `overflow: hidden`. The rects come from the freeze config (`computeOverlayRegions` in `state/modules/freeze.ts`) and change only when the freeze config or the row and column sizes change. Inside each region a content div restores the content-coordinate origin and translates from the scroll bus on its free axes only: main `(-sx, -sy)`, rows band `(-sx, ·)`, columns band `(·, -sy)`, the corner pinned. It is the header mechanism applied per pane, locked to the canvas redraw, so nothing drifts and a scroll does no React work.
 

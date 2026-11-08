@@ -11,6 +11,7 @@ import type {
 } from '@workspace/lib/sheets';
 import { isNil } from 'es-toolkit/compat';
 import { toA1 } from '../../engine/a1-notation';
+import { createArrayResolver } from '../../engine/cell-resolver';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
 import { createCfFormulaEvaluator, evaluateConditionalFormat } from '../../engine/conditional-format';
 import type { CellMatrix, ConditionalFormatRule } from '../../engine/types';
@@ -19,8 +20,6 @@ import type { Context } from '../context';
 import type { ConditionRulesProps } from '../types';
 import { getSheetIndex } from '../utils';
 import { getRangeByTxt } from './cell';
-import { createContextResolver } from './formula-cache';
-import { checkProtectionFormatCells } from './protection';
 import { isRealNum } from './validation';
 
 // The rules the conditional formatting dialog makes. The others, such as a formula rule, come from a file or from a
@@ -51,9 +50,8 @@ export function conditionRuleError(ctx: Context, rules: ConditionRulesProps): st
     return typeof values === 'string' ? values : undefined;
 }
 
-// Adds the dialog's rule over the selection, unless conditionRuleError refuses it or the sheet is protected.
+// Adds the dialog's rule over the selection, unless conditionRuleError refuses it.
 export function setConditionRules(ctx: Context, rules: ConditionRulesProps) {
-    if (!checkProtectionFormatCells(ctx)) return;
     const values = readRuleValues(ctx, rules);
     const cellrange = ctx.selections ?? [];
     const [anchor] = cellrange;
@@ -179,13 +177,11 @@ export function getComputeMap(ctx: Context): ComputeMap | null {
         }
     }
 
-    // Formula rules evaluate through the engine directly, as the HTML export does. execfunction would set
-    // ctx.calculateSheetId, which throws on the frozen context a paint reads, and would add every rule's formula to the
-    // sheet's calc chain.
+    // A paint reads a frozen context, so formula rules evaluate through the engine directly, as the HTML export does.
     const computeMap = evaluateConditionalFormat(ruleArr, data, {
         evaluateFormula: createCfFormulaEvaluator(
             ctx.formulaCache.engine,
-            createContextResolver(ctx),
+            createArrayResolver(ctx.sheets),
             ctx.currentSheetId,
         ),
     });
@@ -233,24 +229,20 @@ export const CF_PRESETS: Record<string, string[]> = {
 };
 
 export function clearSheetRules(ctx: Context) {
-    if (!checkProtectionFormatCells(ctx)) return;
     getSheet(ctx).conditionalFormatRules = [];
 }
 
 export function deleteSheetRule(ctx: Context, ruleIndex: number) {
-    if (!checkProtectionFormatCells(ctx)) return;
     getSheet(ctx).conditionalFormatRules?.splice(ruleIndex, 1);
 }
 
 export function applyColorScalePreset(ctx: Context, presetKey: string) {
-    if (!checkProtectionFormatCells(ctx)) return;
     const format = CF_PRESETS[presetKey];
     if (!format) return;
     appendRule(ctx, 'colorGradation', format);
 }
 
 export function applyDataBarPreset(ctx: Context, presetKey: string) {
-    if (!checkProtectionFormatCells(ctx)) return;
     const format = CF_PRESETS[presetKey];
     if (!format) return;
     appendRule(ctx, 'dataBar', format);

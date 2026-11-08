@@ -26,7 +26,6 @@ function text(v: string): Cell {
 // Header on row 0, four dated rows below it in one column.
 function dateContext(): Context {
     return contextFactory({
-        filter: {},
         sheets: [
             {
                 name: 'sheet',

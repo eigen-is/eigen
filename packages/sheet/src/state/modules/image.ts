@@ -1,6 +1,6 @@
-// Images on a sheet in the editor: inserting one at the selected cell, and swapping a pending upload's name for the real
-// one once the upload settles, on every sheet and in the undo stacks. The toolbar and the paste and upload flows call
-// these inside an edit's recipe.
+// Images on a sheet in the editor: inserting one at the selected cell, and swapping a pending upload's name for the
+// real one once the upload settles, on every sheet and in the undo stacks. The toolbar and the paste and upload flows
+// call these inside an edit's recipe.
 
 import { CHART_MAX_SIDE } from '@workspace/lib/charts';
 import type { SheetImage } from '@workspace/lib/sheets';
@@ -30,9 +30,8 @@ export function removeImageByMediaName(ctx: Context, name: string) {
     }
 }
 
-// The swap of a pending name records no undo step, so an entry that brings its image back, a redone insert or copy, an
-// undone delete of the image or of its sheet, would still bring the pending name, which resolves to nothing; it takes
-// the real name too, in a patch at any depth down to the image and in the deleted sheet an undo ships.
+// The swap records no undo step, so an undo or redo that brings an image back would restore the pending name.
+// This renames it in every history patch, down to the image, and in the added or deleted sheet a step ships.
 export function replaceMediaNameInHistory(
     history: Pick<GlobalCache, 'undoList' | 'redoList'>,
     oldName: string,
@@ -42,16 +41,16 @@ export function replaceMediaNameInHistory(
     const images = (value: Record<string, SheetImage>) => mapValues(value, image);
     const sheet = (value: Sheet) => (value.images ? { ...value, images: images(value.images) } : value);
     const rename = (patch: Patch): Patch => {
-        if (patch.path[0] !== 'sheets' || patch.value == null) return patch;
-        if (patch.path.length === 2) return { ...patch, value: sheet(patch.value) };
-        if (patch.path[2] !== 'images') return patch;
+        if (patch.value == null || patch.path[2] !== 'images') return patch;
         if (patch.path.length === 3) return { ...patch, value: images(patch.value) };
         return patch.path.length === 4 ? { ...patch, value: image(patch.value) } : patch;
     };
     for (const entry of [...history.undoList, ...history.redoList]) {
         entry.patches = entry.patches.map(rename);
         entry.inversePatches = entry.inversePatches.map(rename);
-        if (entry.options?.deletedSheet) entry.options.deletedSheet = sheet(entry.options.deletedSheet);
+        const { addedSheet, deletedSheet } = entry.options;
+        if (addedSheet) entry.options.addedSheet = sheet(addedSheet);
+        if (deletedSheet) entry.options.deletedSheet = sheet(deletedSheet);
     }
 }
 
@@ -84,9 +83,8 @@ export function selectedCellOrigin(ctx: Context): { x: number; y: number } {
     return { x: left, y: top };
 }
 
-// Stored at the size the caller gives (a fit to the pane, or a pasted item's own box), scaled down whole to the largest
-// side every floating object is clamped to, so a large image keeps its aspect. The id is a uuid: two peers inserting
-// at once must never write one key.
+// Scaled down whole to the largest side a floating object may have, so a large image keeps its aspect.
+// The id is a uuid: two peers inserting at once must never write one key.
 export function insertImage(ctx: Context, mediaName: string, width: number, height: number, angle = 0) {
     const sheet = editableCurrentSheet(ctx);
     if (!sheet) return;

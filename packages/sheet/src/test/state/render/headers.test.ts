@@ -39,7 +39,7 @@ function letterPositions(scrollWidth: number, offsetLeft: number) {
             letters[text] = x;
         },
     };
-    const ctx = workbookContextFactory({ visibledatacolumn: [100, 200, 300, 400], columnHeaderHeight: 20 });
+    const ctx = workbookContextFactory({ visibledatacolumn: [100, 200, 300, 400] });
     drawColumnHeader(ctx, renderCtx as unknown as CanvasRenderingContext2D, scrollWidth, 400, offsetLeft);
     return letters;
 }

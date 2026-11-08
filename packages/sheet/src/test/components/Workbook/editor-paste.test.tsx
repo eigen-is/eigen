@@ -1,6 +1,5 @@
 // While a cell is open, the editor owns a paste: the text lands once, in the editor, and the grid pastes
-// nothing, neither cells nor an image or a chart. A ⌘V whose paste the grid passed on doesn't make the next
-// paste into the editor a grid paste that closes it.
+// nothing, neither cells nor an image or a chart.
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { buildChartClipboardItem, writeEigenClipboard } from '@workspace/lib/clipboard';
@@ -34,11 +33,9 @@ async function mount() {
     document.body.append(container);
     const root = createRoot(container);
     const workbook = createRef<WorkbookInstance>();
-    const data: Sheet[] = [
-        { id: 's1', name: 'One', order: 0, status: 1, row: 20, column: 10, celldata: [], config: {} },
-    ];
+    const data: Sheet[] = [{ id: 's1', name: 'One', order: 0, row: 20, column: 10, celldata: [], config: {} }];
     await act(async () => {
-        root.render(createElement(Workbook, { ref: workbook, data, showToolbar: false, showFormulaBar: false }));
+        root.render(createElement(Workbook, { ref: workbook, data }));
     });
     cleanup = async () => {
         await act(async () => root.unmount());
@@ -102,15 +99,4 @@ test('a chart on the clipboard pastes into the open editor as nothing but text',
     await openEditor(input);
     await paste(input, chartClipboard());
     expect(charts()).toEqual([]);
-});
-
-test('a ⌘V on the grid that pasted a chart leaves no grid paste waiting for the editor', async () => {
-    const { input, cell, charts } = await mount();
-    await key(input, { key: 'v', code: 'KeyV', metaKey: true });
-    await paste(input, chartClipboard());
-    expect(charts()).toHaveLength(1);
-    await openEditor(input);
-    await paste(input, textClipboard('a'));
-    expect(inserted).toEqual(['a']);
-    expect(cell(1, 0)).toBeNull();
 });

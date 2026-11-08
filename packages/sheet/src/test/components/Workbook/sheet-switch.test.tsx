@@ -11,12 +11,12 @@ const contextModule = await import('../../../state/context');
 type Sheet = import('../../../state').Sheet;
 type WorkbookInstance = import('../../../components/Workbook').WorkbookInstance;
 
-// Tab order is `order`, not array position: array-first "Hidden" must never become current.
+// Tab order is `order`, not array position: the workbook opens on One, not on array-first Two or on Hidden.
 function sheets(): Sheet[] {
     return [
+        { id: 's2', name: 'Two', order: 2, row: 30, column: 6, celldata: [], config: {}, defaultRowHeight: 40 },
         { id: 'hidden', name: 'Hidden', order: 0, hide: 1, row: 10, column: 5, celldata: [], config: {} },
-        { id: 's1', name: 'One', order: 2, status: 1, row: 20, column: 5, celldata: [], config: {} },
-        { id: 's2', name: 'Two', order: 1, row: 30, column: 6, celldata: [], config: {}, defaultRowHeight: 40 },
+        { id: 's1', name: 'One', order: 1, row: 20, column: 5, celldata: [], config: {} },
     ];
 }
 
@@ -40,8 +40,6 @@ async function mountWorkbook(props: Record<string, unknown> = {}) {
                 createElement(Workbook, {
                     ref,
                     data,
-                    showToolbar: false,
-                    showFormulaBar: false,
                     hooks: {},
                     ...props,
                 }),
@@ -65,18 +63,6 @@ function tab(container: HTMLElement, name: string) {
     if (!span?.parentElement) throw new Error(`tab ${name} did not render`);
     return span.parentElement;
 }
-
-// A stored sheet's id is optional, the editor's isn't: the mount gives one to a sheet that comes without.
-test('a sheet without an id gets one when the workbook mounts', async () => {
-    const given = '00000000-0000-4000-8000-000000000001';
-    spyOn(crypto, 'randomUUID').mockReturnValue(given);
-    const data = [{ name: 'One', order: 0, row: 10, column: 5, celldata: [], config: {} }];
-    const { workbook } = await mountWorkbook({ data });
-    const ids = workbook()
-        .getAllSheets()
-        .map((sheet) => sheet.id);
-    expect(ids).toEqual([given]);
-});
 
 test('a tab switch derives the sheet geometry once', async () => {
     const { container, current } = await mountWorkbook();
@@ -121,7 +107,7 @@ test("a viewer applies a peer's sheet deletion and addition", async () => {
         workbook()
             .getAllSheets()
             .map((sheet) => sheet.id),
-    ).toEqual(['hidden', 's2', 's3']);
+    ).toEqual(['s2', 'hidden', 's3']);
     expect(current()).toBe('Two');
 });
 
@@ -136,7 +122,7 @@ test('undoing an added sheet lands on the first visible sheet in tab order', asy
         workbook().undo();
     });
     expect(workbook().getAllSheets()).toHaveLength(3);
-    expect(current()).toBe('Two');
+    expect(current()).toBe('One');
 });
 
 // All sheets is the choice of sheet: the visible ones in tab order, the current one checked.
@@ -150,15 +136,15 @@ test('All sheets lists the visible sheets in tab order, checks the current one a
         });
     await open();
     expect(checkRows()).toEqual([
-        ['Two', 'false'],
         ['One', 'true'],
+        ['Two', 'false'],
     ]);
     await clickRow('Two');
     expect(current()).toBe('Two');
     await open();
     expect(checkRows()).toEqual([
-        ['Two', 'true'],
         ['One', 'false'],
+        ['Two', 'true'],
     ]);
 });
 
@@ -240,17 +226,4 @@ test('Enter that ends a tab rename sends no keypress on to the notice', async ()
         await act(async () => focused.click());
     }
     expect(notice()).not.toBeNull();
-});
-
-// The column menu's arrow shows on a hovered column a user may edit. A read-only column beside it must not hide it.
-test("a column header's menu arrow asks only about the hovered column", async () => {
-    const data = sheets();
-    data[1].config = { colReadOnly: { 1: 1 } };
-    const { container } = await mountWorkbook({ data, showToolbar: false });
-    const header = container.querySelector('.sheet-col-header');
-    if (!header) throw new Error('no column header');
-    await act(async () => {
-        header.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 10, clientY: 5 }));
-    });
-    expect(container.querySelector('[aria-label="Column options"]')).not.toBeNull();
 });

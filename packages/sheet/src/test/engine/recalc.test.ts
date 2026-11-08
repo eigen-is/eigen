@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import type { Cell, Sheet } from '@workspace/lib/sheets';
+import { createArrayResolver } from '../../engine/cell-resolver';
+import { FormulaEngine } from '../../engine/formula-engine';
 import { sheetFinder } from '../../engine/parser/helper/cell';
-import { extractDependencies, recalcSheets, sheetsNeedRecalc } from '../../engine/recalc';
+import { extractDependencies, recalcSheets } from '../../engine/recalc';
 
 // ── Builders ────────────────────────────────────────────────────────────────
 
@@ -20,8 +22,6 @@ function formula(f: string, cached?: Partial<Cell>): Cell {
 function sheet(id: string, name: string, data: (Cell | null)[][], extra: Partial<Sheet> = {}): Sheet {
     return { id, name, order: 0, config: {}, data, ...extra };
 }
-
-type SheetWithChain = Sheet & { calcChain?: { r: number; c: number; id: string }[] };
 
 // ── recalcSheets ────────────────────────────────────────────────────────────
 
@@ -179,7 +179,7 @@ describe('engine/recalc — recalcSheets', () => {
 
     test('downstream formula reads the cached value, not the engine error', () => {
         // B1 is an unsupported function with a cached 7; =B1+1 must see 7 → 8,
-        // proving the #NAME? never entered the eval cache (execFunctionGlobalData).
+        // proving the #NAME? never reached the formulas downstream.
         const sheets = [
             sheet('s1', 'Sheet1', [
                 [null, formula('=FILTER(1,2)', { v: 7, m: '7', ct: { fa: 'General', t: 'n' } }), formula('=B1+1')],
@@ -530,100 +530,100 @@ describe('engine/recalc — recalcSheets', () => {
         ];
         expect(recalcSheets(sheets, { maxDependencySlots: 1 })[0].data![0][0]?.v).toBe(11);
     });
-
-    test('output carries a populated calcChain for formula cells', () => {
-        const out = recalcSheets([sheet('s1', 'Sheet1', [[num(1), formula('=A1+1')]])]) as SheetWithChain[];
-        expect(out[0].calcChain).toEqual([{ r: 0, c: 1, id: 's1' }]);
-    });
-});
-
-// ── sheetsNeedRecalc gate ───────────────────────────────────────────────────
-
-describe('engine/recalc — sheetsNeedRecalc', () => {
-    test('false for a doc with no formula cells', () => {
-        expect(sheetsNeedRecalc([sheet('s1', 'Sheet1', [[num(1), num(2)]])])).toBe(false);
-    });
-
-    test('true for formula cells (data) without a calcChain', () => {
-        expect(sheetsNeedRecalc([sheet('s1', 'Sheet1', [[num(1), formula('=A1+1')]])])).toBe(true);
-    });
-
-    test('true for formula cells in celldata without a calcChain', () => {
-        const s: Sheet = {
-            id: 's1',
-            name: 'Sheet1',
-            order: 0,
-            config: {},
-            celldata: [{ r: 0, c: 0, v: formula('=1+1') }],
-        };
-        expect(sheetsNeedRecalc([s])).toBe(true);
-    });
-
-    test('false once a calcChain is present (editor-flushed / import-recalced)', () => {
-        const s: SheetWithChain = {
-            ...sheet('s1', 'Sheet1', [[num(1), formula('=A1+1')]]),
-            calcChain: [{ r: 0, c: 1, id: 's1' }],
-        };
-        expect(sheetsNeedRecalc([s])).toBe(false);
-    });
-
-    test('recalc output no longer triggers the gate (idempotent)', () => {
-        const out = recalcSheets([sheet('s1', 'Sheet1', [[num(1), formula('=A1+1')]])]);
-        expect(sheetsNeedRecalc(out)).toBe(false);
-    });
-
-    test('false for an id-less sheet — recalcSheets skips it, so it must not arm the gate', () => {
-        const idless: Sheet = { name: 'Loose', order: 0, config: {}, data: [[num(1), formula('=A1+1')]] };
-        expect(sheetsNeedRecalc([idless])).toBe(false);
-        expect(recalcSheets([idless])[0]).toBe(idless);
-    });
-
-    test('recalc output of a doc carrying an id-less sheet no longer triggers the gate', () => {
-        const idless: Sheet = { name: 'Loose', order: 0, config: {}, data: [[num(1), formula('=A1+1')]] };
-        const out = recalcSheets([sheet('s1', 'Sheet1', [[num(1), formula('=A1+1')]]), idless]);
-        expect(sheetsNeedRecalc(out)).toBe(false);
-    });
 });
 
 describe('engine/recalc — extractDependencies', () => {
     const walkOver = (sheets: Pick<Sheet, 'id' | 'name' | 'data'>[]) => ({
-        sheets,
         findSheet: sheetFinder(sheets),
         cellTextToIndexList: {},
     });
 
-    // Each quoted sheet name is glued to the reference after it as the formula is split, never by moving the rest of
-    // the parts, so a crafted file can't make the walk quadratic.
+    // The walk is linear in the text, so a crafted file can't make it quadratic.
     test('walks a 2 MB formula of quoted sheet names in well under a second', () => {
         const g = walkOver([{ id: 's2', name: 'My Data', data: [[num(1)]] }]);
         const f = `=${"'My Data'!A1+".repeat(160_000)}1`;
         expect(f.length).toBeGreaterThan(2_000_000);
         const start = performance.now();
-        const deps = extractDependencies(g, f, 's1', null);
+        const deps = extractDependencies(g, f, 's1');
         expect(performance.now() - start).toBeLessThan(1_000);
         expect(deps).toHaveLength(160_000);
         expect(deps[0]).toEqual({ row: [0, 0], column: [0, 0], sheetId: 's2' });
     });
 
-    // A function's name is matched only where a word starts, so a long run of letters with no bracket after it is
-    // read once, not once per letter.
     test('walks a 1 MB run of letters in well under a second', () => {
         const g = walkOver([{ id: 's1', name: 'Sheet1', data: [[num(1)]] }]);
         const start = performance.now();
-        expect(extractDependencies(g, `=${'A'.repeat(1_000_000)}`, 's1', [[num(1)]])).toEqual([]);
+        expect(extractDependencies(g, `=${'A'.repeat(1_000_000)}`, 's1')).toEqual([]);
         expect(performance.now() - start).toBeLessThan(1_000);
+    });
+
+    // Whatever the engine reads must be listed, or a change in that cell leaves the formula stale. So each formula runs
+    // through the engine over a resolver that records the cells, and the walk has to cover them.
+    test.each([
+        '=A1 + B1',
+        '=SUM(A1 : B2)',
+        '=SUM(A1  :  B2)+C1',
+        '=SUM(-1:2)',
+        '=2*-1:2',
+        '=-A1',
+        '=LOG10(A1)+ATAN2(B2,1)',
+        '=_xlfn.STDEV.S(A1:A3)',
+        '=A1&"B1"&C1',
+        '="\'"&C1&"\'"',
+        '=SUM(A:A)',
+        '=SUM(1:2)',
+        '=SUM(B3:A1)',
+        '=$A$1+B$2',
+        '=Data!A1+Data!B2',
+        '=SUM(Data!A:Data!B)',
+        "=SUM('my sheet-1'!A1:'my sheet-1'!B2)",
+        "='my sheet-1'!A1+5",
+        "='it''s'!B1",
+        "='a!b'!B1",
+        "=SUM('a!b'!A:A)",
+        '=INDEX(A1:B3,2,1)',
+        '=IF(A1>=1,"B2",C1)',
+    ])('lists every cell the engine reads for %s', (text) => {
+        const grid = () => [
+            [num(1), num(2), num(3)],
+            [num(4), num(5), num(6)],
+            [num(7), num(8), num(9)],
+        ];
+        const sheets = ['Sheet1', 'Data', 'my sheet-1', "it's", 'a!b'].map((name, i) => ({
+            id: `s${i}`,
+            name,
+            data: grid(),
+        }));
+        const resolver = createArrayResolver(sheets);
+        const read: string[] = [];
+        new FormulaEngine().evaluate(text, 's0', {
+            ...resolver,
+            getCell(sheetId, row, col) {
+                read.push(`${sheetId} ${row} ${col}`);
+                return resolver.getCell(sheetId, row, col);
+            },
+        });
+        expect(read.length).toBeGreaterThan(0);
+
+        const listed = new Set<string>();
+        for (const { sheetId, row, column } of extractDependencies(walkOver(sheets), text, 's0')) {
+            for (let r = row[0]; r <= row[1]; r += 1) {
+                for (let c = column[0]; c <= column[1]; c += 1) listed.add(`${sheetId} ${r} ${c}`);
+            }
+        }
+        expect(read.filter((cell) => !listed.has(cell))).toEqual([]);
     });
 
     test("a function's name reads as no cell, after an operator or a colon", () => {
         const data = [[num(1), num(2)]];
         const g = walkOver([{ id: 's1', name: 'Sheet1', data }]);
-        expect(extractDependencies(g, '=LOG10(A1)+ATAN2(B2,1)', 's1', data)).toEqual([
+        expect(extractDependencies(g, '=LOG10(A1)+ATAN2(B2,1)', 's1')).toEqual([
             { row: [0, 0], column: [0, 0], sheetId: 's1' },
             { row: [1, 1], column: [1, 1], sheetId: 's1' },
         ]);
-        expect(extractDependencies(g, '=A1:INDEX(B:B,1)', 's1', data)).toEqual([
+        expect(extractDependencies(g, '=A1:INDEX(B:B,1)', 's1')).toEqual([
             { row: [0, 0], column: [0, 0], sheetId: 's1' },
-            { row: [0, 0], column: [1, 1], sheetId: 's1' },
+            { row: [0, 1_048_575], column: [1, 1], sheetId: 's1' },
         ]);
     });
 });

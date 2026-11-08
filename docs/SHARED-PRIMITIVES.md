@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2139 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2137 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -552,7 +552,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (449)
+## Types (447)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -610,7 +610,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BorderSide` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `BorderStyleName` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `BorderType` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
-| `CalcChainEntry` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `Cell` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `CellBorderSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `CellMatrix` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
@@ -635,7 +634,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SheetFloatingObject` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SheetImage` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SheetValidation` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
-| `SheetWithCalcChain` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SingleRange` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SettingWithCopy` | `@workspace/lib/space` | packages/lib/src/core/space/hooks/use-setting-with-copy.ts |
 | `ActivityLines` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |

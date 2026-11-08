@@ -4,7 +4,7 @@
 // editor and the reference highlights follow.
 
 import { escapeHtml } from '@workspace/lib/html';
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { richText } from '../../engine/format';
 import { useFormulaAutocomplete } from '../../hooks/useFormulaAutocomplete';
@@ -13,14 +13,16 @@ import {
     getFlowdata,
     getFormulaHtml,
     handleFormulaInput,
-    isAllowEdit,
+    handleGlobalEnter,
     isSelectionOnHiddenRowCol,
     loadCellFont,
     moveHighlightCell,
+    openCellEditor,
     rangeHightlightselected,
-    updateCell,
+    typesIntoEditor,
     valueShowEs,
 } from '../../state';
+
 import { ContentEditable } from '../SheetOverlay/ContentEditable';
 import { FormulaHint } from '../SheetOverlay/FormulaHint';
 import { FormulaSearch } from '../SheetOverlay/FormulaSearch';
@@ -32,7 +34,7 @@ export function FxEditor() {
     const [focused, setFocused] = useState(false);
     const lastKeyDownEventRef = useRef<KeyboardEvent>(null);
     const [isOnHiddenRowCol, setIsOnHiddenRowCol] = useState<boolean>(false);
-    const firstSelection = context.selections?.[0];
+    const selection = context.selections?.at(-1);
     const recentText = useRef('');
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: re-renders fx box only on real cell/sheet/selection changes — derived helpers are read fresh from `context`
@@ -45,9 +47,9 @@ export function FxEditor() {
         if (!fxInput) return;
         const d = getFlowdata(context);
         let value = '';
-        if (firstSelection) {
-            const r = firstSelection.row_focus;
-            const c = firstSelection.column_focus;
+        if (selection) {
+            const r = selection.row_focus;
+            const c = selection.column_focus;
             if (r == null || c == null) return;
 
             const cell = d?.[r]?.[c];
@@ -76,20 +78,15 @@ export function FxEditor() {
         if (context.allowEdit === false) {
             return;
         }
-        if (
-            (context.selections?.length ?? 0) > 0 &&
-            !context.cellSelectMoving &&
-            isAllowEdit(context, context.selections)
-        ) {
+        if ((context.selections?.length ?? 0) > 0 && !context.cellSelectMoving) {
             setFocused(true);
             setContext((draftCtx) => {
                 const last = draftCtx.selections?.at(-1);
                 if (last?.row_focus == null || last.column_focus == null) return;
-                draftCtx.editingCellPosition = [last.row_focus, last.column_focus];
-                refs.globalCache.doNotFocus = true;
+                openCellEditor(draftCtx, last.row_focus, last.column_focus);
             });
         }
-    }, [context.selections, context.sheets, context.currentSheetId, refs.globalCache, setContext]);
+    }, [context.selections, context.sheets, context.currentSheetId, setContext]);
 
     const formulaAutocomplete = useFormulaAutocomplete({ targetRef: refs.fxInput, enabled: focused });
 
@@ -122,23 +119,7 @@ export function FxEditor() {
                 if (draftCtx.editingCellPosition.length > 0) {
                     switch (key) {
                         case 'Enter': {
-                            const lastEditingCellPosition = [...draftCtx.editingCellPosition];
-                            updateCell(
-                                draftCtx,
-                                draftCtx.editingCellPosition[0],
-                                draftCtx.editingCellPosition[1],
-                                fxInput,
-                            );
-                            draftCtx.selections = [
-                                {
-                                    row: [lastEditingCellPosition[0], lastEditingCellPosition[0]],
-                                    column: [lastEditingCellPosition[1], lastEditingCellPosition[1]],
-                                    row_focus: lastEditingCellPosition[0],
-                                    column_focus: lastEditingCellPosition[1],
-                                },
-                            ];
-                            moveHighlightCell(draftCtx, 'down', 1, 'rangeOfSelect');
-                            e.preventDefault();
+                            handleGlobalEnter(draftCtx, fxInput, e.nativeEvent);
                             e.stopPropagation();
                             break;
                         }
@@ -149,16 +130,11 @@ export function FxEditor() {
                             e.stopPropagation();
                             break;
                         }
-                        case 'ArrowLeft': {
-                            rangeHightlightselected(draftCtx, fxInput);
-                            break;
-                        }
+                        case 'ArrowLeft':
                         case 'ArrowRight': {
                             rangeHightlightselected(draftCtx, fxInput);
                             break;
                         }
-                        default:
-                            break;
                     }
                 }
             });
@@ -178,46 +154,16 @@ export function FxEditor() {
     const onChange = useCallback(() => {
         if (refs.fxInput.current) loadCellFont(editingCell, refs.fxInput.current.innerText);
         const e = lastKeyDownEventRef.current;
-        if (!e) return;
-        const kcode = e.keyCode;
-        if (!kcode) return;
+        if (!e?.keyCode || !typesIntoEditor(e)) return;
 
-        if (
-            !(
-                (kcode >= 112 && kcode <= 123) ||
-                kcode <= 46 ||
-                kcode === 144 ||
-                kcode === 108 ||
-                e.ctrlKey ||
-                e.altKey ||
-                (e.shiftKey && (kcode === 37 || kcode === 38 || kcode === 39 || kcode === 40))
-            ) ||
-            kcode === 8 ||
-            kcode === 32 ||
-            kcode === 46 ||
-            (e.ctrlKey && kcode === 86)
-        ) {
-            setContext((draftCtx) => {
-                const fxInput = refs.fxInput.current;
-                if (!fxInput) return;
-                handleFormulaInput(draftCtx, refs.cellInput.current, fxInput, kcode, recentText.current);
-            });
-        }
+        setContext((draftCtx) => {
+            const fxInput = refs.fxInput.current;
+            if (!fxInput) return;
+            handleFormulaInput(draftCtx, refs.cellInput.current, fxInput, e.keyCode, recentText.current);
+        });
     }, [editingCell, refs.cellInput, refs.fxInput, setContext]);
 
-    // biome-ignore lint/correctness/useExhaustiveDependencies: re-evaluates allowEdit only on the listed shape changes — internals of `context` are read directly
-    const allowEdit = useMemo(() => {
-        if (context.allowEdit === false) {
-            return false;
-        }
-        if (isOnHiddenRowCol) {
-            return false;
-        }
-        if (!isAllowEdit(context, context.selections)) {
-            return false;
-        }
-        return true;
-    }, [context.selections, context.sheets, context.currentSheetId, isOnHiddenRowCol]);
+    const allowEdit = context.allowEdit !== false && !isOnHiddenRowCol;
 
     return (
         // eigen-paper: the formula bar reads like the grid — light in dark mode too (globals.css)

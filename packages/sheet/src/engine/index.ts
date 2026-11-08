@@ -1,12 +1,9 @@
 export {
     findSheetByName,
-    MAX_SHEET_NAME_LENGTH,
     parseA1Range,
     quoteSheetName,
     rangeToA1,
     rowIndexToLabel,
-    SHEET_NAME_END_QUOTES,
-    SHEET_NAME_FORBIDDEN,
     sheetFinder,
     sheetNameKey,
     toA1,
@@ -30,7 +27,7 @@ export {
 } from './conditional-format';
 // CF rule shapes (`ConditionalFormatRule` etc.) live in `@workspace/lib/sheets` and
 // are surfaced through `./types` re-exports below.
-export { createDefaultSheets, DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from './defaults';
+export { createDefaultSheets, DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT, decodeOrDefault } from './defaults';
 export {
     booleanDisplay,
     cellDisplay,
@@ -44,18 +41,16 @@ export {
     update,
 } from './format';
 export { FormulaEngine } from './formula-engine';
-export { functionCopy, inlineNames, renameSheetRefs } from './formula-shift';
+export { functionCopy, inlineNames } from './formula-shift';
 export { iscelldata } from './formula-utils';
 export { DOTTED_FUNCTIONS } from './parser/evaluate-by-operator/operator/formula-function';
-export { recalcSheets, sheetsNeedRecalc } from './recalc';
+export { recalcSheets } from './recalc';
 export { replaySheetsOps, withMaterializedData } from './replay-ops';
 export { normalizeSheetConfig } from './sheet-config';
-export { copySheetName } from './sheet-name';
+export { copySheetName, legalSheetNames, renameSheetTexts } from './sheet-name';
 export type {
-    CalcChainEntry,
     CellResolver,
     EvaluationResult,
     FormulaEngineState,
-    SheetInfo,
 } from './types';
 export { valueIsError } from './validation';

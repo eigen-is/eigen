@@ -767,7 +767,7 @@ describe('document transform (xlsx import)', () => {
 
         const snapshot = (await XLSX_FIXTURE.readState(target.id)) as string;
         expect(snapshot.startsWith('{"f":"eigensheets/2"')).toBe(true);
-        // The import recalc succeeded, so the decoded calcChain keeps the read gate off.
+        // The import recalc succeeded, so no reader recalculates it.
         expect(snapshot).toContain('"computed":true');
     }, 120_000);
 

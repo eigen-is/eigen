@@ -82,7 +82,6 @@ async function mount({
             id: 's1',
             name: 'One',
             order: 0,
-            status: 1,
             row: 20,
             column: 10,
             celldata: [
@@ -98,9 +97,7 @@ async function mount({
         },
     ];
     await act(async () => {
-        root.render(
-            createElement(Workbook, { ref: workbook, data, allowEdit, showToolbar: false, showFormulaBar: false }),
-        );
+        root.render(createElement(Workbook, { ref: workbook, data, allowEdit }));
     });
     cleanups.push(async () => {
         await act(async () => root.unmount());

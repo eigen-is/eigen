@@ -10,7 +10,7 @@ import { workbookContextFactory } from '../factories/context';
 
 const overlaps = (a: Box, b: Box) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
 
-const frozenAt = (pos: number): FreezenAxisData => ({ pos, boundary: 1, scroll: 0, cumulative: [], edge: 0 });
+const frozenAt = (pos: number): FreezenAxisData => ({ pos, boundary: 1, scroll: 0 });
 
 const FREEZES: [string, Freezen | undefined][] = [
     ['no freeze', undefined],
@@ -34,8 +34,6 @@ describe('state/render/frame — planScroll', () => {
         test(`copies each device pixel once at most and repaints each box once, at a pixel ratio of ${dpr}`, () => {
             const ctx = workbookContextFactory({
                 devicePixelRatio: dpr,
-                rowHeaderWidth: 46,
-                columnHeaderHeight: 20,
                 tableContentSize: [1000, 600],
             });
             for (const [name, freeze] of FREEZES) {
@@ -65,8 +63,6 @@ describe('state/render/frame — planScroll', () => {
     test('draws the frame whole for a step of part of a device pixel or more than half the canvas', () => {
         const ctx = workbookContextFactory({
             devicePixelRatio: 2,
-            rowHeaderWidth: 46,
-            columnHeaderHeight: 20,
             tableContentSize: [1000, 600],
         });
         const from = { scrollLeft: 0, scrollTop: 0 };

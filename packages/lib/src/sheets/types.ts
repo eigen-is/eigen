@@ -37,7 +37,6 @@ export type Cell = CellStyle & {
     ct?: CellType;
     qp?: number;
     bg?: string;
-    lo?: number;
     // Text rotation: signed degrees in [-90, 90] (positive = counter-clockwise / "up",
     // negative = clockwise / "down"), or 'vertical' for stacked top-to-bottom characters.
     // Matches Excel/OOXML's textRotation. Undefined or 0 = no rotation.
@@ -55,10 +54,10 @@ export type CellWithRowAndCol = {
 };
 
 // One edit to a workbook, made by the editor from immer's patches and replayed by the editor and the API.
-// `value` stays `any` because the editor passes a cell, a sheet, a row or column op or a calc chain through it,
-// with no field that says which.
+// `value` stays `any` because the editor passes a cell, a sheet or a row or column op through it, with no field that
+// says which.
 export type Op = {
-    op: 'replace' | 'remove' | 'add' | 'insertRowCol' | 'deleteRowCol' | 'addSheet' | 'deleteSheet';
+    op: 'replace' | 'remove' | 'add' | 'insertRowCol' | 'deleteRowCol' | 'addSheet' | 'deleteSheet' | 'renameSheet';
     id?: string;
     path: (string | number)[];
     // biome-ignore lint/suspicious/noExplicitAny: see comment above
@@ -162,11 +161,6 @@ export type DataValidationRule = {
     hintShow?: boolean;
     hintValue?: string;
     prohibitInput?: boolean;
-    // Fields of the dialog's draft that land on the stored rule, because the dialog saves its whole draft. Only the
-    // dialog reads them back, when it opens on a cell of the rule.
-    rangeTxt?: string;
-    validity?: string;
-    remote?: boolean;
 };
 
 // One rule over its ranges, stored under an id in `Sheet.dataValidations`, as a conditional format keeps its
@@ -208,7 +202,6 @@ type CFRuleBase = { cellrange: SingleRange[] };
 
 export type DataBarRule = CFRuleBase & { type: 'dataBar'; format: string[] };
 export type ColorGradationRule = CFRuleBase & { type: 'colorGradation'; format: string[] };
-type IconsRule = CFRuleBase & { type: 'icons' };
 export type DefaultConditionalFormatRule = CFRuleBase & {
     type: 'default';
     format: { textColor?: string | null; cellColor?: string | null };
@@ -217,20 +210,11 @@ export type DefaultConditionalFormatRule = CFRuleBase & {
     conditionValue: (string | number)[];
 };
 
-export type ConditionalFormatRule = DataBarRule | ColorGradationRule | IconsRule | DefaultConditionalFormatRule;
-
-// A formula cell in the dependency graph. The engine stamps `r`, `c` and `id`, and the editor's ordering adds
-// `index`. It is never stored: decoding a snapshot builds the chain again.
-export type CalcChainEntry = {
-    r: number;
-    c: number;
-    id: string;
-    index?: number;
-};
+export type ConditionalFormatRule = DataBarRule | ColorGradationRule | DefaultConditionalFormatRule;
 
 export type Sheet = {
     name: string;
-    id?: string;
+    id: string;
     order?: number;
     // 1 hides the tab (View > Hidden sheets shows it again); the editor opens on a sheet it shows.
     hide?: number;
@@ -268,9 +252,6 @@ export type Sheet = {
     images?: Record<string, SheetImage>;
     charts?: Record<string, SheetChart>;
 };
-
-// The editor-runtime Sheet: the wire shape plus the calc chain the reader gate keys off.
-export type SheetWithCalcChain = Sheet & { calcChain?: CalcChainEntry[] };
 
 // Whether a frozen pane freezes rows: 'row', 'both', and their range forms 'rangeRow' and 'rangeBoth'.
 export function freezesRows(frozen: Sheet['frozen']): boolean {

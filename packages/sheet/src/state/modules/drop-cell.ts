@@ -4,7 +4,7 @@
 
 import dayjs from 'dayjs';
 import { cloneDeep, pick } from 'es-toolkit/compat';
-import { current, isDraft } from 'immer';
+import { createArrayResolver } from '../../engine/cell-resolver';
 import { cfSplitRange } from '../../engine/conditional-format';
 import { numberDisplay, parseCellInput, update } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
@@ -12,12 +12,11 @@ import type { Cell, CellMatrix, SingleRange } from '../../engine/types';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
 import type { Rect } from '../types';
-import { getSheetIndex, isAllowEdit } from '../utils';
+import { getSheetIndex } from '../utils';
 import { carrySides, getBorderInfoCompute } from './border';
 import { setCellValue } from './cell';
-import { createContextResolver } from './formula-cache';
-import { execFunctionGroup, execfunction } from './formula-exec';
-import { colLocation, rowLocation } from './location';
+import { computeFormula } from './formula-exec';
+import { colLocation, rowLocation, sheetPoint } from './location';
 import { jfrefreshgrid } from './refresh';
 import { normalizeSelection } from './selection';
 import { addValidation, validationEntryAt } from './validation-rules';
@@ -398,23 +397,13 @@ export function hideDropCellSelection(container: HTMLDivElement) {
     }
 }
 
-export function createDropCellRange(ctx: Context, e: MouseEvent, container: HTMLDivElement) {
+export function createDropCellRange(ctx: Context, e: MouseEvent, cellArea: HTMLDivElement, container: HTMLDivElement) {
     ctx.cellSelectExtending = true;
     ctx.scrolling = true;
 
-    const { scrollLeft, scrollTop } = ctx;
-    const rect = container.getBoundingClientRect();
-    const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollLeft;
-    const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollTop;
-
-    const row_location = rowLocation(y, ctx.visibledatarow);
-    const row_pre = row_location[0];
-    const row = row_location[1];
-    const row_index = row_location[2];
-    const col_location = colLocation(x, ctx.visibledatacolumn);
-    const col_pre = col_location[0];
-    const col = col_location[1];
-    const col_index = col_location[2];
+    const { x, y } = sheetPoint(ctx, e, cellArea);
+    const [row_pre, row, row_index] = rowLocation(y, ctx.visibledatarow);
+    const [col_pre, col, col_index] = colLocation(x, ctx.visibledatacolumn);
 
     ctx.cellSelectExtendIndex = [row_index, col_index];
 
@@ -429,29 +418,17 @@ export function createDropCellRange(ctx: Context, e: MouseEvent, container: HTML
     );
 }
 
-export function onDropCellSelect(ctx: Context, e: MouseEvent, scrollEl: HTMLDivElement, container: HTMLDivElement) {
-    const { scrollLeft, scrollTop } = scrollEl;
-    const rect = container.getBoundingClientRect();
-    const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollLeft;
-    const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollTop;
-
-    const row_location = rowLocation(y, ctx.visibledatarow);
-    const row = row_location[1];
-    const row_pre = row_location[0];
-    const row_index = row_location[2];
-    const col_location = colLocation(x, ctx.visibledatacolumn);
-    const col = col_location[1];
-    const col_pre = col_location[0];
-    const col_index = col_location[2];
+export function onDropCellSelect(ctx: Context, e: MouseEvent, cellArea: HTMLDivElement, container: HTMLDivElement) {
+    const { x, y } = sheetPoint(ctx, e, cellArea);
+    const [row_pre, row, row_index] = rowLocation(y, ctx.visibledatarow);
+    const [col_pre, col, col_index] = colLocation(x, ctx.visibledatacolumn);
 
     const row_index_original = ctx.cellSelectExtendIndex[0];
     const col_index_original = ctx.cellSelectExtendIndex[1];
 
     if (!ctx.selections) return;
-    let row_s = ctx.selections[0].row[0];
-    let row_e = ctx.selections[0].row[1];
-    let col_s = ctx.selections[0].column[0];
-    let col_e = ctx.selections[0].column[1];
+    const [row_s, row_e] = ctx.selections[0].row;
+    const [col_s, col_e] = ctx.selections[0].column;
 
     let top = ctx.selections[0].top_move;
     let height = ctx.selections[0].height_move;
@@ -477,14 +454,6 @@ export function onDropCellSelect(ctx: Context, e: MouseEvent, scrollEl: HTMLDivE
                 width = col - left - 1;
             }
         }
-    }
-    if (y < 0) {
-        row_s = 0;
-        [row_e] = ctx.selections[0].row;
-    }
-    if (x < 0) {
-        col_s = 0;
-        [col_e] = ctx.selections[0].column;
     }
 
     showDropCellSelection({ left, width, top, height }, container);
@@ -1881,8 +1850,7 @@ function getApplyData(
 
 export function updateDropCell(ctx: Context) {
     const d = getFlowdata(ctx);
-    const allowEdit = isAllowEdit(ctx);
-    if (allowEdit === false || d == null) {
+    if (ctx.allowEdit === false || d == null) {
         return;
     }
 
@@ -1894,7 +1862,7 @@ export function updateDropCell(ctx: Context) {
 
     // Live resolver, hoisted: one per fill-drag instead of one snapshot per
     // filled formula cell.
-    const resolver = createContextResolver(ctx);
+    const resolver = createArrayResolver(ctx.sheets);
 
     const cfg = (file.config ??= {});
     cfg.borderInfo ??= {};
@@ -1972,18 +1940,7 @@ export function updateDropCell(ctx: Context) {
             if (cell?.f != null) {
                 const offset = pos - srcAxis;
                 const f = `=${functionCopy(cell.f, axisIsRow ? offset : 0, axisIsRow ? 0 : offset)}`;
-                const [, value, filledF] = execfunction(
-                    ctx,
-                    f,
-                    row,
-                    col,
-                    undefined,
-                    undefined,
-                    undefined,
-                    undefined,
-                    resolver,
-                );
-                execFunctionGroup(ctx, row, col, value);
+                const [value, filledF] = computeFormula(ctx, f, { resolver });
                 setCellValue(ctx, row, col, d, { v: value, f: filledF });
             }
 
@@ -2031,8 +1988,7 @@ export function updateDropCell(ctx: Context) {
         }
     }
 
-    // A plain matrix keeps registering the filled formulas off the draft proxies.
-    jfrefreshgrid(ctx, isDraft(d) ? current(d) : d, ctx.selections);
+    jfrefreshgrid(ctx);
 }
 
 // Excel refuses a fill that would split or overwrite a merge.
@@ -2064,21 +2020,13 @@ export function fillFromEdge(ctx: Context, range: SingleRange, direction: 'down'
     updateDropCell(ctx);
 }
 
-export function onDropCellSelectEnd(ctx: Context, e: MouseEvent, container: HTMLDivElement) {
+export function onDropCellSelectEnd(ctx: Context, e: MouseEvent, cellArea: HTMLDivElement, container: HTMLDivElement) {
     ctx.cellSelectExtending = false;
     hideDropCellSelection(container);
 
-    const { scrollLeft, scrollTop } = ctx;
-    const rect = container.getBoundingClientRect();
-    const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollLeft;
-    const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollTop;
-
-    const row_location = rowLocation(y, ctx.visibledatarow);
-    const row_pre = row_location[0];
-    const row_index = row_location[2];
-    const col_location = colLocation(x, ctx.visibledatacolumn);
-    const col_pre = col_location[0];
-    const col_index = col_location[2];
+    const { x, y } = sheetPoint(ctx, e, cellArea);
+    const [row_pre, , row_index] = rowLocation(y, ctx.visibledatarow);
+    const [col_pre, , col_index] = colLocation(x, ctx.visibledatacolumn);
 
     const row_index_original = ctx.cellSelectExtendIndex[0];
     const col_index_original = ctx.cellSelectExtendIndex[1];

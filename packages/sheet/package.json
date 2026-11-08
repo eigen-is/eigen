@@ -22,8 +22,7 @@
     "es-toolkit": "^1.53.0",
     "immer": "^9.0.21",
     "numeral": "^2.0.6",
-    "numfmt": "^3.2.6",
-    "tiny-emitter": "^2.1.0"
+    "numfmt": "^3.2.6"
   },
   "devDependencies": {
     "@types/numeral": "^2.0.5",

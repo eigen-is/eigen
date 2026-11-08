@@ -26,13 +26,8 @@ was removed and the code became internal. The package is now treated as
   imports from `state/`**. Importable server-side via the
   `@workspace/sheet/engine` subpath export — used by xlsx/PDF/HTML export
   and the document-load replay layer in `apps/api`.
-- `Cell`, `Sheet`, `Op`, `CellMatrix`, `Range`, `SingleRange`,
-  `ConditionalFormatRule`, `MergeCell`, `CellBorderSides`,
-  `DataValidationRule`, `CalcChainEntry`, `AncestorFormulaCell` etc.
-  canonicalized into `@workspace/lib/sheets`; the sheet package
-  re-exports the canonicals to keep the FE↔BE type chain honest.
-- Many `any`-typed APIs tightened to discriminated unions (conditional-format
-  rules, freeze-pane data, sheet authority, range or whole-axis selections, …).
+- `Cell`, `Sheet`, `Op`, `CellMatrix`, `Range`, `SingleRange`, `ConditionalFormatRule`, `MergeCell`, `CellBorderSides`, `DataValidationRule` etc. canonicalized into `@workspace/lib/sheets`; the sheet package re-exports the canonicals to keep the FE↔BE type chain honest.
+- Many `any`-typed APIs tightened to discriminated unions (conditional-format rules, freeze-pane data, range or whole-axis selections, …).
 - All `/** */` JSDoc/doc-comment blocks removed; comments only where the
   *why* is non-obvious.
 - lodash → [es-toolkit](https://github.com/toss/es-toolkit) (zero lodash

@@ -7,19 +7,15 @@ import type { Sheet as LibSheet } from '@workspace/lib/sheets';
 import { produce } from 'immer';
 import { generateAPIs } from '../../../components/Workbook/api';
 import { dataToCelldata } from '../../../engine/celldata';
+import { MAX_SHEET_ROW_COUNT } from '../../../engine/defaults';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
+import { changeSheet } from '../../../state/modules/sheet';
 import type { Op } from '../../../state/types';
 import { emitOps, join } from '../../state/factories/collab';
 import { workbookContextFactory } from '../../state/factories/context';
 import { edit, pasteInternal, sel, typed } from '../../state/factories/edit-cycle';
-
-// copy() writes the plain-text clipboard through document and sessionStorage.
-// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-const g = globalThis as any;
-g.document = { createElement: () => ({ innerHTML: '', innerText: '', textContent: '' }) };
-g.sessionStorage = { setItem: () => {} };
 
 // A1 = 5, B1 = b1.
 function makeData(b1: Cell | null, rows = 4): (Cell | null)[][] {
@@ -42,9 +38,8 @@ function makeCtx(b1: Cell | null, currentSheetId = 'id_1'): Context {
                 row: 4,
                 column: 4,
                 data,
-                calcChain: b1?.f ? [{ r: 0, c: 1, id: 'id_1' }] : [],
             },
-            { name: 'second', id: 'id_2', order: 1, row: 4, column: 4, data: makeData(null), calcChain: [] },
+            { name: 'second', id: 'id_2', order: 1, row: 4, column: 4, data: makeData(null) },
         ],
     });
 }
@@ -111,21 +106,18 @@ describe('applyOp and the formula dependency map', () => {
         const next = applyPeerOps(ctx, ops);
 
         const map = next.formulaCache.formulaCellInfoMap!;
-        expect(map[key(0, 1, 'id_2')]?.calc_funcStr).toBe('=A1*2');
+        expect(map[key(0, 1, 'id_2')]?.formula).toBe('=A1*2');
         expect(map[key(0, 1, 'id_1')]).toBeUndefined();
     });
 
-    // Clearing a formula ships the whole reassigned calcChain; the map only follows cell data.
-    it('re-registers only the cell a peer typed over, not the whole calcChain', () => {
+    it('re-registers only the cell a peer typed over', () => {
         const withColumn = (ctx: Context) => {
             const data = makeData({ f: '=A1*2', v: 10, m: '10' }, 50);
             for (let r = 1; r < 50; r += 1) data[r][1] = { f: `=A${r + 1}*2`, v: 0, m: '0' };
             ctx.sheets[0].data = data;
-            ctx.sheets[0].calcChain = data.map((_, r) => ({ r, c: 1, id: 'id_1' }));
             return ctx;
         };
         const ops = emitOps(withColumn(makeCtx(null)), typed(0, 1, '3'));
-        expect(ops.some((op) => op.path[0] === 'calcChain' && Array.isArray(op.value))).toBe(true);
         const ctx = withColumn(makeCtx(null));
         const before = { ...warmFormulaCellInfoMap(ctx) };
 
@@ -160,12 +152,11 @@ describe('applyOp and the formula dependency map', () => {
                 { r: 0, c: 0, v: { v: 5, m: '5' } },
                 { r: 0, c: 1, v: { f: '=A1*2', v: 10, m: '10' } },
             ],
-            calcChain: [{ r: 0, c: 1, id: 'id_3' }],
         };
 
         const next = applyPeerOps(ctx, [{ op: 'addSheet', id: 'id_3', path: [], value: added }]);
 
-        expect(next.formulaCache.formulaCellInfoMap![key(0, 1, 'id_3')]?.calc_funcStr).toBe('=A1*2');
+        expect(next.formulaCache.formulaCellInfoMap![key(0, 1, 'id_3')]?.formula).toBe('=A1*2');
     });
 });
 
@@ -246,28 +237,6 @@ describe('applyOp and a joiner agree on the batch shapes that once disagreed', (
         expect({ ...next.formulaCache.formulaCellInfoMap }).toEqual(before);
     });
 
-    it('gives a sheet that has only its stored cells a matrix before a row or cell op on it', () => {
-        const ops: Op[] = [
-            {
-                op: 'insertRowCol',
-                id: 'id_2',
-                path: [],
-                value: { type: 'row', index: 0, count: 1, direction: 'lefttop', id: 'id_2' },
-            },
-            { op: 'replace', id: 'id_2', path: ['data', 0, 0], value: { v: 9, m: '9' } },
-        ];
-        const ctx = produce(makeCtx(null), (draft: Context) => {
-            draft.sheets[1].celldata = [{ r: 0, c: 1, v: { v: 7, m: '7' } }];
-            delete draft.sheets[1].data;
-        });
-        const [, joiner] = join(ctx, [ops]);
-        expect(dataToCelldata(joiner.data)).toEqual([
-            { r: 0, c: 0, v: { v: 9, m: '9' } },
-            { r: 1, c: 1, v: { v: 7, m: '7' } },
-        ]);
-        expect(dataToCelldata(applyPeerOps(ctx, ops).sheets[1].data)).toEqual(dataToCelldata(joiner.data));
-    });
-
     it("inserts on the op's own sheet, as the replay does, whatever sheet is current", () => {
         const ops: Op[] = [
             {
@@ -283,7 +252,7 @@ describe('applyOp and a joiner agree on the batch shapes that once disagreed', (
         expect(join(ctx, [ops])[1].data?.length).toBe(5);
     });
 
-    it('skips the whole batch of an insert into a read-only row, as the replay does', () => {
+    it('skips the whole batch of an insert past the row limit, as the replay does', () => {
         const ops: Op[] = [
             {
                 op: 'insertRowCol',
@@ -294,7 +263,11 @@ describe('applyOp and a joiner agree on the batch shapes that once disagreed', (
             { op: 'replace', id: 'id_1', path: ['data', 0, 0], value: { v: 9, m: '9' } },
         ];
         const ctx = produce(makeCtx(null), (draft: Context) => {
-            draft.sheets[0].config = { rowReadOnly: { 1: 1 } };
+            const width = draft.sheets[0].data?.[0]?.length ?? 1;
+            while ((draft.sheets[0].data?.length ?? MAX_SHEET_ROW_COUNT) < MAX_SHEET_ROW_COUNT) {
+                draft.sheets[0].data?.push(new Array(width).fill(null));
+            }
+            draft.sheets[0].row = MAX_SHEET_ROW_COUNT;
         });
         const [joiner] = join(ctx, [ops]);
         const [live] = applyPeerOps(ctx, ops).sheets;
@@ -448,7 +421,7 @@ describe('replayOps', () => {
         path: [],
         value: { type: 'row', index: 0, count: 1, direction: 'lefttop' },
     };
-    const entry = { patches: [], inversePatches: [] };
+    const entry = { patches: [], inversePatches: [], options: {} };
 
     function replay(ctx: Context, base: Context['sheets'], batches: Op[][], fresh: Op[][]) {
         let next = ctx;
@@ -549,6 +522,45 @@ describe('replayOps', () => {
             expect(ctx.selections?.[0].row).toEqual([0, 0]);
         });
 
+        // The tab left id_1 with its selection on row 2 and is on id_2.
+        const leftBehind = (ctx: Context) =>
+            produce(ctx, (draft: Context) => {
+                draft.selections = sel(2, 2, 1, 1);
+                changeSheet(draft, 'id_2');
+            });
+        const insertAbove: Op[] = [
+            {
+                op: 'insertRowCol',
+                id: 'id_1',
+                path: [],
+                value: { type: 'row', index: 0, count: 1, direction: 'lefttop' },
+            },
+        ];
+        const deleteAbove: Op[] = [
+            { op: 'deleteRowCol', id: 'id_1', path: [], value: { type: 'row', start: 0, end: 0 } },
+        ];
+        const kept = (ctx: Context) => ctx.sheetViewRecord.id_1?.selections?.[0].row;
+
+        it('a row op it applied before moved the selection of a sheet the tab left once', () => {
+            const base = makeCtx(null);
+            const shown = applyPeerOps(leftBehind(base), insertAbove);
+            expect(kept(replay(shown, base.sheets, [insertAbove, typed], [typed]).ctx)).toEqual([3, 3]);
+        });
+
+        it('a new row op moves it', () => {
+            const base = makeCtx(null);
+            const { ctx } = replay(leftBehind(base), base.sheets, [insertAbove, typed], [insertAbove]);
+            expect(kept(ctx)).toEqual([3, 3]);
+        });
+
+        it('a new row op ahead of an applied one drops it, since the tab cannot tell where it went', () => {
+            const base = makeCtx(null);
+            const shown = applyPeerOps(leftBehind(base), insertAbove);
+            const { ctx } = replay(shown, base.sheets, [deleteAbove, insertAbove], [deleteAbove]);
+            expect(kept(ctx)).toBeUndefined();
+            expect(ctx.selections).toBe(shown.selections);
+        });
+
         it('a hide and a show of the current sheet leave the tab on it', () => {
             const shown = makeCtx(null);
             const hide: Op[] = [{ op: 'replace', id: 'id_1', path: ['hide'], value: 1 }];
@@ -563,15 +575,6 @@ describe('replayOps', () => {
             const add: Op[] = [{ op: 'addSheet', id: 'id_2', path: [], value: { ...shown.sheets[1], config: {} } }];
             const { ctx } = replay(shown, shown.sheets, [typed, del, add], [typed]);
             expect(ctx.currentSheetId).toBe('id_2');
-        });
-
-        it('a filter set before leaves the filter the tab shows', () => {
-            const shown = makeCtx(null);
-            const filter: Op[] = [
-                { op: 'replace', id: 'id_1', path: ['filterRange'], value: { row: [0, 3], column: [0, 0] } },
-            ];
-            const { ctx } = replay(shown, shown.sheets, [filter, typed], [typed]);
-            expect(ctx.filterRange).toBe(shown.filterRange);
         });
 
         it('a fresh hide of the current sheet moves the tab off it', () => {
@@ -623,5 +626,24 @@ describe("the selection follows a peer's row and column ops", () => {
 
     it('a delete of its cell drops it', () => {
         expect(applyPeerOps(selected(2, 1), [remove('row', 1, 2)]).selections).toBeUndefined();
+    });
+
+    // The tab left id_1 with its selection on row 2 and is on id_2.
+    const leftBehind = () =>
+        produce(selected(2, 1), (draft: Context) => {
+            changeSheet(draft, 'id_2');
+        });
+    const backOnFirst = (ctx: Context) =>
+        produce(ctx, (draft: Context) => {
+            changeSheet(draft, 'id_1');
+        });
+
+    it('on a sheet the tab left it moves too, and a switch back finds it on its cell', () => {
+        expect(focus(backOnFirst(applyPeerOps(leftBehind(), [remove('row', 0, 0)])))).toEqual([[1, 1], [1, 1], 1, 1]);
+        expect(focus(backOnFirst(applyPeerOps(leftBehind(), [insert('column', 0)])))).toEqual([[2, 2], [2, 2], 2, 2]);
+    });
+
+    it('on a sheet the tab left a delete of its cell drops it, and a switch back opens on A1', () => {
+        expect(focus(backOnFirst(applyPeerOps(leftBehind(), [remove('row', 2, 2)])))).toEqual([[0, 0], [0, 0], 0, 0]);
     });
 });

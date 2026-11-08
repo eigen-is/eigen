@@ -10,7 +10,7 @@ const { act, createElement, createRef } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { WorkbookContext } = await import('../../../context');
 const { SheetOverlay } = await import('../../../components/SheetOverlay');
-const { defaultContext, defaultSettings } = await import('../../../state');
+const { defaultContext } = await import('../../../state');
 type GlobalCache = import('../../../state').GlobalCache;
 
 const globalCache: GlobalCache = {
@@ -19,7 +19,6 @@ const globalCache: GlobalCache = {
     scrollLeft: 0,
     scrollTop: 0,
     scrollListeners: new Set<() => void>(),
-    notifyScrollListeners: () => {},
 };
 const refs = {
     globalCache,
@@ -28,6 +27,7 @@ const refs = {
     canvas: createRef<HTMLCanvasElement | null>(),
     cellArea: createRef<HTMLDivElement | null>(),
     workbookContainer: createRef<HTMLDivElement | null>(),
+    hooks: { current: {} },
 };
 
 let cleanup: (() => Promise<void>) | undefined;
@@ -55,10 +55,11 @@ async function renderOverlay() {
                         context,
                         getContext: () => context,
                         setContext: () => {},
-                        settings: defaultSettings,
+                        aspectLocked: false,
                         refs,
                         handleUndo: () => {},
                         handleRedo: () => {},
+                        pasteClipboard: () => {},
                     },
                 },
                 createElement(SheetOverlay),

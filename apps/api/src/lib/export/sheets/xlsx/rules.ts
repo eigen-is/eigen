@@ -114,8 +114,6 @@ function cfRuleOf(rule: ConditionalFormatRule): CfRule | undefined {
             body: `<colorScale><cfvo type="min"/>${middle}<cfvo type="max"/>${stops}</colorScale>`,
         };
     }
-    // An icon set has no evaluator to say what it shows.
-    if (rule.type === 'icons') return undefined;
 
     const { conditionName: name, conditionValue: values, format: look } = rule;
     const fits = (cfRule: CfRule) => ((cfRule.formulas ?? []).every(fitsExcel) ? cfRule : undefined);

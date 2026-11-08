@@ -7,12 +7,10 @@ import { renderInDocument } from '@workspace/ui/test/render-in-document';
 import { produce } from 'immer';
 import type { ReactNode } from 'react';
 import { act, createElement, createRef, useState } from 'react';
-import type { RefValues } from '../../context';
 import { WorkbookContext } from '../../context';
 import { ModalProvider } from '../../context/modal';
 import { useDialog } from '../../hooks/useDialog';
-import type { Context, SheetConfig } from '../../state';
-import { defaultSettings } from '../../state';
+import type { Context, RefValues, SheetConfig } from '../../state';
 import { workbookContextFactory } from '../state/factories/context';
 
 // The workbook's refs, fresh for each render.
@@ -24,13 +22,13 @@ function workbookRefs(): RefValues {
             scrollLeft: 0,
             scrollTop: 0,
             scrollListeners: new Set<() => void>(),
-            notifyScrollListeners: () => {},
         },
         cellInput: createRef<HTMLDivElement | null>(),
         fxInput: createRef<HTMLDivElement | null>(),
         canvas: createRef<HTMLCanvasElement | null>(),
         cellArea: createRef<HTMLDivElement | null>(),
         workbookContainer: createRef<HTMLDivElement | null>(),
+        hooks: { current: {} },
     };
 }
 
@@ -61,10 +59,11 @@ function Workbook({ harness }: { harness: Harness }) {
         context: rendered,
         getContext: () => harness.context,
         setContext: harness.setContext,
-        settings: defaultSettings,
+        aspectLocked: false,
         refs: harness.refs,
         handleUndo: () => {},
         handleRedo: () => {},
+        pasteClipboard: () => {},
     };
     return createElement(
         WorkbookContext.Provider,
@@ -86,7 +85,8 @@ export async function renderSheetDialog(
     params: Partial<Context> & { config?: SheetConfig } = {},
     grid?: (context: Context) => ReactNode,
 ) {
-    const harness: Harness = { context: workbookContextFactory(params), refs: workbookRefs(), grid };
+    const refs = workbookRefs();
+    const harness: Harness = { context: workbookContextFactory({ getRefs: () => refs, ...params }), refs, grid };
     await renderInDocument(createElement(Workbook, { harness }));
     // Opens a dialog in the slot the way the app does, such as a notice over the one open.
     const show = (open: (dialogs: Dialogs) => void) =>

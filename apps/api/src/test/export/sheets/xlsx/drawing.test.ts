@@ -312,7 +312,7 @@ describe('a picture', () => {
 
     // DrawingML writes a turn within one turn, so an angle that rounds up to a full turn is upright.
     test('a hair short of a full turn is upright, with no rot', () => {
-        const sheet: Sheet = { name: 'Pictures', images: { below: { ...BELOW, angle: -0.000_001 } } };
+        const sheet: Sheet = { id: 'fixture-4', name: 'Pictures', images: { below: { ...BELOW, angle: -0.000_001 } } };
         const drawing = drawingOf(sheet, 1, [sheet], officeImages([PNG], 'xl/media'), () => {});
         const root = drawing && parseOoxml(xml(drawing.parts[0]));
         if (!root) throw new Error('no drawing');
@@ -323,7 +323,7 @@ describe('a picture', () => {
         const lost: CountedWarningCode[] = [];
         const drawn: SheetImage = { ...BELOW, mediaName: 'drawing.svg' };
         const webp: SheetImage = { ...BELOW, id: 'webp', index: 'a1', mediaName: 'still.webp' };
-        const sheet: Sheet = { name: 'Pictures', images: { below: drawn, webp } };
+        const sheet: Sheet = { id: 'fixture-3', name: 'Pictures', images: { below: drawn, webp } };
         const pictures = officeImages([SVG, { ...PNG, name: 'still.webp', contentType: 'image/webp' }], 'xl/media');
         const drawing = drawingOf(sheet, 2, [sheet], pictures, (code) => lost.push(code));
         expect(lost).toEqual(['images-dropped']);
@@ -336,7 +336,7 @@ describe('a picture', () => {
     test('turned sideways, is anchored over its box turned a quarter, as Excel and LibreOffice place it', () => {
         const upright: SheetImage = { ...BELOW, x: 100, y: 100, width: 200, height: 50, angle: 0 };
         const placed = (angle: number) => {
-            const sheet: Sheet = { name: 'Pictures', images: { below: { ...upright, angle } } };
+            const sheet: Sheet = { id: 'fixture-2', name: 'Pictures', images: { below: { ...upright, angle } } };
             const drawing = drawingOf(sheet, 1, [sheet], officeImages([PNG], 'xl/media'), () => {});
             const root = drawing && parseOoxml(xml(drawing.parts[0]));
             if (!root) throw new Error('no drawing');
@@ -366,7 +366,7 @@ describe('a picture', () => {
     });
 
     test('a sheet of pictures only has a drawing, and one whose media is all missing none', () => {
-        const sheet: Sheet = { name: 'Pictures', images: { below: BELOW } };
+        const sheet: Sheet = { id: 'fixture-1', name: 'Pictures', images: { below: BELOW } };
         expect(drawingOf(sheet, 1, [sheet], officeImages([PNG], 'xl/media'), () => {})?.parts).toHaveLength(2);
         expect(drawingOf(sheet, 1, [sheet], noPictures(), () => {})).toBeUndefined();
     });

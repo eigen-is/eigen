@@ -4,7 +4,9 @@ import {
     functionCopy,
     functionStrChange,
     inlineNames,
+    moveFormulaRefs,
     renameSheetRefs,
+    walkFormulaRefs,
 } from '../../engine/formula-shift';
 import { sheetFinder } from '../../engine/parser/helper/cell';
 
@@ -213,6 +215,7 @@ describe('engine/formula-shift — functionCopy sheet names, intersections and c
         expect(functionCopy('=A1 (B1:C2)', 1, 1)).toBe('B2 (C2:D3)');
         expect(functionCopy('=SUM(A1:B2 (B1:C3))', 1, 1)).toBe('SUM(B2:C3 (C2:D4))');
         expect(functionCopy('=LOG10 (A1)', 1, 1)).toBe('LOH11 (B2)');
+        expect(functionCopy("='a!b'!A1", 1, 1)).toBe("'a!b'!B2");
         expect(functionCopy('=A1  B1', 1, 1)).toBe('B2  C2');
     });
 
@@ -469,24 +472,41 @@ describe('functionStrChange — formulas', () => {
     });
 });
 
-describe('functionStrChange — unary-minus predecessor scan', () => {
-    // A `-` immediately after `(` is a unary sign, so `-1:3` / `-3:A10` are glued literals,
-    // not recognizable refs, and must pass through unshifted — exactly what functionCopy does.
-    // Both walkers now locate the unary predecessor by reading i-1 (the `(`); the former
-    // decrement-then-read scan skipped it, read the function-name char, misclassified `-` as
-    // binary and shifted the trailing range (`CONCAT(-1:3)` → `CONCAT(-2:4)`).
-    test('treats `-` after `(` as a unary sign and leaves the glued token unshifted', () => {
+describe('engine/formula-shift — a minus before a whole row', () => {
+    // The engine reads `-1:3` as minus the rows 1 to 3, so the range moves as any other.
+    test('moves the range after the sign', () => {
         expect(functionStrChange('CONCAT(-1:3)', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe(
-            'CONCAT(-1:3)',
+            'CONCAT(-2:4)',
         );
-        expect(functionStrChange('CONCAT(-3:A10)', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe(
-            'CONCAT(-3:A10)',
-        );
+        expect(functionCopy('CONCAT(-1:3)', 1, 0)).toBe('CONCAT(-2:4)');
+        expect(functionCopy('=1+-1:3', 1, 0)).toBe('1+-2:4');
     });
 
-    test('functionCopy output is unchanged on the same input (already reads i-1)', () => {
-        expect(functionCopy('CONCAT(-1:3)', 1, 0)).toBe('CONCAT(-1:3)');
-        expect(functionCopy('CONCAT(-3:A10)', 1, 0)).toBe('CONCAT(-3:A10)');
+    test('keeps a negative number', () => {
+        expect(functionCopy('=-1+A1*-2', 1, 0)).toBe('-1+A2*-2');
+    });
+});
+
+describe('engine/formula-shift — walkFormulaRefs', () => {
+    const refs = (formula: string) => {
+        const found: string[] = [];
+        walkFormulaRefs(formula, (ref) => {
+            found.push(ref);
+            return ref;
+        });
+        return found;
+    };
+
+    test('hands over each ref once, as the rewrites read it', () => {
+        expect(refs('=SUM(A1 : B2)+LOG10(C3)&"D4"&Name')).toEqual(['A1:B2', 'C3']);
+        expect(refs("='a!b'!A1:'a!b'!B2+Data!A:A")).toEqual(["'a!b'!A1:B2", 'Data!A:A']);
+        expect(refs('=A1:INDEX(B:B,1):C3')).toEqual(['A1', 'B:B', 'C3']);
+    });
+
+    // A leading colon is read off once. Off every colon, a formula of them overflowed the stack.
+    test('reads a 1 MB run of colons without overflowing the stack', () => {
+        expect(refs(`=${':'.repeat(1_000_000)}`)).toEqual([]);
+        expect(functionCopy(`=${' :'.repeat(10)}A1`, 1, 0)).toBe(`${':'.repeat(10)}A1`);
     });
 });
 
@@ -594,5 +614,51 @@ describe('engine/formula-shift — inlineNames', () => {
         const formula = '= SUM( A1 : B2 ) ';
         expect(inlineNames(formula, resolve)).toBe(formula);
         expect(inlineNames('Rate', resolve)).toBe('Inputs!$B$2');
+    });
+});
+
+// Excel's rule for a formula a cut or a drag moved: a ref wholly inside the block follows its cells, `$` or not, and any
+// other ref still means the cell it meant.
+describe('engine/formula-shift — moveFormulaRefs', () => {
+    // The block D5:E6 moved 2 rows up and 3 columns right.
+    const block = { row: [4, 5], column: [3, 4] };
+    const move = (formula: string, to = 'Sheet1') => moveFormulaRefs(formula, block, -2, 3, 'Sheet1', to, workbook);
+
+    test.each([
+        ['=D5*2', 'G3*2'],
+        ['=$D$5+E$6+$E6', '$G$3+H$4+$H4'],
+        ['=SUM(D5:E6)', 'SUM(G3:H4)'],
+        ['=Sheet1!D5', 'Sheet1!G3'],
+    ])('a ref wholly inside the block follows it: %s', (formula, moved) => {
+        expect(move(formula)).toBe(moved);
+    });
+
+    test.each([
+        ['=A1+F5', 'A1+F5'],
+        ['=SUM(D5:F6)', 'SUM(D5:F6)'],
+        ['=SUM(D:D)', 'SUM(D:D)'],
+        ['=Sheet2!D5', 'Sheet2!D5'],
+        ['="D5"&LOG10(2)', '"D5"&LOG10(2)'],
+    ])('any other ref stays: %s', (formula, moved) => {
+        expect(move(formula)).toBe(moved);
+    });
+
+    test.each([
+        ['=D5*2', 'G3*2'],
+        ['=A1', 'Sheet1!A1'],
+        ['=SUM(D5:F6)', 'SUM(Sheet1!D5:F6)'],
+        ['=SUM(D:D)', 'SUM(Sheet1!D:D)'],
+        ['=A1+D5', 'Sheet1!A1+G3'],
+        ['=Sheet1!D5', 'Sheet2!G3'],
+        ['=Sheet1!A1', 'Sheet1!A1'],
+        ['=Sheet2!A1', 'Sheet2!A1'],
+        ['="A1"&LOG10(2)', '"A1"&LOG10(2)'],
+    ])('onto another sheet, a ref keeps its meaning: %s', (formula, moved) => {
+        expect(move(formula, 'Sheet2')).toBe(moved);
+    });
+
+    test('a sheet name that needs quotes gets them', () => {
+        expect(moveFormulaRefs('=A1', block, 0, 0, 'My Sheet', 'Sheet1', workbook)).toBe("'My Sheet'!A1");
+        expect(moveFormulaRefs('=Sheet1!D5', block, 0, 0, 'Sheet1', 'My Sheet', workbook)).toBe("'My Sheet'!D5");
     });
 });

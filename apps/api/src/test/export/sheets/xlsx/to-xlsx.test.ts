@@ -5,6 +5,7 @@ import { recalcSheets } from '@workspace/sheet/engine';
 import type { TransformWarning } from '../../../../lib/document/transform/protocol';
 import { xlsxToSheets } from '../../../../lib/import/sheets/from-xlsx';
 import { openZip } from '../../../../lib/ooxml/zip';
+import { validationsByCell } from '../../../fixtures/validations';
 import { exportXlsx } from '../../../fixtures/xlsx';
 
 function entry(bytes: Uint8Array, path: string): string {
@@ -40,6 +41,7 @@ describe('an xlsx export read back by the import', () => {
         const thin = { style: 1, color: '#000000' };
         const sheets: Sheet[] = [
             {
+                id: 'fixture-29',
                 name: 'Data',
                 color: '#FF0000',
                 defaultColWidth: 72,
@@ -67,7 +69,7 @@ describe('an xlsx export read back by the import', () => {
                     borderInfo: { '1_0': { l: thin, t: thin }, '1_1': { t: thin, r: thin }, '2_1': { r: thin } },
                 },
             },
-            { name: 'Hidden', hide: 1, celldata: [{ r: 0, c: 0, v: { v: 1 } }] },
+            { id: 'fixture-28', name: 'Hidden', hide: 1, celldata: [{ r: 0, c: 0, v: { v: 1 } }] },
         ];
         const [data, hidden] = xlsxToSheets(exportXlsx(sheets));
         expect(data).toMatchObject({
@@ -101,6 +103,7 @@ describe('an xlsx export read back by the import', () => {
         const [sheet] = xlsxToSheets(
             exportXlsx([
                 {
+                    id: 'fixture-27',
                     name: 'Sheet1',
                     celldata: [{ r: 0, c: 0, v: { v: 'bold', bl: 1 } }],
                     config: { borderInfo: { '1_1': { t: thin } } },
@@ -116,6 +119,7 @@ describe('an xlsx export read back by the import', () => {
         const [sheet] = xlsxToSheets(
             exportXlsx([
                 {
+                    id: 'fixture-26',
                     name: 'Index',
                     celldata: [{ r: 0, c: 0, v: { v: 'table 1' } }],
                     hyperlink: { '0_0': { linkType: 'sheet', linkAddress: 'tbl1.2' } },
@@ -129,8 +133,9 @@ describe('an xlsx export read back by the import', () => {
     // workbook writes it, a repaired name too.
     test("a link to a sheet's name in another case names the sheet as the workbook writes it", async () => {
         const bytes = exportXlsx([
-            { name: 'History', celldata: [{ r: 0, c: 0, v: { v: 1 } }] },
+            { id: 'fixture-25', name: 'History', celldata: [{ r: 0, c: 0, v: { v: 1 } }] },
             {
+                id: 'fixture-24',
                 name: 'Index',
                 celldata: [
                     { r: 0, c: 0, v: { v: 'sheet' } },
@@ -149,6 +154,68 @@ describe('an xlsx export read back by the import', () => {
         ]);
     });
 
+    test('a formula, a rule and a list name a sheet as Excel reads it', () => {
+        const bytes = exportXlsx([
+            { id: 'fixture-23', name: 'Q1', celldata: [{ r: 0, c: 0, v: { v: 1 } }] },
+            { id: 'fixture-22', name: 'R1C1', celldata: [] },
+            { id: 'fixture-21', name: '2024', celldata: [] },
+            { id: 'fixture-20', name: 'TRUE', celldata: [] },
+            { id: 'fixture-19', name: 'History', celldata: [] },
+            { id: 'fixture-18', name: 'My Sheet', celldata: [] },
+            {
+                id: 'fixture-17',
+                name: 'Index',
+                celldata: [
+                    {
+                        r: 0,
+                        c: 0,
+                        v: { f: "=Q1!A1+q1!B2+R1C1!A1+2024!A1+TRUE!A1+History!A1+'My Sheet'!A1+Index!A1+1" },
+                    },
+                ],
+                conditionalFormatRules: [
+                    {
+                        type: 'default',
+                        conditionName: 'formula',
+                        conditionValue: ['=Q1!A1>0'],
+                        cellrange: [{ row: [0, 0], column: [0, 0] }],
+                        format: {},
+                    },
+                ],
+                dataValidations: validationsByCell({
+                    '1_0': {
+                        type: 'dropdown',
+                        type2: '',
+                        value1: 'Q1!A1:A3',
+                        value2: '',
+                        prohibitInput: false,
+                        hintShow: false,
+                        hintValue: '',
+                    },
+                }),
+            },
+        ]);
+        const xml = entry(bytes, 'xl/worksheets/sheet7.xml').replaceAll('&apos;', "'");
+        expect(xml).toContain(
+            "<f>'Q1'!A1+'Q1'!B2+'R1C1'!A1+'2024'!A1+'TRUE'!A1+'History (2)'!A1+'My Sheet'!A1+Index!A1+1</f>",
+        );
+        expect(xml).toContain("<formula>'Q1'!A1&gt;0</formula>");
+        expect(xml).toContain("<formula1>'Q1'!$A$1:$A$3</formula1>");
+    });
+
+    test('a name Excel reads bare keeps how the file spells it, a dot in it too', () => {
+        const bytes = exportXlsx([
+            { id: 'fixture-16', name: 'T3.2', celldata: [] },
+            { id: 'fixture-15', name: 'My Sheet', celldata: [] },
+            {
+                id: 'fixture-14',
+                name: 'Index',
+                celldata: [{ r: 0, c: 0, v: { v: 'go' } }],
+                hyperlink: { '0_0': { linkType: 'cellrange', linkAddress: 'T3.2!A1' } },
+            },
+        ]);
+        expect(entry(bytes, 'xl/worksheets/sheet3.xml')).toContain('location="T3.2!A1"');
+    });
+
     test('keeps a rich string its runs', async () => {
         const runs = [
             { v: 'Hello ', bl: 1, fc: '#FF0000' },
@@ -156,7 +223,11 @@ describe('an xlsx export read back by the import', () => {
         ];
         const [sheet] = xlsxToSheets(
             exportXlsx([
-                { name: 'Sheet1', celldata: [{ r: 0, c: 0, v: { ct: { fa: 'General', t: 'inlineStr', s: runs } } }] },
+                {
+                    id: 'fixture-13',
+                    name: 'Sheet1',
+                    celldata: [{ r: 0, c: 0, v: { ct: { fa: 'General', t: 'inlineStr', s: runs } } }],
+                },
             ]),
         );
         expect(cellAt(sheet, 0, 0)?.ct).toMatchObject({ t: 'inlineStr', s: [runs[0], runs[1]] });
@@ -170,7 +241,11 @@ describe('an xlsx export read back by the import', () => {
         ];
         const [sheet] = xlsxToSheets(
             exportXlsx([
-                { name: 'Sheet1', celldata: [{ r: 0, c: 0, v: { ct: { fa: 'General', t: 'inlineStr', s: runs } } }] },
+                {
+                    id: 'fixture-12',
+                    name: 'Sheet1',
+                    celldata: [{ r: 0, c: 0, v: { ct: { fa: 'General', t: 'inlineStr', s: runs } } }],
+                },
             ]),
         );
         const [hello, world] = cellAt(sheet, 0, 0)?.ct?.s ?? [];
@@ -186,6 +261,7 @@ describe('the export keeps what a plain writer loses', () => {
         const [sheet] = xlsxToSheets(
             exportXlsx([
                 {
+                    id: 'fixture-11',
                     name: 'Sheet1',
                     celldata: [
                         { r: 0, c: 0, v: { v: 45366, m: '3/15/2024', ct: { fa: 'M/d/yyyy', t: 'd' } } },
@@ -207,6 +283,7 @@ describe('the export keeps what a plain writer loses', () => {
         const [sheet] = xlsxToSheets(
             exportXlsx([
                 {
+                    id: 'fixture-10',
                     name: 'Sheet1',
                     celldata: [{ r: 0, c: 0, v: { f: '=SUM(B1:B3)', v: 6 } }],
                     hyperlink: { '0_0': { linkType: 'webpage', linkAddress: 'https://example.com' } },
@@ -221,6 +298,7 @@ describe('the export keeps what a plain writer loses', () => {
         const [sheet] = xlsxToSheets(
             exportXlsx([
                 {
+                    id: 'fixture-9',
                     name: 'Sheet1',
                     celldata: [
                         { r: 0, c: 0, v: { v: 'range' } },
@@ -231,7 +309,7 @@ describe('the export keeps what a plain writer loses', () => {
                         '1_0': { linkType: 'webpage', linkAddress: 'https://example.com/x!B2' },
                     },
                 },
-                { name: 'Sheet2', celldata: [] },
+                { id: 'fixture-8', name: 'Sheet2', celldata: [] },
             ]),
         );
         expect(sheet.hyperlink).toEqual({
@@ -242,7 +320,11 @@ describe('the export keeps what a plain writer loses', () => {
 
     test('an error result is an error cell', async () => {
         const bytes = exportXlsx([
-            { name: 'Sheet1', celldata: [{ r: 0, c: 0, v: { f: '=1/0', v: '#DIV/0!', m: '#DIV/0!' } }] },
+            {
+                id: 'fixture-7',
+                name: 'Sheet1',
+                celldata: [{ r: 0, c: 0, v: { f: '=1/0', v: '#DIV/0!', m: '#DIV/0!' } }],
+            },
         ]);
         expect(entry(bytes, 'xl/worksheets/sheet1.xml')).toContain('<c r="A1" t="e"><f>1/0</f><v>#DIV/0!</v></c>');
         expect(cellAt(xlsxToSheets(bytes)[0], 0, 0)).toMatchObject({ f: '=1/0', v: '#DIV/0!' });
@@ -253,9 +335,9 @@ describe('the export keeps what a plain writer loses', () => {
         const warnings: TransformWarning[] = [];
         const bytes = exportXlsx(
             [
-                { name: 'History', celldata: [] },
-                { name: `${long} A`, celldata: [] },
-                { name: `${long} B`, celldata: [] },
+                { id: 'fixture-6', name: 'History', celldata: [] },
+                { id: 'fixture-5', name: `${long} A`, celldata: [] },
+                { id: 'fixture-4', name: `${long} B`, celldata: [] },
             ],
             { warnings },
         );
@@ -306,6 +388,7 @@ describe('the export keeps what a plain writer loses', () => {
     test('one workbook is always the same bytes', async () => {
         const sheets: Sheet[] = [
             {
+                id: 'fixture-3',
                 name: 'Sheet1',
                 celldata: [
                     { r: 0, c: 0, v: { v: 'a', bl: 1 } },
@@ -363,7 +446,7 @@ const GOLDEN_XLSX_SHA256 = 'ab7e8cc9f3ff5522188653c810d5a541114642bb8807fba3e9be
 
 describe('the package', () => {
     test("declares Excel's parts and their types", async () => {
-        const bytes = exportXlsx([{ name: 'Sheet1', celldata: [] }], { title: 'Budget' });
+        const bytes = exportXlsx([{ id: 'fixture-2', name: 'Sheet1', celldata: [] }], { title: 'Budget' });
         expect(openZip(bytes).names()).toEqual([
             '[Content_Types].xml',
             '_rels/.rels',
@@ -393,7 +476,7 @@ describe('a large sheet', () => {
             for (let c = 0; c < 10; c++) celldata.push({ r, c, v: { v: c === 0 ? `row ${r % 1000}` : r * c } });
         Bun.gc(true);
         const before = process.memoryUsage().rss;
-        const bytes = exportXlsx([{ name: 'Big', celldata }]);
+        const bytes = exportXlsx([{ id: 'fixture-1', name: 'Big', celldata }]);
         // The writer is synchronous and RSS seldom falls back within it, so after it is near its peak: about 300 MB for
         // a million cells, against about 450 MB with the sheet's XML whole.
         expect(process.memoryUsage().rss - before).toBeLessThan(400 * 1024 * 1024);

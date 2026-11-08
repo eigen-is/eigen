@@ -1,3 +1,52 @@
+// A rule that prohibits input reads a commit as the write will, and text the editor was seeded with changes nothing.
+describe('state/modules/cell — updateCell under a prohibiting rule', () => {
+    function commit(rule: DataValidationRule, cell: Cell | null, text: string) {
+        const data: CellMatrix = [[cell]];
+        const dataValidations = validationsByCell({ '0_0': { ...rule, prohibitInput: true } });
+        const ctx = workbookContextFactory({
+            currentSheetId: 'id_1',
+            sheets: [{ name: 'sheet', id: 'id_1', order: 0, data, dataValidations }],
+        });
+        const input = document.createElement('div');
+        input.innerText = text;
+        updateCell(ctx, 0, 0, input);
+        return { warned: ctx.warnDialog, written: data[0][0] };
+    }
+    const rule = (type: string, type2: string, value1: string): DataValidationRule => ({
+        type,
+        type2,
+        value1,
+        value2: '',
+    });
+
+    test('a date shown as dd/MM/yyyy commits unchanged', () => {
+        const date = { v: 45306, m: '15/01/2024', ct: { fa: 'dd/MM/yyyy', t: 'd' } };
+        const { warned, written } = commit(rule('date', 'laterThan', '2020-01-01'), date, '15/01/2024');
+        expect(warned).toBeUndefined();
+        expect(written?.v).toBe(45306);
+    });
+
+    test('an unchanged formula, and Enter on an empty cell, are no input', () => {
+        const formula = { v: 3, m: '3', f: '=1+2' };
+        expect(commit(rule('number', 'lessThan', '1'), formula, '=1+2').warned).toBeUndefined();
+        expect(commit(rule('number', 'lessThan', '1'), null, '').warned).toBeUndefined();
+    });
+
+    test('typed text is read as the write reads it', () => {
+        expect(commit(rule('number', 'moreThanThe', '1000'), null, '1,234.50').written?.v).toBe(1234.5);
+        expect(commit(rule('number', 'lessThan', '1'), null, '50%').written?.v).toBe(0.5);
+        expect(commit(rule('date', 'laterThan', '2020-01-01'), null, '2024-06-15').warned).toBeUndefined();
+    });
+
+    test('a value that fails is refused, and the cell keeps its own', () => {
+        const number = { v: 5, m: '5' };
+        const { warned, written } = commit(rule('number', 'moreThanThe', '3'), number, '2');
+        expect(warned).toBe('Input must be a number greater than 3.');
+        expect(written?.v).toBe(5);
+        expect(commit(rule('date', 'laterThan', '2020-01-01'), null, '15/01/2024').warned).toContain('Date must be');
+    });
+});
+
 // Cell text is a schemaless CRDT string — authored by any collaborator, or carried
 // in from an uploaded xlsx — and getInlineStringHTML writes it into the formula bar
 // and the in-cell editor through innerHTML. The package used to guard those writes
@@ -11,7 +60,6 @@ import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { applyPatches, enablePatches, produceWithPatches } from 'immer';
 import { evaluateConditionalFormat } from '../../../engine/conditional-format';
 import type { CellType } from '../../../engine/types';
-import { setCellValue as apiSetCellValue } from '../../../state/api/cell';
 import type { Context } from '../../../state/context';
 import {
     getCellValue,
@@ -21,17 +69,18 @@ import {
     setCellValue,
     updateCell,
 } from '../../../state/modules/cell';
-import { groupValuesRefresh } from '../../../state/modules/formula-exec';
 import { clearMeasureTextCache } from '../../../state/modules/text';
-import type { CellMatrix, SheetConfig } from '../../../state/types';
+import type { Cell, CellMatrix, DataValidationRule, SheetConfig } from '../../../state/types';
 import { filterPatch } from '../../../state/utils/patch';
-import { contextFactory } from '../factories/context';
+import { contextFactory, workbookContextFactory } from '../factories/context';
+import { stubMeasuringCanvas } from '../factories/measuring-canvas';
+import { validationsByCell } from '../factories/validations';
 
 enablePatches();
 
-// The auto-height tests below commit through a real editor element, and getTextSize falls back to a
-// DOM span when a canvas reports no bounding box, so the page is installed at module scope.
+// The auto-height tests below commit through a real editor element.
 const win = installHappyDom();
+stubMeasuringCanvas(win);
 
 describe('state/modules/cell — getInlineStringHTML', () => {
     function inlineCell(runs: { v: string; fc?: string }[]): CellMatrix {
@@ -99,21 +148,6 @@ describe('state/modules/cell — getCellValue / getFormulaHtml', () => {
 // or the row keeps its old height and the text stays clipped. Driving updateCell through
 // produceWithPatches is what exposes a write that never lands.
 describe('state/modules/cell — updateCell auto-height', () => {
-    // Only `font` and `measureText` are read on the auto-height path.
-    function measuringCanvas(): CanvasRenderingContext2D {
-        const canvas = {
-            font: '11px Arial',
-            textAlign: 'start',
-            textBaseline: 'top',
-            measureText: (text: string) => ({
-                width: text.length * 7,
-                actualBoundingBoxAscent: 8,
-                actualBoundingBoxDescent: 3,
-            }),
-        };
-        return canvas as unknown as CanvasRenderingContext2D;
-    }
-
     // The commit path handleGlobalEnter takes: the editor's text, newlines and all.
     function multilineInput(): HTMLDivElement {
         const input = win.document.createElement('div');
@@ -138,17 +172,29 @@ describe('state/modules/cell — updateCell auto-height', () => {
     test('the grown row height lands on the sheet the grid measures from', () => {
         clearMeasureTextCache();
         const [grown] = produceWithPatches(editContext(), (ctx: Context) => {
-            updateCell(ctx, 0, 0, multilineInput(), undefined, measuringCanvas());
+            updateCell(ctx, 0, 0, multilineInput());
         });
 
         expect(grown.sheets[0].config?.rowlen?.[0]).toBeGreaterThan(19);
+    });
+
+    test('a merged cell leaves its row alone, as its text fits the merge and not its first column', () => {
+        clearMeasureTextCache();
+        const base = editContext();
+        const [next] = produceWithPatches(base, (ctx: Context) => {
+            const cell = ctx.sheets[0].data?.[0][0];
+            if (cell) cell.mc = { r: 0, c: 0, rs: 1, cs: 4 };
+            updateCell(ctx, 0, 0, multilineInput());
+        });
+
+        expect(next.sheets[0].config?.rowlen?.[0]).toBeUndefined();
     });
 
     test('and still syncs, because the patch that survives filterPatch carries it', () => {
         clearMeasureTextCache();
         const base = editContext();
         const [grown, patches] = produceWithPatches(base, (ctx: Context) => {
-            updateCell(ctx, 0, 0, multilineInput(), undefined, measuringCanvas());
+            updateCell(ctx, 0, 0, multilineInput());
         });
 
         const synced = applyPatches(base, filterPatch(patches));
@@ -158,13 +204,11 @@ describe('state/modules/cell — updateCell auto-height', () => {
     test('a rich edit recomputes the formulas that read the cell', () => {
         const ctx = editContext();
         ctx.sheets[0].data![0][0] = { ct: { fa: 'General', t: 'inlineStr', s: [{ v: 'Cherry', bl: 1 }] } };
-        apiSetCellValue(ctx, 0, 1, '=A1&"!"', null);
+        updateCell(ctx, 0, 1, null, '=A1&"!"');
         expect(ctx.sheets[0].data![0][1]?.v).toBe('Cherry!');
         const input = win.document.createElement('div');
         input.innerHTML = '<span style="font-weight: bold;">Kiwi</span>';
-        updateCell(ctx, 0, 0, input as unknown as HTMLDivElement, undefined, measuringCanvas());
-        // The workbook applies the recomputed values after the edit, as here.
-        groupValuesRefresh(ctx);
+        updateCell(ctx, 0, 0, input as unknown as HTMLDivElement);
         expect(ctx.sheets[0].data![0][0]?.ct?.t).toBe('inlineStr');
         expect(ctx.sheets[0].data![0][1]?.v).toBe('Kiwi!');
     });

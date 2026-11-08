@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { Parser } from '../../../../../../engine/parser/parser';
+import type { RangeCell } from '../../../../../../engine/types';
 
 describe('.parse() math-trig formulas', () => {
     let parser: Parser | null;
@@ -103,21 +104,15 @@ describe('.parse() math-trig formulas', () => {
     });
 
     it('AGGREGATE', () => {
-        parser!.on('callRangeValue', (_a, _b, done) => {
-            done([[1, 2, 3]]);
-        });
+        const readRange = () => {
+            return [[1, 2, 3]];
+        };
 
-        expect(parser!.parse('AGGREGATE(1, 4, A1:C1)')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
-        });
-        expect(parser!.parse('AGGREGATE(6, 4, A1:C1)')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
-        });
-        expect(parser!.parse('AGGREGATE(10, 4, A1:C1, 2)')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
+        expect(parser!.parse('AGGREGATE(1, 4, A1:C1)', { readRange })).toMatchObject({ error: null, result: 2 });
+        expect(parser!.parse('AGGREGATE(6, 4, A1:C1)', { readRange })).toMatchObject({ error: null, result: 6 });
+        expect(parser!.parse('AGGREGATE(10, 4, A1:C1, 2)', { readRange })).toBeMatchCloseTo({
+            error: null,
+            result: 0.666666666667,
         });
     });
 
@@ -1454,14 +1449,11 @@ describe('.parse() math-trig formulas', () => {
     });
 
     it('SUBTOTAL', () => {
-        parser!.on('callRangeValue', (_a, _b, done) => {
-            done([[120, 10, 150, 23]]);
-        });
+        const readRange = () => {
+            return [[120, 10, 150, 23]];
+        };
 
-        expect(parser!.parse('SUBTOTAL(9, A1:C1)')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
-        });
+        expect(parser!.parse('SUBTOTAL(9, A1:C1)', { readRange })).toMatchObject({ error: null, result: 303 });
     });
 
     it('SUM', () => {
@@ -1478,48 +1470,40 @@ describe('.parse() math-trig formulas', () => {
     });
 
     it('SUMIF', () => {
-        parser!.on('callRangeValue', (_a, _b, done) => {
-            done([[1, 2, 3]]);
-        });
+        const readRange = () => {
+            return [[1, 2, 3]];
+        };
 
-        expect(parser!.parse('SUMIF(A1:C1, ">2")')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
-        });
+        expect(parser!.parse('SUMIF(A1:C1, ">2")', { readRange })).toMatchObject({ error: null, result: 3 });
     });
 
     it('SUMIFS', () => {
-        parser!.on('callRangeValue', (_a, _b, done) => {
-            done([[1, 2, 3]]);
-        });
+        const readRange = () => {
+            return [[1, 2, 3]];
+        };
 
-        expect(parser!.parse('SUMIFS(A1:C1, ">1", "<3")')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
-        });
+        expect(parser!.parse('SUMIFS(A1:C1, ">1", "<3")', { readRange })).toMatchObject({ error: null, result: 2 });
     });
 
     it('SUMPRODUCT', () => {
-        parser!.on('callRangeValue', (a, b, done) => {
+        const readRange = (a: RangeCell, b: RangeCell) => {
             if (a.label === 'A1' && b.label === 'B3') {
-                done([
+                return [
                     [3, 4],
                     [8, 6],
                     [1, 9],
-                ]);
+                ];
             } else if (a.label === 'A4' && b.label === 'B6') {
-                done([
+                return [
                     [2, 7],
                     [6, 7],
                     [5, 3],
-                ]);
+                ];
             }
-        });
+            return [];
+        };
 
-        expect(parser!.parse('SUMPRODUCT(A1:B3, A4:B6)')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
-        });
+        expect(parser!.parse('SUMPRODUCT(A1:B3, A4:B6)', { readRange })).toMatchObject({ error: null, result: 156 });
     });
 
     it('SUMSQ', () => {
@@ -1542,48 +1526,42 @@ describe('.parse() math-trig formulas', () => {
     });
 
     it('SUMX2MY2', () => {
-        parser!.on('callRangeValue', (a, b, done) => {
+        const readRange = (a: RangeCell, b: RangeCell) => {
             if (a.label === 'A1' && b.label === 'B3') {
-                done([[1, 2, 3]]);
+                return [[1, 2, 3]];
             } else if (a.label === 'A4' && b.label === 'B6') {
-                done([[4, 5, 6]]);
+                return [[4, 5, 6]];
             }
-        });
+            return [];
+        };
 
-        expect(parser!.parse('SUMX2MY2(A1:B3, A4:B6)')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
-        });
+        expect(parser!.parse('SUMX2MY2(A1:B3, A4:B6)', { readRange })).toMatchObject({ error: null, result: -63 });
     });
 
     it('SUMX2PY2', () => {
-        parser!.on('callRangeValue', (a, b, done) => {
+        const readRange = (a: RangeCell, b: RangeCell) => {
             if (a.label === 'A1' && b.label === 'B3') {
-                done([[1, 2, 3]]);
+                return [[1, 2, 3]];
             } else if (a.label === 'A4' && b.label === 'B6') {
-                done([[4, 5, 6]]);
+                return [[4, 5, 6]];
             }
-        });
+            return [];
+        };
 
-        expect(parser!.parse('SUMX2PY2(A1:B3, A4:B6)')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
-        });
+        expect(parser!.parse('SUMX2PY2(A1:B3, A4:B6)', { readRange })).toMatchObject({ error: null, result: 91 });
     });
 
     it('SUMXMY2', () => {
-        parser!.on('callRangeValue', (a, b, done) => {
+        const readRange = (a: RangeCell, b: RangeCell) => {
             if (a.label === 'A1' && b.label === 'B3') {
-                done([[1, 2, 3]]);
+                return [[1, 2, 3]];
             } else if (a.label === 'A4' && b.label === 'B6') {
-                done([[4, 5, 6]]);
+                return [[4, 5, 6]];
             }
-        });
+            return [];
+        };
 
-        expect(parser!.parse('SUMXMY2(A1:B3, A4:B6)')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
-        });
+        expect(parser!.parse('SUMXMY2(A1:B3, A4:B6)', { readRange })).toMatchObject({ error: null, result: 27 });
     });
 
     it('TAN', () => {

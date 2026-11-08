@@ -103,7 +103,7 @@ describe('goToLink scheme allowlist', () => {
 
 describe('goToLink cell-range links', () => {
     function rangeLinkContext(): Context {
-        const ctx = contextFactory({ sheetScrollRecord: {} }) as Context;
+        const ctx = contextFactory({ sheetViewRecord: {} }) as Context;
         ctx.sheets[1].name = 'Other';
         ctx.sheets[0].hyperlink = { '0_0': { linkType: 'cellrange', linkAddress: 'Other!C3' } };
         return ctx;

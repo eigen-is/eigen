@@ -16,7 +16,7 @@ const { useCellEditorRefocus } = await import('../../../hooks/useCellEditorRefoc
 const { useEditorSelectionStyle } = await import('../../../hooks/useEditorSelectionStyle');
 const { InputBox } = await import('../../../components/SheetOverlay/InputBox');
 const { WorkbookMenuBar } = await import('../../../components/MenuBar');
-const { committedRuns, defaultContext, defaultSettings, FormulaCache } = await import('../../../state');
+const { committedRuns, defaultContext, FormulaCache } = await import('../../../state');
 type Context = import('../../../state').Context;
 
 const refs = {
@@ -26,13 +26,13 @@ const refs = {
         scrollLeft: 0,
         scrollTop: 0,
         scrollListeners: new Set<() => void>(),
-        notifyScrollListeners: () => {},
     },
     cellInput: createRef<HTMLDivElement | null>(),
     fxInput: createRef<HTMLDivElement | null>(),
     canvas: createRef<HTMLCanvasElement | null>(),
     cellArea: createRef<HTMLDivElement | null>(),
     workbookContainer: createRef<HTMLDivElement | null>(),
+    hooks: { current: {} },
 };
 
 // The handler the menu bar gives its menus as they close.
@@ -87,10 +87,11 @@ async function openEditor(html: string) {
                             context = produce(context, recipe);
                             render();
                         },
-                        settings: defaultSettings,
+                        aspectLocked: false,
                         refs,
                         handleUndo: () => {},
                         handleRedo: () => {},
+                        pasteClipboard: () => {},
                     },
                 },
                 createElement(

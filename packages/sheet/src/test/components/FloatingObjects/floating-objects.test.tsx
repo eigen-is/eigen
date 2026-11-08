@@ -3,8 +3,10 @@
 // resize and rotate, the right-click menu and ⌘[ ⌘] reorder, a viewer only downloads, and Cut and Copy reach the
 // clipboard from the keys, the object's menu and Edit. Both kinds draw in one paint order.
 import { afterEach, describe, expect, test } from 'bun:test';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { readEigenClipboard } from '@workspace/lib/clipboard';
+import { driveKeys, MediaResolverProvider } from '@workspace/lib/drive';
 import type { SheetChart, SheetFloatingItem, SheetImage } from '@workspace/lib/sheets';
 import { drivePath } from '@workspace/ui/test/drive-path';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -12,7 +14,7 @@ import { menuRows } from '@workspace/ui/test/menu-rows';
 
 installHappyDom();
 
-const { act, createElement, createRef } = await import('react');
+const { act, createRef } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { Workbook } = await import('../../../components/Workbook');
 type Sheet = import('../../../state').Sheet;
@@ -44,7 +46,7 @@ afterEach(async () => {
     cleanups = [];
 });
 
-async function mount({ allowEdit = true, aspectLocked = false, showToolbar = false, images = { i1: image } } = {}) {
+async function mount({ allowEdit = true, aspectLocked = false, images = { i1: image } } = {}) {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
@@ -56,7 +58,6 @@ async function mount({ allowEdit = true, aspectLocked = false, showToolbar = fal
             id: 's1',
             name: 'One',
             order: 0,
-            status: 1,
             row: 40,
             column: 20,
             celldata: [{ r: 0, c: 0, v: { v: 'x', m: 'x' } }],
@@ -65,22 +66,28 @@ async function mount({ allowEdit = true, aspectLocked = false, showToolbar = fal
             charts: { c1: chart },
         },
     ];
+    // The media folder's listing already holds the image, so nothing is fetched.
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Number.POSITIVE_INFINITY } } });
+    queryClient.setQueryData(driveKeys.folder(PATH.ownerId, PATH.mountId, 'media'), [PATH]);
     await act(async () => {
         root.render(
-            createElement(Workbook, {
-                ref: workbook,
-                data,
-                allowEdit,
-                aspectLocked,
-                showToolbar,
-                showFormulaBar: false,
-                onOp: (op) => ops.push(op),
-                hooks: {
-                    resolveImageUrl: (name) => `blob:${name}`,
-                    resolveImagePath: () => PATH,
-                    onActiveObjectChange: (item) => reported.push(item),
-                },
-            }),
+            <QueryClientProvider client={queryClient}>
+                <MediaResolverProvider
+                    ownerId={PATH.ownerId}
+                    mountId={PATH.mountId}
+                    mediaFolderId="media"
+                    chatFolderId={null}
+                >
+                    <Workbook
+                        ref={workbook}
+                        data={data}
+                        allowEdit={allowEdit}
+                        aspectLocked={aspectLocked}
+                        onOp={(op) => ops.push(op)}
+                        hooks={{ onActiveObjectChange: (item) => reported.push(item) }}
+                    />
+                </MediaResolverProvider>
+            </QueryClientProvider>,
         );
     });
     cleanups.push(async () => {
@@ -378,7 +385,7 @@ describe.each(KINDS)('a floating $kind', ({ rows, download, ...item }) => {
     test('Edit › Copy and Cut copy it, not the cells behind it', async () => {
         const written = fakeExecCommand();
         try {
-            const { container, content, record } = await mount({ showToolbar: true });
+            const { container, content, record } = await mount();
             const openEdit = async () => {
                 const trigger = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Edit');
                 if (!trigger) throw new Error('no Edit menu');

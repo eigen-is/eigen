@@ -21,13 +21,13 @@ function workbook(): Context {
                 scrollLeft: 0,
                 scrollTop: 0,
                 scrollListeners: new Set(),
-                notifyScrollListeners: () => {},
             },
             cellInput: ref(),
             fxInput: ref(),
             canvas: ref(),
             cellArea: ref(),
             workbookContainer: ref(),
+            hooks: { current: {} },
         }),
         sheets: [
             { id: 's1', name: 'One', order: 0, config: {} },
@@ -38,15 +38,14 @@ function workbook(): Context {
     };
 }
 
-// Renames the current sheet as a typed tab does: the tab holds the new text and remembers the old.
+// Renames the first sheet as a typed tab does: the tab holds the new text.
 function rename(name: string) {
     const ctx = workbook();
     const tab = document.createElement('span');
-    tab.dataset.oldText = 'One';
     tab.innerText = name;
     let error: string | undefined;
     try {
-        editSheetName(ctx, tab);
+        editSheetName(ctx, 's1', tab);
     } catch (e) {
         if (e instanceof Error) error = e.message;
     }
@@ -63,6 +62,10 @@ describe('a tab rename', () => {
             error: undefined,
         });
         expect(rename('x'.repeat(31)).name).toBe('x'.repeat(31));
+    });
+
+    test('takes a ! as Excel does', () => {
+        expect(rename('Q1!').name).toBe('Q1!');
     });
 
     test('takes a fullwidth colon or question mark, as Excel does', () => {
@@ -95,10 +98,10 @@ describe('a tab rename', () => {
         const tab = document.createElement('span');
         tab.innerText = 'One';
         ctx.formulaCache.formulaCellInfoMap = {};
-        editSheetName(ctx, tab);
+        editSheetName(ctx, 's1', tab);
         expect(ctx.formulaCache.formulaCellInfoMap).toEqual({});
         tab.innerText = 'Old';
-        editSheetName(ctx, tab);
+        editSheetName(ctx, 's1', tab);
         expect(ctx.formulaCache.formulaCellInfoMap).toBeNull();
     });
 

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Cell, Sheet } from '@workspace/lib/sheets';
 import { recalcSheets } from '@workspace/sheet/engine';
+import { isSheetName } from '@workspace/sheet/engine/a1-notation';
 import { ApiError } from '../../../lib/core/errors';
 import { readXlsx, xlsxToSheets } from '../../../lib/import/sheets/from-xlsx';
 import { MAX_GRID_SLOTS, MAX_SHARED_FORMULA_TEXT, MAX_TEXT } from '../../../lib/import/sheets/limits';
@@ -858,6 +859,38 @@ describe("the reader's output budget", () => {
         );
         expect(sheets.map((sheet) => sheet.name)).toEqual(['S', 's (3)', 'S (2)', 'S (4)']);
         expect(sheets[0].celldata?.[0].v?.f).toBe('=s!A1+1');
+    });
+
+    test('a name Excel refuses is repaired, numbered within the length, and what names it follows', () => {
+        const long = 'Quarterly revenue by region and year';
+        const sheets = xlsxToSheets(
+            xlsxFixture({
+                sheets: [
+                    {
+                        name: 'a:b',
+                        data: `<row r="1"><c r="A1"><f>'A:B'!B1+'${long}'!A1+'a:b (2)'!A1</f><v>1</v></c></row>`,
+                    },
+                    { name: long },
+                    { name: long },
+                    { name: 'a:b (2)' },
+                    { name: "'quoted'" },
+                    { name: 'a_b' },
+                ],
+            }),
+        );
+        const names = sheets.map((sheet) => sheet.name);
+        expect(names).toEqual([
+            'a_b (2)',
+            'Quarterly revenue by region and',
+            'Quarterly revenue by region (2)',
+            'a_b (2) (2)',
+            'quoted',
+            'a_b',
+        ]);
+        expect(names.every(isSheetName)).toBe(true);
+        expect(sheets[0].celldata?.[0].v?.f).toBe(
+            "='a_b (2)'!B1+'Quarterly revenue by region and'!A1+'a_b (2) (2)'!A1",
+        );
     });
 
     test('a Greek name clashes in any case, its final sigma too, and ß never clashes with ss', () => {

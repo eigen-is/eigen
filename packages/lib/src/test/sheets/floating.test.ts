@@ -65,6 +65,7 @@ describe('sheetFloatingBox', () => {
 describe('floatingItems', () => {
     test('orders images and charts by one index, ties broken by id', () => {
         const sheet: Sheet = {
+            id: 'fixture-8',
             name: 'S',
             images: { i1: image('i1', 'a2'), i2: image('i2', 'a0') },
             charts: { c1: chart('c1', 'a1'), c0: chart('c0', 'a2') },
@@ -78,7 +79,7 @@ describe('floatingItems', () => {
     });
 
     test('a sheet without maps has none', () => {
-        expect(floatingItems({ name: 'S' })).toEqual([]);
+        expect(floatingItems({ id: 'fixture-7', name: 'S' })).toEqual([]);
     });
 
     test('an entry a peer stored as no object is skipped', () => {
@@ -91,23 +92,43 @@ describe('floatingItems', () => {
 
 describe('nextFloatingIndex', () => {
     test('sits above every image and chart', () => {
-        const sheet: Sheet = { name: 'S', images: { i1: image('i1', 'a3') }, charts: { c1: chart('c1', 'a5') } };
+        const sheet: Sheet = {
+            id: 'fixture-6',
+            name: 'S',
+            images: { i1: image('i1', 'a3') },
+            charts: { c1: chart('c1', 'a5') },
+        };
         expect(nextFloatingIndex(sheet) > 'a5').toBe(true);
-        expect(nextFloatingIndex({ name: 'S' })).toBe('a0');
+        expect(nextFloatingIndex({ id: 'fixture-5', name: 'S' })).toBe('a0');
     });
 
     // Two peers inserting at once store one key twice, and a file or a peer can store any string.
     test('never throws on a tied or malformed top key', () => {
-        const tied: Sheet = { name: 'S', images: { i1: image('i1', 'a1') }, charts: { c1: chart('c1', 'a1') } };
+        const tied: Sheet = {
+            id: 'fixture-4',
+            name: 'S',
+            images: { i1: image('i1', 'a1') },
+            charts: { c1: chart('c1', 'a1') },
+        };
         expect(nextFloatingIndex(tied) > 'a1').toBe(true);
-        const malformed: Sheet = { name: 'S', images: { i1: image('i1', 'a0') }, charts: { c1: chart('c1', '') } };
+        const malformed: Sheet = {
+            id: 'fixture-3',
+            name: 'S',
+            images: { i1: image('i1', 'a0') },
+            charts: { c1: chart('c1', '') },
+        };
         expect(() => nextFloatingIndex(malformed)).not.toThrow();
     });
 
     // A malformed key sorts as a string, so 'zz' or 'a10' paints above every valid key a repair in memory would put
     // the insert at: the repair is written back to the record, as a z-order move writes its own.
     test.each(['zz', 'a10'])('lands above a malformed key %p on top, and writes its repair', (top) => {
-        const sheet: Sheet = { name: 'S', images: { i1: image('i1', 'a0') }, charts: { c1: chart('c1', top) } };
+        const sheet: Sheet = {
+            id: 'fixture-2',
+            name: 'S',
+            images: { i1: image('i1', 'a0') },
+            charts: { c1: chart('c1', top) },
+        };
         const index = nextFloatingIndex(sheet);
         const repaired = sheet.charts?.c1.index ?? '';
         expect(repaired).not.toBe(top);
@@ -118,7 +139,7 @@ describe('nextFloatingIndex', () => {
 });
 
 describe('floatingWriteFilter', () => {
-    const sheets = (): Sheet[] => [{ name: 'S', images: {}, charts: { c1: chart('c1', 'a1') } }];
+    const sheets = (): Sheet[] => [{ id: 'fixture-1', name: 'S', images: {}, charts: { c1: chart('c1', 'a1') } }];
     // The sheets the filter reads are a store's, frozen, so it tracks a batch on copies.
     const kept = (writes: { op: string; path: (string | number)[]; value?: unknown }[]) => {
         const stored = sheets();

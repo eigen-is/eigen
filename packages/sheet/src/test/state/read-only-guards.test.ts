@@ -54,13 +54,13 @@ describe('read-only (allowEdit === false) state guards', () => {
     test('createFilter is a no-op for viewers', () => {
         const ctx = contextFactory({ allowEdit: false }) as Context;
         createFilter(ctx);
-        expect(ctx.filterRange).toBeUndefined();
+        expect(ctx.sheets[0].filterRange).toBeUndefined();
     });
 
     test('createFilter still creates a filter for editors', () => {
         const ctx = contextFactory({ allowEdit: true }) as Context;
         createFilter(ctx);
-        expect(ctx.filterRange).toBeDefined();
+        expect(ctx.sheets[0].filterRange).toBeDefined();
     });
 
     test('insertCheckbox is a no-op for viewers', () => {
@@ -80,9 +80,8 @@ describe('read-only (allowEdit === false) state guards', () => {
 });
 
 // The permission guard must stop LOCAL viewer ops only — never the remote mirror.
-// applyOp re-runs the reducer to re-derive the `data` shift while the metadata rides
-// along as authoritative patches; if the guard skipped the shift but the patches still
-// applied, a read-only collaborator's grid would diverge until the next snapshot.
+// applyOp runs the reducer on the marker; if the guard skipped it, a read-only collaborator's grid would diverge
+// until the next snapshot.
 describe('remote-op mirror (applyOp) still applies to viewers', () => {
     // Build the wire ops an editor would emit for a row insert/delete, then apply the
     // exact same ops through the real applyOp on a read-only viewer context.

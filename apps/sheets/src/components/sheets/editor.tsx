@@ -5,7 +5,6 @@
 import { useAuth } from '@workspace/lib/auth';
 import { materializeClipboardSvg, needsReUpload, reUploadImage } from '@workspace/lib/clipboard';
 import { useCommentFilter, useCommentLifecycle, useDocumentPanels } from '@workspace/lib/comments';
-import { commentIndicatorColor } from '@workspace/lib/constants/comment-indicator';
 import {
     isPendingMediaName,
     useCopyToMediaFolder,
@@ -105,8 +104,7 @@ export function SheetEditor({
     const publishSelection = usePresence(provider, workbookRef, auth.user, synced, snapshotVersion);
     const { mutateAsync: copyToMediaFolder } = useCopyToMediaFolder(ownerId, path.mountId);
     const uploadFile = useUploadFile(ownerId, path.mountId);
-    const { resolveMediaUrl, resolveMediaUrlByPath, resolveMediaPath, isMediaMissing, startUpload } =
-        useMediaResolver();
+    const { resolveMediaUrlByPath, startUpload } = useMediaResolver();
     // On a phone the side panel would squeeze the workbook to about 130px, so the panel takes the whole
     // editor area instead. The engine measures its canvas again when the workbook shows again.
     const { isMobile } = useLayout();
@@ -391,13 +389,11 @@ export function SheetEditor({
                                         data={initialData}
                                         onChange={handleWorkbookChange}
                                         onOp={handleOp}
-                                        showToolbar={true}
-                                        showFormulaBar={true}
-                                        showSheetTabs={true}
                                         allowEdit={canWrite && !loadFailed}
                                         toolbarLeftItems={leftItems}
                                         toolbarRightItems={rightItems}
                                         aspectLocked={aspectLocked}
+                                        commentCards={cards}
                                         hooks={{
                                             afterSelectionChange: (sheetId, selection) => {
                                                 const r = selection.row_focus ?? selection.row?.[0];
@@ -414,9 +410,6 @@ export function SheetEditor({
                                                       onPasteSvgFile: handlePasteSvgFile,
                                                   }
                                                 : {}),
-                                            resolveImageUrl: resolveMediaUrl,
-                                            isImageMissing: isMediaMissing,
-                                            resolveImagePath: resolveMediaPath,
                                             ...(canWrite && chatFolderId
                                                 ? {
                                                       onAddComment: addComment,
@@ -441,8 +434,7 @@ export function SheetEditor({
                                                 const entry = card.chatName
                                                     ? allComments.find((comment) => comment.chatName === card.chatName)
                                                     : undefined;
-                                                const indicatorColor = commentIndicatorColor(card.color);
-                                                return { card, entry, indicatorColor };
+                                                return { card, entry };
                                             },
                                         }}
                                     />

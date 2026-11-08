@@ -1,12 +1,16 @@
-// Rewrites the references in a formula's text without parsing it: a copy or a fill shifts its relative refs, an inserted
-// or deleted row or column moves the refs past it, a renamed sheet renames them, and an xlsx import replaces each
-// defined name with what it refers to. One character walker finds the refs and the names for all of them. It needs no
-// sheet state, so the editor and the server share it, for example in the op replay and the xlsx import.
+// Reads and rewrites the references in a formula's text without parsing it: a copy or a fill shifts its relative refs,
+// an inserted or deleted row or column moves the refs past it, a renamed sheet renames them, an xlsx import replaces
+// each defined name with what it refers to, and the dependency walk lists them. One character walker finds the refs and
+// the names for all of them. It reads only plain sheets, so the editor and the server share it, for example in the op
+// replay and the recalc.
 
+import type { Sheet } from '@workspace/lib/sheets';
 import { a1RangeRef, extractLabel, parseA1Range, sheetRefName, toLabel, unquoteSheetName } from './a1-notation';
-import { formulaOperators, iscelldata } from './formula-utils';
+import { formulaOperators, iscelldata, isFormula } from './formula-utils';
 import { offsetCoordinate, offsetRange, sortLegs } from './parser/helper/cell';
 import { error } from './validation';
+
+type RefLeg = NonNullable<ReturnType<typeof extractLabel>>;
 
 // Shifts every ref in a formula by rowOffset rows and colOffset columns, as a copy or a fill does. The text comes back
 // without its leading `=`.
@@ -14,10 +18,8 @@ export function functionCopy(txt: string, rowOffset: number, colOffset: number):
     return walkFormulaRefs(txt, (ref) => shiftRef(ref, rowOffset, colOffset));
 }
 
-// Points every ref naming a renamed sheet at its new name, `Sheet1!A1` → `'Sheet1(Copy)'!A1`: Import… renames an
-// imported tab whose name the workbook holds. `findSheet` reads a ref's name against the sheets of the formula's
-// workbook, as a sheetFinder over them does, and `renames` maps the name of each renamed one to its new name. A
-// leading `=` is kept.
+// Points every ref naming a renamed sheet at its new name, `Sheet1!A1` → `'Sheet1(Copy)'!A1`.
+// `renames` maps the name of each renamed sheet to its new name. A leading `=` is kept.
 export function renameSheetRefs(
     txt: string,
     findSheet: (name: string) => { name: string } | undefined,
@@ -33,10 +35,56 @@ export function renameSheetRefs(
     return txt.startsWith('=') ? `=${renamed}` : renamed;
 }
 
-// Replaces each defined name in a formula with the text `resolve` gives for it, as an xlsx import does, since the
-// engine has no names. `resolve` gets every leaf that is no ref, such as a name or a number, as written, and the sheet
-// a `Sheet1!Name` qualifies it with, unquoted. It returns nothing for a leaf that stays. A function of the same name
-// is still called. A formula without a name comes back as written, and a leading `=` is kept.
+// The sheet with `rewrite` run over the formula text in its cells and formula rules.
+// A sheet whose text stays comes back as the same object, and an untouched row keeps its object.
+export function rewriteSheetFormulas<S extends Sheet>(sheet: S, rewrite: (txt: string) => string): S {
+    let next = sheet;
+    if (sheet.data) {
+        let data: typeof sheet.data | null = null;
+        for (let r = 0; r < sheet.data.length; r += 1) {
+            const row = sheet.data[r];
+            if (!row) continue;
+            for (let c = 0; c < row.length; c += 1) {
+                const cell = row[c];
+                if (!isFormula(cell?.f)) continue;
+                const f = rewrite(cell.f);
+                if (f === cell.f) continue;
+                data ??= [...sheet.data];
+                if (data[r] === row) data[r] = [...row];
+                data[r][c] = { ...cell, f };
+            }
+        }
+        if (data) next = { ...next, data };
+    } else if (sheet.celldata) {
+        let celldata: typeof sheet.celldata | null = null;
+        for (let i = 0; i < sheet.celldata.length; i += 1) {
+            const entry = sheet.celldata[i];
+            if (!isFormula(entry.v?.f)) continue;
+            const f = rewrite(entry.v.f);
+            if (f === entry.v.f) continue;
+            celldata ??= [...sheet.celldata];
+            celldata[i] = { ...entry, v: { ...entry.v, f } };
+        }
+        if (celldata) next = { ...next, celldata };
+    }
+
+    const rules = sheet.conditionalFormatRules;
+    if (!rules) return next;
+    let newRules: typeof rules | null = null;
+    for (let i = 0; i < rules.length; i += 1) {
+        const rule = rules[i];
+        if (rule.type !== 'default' || rule.conditionName !== 'formula') continue;
+        const txt = String(rule.conditionValue[0]);
+        const rewritten = rewrite(txt);
+        if (rewritten === txt) continue;
+        newRules ??= [...rules];
+        newRules[i] = { ...rule, conditionValue: [rewritten] };
+    }
+    return newRules ? { ...next, conditionalFormatRules: newRules } : next;
+}
+
+// Replaces each defined name in a formula with the text `resolve` gives for it, since the engine has no names.
+// `resolve` gets every leaf that is no ref, a number included, and returns nothing for a leaf that stays.
 export function inlineNames(
     txt: string,
     resolve: (name: string, sheet: string | undefined) => string | undefined,
@@ -62,11 +110,41 @@ export function inlineNames(
     return txt.startsWith('=') ? `=${walked}` : walked;
 }
 
-// Moves a formula's refs for a row or column insert ('add') or delete ('del'), on the editor and in the op replay
-// alike. `stindex` is the first row or column the op touches and `step` how many. `orient` says whether an insert at
-// `stindex` moves a ref that starts there. `targetSheet` names the sheet the op runs on, and `onTargetSheet` says
-// whether the formula lives on it. Only refs to that sheet move. `findSheet` reads a ref's name against the
-// workbook's sheets, so in a workbook holding Data and data an op on one moves only its own refs.
+// The text of a formula a cut or a drag moved, by Excel's rule: a ref wholly inside the moved block follows its cells,
+// `$` or not, and any other ref still means the cell it meant, so on another sheet it names the one it came from.
+// `from` and `to` are the sheets' names. The text comes back without its `=`.
+export function moveFormulaRefs(
+    txt: string,
+    block: { row: readonly number[]; column: readonly number[] },
+    rowOffset: number,
+    colOffset: number,
+    from: string,
+    to: string,
+    findSheet: (name: string) => { name: string } | undefined,
+): string {
+    const inBlock = ([row, column]: RefLeg) =>
+        row.index >= block.row[0] &&
+        row.index <= block.row[1] &&
+        column.index >= block.column[0] &&
+        column.index <= block.column[1];
+    const moved = ([row, column]: RefLeg) =>
+        toLabel({ ...row, index: row.index + rowOffset }, { ...column, index: column.index + colOffset });
+    return walkFormulaRefs(txt, (ref) => {
+        const sheetEnd = ref.lastIndexOf('!') + 1;
+        if (sheetEnd > 0 && findSheet(unquoteSheetName(ref.slice(0, sheetEnd - 1)))?.name !== from) return ref;
+        const [startTxt, endTxt] = ref.slice(sheetEnd).split(':');
+        const start = extractLabel(startTxt);
+        const end = endTxt == null ? start : extractLabel(endTxt);
+        if (!start || !end || !inBlock(start) || !inBlock(end)) {
+            return sheetEnd === 0 && from !== to ? `${sheetRefName(from)}!${ref}` : ref;
+        }
+        const prefix = sheetEnd > 0 ? `${sheetRefName(to)}!` : '';
+        return endTxt == null ? prefix + moved(start) : `${prefix}${moved(start)}:${moved(end)}`;
+    });
+}
+
+// Moves a formula's refs for a row or column insert ('add') or delete ('del'). Only refs to `targetSheet` move, and
+// `findSheet` reads names by case, so in a workbook holding Data and data an op on one moves only its own refs.
 export function functionStrChange(
     txt: string,
     type: 'add' | 'del',
@@ -101,141 +179,91 @@ export function detectAbsolute(txt: string): [boolean, boolean] {
     ];
 }
 
-// The character walker every rewrite here shares. It drops one leading `=`, then reads the text as refs and the
-// structure around them: brackets, strings, commas, `&` and the operators, a two-character one or a leading minus
-// included. It walks into each part between them. Each leaf that `iscelldata` reads as a ref goes to `onRef`, which
-// returns its replacement. Any other leaf, such as a name or a number, goes to `onName`, which keeps it by default. A
-// function's name is no leaf, and neither is a string.
-//
-// A `-` is a sign, glued to the number after it, when the nearest character before it that is no space is `(`, `,`,
-// another operator, or the start of the part. The scan reads the character just before the `-` first and then walks
-// back over spaces. Starting one further back would read the `-` in `CONCAT(-1:3)` as a minus and shift the range.
-function walkFormulaRefs(
+// The character walker every reader here shares. It drops one leading `=` and reads the text as leaves and structure.
+// A leaf `iscelldata` reads as a ref goes to `onRef`; any other leaf goes to `onName`. A function name is no leaf.
+export function walkFormulaRefs(
     txt: string,
     onRef: (ref: string) => string,
     onName: (token: string) => string = (token) => token,
 ): string {
-    const chars = (txt.startsWith('=') ? txt.slice(1) : txt).split('');
-    let i = 0;
     let str = '';
     let result = '';
-    let dquote = 0;
+    let dquote = false;
     // A quoted sheet name is one token, its delimiters and doubled quotes included.
     let squote = false;
     // A structured reference's brackets hold names, and a `'` escapes the character after it, a bracket too.
     let brackets = 0;
+    const leaf = () => {
+        const walked = refOf(str.trim(), onRef, onName);
+        str = '';
+        return walked;
+    };
 
-    while (i < chars.length) {
-        const s = chars[i];
+    for (let i = txt.startsWith('=') ? 1 : 0; i < txt.length; i += 1) {
+        const s = txt[i];
 
-        if (brackets > 0 || (s === '[' && dquote === 0 && !squote)) {
-            if (s === "'" && i + 1 < chars.length) {
+        if (brackets > 0 || (s === '[' && !dquote && !squote)) {
+            if (s === "'" && i + 1 < txt.length) {
                 i += 1;
-                str += s + chars[i];
+                str += s + txt[i];
             } else {
                 if (s === '[') brackets += 1;
                 else if (s === ']') brackets -= 1;
                 str += s;
             }
-        } else if (squote || (s === "'" && dquote === 0)) {
+        } else if (squote || (s === "'" && !dquote)) {
             if (s === "'") squote = !squote;
             str += s;
-        } else if (s === ' ' && dquote === 0) {
+        } else if (s === '"') {
+            str += '"';
+            if (dquote) {
+                result += str;
+                str = '';
+            }
+            dquote = !dquote;
+        } else if (dquote) {
+            str += s;
+        } else if (s === ' ') {
             // A run of spaces is read at once: kept, and between two refs the intersection operator, a bracketed one's
             // too (Excel reads `LOG10 (A1)` so); around a range's colon it is the range's.
             let end = i;
-            while (end + 1 < chars.length && chars[end + 1] === ' ') end += 1;
-            if (chars[end + 1] !== ':' && !str.endsWith(':')) {
-                result += walkFormulaRefs(str, onRef, onName) + ' '.repeat(end - i + 1);
-                str = '';
-            }
+            while (txt[end + 1] === ' ') end += 1;
+            if (txt[end + 1] !== ':' && !str.endsWith(':')) result += leaf() + ' '.repeat(end - i + 1);
             i = end;
-        } else if (s === '(' && dquote === 0) {
+        } else if (s === '(') {
             // A range may end at a function returning a reference, `B2:INDEX(…)`: its first leg is a ref.
             const legs = splitUnquoted(str, ':');
             const name = legs.pop();
             result += legs.length > 0 ? `${refOf(legs.join(':').trim(), onRef, onName)}:${name}(` : `${str}(`;
             str = '';
-        } else if (s === ')' && dquote === 0) {
-            result += `${walkFormulaRefs(str, onRef, onName)})`;
-            str = '';
-        } else if (s === '"') {
-            if (dquote > 0) {
-                result += `${str}"`;
-                dquote -= 1;
-                str = '';
-            } else {
-                dquote += 1;
-                str += '"';
-            }
-        } else if (s === ',' && dquote === 0) {
-            result += `${walkFormulaRefs(str, onRef, onName)},`;
-            str = '';
-        } else if (s === '&' && dquote === 0) {
-            if (str.length > 0) {
-                result += `${walkFormulaRefs(str, onRef, onName)}&`;
-                str = '';
-            } else {
-                result += '&';
-            }
-        } else if (formulaOperators.has(s) && dquote === 0) {
-            const sNext = i + 1 < chars.length ? chars[i + 1] : '';
-            let p = i - 1;
-            let sPre: string | null = null;
-            if (p >= 0) {
-                do {
-                    sPre = chars[p];
-                    p -= 1;
-                } while (p >= 0 && sPre === ' ');
-            }
-
-            if (formulaOperators.has(s + sNext)) {
-                if (str.length > 0) {
-                    result += walkFormulaRefs(str, onRef, onName) + s + sNext;
-                    str = '';
-                } else {
-                    result += s + sNext;
-                }
-                i += 1;
-            } else if (
-                !/[^0-9]/.test(sNext) &&
-                s === '-' &&
-                (sPre === '(' || sPre == null || sPre === ',' || sPre === ' ' || formulaOperators.has(sPre))
-            ) {
-                str += s;
-            } else if (str.length > 0) {
-                result += walkFormulaRefs(str, onRef, onName) + s;
-                str = '';
-            } else {
-                result += s;
-            }
+        } else if (s === ')' || s === ',') {
+            result += leaf() + s;
+        } else if (formulaOperators.has(s)) {
+            const operator = formulaOperators.has(txt.slice(i, i + 2)) ? txt.slice(i, i + 2) : s;
+            result += leaf() + operator;
+            i += operator.length - 1;
         } else {
             str += s;
         }
-
-        if (i === chars.length - 1) {
-            result += refOf(str.trim(), onRef, onName);
-        }
-
-        i += 1;
     }
 
-    return result;
+    return result + leaf();
 }
 
-// A leaf the walker found: a ref is handed to `onRef` as one or two legs behind one sheet prefix. A range naming its
-// sheet on both legs (`'S 1'!A1:'S 1'!B2`) moves as the one naming it once, and a chained range (`A1:A2:A3`) leg by
-// leg, so its result is #REF! when any leg's is.
+// A range naming its sheet on both legs (`'S 1'!A1:'S 1'!B2`) moves as the one naming it once. A chained range
+// (`A1:A2:A3`) moves leg by leg and is #REF! when any leg is.
 function refOf(token: string, onRef: (ref: string) => string, onName: (token: string) => string): string {
     // The second leg of a range a function starts, `INDEX(…):A5`.
-    if (token.startsWith(':')) return `:${refOf(token.slice(1), onRef, onName)}`;
+    if (token.startsWith(':') && token[1] !== ':') return `:${refOf(token.slice(1), onRef, onName)}`;
     const legs = splitUnquoted(token, ':');
     if (splitUnquoted(token, '!').length > 2) {
         if (legs.length !== 2 || legs.some((leg) => splitUnquoted(leg, '!').length !== 2)) return token;
-        const second = legs[1].slice(0, legs[1].lastIndexOf('!') + 1);
-        const moved = refOf(`${legs[0]}:${legs[1].slice(second.length)}`, onRef, onName);
+        const sheetEnd = legs[1].lastIndexOf('!') + 1;
+        const moved = refOf(`${legs[0]}:${legs[1].slice(sheetEnd)}`, onRef, onName);
         const colon = moved.lastIndexOf(':');
-        return colon < 0 ? moved : `${moved.slice(0, colon + 1)}${second}${moved.slice(colon + 1)}`;
+        if (colon < 0) return moved;
+        const prefix = moved.slice(0, moved.lastIndexOf('!') + 1);
+        return `${moved.slice(0, colon + 1)}${prefix}${moved.slice(colon + 1)}`;
     }
     const sheetEnd = token.lastIndexOf('!') + 1;
     const chained = token.slice(sheetEnd).split(':');
@@ -320,7 +348,7 @@ function shiftRefForRowCol(
 
     const formatRange = () => {
         const start = prefix + toLabel({ ...row0, index: r1 }, { ...column0, index: c1 });
-        // A whole-column (`A:A`) or whole-row (`1:1`) range also meets this through its -1 sentinels, and keeps both legs.
+        // A whole-column or whole-row range meets this through its -1 sentinels and keeps both legs.
         if (!rowsMissing && !colsMissing && r1 === r2 && c1 === c2) {
             return start;
         }

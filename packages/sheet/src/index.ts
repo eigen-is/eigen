@@ -12,7 +12,6 @@ export { evaluateConditionalFormat } from './engine/conditional-format';
 export { FormulaEngine } from './engine/formula-engine';
 export { ERROR_REF, Parser } from './engine/parser';
 export type {
-    CalcChainEntry,
     Cell,
     CellMatrix,
     CellResolver,
@@ -22,6 +21,5 @@ export type {
     FormulaCellInfoMap,
     FormulaDependency,
     FormulaEngineState,
-    SheetInfo,
 } from './engine/types';
 export * from './state';

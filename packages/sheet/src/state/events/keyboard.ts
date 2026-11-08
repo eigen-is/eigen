@@ -6,6 +6,7 @@
 import type { Hotkey } from '@tanstack/react-hotkeys';
 import { matchesKeyboardEvent } from '@tanstack/react-hotkeys';
 import { REDO_ALT_HOTKEY, REDO_HOTKEY, UNDO_HOTKEY } from '@workspace/lib/constants/hotkeys';
+import dayjs from 'dayjs';
 import { cloneDeep, isEmpty, isNil } from 'es-toolkit/compat';
 import { cellValue } from '../../engine/format';
 import type { CellMatrix } from '../../engine/types';
@@ -13,13 +14,14 @@ import { moveCountPastHiddenRowCol } from '..';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import { cancelNormalSelected, updateCell } from '../modules/cell';
+import { openCellEditor } from '../modules/cell-editor';
 import { cellFocus, checkboxChange, getCellDataValidation } from '../modules/data-validation';
 import { fillFromEdge } from '../modules/drop-cell';
 import { handleFormulaInput } from '../modules/formula-editor';
-import { moveHighlightCell, moveHighlightRange, selectAll, selectionCache } from '../modules/selection';
+import { moveHighlightCell, moveHighlightRange, selectAll } from '../modules/selection';
 import { handleBold, handleItalic, handleUnderline } from '../modules/toolbar';
-import type { GlobalCache, Selection } from '../types';
-import { getNowDateTime, getSheetIndex, isAllowEdit } from '../utils';
+import type { Selection } from '../types';
+import { getSheetIndex } from '../utils';
 import { clearSelectedContents } from './clear';
 import { handleCopy, handleCut } from './copy';
 
@@ -42,9 +44,9 @@ export const SHEET_HOTKEYS = {
 } as const satisfies Record<string, Hotkey>;
 
 // Enter and Tab commit the open edit and select the edited cell, then each moves on from it.
-function commitEdit(ctx: Context, cellInput: HTMLDivElement, canvas?: CanvasRenderingContext2D) {
+function commitEdit(ctx: Context, cellInput: HTMLDivElement) {
     const [r, c] = ctx.editingCellPosition;
-    updateCell(ctx, r, c, cellInput, undefined, canvas);
+    updateCell(ctx, r, c, cellInput);
     ctx.selections = [
         {
             row: [r, r],
@@ -55,22 +57,26 @@ function commitEdit(ctx: Context, cellInput: HTMLDivElement, canvas?: CanvasRend
     ];
 }
 
-export function handleGlobalEnter(
-    ctx: Context,
-    cellInput: HTMLDivElement,
-    e: KeyboardEvent,
-    canvas?: CanvasRenderingContext2D,
-) {
+// Whether a key changes an editor's text, or only moves or commands: Backspace, Space and Delete do, and so does a
+// key past the system keys that is no function key, NumLock or numpad equals. Of the Ctrl keys only a paste does.
+export function typesIntoEditor(e: KeyboardEvent) {
+    const key = e.keyCode;
+    if (key === 8 || key === 32 || key === 46) return true;
+    if (e.ctrlKey) return key === 86;
+    return !e.altKey && key > 46 && !(key >= 112 && key <= 123) && key !== 144 && key !== 108;
+}
+
+export function handleGlobalEnter(ctx: Context, cellInput: HTMLDivElement, e: KeyboardEvent) {
     if ((e.altKey || e.metaKey) && ctx.editingCellPosition.length > 0) {
         e.preventDefault();
     } else if (ctx.editingCellPosition.length > 0) {
-        commitEdit(ctx, cellInput, canvas);
+        commitEdit(ctx, cellInput);
         moveHighlightCell(ctx, 'down', 1, 'rangeOfSelect');
         e.preventDefault();
     } else if ((ctx.selections?.length ?? 0) > 0) {
         const last = ctx.selections?.at(-1);
         if (last?.row_focus == null || last.column_focus == null) return;
-        ctx.editingCellPosition = [last.row_focus, last.column_focus];
+        openCellEditor(ctx, last.row_focus, last.column_focus, { caret: 'end' });
         e.preventDefault();
     }
 }
@@ -187,7 +193,6 @@ const floatingObjectSelected = (ctx: Context) => ctx.activeObject != null;
 
 export function handleWithCtrlOrMetaKey(
     ctx: Context,
-    cache: GlobalCache,
     e: KeyboardEvent,
     cellInput: HTMLDivElement,
     fxInput: HTMLDivElement | null | undefined,
@@ -203,16 +208,11 @@ export function handleWithCtrlOrMetaKey(
             // Ctrl + Shift + Arrow: extend selection toward next edge
             handleControlPlusArrowKey(ctx, e, true);
         } else if ([';', '"', ':', "'"].includes(e.key)) {
-            const last = ctx.selections?.[ctx.selections.length - 1];
-            if (!last || last.row_focus == null || last.column_focus == null) return;
+            const last = ctx.selections?.at(-1);
+            if (ctx.allowEdit === false || last?.row_focus == null || last.column_focus == null) return;
 
-            const row_index = last.row_focus;
-            const col_index = last.column_focus;
-            updateCell(ctx, row_index, col_index, cellInput);
-            ctx.editingCellPosition = [row_index, col_index];
-
-            cache.ignoreWriteCell = true;
-            cellInput.innerText = getNowDateTime(2);
+            const html = dayjs().format('YYYY-MM-DD HH:mm:ss');
+            openCellEditor(ctx, last.row_focus, last.column_focus, { html, caret: 'end' });
             handleFormulaInput(ctx, fxInput, cellInput, e.keyCode);
         }
     } else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
@@ -224,12 +224,7 @@ export function handleWithCtrlOrMetaKey(
         e.stopPropagation();
         return;
     } else if (matchesKeyboardEvent(e, SHEET_HOTKEYS.paste)) {
-        // A paste into several ranges is not supported.
-        if ((ctx.selections?.length ?? 0) > 1) {
-            return;
-        }
-
-        selectionCache.isPasteAction = true;
+        // The browser fires its paste next, which the Workbook takes.
         e.stopPropagation();
         return;
     } else if (matchesKeyboardEvent(e, SHEET_HOTKEYS.cut)) {
@@ -326,7 +321,7 @@ function toggleFocusedCheckbox(ctx: Context, kstr: string) {
 // the mousedown path does. Returns false for every other cell and key.
 function openFocusedDropdown(ctx: Context, e: KeyboardEvent) {
     if (!e.altKey || e.key !== 'ArrowDown') return false;
-    if (ctx.editingCellPosition.length > 0 || !isAllowEdit(ctx)) return false;
+    if (ctx.editingCellPosition.length > 0 || ctx.allowEdit === false) return false;
     const selection = ctx.selections?.[ctx.selections.length - 1];
     if (selection?.row_focus == null || selection.column_focus == null) return false;
     const { row_focus: r, column_focus: c } = selection;
@@ -341,8 +336,6 @@ export function handleGlobalKeyDown(
     cellInput: HTMLDivElement,
     fxInput: HTMLDivElement | null | undefined,
     e: KeyboardEvent,
-    cache: GlobalCache,
-    canvas?: CanvasRenderingContext2D,
 ) {
     ctx.selectionActive = false;
     const kcode = e.keyCode;
@@ -355,7 +348,7 @@ export function handleGlobalKeyDown(
         ctx.formulaRangeSelections = [];
     }
 
-    const allowEdit = isAllowEdit(ctx);
+    const allowEdit = ctx.allowEdit !== false;
 
     if (
         ctx.editingCellPosition.length > 0 &&
@@ -393,9 +386,9 @@ export function handleGlobalKeyDown(
         e.preventDefault();
     } else if (kstr === 'Enter') {
         if (!allowEdit) return;
-        handleGlobalEnter(ctx, cellInput, e, canvas);
+        handleGlobalEnter(ctx, cellInput, e);
     } else if (kstr === 'Tab') {
-        if (ctx.editingCellPosition.length > 0) commitEdit(ctx, cellInput, canvas);
+        if (ctx.editingCellPosition.length > 0) commitEdit(ctx, cellInput);
         moveHighlightCell(ctx, 'right', e.shiftKey ? -1 : 1, 'rangeOfSelect');
         e.preventDefault();
     } else if (kstr === 'F2') {
@@ -404,10 +397,10 @@ export function handleGlobalKeyDown(
             return;
         }
 
-        const last = ctx.selections?.[ctx.selections.length - 1];
-        if (!last || last.row_focus == null || last.column_focus == null) return;
+        const last = ctx.selections?.at(-1);
+        if (last?.row_focus == null || last.column_focus == null) return;
 
-        ctx.editingCellPosition = [last.row_focus, last.column_focus];
+        openCellEditor(ctx, last.row_focus, last.column_focus, { caret: 'end' });
         e.preventDefault();
     } else if (kstr === 'Escape' && ctx.editingCellPosition.length > 0) {
         cancelNormalSelected(ctx);
@@ -418,7 +411,7 @@ export function handleGlobalKeyDown(
         // shared find bar's document-level Escape hotkey can dismiss it.
         return;
     } else if (e.ctrlKey || e.metaKey) {
-        handleWithCtrlOrMetaKey(ctx, cache, e, cellInput, fxInput);
+        handleWithCtrlOrMetaKey(ctx, e, cellInput, fxInput);
         return;
     } else if (
         e.shiftKey &&
@@ -431,38 +424,16 @@ export function handleGlobalKeyDown(
         e.preventDefault();
     } else if (kstr === 'ArrowUp' || kstr === 'ArrowDown' || kstr === 'ArrowLeft' || kstr === 'ArrowRight') {
         handleArrowKey(ctx, e);
-    } else if (
-        // Allow printable input through to the cell input box. Reject:
-        // function keys (F1-F12 = 112-123), modifier/system keys (kcode <= 46
-        // except backspace/space/delete/0), NumLock (144), Numpad equals (108),
-        // and modified key combos handled elsewhere — but always allow
-        // Backspace (8), Space (32), Delete (46) and key 0.
-        !(
-            (kcode >= 112 && kcode <= 123) ||
-            kcode <= 46 ||
-            kcode === 144 ||
-            kcode === 108 ||
-            e.ctrlKey ||
-            e.altKey ||
-            (e.shiftKey && (kcode === 37 || kcode === 38 || kcode === 39 || kcode === 40))
-        ) ||
-        kcode === 8 ||
-        kcode === 32 ||
-        kcode === 46 ||
-        kcode === 0
-    ) {
+    } else if (typesIntoEditor(e) || kcode === 0) {
         if (!allowEdit) return;
         // With no selection a typed key has no cell to open, so it must not land in the hidden editor either. A key
         // typed into another field of the workbook, such as a toolbar input, still reaches that field.
         if (isEmpty(ctx.selections)) {
             if (e.target === cellInput) e.preventDefault();
-        } else if (kstr !== 'CapsLock' && kcode !== 18) {
-            // Activate the input box and forward the keypress to it.
+        } else {
             const last = ctx.selections?.at(-1);
             if (last?.row_focus == null || last.column_focus == null) return;
-            ctx.editingCellPosition = [last.row_focus, last.column_focus];
-            cache.overwriteCell = true;
-
+            openCellEditor(ctx, last.row_focus, last.column_focus, { html: '' });
             handleFormulaInput(ctx, fxInput, cellInput, kcode);
         }
     }

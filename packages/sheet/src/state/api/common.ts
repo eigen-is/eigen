@@ -1,32 +1,13 @@
-import { cloneDeep } from 'es-toolkit/compat';
-import { celldataToData, dataToCelldata } from '../../engine/celldata';
+// Finds a sheet on the workbook's context: the one an id names, or the current sheet. The state modules and the sheet
+// calls find their sheet here, so a bad id throws instead of handing back undefined.
+
 import type { Context } from '../context';
 import { getSheetIndex } from '../utils';
-import { sheetNotFound } from './errors';
 
-// Re-exported from the engine so a single canonical implementation serves
-// both the sheet runtime and replaySheetsOps' BE materialization step.
-export { celldataToData, dataToCelldata };
+export type SheetLookup = { id?: string };
 
-export type CommonOptions = { index?: number; id?: string };
-
-export function getSheet(ctx: Context, options: CommonOptions = {}) {
-    const { index = getSheetIndex(ctx, options.id || ctx.currentSheetId) } = options;
-
-    if (index == null) {
-        throw sheetNotFound();
-    }
-
-    const sheet = ctx.sheets[index];
-
-    if (sheet == null) {
-        throw sheetNotFound();
-    }
-
-    return sheet;
-}
-
-export function getSheetWithLatestCelldata(ctx: Context, options: CommonOptions = {}) {
-    const sheet = getSheet(ctx, options);
-    return { ...cloneDeep(sheet), celldata: dataToCelldata(sheet.data) };
+export function getSheet(ctx: Context, { id }: SheetLookup = {}) {
+    const index = getSheetIndex(ctx, id ?? ctx.currentSheetId);
+    if (index == null) throw new Error('sheet not found');
+    return ctx.sheets[index];
 }

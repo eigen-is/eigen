@@ -1,7 +1,7 @@
 // Insert link, or the link card's pencil, opens the link dialog in the sheet's dialog slot. OK, or Enter in the
 // address, saves the link and closes. An address Sheets can't open disables OK and says why, and Cancel, Escape, the X
 // or a click outside close it with the cell as it was. However it closes, the focus goes back to the grid. The range
-// picker takes the dialog's place and brings it back with the draft, on the link's sheet, however the picker leaves.
+// picker takes the dialog's place, and its OK, Cancel or Escape brings it back with the draft, on the link's sheet.
 
 import { describe, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -200,6 +200,8 @@ describe('the focus goes back to the grid', () => {
     }
 });
 
+type Picker = Awaited<ReturnType<typeof openCard>>;
+
 describe('the range picker', () => {
     // Edit link on a link to B1, its display text typed, and the grid button pressed.
     const openPicker = async () => {
@@ -207,7 +209,6 @@ describe('the range picker', () => {
         await dialog.type('Display text', 'Totals');
         await clickLabelled('Select cell range');
         expect(dialog.title()).toBe('Select cell range');
-        expect(dialog.context().rangePickerOpen).toBe(true);
         return dialog;
     };
 
@@ -218,24 +219,50 @@ describe('the range picker', () => {
         expect(dialog.title()).toBe('Edit link');
         expect(dialog.field('Display text').value).toBe('Totals');
         expect(dialog.field('Cell range').value).toBe('Sheet1!C2');
-        expect(dialog.context().rangePickerOpen).toBe(false);
     });
 
-    test('Cancel brings the dialog back with the text as typed', async () => {
-        const dialog = await openPicker();
-        await dialog.type('Cell range', 'Sheet1!C2');
-        await dialog.click('Cancel');
-        expect(dialog.title()).toBe('Edit link');
-        expect(dialog.field('Display text').value).toBe('Totals');
-        expect(dialog.field('Cell range').value).toBe('Sheet1!B1');
-        expect(dialog.context().rangePickerOpen).toBe(false);
-    });
+    for (const [how, leave] of [
+        ['Cancel', (dialog: Picker) => dialog.click('Cancel')],
+        ['Escape', () => pressEscape()],
+    ] as const) {
+        test(`${how} brings the dialog back with the text as typed`, async () => {
+            const dialog = await openPicker();
+            await dialog.type('Cell range', 'Sheet1!C2');
+            await leave(dialog);
+            expect(dialog.title()).toBe('Edit link');
+            expect(dialog.field('Display text').value).toBe('Totals');
+            expect(dialog.field('Cell range').value).toBe('Sheet1!B1');
+        });
+    }
 
-    test('a notice that takes its place lets the cell editor and the link card back', async () => {
+    const HOVER_CARD = {
+        sheetId: 'id_1',
+        r: 0,
+        c: 0,
+        rc: '0_0',
+        originText: '',
+        originType: 'webpage',
+        originAddress: 'https://eigen.is',
+        position: { cellLeft: 0, cellBottom: 20 },
+    };
+
+    test('the link card stays away until a notice takes its place', async () => {
         const dialog = await openPicker();
+        await dialog.setContext((ctx) => {
+            ctx.linkCard = { ...HOVER_CARD, isEditing: false };
+        });
+        expect(document.querySelector('button[aria-label="Edit link"]')).toBeNull();
         await dialog.show((d) => d.showNotice('A notice'));
-        expect(dialog.context().rangePickerOpen).toBe(false);
         expect(dialog.dialogs()[0]?.textContent).toContain('A notice');
+        expect(document.querySelector('button[aria-label="Edit link"]')).not.toBeNull();
+    });
+
+    test('Insert link takes its place, as any other dialog does', async () => {
+        const dialog = await openPicker();
+        await dialog.setContext((ctx) => {
+            ctx.linkCard = { ...HOVER_CARD, originAddress: '', isEditing: true };
+        });
+        expect(dialog.title()).toBe('Insert link');
     });
 
     test('a pick on another sheet comes back to the link on its own sheet', async () => {

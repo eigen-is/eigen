@@ -17,17 +17,17 @@ const freezeContext = (frozen?: Sheet['frozen']) => {
     return ctx;
 };
 
-// Page x 196 is grid x 150, left of the middle of column C, so the pane ends after column B.
-const releaseColumn = (frozen: Sheet['frozen'], pageX = 196) =>
+// Point x 196 is grid x 150, left of the middle of column C, so the pane ends after column B.
+const releaseColumn = (frozen: Sheet['frozen'], clientX = 196) =>
     produce(freezeContext(frozen), (ctx: Context) => {
         ctx.colsFreezeDragging = true;
-        mouseUpAt(pageX, 0)(ctx);
+        mouseUpAt(clientX, 0)(ctx);
     }).sheets[0].frozen;
-// Page y 65 is grid y 45, above the middle of row 3, so the pane ends after row 2.
-const releaseRow = (frozen: Sheet['frozen'], pageY = 65) =>
+// Point y 65 is grid y 45, above the middle of row 3, so the pane ends after row 2.
+const releaseRow = (frozen: Sheet['frozen'], clientY = 65) =>
     produce(freezeContext(frozen), (ctx: Context) => {
         ctx.rowsFreezeDragging = true;
-        mouseUpAt(0, pageY)(ctx);
+        mouseUpAt(0, clientY)(ctx);
     }).sheets[0].frozen;
 
 describe('a column freeze drag', () => {

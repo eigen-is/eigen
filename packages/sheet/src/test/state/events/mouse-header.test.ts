@@ -6,10 +6,12 @@ import { describe, expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import type { Context } from '../../../state/context';
 import { handleColumnHeaderMouseDown, handleRowHeaderMouseDown } from '../../../state/events/mouse-header';
+import { autoFitColumnWidth } from '../../../state/events/mouse-resize';
 import type { GlobalCache } from '../../../state/types';
 import { workbookContextFactory } from '../factories/context';
+import { stubMeasuringCanvas } from '../factories/measuring-canvas';
 
-installHappyDom();
+stubMeasuringCanvas(installHappyDom());
 
 function composingFormula(): Context {
     const ctx = workbookContextFactory();
@@ -23,6 +25,7 @@ function press(
     handler: typeof handleColumnHeaderMouseDown | typeof handleRowHeaderMouseDown,
     ctx: Context,
     pressClosedMenu: boolean,
+    cellInput = document.createElement('div'),
 ) {
     const globalCache: GlobalCache = {
         undoList: [],
@@ -30,7 +33,6 @@ function press(
         scrollLeft: 0,
         scrollTop: 0,
         scrollListeners: new Set(),
-        notifyScrollListeners: () => {},
         pressClosedMenu,
     };
     const container = document.createElement('div');
@@ -40,9 +42,17 @@ function press(
     event.preventDefault = () => {
         prevented = true;
     };
-    handler(ctx, globalCache, event, container, document.createElement('div'), null);
+    handler(ctx, globalCache, event, container, cellInput, null);
     return prevented;
 }
+
+test('a double-click on a column edge fits the column to its widest text', () => {
+    const ctx = workbookContextFactory();
+    ctx.sheets[0].data = [[{ v: 'abc', m: 'abc' }], [{ v: 'abcdefgh', m: 'abcdefgh' }]];
+    autoFitColumnWidth(ctx, 0);
+    // The stub draws a glyph 7 px wide, and the fit pads the text by 14.
+    expect(ctx.sheets[0].config?.columnlen?.[0]).toBe(8 * 7 + 14);
+});
 
 describe.each([
     ['column', handleColumnHeaderMouseDown],
@@ -58,5 +68,14 @@ describe.each([
         const ctx = composingFormula();
         press(handler, ctx, false);
         expect(ctx.formulaCache.func_selectedrange).toBeDefined();
+    });
+
+    test('commits the open edit and grows its row to the text', () => {
+        const ctx = workbookContextFactory();
+        ctx.editingCellPosition = [0, 0];
+        const input = document.createElement('div');
+        input.innerHTML = 'line one\nline two\nline three';
+        press(handler, ctx, false, input);
+        expect(ctx.sheets[0].config?.rowlen?.[0]).toBeGreaterThan(ctx.defaultrowlen);
     });
 });

@@ -25,9 +25,7 @@ async function mount() {
     document.body.append(container);
     const root = createRoot(container);
     const workbook = createRef<WorkbookInstance>();
-    const data: Sheet[] = [
-        { id: 's1', name: 'One', order: 0, status: 1, row: 10, column: 5, celldata: [], config: {} },
-    ];
+    const data: Sheet[] = [{ id: 's1', name: 'One', order: 0, row: 10, column: 5, celldata: [], config: {} }];
     const controller = { search: () => [], highlightAll: () => {}, reveal: () => {}, canReplace: true };
     await act(async () => {
         root.render(
@@ -36,8 +34,6 @@ async function mount() {
                 children: createElement(Workbook, {
                     ref: workbook,
                     data,
-                    showToolbar: true,
-                    showFormulaBar: false,
                     hooks: {},
                 }),
             }),

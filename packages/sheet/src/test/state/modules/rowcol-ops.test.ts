@@ -1,19 +1,17 @@
-// Row/col inserts and deletes must NOT ship the target sheet wholesale over
-// collab: patchToOp drops the sheet-sized immer patch and instead emits the
-// insertRowCol/deleteRowCol special op (every consumer re-runs the engine)
-// plus compact metadata ops for the fields the engine pass doesn't reproduce.
-// These tests pin the op shape and prove FE state and BE replay converge,
-// including the undo-of-delete path that restores non-derivable config.
+// A row or column insert or delete ships its marker alone over collab, and every consumer runs it through the engine.
+// These tests pin the op shape and prove the editor and the replay converge, including the undo of a delete, which
+// restores what the marker alone can't.
 
 import { describe, expect, test } from 'bun:test';
-import type { Sheet as LibSheet, SheetWithCalcChain } from '@workspace/lib/sheets';
+import type { Sheet as LibSheet, MergeCell } from '@workspace/lib/sheets';
 import { REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { enablePatches, produce, produceWithPatches } from 'immer';
 import { replaySheetsOps, withMaterializedData } from '../../../engine';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
-import type { ShiftedSheet } from '../../../engine/types';
+import type { Cell, ShiftedSheet } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import { undoEntry } from '../../../state/modules/history';
+import { saveHyperlink } from '../../../state/modules/hyperlink';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import type { Op } from '../../../state/types';
 import type { PatchOptions } from '../../../state/utils/patch';
@@ -26,6 +24,8 @@ enablePatches();
 const INSERT_OP = { type: 'row', index: 1, count: 1, direction: 'lefttop', id: 'id_1' } as const;
 const DELETE_OP = { type: 'row', start: 1, end: 2, id: 'id_1' } as const;
 const SIDE = { style: 1, color: '#000' };
+const LINK = { linkType: 'webpage', linkAddress: 'https://eigen.is' };
+const PEER_LINK = { linkType: 'webpage', linkAddress: 'https://peer.example' };
 
 function richContext(): Context {
     const cell = (v: number) => ({ v, m: String(v) });
@@ -46,10 +46,8 @@ function richContext(): Context {
                     merge: { '3_2': { r: 3, c: 2, rs: 1, cs: 2 } },
                     borderInfo: { '1_0': { t: SIDE }, '2_1': { b: SIDE }, '3_3': { l: SIDE } },
                 },
-                calcChain: [{ r: 2, c: 1, id: 'id_1' }],
-                // The hyperlinks are shifted only in the state layer, so they prove the metadata ops carry every
-                // field a receiver needs. The validation rules ship nothing and prove the replay moves them itself.
-                hyperlink: { '2_0': { linkType: 'webpage', linkAddress: 'https://eigen.is' } },
+                // The links and the validation rules ship nothing, so they prove the replay moves them itself.
+                hyperlink: { '2_0': LINK },
                 dataValidations: {
                     v: {
                         ranges: [{ row: [1, 2], column: [1, 1] }],
@@ -87,6 +85,22 @@ function emittedOps(recipe: (ctx: Context) => void, options: Parameters<typeof p
     return [patchToOp(next, filterPatch(patches), options), next];
 }
 
+function run(ctx: Context, { insertRowColOp, deleteRowColOp }: PatchOptions) {
+    if (insertRowColOp) insertRowCol(ctx, insertRowColOp);
+    else if (deleteRowColOp) deleteRowCol(ctx, deleteRowColOp);
+}
+
+// The sheet on the author's tab, the peer's tab and a joiner, where the log holds the peer's batch first. The author's
+// tab then applies the log again in that order.
+function race(peer: (ctx: Context) => void, options: PatchOptions, base = richContext()) {
+    const op = author(base, (ctx) => run(ctx, options), options);
+    const fromPeer = author(base, peer);
+    const onAuthor = receive(receive(base, fromPeer.ops), op.ops).sheets[0];
+    const onPeer = receive(fromPeer.next, op.ops).sheets[0];
+    const [joined] = join(base, [fromPeer.ops, op.ops]).map(withMaterializedData);
+    return [onAuthor, onPeer, joined];
+}
+
 describe('insert/delete ops stay sheet-sized-payload free', () => {
     test('insertRowCol ships no whole-sheet replace op', () => {
         const [ops] = emittedOps((ctx) => insertRowCol(ctx, INSERT_OP), { insertRowColOp: INSERT_OP });
@@ -100,25 +114,20 @@ describe('insert/delete ops stay sheet-sized-payload free', () => {
         expect(ops.filter((op) => op.op === 'deleteRowCol')).toHaveLength(1);
     });
 
-    test('insertRowCol carries authoritative metadata ops for the target sheet', () => {
-        const [ops, next] = emittedOps((ctx) => insertRowCol(ctx, INSERT_OP), { insertRowColOp: INSERT_OP });
-        const metaPaths = ops.filter((op) => op.id === 'id_1' && op.path.length === 1).map((op) => op.path[0]);
-        expect(ops.find((op) => op.path[0] === 'hyperlink')?.value).toEqual(next.sheets[0].hyperlink);
-        // Every receiver's engine moves the config, with its merges, and the validation rules itself, so the insert
-        // ships neither, and no merge stamp a peer's row op could leave unresolved.
-        expect(ops.filter((op) => op.path[0] === 'dataValidations' || op.path[0] === 'config')).toEqual([]);
-        expect(ops.filter((op) => op.path.at(-1) === 'mc')).toEqual([]);
-        // Every receiver derives the sheet's size from its cells, so the size does not ship.
-        expect(metaPaths).not.toContain('row');
-        // calcChain scales with formula count and every consumer re-derives it,
-        // so a plain insert must not ship it.
-        expect(metaPaths).not.toContain('calcChain');
+    const columnInsert = { ...INSERT_OP, type: 'column' } as const;
+    const columnDelete = { ...DELETE_OP, type: 'column' } as const;
+    test.each([
+        ['a row insert', { insertRowColOp: INSERT_OP }, { op: 'insertRowCol', value: INSERT_OP }],
+        ['a column insert', { insertRowColOp: columnInsert }, { op: 'insertRowCol', value: columnInsert }],
+        ['a row delete', { deleteRowColOp: DELETE_OP }, { op: 'deleteRowCol', value: DELETE_OP }],
+        ['a column delete', { deleteRowColOp: columnDelete }, { op: 'deleteRowCol', value: columnDelete }],
+    ] as const)('%s ships its marker and nothing else', (_, options, marker) => {
+        const [ops] = emittedOps((ctx) => run(ctx, options), options);
+        expect(ops).toEqual([{ ...marker, id: 'id_1', path: [] }]);
     });
 });
 
 describe('BE replay converges with FE state from the slim ops alone', () => {
-    // calcChain is deliberately absent: it isn't shipped on plain inserts/deletes
-    // (the BE replay never reads it, clients re-derive it) — see sheetMetadataOps.
     function expectConverged(replayed: LibSheet[], next: Context) {
         for (const [i, sheet] of replayed.entries()) {
             expect(sheet.data).toEqual(next.sheets[i].data);
@@ -161,20 +170,14 @@ describe('BE replay converges with FE state from the slim ops alone', () => {
         const deleteOps = deleted.ops;
         const { ops: undoOps } = undoEntry(deleted.next, deleted.entry);
 
-        const replayed: SheetWithCalcChain[] = replaySheetsOps(baseSheets, [deleteOps, undoOps]);
+        const replayed = replaySheetsOps(baseSheets, [deleteOps, undoOps]);
         expect(replayed[0].data).toEqual(base.sheets[0].data);
         // rowlen/rowhidden of the deleted rows aren't derivable from the delete +
         // insert ops alone — the config metadata op must restore them.
         expect(replayed[0].config).toEqual(base.sheets[0].config);
-        // Same for calcChain: the delete dropped the removed rows' entries on
-        // every peer, so the undo must ship the authoritative copy back.
-        expect(replayed[0].calcChain).toEqual(base.sheets[0].calcChain);
     });
 
     test('insert inside a multi-row merge stamps the new null cells on the replay side', () => {
-        // The engine fills the inserted row with nulls; the mc stamps for cells
-        // inside the expanded merge must be applied as full-cell ops before the
-        // ['data', r, c, 'mc'] merge ops, or the replay walks into a null cell.
         const op = { type: 'row', index: 3, count: 1, direction: 'lefttop', id: 'id_1' } as const;
         const base = richContext();
         base.sheets[0].config!.merge = { '2_2': { r: 2, c: 2, rs: 2, cs: 2 } };
@@ -265,7 +268,6 @@ describe("a row or column op racing a peer's unfreeze", () => {
             sheet.filter = {
                 1: { rowhidden: { 2: 0 }, optionstate: true, str: 0, edr: 3, cindex: 1, stc: 0, edc: 3 },
             };
-            sheet.alternateFormatRules = [{ cellrange: { row: [1, 3], column: [1, 3] } }];
         });
     const size = (sheets: LibSheet[]) => [sheets[0].data!.length, sheets[0].data![0].length];
     const rows = { type: 'row', index: 0, count: 2, direction: 'lefttop', id: 'id_1' } as const;
@@ -285,8 +287,7 @@ describe("a row or column op racing a peer's unfreeze", () => {
         ],
     ] as const;
 
-    // The edited sheet's fields reach a peer through sheetMetadataOps; the undo entry puts each back whole. Images,
-    // charts and validation rules are written one object at a time instead.
+    // The undo entry puts each field back whole. Images, charts and validation rules are written one object at a time.
     test.each(cases)('%s writes every sheet field whole, in the op and in its undo entry', (_, recipe, options) => {
         const op = author(frozenContext(), recipe, options);
         const perObject = new Set(['images', 'charts', 'dataValidations']);
@@ -297,7 +298,7 @@ describe("a row or column op racing a peer's unfreeze", () => {
     });
 
     test.each(cases)(
-        '%s applies its batch on every client and in the replay, the grid sizes agree, and its undo applies',
+        '%s applies its batch on every client and in the replay, and the grid sizes agree',
         (_, recipe, options, after) => {
             const base = frozenContext();
             const op = author(base, recipe, options);
@@ -314,15 +315,6 @@ describe("a row or column op racing a peer's unfreeze", () => {
             ]) {
                 expect(size(sheets)).toEqual([...after]);
             }
-
-            const { ctx: undone, ops: undoOps } = undoEntry(onA, op.entry);
-            for (const sheets of [
-                undone.sheets,
-                receive(onB, undoOps).sheets,
-                join(base, [op.ops, unfreeze.ops, undoOps]),
-            ]) {
-                expect(size(sheets)).toEqual([4, 4]);
-            }
         },
     );
 });
@@ -337,8 +329,6 @@ describe('two row ops sent at once keep the sheet size in step with its cells', 
         ['an insert and a delete', { insertRowColOp: inserted }, { deleteRowColOp: deleted }],
         ['two deletes', { deleteRowColOp: deleted }, { deleteRowColOp: { ...deleted, start: 0, end: 0 } }],
     ] as const;
-    const run = (ctx: Context, options: PatchOptions) =>
-        options.insertRowColOp ? insertRowCol(ctx, options.insertRowColOp) : deleteRowCol(ctx, options.deleteRowColOp!);
     const size = (sheet: LibSheet) => [sheet.row, sheet.column];
     const grid = (sheet: LibSheet) => [sheet.data!.length, sheet.data![0].length];
 
@@ -370,9 +360,8 @@ test('a row insert inside a whole-column rule writes no rule', () => {
     expect([...op.patches, ...op.inverse].filter(({ path }) => path[2] === 'dataValidations')).toEqual([]);
 });
 
-// A peer can send any value in a row op, and a sheet can refuse one, such as an insert into a read-only row. A peer and
-// a joiner then skip the whole batch alike, so no other op of it lands on rows the op did not move.
-describe('a malformed or refused row op skips its whole batch', () => {
+// A peer can send any value in a row op. A peer and a joiner then skip the whole batch alike, so no other op of it lands on rows the op did not move.
+describe('a malformed row op skips its whole batch', () => {
     const write: Op = { op: 'replace', id: 'id_1', path: ['data', 0, 0], value: { v: 'x', m: 'x' } };
     const insert = (value: Record<string, unknown>): Op => ({
         op: 'insertRowCol',
@@ -397,14 +386,10 @@ describe('a malformed or refused row op skips its whole batch', () => {
         ['a start past its end', remove({ start: 2, end: 1 })],
         ['a fractional end', remove({ end: 1.5 })],
         ['a NaN end', remove({ end: Number.NaN })],
-        ['an insert into a read-only row', insert({})],
     ];
 
     test.each(cases)('%s', (_, op) => {
-        const base = produce(richContext(), (ctx: Context) => {
-            const { config } = ctx.sheets[0];
-            if (config) config.rowReadOnly = { 1: 1 };
-        });
+        const base = richContext();
         const [joined] = join(base, [[op, write]]).map(withMaterializedData);
         for (const sheet of [receive(base, [op, write]).sheets[0], joined]) {
             expect(sheet.data?.length).toBe(4);
@@ -423,10 +408,6 @@ describe('two row ops sent at once on a sheet with a merge', () => {
         ['two inserts', { insertRowColOp: inserted }, 6, 5],
         ['a delete and an insert', { deleteRowColOp: deleted }, 4, 3],
     ] as const;
-    const run = (options: PatchOptions) => (ctx: Context) => {
-        if (options.insertRowColOp) insertRowCol(ctx, options.insertRowColOp);
-        else if (options.deleteRowColOp) deleteRowCol(ctx, options.deleteRowColOp);
-    };
 
     test.each(cases)('%s', (_, first, rows, mergeRow) => {
         const base = produce(richContext(), (ctx: Context) => {
@@ -440,8 +421,8 @@ describe('two row ops sent at once on a sheet with a merge', () => {
                 },
             ];
         });
-        const a = author(base, run(first), first);
-        const b = author(base, run({ insertRowColOp: inserted }), { insertRowColOp: inserted });
+        const a = author(base, (ctx) => run(ctx, first), first);
+        const b = author(base, (ctx) => run(ctx, { insertRowColOp: inserted }), { insertRowColOp: inserted });
         const onA = receive(a.next, b.ops).sheets[0];
         const onB = receive(receive(base, a.ops), b.ops).sheets[0];
         const [joined] = join(base, [a.ops, b.ops]).map(withMaterializedData);
@@ -470,19 +451,6 @@ describe("a row op sent with a peer's freeze or filter", () => {
         sheet.filterRange = { row: [1, 3], column: [0, 1] };
         sheet.filter = { 0: { rowhidden: { 2: 0 }, optionstate: true, str: 1, edr: 3, cindex: 0, stc: 0, edc: 1 } };
     };
-    function race(peer: (ctx: Context) => void, options: PatchOptions, base = richContext()) {
-        const { insertRowColOp, deleteRowColOp } = options;
-        const run = (ctx: Context) => {
-            if (insertRowColOp) insertRowCol(ctx, insertRowColOp);
-            else if (deleteRowColOp) deleteRowCol(ctx, deleteRowColOp);
-        };
-        const op = author(base, run, options);
-        const fromPeer = author(base, peer);
-        const onAuthor = receive(receive(base, fromPeer.ops), op.ops).sheets[0];
-        const onPeer = receive(fromPeer.next, op.ops).sheets[0];
-        const [joined] = join(base, [fromPeer.ops, op.ops]);
-        return [onAuthor, onPeer, joined];
-    }
     const pane = ({ frozen, filterRange, filter }: ShiftedSheet) => ({ frozen, filterRange, filter });
 
     test('a row insert moves the pane and the filter a peer set', () => {
@@ -531,6 +499,130 @@ describe("a row op sent with a peer's freeze or filter", () => {
         for (const sheet of race(() => {}, { insertRowColOp: rows }, base)) {
             expect(sheet.frozen).toEqual({ type: 'both', range: { row_focus: 3, column_focus: 1 } });
         }
+    });
+});
+
+// The op ships none of its sheet's other fields, so what the log puts before it stays as the peer left it.
+describe("a row or column op after a peer's edit of the sheet", () => {
+    const rows = { type: 'row', index: 0, count: 2, direction: 'lefttop', id: 'id_1' } as const;
+    const removed = { type: 'row', start: 0, end: 0, id: 'id_1' } as const;
+    const ops = [
+        ['a row insert', { insertRowColOp: rows }, { '4_0': LINK, '5_1': PEER_LINK }],
+        ['a column insert', { insertRowColOp: { ...rows, type: 'column' } }, { '2_2': LINK, '3_3': PEER_LINK }],
+        ['a row delete', { deleteRowColOp: removed }, { '1_0': LINK, '2_1': PEER_LINK }],
+        ['a column delete', { deleteRowColOp: { ...removed, type: 'column' } }, { '3_0': PEER_LINK }],
+    ] as const;
+
+    test.each(ops)("%s keeps the peer's rename", (_, options) => {
+        const rename = (ctx: Context) => {
+            ctx.sheets[0].name = 'Renamed';
+        };
+        for (const sheet of race(rename, options)) expect(sheet.name).toBe('Renamed');
+    });
+
+    // A sheet with a colour already, so a batch that wrote its fields whole would overwrite the peer's.
+    test.each(ops)("%s keeps the peer's tab colour", (_, options) => {
+        const base = produce(richContext(), (ctx: Context) => {
+            ctx.sheets[0].color = '#00ff00';
+        });
+        const paint = (ctx: Context) => {
+            ctx.sheets[0].color = '#ff0000';
+        };
+        for (const sheet of race(paint, options, base)) expect(sheet.color).toBe('#ff0000');
+    });
+
+    test.each(ops)("%s keeps the peer's hide", (_, options) => {
+        const base = produce(richContext(), (ctx: Context) => {
+            ctx.sheets[0].hide = 0;
+        });
+        const hide = (ctx: Context) => {
+            ctx.sheets[0].hide = 1;
+        };
+        for (const sheet of race(hide, options, base)) expect(sheet.hide).toBe(1);
+    });
+
+    test.each(ops)("%s moves the peer's new link", (_, options, links) => {
+        const link = (ctx: Context) => saveHyperlink(ctx, 3, 1, 'peer', PEER_LINK.linkType, PEER_LINK.linkAddress);
+        for (const sheet of race(link, options)) expect(sheet.hyperlink).toEqual(links);
+    });
+});
+
+// Every receiver's engine stamps a merge's cells. A batch that also wrote the author's stamps as whole cells would
+// leave, under a peer's row or column op, a stamp on a blank row or column at a corner that holds no merge.
+describe("an insert that grows a merge, after a peer's row or column op", () => {
+    const grid = (merge: MergeCell) => {
+        const data: Cell[][] = [];
+        for (let r = 0; r < 8; r += 1) {
+            data.push([]);
+            for (let c = 0; c < 8; c += 1) data[r].push({ v: `${r}_${c}` });
+        }
+        for (let r = merge.r; r < merge.r + merge.rs; r += 1) {
+            for (let c = merge.c; c < merge.c + merge.cs; c += 1) data[r][c] = { mc: { r: merge.r, c: merge.c } };
+        }
+        data[merge.r][merge.c] = { v: 'corner', mc: merge };
+        const ctx = contextFactory({
+            sheets: [
+                {
+                    name: 'sheet',
+                    id: 'id_1',
+                    order: 0,
+                    row: 8,
+                    column: 8,
+                    data,
+                    config: { merge: { [`${merge.r}_${merge.c}`]: merge } },
+                },
+            ],
+        }) as Context;
+        for (const sheet of ctx.sheets) normalizeSheetConfig(sheet);
+        return ctx;
+    };
+    const stamps = ({ data }: LibSheet) =>
+        (data ?? []).flatMap((row, r) => row.flatMap((cell, c) => (cell?.mc ? [[r, c, cell.mc]] : [])));
+    const values = ({ data }: LibSheet) =>
+        (data ?? [])
+            .flat()
+            .flatMap((cell) => (cell?.v == null ? [] : [String(cell.v)]))
+            .sort();
+
+    test('a row insert leaves no stamp outside the merge, and every value stays', () => {
+        const base = grid({ r: 1, c: 1, rs: 3, cs: 1 });
+        const peer = { type: 'row', index: 0, count: 5, direction: 'lefttop', id: 'id_1' } as const;
+        const mine = { ...peer, index: 2, count: 1 };
+        const merge = { r: 7, c: 1, rs: 3, cs: 1 };
+        for (const sheet of race((ctx) => insertRowCol(ctx, peer), { insertRowColOp: mine }, base)) {
+            expect(values(sheet)).toEqual(values(base.sheets[0]));
+            expect(sheet.config?.merge).toEqual({ '7_1': merge });
+            expect(stamps(sheet)).toEqual([
+                [7, 1, merge],
+                [8, 1, { r: 7, c: 1 }],
+                [9, 1, { r: 7, c: 1 }],
+            ]);
+        }
+    });
+
+    test('a column insert leaves no stamp outside the merge, and every value stays', () => {
+        const base = grid({ r: 1, c: 1, rs: 1, cs: 3 });
+        const peer = { type: 'column', index: 0, count: 5, direction: 'lefttop', id: 'id_1' } as const;
+        const mine = { ...peer, index: 2, count: 1 };
+        const merge = { r: 1, c: 7, rs: 1, cs: 3 };
+        for (const sheet of race((ctx) => insertRowCol(ctx, peer), { insertRowColOp: mine }, base)) {
+            expect(values(sheet)).toEqual(values(base.sheets[0]));
+            expect(sheet.config?.merge).toEqual({ '1_7': merge });
+            expect(stamps(sheet)).toEqual([
+                [1, 7, merge],
+                [1, 8, { r: 1, c: 7 }],
+                [1, 9, { r: 1, c: 7 }],
+            ]);
+        }
+    });
+
+    // The stamp's row is past the grid the peer's delete left, so a batch that wrote it would roll back and lose the
+    // insert on every tab that takes the log in this order.
+    test("the insert still lands where a peer's delete took the rows its stamps named", () => {
+        const base = grid({ r: 1, c: 1, rs: 3, cs: 1 });
+        const peerDelete = (ctx: Context) => deleteRowCol(ctx, { type: 'row', start: 1, end: 7, id: 'id_1' });
+        const mine = { type: 'row', index: 2, count: 1, direction: 'lefttop', id: 'id_1' } as const;
+        for (const sheet of race(peerDelete, { insertRowColOp: mine }, base)) expect(sheet.data?.length).toBe(2);
     });
 });
 

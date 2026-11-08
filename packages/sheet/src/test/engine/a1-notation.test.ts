@@ -1,5 +1,54 @@
 import { describe, expect, test } from 'bun:test';
-import { a1RangeRef, parseA1Range, rangeToA1, rowIndexToLabel, rowLabelToIndex, toA1 } from '../../engine/a1-notation';
+import {
+    a1RangeRef,
+    parseA1Range,
+    rangeToA1,
+    rowIndexToLabel,
+    rowLabelToIndex,
+    sheetRefName,
+    toA1,
+} from '../../engine/a1-notation';
+import { renameSheetRefs } from '../../engine/formula-shift';
+
+// Excel's own files quote every sheet named like a cell or starting with a digit: 93 and 961 refs in the xlsx corpus,
+// none bare. The R1C1 forms and the booleans follow the same reading, and quotes are always legal.
+describe('engine/a1-notation — sheetRefName', () => {
+    test.each([
+        'Q1',
+        'q1',
+        'AB12',
+        'XFD1048576',
+        'R1C1',
+        'r1c1',
+        'RC',
+        'R',
+        'C',
+        'R2',
+        'C3',
+        'R2D2',
+        'RC1',
+        '2024',
+        '1a',
+    ])('%s reads as something else, so it is quoted', (name) => expect(sheetRefName(name)).toBe(`'${name}'`));
+    test.each(['TRUE', 'false'])('%s reads as a boolean, so it is quoted', (name) => {
+        expect(sheetRefName(name)).toBe(`'${name}'`);
+    });
+    test.each(['Sheet1', 'Data', 'Q1_2024', 'Übersicht', 'Rates', 'Costs', 'TRUE1X', '_1'])('%s stays bare', (name) => {
+        expect(sheetRefName(name)).toBe(name);
+    });
+    test('a name with a space or a quote is quoted, its quotes doubled', () => {
+        expect(sheetRefName('My Sheet')).toBe("'My Sheet'");
+        expect(sheetRefName("It's")).toBe("'It''s'");
+    });
+    test('a rename to such a name reads back', () => {
+        const findSheet = (name: string) => (name === 'One' ? { name } : undefined);
+        for (const name of ['Q1', 'R1C1', '2024', 'TRUE']) {
+            const renamed = renameSheetRefs('=One!A1+SUM(One!B1:B2)', findSheet, new Map([['One', name]]));
+            expect(renamed).toBe(`='${name}'!A1+SUM('${name}'!B1:B2)`);
+            expect(parseA1Range(`'${name}'!B2`)?.sheet).toBe(name);
+        }
+    });
+});
 
 describe('engine/a1-notation — rowLabelToIndex', () => {
     test('"1" → 0', () => expect(rowLabelToIndex('1')).toBe(0));

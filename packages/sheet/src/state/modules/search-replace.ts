@@ -9,11 +9,10 @@ import { sortBy } from 'es-toolkit/compat';
 import { valueShowEs } from '../../engine/format';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
-import type { SearchHighlight, SearchResult } from '../types';
+import type { FormulaCell, SearchHighlight, SearchResult } from '../types';
 import { sheetOrder } from '../utils';
 import { setCellValue as setCellValueInternal } from './cell';
-import { delFunctionGroup, execFunctionGroup, groupValuesRefresh } from './formula-exec';
-import { checkCellIsLocked } from './protection';
+import { execFunctionGroup } from './formula-exec';
 import { normalizeSelection } from './selection';
 import { changeSheet } from './sheet';
 
@@ -96,10 +95,8 @@ export function revealSearchMatch(ctx: Context, cell: SearchHighlight) {
     centerCellInView(ctx, cell.r, cell.c);
 }
 
-// Rewrite every occurrence of the query inside one cell via the recalc path. Returns true iff the
-// cell was rewritten. A formula cell (its COMPUTED value matched — the Excel/Google convention is not
-// to rewrite inside formula results), a per-cell-locked cell, or a value that no longer matches (a
-// stale id under collab) all no-op and return false, so they're excluded from the replaced count.
+// Rewrites every occurrence of the query in one cell via the recalc path, and returns whether it did.
+// A formula cell is left alone, as in Excel and Google Sheets, and so is a value a peer changed since the search.
 function replaceInCell(
     ctx: Context,
     cell: SearchHighlight,
@@ -111,7 +108,6 @@ function replaceInCell(
     if (!flowdata) return false;
     const cellData = flowdata[cell.r]?.[cell.c];
     if (cellData == null || cellData.f != null) return false;
-    if (checkCellIsLocked(ctx, cell.r, cell.c, cell.sheetId)) return false;
 
     const oldText = cellText(cell.r, cell.c, flowdata);
     regex.lastIndex = 0;
@@ -119,16 +115,12 @@ function replaceInCell(
     const newText = oldText.replace(regex, (m) => (preserveCase ? applyPreserveCase(m, replacement) : replacement));
     if (newText === oldText) return false;
 
-    // Recalc path (mirrors updateCell's plain-value branch), cross-tab safe via sheetId + flowdata:
-    // clear the cell's formula group, run the group so dependents recompute, then write the value.
-    delFunctionGroup(ctx, cell.r, cell.c, cell.sheetId);
-    execFunctionGroup(ctx, cell.r, cell.c, newText, cell.sheetId, flowdata);
     setCellValueInternal(ctx, cell.r, cell.c, flowdata, newText);
     return true;
 }
 
-// Rewrite the one targeted cell (every occurrence within it — the cell is the atomic unit), then
-// materialise any recomputed dependents. Returns whether it changed anything.
+// Rewrite the one targeted cell (every occurrence within it — the cell is the atomic unit), then recompute its
+// dependents. Returns whether it changed anything.
 export function replaceSearchMatch(
     ctx: Context,
     cell: SearchHighlight,
@@ -140,12 +132,12 @@ export function replaceSearchMatch(
     const regex = buildSearchRegex(query, opts);
     if (regex == null) return false;
     const changed = replaceInCell(ctx, cell, regex, replacement, preserveCase);
-    if (changed) groupValuesRefresh(ctx);
+    if (changed) execFunctionGroup(ctx, [{ r: cell.r, c: cell.c, id: cell.sheetId }]);
     return changed;
 }
 
 // Replace across every matching cell in one pass (one setContext recipe = one undo when driven from
-// the Workbook API), skipping formula/locked cells. Returns the count of cells actually rewritten.
+// the Workbook API), skipping formula cells. Returns the count of cells actually rewritten.
 export function replaceAllMatches(
     ctx: Context,
     query: string,
@@ -155,12 +147,11 @@ export function replaceAllMatches(
 ): number {
     const regex = buildSearchRegex(query, opts);
     if (regex == null) return 0;
-    let replaced = 0;
-    for (const m of collectMatches(ctx, query, opts)) {
-        if (replaceInCell(ctx, { sheetId: m.sheetId, r: m.r, c: m.c }, regex, replacement, preserveCase)) {
-            replaced += 1;
-        }
+    const replaced: FormulaCell[] = [];
+    for (const { sheetId, r, c } of collectMatches(ctx, query, opts)) {
+        if (replaceInCell(ctx, { sheetId, r, c }, regex, replacement, preserveCase))
+            replaced.push({ r, c, id: sheetId });
     }
-    if (replaced > 0) groupValuesRefresh(ctx);
-    return replaced;
+    execFunctionGroup(ctx, replaced);
+    return replaced.length;
 }

@@ -1,18 +1,12 @@
 import type { Presence } from './types';
 
-// A collaborator's published awareness snapshot, reduced to the two fields
-// presence needs. The app extracts these from the Yjs provider's awareness
-// states; the projection to `Presence` lives here next to the `Presence` type so
-// it can be unit-tested without a browser or provider.
+// A collaborator's awareness snapshot, reduced to the two fields presence needs.
 export type PeerPresence = {
     user?: { name: string; color: string; userId?: string };
     selection?: { sheetId: string; r: number; c: number };
 };
 
-// Peers that have published both an identity and a cursor become `Presence` rows.
-// The local TAB is already absent (useAwarenessPeers omits the local client), so a
-// same-user entry here is the user's other window — shown like any peer, as in the
-// other apps: you see yourself across windows.
+// Peers with both an identity and a cursor become rows. A same-user entry is their other window, shown like a peer.
 export function presencesFromPeers(peers: PeerPresence[]): Presence[] {
     const result: Presence[] = [];
     for (const { user, selection } of peers) {

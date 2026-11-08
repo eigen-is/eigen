@@ -7,16 +7,10 @@
 import type { CollabDoc } from '@workspace/lib/collab';
 import { useCollabDoc } from '@workspace/lib/collab';
 import type { Sheet } from '@workspace/lib/sheets';
-import {
-    decodeSheetsSnapshot,
-    readSheetsBase,
-    readSheetsSnapshotJson,
-    sheetsOpLog,
-    sheetsStateMap,
-} from '@workspace/lib/sheets';
+import { readSheetsBase, readSheetsSnapshotJson, sheetsOpLog, sheetsStateMap } from '@workspace/lib/sheets';
 import type { Op, WorkbookInstance, Sheet as WorkbookSheet } from '@workspace/sheet';
 import { commutes } from '@workspace/sheet';
-import { createDefaultSheets, replaySheetsOps } from '@workspace/sheet/engine';
+import { createDefaultSheets, decodeOrDefault, replaySheetsOps } from '@workspace/sheet/engine';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 
@@ -74,13 +68,11 @@ export function useSheet(
     // defaults. Mid-session it keeps the workbook on screen, because defaults would wipe the user's view. It returns
     // whether it seeded a new view, so a mid-session caller knows whether to remount.
     const loadSnapshot = (doc: Y.Doc, keepViewOnFailure = false): boolean => {
-        const snapshot = readSheetsSnapshotJson(doc);
         const log = sheetsOpLog(doc).toArray();
         let data = createDefaultSheets();
         let loaded = true;
         try {
-            if (snapshot) data = decodeSheetsSnapshot(snapshot);
-            if (log.length > 0) data = replaySheetsOps(data, log);
+            data = replaySheetsOps(decodeOrDefault(readSheetsSnapshotJson(doc)).sheets, log);
         } catch (e) {
             loaded = false;
             console.error('[sheet] Failed to load the snapshot, opening read-only:', e);
@@ -102,8 +94,8 @@ export function useSheet(
         if (loadSnapshot(doc, true)) setSnapshotVersion((v) => v + 1);
     };
 
-    // The grid's own seed runs in its effect, before this host's, so the queue applies on top of the seed. The seed is
-    // the first anchor.
+    // The grid seeds its workbook as it mounts, before this effect, so the queue applies on top of the seed. The seed
+    // is the first anchor.
     useEffect(() => {
         const pending = pendingRef.current;
         const workbook = workbookRef.current;

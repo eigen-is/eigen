@@ -4,15 +4,18 @@
 // and end with the same sheets.
 
 import { isRecord } from '@workspace/lib/guards';
-import type { Op, Sheet, SheetWithCalcChain } from '@workspace/lib/sheets';
+import type { Op, Sheet } from '@workspace/lib/sheets';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
 import { applyPatches, enablePatches } from 'immer';
+import { isSheetName } from './a1-notation';
 import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
 import type { DeleteRowColOp, InsertRowColOp } from './rowcol';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from './rowcol';
 import { normalizeSheetConfig } from './sheet-config';
+import type { RenameSheetOp } from './sheet-name';
+import { applySheetRename } from './sheet-name';
 
 // immer's patch plugin is global, and enabling it twice is harmless. Enabling it here means every caller of
 // replaySheetsOps has it without a setup step of its own.
@@ -38,7 +41,7 @@ export function replaySheetsOps(
         try {
             const dataOpIds = collectDataOpSheetIds(batch);
             if (dataOpIds) {
-                result = result.map((s) => (s.id && dataOpIds.has(s.id) ? withMaterializedData(s) : s));
+                result = result.map((s) => (dataOpIds.has(s.id) ? withMaterializedData(s) : s));
             }
             // opToPatchOnSheets finds a sheet by its place in the array, so the sheet and row ops settle the array
             // before the patches resolve.
@@ -56,6 +59,8 @@ export function replaySheetsOps(
                     result = applySheetsInsertRowCol(result, insertRowColOf(op));
                 } else if (op.op === 'deleteRowCol') {
                     result = applySheetsDeleteRowCol(result, deleteRowColOf(op));
+                } else if (op.op === 'renameSheet') {
+                    result = applySheetRename(result, renameSheetOf(op));
                 }
             }
             const normalOps = batch.filter((op) => op.op === 'add' || op.op === 'remove' || op.op === 'replace');
@@ -77,10 +82,8 @@ export function withMaterializedData(s: Sheet): Sheet {
     return { ...s, data: celldataToData(s.celldata ?? [], row, column) };
 }
 
-// The insert a row op names. An op's value is untyped, and a buggy or hostile client may send any shape, so a value
-// that is not whole rows or columns on the grid, at least one of them, throws. The sheet throws too where it refuses
-// the op, such as an insert into a read-only row. Either way the op's whole batch rolls back, here and in a live
-// client, since its other ops were written for the rows the op would have moved.
+// The insert a row op names. An op's value is untyped and a hostile client may send any shape, so a bad one throws and
+// the op's whole batch rolls back, since its other ops were written for the rows the op would have moved.
 export function insertRowColOf(op: Op): InsertRowColOp {
     const value = asInsertValue(op.value);
     if (!value || !op.id) throw new Error('insertRowCol op has a malformed value');
@@ -91,6 +94,14 @@ export function deleteRowColOf(op: Op): DeleteRowColOp {
     const value = asDeleteValue(op.value);
     if (!value || !op.id) throw new Error('deleteRowCol op has a malformed value');
     return { ...value, id: op.id };
+}
+
+// A rename writes its name into every formula naming the tab, so a long one would run the reader out of memory, which
+// applySheetRename refuses.
+export function renameSheetOf(op: Op): RenameSheetOp {
+    const { name } = isRecord(op.value) ? op.value : { name: undefined };
+    if (typeof name !== 'string' || !op.id) throw new Error('renameSheet op has a malformed value');
+    return { id: op.id, name };
 }
 
 function asInsertValue(v: unknown): InsertValue | null {
@@ -115,12 +126,12 @@ function isLine(value: unknown, type: 'row' | 'column'): value is number {
     return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value < count;
 }
 
-// A new sheet needs an id, because every later op names its sheet by id. The id must be one no sheet has yet, or those
-// ops would be ambiguous. A name is the one other field every reader of a sheet needs.
-export function isNewSheet(v: unknown, sheets: { id?: string }[]): v is Sheet & { id: string } {
+// A new sheet needs an id no sheet has yet, because every later op names its sheet by id. Its name follows the
+// sheet-name rule, or a rename's undo could not restore it.
+export function isNewSheet(v: unknown, sheets: { id: string }[]): v is Sheet {
     if (!isRecord(v)) return false;
     const { id, name } = v;
-    return typeof id === 'string' && typeof name === 'string' && !sheets.some((s) => s.id === id);
+    return typeof id === 'string' && typeof name === 'string' && isSheetName(name) && !sheets.some((s) => s.id === id);
 }
 
 // A row or column op moves the cells after it on its sheet, and it needs the sheet's matrix to apply.
@@ -128,13 +139,10 @@ export function isRowColOp(op: Op): boolean {
     return op.op === 'insertRowCol' || op.op === 'deleteRowCol';
 }
 
-// Every sheet leaves the replay in one shape, whether it came from the snapshot or from an addSheet op. The editor
-// writes into its config collections, `images`, `charts` and `calcChain` key by key, and a patch against a missing
-// collection fails and takes its whole batch down. The editor seeds a calcChain on every sheet it mounts, so the first
-// formula a user types adds to it in the same batch as the cell's value. An empty chain reads as "not computed" to
-// sheetsNeedRecalc, as a missing one does, so adding it changes no recalc.
-function withNormalizedSheet(s: SheetWithCalcChain): SheetWithCalcChain {
-    const next = { ...s, config: { ...s.config }, calcChain: s.calcChain ?? [] };
+// The editor writes into `images` and `charts` key by key, and a patch against a missing collection fails and takes
+// its whole batch down, so every sheet leaves the replay with them.
+function withNormalizedSheet(s: Sheet): Sheet {
+    const next = { ...s, config: { ...s.config } };
     normalizeSheetConfig(next);
     return next;
 }

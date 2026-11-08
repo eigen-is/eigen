@@ -1,6 +1,7 @@
 // The link card over a cell: hovering a cell's link shows it, with buttons to open, copy, edit or remove the link. The
 // card sits under the cell inside the grid. Insert link and the card's pencil set ctx.linkCard editing, and the card
-// then opens the link dialog in the sheet's dialog slot in its own place.
+// then opens the link dialog in the sheet's dialog slot in its own place. The card hides while the range picker is
+// open, so a pick over a linked cell draws none.
 
 import { cn } from '@workspace/ui/lib/utils';
 import type { LucideIcon } from 'lucide-react';
@@ -35,7 +36,7 @@ const GO_TO_FRAME = 'Go to ${linkAddress}';
 
 export function LinkEditCard(link: LinkCardProps) {
     const { context, setContext, refs } = useContext(WorkbookContext);
-    const { showDialog } = useDialog();
+    const { showDialog, pickerOpen } = useDialog();
     const { r, c, originType: linkType, originAddress: linkAddress, isEditing, position } = link;
 
     const setMouseEnter = (mouseEnter: boolean) => {
@@ -53,7 +54,7 @@ export function LinkEditCard(link: LinkCardProps) {
         });
     }, [isEditing]);
 
-    if (isEditing) return null;
+    if (isEditing || pickerOpen) return null;
 
     const toolbarButton = (Icon: LucideIcon, label: string, onClick: () => void) => (
         <button type="button" aria-label={label} className="p-1.5 cursor-pointer hover:bg-accent" onClick={onClick}>

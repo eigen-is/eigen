@@ -1,41 +1,26 @@
 // The React context the Workbook provides to every part of the grid: the workbook it renders, the way to write it, the
-// settings, the DOM refs and undo and redo. `context` is the workbook as it was last rendered. A read that must see a
-// write made since that render, such as one right after an edit, goes through `getContext()`.
+// DOM refs and the host's hooks, undo and redo, and the paste a menu row runs. `context` is the workbook as it was last
+// rendered. A read that must see a write made since that render, such as one right after an edit, goes through
+// `getContext()`. A host render changes none of this, so the parts behind a memo stay as they are.
 
 import React from 'react';
-import type { Context, GlobalCache, PatchOptions, Settings } from '../state';
-import { defaultContext, defaultSettings } from '../state';
-
-export type RefValues = {
-    globalCache: GlobalCache;
-    cellInput: React.MutableRefObject<HTMLDivElement | null>;
-    fxInput: React.MutableRefObject<HTMLDivElement | null>;
-    canvas: React.MutableRefObject<HTMLCanvasElement | null>;
-    cellArea: React.MutableRefObject<HTMLDivElement | null>;
-    workbookContainer: React.MutableRefObject<HTMLDivElement | null>;
-};
+import type { Context, GlobalCache, PatchOptions, RefValues } from '../state';
+import { defaultContext } from '../state';
 
 export type SetContextOptions = {
     // Skip patch generation entirely: no op emitted to peers AND no undo entry.
     noHistory?: boolean;
-    // Emit the collaborative op but record NO local undo entry. For technical fixups a user never
-    // undoes as their own step — the pending→real image mediaName swap and the paste-flow height
-    // correction — so a single paste stays one ⌘Z. Distinct from noHistory, which skips op emission too.
+    // Emit the op but record no undo entry, so a technical fixup (such as a paste height correction) stays one ⌘Z.
+    // Unlike noHistory, peers still get the op.
     noUndo?: boolean;
 } & PatchOptions;
 
-const defaultScrollListeners = new Set<() => void>();
 const defaultGlobalCache: GlobalCache = {
     undoList: [],
     redoList: [],
     scrollLeft: 0,
     scrollTop: 0,
-    scrollListeners: defaultScrollListeners,
-    notifyScrollListeners: () => {
-        for (const fn of defaultScrollListeners) {
-            fn();
-        }
-    },
+    scrollListeners: new Set(),
 };
 
 const defaultRefs: RefValues = {
@@ -45,6 +30,7 @@ const defaultRefs: RefValues = {
     canvas: React.createRef<HTMLCanvasElement | null>(),
     cellArea: React.createRef<HTMLDivElement | null>(),
     workbookContainer: React.createRef<HTMLDivElement | null>(),
+    hooks: { current: {} },
 };
 
 const defaultWorkbook = defaultContext(defaultRefs);
@@ -53,17 +39,19 @@ const WorkbookContext = React.createContext<{
     context: Context;
     getContext: () => Context;
     setContext: (recipe: (ctx: Context) => void, options?: SetContextOptions) => void;
-    settings: Required<Settings>;
+    aspectLocked: boolean;
     refs: RefValues;
     handleUndo: () => void;
     handleRedo: () => void;
+    pasteClipboard: (clipboardData: DataTransfer) => void;
 }>({
     context: defaultWorkbook,
     getContext: () => defaultWorkbook,
     setContext: () => {},
-    settings: defaultSettings,
+    aspectLocked: false,
     handleUndo: () => {},
     handleRedo: () => {},
+    pasteClipboard: () => {},
     refs: defaultRefs,
 });
 

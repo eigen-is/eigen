@@ -10,7 +10,6 @@ import type { CellCoordinate } from './parser/helper/cell';
 // not vice versa). Re-exported here so engine code keeps importing from `./types`
 // without churning every file.
 export type {
-    CalcChainEntry,
     Cell,
     CellMatrix,
     CellStyle,
@@ -20,20 +19,14 @@ export type {
     DefaultConditionalFormatRule,
     InlineStringSegment,
     Range,
-    SheetWithCalcChain,
     SingleRange,
 } from '@workspace/lib/sheets';
 
-import type { CalcChainEntry, Cell, CellMatrix } from '@workspace/lib/sheets';
+import type { Cell, CellMatrix } from '@workspace/lib/sheets';
 
-// Editor-only SheetConfig overlay: structural per-row/col flags the state layer
-// reads/writes and the engine's row/col shifter shifts, but the BE/wire-shape
-// `SheetConfig` in `@workspace/lib/sheets` never serializes. Hoisted here so
-// state's `SheetConfig` and `engine/rowcol.ts::ExtendedSheetConfig` share one
-// declaration instead of independently re-listing the same four fields.
+// Row and column size overrides the state layer writes and the engine's row and column shifter moves, on top of the
+// config lib stores.
 export type EditorSheetConfigExtras = {
-    rowReadOnly?: Record<string, number>;
-    colReadOnly?: Record<string, number>;
     customHeight?: Record<string, number>;
     customWidth?: Record<string, number>;
 };
@@ -115,23 +108,14 @@ export type FormulaDependency = {
     sheetId: string | undefined;
 };
 
-// Dependency-graph adjacency: maps the `${r}_${c}_${index}` key of each
-// adjacent formula cell to a refcount. Used as both the `parents` and
-// `children` field type on FormulaCellInfo (engine) and FormulaCell (state).
-export type AncestorFormulaCell = {
-    [rxcxix: string]: number;
-};
-
 export type FormulaCellInfo = {
-    formulaDependency: FormulaDependency[];
-    calc_funcStr: string;
+    formula: string;
     key: string;
     r: number;
     c: number;
     id: string;
-    parents: AncestorFormulaCell;
-    children: AncestorFormulaCell;
-    color: 'w' | 'b';
+    // The keys of the formulas that read this cell.
+    dependents: readonly string[];
 };
 
 export type FormulaCellInfoMap = {
@@ -142,14 +126,7 @@ export type CellResolver = {
     getCell(sheetId: string, row: number, col: number): Cell | null;
     getSheetIdByName(name: string): string | null;
     getSheetData(sheetId: string): CellMatrix | null;
-    getSheets(): SheetInfo[];
-};
-
-export type SheetInfo = {
-    id: string;
-    name: string;
-    calculationChain: CalcChainEntry[];
-    dynamicArrayCompute: unknown[];
+    hasSheet(sheetId: string): boolean;
 };
 
 export type EvaluationResult = {
@@ -159,7 +136,6 @@ export type EvaluationResult = {
 };
 
 export type FormulaEngineState = {
-    execFunctionGlobalData: Record<string, Cell>;
     formulaCellInfoMap: FormulaCellInfoMap | null;
     // Reverse lookup cell → formulas reading it; mirrors formulaCellInfoMap
     // and must reset with it.
@@ -186,10 +162,6 @@ export type FormulaArg = FormulaValue | FormulaValue[] | FormulaValue[][];
 // `parse()` unwraps any Error result into a `{error}` field for callers.
 export type FormulaOutput = FormulaArg;
 
-// Acknowledgment callback the parser passes to `callCellValue` / `callRangeValue` /
-// `callFunction` / `callVariable` listeners so they can supply the resolved value.
-export type ParserDoneCallback = (value: unknown) => void;
-
 export type ParseResult = {
     error: string | null;
     // biome-ignore lint/suspicious/noExplicitAny: formula result is dynamic (scalar, array, Date, error) — consumers narrow at use, tightening forces ~70 test casts with no safety gain
@@ -197,15 +169,12 @@ export type ParseResult = {
 };
 
 export type ParserOptions = {
-    sheetId?: string;
     // How far the evaluated cell sits from the cell the formula was written for; relative refs move by it.
     rowOffset?: number;
     colOffset?: number;
-    [key: string]: unknown;
+    readCell?: (cell: CellInfo) => FormulaValue;
+    readRange?: (start: RangeCell, end: RangeCell) => FormulaValue[] | FormulaValue[][];
 };
 
 // A parsed formula; only the Parser that compiled it can evaluate it.
 export type CompiledFormula = () => unknown;
-
-// biome-ignore lint/suspicious/noExplicitAny: event-emitter boundary — per-event args are typed at call sites
-export type ParserEventListener = (...args: any[]) => void;

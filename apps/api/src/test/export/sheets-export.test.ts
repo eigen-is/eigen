@@ -90,6 +90,7 @@ describe("Excel's future functions", () => {
     test('are written with their prefixes, so Excel reads them as functions, and read back without', async () => {
         const sheets: Sheet[] = [
             {
+                id: 'fixture-67',
                 name: 'Sheet1',
                 celldata: [
                     { r: 0, c: 0, v: { v: 1, f: '=IFNA(B1,0)' } },
@@ -110,6 +111,7 @@ describe('Sheets xlsx export', () => {
     test('writes textRotation as Excel counts it, and the import reads the signed degrees back', async () => {
         const sheets: Sheet[] = [
             {
+                id: 'fixture-66',
                 name: 'Sheet1',
                 celldata: [
                     { r: 0, c: 0, v: { v: '45-up', rt: 45 } },
@@ -140,6 +142,7 @@ describe('Sheets xlsx export', () => {
     test('writes the font name when ff is a string', async () => {
         const sheets: Sheet[] = [
             {
+                id: 'fixture-65',
                 name: 'Sheet1',
                 celldata: [
                     { r: 0, c: 0, v: { v: 'georgia', ff: 'Georgia' } },
@@ -155,6 +158,7 @@ describe('Sheets xlsx export', () => {
     test("number formats round-trip, a month in Excel's case", async () => {
         const sheets: Sheet[] = [
             {
+                id: 'fixture-64',
                 name: 'Sheet1',
                 celldata: [
                     { r: 0, c: 0, v: { v: 14207.82, ct: { fa: '[$€]#,##0.00', t: 'n' } } },
@@ -183,7 +187,7 @@ describe('Sheets xlsx export', () => {
 
 describe('Sheets xlsx export — fonts', () => {
     test('the workbook default font is Inter at the sheet default size, not a theme font', async () => {
-        const xml = readZipEntry(exportXlsx([{ name: 'Sheet1', celldata: [] }]), 'xl/styles.xml');
+        const xml = readZipEntry(exportXlsx([{ id: 'fixture-63', name: 'Sheet1', celldata: [] }]), 'xl/styles.xml');
         expect(xml.match(/<fonts\b[^>]*>(<font>.*?<\/font>)/)?.[1]).toBe(
             '<font><sz val="10"/><name val="Inter"/><family val="2"/></font>',
         );
@@ -192,6 +196,7 @@ describe('Sheets xlsx export — fonts', () => {
     test('each written font names its face and the family of a bundled one, in cells and runs', async () => {
         const sheets: Sheet[] = [
             {
+                id: 'fixture-62',
                 name: 'Sheet1',
                 celldata: [
                     { r: 0, c: 0, v: { v: 'bold', bl: 1 } },
@@ -221,7 +226,9 @@ describe('Sheets xlsx export — fonts', () => {
     });
 
     test("a column width counts the default font's digits in 256ths, and the import reads it back to the pixel", async () => {
-        const sheets: Sheet[] = [{ name: 'Sheet1', celldata: [], config: { columnlen: { 0: 90, 1: 131 } } }];
+        const sheets: Sheet[] = [
+            { id: 'fixture-61', name: 'Sheet1', celldata: [], config: { columnlen: { 0: 90, 1: 131 } } },
+        ];
         const buffer = exportXlsx(sheets);
         expect(readZipEntry(buffer, 'xl/worksheets/sheet1.xml')).toContain(
             '<cols><col min="1" max="1" width="10" customWidth="1"/><col min="2" max="2" width="14.5546875" customWidth="1"/></cols>',
@@ -231,8 +238,15 @@ describe('Sheets xlsx export — fonts', () => {
 
     test("the sheet's default column width and row height, its own or the app's, round-trip", async () => {
         const sheets: Sheet[] = [
-            { name: 'Excel', celldata: [], defaultColWidth: 72, defaultRowHeight: 17, config: { rowhidden: { 3: 0 } } },
-            { name: 'Eigen', celldata: [] },
+            {
+                id: 'fixture-60',
+                name: 'Excel',
+                celldata: [],
+                defaultColWidth: 72,
+                defaultRowHeight: 17,
+                config: { rowhidden: { 3: 0 } },
+            },
+            { id: 'fixture-59', name: 'Eigen', celldata: [] },
         ];
         const buffer = exportXlsx(sheets);
         expect(readZipEntry(buffer, 'xl/worksheets/sheet1.xml')).toContain(
@@ -249,7 +263,11 @@ describe('Sheets xlsx export — fonts', () => {
 describe('Sheets xlsx export — typed numbers', () => {
     test('a typed number exports as a numeric cell', async () => {
         const sheets: Sheet[] = [
-            { name: 'Sheet1', celldata: [{ r: 0, c: 0, v: { v: 28254, m: '28254', ct: { fa: 'General', t: 'n' } } }] },
+            {
+                id: 'fixture-58',
+                name: 'Sheet1',
+                celldata: [{ r: 0, c: 0, v: { v: 28254, m: '28254', ct: { fa: 'General', t: 'n' } } }],
+            },
         ];
         const buffer = exportXlsx(sheets);
         expect(readZipEntry(buffer, 'xl/worksheets/sheet1.xml')).toContain('<c r="A1"><v>28254</v></c>');
@@ -261,6 +279,7 @@ describe('Sheets xlsx export — hidden rows/cols', () => {
     test('exports hidden rows (incl. data-less ones) and hidden columns', async () => {
         const sheets: Sheet[] = [
             {
+                id: 'fixture-57',
                 name: 'Sheet1',
                 celldata: [
                     { r: 0, c: 0, v: { v: 'top' } },
@@ -318,6 +337,7 @@ describe('Sheets xlsx export — a row Excel would refit', () => {
         // Larger means above Excel's 11 pt default, in the cell's font or a rich run's. A wrapped cell counts when it holds text.
         const sheets: Sheet[] = [
             {
+                id: 'fixture-56',
                 name: 'Sheet1',
                 celldata: [
                     { r: 0, c: 0, v: { v: long, m: long, tb: '2' } },
@@ -345,26 +365,25 @@ describe('Sheets xlsx export — frozen panes', () => {
     test('maps both alias families onto frozen panes', async () => {
         const sheets: Sheet[] = [
             {
+                id: 'fixture-55',
                 name: 'RangeRow',
                 celldata: [{ r: 0, c: 0, v: { v: 'x' } }],
                 frozen: { type: 'rangeRow', range: { row_focus: 1, column_focus: 0 } },
             },
+            { id: 'fixture-54', name: 'BareRow', celldata: [{ r: 0, c: 0, v: { v: 'x' } }], frozen: { type: 'row' } },
             {
-                name: 'BareRow',
-                celldata: [{ r: 0, c: 0, v: { v: 'x' } }],
-                frozen: { type: 'row' },
-            },
-            {
+                id: 'fixture-53',
                 name: 'Both',
                 celldata: [{ r: 0, c: 0, v: { v: 'x' } }],
                 frozen: { type: 'both', range: { row_focus: 1, column_focus: 2 } },
             },
             {
+                id: 'fixture-52',
                 name: 'RangeColumn',
                 celldata: [{ r: 0, c: 0, v: { v: 'x' } }],
                 frozen: { type: 'rangeColumn', range: { row_focus: 0, column_focus: 0 } },
             },
-            { name: 'Plain', celldata: [{ r: 0, c: 0, v: { v: 'x' } }] },
+            { id: 'fixture-51', name: 'Plain', celldata: [{ r: 0, c: 0, v: { v: 'x' } }] },
         ];
         const buffer = exportXlsx(sheets);
         expect(readZipEntry(buffer, 'xl/worksheets/sheet3.xml')).toContain(
@@ -384,6 +403,7 @@ describe('Sheets xlsx export — frozen panes', () => {
     test('frozen state and showGridLines share a single view', async () => {
         const sheets: Sheet[] = [
             {
+                id: 'fixture-50',
                 name: 'Sheet1',
                 celldata: [{ r: 0, c: 0, v: { v: 'x' } }],
                 showGridLines: false,
@@ -405,6 +425,7 @@ describe('Sheets xlsx export — autofilter', () => {
     test('exports the filter range as an A1 autoFilter ref and its filter database name', async () => {
         const sheets: Sheet[] = [
             {
+                id: 'fixture-49',
                 name: 'Filtered',
                 celldata: [
                     { r: 1, c: 1, v: { v: 'Name' } },
@@ -412,7 +433,7 @@ describe('Sheets xlsx export — autofilter', () => {
                 ],
                 filterRange: { row: [1, 9], column: [1, 3] },
             },
-            { name: 'Plain', celldata: [{ r: 0, c: 0, v: { v: 'x' } }] },
+            { id: 'fixture-48', name: 'Plain', celldata: [{ r: 0, c: 0, v: { v: 'x' } }] },
         ];
         const buffer = exportXlsx(sheets);
         expect(readZipEntry(buffer, 'xl/worksheets/sheet1.xml')).toContain('<autoFilter ref="B2:D10"/>');
@@ -431,6 +452,7 @@ describe('Sheets xlsx export — autofilter', () => {
         // the stored range is deliberate fidelity (the dba90dbb clamp is view-only).
         const sheets: Sheet[] = [
             {
+                id: 'fixture-47',
                 name: 'Sheet1',
                 celldata: [{ r: 4, c: 0, v: { v: 'header' } }],
                 filterRange: { row: [4, 437], column: [0, 368] },
@@ -463,7 +485,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
             },
         ];
         const sheets: Sheet[] = [
-            { name: 'CF', celldata: [{ r: 0, c: 1, v: { v: 12 } }], conditionalFormatRules: rules },
+            { id: 'fixture-46', name: 'CF', celldata: [{ r: 0, c: 1, v: { v: 12 } }], conditionalFormatRules: rules },
         ];
         // Engine order is last-write-wins; Excel priority 1 wins → last rule gets priority 1. One range is one block.
         const written = writtenFormats(exportXlsx(sheets));
@@ -508,7 +530,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
             },
         ];
         const sheets: Sheet[] = [
-            { name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 3 } }], conditionalFormatRules: rules },
+            { id: 'fixture-45', name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 3 } }], conditionalFormatRules: rules },
         ];
         const written = writtenFormats(exportXlsx(sheets));
         expect(written.get('A1:A4')?.map(({ formulas }) => formulas)).toEqual([['2', '5'], ['"say ""hi"""']]);
@@ -538,7 +560,9 @@ describe('Sheets xlsx export — conditional formatting', () => {
         };
         const cpuMs = cpuClock();
         const warnings: TransformWarning[] = [];
-        const buffer = exportXlsx([{ name: 'CF', celldata: [], conditionalFormatRules: [rule] }], { warnings });
+        const buffer = exportXlsx([{ id: 'fixture-44', name: 'CF', celldata: [], conditionalFormatRules: [rule] }], {
+            warnings,
+        });
         expect(cpuMs()).toBeLessThan(1_000);
         expect(writtenFormats(buffer).size).toBe(0);
         expect(warnings).toEqual([{ code: 'conditional-formats-dropped', count: 1 }]);
@@ -556,7 +580,12 @@ describe('Sheets xlsx export — conditional formatting', () => {
             },
         ];
         const sheets: Sheet[] = [
-            { name: 'CF', celldata: [{ r: 1, c: 1, v: { v: 'longtext' } }], conditionalFormatRules: rules },
+            {
+                id: 'fixture-43',
+                name: 'CF',
+                celldata: [{ r: 1, c: 1, v: { v: 'longtext' } }],
+                conditionalFormatRules: rules,
+            },
         ];
         expect(writtenFormats(exportXlsx(sheets)).get('B2:B4')).toMatchObject([
             { attributes: { type: 'expression' }, formulas: ['LEN(B2)>2'] },
@@ -581,7 +610,12 @@ describe('Sheets xlsx export — conditional formatting', () => {
             },
         ];
         const sheets: Sheet[] = [
-            { name: 'CF', celldata: [{ r: 1, c: 1, v: { v: 'longtext' } }], conditionalFormatRules: rules },
+            {
+                id: 'fixture-42',
+                name: 'CF',
+                celldata: [{ r: 1, c: 1, v: { v: 'longtext' } }],
+                conditionalFormatRules: rules,
+            },
         ];
         const written = writtenFormats(exportXlsx(sheets));
         expect([...written.keys()]).toEqual(['B2:B4 D2:D4']);
@@ -612,7 +646,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
             conditionValue: [...conditionValue],
         }));
         const sheets: Sheet[] = [
-            { name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 5 } }], conditionalFormatRules: rules },
+            { id: 'fixture-41', name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 5 } }], conditionalFormatRules: rules },
         ];
         const written = writtenFormats(exportXlsx(sheets)).get('A1:A10') ?? [];
         expect(written.map(({ attributes }) => attributes)).toMatchObject([
@@ -641,6 +675,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
         ];
         const sheets: Sheet[] = [
             {
+                id: 'fixture-40',
                 name: 'CF',
                 celldata: [
                     { r: 0, c: 0, v: { v: 1 } },
@@ -660,7 +695,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
         expect(rt[0].conditionalFormatRules).toEqual(rules);
     });
 
-    test('skips occurrenceDate and icons rules without emitting empty blocks', async () => {
+    test('skips an occurrenceDate rule without emitting an empty block', async () => {
         const rules: ConditionalFormatRule[] = [
             {
                 type: 'default',
@@ -670,7 +705,6 @@ describe('Sheets xlsx export — conditional formatting', () => {
                 conditionRange: [],
                 conditionValue: ['2024-01-01', '2024-12-31'],
             },
-            { type: 'icons', cellrange: [{ row: [0, 4], column: [0, 0] }] },
             {
                 type: 'default',
                 cellrange: [{ row: [0, 4], column: [0, 0] }],
@@ -681,7 +715,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
             },
         ];
         const sheets: Sheet[] = [
-            { name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 1 } }], conditionalFormatRules: rules },
+            { id: 'fixture-39', name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 1 } }], conditionalFormatRules: rules },
         ];
         const warnings: TransformWarning[] = [];
         const written = writtenFormats(exportXlsx(sheets, { warnings }));
@@ -689,10 +723,10 @@ describe('Sheets xlsx export — conditional formatting', () => {
         expect(written.get('A1:A5')?.map(({ attributes }) => attributes)).toMatchObject([
             { type: 'cellIs', operator: 'equal', priority: '1' },
         ]);
-        expect(warnings).toEqual([{ code: 'conditional-formats-dropped', count: 2 }]);
+        expect(warnings).toEqual([{ code: 'conditional-formats-dropped', count: 1 }]);
 
         const rt = await roundTrip(sheets);
-        expect(rt[0].conditionalFormatRules).toEqual([rules[2]]);
+        expect(rt[0].conditionalFormatRules).toEqual([rules[1]]);
     });
 
     test("exports duplicate and unique value rules as Excel's own, which re-import as themselves", async () => {
@@ -715,7 +749,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
             },
         ];
         const sheets: Sheet[] = [
-            { name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 1 } }], conditionalFormatRules: rules },
+            { id: 'fixture-38', name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 1 } }], conditionalFormatRules: rules },
         ];
         const written = writtenFormats(exportXlsx(sheets));
         expect(written.get('A1:A5')).toMatchObject([{ attributes: { type: 'duplicateValues', priority: '2' } }]);
@@ -743,7 +777,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
             },
         ];
         const sheets: Sheet[] = [
-            { name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 1 } }], conditionalFormatRules: rules },
+            { id: 'fixture-37', name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 1 } }], conditionalFormatRules: rules },
         ];
         const written = writtenFormats(exportXlsx(sheets));
         expect(written.get('A1:A5 C1:C10 E1')).toMatchObject([{ attributes: { type: 'duplicateValues' } }]);
@@ -801,6 +835,7 @@ describe('Sheets xlsx export — data validation', () => {
         const ref = dvRule({ type: 'dropdown', type2: '', value1: "'Other Sheet'!$B$1:$B$5" });
         const sheets: Sheet[] = [
             {
+                id: 'fixture-36',
                 name: 'Main',
                 celldata: [
                     { r: 1, c: 1, v: { v: 'Red' } },
@@ -811,7 +846,7 @@ describe('Sheets xlsx export — data validation', () => {
                     ...validationsByCell({ '3_1': quoted, '4_1': ref }),
                 },
             },
-            { name: 'Other Sheet', celldata: [{ r: 0, c: 1, v: { v: 'Option 1' } }] },
+            { id: 'fixture-35', name: 'Other Sheet', celldata: [{ r: 0, c: 1, v: { v: 'Option 1' } }] },
         ];
         const written = writtenValidations(exportXlsx(sheets));
         expect(written.get('B2:B3')).toMatchObject({
@@ -841,7 +876,12 @@ describe('Sheets xlsx export — data validation', () => {
             '6_0': dvRule({ type: 'date', type2: 'earlierThan', value1: '2024-03-01' }),
         };
         const sheets: Sheet[] = [
-            { name: 'DV', celldata: [{ r: 0, c: 0, v: { v: 5 } }], dataValidations: validationsByCell(rules) },
+            {
+                id: 'fixture-34',
+                name: 'DV',
+                celldata: [{ r: 0, c: 0, v: { v: 5 } }],
+                dataValidations: validationsByCell(rules),
+            },
         ];
         const written = writtenValidations(exportXlsx(sheets));
         // between is the default operator; dates are serials.
@@ -866,6 +906,7 @@ describe('Sheets xlsx export — data validation', () => {
     test('re-imports number_decimal as number (accepted drift) and drops NaN operands', async () => {
         const sheets: Sheet[] = [
             {
+                id: 'fixture-33',
                 name: 'DV',
                 celldata: [{ r: 0, c: 0, v: { v: 1.5 } }],
                 dataValidations: validationsByCell({
@@ -890,6 +931,7 @@ describe('Sheets xlsx export — data validation', () => {
     test('exports text_content rules as per-cell custom formulae', async () => {
         const sheets: Sheet[] = [
             {
+                id: 'fixture-32',
                 name: 'DV',
                 celldata: [{ r: 1, c: 1, v: { v: 'foobar' } }],
                 dataValidations: validationsByCell({
@@ -915,6 +957,7 @@ describe('Sheets xlsx export — data validation', () => {
     test('skips checkbox rules while keeping cell values', async () => {
         const sheets: Sheet[] = [
             {
+                id: 'fixture-31',
                 name: 'DV',
                 celldata: [{ r: 0, c: 0, v: { v: 'done' } }],
                 dataValidations: validationsByCell({
@@ -941,6 +984,7 @@ describe('Sheets xlsx export — data validation', () => {
         const blocking = dvRule({ type: 'dropdown', type2: '', value1: 'Yes,No', prohibitInput: true });
         const sheets: Sheet[] = [
             {
+                id: 'fixture-30',
                 name: 'DV',
                 celldata: [{ r: 0, c: 0, v: { v: 'Yes' } }],
                 dataValidations: validationsByCell({ '0_0': hinted, '1_0': blocking }),
@@ -969,7 +1013,9 @@ describe('Sheets xlsx export — cell borders', () => {
             '3_3': { s: thin },
             '4_4': { l: thin, s: thin },
         };
-        const sheets: Sheet[] = [{ name: 'Sheet1', celldata: [{ r: 1, c: 1, v: { v: 'x' } }], config: { borderInfo } }];
+        const sheets: Sheet[] = [
+            { id: 'fixture-29', name: 'Sheet1', celldata: [{ r: 1, c: 1, v: { v: 'x' } }], config: { borderInfo } },
+        ];
         const buffer = exportXlsx(sheets);
         expect(readZipEntry(buffer, 'xl/styles.xml')).toContain(
             '<border diagonalDown="1"><left/><right/><top/><bottom/><diagonal style="thin"><color rgb="FF000000"/></diagonal></border>',
@@ -994,6 +1040,7 @@ describe('Sheets xlsx export — merged-cell borders', () => {
         };
         const sheets: Sheet[] = [
             {
+                id: 'fixture-28',
                 name: 'Box',
                 celldata: [
                     { r: 0, c: 0, v: { v: 'anchor', mc: { r: 0, c: 0, rs: 2, cs: 2 } } },
@@ -1016,9 +1063,9 @@ describe('Sheets xlsx export — merged-cell borders', () => {
 describe('Sheets xlsx export — the tabs', () => {
     test('a hidden sheet exports hidden and a tab its colour, and both import back', async () => {
         const sheets: Sheet[] = [
-            { name: 'Shown', celldata: [], color: '#FF0000' },
-            { name: 'Hidden', celldata: [], hide: 1, color: 'rgb(0, 128, 255)' },
-            { name: 'Plain', celldata: [] },
+            { id: 'fixture-27', name: 'Shown', celldata: [], color: '#FF0000' },
+            { id: 'fixture-26', name: 'Hidden', celldata: [], hide: 1, color: 'rgb(0, 128, 255)' },
+            { id: 'fixture-25', name: 'Plain', celldata: [] },
         ];
         const buffer = exportXlsx(sheets);
         expect(readZipEntry(buffer, 'xl/workbook.xml')).toContain(
@@ -1041,9 +1088,9 @@ describe('Sheets xlsx export — the active tab', () => {
     // Excel opens on the workbook's active tab, the first sheet unless told: a hidden one would open hidden.
     test('is the first sheet shown, selected', async () => {
         const sheets: Sheet[] = [
-            { name: 'Hidden', celldata: [], hide: 1 },
-            { name: 'Shown', celldata: [] },
-            { name: 'Later', celldata: [] },
+            { id: 'fixture-24', name: 'Hidden', celldata: [], hide: 1 },
+            { id: 'fixture-23', name: 'Shown', celldata: [] },
+            { id: 'fixture-22', name: 'Later', celldata: [] },
         ];
         const buffer = exportXlsx(sheets);
         expect(readZipEntry(buffer, 'xl/workbook.xml')).toMatch(/<workbookView\b[^>]*\bactiveTab="1"/);
@@ -1055,8 +1102,8 @@ describe('Sheets xlsx export — the active tab', () => {
     // Excel refuses a workbook with every sheet hidden; the import shows the first, and so does the export.
     test('is the first sheet, shown, when every sheet is hidden', async () => {
         const back = await roundTrip([
-            { name: 'One', celldata: [], hide: 1 },
-            { name: 'Two', celldata: [], hide: 1 },
+            { id: 'fixture-21', name: 'One', celldata: [], hide: 1 },
+            { id: 'fixture-20', name: 'Two', celldata: [], hide: 1 },
         ]);
         expect(back.map((sheet) => sheet.hide)).toEqual([undefined, 1]);
     });
@@ -1066,6 +1113,7 @@ describe('Sheets xlsx export — inline rich text', () => {
     test('exports ct.s segments as rich shared strings with mapped fonts', async () => {
         const sheets: Sheet[] = [
             {
+                id: 'fixture-19',
                 name: 'Sheet1',
                 celldata: [
                     {
@@ -1106,6 +1154,7 @@ describe('Sheets xlsx export — inline rich text', () => {
     test('falls back to plain value when segments are empty or text-less', async () => {
         const [sheet] = await roundTrip([
             {
+                id: 'fixture-18',
                 name: 'Sheet1',
                 celldata: [
                     { r: 0, c: 0, v: { v: 'plain', ct: { fa: 'General', t: 'inlineStr', s: [] } } },
@@ -1122,6 +1171,7 @@ describe('Sheets xlsx export — hyperlinks', () => {
     test('exports webpage and mailto links as external rels, the cells keeping their values', async () => {
         const sheets: Sheet[] = [
             {
+                id: 'fixture-17',
                 name: 'Sheet1',
                 celldata: [
                     { r: 0, c: 0, v: { v: 'Jira ticket', m: 'Jira ticket' } },
@@ -1153,6 +1203,7 @@ describe('Sheets xlsx export — hyperlinks', () => {
     test('blocked schemes export as plain text with no link written', async () => {
         const sheets: Sheet[] = [
             {
+                id: 'fixture-16',
                 name: 'Sheet1',
                 celldata: [{ r: 0, c: 0, v: { v: 'click me' } }],
                 hyperlink: { '0_0': { linkType: 'webpage', linkAddress: 'javascript:alert(1)' } },
@@ -1171,6 +1222,7 @@ describe('Sheets xlsx export — hyperlinks', () => {
     test("exports sheet links in Excel's location form anchored at A1, labelled by the cell's text", async () => {
         const sheets: Sheet[] = [
             {
+                id: 'fixture-15',
                 name: 'Sheet1',
                 celldata: [
                     { r: 0, c: 0, v: { v: 'go to data', m: 'go to data' } },
@@ -1183,8 +1235,8 @@ describe('Sheets xlsx export — hyperlinks', () => {
                     '2_0': { linkType: 'sheet', linkAddress: 'My Sheet' },
                 },
             },
-            { name: 'My Sheet', celldata: [] },
-            { name: "It's", celldata: [] },
+            { id: 'fixture-14', name: 'My Sheet', celldata: [] },
+            { id: 'fixture-13', name: "It's", celldata: [] },
         ];
         const buffer = exportXlsx(sheets);
         // Per ECMA-376 an r:id on a hyperlink wins over its location, so Excel authors internal links location-only.
@@ -1208,6 +1260,7 @@ describe('Sheets xlsx export — hyperlinks', () => {
     test('exports cellrange links with their whole range; a bare ref gains its own sheet', async () => {
         const sheets: Sheet[] = [
             {
+                id: 'fixture-12',
                 name: 'Sheet1',
                 celldata: [
                     { r: 0, c: 0, v: { v: 'range' } },
@@ -1220,8 +1273,8 @@ describe('Sheets xlsx export — hyperlinks', () => {
                     '2_0': { linkType: 'cellrange', linkAddress: "'Sheet 2'!A1" },
                 },
             },
-            { name: 'Sheet2', celldata: [] },
-            { name: 'Sheet 2', celldata: [] },
+            { id: 'fixture-11', name: 'Sheet2', celldata: [] },
+            { id: 'fixture-10', name: 'Sheet 2', celldata: [] },
         ];
         const buffer = exportXlsx(sheets);
         const xml = readZipEntry(buffer, 'xl/worksheets/sheet1.xml');
@@ -1239,6 +1292,7 @@ describe('Sheets xlsx export — hyperlinks', () => {
     test('a link to a sheet the workbook renamed names it as written', async () => {
         const sheets: Sheet[] = [
             {
+                id: 'fixture-9',
                 name: 'Sheet1',
                 celldata: [],
                 hyperlink: {
@@ -1246,7 +1300,7 @@ describe('Sheets xlsx export — hyperlinks', () => {
                     '1_0': { linkType: 'cellrange', linkAddress: 'History!B2' },
                 },
             },
-            { name: 'History', celldata: [] },
+            { id: 'fixture-8', name: 'History', celldata: [] },
         ];
         expect((await roundTrip(sheets))[0].hyperlink).toEqual({
             '0_0': { linkType: 'cellrange', linkAddress: "'History (2)'!A1" },
@@ -1257,6 +1311,7 @@ describe('Sheets xlsx export — hyperlinks', () => {
     test('a formula cell keeps its link', async () => {
         const sheets: Sheet[] = [
             {
+                id: 'fixture-7',
                 name: 'Sheet1',
                 celldata: [{ r: 0, c: 0, v: { f: '=SUM(B1:B3)', v: 6 } }],
                 hyperlink: { '0_0': { linkType: 'webpage', linkAddress: 'https://example.com' } },
@@ -1270,6 +1325,7 @@ describe('Sheets xlsx export — hyperlinks', () => {
     test('a link on a cell without a value is written on the empty cell', async () => {
         const sheets: Sheet[] = [
             {
+                id: 'fixture-6',
                 name: 'Sheet1',
                 celldata: [],
                 hyperlink: { '1_1': { linkType: 'webpage', linkAddress: 'https://example.com/docs' } },
@@ -1283,6 +1339,7 @@ describe('Sheets xlsx export — hyperlinks', () => {
     test('keeps ct.s rich text runs on a linked cell', async () => {
         const sheets: Sheet[] = [
             {
+                id: 'fixture-5',
                 name: 'Sheet1',
                 celldata: [
                     {
@@ -1316,6 +1373,7 @@ describe('Sheets xlsx export — colors', () => {
     test('a short hex and an rgb() are normalized everywhere a cell color is written; one Office cannot hold is dropped', async () => {
         const sheets: Sheet[] = [
             {
+                id: 'fixture-4',
                 name: 'Sheet1',
                 celldata: [
                     { r: 0, c: 0, v: { v: 'a', fc: '#f00', bg: 'rgb(0, 128, 255)' } },
@@ -1348,7 +1406,7 @@ describe('Sheets xlsx export — colors', () => {
             },
             { type: 'dataBar', cellrange: [{ row: [0, 0], column: [2, 2] }], format: ['#63c'] },
         ];
-        const buffer = exportXlsx([{ name: 'Sheet1', celldata: [], conditionalFormatRules: rules }]);
+        const buffer = exportXlsx([{ id: 'fixture-3', name: 'Sheet1', celldata: [], conditionalFormatRules: rules }]);
         const argbs = [...readZipEntry(buffer, 'xl/styles.xml').matchAll(/rgb="([0-9A-Fa-f]+)"/g)].map(
             ([, argb]) => argb,
         );
@@ -1375,6 +1433,7 @@ describe('an xlsx export carries the sheets’ images', () => {
         const box = { x: 10, y: 10, width: 40, height: 20 };
         const sheets: Sheet[] = [
             {
+                id: 'fixture-2',
                 name: 'One',
                 celldata: [],
                 images: {
@@ -1387,6 +1446,7 @@ describe('an xlsx export carries the sheets’ images', () => {
                 },
             },
             {
+                id: 'fixture-1',
                 name: 'Two',
                 celldata: [],
                 images: { again: { id: 'again', index: 'a0', ...box, mediaName: 'photo.png' } },

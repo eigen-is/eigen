@@ -47,12 +47,12 @@ const numbers: (Cell | null)[][] = [
     [num(5), num(6)],
 ];
 
-const resolver = createArrayResolver([
-    { id: 's1', name: 'Sheet1', data: table, calculationChain: [], dynamicArrayCompute: [] },
-    { id: 's2', name: 'Wide sheet', data: wide, calculationChain: [], dynamicArrayCompute: [] },
-    { id: 's3', name: "Bob's", data: numbers, calculationChain: [], dynamicArrayCompute: [] },
-]);
-const sheets = resolver.getSheets();
+const sheets = [
+    { id: 's1', name: 'Sheet1', data: table },
+    { id: 's2', name: 'Wide sheet', data: wide },
+    { id: 's3', name: "Bob's", data: numbers },
+];
+const resolver = createArrayResolver(sheets);
 
 describe('suggestChartRange', () => {
     test('a text first row names series, a text first column names categories, series run down columns', () => {
@@ -237,15 +237,11 @@ describe('suggestChartSpec', () => {
 
     test('more series than a chart holds is refused', () => {
         const many: (Cell | null)[][] = [Array.from({ length: 40 }, (_, i) => num(i))];
-        const wideResolver = createArrayResolver([
-            { id: 'w', name: 'W', data: many, calculationChain: [], dynamicArrayCompute: [] },
-        ]);
+        const wideResolver = createArrayResolver([{ id: 'w', name: 'W', data: many }]);
         // One row of 40: the row is longer, so 1 series of 40 points.
         expect(suggestChartSpec(ref([0, 0], [0, 39], 'w'), wideResolver)).toMatchObject({ data: { series: [{}] } });
         const square = Array.from({ length: 40 }, () => Array.from({ length: 40 }, () => num(1)));
-        const squareResolver = createArrayResolver([
-            { id: 'q', name: 'Q', data: square, calculationChain: [], dynamicArrayCompute: [] },
-        ]);
+        const squareResolver = createArrayResolver([{ id: 'q', name: 'Q', data: square }]);
         expect(suggestChartSpec(ref([0, 39], [0, 39], 'q'), squareResolver)).toBe('too-many-series');
     });
 });
@@ -265,9 +261,7 @@ describe('currentRegion', () => {
 
     test('a 10,000-row table stops growing past the values a chart draws, in linear reads', () => {
         const rows = Array.from({ length: 10_000 }, (_, r) => Array.from({ length: 5 }, (_, c) => num(r * c)));
-        const tall = createArrayResolver([
-            { id: 't', name: 'Tall', data: rows, calculationChain: [], dynamicArrayCompute: [] },
-        ]);
+        const tall = createArrayResolver([{ id: 't', name: 'Tall', data: rows }]);
         let reads = 0;
         const counted: CellResolver = {
             ...tall,

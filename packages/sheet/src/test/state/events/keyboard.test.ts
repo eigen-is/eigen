@@ -9,9 +9,8 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { Window } from 'happy-dom';
 import type { Context } from '../../../state/context';
-import { handleGlobalKeyDown } from '../../../state/events/keyboard';
-import { selectionCache } from '../../../state/modules/selection';
-import type { Cell, DataValidationRule, GlobalCache, SingleRange } from '../../../state/types';
+import { handleGlobalKeyDown, typesIntoEditor } from '../../../state/events/keyboard';
+import type { Cell, DataValidationRule, SingleRange } from '../../../state/types';
 import { contextFactory } from '../factories/context';
 import { validationsByCell } from '../factories/validations';
 
@@ -20,7 +19,6 @@ const g = globalThis as any;
 const win = new Window();
 g.window = win;
 g.document = win.document;
-g.sessionStorage = win.sessionStorage;
 
 const anchor = win.document.createElement('div');
 anchor.id = 'sheet-validation-list-anchor';
@@ -71,7 +69,7 @@ function keyDown(
         },
         stopPropagation() {},
     } as unknown as KeyboardEvent;
-    handleGlobalKeyDown(ctx, input, null, e, {} as GlobalCache);
+    handleGlobalKeyDown(ctx, input, null, e);
     return prevented;
 }
 
@@ -267,6 +265,42 @@ describe('handleGlobalKeyDown — Tab while editing', () => {
     });
 });
 
+// Ctrl+Shift+; puts the date and time into the closed editor. Nothing is written until the edit commits.
+describe('handleGlobalKeyDown — the date shortcut', () => {
+    function filled() {
+        const ctx = listContext(null);
+        const data = ctx.sheets[0].data;
+        if (data) data[1][1] = { v: 'keep', m: 'keep' };
+        const cellInput = win.document.createElement('div') as unknown as HTMLDivElement;
+        ctx.getRefs().cellInput.current = cellInput;
+        return { ctx, cellInput };
+    }
+
+    test('opens with the date and leaves the cell as it was, so Escape restores it', () => {
+        const { ctx, cellInput } = filled();
+        keyDown(ctx, ':', { ctrlKey: true, shiftKey: true, cellInput });
+        expect(ctx.editingCellPosition).toEqual([1, 1]);
+        expect(cellInput.textContent).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+        expect(ctx.sheets[0].data?.[1][1]?.v).toBe('keep');
+    });
+
+    test('a typed key opens the filled cell empty, for the key to type over, and writes nothing', () => {
+        const { ctx, cellInput } = filled();
+        keyDown(ctx, 'x', { cellInput });
+        expect(ctx.editingCellPosition).toEqual([1, 1]);
+        expect(cellInput.textContent).toBe('');
+        expect(ctx.sheets[0].data?.[1][1]?.v).toBe('keep');
+    });
+
+    test('a read-only viewer opens nothing', () => {
+        const { ctx, cellInput } = filled();
+        ctx.allowEdit = false;
+        keyDown(ctx, ':', { ctrlKey: true, shiftKey: true, cellInput });
+        expect(ctx.editingCellPosition).toEqual([]);
+        expect(ctx.sheets[0].data?.[1][1]?.v).toBe('keep');
+    });
+});
+
 // A peer's row delete can take the selection away. A key typed then has no cell to open, so it must not pile up in the
 // hidden editor, and Enter and Tab do nothing.
 describe('handleGlobalKeyDown — no selection', () => {
@@ -319,12 +353,8 @@ describe('handleGlobalKeyDown — letter shortcuts', () => {
         expect([cell?.bl, cell?.it, cell?.un]).toEqual([1, 1, 1]);
     });
 
-    test('⌘V marks the paste the browser fires next', () => {
-        const ctx = lettersContext();
-        selectionCache.isPasteAction = false;
-        expect(keyDown(ctx, 'v', { mod: true })).toBe(false);
-        expect(selectionCache.isPasteAction).toBe(true);
-        selectionCache.isPasteAction = false;
+    test('⌘V lets the browser fire its paste', () => {
+        expect(keyDown(lettersContext(), 'v', { mod: true })).toBe(false);
     });
 
     test('⌘A selects the whole sheet', () => {
@@ -342,7 +372,27 @@ describe('handleGlobalKeyDown — letter shortcuts', () => {
     test('⌘X on Dvorak cuts and does not bold', () => {
         const ctx = lettersContext();
         keyDown(ctx, 'x', { mod: true, code: 'KeyB' });
-        expect(ctx.pasteIsCut).toBe(true);
+        expect(ctx.copyState?.cut).toBe(true);
         expect(ctx.sheets[0].data?.[0][0]?.bl).toBeUndefined();
+    });
+});
+
+describe('typesIntoEditor', () => {
+    const typed = (keyCode: number, modifiers: { ctrlKey?: boolean; altKey?: boolean } = {}) =>
+        typesIntoEditor({ keyCode, ctrlKey: false, altKey: false, ...modifiers } as KeyboardEvent);
+
+    test('a letter, Backspace, Space and Delete type', () => {
+        for (const keyCode of [65, 8, 32, 46]) expect(typed(keyCode)).toBe(true);
+    });
+
+    test('a function key, a system key, NumLock and an arrow do not', () => {
+        for (const keyCode of [112, 123, 13, 27, 144, 108, 37]) expect(typed(keyCode)).toBe(false);
+    });
+
+    test('of the modified letters only Ctrl+V types', () => {
+        expect(typed(86, { ctrlKey: true })).toBe(true);
+        expect(typed(65, { ctrlKey: true })).toBe(false);
+        expect(typed(65, { altKey: true })).toBe(false);
+        expect(typed(8, { altKey: true })).toBe(true);
     });
 });

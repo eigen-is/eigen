@@ -6,16 +6,14 @@ import { describe, expect, test } from 'bun:test';
 import { evaluateConditionalFormat } from '../../engine/conditional-format';
 import { cellDisplay, cellValue } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
-import { setCellValue as apiSetCellValue } from '../../state/api/cell';
 import type { Context } from '../../state/context';
-import { getCellValue, getRealCellValue, setCellValue } from '../../state/modules/cell';
+import { getCellValue, getRealCellValue, setCellValue, updateCell } from '../../state/modules/cell';
 import { getDropdownList, validateCellData } from '../../state/modules/data-validation';
 import { buildFilterConditionMatcher, getFilterColumnValues } from '../../state/modules/filter';
 import { removeHyperlink, saveHyperlink, showLinkCard } from '../../state/modules/hyperlink';
 import { calcSelectionInfo } from '../../state/modules/selection';
 import { sortRows, sortSelection } from '../../state/modules/sort';
 import { autoSelectionFormula, handleMerge } from '../../state/modules/toolbar';
-import type { GlobalCache } from '../../state/types';
 import { contextFactory, selectionFactory } from './factories/context';
 
 function rich(text: string): Cell {
@@ -120,7 +118,6 @@ describe('readers of a rich cell', () => {
         );
         expect(buildFilterConditionMatcher({ conditionName: 'isEmpty', values: [] })(rich('Hello'))).toBe(false);
         const ctx = sheetContext([[plain('Head')], [rich('Hello')], [plain('x')]]);
-        ctx.filter = {};
         const { values } = getFilterColumnValues(ctx, 0, 0, 2, 0);
         expect(values.map((value) => value.text)).toEqual(['Hello', 'x']);
         expect(
@@ -152,7 +149,7 @@ describe('readers of a rich cell', () => {
             [[plain(1)], [plain(2)], [rich('Note')], [null]],
             selectionFactory([0, 1], [0, 0], 0, 0),
         );
-        autoSelectionFormula(ctx, {} as HTMLDivElement, null, 'SUM', {} as GlobalCache);
+        autoSelectionFormula(ctx, {} as HTMLDivElement, null, 'SUM');
         const d = ctx.sheets[0].data!;
         expect(cellValue(d[2][0])).toBe('Note');
         expect(d[3][0]?.f).toBe('=SUM(A1:A2)');
@@ -183,9 +180,9 @@ describe('writers over a rich cell', () => {
         expect(cellValue(data[0][0])).toBe('Hello');
     });
 
-    test('the API writes a formula over a rich cell', () => {
+    test('a formula written over a rich cell drops its runs', () => {
         const ctx = sheetContext([[plain('Hi'), rich('Hello')]]);
-        apiSetCellValue(ctx, 0, 1, '=A1&"!"', null);
+        updateCell(ctx, 0, 1, null, '=A1&"!"');
         const cell = ctx.sheets[0].data![0][1];
         expect(cell?.ct?.s).toBeUndefined();
         expect(cellValue(cell)).toBe('Hi!');

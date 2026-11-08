@@ -9,23 +9,18 @@ import { getFlowdata } from '../context';
 import { getRealCellValue, isForcedStringNumber, mergeBorder } from './cell';
 import type { CellGlyphRect } from './data-validation';
 import {
+    cellPassesRule,
     cellTextBox,
     getCellDataValidation,
     isCheckboxClick,
     isDropdownChevronClick,
-    validateCellData,
 } from './data-validation';
 import { colLocation, rowLocation } from './location';
 
 export type CellGlyph = 'dropdown' | 'checkbox' | 'comment' | 'invalid' | 'forced-string';
 
-// Corner indicators: a comment top-right, an invalid value or a forced string
-// top-left. One size for all three so they read as one family of marks — the
-// shared CELL_INDICATOR_SIZE, which the canvas apps paint their mark at too.
-
-// The square the corner triangle is drawn in, anchored on the cell corner itself
-// (the 1px is the grid line): one leg along the top edge, one down the side.
-// The painter (render/cells.ts) and the hit test share this one construction.
+// The square a corner triangle is drawn in, anchored on the cell corner itself (the 1px is the grid line). The painter
+// and the hit test share it.
 export function cellIndicatorRect(corner: 'left' | 'right', left: number, top: number, right: number): CellGlyphRect {
     return { x: (corner === 'left' ? left : right - CELL_INDICATOR_SIZE) - 1, y: top, size: CELL_INDICATOR_SIZE };
 }
@@ -52,14 +47,12 @@ export function cellGlyphAt(ctx: Context, x: number, y: number): CellGlyph | und
     if (cell?.commentCardIds?.length && inGlyph(cellIndicatorRect('right', colPre, rowPre, col), x, y)) {
         return 'comment';
     }
-    // The invalid and forced-string triangles share the top-left corner, and the painter draws
-    // both only through cellRender — which phases.ts reaches only for a cell with a non-empty
-    // value (an empty cell goes to nullCellRender, which draws neither). Mirror that gate here so
-    // the hit test claims a corner exactly when a triangle is painted in it.
+    // The painter draws the two top-left triangles only on a cell with a value, so the hit test claims the corner only
+    // there too.
     const value = cell ? getRealCellValue(r, c, d) : null;
     if (value != null && value.toString().length > 0 && inGlyph(cellIndicatorRect('left', colPre, rowPre, col), x, y)) {
         const rule = getCellDataValidation(ctx, r, c);
-        if (rule && !validateCellData(ctx, rule, value)) return 'invalid';
+        if (rule && !cellPassesRule(ctx, rule, cell)) return 'invalid';
         if (isForcedStringNumber(cell)) return 'forced-string';
     }
     return undefined;

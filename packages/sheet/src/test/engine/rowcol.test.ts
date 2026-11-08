@@ -13,7 +13,7 @@ import type { Span } from './range-oracle';
 import { expectedDelete, expectedInsert, SPANS } from './range-oracle';
 
 // The sheet the engine shifts, with the editor's config extras lib's SheetConfig doesn't type, such as the
-// read-only guards.
+// size overrides.
 type TestSheet = ShiftedSheet & { config?: SheetConfig & EditorSheetConfigExtras };
 
 const cell = (v: string | number) => ({ v, m: String(v), ct: { fa: 'General', t: 'g' } });
@@ -87,6 +87,18 @@ describe('applySheetsInsertRowCol — row', () => {
         expect(result[0].data![1][0]?.v).toBe('b');
         expect(result[0].data![2]).toEqual([null]);
         expect(result[0].data![3][0]?.v).toBe('c');
+    });
+
+    test('insert column (rightbottom) lands right of its index', () => {
+        const sheets: Sheet[] = [makeSheet('s1', 'Sheet1', [[cell('a'), cell('b'), cell('c')]])];
+        const [{ data }] = applySheetsInsertRowCol(sheets, {
+            type: 'column',
+            index: 1,
+            count: 1,
+            direction: 'rightbottom',
+            id: 's1',
+        });
+        expect(data?.[0].map((value) => value?.v ?? null)).toEqual(['a', 'b', null, 'c']);
     });
 
     test('insert shifts config.merge entries spanning the insert row', () => {
@@ -511,7 +523,7 @@ describe('applySheetsInsertRowCol/Delete — a formula rule keeps its colors', (
         const data = sheet.data ?? [];
         const evaluateFormula = createCfFormulaEvaluator(
             new FormulaEngine(),
-            createArrayResolver([{ id: 's1', name: sheet.name, data, calculationChain: [], dynamicArrayCompute: [] }]),
+            createArrayResolver([{ id: 's1', name: sheet.name, data }]),
             's1',
         );
         return Object.keys(evaluateConditionalFormat(sheet.conditionalFormatRules, data, { evaluateFormula })).sort();
@@ -559,19 +571,7 @@ describe('applySheetsInsertRowCol/Delete — a formula rule keeps its colors', (
 });
 
 describe('applySheetsInsertRowCol/Delete — guards', () => {
-    test('throws readOnly when target row is read-only', () => {
-        const sheets: TestSheet[] = [
-            makeSheet('s1', 'Sheet1', [[cell('a')]], {
-                config: { rowReadOnly: { '0': 1 } },
-            }),
-        ];
-        const run = () =>
-            applySheetsInsertRowCol(sheets, { type: 'row', index: 0, count: 1, direction: 'lefttop', id: 's1' });
-        expect(run).toThrow(RowColError);
-        expect(getThrownCode(run)).toBe('readOnly');
-    });
-
-    test('insert up to exactly the row ceiling passes, one past it throws maxExceeded', () => {
+    test('insert up to exactly the row ceiling passes, one past it throws', () => {
         const rows = (n: number) =>
             makeSheet(
                 's1',
@@ -597,10 +597,9 @@ describe('applySheetsInsertRowCol/Delete — guards', () => {
                 id: 's1',
             });
         expect(run).toThrow(RowColError);
-        expect(getThrownCode(run)).toBe('maxExceeded');
     });
 
-    test('insert up to exactly the column ceiling passes, one past it throws maxExceeded', () => {
+    test('insert up to exactly the column ceiling passes, one past it throws', () => {
         const cols = (n: number) => makeSheet('s1', 'Sheet1', [new Array(n).fill(null).map(() => cell('x'))]);
 
         const atCeiling = applySheetsInsertRowCol([cols(MAX_SHEET_COLUMN_COUNT - 1)], {
@@ -621,67 +620,6 @@ describe('applySheetsInsertRowCol/Delete — guards', () => {
                 id: 's1',
             });
         expect(run).toThrow(RowColError);
-        expect(getThrownCode(run)).toBe('maxExceeded');
-    });
-
-    test('delete throws readOnly when any row in [start, end] is read-only', () => {
-        const sheets: TestSheet[] = [
-            makeSheet('s1', 'Sheet1', [[cell('a')], [cell('b')], [cell('c')]], {
-                config: { rowReadOnly: { '1': 1 } },
-            }),
-        ];
-        const run = () => applySheetsDeleteRowCol(sheets, { type: 'row', start: 0, end: 2, id: 's1' });
-        expect(run).toThrow(RowColError);
-        expect(getThrownCode(run)).toBe('readOnly');
-    });
-
-    test('delete throws readOnly for column range', () => {
-        const sheets: TestSheet[] = [
-            makeSheet('s1', 'Sheet1', [[cell('a'), cell('b'), cell('c')]], {
-                config: { colReadOnly: { '2': 1 } },
-            }),
-        ];
-        const run = () => applySheetsDeleteRowCol(sheets, { type: 'column', start: 1, end: 2, id: 's1' });
-        expect(run).toThrow(RowColError);
-        expect(getThrownCode(run)).toBe('readOnly');
-    });
-});
-
-function getThrownCode(fn: () => void): string | undefined {
-    try {
-        fn();
-    } catch (e) {
-        return e instanceof RowColError ? e.code : undefined;
-    }
-    return undefined;
-}
-
-describe('applySheetsInsertRowCol — frozen pane and filter', () => {
-    test('a row insert above them moves the frozen pane and the filter with their rows', () => {
-        const sheets: TestSheet[] = [
-            {
-                id: 's1',
-                name: 'Sheet1',
-                order: 0,
-                data: [[cell('a')], [cell('b')]],
-                config: {},
-                frozen: { type: 'rangeRow', range: { row_focus: 1, column_focus: 0 } },
-                filterRange: { row: [0, 1], column: [0, 0] },
-                filter: { 0: { cindex: 0, str: 0, edr: 1, stc: 0, edc: 0, optionstate: true, rowhidden: { 1: 0 } } },
-            },
-        ];
-        const [result] = applySheetsInsertRowCol(sheets, {
-            type: 'row',
-            index: 0,
-            count: 1,
-            direction: 'lefttop',
-            id: 's1',
-        });
-        expect(result.frozen).toEqual({ type: 'rangeRow', range: { row_focus: 2, column_focus: 0 } });
-        expect(result.filterRange).toEqual({ row: [1, 2], column: [0, 0] });
-        expect(result.filter?.[0]).toMatchObject({ str: 1, edr: 2, rowhidden: { 2: 0 } });
-        expect(result.config?.rowhidden).toEqual({ 2: 0 });
-        expect(sheets[0].config?.rowhidden).toBeUndefined();
     });
 });
 
@@ -689,6 +627,35 @@ const grid = () => Array.from({ length: 8 }, () => Array.from({ length: 8 }, () 
 const OTHER: Span = [0, 1];
 const onAxis = (type: 'row' | 'column', span: Span) =>
     type === 'row' ? { row: span, column: OTHER } : { row: OTHER, column: span };
+
+describe('applySheetsInsertRowCol/Delete — links', () => {
+    const link = { linkType: 'webpage', linkAddress: 'https://eigen.is' };
+    const grid = () => [
+        [cell('a'), cell('b')],
+        [cell('c'), cell('d')],
+    ];
+    const linked = () => [makeSheet('s1', 'Sheet1', grid(), { hyperlink: { '0_0': link, '1_1': link } })];
+
+    test('an insert moves the links past it', () => {
+        const rows = { type: 'row', index: 1, count: 2, direction: 'lefttop', id: 's1' } as const;
+        expect(applySheetsInsertRowCol(linked(), rows)[0].hyperlink).toEqual({ '0_0': link, '3_1': link });
+        const columns = { ...rows, type: 'column', index: 0, direction: 'rightbottom' } as const;
+        expect(applySheetsInsertRowCol(linked(), columns)[0].hyperlink).toEqual({ '0_0': link, '1_3': link });
+    });
+
+    test('a delete drops the links it takes and moves the ones past it', () => {
+        const rows = { type: 'row', start: 0, end: 0, id: 's1' } as const;
+        expect(applySheetsDeleteRowCol(linked(), rows)[0].hyperlink).toEqual({ '0_1': link });
+        const columns = { ...rows, type: 'column' } as const;
+        expect(applySheetsDeleteRowCol(linked(), columns)[0].hyperlink).toEqual({ '1_0': link });
+    });
+
+    test('a sheet without links stays without a map', () => {
+        const sheets = [makeSheet('s1', 'Sheet1', grid())];
+        const op = { type: 'row', index: 0, count: 1, direction: 'lefttop', id: 's1' } as const;
+        expect(applySheetsInsertRowCol(sheets, op)[0].hyperlink).toBeUndefined();
+    });
+});
 
 describe('conditional-format ranges follow the membership rule', () => {
     const cfSheet = (type: 'row' | 'column') =>

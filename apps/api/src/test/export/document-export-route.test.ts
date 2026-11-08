@@ -278,7 +278,9 @@ suite('Document export routes — PDF (WeasyPrint end-to-end)', () => {
             seedEigendoc(doc, { type: 'doc', content: [{ type: 'paragraph', content: [figure] }] });
         } else {
             const image = { id: 'picture', index: 'a0', x: 10, y: 10, width: 320, height: 200, mediaName: name };
-            writeSheetsToYjs(doc, [{ name: 'One', celldata: [], images: { picture: image } }], { computed: false });
+            writeSheetsToYjs(doc, [{ id: 'fixture-1', name: 'One', celldata: [], images: { picture: image } }], {
+                computed: false,
+            });
         }
         const { mount, path } = await home.drive.resolveFile(mountId, created.id);
         await seedDocumentMedia(mount, path, name, bytes, mimeType);

@@ -1,23 +1,17 @@
 // The per-edit recalc pipeline: reverse dependency index → affected closure →
-// topological order → evaluate → groupValuesRefresh. These pin the behaviors
+// topological order → evaluate → write. These pin the behaviors
 // the index rewrite must preserve: cross-sheet transitive recompute, index
 // updates when formulas change, and rebuild-after-reset.
 
 import { describe, expect, it, spyOn } from 'bun:test';
-import type { Patch } from 'immer';
 import { enablePatches, isDraft, produceWithPatches } from 'immer';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import * as cellModule from '../../../state/modules/cell';
 import { setFormulaCellInfo } from '../../../state/modules/formula-cache';
-import {
-    execFunctionGroup,
-    getcellrange,
-    groupValuesRefresh,
-    warmFormulaCellInfoMap,
-} from '../../../state/modules/formula-exec';
+import { execFunctionGroup, getcellrange, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import { insertRowCol } from '../../../state/modules/rowcol';
-import { addSheet, deleteSheet } from '../../../state/modules/sheet';
+import { addSheet, deleteSheet, renameSheet } from '../../../state/modules/sheet';
 import { contextFactory } from '../factories/context';
 
 enablePatches();
@@ -37,19 +31,16 @@ function makeCtx(): Context {
     return contextFactory({
         currentSheetId: 'id_1',
         sheets: [
-            { name: 'One', id: 'id_1', order: 0, data: one, calcChain: [{ r: 0, c: 1, id: 'id_1' }] },
-            { name: 'Two', id: 'id_2', order: 1, data: two, calcChain: [{ r: 0, c: 0, id: 'id_2' }] },
+            { name: 'One', id: 'id_1', order: 0, data: one },
+            { name: 'Two', id: 'id_2', order: 1, data: two },
         ],
     }) as Context;
 }
 
 function editCell(ctx: Context, r: number, c: number, value: number, id: string) {
-    // Mirrors updateCell: recalc sees the new value via execFunctionGlobalData,
-    // then the cell itself is written, then refresh applies dependent results.
-    execFunctionGroup(ctx, r, c, value, id);
     const data = ctx.sheets[ctx.sheets.findIndex((s) => s.id === id)].data!;
     cellModule.setCellValue(ctx, r, c, data, value);
-    groupValuesRefresh(ctx);
+    execFunctionGroup(ctx, [{ r, c, id }]);
 }
 
 describe('execFunctionGroup — index-driven recalc', () => {
@@ -67,9 +58,13 @@ describe('execFunctionGroup — index-driven recalc', () => {
         const ctx = makeCtx();
         warmFormulaCellInfoMap(ctx);
 
-        execFunctionGroup(ctx, 3, 3, 42, 'id_1');
+        const data = ctx.sheets[0].data;
+        const before = data![0][1];
 
-        expect(ctx.groupValuesRefreshData).toHaveLength(0);
+        execFunctionGroup(ctx, [{ r: 3, c: 3, id: 'id_1' }]);
+
+        expect(ctx.sheets[0].data).toBe(data);
+        expect(ctx.sheets[0].data![0][1]).toBe(before);
     });
 
     it('builds the map and index lazily when not warmed', () => {
@@ -96,7 +91,7 @@ describe('execFunctionGroup — index-driven recalc', () => {
         const ctx = makeCtx();
 
         // Search-and-replace recalcs a cell on Two while One is on screen.
-        execFunctionGroup(ctx, 3, 3, 1, 'id_2', ctx.sheets[1].data);
+        execFunctionGroup(ctx, [{ r: 3, c: 3, id: 'id_2' }]);
         editCell(ctx, 0, 0, 7, 'id_1');
 
         expect(ctx.sheets[0].data![0][1]?.v).toBe(14);
@@ -109,7 +104,7 @@ describe('execFunctionGroup — index-driven recalc', () => {
         let draftReads = 0;
 
         produceWithPatches(base, (draft) => {
-            execFunctionGroup(draft as Context, 0, 0, 7, 'id_1');
+            execFunctionGroup(draft as Context, [{ r: 0, c: 0, id: 'id_1' }]);
             allReads = reads.mock.calls.length;
             draftReads = reads.mock.calls.filter(([ctx]) => isDraft(ctx)).length;
         });
@@ -125,7 +120,7 @@ describe('execFunctionGroup — index-driven recalc', () => {
         let draftReads = -1;
 
         produceWithPatches(base, (draft) => {
-            warmFormulaCellInfoMap(draft as Context, draft.sheets[0].data);
+            warmFormulaCellInfoMap(draft as Context);
             draftReads = reads.mock.calls.filter(([, , , , data]) => data != null && isDraft(data)).length;
         });
         reads.mockRestore();
@@ -156,10 +151,9 @@ describe('execFunctionGroup — index-driven recalc', () => {
         ctx.sheets[0].data![0][1] = null;
         setFormulaCellInfo(ctx, { r: 0, c: 1, id: 'id_1' });
 
-        execFunctionGroup(ctx, 0, 0, 9, 'id_1');
+        execFunctionGroup(ctx, [{ r: 0, c: 0, id: 'id_1' }]);
 
-        // Two!A1 still recomputes (it reads One!B1, now empty), but One!B1 must not.
-        expect(ctx.groupValuesRefreshData.every((e) => !(e.r === 0 && e.c === 1 && e.id === 'id_1'))).toBe(true);
+        expect(ctx.sheets[0].data![0][1]).toBeNull();
     });
 
     it('rebuilds map and index after a reset (row/col ops set the map to null)', () => {
@@ -174,22 +168,19 @@ describe('execFunctionGroup — index-driven recalc', () => {
         expect(ctx.sheets[1].data![0][0]?.v).toBe(17);
     });
 
-    it('handles multi-cell edits via execFunctionExist', () => {
+    it('handles a multi-cell edit', () => {
         const ctx = makeCtx();
         warmFormulaCellInfoMap(ctx);
 
         // Simulate a paste/delete that changed One!A1 and a cell nothing reads.
         ctx.sheets[0].data![0][0] = { v: 20, m: '20' };
-        ctx.formulaCache.execFunctionExist = [
+        execFunctionGroup(ctx, [
             { r: 0, c: 0, id: 'id_1' },
             { r: 2, c: 2, id: 'id_2' },
-        ];
-        execFunctionGroup(ctx, null, null, null, null);
-        groupValuesRefresh(ctx);
+        ]);
 
         expect(ctx.sheets[0].data![0][1]?.v).toBe(40);
         expect(ctx.sheets[1].data![0][0]?.v).toBe(41);
-        expect(ctx.formulaCache.execFunctionExist).toBeUndefined();
     });
 
     it('produces identical results when run inside an immer draft', () => {
@@ -210,11 +201,9 @@ describe('execFunctionGroup — index-driven recalc', () => {
         const ctx = makeCtx();
         ctx.sheets[0].data![0][2] = { f: '=SUM(A3:A1)', v: 5, m: '5' };
         ctx.sheets[0].data![1][3] = { f: '=SUM(B$3:A1)', v: 15, m: '15' };
-        ctx.sheets[0].calcChain!.push({ r: 0, c: 2, id: 'id_1' }, { r: 1, c: 3, id: 'id_1' });
         warmFormulaCellInfoMap(ctx);
 
         cellModule.updateCell(ctx, 1, 0, null, 7);
-        groupValuesRefresh(ctx);
 
         expect(ctx.sheets[0].data![0][2]?.v).toBe(12);
         expect(ctx.sheets[0].data![1][3]?.v).toBe(22);
@@ -225,7 +214,6 @@ describe('execFunctionGroup — index-driven recalc', () => {
     it('shows #NAME? for a real Excel function the engine lacks, even inside IFERROR, once an input changes', () => {
         const ctx = makeCtx();
         ctx.sheets[0].data![0][2] = { f: '=IFERROR(FILTER(A1:A3,A1:A3>1),"none")', v: 5, m: '5' };
-        ctx.sheets[0].calcChain!.push({ r: 0, c: 2, id: 'id_1' });
         warmFormulaCellInfoMap(ctx);
 
         editCell(ctx, 0, 0, 7, 'id_1');
@@ -237,7 +225,6 @@ describe('execFunctionGroup — index-driven recalc', () => {
         const ctx = makeCtx();
         ctx.sheets[0].data![0][2] = { f: '=IFERROR(FILTRE(A1),"x")', v: 'x', m: 'x' };
         ctx.sheets[0].data![0][3] = { f: '=IFERROR(FILTRE(A1),A1)', v: 5, m: '5' };
-        ctx.sheets[0].calcChain!.push({ r: 0, c: 2, id: 'id_1' }, { r: 0, c: 3, id: 'id_1' });
         warmFormulaCellInfoMap(ctx);
 
         editCell(ctx, 0, 0, 7, 'id_1');
@@ -254,9 +241,6 @@ describe('execFunctionGroup — index-driven recalc', () => {
         one[1][0] = { f: '=ISERROR(C1)', v: false, m: 'FALSE' };
         one[1][1] = { f: '=C1+1', v: 0.5, m: '0.5' };
         ctx.sheets[1].data![1][0] = { f: '=ERROR.TYPE(One!C1)', v: '#N/A', m: '#N/A' };
-        ctx.sheets[0].calcChain!.push({ r: 0, c: 2, id: 'id_1' }, { r: 0, c: 3, id: 'id_1' });
-        ctx.sheets[0].calcChain!.push({ r: 1, c: 0, id: 'id_1' }, { r: 1, c: 1, id: 'id_1' });
-        ctx.sheets[1].calcChain!.push({ r: 1, c: 0, id: 'id_2' });
         warmFormulaCellInfoMap(ctx);
 
         editCell(ctx, 0, 0, 7, 'id_1');
@@ -270,7 +254,6 @@ describe('execFunctionGroup — index-driven recalc', () => {
         const ctx = makeCtx();
         ctx.sheets[0].data![0][2] = { f: '=FILTER(A1:A3,A1:A3>1)', v: 5, m: '5' };
         ctx.sheets[0].data![0][3] = { f: '=IFERROR(C1,"none")', v: 5, m: '5' };
-        ctx.sheets[0].calcChain!.push({ r: 0, c: 2, id: 'id_1' }, { r: 0, c: 3, id: 'id_1' });
         warmFormulaCellInfoMap(ctx);
 
         editCell(ctx, 0, 0, 7, 'id_1');
@@ -317,7 +300,6 @@ describe('updateCell — the formulas that read an edited cell through a functio
                     id: 's1',
                     order: 0,
                     data: sheet1,
-                    calcChain: formulas.map(([r, c]) => ({ r, c, id: 's1' })),
                 },
                 { name: 'Data', id: 's2', order: 1, data },
             ],
@@ -326,12 +308,10 @@ describe('updateCell — the formulas that read an edited cell through a functio
         const shown = () => formulas.map(([r, c]) => ctx.sheets[0].data![r][c]?.m);
 
         cellModule.updateCell(ctx, 0, 0, null, 10);
-        groupValuesRefresh(ctx);
         expect(shown()).toEqual(['10', '18', '#NAME?', '#ERROR!', '33', '6', '1', '11']);
 
         ctx.currentSheetId = 's2';
         cellModule.updateCell(ctx, 0, 0, null, 10);
-        groupValuesRefresh(ctx);
         expect(shown()).toEqual(['10', '18', '#NAME?', '#ERROR!', '33', '15', '10', '11']);
     });
 });
@@ -353,13 +333,9 @@ describe('execFunctionGroup — references resolved before the sheets changed', 
                 { name: 'Two', id: 'id_2', order: 1, data: two },
             ].map((sheet) => ({
                 ...sheet,
-                calcChain: formula != null && sheet.id === id ? [{ r: 0, c: 1, id }] : [],
             })),
         }) as Context;
     }
-    const peerBatch = (ctx: Context, patches: Patch[]) =>
-        ctx.formulaCache.updateFormulaCache(ctx, { patches, inversePatches: [] }, 'redo');
-    const renameOne: Patch = { op: 'replace', path: ['sheets', 0, 'name'], value: 'Gone' };
     const growOne = (ctx: Context) =>
         insertRowCol(ctx, { type: 'row', index: 3, count: 4, direction: 'rightbottom', id: 'id_1' });
 
@@ -383,43 +359,36 @@ describe('execFunctionGroup — references resolved before the sheets changed', 
         const ctx = workbook('=One!A1');
         warmFormulaCellInfoMap(ctx);
         deleteSheet(ctx, 'id_1');
-        addSheet(ctx, 'id_3', false, 'One');
+        addSheet(ctx, 'id_3', 'One');
         ctx.sheets[1].data = grid(4, 4);
         editCell(ctx, 0, 0, 100, 'id_3');
         expect(ctx.sheets[0].data?.[0][1]?.v).toBe(100);
     });
 
-    it('a sheet name reads the sheet a peer renamed to it', () => {
+    it('a sheet name that read no sheet reads the sheet renamed to it', () => {
         const ctx = workbook('=Old!A1');
         warmFormulaCellInfoMap(ctx);
-        ctx.sheets[0].name = 'Old';
-        ctx.formulaCache.updateFormulaCache(
-            ctx,
-            { patches: [{ op: 'replace', path: ['sheets', 0, 'name'], value: 'Old' }], inversePatches: [] },
-            'redo',
-        );
+        renameSheet(ctx, { id: 'id_1', name: 'Old' });
         editCell(ctx, 0, 0, 7, 'id_1');
         expect(ctx.sheets[1].data?.[0][1]?.v).toBe(7);
     });
 
-    // Before the batch the map holds no formula, while a hyperlink or a validation rule already resolved One!A1.
-    it('a formula a peer writes as it renames the sheet the formula names reads no sheet', () => {
-        const ctx = workbook();
+    // A rename points the formula at the new name, so the formula keeps reading the sheet.
+    it('a formula that names a renamed sheet follows it, and the map builds again', () => {
+        const ctx = workbook('=One!A1');
         warmFormulaCellInfoMap(ctx);
         getcellrange(ctx, 'One!A1');
-        ctx.sheets[0].name = 'Gone';
-        ctx.sheets[1].data?.[0].splice(1, 1, { f: '=One!A1' });
-        peerBatch(ctx, [{ op: 'replace', path: ['sheets', 1, 'data', 0, 1], value: { f: '=One!A1' } }, renameOne]);
+        renameSheet(ctx, { id: 'id_1', name: 'Gone' });
+        expect(ctx.sheets[1].data?.[0][1]?.f).toBe('=Gone!A1');
         expect(ctx.formulaCache.formulaCellInfoMap).toBeNull();
         setFormulaCellInfo(ctx, { r: 0, c: 1, id: 'id_2' });
-        expect(ctx.formulaCache.formulaCellInfoMap?.r0c1iid_2?.formulaDependency).toEqual([]);
+        expect(ctx.formulaCache.dependencyIndex.dependentsOf('id_1', 0, 0)).toEqual(['r0c1iid_2']);
     });
 
     it('a sheet name another caller resolved reads no sheet once a peer renames it, before the map is built', () => {
         const ctx = workbook();
         expect(getcellrange(ctx, 'One!A1')?.sheetId).toBe('id_1');
-        ctx.sheets[0].name = 'Gone';
-        peerBatch(ctx, [renameOne]);
+        renameSheet(ctx, { id: 'id_1', name: 'Gone' });
         expect(getcellrange(ctx, 'One!A1')).toBeNull();
     });
 
@@ -430,8 +399,7 @@ describe('execFunctionGroup — references resolved before the sheets changed', 
         ctx.formulaCache.resetEngine();
         ctx.sheets[0].name = 'Old';
         getcellrange(ctx, 'Old!A1');
-        ctx.sheets[0].name = 'One';
-        peerBatch(ctx, [{ op: 'replace', path: ['sheets', 0, 'name'], value: 'One' }]);
+        renameSheet(ctx, { id: 'id_1', name: 'One' });
         expect(getcellrange(ctx, 'Old!A1')).toBeNull();
     });
 });

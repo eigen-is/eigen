@@ -26,7 +26,7 @@ const { createRoot } = await import('react-dom/client');
 const { WorkbookContext } = await import('../../../context');
 const { InputBox } = await import('../../../components/SheetOverlay/InputBox');
 const { FxEditor } = await import('../../../components/FxEditor');
-const { defaultContext, defaultSettings, FormulaCache, getFontSet } = await import('../../../state');
+const { defaultContext, FormulaCache, getFontSet } = await import('../../../state');
 type Context = import('../../../state').Context;
 
 const refs = {
@@ -36,13 +36,13 @@ const refs = {
         scrollLeft: 0,
         scrollTop: 0,
         scrollListeners: new Set<() => void>(),
-        notifyScrollListeners: () => {},
     },
     cellInput: createRef<HTMLDivElement | null>(),
     fxInput: createRef<HTMLDivElement | null>(),
     canvas: createRef<HTMLCanvasElement | null>(),
     cellArea: createRef<HTMLDivElement | null>(),
     workbookContainer: createRef<HTMLDivElement | null>(),
+    hooks: { current: {} },
 };
 
 // A wrapped cell in a bold serif, so its font set is not the sheet default.
@@ -77,10 +77,11 @@ async function openEditor(editor: typeof InputBox | typeof FxEditor, id: string)
                         context,
                         getContext: () => context,
                         setContext: () => {},
-                        settings: defaultSettings,
+                        aspectLocked: false,
                         refs,
                         handleUndo: () => {},
                         handleRedo: () => {},
+                        pasteClipboard: () => {},
                     },
                 },
                 createElement(editor),

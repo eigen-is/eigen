@@ -26,8 +26,6 @@ const resolver = createArrayResolver([
             [50, 'Xstar', 9, 9, null, null, null, 3, 1],
             [60, '*star', 6, 6, null, null, null, 3, 1],
         ]),
-        calculationChain: [],
-        dynamicArrayCompute: [],
     },
     {
         id: 's2',
@@ -37,8 +35,6 @@ const resolver = createArrayResolver([
             ['a', 'b', 'c', 'd'],
             [1, 2, 3, 4],
         ]),
-        calculationChain: [],
-        dynamicArrayCompute: [],
     },
     {
         // The arrays of Microsoft's XMATCH examples.
@@ -51,8 +47,6 @@ const resolver = createArrayResolver([
             [2, 'Banana'],
             [1, 'Cherry'],
         ]),
-        calculationChain: [],
-        dynamicArrayCompute: [],
     },
 ]);
 
