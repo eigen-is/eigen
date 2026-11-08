@@ -50,10 +50,8 @@ const formSchema = z
         },
     );
 
-// The form models email/phone as `{ value }[]` rather than the wire `string[]`: react-hook-form's
-// useFieldArray reads the array through compact() (filter(Boolean)), so a blank primitive '' is stripped —
-// the create form would open with zero rows and "Add" would collapse an all-blank list back to one row.
-// Object entries are always truthy, so every row survives; onSave flattens back to string[], blanks filtered.
+// A row is `{ value }`, not the wire's string: useFieldArray reads a list through compact(), which strips a blank ''.
+// onSave flattens the rows back, without the blanks.
 type FormValues = z.infer<typeof formSchema>;
 export type ContactFormValues = Omit<FormValues, 'email' | 'phone'> & { email: string[]; phone: string[] };
 
@@ -114,19 +112,23 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
     const { data: labels = [], error: labelsError } = useLabels();
     const form = useForm<FormValues>({ resolver: zodResolver(formSchema), defaultValues: formValues(contact) });
 
-    // A whole list or address field stays or follows as one: its rows have no identity to merge them by.
+    const dirtyNames = Object.keys(form.formState.dirtyFields).join();
+    const typing = dirtyNames !== '';
+
+    // A whole list or address field stays or follows as one: its rows have no identity to merge them by. A field goes
+    // clean when typed back to its old value, and follows then. Resetting an unchanged list would remount its rows.
     useEffect(() => {
         const current = formValues(contact);
         for (const name of FORM_FIELDS) {
-            if (!form.getFieldState(name).isDirty) form.resetField(name, { defaultValue: current[name] });
+            const followed = JSON.stringify(form.getValues(name)) === JSON.stringify(current[name]);
+            if (!followed && !form.getFieldState(name).isDirty) form.resetField(name, { defaultValue: current[name] });
         }
-    }, [contact, form]);
+    }, [contact, form, dirtyNames]);
 
     // The etag typed edits answer to: the contact's when typing began, so a save can't overwrite a change it never
     // showed. A refusal lets it move on once, to the contact the toast says to check.
     const [heldEtag, setHeldEtag] = useState(contact.etag);
     const [refused, setRefused] = useState(false);
-    const typing = Object.keys(form.formState.dirtyFields).length > 0;
     if (contact.etag !== heldEtag && (!typing || refused)) {
         setHeldEtag(contact.etag);
         setRefused(false);

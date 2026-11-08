@@ -243,3 +243,48 @@ test('a photo that arrives with a sync is saved with the rest of a clean form', 
     expect(server.writes).toEqual(['v2']);
     expect(server.contact.avatar).toBe('/avatars/ada.png');
 });
+
+test('a field typed back to what it held follows the card, so its Save overwrites nothing', async () => {
+    server.contact = { ...ada, notes: 'a' };
+    await open();
+    await type(field('Notes'), 'ax');
+    changeElsewhere({ notes: 'b' });
+    await sync();
+    expect(field('Notes').value).toBe('ax');
+
+    await type(field('Notes'), 'a');
+    await settle();
+    expect(field('Notes').value).toBe('b');
+
+    await save();
+    expect(server.writes).toEqual(['v2']);
+    expect(server.contact.notes).toBe('b');
+});
+
+test('a field typed back follows the card while another stays typed', async () => {
+    server.contact = { ...ada, notes: 'a' };
+    await open();
+    await type(field('Company'), 'Analytical Engines');
+    await type(field('Notes'), 'ax');
+    changeElsewhere({ notes: 'b' });
+    await sync();
+
+    await type(field('Notes'), 'a');
+    await settle();
+    expect(field('Notes').value).toBe('b');
+    expect(field('Company').value).toBe('Analytical Engines');
+
+    await save();
+    expect(server.writes).toEqual(['v1']);
+    expect(toasts).toEqual([STALE_TOAST]);
+});
+
+test('a list typed back to what it held keeps its row, with the cursor in it', async () => {
+    await open();
+    const row = rows('Email address')[0];
+    if (!row) throw new Error('no email row');
+    await type(row, 'ada@example.orgx');
+    await type(row, 'ada@example.org');
+    await settle();
+    expect(rows('Email address')[0]).toBe(row);
+});
