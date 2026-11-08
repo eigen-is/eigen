@@ -878,6 +878,20 @@ describe('Backup restore refuses an archive this server cannot open', () => {
         );
     });
 
+    test('verify fails a database from a newer server, naming both versions', async () => {
+        const staging = mkdtempSync(join(TEST_DATA_DIR, 'restore-newer-verify-'));
+        const folder = join(staging, buildHomeFolderName(user.id));
+        const manifest = await snapshotHome(await getHome(user.id), staging);
+        await stampSchemaVersion(manifest, folder, 'home/eigen.mail/mail.db', 999);
+        writeFileSync(join(folder, 'manifest.json'), JSON.stringify(manifest, null, 2));
+
+        const record = await verifyModule.verifyFolder(folder);
+
+        expect(record.status).toBe('failed');
+        expect(record.failures.join(' ')).toContain('at mail schema v999, newer than this server supports');
+        rmSync(staging, { recursive: true, force: true });
+    });
+
     test('a database from a newer server is refused before the home is taken', async () => {
         const names = await rootNames(user.sessionToken, user.id, mountId, rootId);
         // quick_check would pass this file; ManagedDatabase's forward-version guard would not, and it
@@ -1767,30 +1781,6 @@ describe('Backup restore of one home judges, then takes the home', () => {
 
         await expectNotTaken(user.id, before);
         rmSync(join(getBackupsDir(), artifact), { force: true });
-    });
-
-    // verifyFolder ran SQLite's check on every database of the unpacked archive, so the check before the swap reads only
-    // their schema stamps. A large home takes minutes per pass.
-    test('the check before the swap reads the stamps only, after verify checked the pages', async () => {
-        const artifact = await backup(user.id, new Date(Date.now() + 91_000));
-        const querySpy = spyOn(Database.prototype, 'query');
-        const pagesChecked = () => querySpy.mock.calls.filter(([sql]) => sql.includes('quick_check')).length;
-        const during: number[] = [];
-        const check = materializeModule.checkUnpackedHome;
-        const checkSpy = spyOn(materializeModule, 'checkUnpackedHome').mockImplementation(async (homeDir, mounts) => {
-            const before = pagesChecked();
-            await check(homeDir, mounts);
-            during.push(pagesChecked() - before);
-        });
-        try {
-            await restoreHome(artifact, user.id, `restore-stamps-${Date.now()}`);
-        } finally {
-            querySpy.mockRestore();
-            checkSpy.mockRestore();
-        }
-        expect(during).toEqual([0]);
-        rmSync(join(getBackupsDir(), artifact), { force: true });
-        removeSafetyCopies(user.id);
     });
 
     // The archive is unpacked on the data disk beside the home, so the home is offline only for the swap's two renames.

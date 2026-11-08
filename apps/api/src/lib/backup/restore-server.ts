@@ -22,8 +22,7 @@ import {
 } from './archive';
 import { archivePaths, readMountPathRows } from './archive-layout';
 import { describeError } from './errors';
-import type { VersionedDatabase } from './materialize-mount';
-import { checkRestoredDatabases, materializeMount, movePath, openToCheck, redateTrash } from './materialize-mount';
+import { materializeMount, movePath, openToCheck, redateTrash } from './materialize-mount';
 import { ARCHIVE_HOME_DIR, buildServerFolderName, INSTALL_FOLDERS, SERVER_ARCHIVE_SERVER_MEMBER } from './paths';
 import { requireVerified, verifyFolder } from './verify';
 
@@ -154,11 +153,10 @@ async function stageHome(
     const liveHomeDir = homeDirUnder(getDataRoot(), home.ownerId);
     movePath(path.join(folder, ARCHIVE_HOME_DIR), homeDir);
     const carried = manifest.mounts.filter((summary) => !summary.skipped);
-    const containerDatabases: VersionedDatabase[] = [];
     const notReplayed: NotReplayed = { settled: 0, missing: 0 };
     for (const summary of carried) {
         if (summary.storageType !== 's3' || (s3FromArchive && summary.contents !== 'metadata')) {
-            containerDatabases.push(...(await materializeMount(homeDir, summary, stamp)));
+            await materializeMount(homeDir, summary, stamp);
             continue;
         }
         const replay = replayPendingUploads(
@@ -170,8 +168,6 @@ async function stageHome(
         notReplayed.missing += replay.missing;
     }
     const mountIds = carried.map((summary) => summary.id);
-    // verifyFolder checked these pages. Since then each file was only renamed, or written through SQLite itself.
-    await checkRestoredDatabases(homeDir, mountIds, containerDatabases, { verified: true });
     try {
         redateTrash(homeDir, mountIds, now);
     } catch (error) {

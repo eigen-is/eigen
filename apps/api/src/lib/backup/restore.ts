@@ -23,9 +23,9 @@ import { authRowsToRestore, restoreAuthRows } from './auth-rows';
 import { describeError } from './errors';
 import { resolveHomeDir } from './home-dir';
 import {
-    checkRestoredDatabases,
-    checkUnpackedHome,
+    checkDatabases,
     containerDatabasesIn,
+    homeDatabasesIn,
     materializeMount,
     mountIdsIn,
     redateTrash,
@@ -78,7 +78,6 @@ export async function restoreHome(
             // snapshotHome left its folder out.
             const carried = manifest.mounts.filter((summary) => !summary.skipped);
             const unpackedHome = path.join(folder, ARCHIVE_HOME_DIR);
-            await checkUnpackedHome(unpackedHome, carried);
             // Before materializeMount, which leaves every trash date alone.
             redateRestoredTrash(
                 ownerId,
@@ -151,7 +150,7 @@ export async function restoreSafetyCopy(
         jobId,
         // Nothing to unpack, but the copy gets the database checks an unpacked archive gets, while the home serves.
         async () => {
-            await checkRestoredDatabases(folder, mountIds, containerDatabasesIn(folder, mountIds));
+            await checkDatabases([...homeDatabasesIn(folder, mountIds), ...containerDatabasesIn(folder, mountIds)]);
             return { install, judged: null };
         },
         // Back under the name it came from, here and at boot after a kill. A `.failed-restore-` name would make a

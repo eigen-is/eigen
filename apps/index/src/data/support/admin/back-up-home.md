@@ -30,7 +30,7 @@ Each archive is one file named `home-<id>-<date>-<time>.tar.zst`. Its row shows 
 
 - **Verified**: the archive passed every check and is ready to restore.
 - **Not verified**: the archive has not been checked yet.
-- **Failed**: a check found a problem. The row lists what went wrong and keeps the file, but offers no restore, so make a fresh backup.
+- **Failed**: a check found a problem, such as a file that differs from the list inside the archive, a damaged database or document, or data from a newer Eigen than this server. The row lists what went wrong and keeps the file, but offers no restore, so make a fresh backup.
 
 <div class="eigen-callout">
 

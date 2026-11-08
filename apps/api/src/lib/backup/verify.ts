@@ -1,7 +1,7 @@
-// Checks that an unpacked backup can be restored before anyone relies on it. It compares the folder's sizes and
-// hashes with its manifest, asks SQLite about every database, and decodes a sample of the documents. The result is a
-// record of failures, which a restore refuses on and the backup pane shows. A backup job runs it on its staging folder,
-// and a restore on the archive it just unpacked.
+// Checks that an unpacked backup can be restored before anyone relies on it. It compares the folder's sizes and hashes
+// with its manifest, asks SQLite about every database and reads its schema stamp, and decodes a sample of the
+// documents. The result is a record of failures, which a restore refuses on and the backup pane shows. A backup job runs
+// it on its staging folder, and a restore on the archive it just unpacked.
 
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
@@ -13,17 +13,19 @@ import * as Y from 'yjs';
 import { readYjsStateFromFile } from '../collab/yjs-loader';
 import { PATHS, SERVER_DATABASES } from '../config/paths';
 import { ApiError } from '../core/errors';
+import type { DatabaseConfig, SchemaType } from '../core/managed-database';
+import { MOUNT_DB_CONFIG } from '../mount/db-config';
 import { hashFile } from '../storage/deadline';
 import { readManifestFile } from './archive';
 import {
     archivePaths,
-    HOME_DATABASE_PATHS,
+    HOME_DATABASES,
     listManagedDatabases,
     managedDbContainer,
     readMountPathRows,
 } from './archive-layout';
 import { describeError } from './errors';
-import { DATABASES_PER_YIELD } from './materialize-mount';
+import { DATABASES_PER_YIELD, newerSchema } from './materialize-mount';
 import { ARCHIVE_HOME_DIR, ARCHIVE_MANIFEST_FILE, archiveHomePath, archiveMountPath, archiveServerPath } from './paths';
 
 // Stage 3 samples rather than decodes everything: the ten heaviest documents plus ten of the rest.
@@ -59,8 +61,9 @@ export function requireVerified(verified: BackupVerifyRecord, name: string): voi
 }
 
 // An Eigen-owned database inside the archive, by the path the manifest speaks of. `isYjsDocument` marks the data.db of
-// a collab container, the only kind stage 3 can decode. A chat's data.db is plain SQLite.
-type ArchiveDatabase = { path: string; isYjsDocument: boolean };
+// a collab container, the only kind stage 3 can decode. A chat's data.db is plain SQLite. `config` is the schema its
+// stamp is read against. A server database has none here: the stage refuses an archive of a newer Eigen as a whole.
+type ArchiveDatabase = { path: string; isYjsDocument: boolean; config?: DatabaseConfig<SchemaType> };
 
 async function listFolderFiles(root: string, relDir: string, present: Set<string>): Promise<void> {
     for (const entry of await fsp.readdir(path.join(root, relDir), { withFileTypes: true })) {
@@ -75,15 +78,16 @@ function listArchiveDatabases(
     entries: ReadonlyMap<string, BackupEntry>,
     fail: (message: string) => void,
 ): ArchiveDatabase[] {
-    const found: ArchiveDatabase[] = [];
     // A home folder holds the first, the server member the second; neither holds the other's.
-    const fixed = [
-        ...[...HOME_DATABASE_PATHS].map(archiveHomePath),
-        ...Object.values(SERVER_DATABASES).map(archiveServerPath),
+    const fixed: ArchiveDatabase[] = [
+        ...HOME_DATABASES.map(([config, relPath]) => ({
+            path: archiveHomePath(relPath),
+            isYjsDocument: false,
+            config,
+        })),
+        ...Object.values(SERVER_DATABASES).map((name) => ({ path: archiveServerPath(name), isYjsDocument: false })),
     ];
-    for (const relDatabase of fixed) {
-        if (fs.existsSync(path.join(root, relDatabase))) found.push({ path: relDatabase, isYjsDocument: false });
-    }
+    const found = fixed.filter((database) => fs.existsSync(path.join(root, database.path)));
 
     const mountsDir = path.join(root, ARCHIVE_HOME_DIR, PATHS.DRIVE.ROOT);
     if (!fs.existsSync(mountsDir)) return found;
@@ -92,7 +96,7 @@ function listArchiveDatabases(
         const relMetadata = archiveMountPath(entry.name, PATHS.DRIVE.METADATA_DB);
         const metadata = path.join(root, relMetadata);
         if (!fs.existsSync(metadata)) continue;
-        found.push({ path: relMetadata, isYjsDocument: false });
+        found.push({ path: relMetadata, isYjsDocument: false, config: MOUNT_DB_CONFIG });
 
         // Which of a mount's files are Eigen's own databases follows from its tree, so the archived
         // metadata.db is read back for it. One too broken to read is a failure of its own; stage 2
@@ -121,6 +125,7 @@ function listArchiveDatabases(
                     found.push({
                         path: archiveMountPath(entry.name, `${PATHS.DRIVE.DATA_DIR}/${managed.path}`),
                         isYjsDocument: managed.isContainerData && isCollabType(managed.containerType),
+                        config: managed.config,
                     });
                 }
             } finally {
@@ -196,6 +201,8 @@ export async function verifyFolder(dir: string, onProgress?: BackupProgress): Pr
                     if (row?.quick_check !== 'ok') {
                         fail(`${database.path}: quick_check says ${row?.quick_check ?? 'nothing'}`);
                     }
+                    const newer = database.config && newerSchema(db, database.config);
+                    if (newer) fail(`${database.path}: ${newer}`);
                 } finally {
                     db.close();
                 }
