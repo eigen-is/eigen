@@ -110,7 +110,7 @@ How `check` works, and how to run one test file: [TESTING.md](TESTING.md).
 - **An error about a duplicate class after a dependency change.** `bun install` sometimes keeps old links and bundles two copies of one package. Run `rm -rf node_modules apps/*/node_modules packages/*/node_modules && bun install`.
 - **A new import from `packages/lib` or `packages/ui` answers 500.** Vite reads the packages' import paths only at start: stop the dev servers, run `rm -rf node_modules/.vite`, and start them again.
 - **A new Tailwind value such as `h-[3px]` doesn't apply.** Restart the dev server before you look for a bug in the component.
-- **An old commit id doesn't exist.** The history was rewritten on 2026-07-06, so an id from before that date, in an older note, no longer works. Find the commit by its message instead.
+- **An old commit id doesn't exist.** The history was rewritten on 2026-07-06, so an id from before that date no longer works. Find the commit by its message instead.
 
 ### Eigen in Docker
 
@@ -134,7 +134,7 @@ From then on, use the clone as a server admin would: `./eigen logs`, `./eigen st
 
 To start over, stop it with `docker compose --env-file .env.production down`, move `data/` and `caddy-data/` elsewhere, and run `./eigen setup` again.
 
-- The API runs as uid 1000, as in production. An older `docker-compose.dev.yml` ran it as root, so on Linux a clone whose `data/` it wrote can't open those files: run `sudo chown -R 1000:1000 data backups` once, then `./eigen restart`.
+- The API runs as uid 1000, as in production.
 - If the stack was off for more than 7 days, Caddy's local certificates have expired: `docker compose --env-file .env.production restart caddy` renews them.
 - On a Mac, `sqlite3` on your machine can show old data from the container's databases. Read a database from inside the API container, with `docker compose --env-file .env.production exec eigen-api`.
 
