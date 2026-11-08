@@ -6,10 +6,12 @@ category: Sharing
 tags: [drive, sharing, permissions, access]
 related: [drive/share-a-file]
 order: 100
-updated: 2026-10-12
+updated: 2026-11-08
 ---
 
 When you follow a link to a file you do not have access to, Eigen shows a "You need access" screen instead of the file. From there you can send the owner a request, and they can grant you access without you needing to contact them separately.
+
+You also land on this screen if your access is taken away while you have a document open. Anything you typed that had not been saved is lost.
 
 ## Request access
 

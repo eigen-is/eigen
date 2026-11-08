@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+    COLLAB_ACCESS_LOST_CLOSE,
     COLLAB_EPOCH_MESSAGE,
     COLLAB_HOME_REPLACED_CLOSE,
     COLLAB_HOME_REPLACED_REASON,
@@ -138,10 +139,10 @@ describe('Collab data epoch', () => {
         expect(after.synced).toBe(true);
     });
 
-    test('a signed-in user who may not read the document is closed 1008 access denied, with no epoch', async () => {
+    test('a signed-in user who may not read the document is closed as access lost, with no epoch', async () => {
         const opened = await open(`?epoch=${getDataEpoch(ownerId)}`, ctx.bob.user.sessionToken);
         expect(opened.synced).toBe(false);
         expect(opened.epoch).toBeNull();
-        expect(opened.close).toEqual({ code: 1008, reason: 'Access denied' });
+        expect(opened.close).toEqual({ code: COLLAB_ACCESS_LOST_CLOSE, reason: 'Access denied' });
     });
 });

@@ -50,9 +50,9 @@ The same 30 s window bounds the whole-state sync reply, because a frame only cou
 
 An unauthenticated upgrade never reaches `open`. The `auth` macro answers the HTTP upgrade itself, so the handler's user is always a session user.
 
-A caller without read access gets nothing but the constant empty awareness heartbeat ([The route speaks first during a cold load](#the-route-speaks-first-during-a-cold-load)), then close 1008. That is why the heartbeat may start before the access check: it carries no document data.
+A caller without read access gets nothing but the constant empty awareness heartbeat ([The route speaks first during a cold load](#the-route-speaks-first-during-a-cold-load)), then close 4403, and so does a path that does not exist, which reads as no access in `/info` too. That is why the heartbeat may start before the access check: it carries no document data.
 
-Three failed opens close with their own codes, so the tab knows what to do ([Each close code tells the tab what to do](#each-close-code-tells-the-tab-what-to-do)): home-replaced after a restore, storage-unavailable for any server-side (5xx) failure, an outage or a local one such as a full disk, and storage-gone (4410: the stored object is gone, so the client stops retrying). Every other failed open, such as a missing path, is 1008.
+Three failed opens close with their own codes, so the tab knows what to do ([Each close code tells the tab what to do](#each-close-code-tells-the-tab-what-to-do)): home-replaced after a restore, storage-unavailable for any server-side (5xx) failure, an outage or a local one such as a full disk, and storage-gone (4410: the stored object is gone, so the client stops retrying). Every other failed open, such as a document in the trash, is 1008.
 
 Binary frames arrive as Bun `Buffer`s. A string frame is `ping` or `pong`, or it is ignored.
 
@@ -62,7 +62,7 @@ The route keeps its per-socket state (the `opened` gate, the drive, the document
 
 The route checks read when the socket opens, and write on every binary frame, so a writer demoted to reader loses write with the next frame. `CollabDocument.handleMessage` drops a sync update from a peer without write and still answers its sync step 1 and awareness. The route keeps each socket's session in a map keyed on `ws.raw`: Elysia's Bun WebSocket adapter hands every open, message and close a fresh wrapper, so a map keyed on `ws` never matches between events.
 
-A revoked read would otherwise keep receiving broadcasts until the socket drops. So `Drive.updateACL` and `Drive.movePath` call `enforceReadAccessBelow` (`apps/api/src/lib/drive/collab-registry.ts`), which walks every open document at or below the path and closes each connection that lost read with 1008. It re-checks read per connection rather than diffing the removed ACL entries, because read inherits from the whole ancestor chain: revoking a folder share must reach the documents inside it.
+A revoked read would otherwise keep receiving broadcasts until the socket drops. So `Drive.updateACL` and `Drive.movePath` call `enforceReadAccessBelow` (`apps/api/src/lib/drive/collab-registry.ts`), which walks every open document at or below the path and closes each connection that lost read with 4403. It re-checks read per connection rather than diffing the removed ACL entries, because read inherits from the whole ancestor chain: revoking a folder share must reach the documents inside it.
 
 A membership that goes takes read away on documents no path change names, in any owner's Home. So better-auth's hooks for removing a team member or an org member, deleting a team and deleting a user call `enforceReadAccessOnLoadedHomes` (`apps/api/src/lib/home/get-home.ts`) once the row is gone, and it makes the same check on every open document of every loaded Home. A plain walk is enough, because a removal is rare. It needs no stored row and no retry, because open sockets live in memory, a crash closes them all, and a Home that is not loaded has no open document. So the walk opens no Home and counts as no request, and it skips a document that is still loading, which has no connection yet and may take as long as a download. A check that fails is logged and the walk goes on: the row is gone, and the removal still answers 200. `apps/api/src/test/collab/collab-membership-revoke.test.ts` pins it.
 
@@ -126,7 +126,9 @@ The codes live in `packages/lib/src/constants/collab.ts`.
 |---|---|
 | 1013 `storage-unavailable` | Any server-side (5xx) failed open, not only an outage. Shows "retrying" and reconnects itself after 5 s. y-websocket would retry every 2.5 s and re-pay the failing load each time. |
 | 4410 `storage-gone` | Stops for good. The loading screen shows an error and offers the version list to a writer. An open editor stays mounted and reads as offline. |
-| 1012 `home-replaced` | Reloads through `reloadReplacedHome`, the reload the event stream uses too, one render after clearing the unsynced flag, so the leave prompt doesn't block the reload. |
+| 1012 `home-replaced` | Reloads through `reloadReplacedHome`, the reload the event stream uses too, one render after clearing the unsynced flag, so the leave prompt doesn't block the reload. A reconnect would sync the tab's copy back over the restore, so its unsynced edits go with it. |
+| 4403 access lost | The user may not read this document, whether a revoke just took it or an open was refused. Stops for good and reloads one render after clearing the unsynced flag. The reload shows what applies now: the route's request-access screen, or sign-in for a deleted user. A query refetch can't do the second, because `AuthProvider` reads the session once per page load and `useCollabDocumentInfo` turns a 401 into no access. |
+| 1008 | Any other failed open, such as a document in the trash. y-websocket retries it every 2.5 s. |
 
 The share cluster's offline icon waits 1.5 s after a disconnect, so a blip or the storage retry's brief connect doesn't flash it.
 

@@ -3,6 +3,7 @@
 // and it hands the frames to the CollabDocument the Drive keeps open for that document.
 
 import {
+    COLLAB_ACCESS_LOST_CLOSE,
     COLLAB_HOME_REPLACED_CLOSE,
     COLLAB_HOME_REPLACED_REASON,
     COLLAB_STORAGE_GONE_CLOSE,
@@ -42,9 +43,8 @@ type CollabSession = {
 // close, and it has no typed field for this route's state, so the state lives in this map.
 const sessions = new WeakMap<ServerWebSocket<unknown>, CollabSession>();
 
-// A user may open a document in another owner's drive, such as a shared or team drive. getSharedDrive and its ACL
-// checks decide what they may do there. The WebSocket server options, such as perMessageDeflate, are set on the root
-// app, because Elysia reads `websocket` config only there.
+// A user may open a document in another owner's drive, and getSharedDrive's checks decide what they may do there. The
+// WebSocket server options are set on the root app, because Elysia reads `websocket` config only there.
 export const collabRouter = new Elysia({
     name: 'collab',
 })
@@ -190,32 +190,27 @@ export const collabRouter = new Elysia({
             try {
                 const user = ws.data.user;
 
-                // y-websocket closes a socket that stays silent for 30 seconds and retries, and every retry
-                // pays for a cold open again. Opening a cold Home in getSharedDrive is the slowest step, so the
-                // heartbeat starts before it. Its frame is a constant empty awareness update, so it reveals
-                // nothing before the access check.
+                // y-websocket gives up on a socket silent for 30 seconds, and a cold Home is the slowest step, so the
+                // heartbeat starts first. Its frame is a constant, so it reveals nothing before the access check.
                 const rawWs = ws.raw;
                 stopHeartbeat = startLoadingHeartbeat(rawWs);
                 const loadStart = performance.now();
 
                 const { ownerId, mountId, pathId } = ws.data.params;
                 const drive = await getSharedDrive(ownerId, user);
-                // A stale epoch means the tab loaded its document before a restore or an update. Its sync would
-                // bring back what the restore undid, or write structures the new code no longer reads. This waits
-                // for a running restore's 503 from getSharedDrive, because a restore that fails puts the epoch back.
+                // A stale epoch's sync would bring back what a restore undid. This comes after getSharedDrive's 503 for
+                // a running restore, because a restore that fails puts the epoch back.
                 const { epoch } = ws.data.query;
                 if (epoch !== undefined && epoch !== getDataEpoch(ownerId)) {
                     ws.close(COLLAB_HOME_REPLACED_CLOSE, COLLAB_HOME_REPLACED_REASON);
                     return;
                 }
                 if (!(await drive.canRead(mountId, pathId, user))) {
-                    ws.close(1008, 'Access denied');
+                    ws.close(COLLAB_ACCESS_LOST_CLOSE, 'Access denied');
                     return;
                 }
-                // Only a user who may read holds the Home. The hold keeps it open until cleanupSession lets go,
-                // whichever way this open ends. A Home that closes anyway, such as for a restore, runs the
-                // callback, which closes the socket with the retry close. A Home that began to close after
-                // getSharedDrive found it refuses with a 503.
+                // Only a user who may read holds the Home, until cleanupSession lets go. A Home that closes anyway,
+                // such as for a restore, closes the socket with the retry close.
                 session.releaseHome = drive.holdHome(() =>
                     rawWs.close(COLLAB_STORAGE_UNAVAILABLE_CLOSE, COLLAB_STORAGE_UNAVAILABLE_REASON),
                 );
@@ -236,7 +231,7 @@ export const collabRouter = new Elysia({
                 // finds this one. A frame that waits for `opened` finds no document once the session is cleaned up.
                 const current = await getUserById(user.id);
                 if (!current || !(await drive.canRead(mountId, pathId, current))) {
-                    ws.close(1008, 'Access revoked');
+                    ws.close(COLLAB_ACCESS_LOST_CLOSE, 'Access revoked');
                     cleanupSession(session, rawWs);
                 }
             } catch (err) {
@@ -247,9 +242,8 @@ export const collabRouter = new Elysia({
                 } else {
                     console.error('Error opening collab session:', err);
                 }
-                // A failure HTTP would answer with a 5xx makes the client retry. That includes a home a restore
-                // is replacing. If the restore finishes, the reconnect names a stale epoch and the tab reloads.
-                // If it fails, the epoch stays, and the tab syncs the edits it holds.
+                // A 5xx makes the client retry, a home a restore is replacing included: the reconnect then names a
+                // stale epoch and reloads, or, if the restore failed, syncs the edits it holds.
                 if (status >= 500) {
                     ws.close(COLLAB_STORAGE_UNAVAILABLE_CLOSE, COLLAB_STORAGE_UNAVAILABLE_REASON);
                 } else if (status === 410) {

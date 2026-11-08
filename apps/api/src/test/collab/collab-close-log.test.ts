@@ -77,9 +77,10 @@ describe('collab close log', () => {
             const ws = new WebSocket(`${socketBase}/${doc.id}`, {
                 headers: { cookie: `better-auth.session_token=${user.sessionToken}` },
             } as unknown as string[]);
-            await new Promise<void>((resolve) => {
-                ws.onclose = () => resolve();
+            const closed = await new Promise<number>((resolve) => {
+                ws.onclose = ({ code }) => resolve(code);
             });
+            expect(closed).toBe(1008);
             const refusals = logs.mock.calls.map(([line]) => String(line)).filter((l) => l.includes('refused'));
             expect(refusals).toEqual([`[collab] open refused path=${doc.id} status=404: File is in trash`]);
             expect(errors.mock.calls.some(([line]) => String(line).startsWith('Error opening collab session'))).toBe(
