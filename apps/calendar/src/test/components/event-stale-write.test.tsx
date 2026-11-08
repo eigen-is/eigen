@@ -391,6 +391,42 @@ test('typing after a refusal answers to what was reloaded, so a change after it 
     expect(toasts).toEqual([STALE_TOAST, STALE_TOAST]);
 });
 
+test('a refusal moves the etag once: a change after it is refused again, with nothing typed since', async () => {
+    await openEdit();
+    await typeDescription('Bring the x-rays');
+    changeFieldsElsewhere({ location: 'New practice' });
+    await click('Save');
+    expect(toasts).toEqual([STALE_TOAST]);
+
+    changeFieldsElsewhere({ description: "A colleague's note" });
+    await refetch();
+    expect(descriptionField().value).toBe('Bring the x-rays');
+
+    await click('Save');
+    expect(server.writes.map(({ etag }) => etag)).toEqual(['v1', 'v2']);
+    expect(server.event.description).toBe("A colleague's note");
+    expect(toasts).toEqual([STALE_TOAST, STALE_TOAST]);
+
+    await click('Save');
+    expect(server.writes.map(({ etag }) => etag)).toEqual(['v1', 'v2', 'v3']);
+    expect(server.event.description).toBe('Bring the x-rays');
+    expect(dialogTitles()).toEqual([]);
+});
+
+test('a clean form refused over a change it had not seen still follows the event', async () => {
+    await openEdit();
+    changeElsewhere('First change');
+    await click('Save');
+    expect(toasts).toEqual([STALE_TOAST]);
+
+    changeElsewhere('Second change');
+    await refetch();
+    await click('Save');
+    expect(server.writes.map(({ etag }) => etag)).toEqual(['v1', 'v3']);
+    expect(toasts).toEqual([STALE_TOAST]);
+    expect(server.event.title).toBe('Second change');
+});
+
 test('a clean form follows the event, and its Save answers to what it shows', async () => {
     await openEdit();
     changeElsewhere('Dentist, moved by a colleague');

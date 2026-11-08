@@ -31,7 +31,7 @@ import type { Attendee, CalendarEventOccurrence } from '@workspace/lib/types/cal
 import { ConfirmDialog, FormDialog, FormDialogForm } from '@workspace/ui';
 import { AttendeeList } from '@workspace/ui/components/calendar';
 import { UsersRound } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { AttendeeEditor } from './attendee-editor';
 import { buildEventTimes, calendarKey } from './calendar-utils';
 import { EventFormFields } from './event-form-fields';
@@ -74,17 +74,23 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
     const [showMoveConfirm, setShowMoveConfirm] = useState(false);
 
     // The etag typed edits answer to: the event's when typing began, so a save can't overwrite a change it never showed.
-    // With nothing typed, or after a refusal has told the user to check, a save answers to the event as it is now.
-    const heldEtag = useRef<string | null>(null);
+    // With nothing typed a save answers to the event as it is now. A refusal lets it move on once, to the event the toast
+    // says to check.
+    const [heldEtag, setHeldEtag] = useState<string | null>(null);
+    const [refused, setRefused] = useState(false);
+    if (refused && event.etag !== heldEtag) {
+        setHeldEtag(event.etag);
+        setRefused(false);
+    }
 
     const times = typed.times ?? fieldTimes(event);
     const edit = (change: TypedFields) => {
-        heldEtag.current ??= event.etag;
+        setHeldEtag((held) => held ?? event.etag);
         setTyped((current) => ({ ...current, ...change }));
     };
     // One user action can set several of these in a row, so each builds on the last.
     const editTimes = (change: Partial<typeof times>) => {
-        heldEtag.current ??= event.etag;
+        setHeldEtag((held) => held ?? event.etag);
         setTyped((current) => ({ ...current, times: { ...(current.times ?? times), ...change } }));
     };
 
@@ -134,7 +140,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
     if (isRecurring) moveLossReasons.push("modified occurrences of the series won't move");
 
     const write = async (action: RecurringAction) => {
-        const etag = heldEtag.current ?? event.etag;
+        const etag = heldEtag ?? event.etag;
         const { start, end } = buildEventTimes(allDay, startDate, endDate, startTime, endTime);
 
         const data = { ...event.data, attendees: attendees.length > 0 ? attendees : undefined };
@@ -175,7 +181,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
                     etag,
                     ...seriesUpdates,
                 });
-                heldEtag.current = updated.etag;
+                setHeldEtag(updated.etag);
                 await moveEvent.mutateAsync({
                     calendarId: event.calendarId,
                     id: targetId,
@@ -209,19 +215,19 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
                     etag,
                     rrule: truncated,
                 });
-                heldEtag.current = updated.etag;
+                setHeldEtag(updated.etag);
             }
             await createEvent.mutateAsync({ calendarId: event.calendarId, ...updates });
         }
     };
 
-    // A refused save goes back to the form the toast says to check, and its next save answers to the reloaded event.
+    // A refused save goes back to the form the toast says to check.
     const save = async (action: RecurringAction) => {
         try {
             await write(action);
         } catch (error) {
             if (isStaleWrite(error)) {
-                heldEtag.current = null;
+                setRefused(heldEtag !== null);
                 setShowRecurringDialog(false);
                 setShowMoveConfirm(false);
             }
