@@ -2,18 +2,10 @@
 // sheets and their filters.
 
 import type { Sheet } from '@workspace/lib/sheets';
-import { escapeXml, stripNonXmlChars } from '@workspace/lib/xml';
-import {
-    MAX_SHEET_NAME_LENGTH,
-    quoteSheetName,
-    rangeToA1,
-    SHEET_NAME_END_QUOTES,
-    SHEET_NAME_FORBIDDEN,
-    sheetNameKey,
-} from '@workspace/sheet/engine';
+import { escapeXml } from '@workspace/lib/xml';
+import { legalSheetNames, quoteSheetName, rangeToA1 } from '@workspace/sheet/engine';
 import type { Lost } from '../../../document/transform/protocol';
 import { R_NS, SML_NS } from '../../../ooxml/ooxml';
-import { cut } from './strings';
 import { filterArea } from './worksheet';
 
 // Excel opens on the active tab, the first unless told, so a hidden first sheet would open hidden. Excel refuses to hide
@@ -51,32 +43,13 @@ export function workbookXml(sheets: Sheet[], names: string[], ids: string[], act
     ].join('');
 }
 
-// Excel refuses a name that breaks the sheet-name rule, an empty one, History, and one another sheet holds in any case.
-// A name it takes is kept, and the first sheet holding a name keeps it. Any other name is repaired, and when that
-// clashes it is numbered as Excel numbers a copy, past every name the workbook holds. Formulas naming a repaired sheet
-// keep the name they had.
+// Excel keeps History for itself, and each name a sheet changes for it is counted. Formulas naming a repaired sheet keep
+// the name they had.
 export function sheetNames(sheets: Pick<Sheet, 'name'>[], lost: Lost): string[] {
-    const taken = new Set([sheetNameKey('History')]);
-    const kept = sheets.map(({ name }) => {
-        if (name !== legalName(name) || taken.has(sheetNameKey(name))) return undefined;
-        taken.add(sheetNameKey(name));
-        return name;
-    });
-    return kept.map((name, index) => {
-        if (name !== undefined) return name;
-        lost('sheet-names-changed');
-        const base = legalName(sheets[index].name) || `Sheet${index + 1}`;
-        let candidate = base;
-        for (let copy = 2; taken.has(sheetNameKey(candidate)); copy++) {
-            const suffix = ` (${copy})`;
-            candidate = `${cut(base, MAX_SHEET_NAME_LENGTH - suffix.length)}${suffix}`;
-        }
-        taken.add(sheetNameKey(candidate));
-        return candidate;
-    });
-}
-
-function legalName(name: string): string {
-    const replaced = stripNonXmlChars(name).replace(SHEET_NAME_FORBIDDEN, '_');
-    return cut(replaced, MAX_SHEET_NAME_LENGTH).replace(SHEET_NAME_END_QUOTES, '');
+    const written = legalSheetNames(
+        sheets.map(({ name }) => name),
+        ['History'],
+    );
+    for (const [index, { name }] of sheets.entries()) if (written[index] !== name) lost('sheet-names-changed');
+    return written;
 }

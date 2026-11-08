@@ -9,6 +9,9 @@ import {
     cellWrapsText,
     DEFAULT_SHEET_COLUMN_COUNT,
     DEFAULT_SHEET_ROW_COUNT,
+    legalSheetNames,
+    renameSheetTexts,
+    sheetFinder,
     sheetNameKey,
 } from '@workspace/sheet/engine';
 import { ApiError } from '../../core/errors';
@@ -70,26 +73,21 @@ export function readXlsx(
         const losses = lossCounter();
         const inline = nameInliner(book.definedNames, losses.lost, emitted.translated.charge);
         const sheets: Sheet[] = [];
-        // Excel refuses two sheets of one name, in any case: the first keeps it, so a formula naming it means that one,
-        // and a later one is numbered as Excel numbers a copy, past every name the workbook holds.
-        const taken = new Set(book.sheets.map(({ name }) => sheetNameKey(name)));
-        const named = new Set<string>();
-        // A chart's refs name sheets as the workbook writes them: the first of a name is the one they mean.
+        // A file may hold a name a sheet can't have, or two of one name. Its formulas and a chart's refs name sheets as
+        // the file writes them, so they mean the first of a name, and what names a repaired sheet follows it.
+        const names = legalSheetNames(book.sheets.map(({ name }) => name));
+        const repaired = new Map<string, string>();
         const sheetIds = new Map<string, string>();
         const drawings: Drawing[] = [];
-        for (const { name: written, path, hidden, chartSheet } of book.sheets) {
+        for (const [index, { name: written, path, hidden, chartSheet }] of book.sheets.entries()) {
             const part = book.pkg.zip.read(path);
             if (!part) continue;
             const id = `sheet-${sheets.length}`;
-            if (!sheetIds.has(sheetNameKey(written))) sheetIds.set(sheetNameKey(written), id);
-            let name = written;
-            if (named.has(sheetNameKey(written))) {
-                let copy = 2;
-                while (taken.has(sheetNameKey(`${written} (${copy})`))) copy++;
-                name = `${written} (${copy})`;
+            const name = names[index];
+            if (!sheetIds.has(sheetNameKey(written))) {
+                sheetIds.set(sheetNameKey(written), id);
+                if (name !== written) repaired.set(written, name);
             }
-            named.add(sheetNameKey(name));
-            taken.add(sheetNameKey(name));
             // The rest is parsed before the rows, so the merges and links are placed when the grid reads its cells.
             const { rest, children } = readInBatches(part, 'sheetData', 'row', reads);
             // A damaged rels part costs the external links, not the workbook.
@@ -170,7 +168,12 @@ export function readXlsx(
         });
         // Excel refuses to hide every sheet, and the editor opens on one it shows.
         if (sheets.every((sheet) => sheet.hide === 1)) delete sheets[0].hide;
-        return { sheets, media: files.media, warnings: losses.warnings() };
+        const findRepaired = sheetFinder([...repaired.keys()].map((name) => ({ name })));
+        return {
+            sheets: sheets.map((sheet) => renameSheetTexts(sheet, findRepaired, repaired)),
+            media: files.media,
+            warnings: losses.warnings(),
+        };
     } catch (error) {
         throw importError(error, 'xlsx');
     }

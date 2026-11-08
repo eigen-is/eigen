@@ -1,9 +1,17 @@
 // A sheet's name: the one it takes when the workbook already holds its own, such as a copy the tab menu's Duplicate
-// makes or a tab Import… brings, and a rename, which every text naming the sheet follows. It is DOM-free, so the editor
-// names copies as the API does, and a live tab renames as the op replay does.
+// makes or a tab Import… brings, the one it takes in a file that breaks the rule, and a rename, which every text naming
+// the sheet follows. It is DOM-free, so the editor names copies as the API does, and a live tab renames as the op
+// replay does.
 
 import type { Sheet } from '@workspace/lib/sheets';
-import { MAX_SHEET_NAME_LENGTH, sheetFinder, sheetNameKey } from './a1-notation';
+import { stripNonXmlChars } from '@workspace/lib/xml';
+import {
+    MAX_SHEET_NAME_LENGTH,
+    SHEET_NAME_END_QUOTES,
+    SHEET_NAME_FORBIDDEN,
+    sheetFinder,
+    sheetNameKey,
+} from './a1-notation';
 import { renameSheetRefs, rewriteSheetFormulas } from './formula-shift';
 import { iscelldata } from './formula-utils';
 
@@ -80,9 +88,42 @@ export function copySheetName(name: string, taken: readonly string[]): string {
     do {
         const postfix = `${copyWord + (index || '')})`;
         const lengthLimit = MAX_SHEET_NAME_LENGTH - postfix.length;
-        copy = base.length > lengthLimit ? `${base.slice(0, lengthLimit - 1)}…` : base;
+        copy = base.length > lengthLimit ? `${fit(base, lengthLimit - 1)}…` : base;
         copy += postfix;
         index = (index || 1) + 1;
     } while (takenKeys.includes(sheetNameKey(copy)));
     return copy;
+}
+
+// What a file's sheets are called, each name following the sheet-name rule and unique in any case. The first holding a
+// name keeps it, and any other is repaired, then numbered as Excel numbers a copy, past every name the workbook holds.
+// `reserved` lists names a writer may not use at all.
+export function legalSheetNames(names: readonly string[], reserved: readonly string[] = []): string[] {
+    const taken = new Set(reserved.map(sheetNameKey));
+    const kept = names.map((name) => {
+        if (!name || name !== legalSheetName(name) || taken.has(sheetNameKey(name))) return undefined;
+        taken.add(sheetNameKey(name));
+        return name;
+    });
+    return kept.map((name, index) => {
+        if (name !== undefined) return name;
+        const base = legalSheetName(names[index]) || `Sheet${index + 1}`;
+        let candidate = base;
+        for (let copy = 2; taken.has(sheetNameKey(candidate)); copy += 1) {
+            const suffix = ` (${copy})`;
+            candidate = `${fit(base, MAX_SHEET_NAME_LENGTH - suffix.length)}${suffix}`;
+        }
+        taken.add(sheetNameKey(candidate));
+        return candidate;
+    });
+}
+
+function legalSheetName(name: string): string {
+    const replaced = stripNonXmlChars(name).replace(SHEET_NAME_FORBIDDEN, '_');
+    return fit(replaced, MAX_SHEET_NAME_LENGTH).replace(SHEET_NAME_END_QUOTES, '');
+}
+
+// A cut between a surrogate pair's halves leaves a character XML can't hold, which the strip takes off.
+function fit(name: string, length: number): string {
+    return name.length > length ? stripNonXmlChars(name.slice(0, length)) : name;
 }

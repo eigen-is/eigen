@@ -130,11 +130,12 @@ function isLine(value: unknown, type: 'row' | 'column'): value is number {
 }
 
 // A new sheet needs an id, because every later op names its sheet by id. The id must be one no sheet has yet, or those
-// ops would be ambiguous. A name is the one other field every reader of a sheet needs.
+// ops would be ambiguous. A name is the one other field every reader of a sheet needs, and it follows the sheet-name
+// rule, or a rename's undo could not restore it.
 export function isNewSheet(v: unknown, sheets: { id?: string }[]): v is Sheet & { id: string } {
     if (!isRecord(v)) return false;
     const { id, name } = v;
-    return typeof id === 'string' && typeof name === 'string' && !sheets.some((s) => s.id === id);
+    return typeof id === 'string' && typeof name === 'string' && isSheetName(name) && !sheets.some((s) => s.id === id);
 }
 
 // A row or column op moves the cells after it on its sheet, and it needs the sheet's matrix to apply.

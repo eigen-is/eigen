@@ -495,6 +495,8 @@ A chart is `renderSheetChartSvg`, the editor's own drawing, in a white box, so t
 
 File › Import… can add an xlsx's sheets as new tabs ([EXPORT.md § A replace saves a version first](EXPORT.md#a-replace-saves-a-version-first)). `appendSheetsToYjs` (`apps/api/src/lib/document/sheets.ts`) pushes them as one batch of `addSheet` ops after the workbook's own, never as a new snapshot. An open tab applies the batch as it applies a peer's new tab, so it keeps its view and its undo, where a new snapshot would remount every tab ([§ A tab keeps its grid](#a-tab-keeps-its-grid-through-a-compaction-of-the-base-it-holds)).
 
+The reader repairs a name the tab bar would refuse, such as one past 31 characters or holding a `:`, and a second sheet of one name (`legalSheetNames` in `engine/sheet-name.ts`, which the writer uses too), and what names a repaired sheet follows it. Otherwise a rename's undo would fail on the old name, and retyping it would be refused. A peer's `addSheet` with such a name doesn't apply, on a live tab or in the replay (`isNewSheet`).
+
 Every imported sheet takes a fresh id: the importer numbers its sheets `sheet-0` and on, which a workbook's own ids can match. A sheet whose name the workbook holds is renamed by `copySheetName` (`engine/sheet-name.ts`), the rule the tab menu's Duplicate uses, so `Data` comes in as `Data(Copy)`. The names are compared ignoring case, as Excel and a rename in the tab bar compare them. What the file says about its own sheets follows the new names and ids, so its formulas still read the cells they read in Excel:
 
 | Reference | Names a sheet by | Rewritten through |

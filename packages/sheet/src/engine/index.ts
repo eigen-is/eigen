@@ -1,12 +1,9 @@
 export {
     findSheetByName,
-    MAX_SHEET_NAME_LENGTH,
     parseA1Range,
     quoteSheetName,
     rangeToA1,
     rowIndexToLabel,
-    SHEET_NAME_END_QUOTES,
-    SHEET_NAME_FORBIDDEN,
     sheetFinder,
     sheetNameKey,
     toA1,
@@ -50,7 +47,7 @@ export { DOTTED_FUNCTIONS } from './parser/evaluate-by-operator/operator/formula
 export { recalcSheets } from './recalc';
 export { replaySheetsOps, withMaterializedData } from './replay-ops';
 export { normalizeSheetConfig } from './sheet-config';
-export { copySheetName, renameSheetTexts } from './sheet-name';
+export { copySheetName, legalSheetNames, renameSheetTexts } from './sheet-name';
 export type {
     CellResolver,
     EvaluationResult,
