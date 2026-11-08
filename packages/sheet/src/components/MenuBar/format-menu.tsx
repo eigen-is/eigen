@@ -326,8 +326,7 @@ function WrappingSubmenu() {
                             const d = getFlowdata(ctx);
                             const input = refs.cellInput.current;
                             if (d == null || !input) return;
-                            const canvas = refs.canvas.current?.getContext('2d') ?? undefined;
-                            updateFormat(ctx, input, d, 'tb', 'wrap', canvas);
+                            updateFormat(ctx, input, d, 'tb', 'wrap');
                         });
                     }}
                 >
@@ -363,8 +362,7 @@ function FontSizeSubmenu() {
                         onClick={() => {
                             setContext((ctx) => {
                                 const input = refs.cellInput.current;
-                                const canvas = refs.canvas.current?.getContext('2d') ?? undefined;
-                                if (input) handleTextSize(ctx, input, num, canvas);
+                                if (input) handleTextSize(ctx, input, num);
                             });
                         }}
                     >

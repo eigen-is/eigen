@@ -45,8 +45,7 @@ export function FormatToolbar({ caret }: { caret: RunStyle | null }) {
             if (input) apply(ctx, input);
         });
     };
-    const setFontSize = (size: number) =>
-        format((ctx, input) => handleTextSize(ctx, input, size, refs.canvas.current?.getContext('2d') ?? undefined));
+    const setFontSize = (size: number) => format((ctx, input) => handleTextSize(ctx, input, size));
 
     // The row folds from its right end as the bar narrows, as the Docs bar does, so its order is its priority order.
     // Each breakpoint is the bar width at which a part fits beside the menus, measured with the font picker showing

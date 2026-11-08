@@ -13,13 +13,15 @@ import {
     getFlowdata,
     getFormulaHtml,
     handleFormulaInput,
+    handleGlobalEnter,
     isSelectionOnHiddenRowCol,
     loadCellFont,
     moveHighlightCell,
     rangeHightlightselected,
-    updateCell,
+    typesIntoEditor,
     valueShowEs,
 } from '../../state';
+
 import { ContentEditable } from '../SheetOverlay/ContentEditable';
 import { FormulaHint } from '../SheetOverlay/FormulaHint';
 import { FormulaSearch } from '../SheetOverlay/FormulaSearch';
@@ -117,23 +119,7 @@ export function FxEditor() {
                 if (draftCtx.editingCellPosition.length > 0) {
                     switch (key) {
                         case 'Enter': {
-                            const lastEditingCellPosition = [...draftCtx.editingCellPosition];
-                            updateCell(
-                                draftCtx,
-                                draftCtx.editingCellPosition[0],
-                                draftCtx.editingCellPosition[1],
-                                fxInput,
-                            );
-                            draftCtx.selections = [
-                                {
-                                    row: [lastEditingCellPosition[0], lastEditingCellPosition[0]],
-                                    column: [lastEditingCellPosition[1], lastEditingCellPosition[1]],
-                                    row_focus: lastEditingCellPosition[0],
-                                    column_focus: lastEditingCellPosition[1],
-                                },
-                            ];
-                            moveHighlightCell(draftCtx, 'down', 1, 'rangeOfSelect');
-                            e.preventDefault();
+                            handleGlobalEnter(draftCtx, fxInput, e.nativeEvent);
                             e.stopPropagation();
                             break;
                         }
@@ -144,16 +130,11 @@ export function FxEditor() {
                             e.stopPropagation();
                             break;
                         }
-                        case 'ArrowLeft': {
-                            rangeHightlightselected(draftCtx, fxInput);
-                            break;
-                        }
+                        case 'ArrowLeft':
                         case 'ArrowRight': {
                             rangeHightlightselected(draftCtx, fxInput);
                             break;
                         }
-                        default:
-                            break;
                     }
                 }
             });
@@ -173,31 +154,13 @@ export function FxEditor() {
     const onChange = useCallback(() => {
         if (refs.fxInput.current) loadCellFont(editingCell, refs.fxInput.current.innerText);
         const e = lastKeyDownEventRef.current;
-        if (!e) return;
-        const kcode = e.keyCode;
-        if (!kcode) return;
+        if (!e?.keyCode || !typesIntoEditor(e)) return;
 
-        if (
-            !(
-                (kcode >= 112 && kcode <= 123) ||
-                kcode <= 46 ||
-                kcode === 144 ||
-                kcode === 108 ||
-                e.ctrlKey ||
-                e.altKey ||
-                (e.shiftKey && (kcode === 37 || kcode === 38 || kcode === 39 || kcode === 40))
-            ) ||
-            kcode === 8 ||
-            kcode === 32 ||
-            kcode === 46 ||
-            (e.ctrlKey && kcode === 86)
-        ) {
-            setContext((draftCtx) => {
-                const fxInput = refs.fxInput.current;
-                if (!fxInput) return;
-                handleFormulaInput(draftCtx, refs.cellInput.current, fxInput, kcode, recentText.current);
-            });
-        }
+        setContext((draftCtx) => {
+            const fxInput = refs.fxInput.current;
+            if (!fxInput) return;
+            handleFormulaInput(draftCtx, refs.cellInput.current, fxInput, e.keyCode, recentText.current);
+        });
     }, [editingCell, refs.cellInput, refs.fxInput, setContext]);
 
     const allowEdit = context.allowEdit !== false && !isOnHiddenRowCol;

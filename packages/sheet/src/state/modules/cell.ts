@@ -49,7 +49,7 @@ import {
     runsHtml,
     sameRunStyle,
 } from './inline-string';
-import { getCellTextInfo } from './text';
+import { getCellTextInfo, measuringContext } from './text';
 import { ID_CARD_NUMBER, isPlainNumber, isRealNull, isRealNum, valueIsError } from './validation';
 import { addValidation, clearValidations, validationAt } from './validation-rules';
 
@@ -546,7 +546,6 @@ export function updateCell(
     $input?: HTMLDivElement | null,
     // biome-ignore lint/suspicious/noExplicitAny: forwarded straight to setCellValue, same scalar/Cell-patch union
     value?: any,
-    canvas?: CanvasRenderingContext2D,
 ) {
     const inputText = $input?.innerText;
     const flowdata = getFlowdata(ctx);
@@ -666,13 +665,8 @@ export function updateCell(
         if (!(cfg.columnlen?.[c] && cfg.rowlen?.[r])) {
             const cellWidth = cfg.columnlen?.[c] || ctx.defaultcollen;
 
-            const textInfo = canvas
-                ? getCellTextInfo(written, canvas, {
-                      r,
-                      c,
-                      cellWidth,
-                  })
-                : null;
+            const measuring = measuringContext();
+            const textInfo = measuring && getCellTextInfo(written, measuring, { r, c, cellWidth });
 
             let currentRowLen = defaultrowlen;
             if (textInfo?.textHeightAll != null) {

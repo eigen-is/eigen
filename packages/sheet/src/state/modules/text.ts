@@ -1,8 +1,9 @@
 // Measures and lays out a cell's text for the canvas: the font set it draws in, where its lines wrap,
 // and where each piece of text sits, a rich cell's runs included. The painter and the row's auto height
-// both lay out here. Text measurements are cached until clearMeasureTextCache, which the font watcher
-// calls when a font slice loads before it tells the grids to redraw. The cell editors ask for the font
-// slices of the text being typed, so a commit measures the real face.
+// both lay out here, the painter on its grid's canvas and a commit on measuringContext. Text measurements
+// are cached until clearMeasureTextCache, which the font watcher calls when a font slice loads before it
+// tells the grids to redraw. The cell editors ask for the font slices of the text being typed, so a commit
+// measures the real face.
 
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { cellFontName, cellFontSize, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
@@ -152,6 +153,15 @@ export function getFontSet(format: CellStyle | null | undefined) {
 // face.
 export function loadCellFont(cell: CellStyle | null | undefined, text: string) {
     document.fonts.load(getFontSet(cell), text).catch(() => {});
+}
+
+let measuring: CanvasRenderingContext2D | null = null;
+
+// The context for a measure outside a draw, such as a commit fitting its row. Every measure sets the font it needs
+// first, and no draw uses this context, so a value it keeps can't disagree with what a grid shows.
+export function measuringContext() {
+    measuring ??= document.createElement('canvas').getContext('2d');
+    return measuring;
 }
 
 // Measures one piece of text in the canvas's current font, or in `fontset` when the caller passes it.

@@ -90,7 +90,6 @@ export function handleCellAreaMouseDown(
     cellInput: HTMLDivElement,
     container: HTMLDivElement,
     fxInput?: HTMLDivElement | null,
-    canvas?: CanvasRenderingContext2D,
 ) {
     ctx.filterContextMenu = undefined;
     const flowdata = getFlowdata(ctx);
@@ -391,7 +390,7 @@ export function handleCellAreaMouseDown(
             e.preventDefault();
             return; // skip ctx.selections to prevent clearing cellInput
         }
-        updateCell(ctx, ctx.editingCellPosition[0], ctx.editingCellPosition[1], cellInput, undefined, canvas);
+        updateCell(ctx, ctx.editingCellPosition[0], ctx.editingCellPosition[1], cellInput);
         ctx.selectionActive = true;
     }
     ctx.selectionActive = true;

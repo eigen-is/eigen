@@ -443,14 +443,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 setContextWithProduce((draftCtx) => {
                     const input = cellInput.current;
                     if (!input) return;
-                    handleGlobalKeyDown(
-                        draftCtx,
-                        input,
-                        fxInput.current,
-                        nativeEvent,
-                        globalCache.current,
-                        canvas.current?.getContext('2d') ?? undefined,
-                    );
+                    handleGlobalKeyDown(draftCtx, input, fxInput.current, nativeEvent, globalCache.current);
                 });
             },
             [handleRedo, handleUndo, setContextWithProduce],

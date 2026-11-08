@@ -9,7 +9,7 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { Window } from 'happy-dom';
 import type { Context } from '../../../state/context';
-import { handleGlobalKeyDown } from '../../../state/events/keyboard';
+import { handleGlobalKeyDown, typesIntoEditor } from '../../../state/events/keyboard';
 import { selectionCache } from '../../../state/modules/selection';
 import type { Cell, DataValidationRule, GlobalCache, SingleRange } from '../../../state/types';
 import { contextFactory } from '../factories/context';
@@ -344,5 +344,25 @@ describe('handleGlobalKeyDown — letter shortcuts', () => {
         keyDown(ctx, 'x', { mod: true, code: 'KeyB' });
         expect(ctx.pasteIsCut).toBe(true);
         expect(ctx.sheets[0].data?.[0][0]?.bl).toBeUndefined();
+    });
+});
+
+describe('typesIntoEditor', () => {
+    const typed = (keyCode: number, modifiers: { ctrlKey?: boolean; altKey?: boolean } = {}) =>
+        typesIntoEditor({ keyCode, ctrlKey: false, altKey: false, ...modifiers } as KeyboardEvent);
+
+    test('a letter, Backspace, Space and Delete type', () => {
+        for (const keyCode of [65, 8, 32, 46]) expect(typed(keyCode)).toBe(true);
+    });
+
+    test('a function key, a system key, NumLock and an arrow do not', () => {
+        for (const keyCode of [112, 123, 13, 27, 144, 108, 37]) expect(typed(keyCode)).toBe(false);
+    });
+
+    test('of the modified letters only Ctrl+V types', () => {
+        expect(typed(86, { ctrlKey: true })).toBe(true);
+        expect(typed(65, { ctrlKey: true })).toBe(false);
+        expect(typed(65, { altKey: true })).toBe(false);
+        expect(typed(8, { altKey: true })).toBe(true);
     });
 });

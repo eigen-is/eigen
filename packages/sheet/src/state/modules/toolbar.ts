@@ -27,7 +27,8 @@ import {
 import { colLocationByIndex, rowLocationByIndex } from './location';
 import { mergeCells } from './merge';
 import { selectIsOverlap } from './selection';
-import { getCellTextInfo } from './text';
+
+import { getCellTextInfo, measuringContext } from './text';
 import { hasPartMC, isRealNull, isRealNum } from './validation';
 
 export function updateFormatCell(
@@ -39,7 +40,6 @@ export function updateFormatCell(
     row_ed: number,
     col_st: number,
     col_ed: number,
-    canvas?: CanvasRenderingContext2D,
 ) {
     if (isNil(d) || isNil(attr)) {
         return;
@@ -145,12 +145,10 @@ export function updateFormatCell(
                     const cellWidth = cfg.columnlen?.[c] || ctx.defaultcollen;
                     // A larger size or wrapped lines need a taller row. The row grows to fit and never
                     // shrinks here, as another cell in it may need the height.
-                    if ((attr === 'fs' || attr === 'tb') && canvas) {
-                        const textInfo = getCellTextInfo(value, canvas, {
-                            r,
-                            c,
-                            cellWidth,
-                        });
+                    const measuring =
+                        attr === 'fs' || (attr === 'tb' && foucsStatus === '2') ? measuringContext() : null;
+                    if (measuring) {
+                        const textInfo = getCellTextInfo(value, measuring, { r, c, cellWidth });
                         if (textInfo?.textHeightAll == null) continue;
                         const rowHeight = round(textInfo.textHeightAll);
                         const currentRowHeight = cfg.rowlen?.[r] || ctx.defaultrowlen;
@@ -172,7 +170,6 @@ export function updateFormat(
     d: CellMatrix,
     attr: keyof Cell,
     foucsStatus: string | number,
-    canvas?: CanvasRenderingContext2D,
 ) {
     if (ctx.allowEdit === false) return;
 
@@ -186,7 +183,7 @@ export function updateFormat(
         const [row_st, row_ed] = selection.row;
         const [col_st, col_ed] = selection.column;
 
-        updateFormatCell(ctx, d, attr, foucsStatus, row_st, row_ed, col_st, col_ed, canvas);
+        updateFormatCell(ctx, d, attr, foucsStatus, row_st, row_ed, col_st, col_ed);
     });
 }
 
@@ -208,17 +205,11 @@ function toggleAttr(ctx: Context, cellInput: HTMLDivElement, attr: 'bl' | 'it' |
     updateFormat(ctx, cellInput, flowdata, attr, isOn ? 0 : 1);
 }
 
-function setAttr(
-    ctx: Context,
-    cellInput: HTMLDivElement,
-    attr: keyof Cell,
-    value: string | number,
-    canvas?: CanvasRenderingContext2D,
-) {
+function setAttr(ctx: Context, cellInput: HTMLDivElement, attr: keyof Cell, value: string | number) {
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
 
-    updateFormat(ctx, cellInput, flowdata, attr, value, canvas);
+    updateFormat(ctx, cellInput, flowdata, attr, value);
 }
 
 function checkNoNullValue(cell: Cell | null) {
@@ -841,13 +832,8 @@ export function handleFreeze(ctx: Context, type: string) {
     }
 }
 
-export function handleTextSize(
-    ctx: Context,
-    cellInput: HTMLDivElement,
-    size: number,
-    canvas?: CanvasRenderingContext2D,
-) {
-    setAttr(ctx, cellInput, 'fs', size, canvas);
+export function handleTextSize(ctx: Context, cellInput: HTMLDivElement, size: number) {
+    setAttr(ctx, cellInput, 'fs', size);
 }
 
 export function handleLink(ctx: Context) {

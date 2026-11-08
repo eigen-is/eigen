@@ -82,7 +82,6 @@ export const SheetOverlay: React.FC = () => {
                         cellInput,
                         cellArea,
                         refs.fxInput.current,
-                        refs.canvas.current?.getContext('2d') ?? undefined,
                     );
 
                     // Focusing the off-screen cell input scrolls the cell area, and the scroll or the focus shift
@@ -101,7 +100,7 @@ export const SheetOverlay: React.FC = () => {
                 });
             }
         },
-        [setContext, refs.globalCache, refs.cellInput, refs.cellArea, refs.fxInput, refs.canvas],
+        [setContext, refs.globalCache, refs.cellInput, refs.cellArea, refs.fxInput],
     );
 
     const cellAreaDoubleClick = useCallback(
