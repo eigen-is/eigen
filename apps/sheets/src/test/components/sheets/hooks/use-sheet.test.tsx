@@ -12,8 +12,14 @@ const { act, createElement, createRef } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const realCollab = { ...(await import('@workspace/lib/collab')) };
 const realSheets = { ...(await import('@workspace/lib/sheets')) };
-const { decodeSheetsSnapshot, encodeSheetsSnapshot, readSheetsBase, readSheetsSnapshotJson, writeSheetsSnapshot } =
-    realSheets;
+const {
+    decodeSheetsSnapshot,
+    decodeSheetsWorkbook,
+    encodeSheetsSnapshot,
+    readSheetsBase,
+    readSheetsSnapshotJson,
+    writeSheetsSnapshot,
+} = realSheets;
 const { Workbook } = await import('@workspace/sheet');
 const { replaySheetsOps } = await import('@workspace/sheet/engine');
 type Op = import('@workspace/sheet').Op;
@@ -65,10 +71,10 @@ mock.module('@workspace/lib/collab', () => ({
 }));
 mock.module('@workspace/lib/sheets', () => ({
     ...realSheets,
-    decodeSheetsSnapshot: (json: string) => {
+    decodeSheetsWorkbook: (json: string) => {
         decodes++;
         if (decodeFails) throw new Error('decode failed');
-        return decodeSheetsSnapshot(json);
+        return decodeSheetsWorkbook(json);
     },
 }));
 afterAll(() => {

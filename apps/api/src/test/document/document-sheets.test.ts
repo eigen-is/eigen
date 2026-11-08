@@ -77,7 +77,7 @@ describe('document/sheets', () => {
         await expect(readSheets(mount, path)).rejects.toThrow('data.db missing');
     });
 
-    test('reads doc with neither snapshot nor ops → returns empty Sheet[]', async () => {
+    test('a doc with neither snapshot nor ops reads as the sheet a tab opening it shows', async () => {
         const sheetsPath = await drivePost<DrivePath>(
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
@@ -87,13 +87,13 @@ describe('document/sheets', () => {
         );
 
         const home = await getHome(ctx.alice.user.id);
-        // Materialise the data.db without writing any snapshot or ops
-        await home.drive.getCollabDocument(mountId, sheetsPath.id);
+        const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
 
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
         const { sheets: result } = await readSheets(mount, path);
 
-        expect(result).toEqual([]);
+        expect(result.map((sheet) => sheet.id)).toEqual(['sheet-1']);
+        expect(readLiveSheets(collab.doc).map((sheet) => sheet.id)).toEqual(['sheet-1']);
     });
 
     test('reads snapshot-only doc → returns parsed Sheet[]', async () => {
