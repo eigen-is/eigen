@@ -7,7 +7,7 @@ Audited 2026-11-08 at `594bc63df` on `api-audit`. Six reviewers each read one ar
 Like ROADMAP and the proposals, this doc holds only open work: strike a finding when it is fixed or ruled out, and delete the doc when it is empty.
 
 **The owner's rulings (2026-11-08).**
-- The measure of every unit: the code ends up flatter, with fewer patches on patches and fixes on fixes, fewer lines, and easier to understand.
+- The measure of every unit: a simple, clean, stable, future proof design, flatter and easier to understand, with fewer patches on patches. Fewer lines usually follow, but they are not the goal. The cleanest code may accept a loss, such as a less exact error message, but that is a judgment per case and no rule.
 - Adding tests is fine when they add real value. Lines are judged on production code.
 - The goal is cleaner and simpler code. A product loss that removes a whole mechanism is welcome; there is no backward compatibility to keep, stored formats included.
 - U2 is accepted: once another user edits, your own row, column or sheet insert or delete can no longer be undone. Pick the simplest cut rule that removes the machinery; a peer batch on that sheet, or any peer batch, are both fine. U1 is folded into U2, and U3 (the alternative if U2 were declined) is ruled out.
