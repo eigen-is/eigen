@@ -155,78 +155,82 @@ export const RowHeader: React.FC = () => {
     const hoverRegion = overlayRegionForCell(regions, rowFreeze, hoverLocation.row_index, 0);
 
     return (
-        <div
-            className="sheet-row-header"
-            style={{
-                width: headerWidth,
-                height: context.cellmainHeight,
-            }}
-            onMouseMove={onMouseMove}
-            onMouseDown={onMouseDown}
-            onMouseLeave={onMouseLeave}
-            onContextMenu={onContextMenu}
-            {...longPress.bind(null)}
-        >
-            {/* The container is pulled up 2px by its margin and padding. This wrapper moves 2px back down, so the
-                regions inside use grid coordinates. The offset must sit on an ancestor, because OverlayRegion pins
-                its content to the origin of its containing block. */}
-            <div style={{ position: 'absolute', top: 2, right: 0, bottom: 0, left: 0, pointerEvents: 'none' }}>
-                {/* Each region draws every selected highlight in content coordinates. Its clip shows only its own
-                    part. */}
-                {regions.map(({ pane, ...rect }) => (
-                    <OverlayRegion key={pane} {...rect}>
-                        {selectedLocation.map(({ row, row_pre, r1, r2 }) => (
+        <>
+            <div
+                className="sheet-row-header"
+                style={{
+                    width: headerWidth,
+                    height: context.cellmainHeight,
+                }}
+                onMouseMove={onMouseMove}
+                onMouseDown={onMouseDown}
+                onMouseLeave={onMouseLeave}
+                onContextMenu={onContextMenu}
+                {...longPress.bind(null)}
+            >
+                {/* The container is pulled up 2px by its margin and padding. This wrapper moves 2px back down, so the
+                    regions inside use grid coordinates. The offset must sit on an ancestor, because OverlayRegion pins
+                    its content to the origin of its containing block. */}
+                <div style={{ position: 'absolute', top: 2, right: 0, bottom: 0, left: 0, pointerEvents: 'none' }}>
+                    {/* Each region draws every selected highlight in content coordinates. Its clip shows only its own
+                        part. */}
+                    {regions.map(({ pane, ...rect }) => (
+                        <OverlayRegion key={pane} {...rect}>
+                            {selectedLocation.map(({ row, row_pre, r1, r2 }) => (
+                                <div
+                                    className="sheet-row-header-selected"
+                                    key={`${r1}-${r2}`}
+                                    style={{
+                                        top: row_pre,
+                                        height: row - row_pre - 1,
+                                        width: headerWidth,
+                                        display: 'block',
+                                    }}
+                                />
+                            ))}
+                        </OverlayRegion>
+                    ))}
+                    {/* The hover highlight and the resize handle exist once, in the region that holds the hovered row. */}
+                    <OverlayRegion {...hoverRegion}>
+                        <div
+                            className="sheet-rows-change-size"
+                            ref={rowChangeSizeRef}
+                            onMouseDown={onRowSizeHandleMouseDown}
+                            style={{
+                                top: hoverLocation.row - 5,
+                                width: headerWidth,
+                                opacity: context.rowsResizing ? 1 : 0,
+                            }}
+                        />
+                        {!context.rowsResizing && hoverLocation.row_index >= 0 ? (
                             <div
-                                className="sheet-row-header-selected"
-                                key={`${r1}-${r2}`}
+                                className="sheet-row-header-hover"
                                 style={{
-                                    top: row_pre,
-                                    height: row - row_pre - 1,
+                                    top: hoverLocation.row_pre,
+                                    height: hoverLocation.row - hoverLocation.row_pre - 1,
                                     width: headerWidth,
                                     display: 'block',
                                 }}
                             />
-                        ))}
+                        ) : null}
                     </OverlayRegion>
-                ))}
-                {/* The hover highlight and the resize handle exist once, in the region that holds the hovered row. */}
-                <OverlayRegion {...hoverRegion}>
+                </div>
+                {/* The freeze handle's position adds the scroll offset, so it stays put in the viewport while the content
+                    scrolls. It sits outside the panes, so no clip cuts it, as none cuts the body's drag lines. A freeze
+                    drag moves it directly. */}
+                <div ref={contentRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
                     <div
-                        className="sheet-rows-change-size"
-                        ref={rowChangeSizeRef}
-                        onMouseDown={onRowSizeHandleMouseDown}
+                        className="sheet-rows-freeze-handle"
+                        onMouseDown={onRowFreezeHandleMouseDown}
                         style={{
-                            top: hoverLocation.row - 5,
-                            width: headerWidth,
-                            opacity: context.rowsResizing ? 1 : 0,
+                            top: freezeHandleTop || 0,
                         }}
                     />
-                    {!context.rowsResizing && hoverLocation.row_index >= 0 ? (
-                        <div
-                            className="sheet-row-header-hover"
-                            style={{
-                                top: hoverLocation.row_pre,
-                                height: hoverLocation.row - hoverLocation.row_pre - 1,
-                                width: headerWidth,
-                                display: 'block',
-                            }}
-                        />
-                    ) : null}
-                </OverlayRegion>
+                </div>
             </div>
-            {/* The freeze handle's position adds the scroll offset, so it stays put in the viewport while the content
-                scrolls. It sits outside the panes, so no clip cuts it, as none cuts the body's drag lines. A freeze
-                drag moves it directly. */}
-            <div ref={contentRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-                <div
-                    className="sheet-rows-freeze-handle"
-                    onMouseDown={onRowFreezeHandleMouseDown}
-                    style={{
-                        top: freezeHandleTop || 0,
-                    }}
-                />
-            </div>
+            {/* Beside the header, not in it: a portal's events still bubble up the React tree, so the pointer over the
+                menu would hover the row or column behind it. */}
             {rowMenuAnchor}
-        </div>
+        </>
     );
 };

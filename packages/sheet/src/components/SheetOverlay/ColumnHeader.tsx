@@ -170,96 +170,100 @@ export const ColumnHeader: React.FC = () => {
     const hoverRegion = overlayRegionForCell(regions, colFreeze, 0, hoverLocation.col_index);
 
     return (
-        <div
-            className="sheet-col-header"
-            style={{
-                height: headerHeight,
-            }}
-            onMouseMove={onMouseMove}
-            onMouseDown={onMouseDown}
-            onMouseLeave={onMouseLeave}
-            onContextMenu={onContextMenu}
-            {...longPress.bind(null)}
-        >
-            {/* Each region draws every selected highlight in content coordinates. Its clip shows only its own part. */}
-            {regions.map(({ pane, ...rect }) => (
-                <OverlayRegion key={pane} {...rect}>
-                    {selectedLocation.map(({ col, col_pre, c1, c2 }) => (
+        <>
+            <div
+                className="sheet-col-header"
+                style={{
+                    height: headerHeight,
+                }}
+                onMouseMove={onMouseMove}
+                onMouseDown={onMouseDown}
+                onMouseLeave={onMouseLeave}
+                onContextMenu={onContextMenu}
+                {...longPress.bind(null)}
+            >
+                {/* Each region draws every selected highlight in content coordinates. Its clip shows only its own part. */}
+                {regions.map(({ pane, ...rect }) => (
+                    <OverlayRegion key={pane} {...rect}>
+                        {selectedLocation.map(({ col, col_pre, c1, c2 }) => (
+                            <div
+                                className="sheet-col-header-selected"
+                                key={`${c1}-${c2}`}
+                                style={{
+                                    left: col_pre,
+                                    width: col - col_pre - 1,
+                                    height: headerHeight,
+                                    display: 'block',
+                                }}
+                            />
+                        ))}
+                    </OverlayRegion>
+                ))}
+                {/* The hover highlight and the resize handle exist once, in the region that holds the hovered column. */}
+                <OverlayRegion {...hoverRegion}>
+                    <div
+                        className="sheet-cols-change-size"
+                        ref={colChangeSizeRef}
+                        id="sheet-cols-change-size"
+                        onMouseDown={onColSizeHandleMouseDown}
+                        onDoubleClick={onColSizeHandleDoubleClick}
+                        style={{
+                            left: hoverLocation.col - 5,
+                            height: headerHeight,
+                            opacity: context.colsResizing ? 1 : 0,
+                        }}
+                    />
+                    {!context.colsResizing && hoverLocation.col_index >= 0 ? (
                         <div
-                            className="sheet-col-header-selected"
-                            key={`${c1}-${c2}`}
+                            className="sheet-col-header-hover"
                             style={{
-                                left: col_pre,
-                                width: col - col_pre - 1,
+                                left: hoverLocation.col_pre,
+                                width: hoverLocation.col - hoverLocation.col_pre - 1,
                                 height: headerHeight,
                                 display: 'block',
                             }}
-                        />
-                    ))}
+                        >
+                            {context.allowEdit !== false && (
+                                <span
+                                    className="header-arrow"
+                                    role="button"
+                                    aria-label="Column options"
+                                    tabIndex={0}
+                                    onClick={onContextMenu}
+                                    onKeyDown={(e) => {
+                                        if (e.key !== 'Enter' && e.key !== ' ') return;
+                                        e.preventDefault();
+                                        const rect = e.currentTarget.getBoundingClientRect();
+                                        openAtPoint(rect.left, rect.bottom);
+                                    }}
+                                >
+                                    <ChevronDown
+                                        width={12}
+                                        height={12}
+                                        className="text-muted-foreground"
+                                        aria-hidden="true"
+                                    />
+                                </span>
+                            )}
+                        </div>
+                    ) : null}
                 </OverlayRegion>
-            ))}
-            {/* The hover highlight and the resize handle exist once, in the region that holds the hovered column. */}
-            <OverlayRegion {...hoverRegion}>
-                <div
-                    className="sheet-cols-change-size"
-                    ref={colChangeSizeRef}
-                    id="sheet-cols-change-size"
-                    onMouseDown={onColSizeHandleMouseDown}
-                    onDoubleClick={onColSizeHandleDoubleClick}
-                    style={{
-                        left: hoverLocation.col - 5,
-                        height: headerHeight,
-                        opacity: context.colsResizing ? 1 : 0,
-                    }}
-                />
-                {!context.colsResizing && hoverLocation.col_index >= 0 ? (
+                {/* The freeze handle's position adds the scroll offset, so it stays put in the viewport while the content
+                    scrolls. It sits outside the panes, so no clip cuts it, as none cuts the body's drag lines. A freeze
+                    drag moves it directly. */}
+                <div ref={contentRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
                     <div
-                        className="sheet-col-header-hover"
+                        className="sheet-cols-freeze-handle"
+                        onMouseDown={onColFreezeHandleMouseDown}
                         style={{
-                            left: hoverLocation.col_pre,
-                            width: hoverLocation.col - hoverLocation.col_pre - 1,
-                            height: headerHeight,
-                            display: 'block',
+                            left: freezeHandleLeft || 0,
                         }}
-                    >
-                        {context.allowEdit !== false && (
-                            <span
-                                className="header-arrow"
-                                role="button"
-                                aria-label="Column options"
-                                tabIndex={0}
-                                onClick={onContextMenu}
-                                onKeyDown={(e) => {
-                                    if (e.key !== 'Enter' && e.key !== ' ') return;
-                                    e.preventDefault();
-                                    const rect = e.currentTarget.getBoundingClientRect();
-                                    openAtPoint(rect.left, rect.bottom);
-                                }}
-                            >
-                                <ChevronDown
-                                    width={12}
-                                    height={12}
-                                    className="text-muted-foreground"
-                                    aria-hidden="true"
-                                />
-                            </span>
-                        )}
-                    </div>
-                ) : null}
-            </OverlayRegion>
-            {/* The freeze handle's position adds the scroll offset, so it stays put in the viewport while the content
-                scrolls. It sits outside the panes, so no clip cuts it, as none cuts the body's drag lines. A freeze
-                drag moves it directly. */}
-            <div ref={contentRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-                <div
-                    className="sheet-cols-freeze-handle"
-                    onMouseDown={onColFreezeHandleMouseDown}
-                    style={{
-                        left: freezeHandleLeft || 0,
-                    }}
-                />
+                    />
+                </div>
             </div>
+            {/* Beside the header, not in it: a portal's events still bubble up the React tree, so the pointer over the
+                menu would hover the row or column behind it. */}
             {columnMenuAnchor}
-        </div>
+        </>
     );
 };
