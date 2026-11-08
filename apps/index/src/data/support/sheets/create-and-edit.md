@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, spreadsheet, create, edit, cells, data]
 related: [sheets/get-started, sheets/enter-and-edit-data]
 order: 20
-updated: 2026-11-02
+updated: 2026-11-08
 ---
 
 You can create a spreadsheet directly in Drive or from inside Sheets, then enter data and edit it using the toolbar menus and keyboard shortcuts.
@@ -57,11 +57,11 @@ Use the standard keyboard shortcuts:
 - **Ctrl+X** (Mac: **⌘X**) to cut
 - **Ctrl+V** (Mac: **⌘V**) to paste
 
-You can also use **Edit → Copy**, **Edit → Cut**, and **Edit → Paste** from the menu bar.
+You can also use **Edit → Copy**, **Edit → Cut**, and **Edit → Paste** from the menu bar. If your browser doesn't let a menu read the clipboard, **Paste** shows a notice that says to press **Ctrl+V** (Mac: **⌘V**) instead.
 
 A copy takes hidden rows and columns along, as in Excel. The one exception is a filter: a copy leaves out the rows a filter hides, and a cut moves them too. The rows and columns you paste over stay hidden or shown as they were.
 
-When you paste in the same browser tab, the pasted cells bring their dropdowns, other data validation, and links. They replace the ones on the cells they land on, so a copied cell without a link or a rule removes the destination's.
+When you paste in the same browser tab, the pasted cells bring their dropdowns, other data validation, and links. They replace the ones on the cells they land on, so a copied cell without a link or a rule removes the destination's. If you edit the copied cells before you paste, the paste brings them as they are now.
 
 Copied cells paste into other apps as rows and columns, the same ones a paste in Sheets gets, for example into a text editor or a chart's **Edit data** grid.
 
@@ -71,6 +71,8 @@ Copied cells paste into other apps as rows and columns, the same ones a paste in
 - **Ctrl+Shift+Z** (Mac: **⇧⌘Z**) redoes it.
 
 Both are also available under **Edit → Undo** and **Edit → Redo**.
+
+When someone else edits the spreadsheet with you, you can no longer undo your last insert or delete of rows or columns, your last added, duplicated, deleted or renamed sheet, or anything you did before it. What you did after it still undoes.
 
 ## Format cells
 

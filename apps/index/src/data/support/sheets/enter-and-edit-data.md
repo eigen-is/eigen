@@ -6,7 +6,7 @@ category: Basics
 tags: [sheets, cells, data, editing, keyboard, formula-bar]
 related: [sheets/get-started, sheets/create-and-edit, sheets/formulas]
 order: 30
-updated: 2026-11-02
+updated: 2026-11-08
 ---
 
 You can enter text, numbers, and formulas into any cell in Sheets, then edit or clear them at any time. Changes are saved automatically.
@@ -69,3 +69,5 @@ A filled cell also takes the data validation of its source cell. Where the sourc
 - **Ctrl+Shift+Z** (Mac: **⇧⌘Z**) redoes it.
 
 Both are also available under **Edit → Undo** and **Edit → Redo**.
+
+When someone else edits the spreadsheet with you, undo stops at your last insert or delete of rows or columns, or your last added, duplicated, deleted or renamed sheet. As soon as they change anything, you can no longer undo or redo that change or anything you did before it. What you did after it still undoes.
