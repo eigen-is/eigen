@@ -1,4 +1,5 @@
-// Clearing the selection's contents, or the active image or chart, for the Delete key and the menus.
+// Clearing the selection's contents, or the active image or chart. The Delete key and the menus call it, and it
+// recomputes the formulas that read what it cleared.
 
 import type { Context } from '../context';
 import { deleteActiveObject } from '../modules/floating';

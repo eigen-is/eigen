@@ -270,7 +270,7 @@ export function checkboxChange(ctx: Context, r: number, c: number) {
     setCellValue(ctx, r, c, d, checked ? item.value2 : item.value1);
     // The write must recalculate the formulas that depend on this cell. The mousedown has not moved the selection here
     // yet, so the toggled cell is named.
-    jfrefreshgrid(ctx, d, [{ row: [r, r], column: [c, c] }]);
+    jfrefreshgrid(ctx, [{ row: [r, r], column: [c, c] }]);
     return true;
 }
 
@@ -328,7 +328,7 @@ export function applyDataValidation(ctx: Context, range: SingleRange, item: Data
             seeded = true;
         }
     }
-    if (seeded) jfrefreshgrid(ctx, d, [seededRange]);
+    if (seeded) jfrefreshgrid(ctx, [seededRange]);
 }
 
 // The range the dialog's text names. A whole column such as B:B runs to the grid's last row, as Excel stores it, so
@@ -510,7 +510,7 @@ export function setDropdownValue(ctx: Context, value: string, arr: string[]) {
         ctx.validationListOpen = false;
     }
     setCellValue(ctx, rowIndex, colIndex, d, nextValue);
-    jfrefreshgrid(ctx, null, undefined);
+    jfrefreshgrid(ctx);
 }
 
 // What is wrong with the values a data-validation draft compares against, such as a list with no options or a

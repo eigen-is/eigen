@@ -648,7 +648,7 @@ export function updateCell(
         growRowToFit(ctx, (sheet.config ??= {}), written, r, c);
     }
 
-    recomputeCells(ctx, [{ r, c, id: ctx.currentSheetId }], d);
+    recomputeCells(ctx, [{ r, c, id: ctx.currentSheetId }]);
 }
 
 export function getOrigincell(ctx: Context, r: number, c: number, i: string) {

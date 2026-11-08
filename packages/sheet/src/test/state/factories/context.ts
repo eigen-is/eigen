@@ -20,13 +20,13 @@ function refsFactory() {
             scrollLeft: 0,
             scrollTop: 0,
             scrollListeners: new Set<() => void>(),
-            notifyScrollListeners: () => {},
         },
         cellInput: { current: null },
         fxInput: { current: null },
         canvas: { current: null },
         cellArea: { current: null },
         workbookContainer: { current: null },
+        hooks: { current: {} },
     };
 }
 

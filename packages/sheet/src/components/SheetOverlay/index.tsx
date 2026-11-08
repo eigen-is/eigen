@@ -120,7 +120,7 @@ export const SheetOverlay: React.FC = () => {
         if (!el) return;
         refs.globalCache.scrollLeft = el.scrollLeft;
         refs.globalCache.scrollTop = el.scrollTop;
-        refs.globalCache.notifyScrollListeners();
+        for (const follow of refs.globalCache.scrollListeners) follow();
     }, [refs.cellArea, refs.globalCache]);
 
     const onLeftTopClick = useCallback(() => {

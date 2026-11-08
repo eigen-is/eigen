@@ -14,7 +14,7 @@ import { getFilterButtonAtPosition } from '../modules/filter';
 import { handleFormulaInput } from '../modules/formula-editor';
 import { rangeDragColumn, rangeDragRow } from '../modules/formula-range';
 import { getFrozenHandleLeft, getFrozenHandleTop, scrollToFrozenRowCol } from '../modules/freeze';
-import { colLocation, rowLocation, sheetPoint } from '../modules/location';
+import { colLocation, rowLocation, SCROLLBAR_MARGIN, sheetPoint } from '../modules/location';
 import { pasteHandlerOfPaintModel } from '../modules/selection';
 import type { GlobalCache } from '../types';
 import { getSheetIndex } from '../utils';
@@ -253,7 +253,7 @@ function mouseRender(
         const { viewX, viewY, width, height } = sheetPoint(ctx, e, cellArea);
         const x = viewX + SHEET_ROW_HEADER_WIDTH;
         const y = viewY + SHEET_COLUMN_HEADER_HEIGHT;
-        const winW = width - 14;
+        const winW = width - SCROLLBAR_MARGIN;
         if (y < 0 || y > height) cellArea.scrollTop = ctx.scrollTop + (y < 0 ? y : y - height) / 2;
         if (x < 0 || x > winW) cellArea.scrollLeft = ctx.scrollLeft + (x < 0 ? x : x - winW) / 2;
     }

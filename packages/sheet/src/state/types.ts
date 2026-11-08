@@ -194,7 +194,6 @@ export type GlobalCache = {
     scrollLeft: number;
     scrollTop: number;
     scrollListeners: Set<() => void>;
-    notifyScrollListeners: () => void;
     linkCard?: {
         mouseEnter?: boolean;
     };

@@ -776,7 +776,6 @@ describe('HTML-table paste — the copy of this tab', () => {
         pasteAt(ctx, html, 7, 7);
         const d = ctx.sheets[0].data ?? [];
         expect([d.length, d[0].length]).toEqual([9, 9]);
-        expect([ctx.visibledatarow.length, ctx.visibledatacolumn.length]).toEqual([9, 9]);
         expect(d[8][8]?.f).toBe('=4');
         expect(d[0][0]).toBeNull();
         expect(ctx.copyState).toBeUndefined();

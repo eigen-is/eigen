@@ -24,7 +24,6 @@ const refs = {
         scrollLeft: 0,
         scrollTop: 0,
         scrollListeners: new Set<() => void>(),
-        notifyScrollListeners: () => {},
     },
     cellInput: createRef<HTMLDivElement | null>(),
     fxInput: createRef<HTMLDivElement | null>(),

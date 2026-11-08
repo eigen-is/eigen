@@ -53,7 +53,6 @@ function quietCache(state: Partial<GlobalCache> = {}): GlobalCache {
         scrollLeft: 0,
         scrollTop: 0,
         scrollListeners: new Set(),
-        notifyScrollListeners: () => {},
         ...state,
     };
 }

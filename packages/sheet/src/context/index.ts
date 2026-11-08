@@ -4,18 +4,8 @@
 // `getContext()`. A host render changes none of this, so the parts behind a memo stay as they are.
 
 import React from 'react';
-import type { Context, GlobalCache, Hooks, PatchOptions } from '../state';
+import type { Context, GlobalCache, PatchOptions, RefValues } from '../state';
 import { defaultContext } from '../state';
-
-export type RefValues = {
-    globalCache: GlobalCache;
-    cellInput: React.MutableRefObject<HTMLDivElement | null>;
-    fxInput: React.MutableRefObject<HTMLDivElement | null>;
-    canvas: React.MutableRefObject<HTMLCanvasElement | null>;
-    cellArea: React.MutableRefObject<HTMLDivElement | null>;
-    workbookContainer: React.MutableRefObject<HTMLDivElement | null>;
-    hooks: React.MutableRefObject<Hooks>;
-};
 
 export type SetContextOptions = {
     // Skip patch generation entirely: no op emitted to peers AND no undo entry.
@@ -26,18 +16,12 @@ export type SetContextOptions = {
     noUndo?: boolean;
 } & PatchOptions;
 
-const defaultScrollListeners = new Set<() => void>();
 const defaultGlobalCache: GlobalCache = {
     undoList: [],
     redoList: [],
     scrollLeft: 0,
     scrollTop: 0,
-    scrollListeners: defaultScrollListeners,
-    notifyScrollListeners: () => {
-        for (const fn of defaultScrollListeners) {
-            fn();
-        }
-    },
+    scrollListeners: new Set(),
 };
 
 const defaultRefs: RefValues = {

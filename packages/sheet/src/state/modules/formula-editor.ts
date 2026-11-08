@@ -689,6 +689,11 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
     return null;
 }
 
+// What a formula opens with in the editor: `=NAME(`, each part in the color of plain formula text.
+export function functionCallHtml(name: string) {
+    return `<span dir="auto" class="sheet-formula-text-color">=</span><span dir="auto" class="sheet-formula-text-color">${name}</span><span dir="auto" class="sheet-formula-text-color">(</span>`;
+}
+
 export function handleFormulaInput(
     ctx: Context,
     $copyTo: HTMLDivElement | null | undefined,

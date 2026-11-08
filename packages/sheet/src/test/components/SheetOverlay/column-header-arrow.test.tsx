@@ -21,7 +21,6 @@ const globalCache: GlobalCache = {
     scrollLeft: 0,
     scrollTop: 0,
     scrollListeners: new Set<() => void>(),
-    notifyScrollListeners: () => {},
 };
 const refs = {
     globalCache,

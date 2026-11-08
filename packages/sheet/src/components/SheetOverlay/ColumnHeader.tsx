@@ -146,7 +146,7 @@ export const ColumnHeader: React.FC = () => {
         setSelectedLocation(selects);
     }, [context.selections, context.visibledatacolumn]);
 
-    // The header follows the one scroll offset on the bus by translating its content. notifyScrollListeners runs
+    // The header follows the one scroll offset on the bus by translating its content. The scroll handler calls it
     // synchronously, so the header moves in step with the canvas labels, and the first call sets the offset on mount.
     useEffect(() => {
         const applyOffset = () => {

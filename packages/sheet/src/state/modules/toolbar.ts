@@ -13,7 +13,7 @@ import { applyBorder, clearSides } from './border';
 import { getRangetxt, isAllSelectedCellsInStatus, setCellValue } from './cell';
 import { openCellEditor } from './cell-editor';
 import { rangeColor } from './color';
-import { israngeseleciton } from './formula-editor';
+import { functionCallHtml, israngeseleciton } from './formula-editor';
 import { computeFormula } from './formula-exec';
 import { createFormulaRangeSelect, rangeSetValue } from './formula-range';
 import { showLinkCard } from './hyperlink';
@@ -27,7 +27,6 @@ import { colLocationByIndex, rowLocationByIndex } from './location';
 import { mergeCells } from './merge';
 import { recomputeCells } from './refresh';
 import { selectIsOverlap } from './selection';
-
 import { growRowToFit } from './text';
 import { hasPartMC, isRealNull, isRealNum } from './validation';
 
@@ -259,7 +258,7 @@ function activeFormulaInput(
     isnull = false,
 ) {
     if (isnull) {
-        const html = `<span dir="auto" class="sheet-formula-text-color">=</span><span dir="auto" class="sheet-formula-text-color">${formula.toUpperCase()}</span><span dir="auto" class="sheet-formula-text-color">(</span><span dir="auto" class="sheet-formula-text-color">)</span>`;
+        const html = `${functionCallHtml(formula.toUpperCase())}<span dir="auto" class="sheet-formula-text-color">)</span>`;
         openCellEditor(ctx, row_index, col_index, { html, caret: formula.length + 2 });
         return;
     }
@@ -270,7 +269,7 @@ function activeFormulaInput(
     const col_pre = colLocationByIndex(columnh[0], ctx.visibledatacolumn)[0];
     const col = colLocationByIndex(columnh[1], ctx.visibledatacolumn)[1];
 
-    const html = `<span dir="auto" class="sheet-formula-text-color">=</span><span dir="auto" class="sheet-formula-text-color">${formula.toUpperCase()}</span><span dir="auto" class="sheet-formula-text-color">(</span><span class="sheet-formula-functionrange-cell" rangeindex="0" dir="auto" style="color:${rangeColor(
+    const html = `${functionCallHtml(formula.toUpperCase())}<span class="sheet-formula-functionrange-cell" rangeindex="0" dir="auto" style="color:${rangeColor(
         0,
     )};">${getRangetxt(
         ctx,
@@ -325,7 +324,7 @@ function backFormulaInput(
     )})`;
     const [v, formulaText] = computeFormula(ctx, f);
     setCellValue(ctx, r, c, d, { v, f: formulaText });
-    recomputeCells(ctx, [{ r, c, id: ctx.currentSheetId }], d);
+    recomputeCells(ctx, [{ r, c, id: ctx.currentSheetId }]);
 }
 
 function singleFormulaInput(

@@ -8,14 +8,19 @@ import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import type { GlobalCache } from '../types';
 import { carriedLines, moveCells } from './cell';
-import { colLocation, colLocationByIndex, rowLocation, rowLocationByIndex, sheetPoint } from './location';
+import {
+    colLocation,
+    colLocationByIndex,
+    rowLocation,
+    rowLocationByIndex,
+    SCROLLBAR_MARGIN,
+    sheetPoint,
+} from './location';
 import { jfrefreshgrid } from './refresh';
 import { normalizeSelection } from './selection';
 import { hasPartMC, PART_MERGE_REFUSAL } from './validation';
 
 const dragCellThreshold = 8;
-// A drop this close to the cell area's right edge lands on the sheet's last columns.
-const MOVE_RIGHT_MARGIN = 14;
 
 export function onCellsMoveStart(
     ctx: Context,
@@ -82,7 +87,7 @@ export function onCellsMove(
         globalCache.dragCellStartPos = undefined;
     }
     const { x, y, viewX, viewY, width, height } = sheetPoint(ctx, e, cellArea);
-    const winW = width - MOVE_RIGHT_MARGIN;
+    const winW = width - SCROLLBAR_MARGIN;
     const row_index = rowLocation(y, ctx.visibledatarow)[2];
     const col_index = colLocation(x, ctx.visibledatacolumn)[2];
 
@@ -149,7 +154,7 @@ export function onCellsMoveEnd(
     }
 
     const { x, y, viewX, viewY, width, height } = sheetPoint(ctx, e, cellArea);
-    const winW = width - MOVE_RIGHT_MARGIN;
+    const winW = width - SCROLLBAR_MARGIN;
     const row_index = rowLocation(y, ctx.visibledatarow)[2];
     const col_index = colLocation(x, ctx.visibledatacolumn)[2];
 
@@ -228,5 +233,5 @@ export function onCellsMoveEnd(
     last.column = [col_s, col_e];
     ctx.selections = normalizeSelection(ctx, [last]);
 
-    jfrefreshgrid(ctx, d, range);
+    jfrefreshgrid(ctx, range);
 }

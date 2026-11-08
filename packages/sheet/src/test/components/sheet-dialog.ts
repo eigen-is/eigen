@@ -7,11 +7,10 @@ import { renderInDocument } from '@workspace/ui/test/render-in-document';
 import { produce } from 'immer';
 import type { ReactNode } from 'react';
 import { act, createElement, createRef, useState } from 'react';
-import type { RefValues } from '../../context';
 import { WorkbookContext } from '../../context';
 import { ModalProvider } from '../../context/modal';
 import { useDialog } from '../../hooks/useDialog';
-import type { Context, SheetConfig } from '../../state';
+import type { Context, RefValues, SheetConfig } from '../../state';
 import { workbookContextFactory } from '../state/factories/context';
 
 // The workbook's refs, fresh for each render.
@@ -23,7 +22,6 @@ function workbookRefs(): RefValues {
             scrollLeft: 0,
             scrollTop: 0,
             scrollListeners: new Set<() => void>(),
-            notifyScrollListeners: () => {},
         },
         cellInput: createRef<HTMLDivElement | null>(),
         fxInput: createRef<HTMLDivElement | null>(),

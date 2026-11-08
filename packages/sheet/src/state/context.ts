@@ -15,6 +15,7 @@ import { FormulaCache } from './modules';
 import type { CellGlyph } from './modules/cell-glyph';
 import type { FloatingRef } from './modules/floating';
 import { normalizeSelection } from './modules/selection';
+import type { Hooks } from './settings';
 import type {
     FilterOptions,
     GlobalCache,
@@ -37,13 +38,14 @@ export type FunctionCandidate = {
     d?: string;
 };
 
-type RefValues = {
+export type RefValues = {
     globalCache: GlobalCache;
     cellInput: MutableRefObject<HTMLDivElement | null>;
     fxInput: MutableRefObject<HTMLDivElement | null>;
     canvas: MutableRefObject<HTMLCanvasElement | null>;
     cellArea: MutableRefObject<HTMLDivElement | null>;
     workbookContainer: MutableRefObject<HTMLDivElement | null>;
+    hooks: MutableRefObject<Hooks>;
 };
 
 export type Context = {

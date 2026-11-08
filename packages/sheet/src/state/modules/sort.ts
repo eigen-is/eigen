@@ -76,7 +76,7 @@ export function sortDataRange(
         }
     }
 
-    jfrefreshgrid(ctx, sheetData, [{ row: [startRow, endRow], column: [startColumn, endColumn] }]);
+    jfrefreshgrid(ctx, [{ row: [startRow, endRow], column: [startColumn, endColumn] }]);
 }
 
 // The rows in their sorted order by the column at `index`, empty cells last, and how far each one moved.
