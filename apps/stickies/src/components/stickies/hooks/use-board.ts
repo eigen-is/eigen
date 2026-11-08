@@ -1,3 +1,7 @@
+// A Stickies board's Yjs doc as the state its components read: readBoard lists the columns and their cards, and the
+// hook opens the doc, seeds a new board, runs the shared ref repair on sync, and adds a column. The board component
+// calls it; the cards themselves go through the shared comment-card code.
+
 import { useAuth } from '@workspace/lib/auth';
 import { getIdArray, getIdArrayRoot, getItemMapRoot, useCollabDoc } from '@workspace/lib/collab';
 import { writeCardToDoc } from '@workspace/lib/comments';
@@ -22,7 +26,6 @@ function sameColumn(a: ColumnItem, b: ColumnItem): boolean {
     return (
         a.title === b.title &&
         a.creator === b.creator &&
-        a.createdAt === b.createdAt &&
         a.taskIds.length === b.taskIds.length &&
         a.taskIds.every((id, i) => id === b.taskIds[i])
     );
@@ -36,7 +39,6 @@ export function readBoard(doc: Y.Doc): BoardData {
         if (!(columnMap instanceof Y.Map)) continue;
         const title = columnMap.get('title');
         const creator = columnMap.get('creator');
-        const createdAt = columnMap.get('createdAt');
         columns[id] = {
             id,
             title: typeof title === 'string' ? title : '',
@@ -44,9 +46,6 @@ export function readBoard(doc: Y.Doc): BoardData {
                 (taskId) => tasksMap.get(taskId) instanceof Y.Map,
             ),
             creator: typeof creator === 'string' ? creator : '',
-            // Stable fallback — a per-refresh Date.now() would defeat sameColumn for
-            // legacy columns that predate the createdAt field. Nothing renders it.
-            createdAt: typeof createdAt === 'number' ? createdAt : 0,
         };
     }
     const columnOrder = getIdArrayRoot(doc, 'columnOrder')
@@ -96,7 +95,6 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
             const chatName = await createCardChat();
 
             if (columnsMap.size > 0) return;
-            const now = Date.now();
 
             doc.transact(() => {
                 const columnOrderArray = getIdArrayRoot(doc, 'columnOrder');
@@ -109,7 +107,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
                     color: EIGEN_STICKIES_COLORS[0][1].value,
                     chatName,
                     creator: userEmail,
-                    createdAt: now,
+                    createdAt: Date.now(),
                 });
 
                 const columnIds: string[] = [];
@@ -123,7 +121,6 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
                     if (index === 0) taskIds.push([taskId]);
                     columnYMap.set('taskIds', taskIds);
                     columnYMap.set('creator', userEmail);
-                    columnYMap.set('createdAt', now);
                     columnsMap.set(columnId, columnYMap);
                 }
 
@@ -208,7 +205,6 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
             newColumnMap.set('title', title);
             newColumnMap.set('taskIds', new Y.Array());
             newColumnMap.set('creator', user?.email || '');
-            newColumnMap.set('createdAt', Date.now());
             columnsMap.set(columnId, newColumnMap);
             columnOrderArray.push([columnId]);
         });

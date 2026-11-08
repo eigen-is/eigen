@@ -16,7 +16,7 @@ Every change goes into the Yjs doc first. Observers then rebuild the React state
 
 ```
 Y.Map            "tasks"        cardId → Y.Map { id, title, description, color?, chatName?, creator?, createdAt?, attachments? }
-Y.Map            "columns"      columnId → Y.Map { id, title, taskIds: Y.Array<string>, creator, createdAt }
+Y.Map            "columns"      columnId → Y.Map { id, title, taskIds: Y.Array<string>, creator }
 Y.Array<string>  "columnOrder"  ordered column ids
 ```
 
