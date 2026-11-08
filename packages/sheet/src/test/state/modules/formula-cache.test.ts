@@ -10,12 +10,6 @@ import { insertRowCol } from '../../../state/modules/rowcol';
 import { contextFactory } from '../factories/context';
 import { edit, pasteInternal, redo, sel, typed, undo } from '../factories/edit-cycle';
 
-// copy() writes the plain-text clipboard through document and sessionStorage.
-// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-const g = globalThis as any;
-g.document = { createElement: () => ({ innerHTML: '', innerText: '', textContent: '' }) };
-g.sessionStorage = { setItem: () => {} };
-
 // A1 = 5, B1 = =A1*2, C1 = 3
 function makeCtx(): Context {
     const data: (Cell | null)[][] = Array.from({ length: 6 }, () => Array.from({ length: 6 }, () => null));

@@ -10,7 +10,6 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import { Window } from 'happy-dom';
 import type { Context } from '../../../state/context';
 import { handleGlobalKeyDown } from '../../../state/events/keyboard';
-import { selectionCache } from '../../../state/modules/selection';
 import type { Cell, DataValidationRule, GlobalCache, SingleRange } from '../../../state/types';
 import { contextFactory } from '../factories/context';
 import { validationsByCell } from '../factories/validations';
@@ -20,7 +19,6 @@ const g = globalThis as any;
 const win = new Window();
 g.window = win;
 g.document = win.document;
-g.sessionStorage = win.sessionStorage;
 
 const anchor = win.document.createElement('div');
 anchor.id = 'sheet-validation-list-anchor';
@@ -319,12 +317,8 @@ describe('handleGlobalKeyDown — letter shortcuts', () => {
         expect([cell?.bl, cell?.it, cell?.un]).toEqual([1, 1, 1]);
     });
 
-    test('⌘V marks the paste the browser fires next', () => {
-        const ctx = lettersContext();
-        selectionCache.isPasteAction = false;
-        expect(keyDown(ctx, 'v', { mod: true })).toBe(false);
-        expect(selectionCache.isPasteAction).toBe(true);
-        selectionCache.isPasteAction = false;
+    test('⌘V lets the browser fire its paste', () => {
+        expect(keyDown(lettersContext(), 'v', { mod: true })).toBe(false);
     });
 
     test('⌘A selects the whole sheet', () => {
@@ -342,7 +336,7 @@ describe('handleGlobalKeyDown — letter shortcuts', () => {
     test('⌘X on Dvorak cuts and does not bold', () => {
         const ctx = lettersContext();
         keyDown(ctx, 'x', { mod: true, code: 'KeyB' });
-        expect(ctx.pasteIsCut).toBe(true);
+        expect(ctx.copyState?.cut).toBe(true);
         expect(ctx.sheets[0].data?.[0][0]?.bl).toBeUndefined();
     });
 });

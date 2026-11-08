@@ -75,9 +75,9 @@ export function handleOverlayMouseUp(
         }
     }
 
-    if (ctx.selectionActive && ctx.formatPainterOn) {
-        pasteHandlerOfPaintModel(ctx, ctx.copyState);
-        if (ctx.formatPainterOnce) cancelPaintModel(ctx);
+    if (ctx.selectionActive && ctx.painterSource) {
+        pasteHandlerOfPaintModel(ctx, ctx.painterSource);
+        cancelPaintModel(ctx);
     }
 
     ctx.selectionActive = false;
@@ -247,7 +247,7 @@ export function handleOverlayMouseUp(
 // context from before the mouse-up, where the press still has its drag on, so the next click would run the edit again.
 // This ends those drags and a one-shot painter as handleOverlayMouseUp does, without the edit.
 export function endPointerDrag(ctx: Context) {
-    if (ctx.selectionActive && ctx.formatPainterOn && ctx.formatPainterOnce) cancelPaintModel(ctx);
+    if (ctx.selectionActive) cancelPaintModel(ctx);
     ctx.selectionActive = false;
     ctx.scrolling = false;
     ctx.cellSelectMoving = false;

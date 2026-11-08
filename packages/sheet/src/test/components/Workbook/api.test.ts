@@ -16,12 +16,6 @@ import { emitOps, join } from '../../state/factories/collab';
 import { workbookContextFactory } from '../../state/factories/context';
 import { edit, pasteInternal, sel, typed } from '../../state/factories/edit-cycle';
 
-// copy() writes the plain-text clipboard through document and sessionStorage.
-// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-const g = globalThis as any;
-g.document = { createElement: () => ({ innerHTML: '', innerText: '', textContent: '' }) };
-g.sessionStorage = { setItem: () => {} };
-
 // A1 = 5, B1 = b1.
 function makeData(b1: Cell | null, rows = 4): (Cell | null)[][] {
     const data: (Cell | null)[][] = Array.from({ length: rows }, () => Array.from({ length: 4 }, () => null));

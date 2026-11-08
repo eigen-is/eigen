@@ -81,6 +81,7 @@ async function openEditor(editor: typeof InputBox | typeof FxEditor, id: string)
                         refs,
                         handleUndo: () => {},
                         handleRedo: () => {},
+                        pasteClipboard: () => {},
                     },
                 },
                 createElement(editor),

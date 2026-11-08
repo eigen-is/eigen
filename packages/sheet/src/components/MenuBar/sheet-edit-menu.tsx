@@ -26,8 +26,7 @@ import {
     handleCopy,
     handleCut,
     handleFormatPainter,
-    handlePasteByClick,
-    readClipboardText,
+    pasteFromClipboard,
     SHEET_HOTKEYS,
     tryDeleteRowCol,
 } from '../../state';
@@ -35,7 +34,8 @@ import {
 // The WorkbookMenuBar owns focusFindBarRef and hands it in: a Find pick sets it, so the menu's onCloseAutoFocus
 // skips Radix's focus-restore to the trigger, which would otherwise steal the focus back from the find bar.
 export function SheetEditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<boolean> }) {
-    const { context, getContext, setContext, refs, handleUndo, handleRedo } = useContext(WorkbookContext);
+    const { context, getContext, setContext, refs, handleUndo, handleRedo, pasteClipboard } =
+        useContext(WorkbookContext);
     const { showNotice } = useDialog();
     const docSearchBar = useOptionalDocSearchBar();
 
@@ -100,14 +100,7 @@ export function SheetEditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<
             </DropdownMenuItem>
             {context.allowEdit && (
                 <>
-                    <DropdownMenuItem
-                        onClick={async () => {
-                            const text = await readClipboardText();
-                            setContext((draftCtx) => {
-                                handlePasteByClick(draftCtx, text);
-                            });
-                        }}
-                    >
+                    <DropdownMenuItem onClick={() => pasteFromClipboard(pasteClipboard, showNotice)}>
                         Paste
                         <DropdownMenuShortcut>{formatForDisplay(SHEET_HOTKEYS.paste)}</DropdownMenuShortcut>
                     </DropdownMenuItem>

@@ -91,6 +91,7 @@ async function openEditor(html: string) {
                         refs,
                         handleUndo: () => {},
                         handleRedo: () => {},
+                        pasteClipboard: () => {},
                     },
                 },
                 createElement(

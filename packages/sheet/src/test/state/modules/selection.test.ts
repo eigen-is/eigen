@@ -75,9 +75,6 @@ describe('state/modules/selection — rangeValueToClipboard', () => {
 // text/plain is what a paste outside a spreadsheet reads (a chart's Edit data grid, a text editor),
 // so it carries the grid as Google writes it: tabs between cells, newlines between rows.
 describe('state/modules/selection — copy', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-    (globalThis as any).sessionStorage ??= { setItem: () => {} };
-
     test('writes the selected cells as TSV on text/plain', () => {
         const ctx = contextFactory() as Context;
         ctx.sheets[0].data = [

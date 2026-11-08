@@ -16,15 +16,14 @@ import { describe, expect, test } from 'bun:test';
 import { setCellFormat } from '../../state/api/cell';
 import { setColumnWidth, setRowHeight } from '../../state/api/rowcol';
 import type { Context } from '../../state/context';
-import { handlePasteByClick } from '../../state/events/paste';
 import { setChartLook, setChartSpec } from '../../state/modules/chart';
 import { clearFilter } from '../../state/modules/filter';
 import { deleteFloatingObject, reorderFloatingObject, updateFloatingBox } from '../../state/modules/floating';
 import { removeImageByMediaName, replaceImageMediaName } from '../../state/modules/image';
 import { showSelectedRowCol } from '../../state/modules/rowcol';
-import { pasteHandlerOfPaintModel } from '../../state/modules/selection';
 import { initSheetData } from '../../state/modules/sheet';
 import { handleBorder, handleClearFormat, handleMerge, updateFormatCell } from '../../state/modules/toolbar';
+import { pasteCopy } from './factories/clipboard';
 import { syncablePaths } from './factories/collab';
 import { contextFactory } from './factories/context';
 import { mouseUpAt, withGridGeometry } from './factories/grid-dom';
@@ -78,7 +77,6 @@ const REJECTED: [name: string, recipe: (ctx: Context) => void][] = [
             mouseUpAt(296, 100)(ctx);
         },
     ],
-    ['the format painter with no copy state', (ctx) => pasteHandlerOfPaintModel(ctx, undefined)],
     [
         'a border on a read-only sheet',
         (ctx) => {
@@ -107,11 +105,13 @@ const REJECTED: [name: string, recipe: (ctx: Context) => void][] = [
         'an internal copy-paste released with no destination selection',
         (ctx) => {
             ctx.copyState = {
+                id: 'copy',
+                cut: false,
                 dataSheetId: ctx.currentSheetId,
                 copyRange: [{ row: [0, 0], column: [0, 0] }],
             };
             ctx.selections = undefined;
-            handlePasteByClick(ctx, 'internal');
+            pasteCopy(ctx);
         },
     ],
 ];

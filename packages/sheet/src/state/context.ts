@@ -119,11 +119,15 @@ export type Context = {
     functionCandidates: FunctionCandidate[];
     functionHint: string | null | undefined;
 
+    // The workbook's last copy or cut of cells. A paste is that copy exactly when the clipboard's table carries its id.
     copyState?: {
+        id: string;
+        cut: boolean;
         dataSheetId: string;
         copyRange: { row: number[]; column: number[] }[];
     };
-    pasteIsCut: boolean;
+    // The range the format painter took, while the painter is on.
+    painterSource?: { sheetId: string; range: { row: number[]; column: number[] } };
 
     filterOptions?: FilterOptions;
     filterRange?: { row: number[]; column: number[] } | undefined;
@@ -155,9 +159,6 @@ export type Context = {
 
     showGridLines: boolean;
     allowEdit: boolean;
-
-    formatPainterOn: boolean;
-    formatPainterOnce: boolean;
 
     defaultCell: Cell;
 
@@ -217,9 +218,6 @@ export function defaultContext(refs: RefValues): Context {
         functionCandidates: [],
         functionHint: null,
 
-        copyState: undefined,
-        pasteIsCut: false,
-
         filter: {},
 
         scrolling: false,
@@ -246,9 +244,6 @@ export function defaultContext(refs: RefValues): Context {
 
         showGridLines: true,
         allowEdit: true,
-
-        formatPainterOn: false,
-        formatPainterOnce: false,
 
         sheetFocused: true,
 

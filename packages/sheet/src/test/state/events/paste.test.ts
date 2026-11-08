@@ -4,25 +4,16 @@
 // dropCell C3, selection C4, tokenizer C5) can be gated on them. They assert on
 // observable output in the resulting Context, never on internal call sequences.
 //
-// Entry point: handlePasteByClick(ctx, clipboardData). It is the
-// headless-drivable door into the pipeline (handlePaste needs a live ClipboardEvent
-// + DOM). When ctx.copyState is set it routes to the internal copy/cut handlers;
-// otherwise a plain string goes to the plain-text / formula-string handlers.
-//
-// The HTML-table paste branch inside handlePaste (real DOM: createElement('div')
-// .innerHTML + querySelectorAll + td.style/innerText + CSSOM) and the non-exported
-// pasteHandler CellMatrix arm it feeds (paste.ts ~157-283, an independent copy of
-// the offsetMC/merge remap) are now covered headless in ./paste-html.test.ts, which
-// installs a happy-dom document at module scope. This file stays DOM-free and pins
-// the other paste routes: pasteHandlerOfCopyPaste / pasteHandlerOfCutPaste and the
-// pasteHandler plain-string branch, entered via handlePasteByClick.
+// The entry points are pasteCopy, a paste of the workbook's own copy, and pasteText, plain text or a formula from
+// elsewhere. A pasted HTML table is covered in ./paste-html.test.ts, which installs a happy-dom document. This file
+// stays DOM-free.
 
 import { describe, expect, it } from 'bun:test';
 import type { Cell, DefaultConditionalFormatRule } from '../../../engine/types';
 import type { Context } from '../../../state/context';
-import { handlePasteByClick } from '../../../state/events/paste';
 import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import { copy } from '../../../state/modules/selection';
+import { pasteCopy, pasteText } from '../factories/clipboard';
 import { contextFactory } from '../factories/context';
 import { edit, typed } from '../factories/edit-cycle';
 
@@ -35,16 +26,6 @@ function single(r: number, c: number) {
 function rangeSel(r1: number, r2: number, c1: number, c2: number) {
     return [{ row: [r1, r2], column: [c1, c2], row_focus: r1, column_focus: c1 }];
 }
-
-// copy() -> setPendingCopy() extracts plain text via document.createElement and
-// writes sessionStorage. Bun's test runtime has neither; widen globalThis with the
-// same minimal stubs the sibling clipboard-cut.test.ts uses.
-// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-const g = globalThis as any;
-g.document = {
-    createElement: () => ({ innerHTML: '', innerText: '', textContent: '' }),
-};
-g.sessionStorage = { setItem: () => {} };
 
 function grid(rows: number, cols: number): (Cell | null)[][] {
     return Array.from({ length: rows }, () => Array.from({ length: cols }, () => null));
@@ -70,10 +51,9 @@ function copyThenPaste(
     { cut = false }: { cut?: boolean } = {},
 ) {
     ctx.selections = source;
-    copy(ctx);
-    ctx.pasteIsCut = cut;
+    copy(ctx, { cut });
     ctx.selections = dest;
-    handlePasteByClick(ctx, 'internal');
+    pasteCopy(ctx);
 }
 
 // A paste past the last row or column grows the grid, and the sheet's size grows with it: a stored snapshot keeps the
@@ -84,7 +64,7 @@ describe('a paste past the grid grows the sheet size with it', () => {
     it('for plain text', () => {
         const ctx = makeCtx();
         ctx.selections = single(7, 7);
-        handlePasteByClick(ctx, '1\t2\n3\t4');
+        pasteText(ctx, '1\t2\n3\t4');
         expect(size(ctx)).toEqual([9, 9]);
     });
 
@@ -103,7 +83,7 @@ describe('a paste past the grid grows the sheet size with it', () => {
 describe('plain-text paste (tab/newline matrix)', () => {
     it('fills a 2x2 numeric block and expands the selection to the pasted range', () => {
         const ctx = makeCtx();
-        handlePasteByClick(ctx, '1\t2\n3\t4');
+        pasteText(ctx, '1\t2\n3\t4');
 
         const d = ctx.sheets[0].data!;
         expect(d[0][0]?.v).toBe(1);
@@ -119,7 +99,7 @@ describe('plain-text paste (tab/newline matrix)', () => {
 
     it('keeps non-numeric cells as strings', () => {
         const ctx = makeCtx();
-        handlePasteByClick(ctx, 'foo\tbar');
+        pasteText(ctx, 'foo\tbar');
 
         const d = ctx.sheets[0].data!;
         expect(d[0][0]?.v).toBe('foo');
@@ -129,7 +109,7 @@ describe('plain-text paste (tab/newline matrix)', () => {
     it('pastes at the selection anchor, not the origin', () => {
         const ctx = makeCtx();
         ctx.selections = single(2, 2);
-        handlePasteByClick(ctx, 'x\ty');
+        pasteText(ctx, 'x\ty');
 
         const d = ctx.sheets[0].data!;
         expect(d[2][2]?.v).toBe('x');
@@ -140,7 +120,7 @@ describe('plain-text paste (tab/newline matrix)', () => {
     it('skips rows with fewer columns than the first row (ragged-input quirk)', () => {
         // colchelen is fixed by row 0; any later row with fewer tabs is dropped.
         const ctx = makeCtx();
-        handlePasteByClick(ctx, '1\t2\n3');
+        pasteText(ctx, '1\t2\n3');
 
         const d = ctx.sheets[0].data!;
         expect(d[0][0]?.v).toBe(1);
@@ -154,7 +134,7 @@ describe('plain-text paste (tab/newline matrix)', () => {
         const ctx = makeCtx(4, 4, (d) => {
             d[0][0] = { v: '', m: '', ct: { fa: '@', t: 's' } };
         });
-        handlePasteByClick(ctx, '00123');
+        pasteText(ctx, '00123');
 
         const d = ctx.sheets[0].data!;
         // stays a string; not parseFloat'd to 123
@@ -167,7 +147,7 @@ describe('plain-text paste (tab/newline matrix)', () => {
             d[0][2] = { v: 45000, m: '15/03/2023', ct: { fa: 'dd/mm/yyyy', t: 'd' } };
             d[0][3] = { f: '=A1', v: 5, m: '5' };
         });
-        handlePasteByClick(ctx, '0x10\t0x10\t2024-05-06\t1,234.5');
+        pasteText(ctx, '0x10\t0x10\t2024-05-06\t1,234.5');
 
         const d = ctx.sheets[0].data!;
         expect(d[0][0]?.v).toBe('0x10');
@@ -300,7 +280,7 @@ describe('internal copy/paste — styles and merges', () => {
         const sides = { l: side, r: side, t: side, b: side };
         ctx.sheets[0].config = { borderInfo: { '0_0': sides } };
 
-        handlePasteByClick(ctx, '1\t2\n3\t4');
+        pasteText(ctx, '1\t2\n3\t4');
 
         expect(ctx.sheets[0].data![0][0]?.v).toBe(1);
         expect(ctx.sheets[0].config!.borderInfo).toEqual({ '0_0': sides });
@@ -385,11 +365,10 @@ describe('cut/paste — cross-range move', () => {
 
         // copy from sheet two, switch to sheet one, cut-paste
         ctx.selections = single(0, 0);
-        copy(ctx);
-        ctx.pasteIsCut = true;
+        copy(ctx, { cut: true });
         ctx.currentSheetId = 'id_1';
         ctx.selections = single(2, 2);
-        handlePasteByClick(ctx, 'internal');
+        pasteCopy(ctx);
 
         // destination on sheet one filled
         expect(ctx.sheets[0].data![2][2]?.v).toBe('Z');
@@ -446,11 +425,10 @@ describe('conditional-format migration on cut/paste (cfSplitRange contract)', ()
         }) as Context;
     const crossSheetPaste = (ctx: Context, cut: boolean) => {
         ctx.selections = rangeSel(1, 5, 1, 1);
-        copy(ctx);
-        ctx.pasteIsCut = cut;
+        copy(ctx, { cut });
         ctx.currentSheetId = 'id_1';
         ctx.selections = single(1, 1);
-        handlePasteByClick(ctx, 'internal');
+        pasteCopy(ctx);
     };
 
     it('keeps the target sheet rules when the copied cells carry none', () => {
@@ -510,7 +488,7 @@ describe('partial-merge guard (hasPartMC)', () => {
         ctx.sheets[0].config = { merge: { '0_0': { r: 0, c: 0, rs: 2, cs: 2 } } };
         // paste a 2x1 block starting inside the merge and crossing its bottom edge
         ctx.selections = single(1, 0);
-        handlePasteByClick(ctx, '9\n8');
+        pasteText(ctx, '9\n8');
 
         const d = ctx.sheets[0].data!;
         // nothing written — the guard bailed out
@@ -541,9 +519,9 @@ describe('copy/paste round-trip (item 6)', () => {
 });
 
 describe('pasted formulas and the dependency map', () => {
-    const pasteText = (text: string, r: number, c: number) => (d: Context) => {
+    const pasteTextAt = (text: string, r: number, c: number) => (d: Context) => {
         d.selections = single(r, c);
-        handlePasteByClick(d, text);
+        pasteText(d, text);
     };
 
     for (const warm of [false, true]) {
@@ -553,7 +531,7 @@ describe('pasted formulas and the dependency map', () => {
             });
             if (warm) warmFormulaCellInfoMap(ctx);
 
-            [ctx] = edit(ctx, pasteText('=A1*3', 0, 2));
+            [ctx] = edit(ctx, pasteTextAt('=A1*3', 0, 2));
             expect(ctx.sheets[0].data![0][2]?.v).toBe(15);
             [ctx] = edit(ctx, typed(0, 0, '2'));
 
@@ -579,11 +557,10 @@ describe('pasted formulas and the dependency map', () => {
         warmFormulaCellInfoMap(base);
         const [ctx] = edit(base, (d) => {
             d.selections = single(0, 1);
-            copy(d);
-            d.pasteIsCut = true;
+            copy(d, { cut: true });
             d.currentSheetId = 'id_2';
             d.selections = single(0, 3);
-            handlePasteByClick(d, 'internal');
+            pasteCopy(d);
         });
         return ctx;
     }

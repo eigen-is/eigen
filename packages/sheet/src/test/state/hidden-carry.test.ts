@@ -12,14 +12,15 @@ import type { DataValidationRule } from '@workspace/lib/sheets';
 import { Window } from 'happy-dom';
 import type { Context } from '../../state/context';
 import { handleCopy, handleCut } from '../../state/events/copy';
-import { handlePaste, handlePasteByClick } from '../../state/events/paste';
+import { handlePaste } from '../../state/events/paste';
 import { carriedLines, carryCells } from '../../state/modules/cell';
 import { consumePendingCopy } from '../../state/modules/clipboard';
 import { onCellsMoveEnd } from '../../state/modules/move-cells';
-import { pasteHandlerOfPaintModel, rangeValueToClipboard, selectionCache } from '../../state/modules/selection';
+import { pasteHandlerOfPaintModel, rangeValueToClipboard } from '../../state/modules/selection';
 import { handleFormatPainter } from '../../state/modules/toolbar';
 import { ValidationLimitError, validationAt } from '../../state/modules/validation-rules';
 import type { Cell, GlobalCache, Op, Selection } from '../../state/types';
+import { clipboardWith, pasteCopy } from './factories/clipboard';
 import { author, join } from './factories/collab';
 import { contextFactory, workbookContextFactory } from './factories/context';
 import { gridElements, withGridGeometry } from './factories/grid-dom';
@@ -27,7 +28,6 @@ import { validationsByCell } from './factories/validations';
 
 // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
 const g = globalThis as any;
-g.sessionStorage = { setItem: () => {} };
 // A paste the copy state can't serve parses the clipboard's table, so it needs a DOM.
 g.DOMParser = new Window().DOMParser;
 
@@ -122,22 +122,20 @@ function paste(ctx: Context, cut: boolean) {
     if (cut) handleCut(ctx);
     else handleCopy(ctx);
     ctx.selections = destination();
-    handlePasteByClick(ctx, 'internal');
+    pasteCopy(ctx);
 }
 
 // ⌘V: the browser hands over the table the copy put on the clipboard.
 function pasteFromClipboard(ctx: Context) {
     const html = consumePendingCopy()?.html ?? '';
     ctx.selections = destination();
-    selectionCache.isPasteAction = true;
-    const clipboardData = { getData: (type: string) => (type === 'text/html' ? html : ''), files: [] };
-    handlePaste(ctx, { clipboardData } as unknown as ClipboardEvent);
+    handlePaste(ctx, clipboardWith({ html }));
 }
 
 function paint(ctx: Context) {
     handleFormatPainter(ctx);
     ctx.selections = destination();
-    pasteHandlerOfPaintModel(ctx, ctx.copyState);
+    if (ctx.painterSource) pasteHandlerOfPaintModel(ctx, ctx.painterSource);
 }
 
 // Drags A1:D4 by its top-left cell onto G7.
@@ -250,7 +248,7 @@ describe('a range with a hidden row and column inside it', () => {
         const { next, ops } = author(base, (ctx) => {
             ctx.currentSheetId = 'id_2';
             ctx.selections = destination();
-            pasteHandlerOfPaintModel(ctx, ctx.copyState);
+            if (ctx.painterSource) pasteHandlerOfPaintModel(ctx, ctx.painterSource);
         });
         expect(next.sheets[1].data?.[7][7]?.hl).toBeUndefined();
         const joined = join(base, [ops]).find((s) => s.id === 'id_2');
@@ -460,7 +458,7 @@ describe('a carried rule lands as ranges', () => {
         handleCopy(ctx);
         toOtherSheet(ctx);
         ctx.selections = destination();
-        handlePasteByClick(ctx, 'internal');
+        pasteCopy(ctx);
         expect(Object.values(ctx.sheets[1].dataValidations ?? {})).toEqual([
             { ranges: [{ row: [6, 9], column: [6, 6] }], rule: rule(9, 9) },
         ]);
@@ -472,7 +470,7 @@ describe('a carried rule lands as ranges', () => {
         handleCut(ctx);
         toOtherSheet(ctx);
         ctx.selections = destination();
-        handlePasteByClick(ctx, 'internal');
+        pasteCopy(ctx);
         expect(Object.values(ctx.sheets[1].dataValidations ?? {})).toEqual([
             { ranges: [{ row: [6, 9], column: [6, 6] }], rule: rule(9, 9) },
         ]);
@@ -584,7 +582,7 @@ describe('a carried rule lands as ranges', () => {
             author(ctx, (draft) => {
                 handleCopy(draft);
                 draft.selections = [{ row: [0, rows - 1], column: [2, 2], row_focus: 0, column_focus: 2 }];
-                handlePasteByClick(draft, 'internal');
+                pasteCopy(draft);
             });
         expect(refused).toThrow(ValidationLimitError);
     });

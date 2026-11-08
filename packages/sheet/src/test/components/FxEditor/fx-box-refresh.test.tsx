@@ -60,6 +60,7 @@ function render(root: ReturnType<typeof createRoot>, context: Context) {
                         refs,
                         handleUndo: () => {},
                         handleRedo: () => {},
+                        pasteClipboard: () => {},
                     },
                 },
                 createElement(FxEditor),

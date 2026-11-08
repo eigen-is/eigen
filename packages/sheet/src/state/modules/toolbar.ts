@@ -661,19 +661,10 @@ export function autoSelectionFormula(
 }
 
 export function cancelPaintModel(ctx: Context) {
-    if (ctx.copyState === null) return;
-    // The painter's marching ants are drawn from ctx.formulaRangeSelections, which only ever
-    // shows the current sheet. A copy sourced from another sheet has nothing on screen here.
-    if (ctx.copyState?.dataSheetId === ctx.currentSheetId) {
-        ctx.formulaRangeSelections = [];
-    }
-
-    ctx.copyState = {
-        dataSheetId: '',
-        copyRange: [{ row: [0], column: [0] }],
-    };
-
-    ctx.formatPainterOn = false;
+    // The marching ants are drawn from ctx.formulaRangeSelections, which only shows the current sheet, so a source on
+    // another sheet has nothing on screen here.
+    if (ctx.painterSource?.sheetId === ctx.currentSheetId) ctx.formulaRangeSelections = [];
+    ctx.painterSource = undefined;
 }
 
 export function handleNumberFormat(ctx: Context, cellInput: HTMLDivElement, pattern: string) {
@@ -716,16 +707,8 @@ export function handleFormatPainter(ctx: Context) {
         return;
     }
 
-    cancelPaintModel(ctx);
-
     ctx.formulaRangeSelections = [{ row: selection.row, column: selection.column }];
-    ctx.copyState = {
-        dataSheetId: ctx.currentSheetId,
-        copyRange: [{ row: selection.row, column: selection.column }],
-    };
-
-    ctx.formatPainterOn = true;
-    ctx.formatPainterOnce = true;
+    ctx.painterSource = { sheetId: ctx.currentSheetId, range: { row: selection.row, column: selection.column } };
 }
 
 export function handleClearFormat(ctx: Context) {

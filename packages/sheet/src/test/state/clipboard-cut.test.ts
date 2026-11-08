@@ -3,10 +3,6 @@ import type { Context } from '../../index';
 import { handleCut } from '../../state/events/copy';
 import { contextFactory } from './factories/context';
 
-// sessionStorage is not available in Bun's test environment.
-// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-(globalThis as any).sessionStorage = { setItem: () => {} };
-
 describe('handleCut', () => {
     it('marks the copy range as cut and populates copy data', () => {
         const ctx = contextFactory({
@@ -24,23 +20,19 @@ describe('handleCut', () => {
                 },
             ],
         }) as Context;
-        ctx.pasteIsCut = false;
-
         handleCut(ctx);
 
-        expect(ctx.pasteIsCut).toBe(true);
+        expect(ctx.copyState?.cut).toBe(true);
         expect(ctx.formulaRangeSelections).toHaveLength(1);
         expect(ctx.copyState?.dataSheetId).toBe('id_1');
     });
 
-    it('does not set the cut flag when selection is empty', () => {
+    it('makes no copy when the selection is empty', () => {
         const ctx = contextFactory({
             selections: [],
         }) as Context;
-        ctx.pasteIsCut = false;
-
         handleCut(ctx);
 
-        expect(ctx.pasteIsCut).toBe(false);
+        expect(ctx.copyState).toBeUndefined();
     });
 });
