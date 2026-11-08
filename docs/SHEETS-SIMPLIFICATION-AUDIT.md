@@ -94,12 +94,6 @@ Root cause: root 1, pattern 1. The filter predicts what `applyPatches` would thr
 Simpler: one sequential applier (~35 lines) with JSON Patch semantics: a write needs its parent to exist, or that op alone is skipped. Delete-wins for rules, images and charts falls out. The entry caps and the "matrix is an array" check stay at the op, because a peer's op is untrusted.
 Lost: a cell or field write is no longer all-or-nothing with its batch; a refused row or sheet op still rolls back the batch. ~60 LOC net + ~40 test, medium risk, medium confidence.
 
-<a id="s8"></a>**S8. Four readers each decide what a workbook without a snapshot is.**
-`api/document/sheets.ts` (`readSheetsFromDoc`, `compactSheetsSnapshot`, `readLiveSheets`), `use-sheet.ts` (`loadSnapshot`), the fixed `'sheet-1'` id in `engine/defaults.ts`.
-Root cause: root 3. A new workbook's ops are recorded against defaults no stored state holds.
-Simpler: write the encoded default snapshot when the workbook is created (count every path: new file, template, copy). Every reader just decodes, and the default id need not be fixed.
-Lost: nothing. ~15 LOC, low risk, medium confidence.
-
 S6 (the recalc list on the wire) is [E1](#e1).
 
 <a id="s9"></a>**S9. Redesign: the server orders the log and is the only writer of `ops`.**
@@ -328,7 +322,6 @@ Wave 1 (nothing lost, or decided):
 
 | Lane | Units, in order | Main files |
 |---|---|---|
-| Op log | [S8](#s8) | `state/utils/patch.ts`, `state/modules/sheet.ts`, `engine/replay-ops.ts`, `use-sheet.ts` |
 | Formulas | [E4](#e4), [E5](#e5) | `engine/formula-shift.ts`, `engine/recalc.ts`, `formula-*` |
 | Render and input | [R6](#r6), [R7](#r7) | `state/context.ts`, `context/modal.tsx`, `state/events/*`, `SheetOverlay/*` |
 
@@ -343,7 +336,7 @@ Wave 3, the redesigns, in [§ If we built it today](#if-we-built-it-today)'s ord
 - This run also takes the API audit's T2 and X2 (the other session agreed). Don't edit `API-SIMPLIFICATION-AUDIT.md` on this branch, because that session keeps editing it: tell it when T2 or X2 lands, and it strikes them. Its X2 ruling: a flat cap, the runner's deadline and its memory limit, and a timeout or out-of-memory is an accepted outcome. X2 joins Wave 2.
 - The owner's standing word on merging: at a logical moment to merge, or to continue with a clean context, tell the owner and give the hand-off prompt. Merging with the other sessions' work is fine and a good idea. The first such moment is the end of Wave 1.
 - The owner allows an implementer to hand mechanical work (a grep sweep, rewiring similar test call sites, running a suite) to a cheaper sub-agent: Sonnet, or Haiku for a lookup, at low or medium effort. The implementer keeps Step 0, the design, the diff read and the commit. A sub-agent uses the implementer's worktree with no isolation option, one editing at a time, and never commits.
-- Wave 1 is running. Merged: S7 (in cold review; the ref's `setSelection` went with it), E6, the U2 and E9 fixes, R3, D5, F3, D7, E3, U2, S3, R2, D1, F1, E9, S1, R5, R4, D3. Running: S8, R6, E4. In scoped review: the U2 and E9 fixes. Next: E4, E5, D5, R6, R7, then the wave's close.
+- Wave 1 is running. Merged: S8 (`decodeOrDefault`, not a seed at creation: export, preview and search read `data.db` without opening the document, and a restored first-session version holds ops naming `sheet-1`; a document with neither snapshot nor ops now reads as one blank sheet), S7 (in cold review; the ref's `setSelection` went with it), E6, the U2 and E9 fixes, R3, D5, F3, D7, E3, U2, S3, R2, D1, F1, E9, S1, R5, R4, D3. Running: R6, E4. In scoped review: the U2 and E9 fixes. Next: E4, E5, D5, R6, R7, then the wave's close.
 - For E4: half-open legs (`B2:1`, `A:B1`, `TRUE:A1`) read more than their dependency list, and `A1\n:B2` is missed because only spaces join a range.
 - For S5 or S10: `sheet.filter ??= {}` means a `['filter','1']` op after a peer cleared the filter should throw and drop its batch, and two first filters at once overwrite each other (D7 read this; not run). The `state/types.ts` line saying filter criteria never reach the stored shape looks false, since `encodeSheetsSnapshot` keeps `filter`.
 - For F10: the owner ruled that ROADMAP's row "The zombie media sweep can remove a peer's upload" waits for F10. When F10 lands, remove that row. eigen-c6 adds a pointer in it on `relay-outbox`, so expect a one-line ROADMAP merge.

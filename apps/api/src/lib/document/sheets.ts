@@ -6,7 +6,6 @@
 import type { Op, Sheet, SheetWithCalcChain } from '@workspace/lib/sheets';
 import {
     decodeSheetsSnapshot,
-    decodeSheetsWorkbook,
     encodeSheetsSnapshot,
     readSheetsBase,
     readSheetsSnapshotJson,
@@ -17,7 +16,7 @@ import type { DrivePathType } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_SHEETS } from '@workspace/lib/types/drive';
 import {
     copySheetName,
-    createDefaultSheets,
+    decodeOrDefault,
     mapChartRefs,
     recalcSheets,
     renameSheetTexts,
@@ -61,15 +60,11 @@ export function readSheetsFromDoc(
     doc: Y.Doc,
     { recalc = true }: { recalc?: boolean } = {},
 ): { sheets: Sheet[]; recalcError: string | null } {
-    const snapshot = readSheetsSnapshotJson(doc);
-    const opBatches = sheetsOpLog(doc).toArray();
-    // Ops without a snapshot come from a new workbook closed before its first compaction. They were recorded against the
-    // editor's default sheets, so the replay starts from those, or it drops every edit. A doc with neither stays empty.
-    const sheets = snapshot ? decodeSheetsSnapshot(snapshot) : opBatches.length > 0 ? createDefaultSheets() : [];
+    const { sheets } = decodeOrDefault(readSheetsSnapshotJson(doc));
     // The snapshot stores cells as a list, but the renderers' conditional formats and the cross-sheet formula resolver
     // read the dense `data` matrix, so every sheet gets one. One far-flung cell, such as XFD1048576, makes a huge grid,
     // and the transform's deadline bounds it.
-    const replayed = replaySheetsOps(sheets, opBatches).map(withMaterializedData);
+    const replayed = replaySheetsOps(sheets, sheetsOpLog(doc).toArray()).map(withMaterializedData);
 
     // Only a workbook nobody computed, with formulas but no calc chain, is recalculated here, such as an old xlsx
     // import. An edited workbook pays nothing. Only the export asks for it. A large recalc took 39 s, more than a
@@ -89,14 +84,12 @@ export function readSheetsFromDoc(
 // A compaction, in the transform process. It replays the log over the snapshot and encodes the result as an import
 // does, and the main thread swaps it in. The batches come as JSON text, which crosses to the process much faster than
 // the objects. A batch the replay rejects is skipped, as every reader skips it, and `dropped` counts them for the
-// caller to log. A workbook with no snapshot yet starts from the default sheets the editor made its edits against.
+// caller to log.
 export function compactSheetsSnapshot(
     snapshotJson: string | null,
     batchesJson: string,
 ): { snapshot: string; dropped: number } {
-    const { sheets, computed } = snapshotJson
-        ? decodeSheetsWorkbook(snapshotJson)
-        : { sheets: createDefaultSheets(), computed: true };
+    const { sheets, computed } = decodeOrDefault(snapshotJson);
     let dropped = 0;
     const replayed = replaySheetsOps(sheets, JSON.parse(batchesJson), () => dropped++);
     // The compaction never recalculates, so a workbook nobody computed stays uncomputed, and an export computes it. So
@@ -105,12 +98,9 @@ export function compactSheetsSnapshot(
     return { snapshot: encodeSheetsSnapshot(replayed, { computed: computed && !sheetsNeedRecalc(replayed) }), dropped };
 }
 
-// The workbook as a tab opening the doc shows it: the stored snapshot, or the default sheets for a workbook with no
-// snapshot yet, with every pending op replayed.
+// The workbook as a tab opening the doc shows it, with every pending op replayed.
 export function readLiveSheets(doc: Y.Doc): Sheet[] {
-    const snapshot = readSheetsSnapshotJson(doc);
-    const stored = snapshot ? decodeSheetsSnapshot(snapshot) : createDefaultSheets();
-    return replaySheetsOps(stored, sheetsOpLog(doc).toArray());
+    return replaySheetsOps(decodeOrDefault(readSheetsSnapshotJson(doc)).sheets, sheetsOpLog(doc).toArray());
 }
 
 // A workbook opened without a base, such as a new one or one stored before bases existed, gets one. Then its first

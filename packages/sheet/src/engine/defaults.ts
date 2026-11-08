@@ -1,8 +1,9 @@
 // The grid of a sheet that names no size of its own. The editor and the op replay both build every sheet through
 // gridSize, because an op recorded against the editor's grid fails to resolve on a smaller one. It also holds the
-// ceilings an insert may reach, and the sheet a new workbook starts with.
+// ceilings an insert may reach, and what a workbook with no snapshot reads as, on the server and in the editor alike.
 
 import type { Sheet } from '@workspace/lib/sheets';
+import { decodeSheetsWorkbook } from '@workspace/lib/sheets';
 import { normalizeSheetConfig } from './sheet-config';
 
 export const DEFAULT_SHEET_ROW_COUNT = 100;
@@ -24,4 +25,10 @@ export function createDefaultSheets(): Sheet[] {
     const sheet: Sheet = { name: 'Sheet1', id: 'sheet-1', order: 0, celldata: [] };
     normalizeSheetConfig(sheet);
     return [sheet];
+}
+
+// No snapshot is stored until a workbook's first compaction, so its first edits were recorded against the default
+// sheets, whose fixed id they name. Every replay of them starts here, or it drops those edits.
+export function decodeOrDefault(snapshot: string | null | undefined): { sheets: Sheet[]; computed: boolean } {
+    return snapshot ? decodeSheetsWorkbook(snapshot) : { sheets: createDefaultSheets(), computed: true };
 }
