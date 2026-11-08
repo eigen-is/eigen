@@ -495,9 +495,8 @@ test('a batch that lands before the oldest anchor the tab keeps loads the grid a
 const sheetTab = (name: string) =>
     [...document.querySelectorAll('[role="button"] span')].find((span) => span.textContent === name)?.parentElement;
 
-// A sheet the tab adds or copies gets its cell matrix only when it opens, and that write stays off the log. So the
-// anchor kept at the add or copy holds the sheet without one. A rollback to it must still leave the open sheet with its
-// cells, and a keystroke there must land.
+// The tab keeps an anchor inside the observer of its own push, so the anchor at an add or copy must already hold the
+// sheet's cell matrix. A rollback to it must leave the open sheet with its cells, and a keystroke there must land.
 for (const [name, open, first] of [
     [
         'an added sheet',

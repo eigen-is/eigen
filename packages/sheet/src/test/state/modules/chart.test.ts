@@ -235,7 +235,7 @@ describe("the Workbook's insertChart", () => {
 describe('every sheet entry carries a charts map', () => {
     test('initSheetData and addSheet materialize it', () => {
         const ctx = contextFactory() as Context;
-        initSheetData(ctx, 0, ctx.sheets[0]);
+        initSheetData(ctx.sheets[0]);
         expect(ctx.sheets[0].charts).toEqual({});
         addSheet(ctx);
         expect(ctx.sheets[2].charts).toEqual({});

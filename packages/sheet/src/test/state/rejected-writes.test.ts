@@ -42,7 +42,7 @@ function bareSheet(): Context {
 function freshSheet(): Context {
     const ctx = withGridGeometry(contextFactory() as Context);
     ctx.sheets[0].config = undefined;
-    initSheetData(ctx, 0, ctx.sheets[0]);
+    initSheetData(ctx.sheets[0]);
     return ctx;
 }
 

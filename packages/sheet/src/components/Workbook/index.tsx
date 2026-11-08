@@ -30,7 +30,6 @@ import type { RefValues, SetContextOptions } from '../../context';
 import { WorkbookContext } from '../../context';
 import { ModalProvider } from '../../context/modal';
 import { copySheetChartSpec, resolveRangeChartData, seriesName } from '../../engine/chart-data';
-import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { ChartPanelState, Context, GlobalCache, Op, Settings, Sheet as SheetType } from '../../state';
 import {
     api,
@@ -427,76 +426,37 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             }
         }, [context.sheets, context.currentSheetId, onChange]);
 
-        // biome-ignore lint/correctness/useExhaustiveDependencies: the current sheet and the sheet count re-run the effect on a sheet switch, add or delete; the body reads them through draftCtx
         useEffect(() => {
             setContextWithProduce(
                 (draftCtx) => {
-                    // Only a load or newly created sheet data needs the view here; a switch derives its own.
-                    let viewStale = false;
+                    draftCtx.allowEdit = mergedSettings.allowEdit;
+                    draftCtx.hooks = mergedSettings.hooks;
                     if (draftCtx.sheets.length === 0) {
-                        viewStale = true;
                         // Each sheet is copied one level deep, and its cells stay shared: a deep copy of a large
-                        // import takes about a second. The init below writes only a sheet's own fields, so a remount
-                        // can run it again on the same data. It skips a sheet that already has a matrix, so the shared
-                        // cells, which immer freezes, are never written.
+                        // import takes about a second. The init below writes only a sheet's own fields and keeps a
+                        // matrix the sheet has, so a remount can run it again on the same data, and the shared cells,
+                        // which immer freezes, are never written.
                         draftCtx.sheets = originalData.map((sheet) => ({
                             ...sheet,
                             id: sheet.id ?? crypto.randomUUID(),
                         }));
                         ensureSheetIndex(draftCtx.sheets);
-                        for (const [index, sheet] of draftCtx.sheets.entries()) {
-                            if (!sheet.data || sheet.data.length === 0) {
-                                initSheetData(draftCtx, index, sheet);
-                            } else {
-                                // The replay gave this sheet its matrix. Its config collections must still exist, or
-                                // this tab's first config write would send a whole collection.
-                                normalizeSheetConfig(sheet);
-                            }
-                        }
+                        for (const sheet of draftCtx.sheets) initSheetData(sheet);
                         // The list of formula cells is seeded without computing them. An imported or stored sheet
                         // carries its computed values, and an edit computes the formulas it affects.
                         api.seedCalcChain(draftCtx);
+                        if (!draftCtx.currentSheetId) initSheetIndex(draftCtx);
+                        const sheetIdx = getSheetIndex(draftCtx, draftCtx.currentSheetId);
+                        if (sheetIdx == null) return;
+                        const stored = draftCtx.sheets[sheetIdx].selections;
+                        if (!draftCtx.selections?.length && stored?.length) draftCtx.selections = stored;
+                        // A sheet with no stored selection gets its first one when the grid overlay mounts.
+                        applySheetView(draftCtx);
                     }
-                    draftCtx.allowEdit = mergedSettings.allowEdit;
-                    draftCtx.hooks = mergedSettings.hooks;
-                    if (!draftCtx.currentSheetId) {
-                        initSheetIndex(draftCtx);
-                    }
-                    const sheetIdx = getSheetIndex(draftCtx, draftCtx.currentSheetId);
-                    if (sheetIdx == null) return;
-                    const sheet = draftCtx.sheets[sheetIdx];
-
-                    if (!sheet.data || sheet.data.length === 0) {
-                        initSheetData(draftCtx, sheetIdx, sheet);
-                        viewStale = true;
-                    } else {
-                        normalizeSheetConfig(sheet);
-                    }
-
-                    // A switch already restored the sheet's stored selection. Once the view is live, an empty
-                    // selection may be one a peer's row op dropped, and the stored copy points at the wrong row.
-                    if (
-                        viewStale &&
-                        (!draftCtx.selections || draftCtx.selections.length === 0) &&
-                        sheet.selections &&
-                        sheet.selections.length > 0
-                    ) {
-                        draftCtx.selections = sheet.selections;
-                    }
-                    // A sheet with no stored selection gets its first one when the grid overlay mounts.
-
-                    if (viewStale) applySheetView(draftCtx);
                 },
                 { noHistory: true },
             );
-        }, [
-            context.currentSheetId,
-            context.sheets.length,
-            originalData,
-            mergedSettings.allowEdit,
-            mergedSettings.hooks,
-            setContextWithProduce,
-        ]);
+        }, [originalData, mergedSettings.allowEdit, mergedSettings.hooks, setContextWithProduce]);
 
         const onKeyDown = useCallback(
             (e: React.KeyboardEvent<HTMLDivElement>) => {

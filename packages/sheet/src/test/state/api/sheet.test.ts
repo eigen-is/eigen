@@ -2,14 +2,16 @@ import { describe, expect, test } from 'bun:test';
 import { newSheetChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet as LibSheet } from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartSpec } from '@workspace/lib/types/chart';
-import { produce } from 'immer';
+import { produce, produceWithPatches } from 'immer';
 import { celldataToData, dataToCelldata } from '../../../engine/celldata';
+import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../../../engine/defaults';
 import { copySheet, getAllSheets, seedCalcChain, setSheetOrder } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { setCellValue } from '../../../state/modules/cell';
 import { execFunctionGroup, groupValuesRefresh, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import { addSheet, deleteSheet } from '../../../state/modules/sheet';
 import type { Sheet } from '../../../state/types';
+import { filterPatch, patchToOp } from '../../../state/utils/patch';
 import { author, join, receive } from '../factories/collab';
 import { contextFactory, selectionFactory, workbookContextFactory } from '../factories/context';
 
@@ -245,6 +247,17 @@ describe('sheet order on a copy, an add and a delete', () => {
             ['A', undefined],
             ['C', 1],
         ]);
+    });
+
+    test("a blank sheet has its cell matrix inside the add's own recipe, and its add sends none", () => {
+        const [next, patches] = produceWithPatches(threeSheets(), (draft: Context) => addSheet(draft));
+        const added = next.sheets[3];
+        expect(next.currentSheetId).toBe(added.id);
+        expect(added.data).toHaveLength(DEFAULT_SHEET_ROW_COUNT);
+        expect(added.data?.[0]).toHaveLength(DEFAULT_SHEET_COLUMN_COUNT);
+        const [{ value }] = patchToOp(next, filterPatch(patches), { addSheetOp: true });
+        expect(value.data).toBeUndefined();
+        expect(value.celldata).toEqual([]);
     });
 
     test('an added sheet keeps its id, and the add switches to it', () => {

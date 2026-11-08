@@ -6,7 +6,7 @@
 import type { CellRangeRef, ChartLook, ChartSpec, ChartSpecChange } from '@workspace/lib/types/chart';
 import type { DocSearchOptions } from '@workspace/lib/types/doc-search';
 import type { Box, ZOp } from '@workspace/lib/vector';
-import { current, produce } from 'immer';
+import { current } from 'immer';
 import type { SetContextOptions } from '../../context';
 import type { ChartRangeRefusal } from '../../engine/chart-range';
 import { setUpChartRange } from '../../engine/chart-range';
@@ -33,8 +33,6 @@ import {
     deleteFloatingObject,
     dropStructuralEntries,
     getFlowdata,
-    getSheetIndex,
-    initSheetData,
     insertChart,
     insertImage,
     removeImageByMediaName,
@@ -108,13 +106,6 @@ export function generateAPIs(
                         const applied = applyOpBatch(next, ops, fresh.has(ops));
                         if (applied) next = applied.ctx;
                         else accepted = false;
-                    }
-                    // The grid gives a sheet its cell matrix when the sheet opens, and that write never reaches the
-                    // log. So an anchor kept before it, such as right after the tab's own add of the sheet, holds the
-                    // open sheet without one.
-                    const shown = getSheetIndex(next, next.currentSheetId);
-                    if (shown != null && !next.sheets[shown].data) {
-                        next = produce(next, (draft: Context) => initSheetData(draft, shown, draft.sheets[shown]));
                     }
                     Object.assign(ctx_, next);
                     settleCurrentSheet(ctx_);
