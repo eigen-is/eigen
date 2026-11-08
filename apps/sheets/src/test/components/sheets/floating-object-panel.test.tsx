@@ -125,8 +125,6 @@ test('âŒ˜Z in a typed chart title takes the whole title back in one step, and â‡
                         charts: { c1: chart },
                     },
                 ],
-                showToolbar: false,
-                showFormulaBar: false,
                 hooks: { onChartPanelChange: setPanel },
             }),
             panel &&

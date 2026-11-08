@@ -44,7 +44,7 @@ afterEach(async () => {
     cleanups = [];
 });
 
-async function mount({ allowEdit = true, aspectLocked = false, showToolbar = false, images = { i1: image } } = {}) {
+async function mount({ allowEdit = true, aspectLocked = false, images = { i1: image } } = {}) {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
@@ -72,8 +72,6 @@ async function mount({ allowEdit = true, aspectLocked = false, showToolbar = fal
                 data,
                 allowEdit,
                 aspectLocked,
-                showToolbar,
-                showFormulaBar: false,
                 onOp: (op) => ops.push(op),
                 hooks: {
                     resolveImageUrl: (name) => `blob:${name}`,
@@ -378,7 +376,7 @@ describe.each(KINDS)('a floating $kind', ({ rows, download, ...item }) => {
     test('Edit › Copy and Cut copy it, not the cells behind it', async () => {
         const written = fakeExecCommand();
         try {
-            const { container, content, record } = await mount({ showToolbar: true });
+            const { container, content, record } = await mount();
             const openEdit = async () => {
                 const trigger = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Edit');
                 if (!trigger) throw new Error('no Edit menu');

@@ -137,8 +137,6 @@ async function open(cells: Record<string, string> = {}, { stamped = true } = {})
             ref: workbookRef,
             data: initialData,
             onOp: handleOp,
-            showToolbar: false,
-            showFormulaBar: false,
         });
     }
     const container = document.createElement('div');

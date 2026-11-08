@@ -177,15 +177,12 @@ export function execfunction(
         id = ctx.currentSheetId;
     }
 
-    ctx.calculateSheetId = id;
-
     resolver ??= createContextResolver(snapshotContext(ctx));
     const evalResult = ctx.formulaCache.engine.evaluate(txt, id, resolver);
     const result = evalResult.value;
 
     if (r != null && c != null) {
         if (isrefresh) {
-            // eslint-disable-next-line no-use-before-define
             execFunctionGroup(ctx, r, c, result, id);
         }
 
@@ -230,10 +227,6 @@ export function setFormulaCellInfoMap(ctx: Context, calcChains?: FormulaCell[], 
     }
 }
 
-// Build the formula dependency map up front (e.g. from an idle callback after
-// load) so the first edit doesn't pay the full O(all formulas) rebuild inline.
-// On large workbooks this rebuild is multi-second; running it off the
-// interaction path keeps the first edit responsive. No-op if already built.
 // `data` stands in for the current sheet's matrix, as in setFormulaCellInfo.
 export function warmFormulaCellInfoMap(ctx: Context, data?: CellMatrix | null): FormulaCellInfoMap {
     if (ctx.formulaCache.formulaCellInfoMap != null) return ctx.formulaCache.formulaCellInfoMap;
@@ -266,7 +259,6 @@ export function execFunctionGroup(
     id?: string | null,
     data?: CellMatrix | null,
 ): void {
-    // 0. null checks
     if (ctx.formulaCache.execFunctionGlobalData == null) {
         ctx.formulaCache.execFunctionGlobalData = {};
     }
@@ -280,27 +272,21 @@ export function execFunctionGroup(
         [[ctx.formulaCache.execFunctionGlobalData[`${origin_r}_${origin_c}_${id}`]]] = cellCache;
     }
 
-    // 1. plain view of the workbook, taken lazily: chains and cells are only
-    // read below, and reading them through immer draft proxies is what made
-    // recalc slow. Edits with no dependents never pay for the snapshot.
+    // Reading cells through immer drafts is slow, so the recalc reads a plain view. It is taken lazily, because an
+    // edit with no dependents needs none.
     let snap: Context | null = null;
     const getSnapshot = () => (snap ??= snapshotContext(ctx));
     let allChains: FormulaCell[] | null = null;
     const getChains = () => (allChains ??= getAllFunctionGroup(getSnapshot()));
 
-    // 2. the cells this edit changed
     const changedCells: FormulaCell[] =
         ctx.formulaCache.execFunctionExist ??
         (origin_r != null && origin_c != null ? [{ r: origin_r, c: origin_c, id }] : []);
 
-    // 3. formulaCellInfoMap: a cache of ALL formulas vs their ranges
     const formulaCellInfoMap = warmFormulaCellInfoMap(ctx, id === ctx.currentSheetId ? data : undefined);
     const { dependencyIndex } = ctx.formulaCache;
 
-    // 4. Collect the affected sub-graph from the reverse index: direct
-    // dependents of the changed cells, then everything downstream of those.
-    // Each affected formula's `parents` (= its dependents, see
-    // dependency-graph.ts) is refilled so the sort below sees fresh edges.
+    // Each affected formula's `parents`, which are its dependents, is refilled so the sort below sees fresh edges.
     const affected: FormulaCellInfo[] = [];
     const affectedKeys = new Set<string>();
     const collect = (key: string) => {
@@ -325,10 +311,8 @@ export function execFunctionGroup(
         }
     }
 
-    // 5. Get list of affected formulas using the graph structure by depth-first traversal
     const formulaRunList = getCalculationOrder(affected, formulaCellInfoMap);
 
-    // 6. execute relevant formulas
     if (formulaRunList.length > 0) {
         executeAffectedFormulas(ctx, formulaRunList, getChains(), createContextResolver(getSnapshot()));
     }

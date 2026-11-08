@@ -40,8 +40,6 @@ async function mountWorkbook(props: Record<string, unknown> = {}) {
                 createElement(Workbook, {
                     ref,
                     data,
-                    showToolbar: false,
-                    showFormulaBar: false,
                     hooks: {},
                     ...props,
                 }),
@@ -246,7 +244,7 @@ test('Enter that ends a tab rename sends no keypress on to the notice', async ()
 test("a column header's menu arrow asks only about the hovered column", async () => {
     const data = sheets();
     data[1].config = { colReadOnly: { 1: 1 } };
-    const { container } = await mountWorkbook({ data, showToolbar: false });
+    const { container } = await mountWorkbook({ data });
     const header = container.querySelector('.sheet-col-header');
     if (!header) throw new Error('no column header');
     await act(async () => {

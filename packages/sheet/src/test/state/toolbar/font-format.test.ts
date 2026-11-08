@@ -17,8 +17,6 @@ import { contextFactory } from '../factories/context';
 
 enablePatches();
 
-// getTextSize falls back to a DOM span when a canvas reports no bounding box, so the page is
-// installed at module scope.
 const win = installHappyDom();
 
 // Only `font` and `measureText` are read on the auto-height path.

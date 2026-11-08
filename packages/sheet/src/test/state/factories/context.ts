@@ -1,4 +1,3 @@
-import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../../../engine/defaults';
 import type { Context, SheetConfig } from '../../../state/index';
 import { defaultContext, FormulaCache } from '../../../state/index';
 
@@ -62,8 +61,6 @@ export function contextFactory({
         sheetScrollRecord: {},
         shiftKeyDown: false,
         groupValuesRefreshData: [],
-        defaultrowNum: DEFAULT_SHEET_ROW_COUNT,
-        defaultcolumnNum: DEFAULT_SHEET_COLUMN_COUNT,
         formulaCache: new FormulaCache(),
         defaultCell: {},
         hooks: {},

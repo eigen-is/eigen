@@ -70,8 +70,6 @@ function Host({ data, workbook }: { data: Sheet[]; workbook: RefObject<WorkbookI
         createElement(Workbook, {
             ref: workbook,
             data,
-            showToolbar: false,
-            showFormulaBar: false,
             hooks: { onChartPanelChange: setPanel },
         }),
         panel &&

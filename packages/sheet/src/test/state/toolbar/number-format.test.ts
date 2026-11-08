@@ -1,11 +1,11 @@
-// Pins the Format → Number menu presets (numberMenuPresets) through the canonical
+// Pins the Format → Number menu presets (NUMBER_MENU_PRESETS) through the canonical
 // apply path: updateFormat → updateFormatCell derives ct.t from the format
 // string (is_date → 'd', '@' → 's', 'General' → 'n'/'g') and sets cell.m via
 // numfmt. Exact rendered strings are pinned so preset changes are deliberate.
 
 import { describe, expect, test } from 'bun:test';
 import type { Context } from '../../../state/context';
-import { numberMenuPresets } from '../../../state/modules/format-presets';
+import { NUMBER_MENU_PRESETS } from '../../../state/modules/format-presets';
 import { updateFormat } from '../../../state/modules/toolbar';
 import type { Cell } from '../../../state/types';
 import { contextFactory } from '../factories/context';
@@ -21,7 +21,7 @@ function applyFormat(value: Cell['v'], fa: string): Cell {
     return data[0][1]!;
 }
 
-const PRESETS = numberMenuPresets('€').flat();
+const PRESETS = NUMBER_MENU_PRESETS.flat();
 
 function presetValue(text: string): string {
     const preset = PRESETS.find((p) => p.text === text);
@@ -146,13 +146,5 @@ describe('Format → Number menu presets', () => {
         const cell = applyFormat(1.000694444444, presetValue('Duration'));
         expect(cell.ct).toEqual({ fa: '[h]:mm:ss', t: 'd' });
         expect(cell.m).toBe('24:01:00');
-    });
-
-    test('the currency symbol parameter flows into the currency presets', () => {
-        const dollar = numberMenuPresets('$').flat();
-        expect(dollar.find((p) => p.text === 'Currency')?.value).toBe('$#,##0.00');
-        expect(dollar.find((p) => p.text === 'Accounting')?.value).toBe(
-            '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)',
-        );
     });
 });

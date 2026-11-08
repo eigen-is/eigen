@@ -29,8 +29,7 @@ import { contextFactory } from '../factories/context';
 
 enablePatches();
 
-// The auto-height tests below commit through a real editor element, and getTextSize falls back to a
-// DOM span when a canvas reports no bounding box, so the page is installed at module scope.
+// The auto-height tests below commit through a real editor element.
 const win = installHappyDom();
 
 describe('state/modules/cell — getInlineStringHTML', () => {

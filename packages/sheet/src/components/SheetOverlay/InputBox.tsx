@@ -71,15 +71,6 @@ export const InputBox: React.FC = () => {
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: cell-edit sync — collaborative-update guard relies on prev refs, not React deps; firing on every refs.* change would clobber the editor
     useLayoutEffect(() => {
-        if (!context.allowEdit) {
-            setContext((ctx) => {
-                const flowdata = getFlowdata(ctx);
-                if (flowdata != null && ctx.forceFormulaRef && row_index != null && col_index != null) {
-                    const formulaHtml = getFormulaHtml(row_index, col_index, flowdata);
-                    if (formulaHtml) createRangeHightlight(ctx, formulaHtml);
-                }
-            });
-        }
         if (row_index != null && col_index != null && context.editingCellPosition.length > 0) {
             if (refs.globalCache.doNotUpdateCell) {
                 delete refs.globalCache.doNotUpdateCell;
@@ -178,7 +169,7 @@ export const InputBox: React.FC = () => {
             lastKeyDownEventRef.current = new KeyboardEvent(e.type, e.nativeEvent);
             preText.current = input.innerText;
 
-            // Alt/Meta+Enter inserts a newline regardless of suggest visibility (originally `enterKeyControll`).
+            // Alt or Meta with Enter inserts a newline, whether or not the suggestions show.
             if (e.key === 'Enter' && (e.altKey || e.metaKey) && context.editingCellPosition.length > 0) {
                 document.execCommand('insertHTML', false, '\n '); // Trailing space forces a line break; removed by the subsequent delete
                 document.execCommand('delete', false);

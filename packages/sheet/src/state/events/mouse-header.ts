@@ -52,9 +52,8 @@ export function handleRowHeaderMouseDown(
     const col = ctx.visibledatacolumn[col_index];
     const col_pre = 0;
 
-    // Right-click: check if inside existing selection
     if (e.button === 2) {
-        // If right-click is inside selection, stop mousedown handling
+        // A right-click inside the selection keeps it, for the menu it opens.
         const flowdata = getFlowdata(ctx);
         const isInSelection = ctx.selections?.some(
             (obj_s) =>
@@ -73,7 +72,6 @@ export function handleRowHeaderMouseDown(
 
     ctx.scrolling = true;
 
-    // Formula-related
     if (!isEmpty(ctx.editingCellPosition)) {
         if (
             ctx.formulaCache.rangestart ||
@@ -81,7 +79,6 @@ export function handleRowHeaderMouseDown(
             ctx.formulaCache.rangedrag_row_start ||
             israngeseleciton(ctx)
         ) {
-            // Formula range selection
             let changeparam = mergeMoveMain(ctx, [0, col_index], rowseleted, top, height, col_pre, col);
             if (changeparam != null) {
                 [rowseleted, top, height] = [changeparam[1], changeparam[2], changeparam[3]];
@@ -153,7 +150,6 @@ export function handleRowHeaderMouseDown(
 
                 rangeHightlightselected(ctx, cellInput);
 
-                // Then proceed with new range selection
                 israngeseleciton(ctx);
                 ctx.formulaCache.func_selectedrange = {
                     left: colLocationByIndex(0, ctx.visibledatacolumn)[0],
@@ -237,9 +233,8 @@ export function handleRowHeaderMouseDown(
 
     if (ctx.rowsSelected) {
         if (e.shiftKey) {
-            // Shift+click on row header to select range
             const { selections } = ctx;
-            const last = cloneDeep(selections?.[selections.length - 1]); // Last selection
+            const last = cloneDeep(selections?.[selections.length - 1]);
             if (!selections || !last || isNil(last.top) || isNil(last.height) || isNil(last.row_focus)) {
                 return;
             }
@@ -339,9 +334,6 @@ export function handleColumnHeaderMouseDown(
     const col_pre = col_location[0];
     const col_index = col_location[2];
 
-    ctx.orderbyindex = col_index; // Global sort index
-
-    // Right-click: check if inside existing selection
     if (e.button === 2) {
         const flowdata = getFlowdata(ctx);
         const isInSelection = ctx.selections?.some(
@@ -361,7 +353,6 @@ export function handleColumnHeaderMouseDown(
 
     ctx.scrolling = true;
 
-    // Formula-related
     if (!isEmpty(ctx.editingCellPosition)) {
         if (
             ctx.formulaCache.rangestart ||
@@ -369,7 +360,6 @@ export function handleColumnHeaderMouseDown(
             ctx.formulaCache.rangedrag_row_start ||
             israngeseleciton(ctx)
         ) {
-            // Formula range selection
             let changeparam = mergeMoveMain(ctx, columnseleted, [0, row_index], row_pre, row, left, width);
             if (changeparam != null) {
                 [columnseleted, left, width] = [changeparam[0], changeparam[4], changeparam[5]];
@@ -443,7 +433,6 @@ export function handleColumnHeaderMouseDown(
                 }
                 rangeHightlightselected(ctx, cellInput);
 
-                // Then proceed with new range selection
                 israngeseleciton(ctx);
                 ctx.formulaCache.func_selectedrange = {
                     left,
@@ -522,9 +511,8 @@ export function handleColumnHeaderMouseDown(
 
     if (ctx.colsSelected) {
         if (e.shiftKey) {
-            // Shift+click on column header to select range
             const { selections } = ctx;
-            const last = cloneDeep(selections?.[selections.length - 1]); // Last selection
+            const last = cloneDeep(selections?.[selections.length - 1]);
 
             let _left = 0;
             let _width = 0;
@@ -554,7 +542,6 @@ export function handleColumnHeaderMouseDown(
 
             selections[selections.length - 1] = last;
         } else if (e.ctrlKey || e.metaKey) {
-            // Add to selection
             ctx.selections?.push({
                 left,
                 width,

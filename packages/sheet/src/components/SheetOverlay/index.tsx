@@ -49,6 +49,8 @@ import { OverlayRegion } from './OverlayRegion';
 import { OverlayVisuals } from './OverlayVisuals';
 import { RowHeader } from './RowHeader';
 
+const DEFAULT_ADD_ROWS = 50;
+
 export const SheetOverlay: React.FC = () => {
     const { context, getContext, setContext, refs } = useContext(WorkbookContext);
     const { showNotice } = useDialog();
@@ -73,7 +75,6 @@ export const SheetOverlay: React.FC = () => {
             // React types a mouse event's target as an EventTarget; on this div it is always an element.
             if ((e.target as HTMLElement).closest?.('.sheet-mousedown-cancel')) return;
             if (e.button !== 2) {
-                // onContextMenu event will not call onMouseDown
                 setContext((draftCtx) => {
                     // The recipe can run after the grid unmounts, and then its refs are unset.
                     const cellInput = refs.cellInput.current;
@@ -248,7 +249,7 @@ export const SheetOverlay: React.FC = () => {
 
     const handleBottomAddRow = useCallback(() => {
         const ctx = getContext();
-        const valueStr = bottomAddRowInputRef.current?.value || ctx.addDefaultRows.toString();
+        const valueStr = bottomAddRowInputRef.current?.value || DEFAULT_ADD_ROWS.toString();
         const value = parseInt(valueStr, 10);
         if (Number.isNaN(value)) {
             return;
@@ -281,14 +282,12 @@ export const SheetOverlay: React.FC = () => {
 
             const currentSheet = draftCtx.sheets[sheetIndex];
 
-            // Only reset selection if there's no existing selection
             if (!currentSheet.selections?.length) {
                 api.setSelection(draftCtx, [{ row: [0, 0], column: [0, 0] }], {});
             }
         });
     }, [setContext]);
 
-    // Warning dialog
     // biome-ignore lint/correctness/useExhaustiveDependencies: fires once per new warnDialog message; showNotice + setContext are stable
     useEffect(() => {
         if (context.warnDialog) {
@@ -574,7 +573,7 @@ export const SheetOverlay: React.FC = () => {
                                         ref={bottomAddRowInputRef}
                                         type="text"
                                         className="h-8 w-16"
-                                        placeholder={context.addDefaultRows.toString()}
+                                        placeholder={DEFAULT_ADD_ROWS.toString()}
                                     />
                                     <span className="text-sm text-muted-foreground">(more rows at bottom)</span>
                                     <Button

@@ -4,14 +4,14 @@
 
 import type { BorderType } from '@workspace/lib/sheets';
 import { forEach, isNil, isPlainObject, pick, round } from 'es-toolkit/compat';
-import { cellValue, is_date, numberDisplay, parseCellInput } from '../../engine/format';
+import { cellValue, is_date, numberDisplay } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
 import type { GlobalCache } from '../types';
 import { clipToUsedExtent, getSheetIndex, isAllowEdit } from '../utils';
 import { applyBorder, clearSides } from './border';
-import { getRangetxt, isAllSelectedCellsInStatus, normalizedAttr, setCellValue } from './cell';
+import { getRangetxt, isAllSelectedCellsInStatus, setCellValue } from './cell';
 import { rangeColor } from './color';
 import { setFormulaCellInfo } from './formula-cache';
 import { israngeseleciton } from './formula-editor';
@@ -27,13 +27,8 @@ import {
 import { colLocationByIndex, rowLocationByIndex } from './location';
 import { mergeCells } from './merge';
 import { selectIsOverlap } from './selection';
-import { sortSelection } from './sort';
 import { getCellTextInfo } from './text';
 import { hasPartMC, isdatatypemulti, isRealNull, isRealNum } from './validation';
-
-type ToolbarItemClickHandler = (ctx: Context, cellInput: HTMLDivElement, cache?: GlobalCache) => void;
-
-type ToolbarItemSelectedFunc = (cell: Cell | null | undefined) => boolean;
 
 export function updateFormatCell(
     ctx: Context,
@@ -312,7 +307,6 @@ function activeFormulaInput(
         return;
     }
 
-    // Non-null past the `isnull` early-return: callers pass null only with isnull=true.
     if (rowh == null || columnh == null) return;
     const row_pre = rowLocationByIndex(rowh[0], ctx.visibledatarow)[0];
     const row = rowLocationByIndex(rowh[1], ctx.visibledatarow)[1];
@@ -696,175 +690,6 @@ export function handleNumberFormat(ctx: Context, cellInput: HTMLDivElement, patt
     setAttr(ctx, cellInput, 'ct', pattern);
 }
 
-export function handleCurrencyFormat(ctx: Context, cellInput: HTMLDivElement) {
-    const currency = ctx.currency || '€';
-
-    handleNumberFormat(ctx, cellInput, `${currency} #.00`);
-}
-
-export function handlePercentageFormat(ctx: Context, cellInput: HTMLDivElement) {
-    handleNumberFormat(ctx, cellInput, '0.00%');
-}
-
-export function handleNumberDecrease(ctx: Context, cellInput: HTMLDivElement) {
-    const flowdata = getFlowdata(ctx);
-    if (!flowdata || !ctx.selections) return;
-
-    const row_index = ctx.selections[0].row_focus;
-    const col_index = ctx.selections[0].column_focus;
-    if (row_index === undefined || col_index === undefined) return;
-
-    let foucsStatus = normalizedAttr(flowdata, row_index, col_index, 'ct');
-    const cell = flowdata[row_index][col_index];
-
-    if (foucsStatus == null || foucsStatus.t !== 'n') {
-        return;
-    }
-
-    if (foucsStatus.fa === 'General') {
-        if (!cell?.v) return;
-
-        [, foucsStatus] = parseCellInput(cell.v);
-    }
-
-    // Wan/Yi (10,000/100,000,000) number format
-    const reg = /^(w|W)((0?)|(0\.0+))$/;
-    if (reg.test(foucsStatus.fa)) {
-        if (foucsStatus.fa.includes('.')) {
-            if (foucsStatus.fa.substr(-2) === '.0') {
-                updateFormat(ctx, cellInput, flowdata, 'ct', foucsStatus.fa.split('.')[0]);
-            } else {
-                updateFormat(ctx, cellInput, flowdata, 'ct', foucsStatus.fa.substr(0, foucsStatus.fa.length - 1));
-            }
-        } else {
-            updateFormat(ctx, cellInput, flowdata, 'ct', foucsStatus.fa);
-        }
-
-        return;
-    }
-    let prefix = '';
-    let main = '';
-    let fa = [];
-    if (foucsStatus.fa.includes('.')) {
-        fa = foucsStatus.fa.split('.');
-        [prefix, main] = fa;
-    } else {
-        return;
-    }
-
-    fa = main.split('');
-    let tail = '';
-    for (let i = fa.length - 1; i >= 0; i -= 1) {
-        const c = fa[i];
-        if (c !== '#' && c !== '0' && c !== ',' && Number.isNaN(parseInt(c, 10))) {
-            tail = c + tail;
-        } else {
-            break;
-        }
-    }
-
-    let fmt = '';
-    if (foucsStatus.fa.includes('.')) {
-        let suffix = main;
-        if (tail.length > 0) {
-            suffix = main.replace(tail, '');
-        }
-
-        let pos = suffix.replace(/#/g, '0');
-        pos = pos.substr(0, pos.length - 1);
-        if (pos === '') {
-            fmt = prefix + tail;
-        } else {
-            fmt = `${prefix}.${pos}${tail}`;
-        }
-    }
-
-    updateFormat(ctx, cellInput, flowdata, 'ct', fmt);
-}
-
-export function handleNumberIncrease(ctx: Context, cellInput: HTMLDivElement) {
-    const flowdata = getFlowdata(ctx);
-    if (!flowdata) return;
-    if (!ctx.selections) return;
-    const row_index = ctx.selections[0].row_focus;
-    const col_index = ctx.selections[0].column_focus;
-    if (row_index === undefined || col_index === undefined) return;
-    let foucsStatus = normalizedAttr(flowdata, row_index, col_index, 'ct');
-    const cell = flowdata[row_index][col_index];
-
-    if (foucsStatus == null || foucsStatus.t !== 'n') {
-        return;
-    }
-
-    if (foucsStatus.fa === 'General') {
-        if (!cell?.v) return;
-        [, foucsStatus] = parseCellInput(cell.v);
-    }
-
-    if (foucsStatus.fa === 'General') {
-        updateFormat(ctx, cellInput, flowdata, 'ct', '#.0');
-        return;
-    }
-
-    // Wan/Yi (10,000/100,000,000) number format
-    const reg = /^(w|W)((0?)|(0\.0+))$/;
-    if (reg.test(foucsStatus.fa)) {
-        if (foucsStatus.fa.includes('.')) {
-            updateFormat(ctx, cellInput, flowdata, 'ct', `${foucsStatus.fa}0`);
-        } else {
-            if (foucsStatus.fa.substr(-1) === '0') {
-                updateFormat(ctx, cellInput, flowdata, 'ct', `${foucsStatus.fa}.0`);
-            } else {
-                updateFormat(ctx, cellInput, flowdata, 'ct', `${foucsStatus.fa}0.0`);
-            }
-        }
-
-        return;
-    }
-
-    let prefix = '';
-    let main = '';
-    let fa = [];
-
-    if (foucsStatus.fa.includes('.')) {
-        fa = foucsStatus.fa.split('.');
-        [prefix, main] = fa;
-    } else {
-        main = foucsStatus.fa;
-    }
-
-    fa = main.split('');
-    let tail = '';
-    for (let i = fa.length - 1; i >= 0; i -= 1) {
-        const c = fa[i];
-        if (c !== '#' && c !== '0' && c !== ',' && Number.isNaN(parseInt(c, 10))) {
-            tail = c + tail;
-        } else {
-            break;
-        }
-    }
-
-    let fmt = '';
-    if (foucsStatus.fa.includes('.')) {
-        let suffix = main;
-        if (tail.length > 0) {
-            suffix = main.replace(tail, '');
-        }
-
-        let pos = suffix.replace(/#/g, '0');
-        pos += '0';
-        fmt = `${prefix}.${pos}${tail}`;
-    } else {
-        if (tail.length > 0) {
-            fmt = `${main.replace(tail, '')}.0${tail}`;
-        } else {
-            fmt = `${main}.0${tail}`;
-        }
-    }
-
-    updateFormat(ctx, cellInput, flowdata, 'ct', fmt);
-}
-
 export function handleBold(ctx: Context, cellInput: HTMLDivElement) {
     toggleAttr(ctx, cellInput, 'bl');
 }
@@ -995,10 +820,6 @@ export function handleMerge(ctx: Context, type: string) {
     mergeCells(ctx, ctx.currentSheetId, ctx.selections, type);
 }
 
-export function handleSort(ctx: Context, isAsc: boolean) {
-    sortSelection(ctx, isAsc);
-}
-
 export function handleFreeze(ctx: Context, type: string) {
     if (!isAllowEdit(ctx)) return;
 
@@ -1046,36 +867,4 @@ export function handleLink(ctx: Context) {
     if (flowdata != null && selection != null) {
         showLinkCard(ctx, selection.row[0], selection.column[0], true);
     }
-}
-
-const handlerMap: Record<string, ToolbarItemClickHandler> = {
-    'currency-format': handleCurrencyFormat,
-    'percentage-format': handlePercentageFormat,
-    'number-decrease': handleNumberDecrease,
-    'number-increase': handleNumberIncrease,
-    'sort-cell': (ctx: Context) => handleSort(ctx, true),
-    'merge-all': (ctx: Context) => handleMerge(ctx, 'mergeAll'),
-    'border-all': (ctx: Context) => handleBorder(ctx, 'border-all'),
-    bold: handleBold,
-    italic: handleItalic,
-    'strike-through': handleStrikeThrough,
-    underline: handleUnderline,
-    'clear-format': handleClearFormat,
-    'format-painter': handleFormatPainter,
-    link: handleLink,
-};
-
-const selectedMap: Record<string, ToolbarItemSelectedFunc> = {
-    bold: (cell) => cell?.bl === 1,
-    italic: (cell) => cell?.it === 1,
-    'strike-through': (cell) => cell?.cl === 1,
-    underline: (cell) => cell?.un === 1,
-};
-
-export function toolbarItemClickHandler(name: string) {
-    return handlerMap[name];
-}
-
-export function toolbarItemSelectedFunc(name: string) {
-    return selectedMap[name];
 }

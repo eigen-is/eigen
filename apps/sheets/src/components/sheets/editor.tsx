@@ -391,9 +391,6 @@ export function SheetEditor({
                                         data={initialData}
                                         onChange={handleWorkbookChange}
                                         onOp={handleOp}
-                                        showToolbar={true}
-                                        showFormulaBar={true}
-                                        showSheetTabs={true}
                                         allowEdit={canWrite && !loadFailed}
                                         toolbarLeftItems={leftItems}
                                         toolbarRightItems={rightItems}

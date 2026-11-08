@@ -3,10 +3,9 @@
 
 import { Input } from '@workspace/ui/components/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
-import { useContext, useState } from 'react';
-import { WorkbookContext } from '../../context';
+import { useState } from 'react';
 import { update } from '../../engine/format';
-import { CURRENCIES } from '../../state';
+import { CURRENCIES, MENU_CURRENCY } from '../../state';
 import { FormatDialog, PresetList, PresetRow } from './format-dialog';
 import type { CurrencyVariantId } from './format-pattern';
 import { buildCurrencyPattern, CURRENCY_VARIANT_IDS } from './format-pattern';
@@ -29,12 +28,10 @@ const LISTED_CURRENCIES = [...CURRENCIES]
     }));
 
 export function CustomCurrencies() {
-    const { settings } = useContext(WorkbookContext);
-
-    const [symbol, setSymbol] = useState(settings.currency);
+    const [symbol, setSymbol] = useState<string>(MENU_CURRENCY);
     const [variantId, setVariantId] = useState<CurrencyVariantId>('symbolFirst');
     const [selectedName, setSelectedName] = useState<string | null>(
-        () => CURRENCIES.find((c) => c.value === settings.currency)?.name ?? null,
+        () => CURRENCIES.find((c) => c.value === MENU_CURRENCY)?.name ?? null,
     );
     // The field holds the active symbol, and only text the user typed filters the list. A prefilled or picked symbol
     // keeps the whole list in view.

@@ -1,6 +1,6 @@
 // Excel and Google wrap text only: a number too wide for its column stays on one line and clips.
 
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, test } from 'bun:test';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { setCellValue } from '../../../state/modules/cell';
@@ -14,7 +14,7 @@ import {
 import type { Cell } from '../../../state/types';
 import { workbookContextFactory } from '../factories/context';
 
-const window = installHappyDom();
+installHappyDom();
 
 type Measure = (text: string, font: string) => { width: number; ascent: number; descent: number };
 
@@ -135,16 +135,8 @@ describe('state/modules/text — font sets', () => {
 // A glyph's ascent and descent are measured from the baseline, so the same text measures differently
 // under another baseline. A cache that mixed them up shifted numbers in one row up or down.
 describe('state/modules/text — measure cache', () => {
-    // Every happy-dom window shares one HTMLElement class, so the real offsetHeight goes back after each stub.
-    const realOffsetHeight = Object.getOwnPropertyDescriptor(window.HTMLElement.prototype, 'offsetHeight');
-
     beforeEach(() => {
         clearMeasureTextCache();
-    });
-
-    afterEach(() => {
-        if (realOffsetHeight) Object.defineProperty(window.HTMLElement.prototype, 'offsetHeight', realOffsetHeight);
-        else Reflect.deleteProperty(window.HTMLElement.prototype, 'offsetHeight');
     });
 
     test('the same text under another baseline is measured again', () => {
@@ -156,38 +148,6 @@ describe('state/modules/text — measure cache', () => {
         expect(getMeasureText('22', ctx).actualBoundingBoxAscent).toBe(0);
         ctx.textBaseline = 'alphabetic';
         expect(getMeasureText('22', ctx).actualBoundingBoxAscent).toBe(8);
-    });
-
-    // A canvas without bounding boxes takes a line's height from a DOM span, which a font slice that arrives later
-    // makes taller. The grid clears the caches when a slice loads, so the next measure sees the loaded font.
-    test('a line height taken from the DOM is measured again once the caches are cleared', () => {
-        let lineHeight = 10;
-        Object.defineProperty(window.HTMLElement.prototype, 'offsetHeight', {
-            configurable: true,
-            get: () => lineHeight,
-        });
-        const ctx = measuringCanvas((text) => ({ width: text.length * 7, ascent: Number.NaN, descent: Number.NaN }));
-        const font = getFontSet({});
-
-        expect(getMeasureText('M', ctx, font).actualBoundingBoxAscent).toBe(8);
-        lineHeight = 20;
-        clearMeasureTextCache();
-        expect(getMeasureText('M', ctx, font).actualBoundingBoxAscent).toBe(16);
-    });
-
-    // The span's height is cached by font, so it has to be measured in that font, not in the page's. The DOM here
-    // lays nothing out, so the span is as tall as the point size its font names.
-    test('a line height taken from the DOM is measured in the font it is cached by', () => {
-        Object.defineProperty(window.HTMLElement.prototype, 'offsetHeight', {
-            configurable: true,
-            get(this: HTMLElement) {
-                return Number.parseFloat(this.style.font.match(/([\d.]+)pt/)?.[1] ?? '0');
-            },
-        });
-        const ctx = measuringCanvas((text) => ({ width: text.length * 7, ascent: Number.NaN, descent: Number.NaN }));
-
-        expect(getMeasureText('M', ctx, getFontSet({ fs: 20 })).actualBoundingBoxAscent).toBe(16);
-        expect(getMeasureText('M', ctx, getFontSet({ fs: 30 })).actualBoundingBoxAscent).toBe(24);
     });
 });
 

@@ -98,9 +98,7 @@ async function mount({
         },
     ];
     await act(async () => {
-        root.render(
-            createElement(Workbook, { ref: workbook, data, allowEdit, showToolbar: false, showFormulaBar: false }),
-        );
+        root.render(createElement(Workbook, { ref: workbook, data, allowEdit }));
     });
     cleanups.push(async () => {
         await act(async () => root.unmount());

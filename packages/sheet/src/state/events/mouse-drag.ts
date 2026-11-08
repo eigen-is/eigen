@@ -85,7 +85,6 @@ export function handleOverlayMouseUp(
     ctx.scrolling = false;
     ctx.rowsSelected = false;
     ctx.colsSelected = false;
-    ctx.modalDragging = false;
 
     if (ctx.rowsResizing) {
         ctx.rowsResizing = false;

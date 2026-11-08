@@ -24,7 +24,7 @@ async function mountWorkbook() {
         { id: 's1', name: 'One', order: 0, status: 1, row: 10, column: 5, celldata: [], config: {} },
     ];
     await act(async () => {
-        root.render(createElement(Workbook, { data, showToolbar: true, showFormulaBar: false, hooks: {} }));
+        root.render(createElement(Workbook, { data, hooks: {} }));
     });
     cleanup = async () => {
         await act(async () => root.unmount());

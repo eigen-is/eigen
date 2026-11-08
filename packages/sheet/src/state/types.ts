@@ -76,12 +76,8 @@ export type Selection = {
     column_select?: boolean;
 };
 
-// Formula-edit selection input. The column-header and row-header click handlers
-// (`mouse-header.ts`, `formula-range.ts::rangeDragColumn`/`rangeDragRow`) pass
-// `[null, null]` as a whole-axis sentinel: `row: [null, null]` denotes a whole-
-// column reference, `column: [null, null]` a whole-row reference. `getRangetxt`
-// emits `A:A` / `1:1` from the sentinel; the data never escapes that formatter.
-// At most one axis is the sentinel (the producers never set both).
+// A range being picked into a formula. `[null, null]` on one axis means the whole axis: `row: [null, null]` is a
+// whole-column reference, and `column: [null, null]` a whole-row one.
 export type RangeOrWholeAxis =
     | SingleRange
     | { row: [null, null]; column: number[] }
@@ -136,7 +132,6 @@ export type AlternateFormatEntry = {
 export type Sheet = Omit<LibSheet, 'config' | 'id'> & {
     id: string;
     config?: SheetConfig;
-    addRows?: number;
     status?: number;
     selections?: Selection[];
     calcChain?: CalcChainEntry[];
@@ -227,9 +222,6 @@ export type History = {
     gesture?: object;
 };
 
-// Pre-computed offsets the freeze line uses to redraw above/below the frozen
-// pane. Built by state/modules/freeze.ts; consumed by event handlers,
-// selection-overflow math, and the Sheet canvas-draw helpers.
 export type FreezenAxisData = {
     pos: number; // pixel position of the freeze boundary (visibledatarow/col at row_st/col_st)
     boundary: number; // first row/col index immediately past the freeze boundary
@@ -259,9 +251,7 @@ export type GlobalCache = {
     copiedChart?: { inline: ChartSpecTexts; chart: SheetChart };
     freezen?: Record<string, Freezen>;
 
-    // Scroll state stored outside React/immer to avoid triggering full
-    // re-render cascades across all context consumers on every scroll tick.
-    // Components that need scroll position subscribe via scrollListeners.
+    // Kept outside React and immer, so a scroll tick doesn't render every reader of the context.
     scrollLeft: number;
     scrollTop: number;
     scrollListeners: Set<() => void>;

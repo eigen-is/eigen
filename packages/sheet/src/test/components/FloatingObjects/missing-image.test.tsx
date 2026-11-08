@@ -36,8 +36,6 @@ test('a missing image selects on click and Delete removes it', async () => {
         root.render(
             createElement(Workbook, {
                 data,
-                showToolbar: false,
-                showFormulaBar: false,
                 hooks: { resolveImageUrl: () => null, isImageMissing: () => true },
             }),
         );

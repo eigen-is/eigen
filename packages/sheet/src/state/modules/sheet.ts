@@ -12,7 +12,13 @@ import {
     sheetNameKey,
 } from '../../engine/a1-notation';
 import { celldataToData } from '../../engine/celldata';
-import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
+import {
+    DEFAULT_SHEET_COLUMN_COUNT,
+    DEFAULT_SHEET_ROW_COUNT,
+    gridSize,
+    MAX_SHEET_COLUMN_COUNT,
+    MAX_SHEET_ROW_COUNT,
+} from '../../engine/defaults';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
@@ -107,8 +113,8 @@ export function addSheet(
               status: 0,
               order,
               id,
-              row: ctx.defaultrowNum,
-              column: ctx.defaultcolumnNum,
+              row: DEFAULT_SHEET_ROW_COUNT,
+              column: DEFAULT_SHEET_COLUMN_COUNT,
               config: {},
               pivotTable: null,
               isPivotTable: !!isPivotTable,
@@ -128,12 +134,8 @@ export function addSheet(
 // A sheet's cells come stored as a sparse list; the editor works on a full matrix, so a sheet gets one before
 // anything reads or writes its cells.
 export function initSheetData(draftCtx: Context, index: number, newData: Sheet) {
-    const { celldata, row, column } = newData;
-    const expandedData = celldataToData(
-        celldata ?? [],
-        row != null && row > 0 ? row : draftCtx.defaultrowNum,
-        column != null && column > 0 ? column : draftCtx.defaultcolumnNum,
-    );
+    const { row, column } = gridSize(newData);
+    const expandedData = celldataToData(newData.celldata ?? [], row, column);
     if (draftCtx.sheets[index] == null) {
         newData.data = expandedData;
         delete newData.celldata;
