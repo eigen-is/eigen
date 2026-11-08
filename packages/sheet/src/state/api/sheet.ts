@@ -1,5 +1,5 @@
-// The sheet calls on the workbook's context, such as hiding, copying or ordering a sheet, and seeding its recalc list.
-// Most of them write the context they are given, so a caller runs them inside an edit's recipe.
+// The sheet calls on the workbook's context, such as hiding, copying or ordering a sheet. Most of them write the context
+// they are given, so a caller runs them inside an edit's recipe.
 
 import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { cloneDeep, sortBy } from 'es-toolkit/compat';
@@ -7,7 +7,6 @@ import { mapChartRefs } from '../../engine/chart-data';
 import { copySheetName } from '../../engine/sheet-name';
 import type { Context } from '../context';
 import { addSheet, leaveCurrentSheet } from '../modules';
-import type { FormulaCell } from '../types';
 import { getSheetIndex, sheetOrder } from '../utils';
 
 export function getAllSheets(ctx: Context) {
@@ -45,8 +44,6 @@ export function copySheet(ctx: Context, sheetId: string) {
     for (const row of sheetData.data ?? []) {
         for (const cell of row) delete cell?.commentCardIds;
     }
-    // The formula map is built from every sheet's recalc list, which must name the copy, not the sheet copied.
-    sheetData.calcChain = sheetData.calcChain?.map((entry) => ({ ...entry, id: copyId }));
     // A copy's images and charts take fresh ids, and its charts read the copy where they read the sheet copied, as
     // in Excel and Google.
     const toCopy = (ref: CellRangeRef) => (ref.sheetId === sheetId ? { ...ref, sheetId: copyId } : ref);
@@ -72,24 +69,5 @@ export function setSheetOrder(ctx: Context, orderList: Record<string, number>) {
     }
     for (const [i, sheet] of sortBy(ctx.sheets, ['order']).entries()) {
         sheet.order = i;
-    }
-}
-
-// Rebuilds each sheet's recalc list from the cells that hold a formula, without computing any. The workbook calls it
-// when it mounts, because the stored values are already current and computing them all takes a second on a large
-// file. An edit then computes only the formulas it affects, and the formula map learns them from this list.
-export function seedCalcChain(ctx: Context) {
-    for (const sheet of ctx.sheets) {
-        const { id, data } = sheet;
-        if (!id || !data) continue;
-        const chain: FormulaCell[] = [];
-        for (let r = 0; r < data.length; r += 1) {
-            const row = data[r];
-            if (!row) continue;
-            for (let c = 0; c < row.length; c += 1) {
-                if (row[c]?.f) chain.push({ r, c, id });
-            }
-        }
-        sheet.calcChain = chain;
     }
 }

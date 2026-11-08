@@ -14,7 +14,7 @@ import { getRangetxt, isAllSelectedCellsInStatus, setCellValue } from './cell';
 import { openCellEditor } from './cell-editor';
 import { rangeColor } from './color';
 import { israngeseleciton } from './formula-editor';
-import { execfunction } from './formula-exec';
+import { computeFormula } from './formula-exec';
 import { createFormulaRangeSelect, rangeSetValue } from './formula-range';
 import { showLinkCard } from './hyperlink';
 import {
@@ -335,9 +335,8 @@ function backFormulaInput(
         { row: rowh, column: columnh },
         ctx.currentSheetId,
     )})`;
-    const v = execfunction(ctx, f, r, c);
-    const value = { v: v[1], f: v[2] };
-    setCellValue(ctx, r, c, d, value);
+    const [v, formulaText] = computeFormula(ctx, f);
+    setCellValue(ctx, r, c, d, { v, f: formulaText });
     recomputeCells(ctx, [{ r, c, id: ctx.currentSheetId }], d);
 }
 

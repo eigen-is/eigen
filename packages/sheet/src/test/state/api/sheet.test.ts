@@ -5,7 +5,7 @@ import type { CellRangeRef, ChartSpec } from '@workspace/lib/types/chart';
 import { produce, produceWithPatches } from 'immer';
 import { celldataToData, dataToCelldata } from '../../../engine/celldata';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../../../engine/defaults';
-import { copySheet, getAllSheets, seedCalcChain, setSheetOrder } from '../../../state/api/sheet';
+import { copySheet, getAllSheets, setSheetOrder } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { setCellValue } from '../../../state/modules/cell';
 import { execFunctionGroup, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
@@ -160,7 +160,6 @@ describe('sheet/core/api/sheet', () => {
             ],
         });
         const copied = produce(base, (draft: Context) => {
-            seedCalcChain(draft);
             warmFormulaCellInfoMap(draft);
             copySheet(draft, 'id_1');
         });

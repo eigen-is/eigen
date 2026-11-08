@@ -33,7 +33,7 @@ describe('commutes', () => {
     });
 
     test('fails for two adds at an array index, which both move the array', () => {
-        expect(commutes([add(['calcChain', 0])], [add(['calcChain', 1])])).toBe(false);
+        expect(commutes([add(['conditionalFormatRules', 0])], [add(['conditionalFormatRules', 1])])).toBe(false);
     });
 
     test('fails when either side moves rows', () => {

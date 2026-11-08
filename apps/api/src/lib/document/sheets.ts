@@ -3,7 +3,7 @@
 // new snapshot when the document closes. Some writers change the doc through it, such as an import that adds tabs or
 // a version restore that stamps a fresh base.
 
-import type { Op, Sheet, SheetWithCalcChain } from '@workspace/lib/sheets';
+import type { Op, Sheet } from '@workspace/lib/sheets';
 import {
     decodeSheetsSnapshot,
     encodeSheetsSnapshot,
@@ -23,7 +23,6 @@ import {
     replaySheetsOps,
     sheetFinder,
     sheetNameKey,
-    sheetsNeedRecalc,
     withMaterializedData,
 } from '@workspace/sheet/engine';
 import type * as Y from 'yjs';
@@ -60,17 +59,16 @@ export function readSheetsFromDoc(
     doc: Y.Doc,
     { recalc = true }: { recalc?: boolean } = {},
 ): { sheets: Sheet[]; recalcError: string | null } {
-    const { sheets } = decodeOrDefault(readSheetsSnapshotJson(doc));
+    const { sheets, computed } = decodeOrDefault(readSheetsSnapshotJson(doc));
     // The snapshot stores cells as a list, but the renderers' conditional formats and the cross-sheet formula resolver
     // read the dense `data` matrix, so every sheet gets one. One far-flung cell, such as XFD1048576, makes a huge grid,
     // and the transform's deadline bounds it.
     const replayed = replaySheetsOps(sheets, sheetsOpLog(doc).toArray()).map(withMaterializedData);
 
-    // Only a workbook nobody computed, with formulas but no calc chain, is recalculated here, such as an old xlsx
-    // import. An edited workbook pays nothing. Only the export asks for it. A large recalc took 39 s, more than a
-    // preview or a search extract may take, so those read the replayed values. A recalc that fails leaves the replayed
-    // values, because an export must not fail on it.
-    if (!recalc || !sheetsNeedRecalc(replayed)) return { sheets: replayed, recalcError: null };
+    // Only a workbook nobody computed is recalculated here, such as an xlsx import whose recalc failed. Only the export
+    // asks for it. A large recalc took 39 s, more than a preview or a search extract may take, so those read the
+    // replayed values. A recalc that fails leaves the replayed values, because an export must not fail on it.
+    if (!recalc || computed) return { sheets: replayed, recalcError: null };
     try {
         return {
             sheets: recalcSheets(replayed, SERVER_RECALC_BUDGET),
@@ -92,10 +90,8 @@ export function compactSheetsSnapshot(
     const { sheets, computed } = decodeOrDefault(snapshotJson);
     let dropped = 0;
     const replayed = replaySheetsOps(sheets, JSON.parse(batchesJson), () => dropped++);
-    // The compaction never recalculates, so a workbook nobody computed stays uncomputed, and an export computes it. So
-    // does one that gained formulas without a calc chain, such as a tab an import added, or the decoder would give
-    // those formulas a calc chain and no reader would ever compute them.
-    return { snapshot: encodeSheetsSnapshot(replayed, { computed: computed && !sheetsNeedRecalc(replayed) }), dropped };
+    // The compaction never recalculates, so a workbook nobody computed stays uncomputed, and an export computes it.
+    return { snapshot: encodeSheetsSnapshot(replayed, { computed }), dropped };
 }
 
 // The workbook as a tab opening the doc shows it, with every pending op replayed.
@@ -118,10 +114,9 @@ export function restampRestoredSheetsBase(type: DrivePathType, doc: Y.Doc): void
 // Import… as new tabs. The file's sheets go in after the workbook's own as addSheet ops, the way a peer's new tab
 // arrives, so an open tab adds them live and keeps its view and its undo. Each sheet takes a fresh id. One whose name the
 // workbook already has is renamed the way Duplicate names a copy. The file's references to its own sheets follow them.
-// Formulas, conditional formats, list sources and links name a sheet by name. Charts, link cells and the calc chain
-// name it by id. `current` is the workbook as readLiveSheets reads it in the same write.
+// Formulas, conditional formats, list sources and links name a sheet by name. Charts and link cells name it by id. `current` is the workbook as readLiveSheets reads it in the same write.
 export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string, current: Sheet[]): void {
-    const imported: SheetWithCalcChain[] = decodeSheetsSnapshot(snapshotJson);
+    const imported = decodeSheetsSnapshot(snapshotJson);
     const taken = current.map((sheet) => sheet.name);
     const renames = new Map<string, string>();
     const fresh = imported.map((sheet) => {
@@ -140,7 +135,6 @@ export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string, current: She
         for (const { v } of sheet.celldata ?? []) {
             if (v?.hl) v.hl.id = id;
         }
-        for (const entry of sheet.calcChain ?? []) entry.id = id;
         const charts = Object.fromEntries(
             Object.entries(sheet.charts ?? {}).map(([key, chart]) => [
                 key,

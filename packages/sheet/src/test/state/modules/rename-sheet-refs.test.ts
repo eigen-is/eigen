@@ -38,13 +38,6 @@ function workbookTab(cells: Record<string, string>, extra: Partial<Sheet> = {}, 
         name,
         order,
         config: {},
-        calcChain:
-            order === 1
-                ? Object.keys(cells).map((key) => {
-                      const [r, c] = key.split('_').map(Number);
-                      return { r, c, id: 'id_2' };
-                  })
-                : [],
         data: order === 0 ? first : order === 1 ? matrix(cells) : matrix({}),
         ...(order === 1 ? extra : {}),
     }));

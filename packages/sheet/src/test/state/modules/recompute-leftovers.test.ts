@@ -29,7 +29,6 @@ function withDependent(a1: number | string, selections = selectionFactory([0, 0]
                     ],
                     [null, null, null, null],
                 ],
-                calcChain: [{ r: 0, c: 1, id: 'id_1' }],
             },
         ],
     }) as Context;

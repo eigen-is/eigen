@@ -2,9 +2,8 @@
 // a formula at a row beyond the active sheet's bounds. Repro: select-all +
 // delete on a small sheet while a taller sheet holds a formula in, say, column
 // E. The delete clears the active sheet's formulaCellInfoMap entries, forcing
-// execFunctionGroup to rebuild the map over the whole workbook's calc chain
-// (getAllFunctionGroup spans every sheet). getcellFormula then indexed the
-// active sheet's data with the *other* sheet's (r,c), throwing
+// execFunctionGroup to rebuild the map over every sheet's cells. getcellFormula
+// then indexed the active sheet's data with the *other* sheet's (r,c), throwing
 // "Cannot read properties of undefined (reading '4')".
 
 import { describe, expect, it } from 'bun:test';
@@ -21,7 +20,7 @@ function tallSheetData() {
     );
 }
 
-describe('a delete across a multi-sheet calc chain', () => {
+describe('a delete with formulas on several sheets', () => {
     it('does not crash when another sheet has a formula beyond the active sheet bounds', () => {
         const ctx = contextFactory({
             currentSheetId: 'id_1',
@@ -42,7 +41,6 @@ describe('a delete across a multi-sheet calc chain', () => {
                     id: 'id_2',
                     order: 1,
                     data: tallSheetData(),
-                    calcChain: [{ r: 10, c: 4, id: 'id_2' }],
                 },
             ],
         }) as Context;
@@ -71,7 +69,7 @@ describe('delete refreshes only the cells it actually changed', () => {
             currentSheetId: 'id_1',
             // Select all of column A (rows 0..999); C1 in column C stays unselected.
             selections: [{ row: [0, 999], column: [0, 0], row_focus: 0, column_focus: 0 }],
-            sheets: [{ name: 'active', id: 'id_1', order: 0, data, calcChain: [{ r: 0, c: 2, id: 'id_1' }] }],
+            sheets: [{ name: 'active', id: 'id_1', order: 0, data }],
         }) as Context;
 
         const changed = deleteSelectedCellText(ctx);

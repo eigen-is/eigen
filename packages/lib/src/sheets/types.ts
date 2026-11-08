@@ -54,8 +54,8 @@ export type CellWithRowAndCol = {
 };
 
 // One edit to a workbook, made by the editor from immer's patches and replayed by the editor and the API.
-// `value` stays `any` because the editor passes a cell, a sheet, a row or column op or a calc chain through it,
-// with no field that says which.
+// `value` stays `any` because the editor passes a cell, a sheet or a row or column op through it, with no field that
+// says which.
 export type Op = {
     op: 'replace' | 'remove' | 'add' | 'insertRowCol' | 'deleteRowCol' | 'addSheet' | 'deleteSheet' | 'renameSheet';
     id?: string;
@@ -212,15 +212,6 @@ export type DefaultConditionalFormatRule = CFRuleBase & {
 
 export type ConditionalFormatRule = DataBarRule | ColorGradationRule | DefaultConditionalFormatRule;
 
-// A formula cell in the dependency graph. The engine stamps `r`, `c` and `id`, and the editor's ordering adds
-// `index`. It is never stored: decoding a snapshot builds the chain again.
-export type CalcChainEntry = {
-    r: number;
-    c: number;
-    id: string;
-    index?: number;
-};
-
 export type Sheet = {
     name: string;
     id?: string;
@@ -261,9 +252,6 @@ export type Sheet = {
     images?: Record<string, SheetImage>;
     charts?: Record<string, SheetChart>;
 };
-
-// The editor-runtime Sheet: the wire shape plus the calc chain the reader gate keys off.
-export type SheetWithCalcChain = Sheet & { calcChain?: CalcChainEntry[] };
 
 // Whether a frozen pane freezes rows: 'row', 'both', and their range forms 'rangeRow' and 'rangeBoth'.
 export function freezesRows(frozen: Sheet['frozen']): boolean {

@@ -13,7 +13,7 @@ import { cfSplitRange, withCfRanges } from '../../engine/conditional-format';
 import { cellDisplay, numberDisplay, numberText } from '../../engine/format';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
-import type { CalcChainEntry, Cell, CellMatrix, Range, Selection, SingleRange } from '../types';
+import type { Cell, CellMatrix, FormulaCell, Range, Selection, SingleRange } from '../types';
 import { getSheetIndex, replaceHtml, styleObjectToCss } from '../utils';
 import type { CarryTile } from './cell';
 import {
@@ -1207,8 +1207,8 @@ export function copy(ctx: Context, { cut = false }: { cut?: boolean } = {}) {
 
 // Returns the cells it cleared, for the recompute to name: every cell of a select-all would make clearing a large and
 // mostly empty selection slow.
-export function deleteSelectedCellText(ctx: Context): CalcChainEntry[] {
-    const changed: CalcChainEntry[] = [];
+export function deleteSelectedCellText(ctx: Context): FormulaCell[] {
+    const changed: FormulaCell[] = [];
 
     const selection = ctx.selections;
     if (selection && !isEmpty(selection)) {

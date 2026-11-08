@@ -3,7 +3,7 @@
 // restores what the marker alone can't.
 
 import { describe, expect, test } from 'bun:test';
-import type { Sheet as LibSheet, MergeCell, SheetWithCalcChain } from '@workspace/lib/sheets';
+import type { Sheet as LibSheet, MergeCell } from '@workspace/lib/sheets';
 import { REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { enablePatches, produce, produceWithPatches } from 'immer';
 import { replaySheetsOps, withMaterializedData } from '../../../engine';
@@ -46,7 +46,6 @@ function richContext(): Context {
                     merge: { '3_2': { r: 3, c: 2, rs: 1, cs: 2 } },
                     borderInfo: { '1_0': { t: SIDE }, '2_1': { b: SIDE }, '3_3': { l: SIDE } },
                 },
-                calcChain: [{ r: 2, c: 1, id: 'id_1' }],
                 // The links and the validation rules ship nothing, so they prove the replay moves them itself.
                 hyperlink: { '2_0': LINK },
                 dataValidations: {
@@ -129,7 +128,6 @@ describe('insert/delete ops stay sheet-sized-payload free', () => {
 });
 
 describe('BE replay converges with FE state from the slim ops alone', () => {
-    // calcChain is absent because no forward op ships it: the replay never reads it, and each tab moves its own.
     function expectConverged(replayed: LibSheet[], next: Context) {
         for (const [i, sheet] of replayed.entries()) {
             expect(sheet.data).toEqual(next.sheets[i].data);
@@ -172,14 +170,11 @@ describe('BE replay converges with FE state from the slim ops alone', () => {
         const deleteOps = deleted.ops;
         const { ops: undoOps } = undoEntry(deleted.next, deleted.entry);
 
-        const replayed: SheetWithCalcChain[] = replaySheetsOps(baseSheets, [deleteOps, undoOps]);
+        const replayed = replaySheetsOps(baseSheets, [deleteOps, undoOps]);
         expect(replayed[0].data).toEqual(base.sheets[0].data);
         // rowlen/rowhidden of the deleted rows aren't derivable from the delete +
         // insert ops alone — the config metadata op must restore them.
         expect(replayed[0].config).toEqual(base.sheets[0].config);
-        // Same for calcChain: the delete dropped the removed rows' entries on
-        // every peer, so the undo must ship the authoritative copy back.
-        expect(replayed[0].calcChain).toEqual(base.sheets[0].calcChain);
     });
 
     test('insert inside a multi-row merge stamps the new null cells on the replay side', () => {

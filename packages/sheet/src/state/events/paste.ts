@@ -22,7 +22,7 @@ import { carrySides } from '../modules/border';
 import type { CarryTile } from '../modules/cell';
 import { carriedLines, carryCells, getQKBorder, landedRanges, setCellValue } from '../modules/cell';
 import { setFormulaCellInfo } from '../modules/formula-cache';
-import { delFunctionGroup, execFunctionGroup, execfunction } from '../modules/formula-exec';
+import { computeFormula, execFunctionGroup } from '../modules/formula-exec';
 import { jfrefreshgrid } from '../modules/refresh';
 import { hasPartMC } from '../modules/validation';
 import type { Selection } from '../types';
@@ -153,7 +153,7 @@ function pasteCut(ctx: Context, copyState: NonNullable<Context['copyState']>) {
             for (let c = column[0]; c <= column[1]; c += 1) {
                 const cell = evaluate ? d[r]?.[c] : undefined;
                 if (cell?.f != null) {
-                    [, cell.v] = execfunction(ctx, cell.f, r, c, { id, resolver });
+                    [cell.v] = computeFormula(ctx, cell.f, { id, resolver });
                     cell.m = numberDisplay(cell.v, cell.ct?.fa);
                 }
                 setFormulaCellInfo(ctx, { r, c, id });
@@ -222,9 +222,8 @@ function pasteCopy(ctx: Context, copyState: NonNullable<Context['copyState']>) {
             return cell;
         }
         const func = r === sr && c === sc ? cell.f : `=${functionCopy(cell.f, r - sr, c - sc)}`;
-        const funcV = execfunction(ctx, func, r, c, { resolver });
-        [, cell.v, cell.f] = funcV;
-        cell.m = numberDisplay(funcV[1], cell.ct?.fa);
+        [cell.v, cell.f] = computeFormula(ctx, func, { resolver });
+        cell.m = numberDisplay(cell.v, cell.ct?.fa);
         return cell;
     });
 
@@ -543,10 +542,7 @@ function pasteText(ctx: Context, text: string) {
     for (const [r, row] of rows.entries()) {
         for (let c = 0; c < columns; c += 1) {
             const originCell = d[r + top][c + left];
-            if (originCell?.f != null) {
-                delete originCell.f;
-                delFunctionGroup(ctx, r + top, c + left, ctx.currentSheetId);
-            }
+            if (originCell?.f != null) delete originCell.f;
             setCellValue(ctx, r + top, c + left, d, row[c]);
         }
     }
@@ -564,9 +560,7 @@ function pasteFormula(ctx: Context, formulaStr: string) {
     const r = selection.row[0];
     const c = selection.column[0];
 
-    const funcV = execfunction(ctx, formulaStr, r, c);
-
-    const val = funcV[1];
+    const [val] = computeFormula(ctx, formulaStr);
 
     const d = getFlowdata(ctx);
     if (!d) return;

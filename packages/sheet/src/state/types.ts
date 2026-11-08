@@ -15,7 +15,6 @@ import type {
 import type { ChartSpecTexts } from '@workspace/lib/types/chart';
 import type { Patch as ImmerPatch } from 'immer';
 import type {
-    CalcChainEntry,
     Cell,
     CellMatrix,
     CellWithRowAndCol,
@@ -33,7 +32,6 @@ import type { PatchOptions } from './utils';
 // are lib's and reach this file through the engine's types. Op and the conditional-format and
 // validation rules come from lib directly, because the server reads them without the engine.
 export type {
-    CalcChainEntry,
     Cell,
     CellMatrix,
     CellWithRowAndCol,
@@ -94,15 +92,14 @@ export type Presence = {
 
 export type SheetConfig = LibSheetConfig & EditorSheetConfigExtras;
 
-// The sheet as the editor holds it: lib's stored fields plus editor-only ones, such as the calc chain and the filter
-// criteria, which never reach the stored shape. `config` widens to the editor's SheetConfig. `id` is
+// The sheet as the editor holds it: lib's stored fields plus editor-only ones, such as the filter criteria, which never
+// reach the stored shape. `config` widens to the editor's SheetConfig. `id` is
 // required, because the editor names every sheet by it. A stored sheet may lack one: the Workbook takes lib's Sheet in
 // its `data` and gives such a sheet an id when it mounts. Fields that persist, such as the frozen panes, the hyperlinks
 // and the tab colour, live on lib's Sheet, since the server reads them too.
 export type Sheet = Omit<LibSheet, 'config' | 'id'> & {
     id: string;
     config?: SheetConfig;
-    calcChain?: CalcChainEntry[];
     filter?: Record<string, FilterEntry>;
 };
 

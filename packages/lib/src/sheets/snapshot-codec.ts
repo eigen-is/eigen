@@ -7,7 +7,6 @@ import { isRecord } from '../core/guards';
 import { cloneSides, parseCellKey } from './borders';
 import { chartsWithinEntryCap } from './floating';
 import type {
-    CalcChainEntry,
     Cell,
     CellBorderSides,
     CellMatrix,
@@ -16,7 +15,6 @@ import type {
     SheetChart,
     SheetConfig,
     SheetImage,
-    SheetWithCalcChain,
 } from './types';
 import { wellFormedValidations } from './validations';
 
@@ -60,8 +58,8 @@ export function encodeSheetsSnapshot(sheets: Sheet[], opts: { computed: boolean 
     const borders: CellBorderSides[] = [];
     const borderIndex = new Map<string, number>();
 
-    const encoded = sheets.map((sheet: SheetWithCalcChain) => {
-        const { celldata, data, calcChain: _calcChain, config, images, charts, dataValidations, ...rest } = sheet;
+    const encoded = sheets.map((sheet) => {
+        const { celldata, data, config, images, charts, dataValidations, ...rest } = sheet;
         const out: EncodedSheet = { ...rest };
         if (images && Object.keys(images).length > 0) out.images = images;
         if (charts && Object.keys(charts).length > 0) out.charts = charts;
@@ -113,7 +111,7 @@ export function decodeSheetsSnapshot(snapshot: string): Sheet[] {
 }
 
 // The sheets with the `computed` flag the encoder was given. A writer that encodes them again, such as the server's
-// compaction, must pass the flag on. The decoded sheets only hint at it through their calcChain.
+// compaction, must pass the flag on.
 export function decodeSheetsWorkbook(snapshot: string): { sheets: Sheet[]; computed: boolean } {
     const { f, computed, styles, borders, sheets } = JSON.parse(snapshot) as SnapshotV2;
     // A corrupt snapshot, an older format or a newer one throws here. Read on, it would become a half-empty workbook
@@ -124,7 +122,7 @@ export function decodeSheetsWorkbook(snapshot: string): { sheets: Sheet[]; compu
         // Every sheet gets all three maps, even empty ones. The editor writes each image, chart or validation under its
         // own key, and that patch needs the map to exist. A value that is no map is dropped, and so is a chart past the
         // entry cap and a validation that is not well formed.
-        const sheet: SheetWithCalcChain = {
+        const sheet: Sheet = {
             ...rest,
             images: isRecord(images) ? images : {},
             charts: isRecord(charts) ? chartsWithinEntryCap(charts) : {},
@@ -133,17 +131,10 @@ export function decodeSheetsWorkbook(snapshot: string): { sheets: Sheet[]; compu
 
         if (cells) {
             const celldata: CellWithRowAndCol[] = [];
-            const calcChain: CalcChainEntry[] = [];
-            const id = sheet.id;
             for (const [r, c, styleIdx, content] of cells) {
-                const cell = decodeCell(styleIdx, content, styles);
-                celldata.push({ r, c, v: cell });
-                if (id != null && typeof cell?.f === 'string') calcChain.push({ r, c, id });
+                celldata.push({ r, c, v: decodeCell(styleIdx, content, styles) });
             }
             sheet.celldata = celldata;
-            // A calcChain tells a reader that the values are computed. A snapshot written with stale values leaves it
-            // off, so the recalc runs.
-            if (computed) sheet.calcChain = calcChain;
         }
 
         if (config || borderCells) {

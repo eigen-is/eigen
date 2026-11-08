@@ -3,7 +3,7 @@ import type { Cell, Sheet } from '@workspace/lib/sheets';
 import { createArrayResolver } from '../../engine/cell-resolver';
 import { FormulaEngine } from '../../engine/formula-engine';
 import { sheetFinder } from '../../engine/parser/helper/cell';
-import { extractDependencies, recalcSheets, sheetsNeedRecalc } from '../../engine/recalc';
+import { extractDependencies, recalcSheets } from '../../engine/recalc';
 
 // ── Builders ────────────────────────────────────────────────────────────────
 
@@ -22,8 +22,6 @@ function formula(f: string, cached?: Partial<Cell>): Cell {
 function sheet(id: string, name: string, data: (Cell | null)[][], extra: Partial<Sheet> = {}): Sheet {
     return { id, name, order: 0, config: {}, data, ...extra };
 }
-
-type SheetWithChain = Sheet & { calcChain?: { r: number; c: number; id: string }[] };
 
 // ── recalcSheets ────────────────────────────────────────────────────────────
 
@@ -532,59 +530,11 @@ describe('engine/recalc — recalcSheets', () => {
         ];
         expect(recalcSheets(sheets, { maxDependencySlots: 1 })[0].data![0][0]?.v).toBe(11);
     });
-
-    test('output carries a populated calcChain for formula cells', () => {
-        const out = recalcSheets([sheet('s1', 'Sheet1', [[num(1), formula('=A1+1')]])]) as SheetWithChain[];
-        expect(out[0].calcChain).toEqual([{ r: 0, c: 1, id: 's1' }]);
-    });
 });
 
-// ── sheetsNeedRecalc gate ───────────────────────────────────────────────────
-
-describe('engine/recalc — sheetsNeedRecalc', () => {
-    test('false for a doc with no formula cells', () => {
-        expect(sheetsNeedRecalc([sheet('s1', 'Sheet1', [[num(1), num(2)]])])).toBe(false);
-    });
-
-    test('true for formula cells (data) without a calcChain', () => {
-        expect(sheetsNeedRecalc([sheet('s1', 'Sheet1', [[num(1), formula('=A1+1')]])])).toBe(true);
-    });
-
-    test('true for formula cells in celldata without a calcChain', () => {
-        const s: Sheet = {
-            id: 's1',
-            name: 'Sheet1',
-            order: 0,
-            config: {},
-            celldata: [{ r: 0, c: 0, v: formula('=1+1') }],
-        };
-        expect(sheetsNeedRecalc([s])).toBe(true);
-    });
-
-    test('false once a calcChain is present (editor-flushed / import-recalced)', () => {
-        const s: SheetWithChain = {
-            ...sheet('s1', 'Sheet1', [[num(1), formula('=A1+1')]]),
-            calcChain: [{ r: 0, c: 1, id: 's1' }],
-        };
-        expect(sheetsNeedRecalc([s])).toBe(false);
-    });
-
-    test('recalc output no longer triggers the gate (idempotent)', () => {
-        const out = recalcSheets([sheet('s1', 'Sheet1', [[num(1), formula('=A1+1')]])]);
-        expect(sheetsNeedRecalc(out)).toBe(false);
-    });
-
-    test('false for an id-less sheet — recalcSheets skips it, so it must not arm the gate', () => {
-        const idless: Sheet = { name: 'Loose', order: 0, config: {}, data: [[num(1), formula('=A1+1')]] };
-        expect(sheetsNeedRecalc([idless])).toBe(false);
-        expect(recalcSheets([idless])[0]).toBe(idless);
-    });
-
-    test('recalc output of a doc carrying an id-less sheet no longer triggers the gate', () => {
-        const idless: Sheet = { name: 'Loose', order: 0, config: {}, data: [[num(1), formula('=A1+1')]] };
-        const out = recalcSheets([sheet('s1', 'Sheet1', [[num(1), formula('=A1+1')]]), idless]);
-        expect(sheetsNeedRecalc(out)).toBe(false);
-    });
+test('recalcSheets leaves an id-less sheet as it is', () => {
+    const idless: Sheet = { name: 'Loose', order: 0, config: {}, data: [[num(1), formula('=A1+1')]] };
+    expect(recalcSheets([idless])[0]).toBe(idless);
 });
 
 describe('engine/recalc — extractDependencies', () => {

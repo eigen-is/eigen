@@ -140,7 +140,6 @@ describe('replaceAllMatches', () => {
                             { f: '=A1', v: 'cat', m: 'cat' },
                         ],
                     ],
-                    calcChain: [{ r: 0, c: 1, id: 'id_1' }],
                 },
             ],
         }) as Context;

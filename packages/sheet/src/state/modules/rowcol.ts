@@ -1,17 +1,15 @@
 // Row and column inserts, deletes, hides and unhides on the open workbook. The engine shifts what every reader of the
 // workbook sees, such as the cells, the formulas and the links (applySheetsInsertRowCol). This module writes that result
-// back into the editor's draft, then shifts what only this tab holds, such as the calc chain and the selection. A local
-// edit, a peer's op and an undo all come through here. It also tells the editors and the arrow keys where the hidden
-// rows and columns are.
+// back into the editor's draft, then moves what only this tab holds, such as the selection. A local edit, a peer's op
+// and an undo all come through here. It also tells the editors and the arrow keys where the hidden rows and columns are.
 
 import { isRecord } from '@workspace/lib/guards';
 import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from '../../engine/rowcol';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
-import { getSheetConfig } from '../context';
-import type { CalcChainEntry, Sheet } from '../types';
-import { getSheetIndex } from '../utils';
+import { getFlowdata, getSheetConfig } from '../context';
+import type { Sheet } from '../types';
 
 export const ONE_AREA_ONLY = 'Cannot perform this operation on multiple selection areas, please select a single area';
 
@@ -23,23 +21,13 @@ export function insertRowCol(
     fromBatch = false,
 ) {
     if (!fromBatch && ctx.allowEdit === false) return;
-    const { id, type, index, count, direction } = op;
+    const { type, index, count, direction } = op;
 
     writeBackSheets(ctx, applySheetsInsertRowCol(ctx.sheets, op));
 
-    const sheetIndex = getSheetIndex(ctx, id);
-    if (sheetIndex == null) return;
-    const sheet = ctx.sheets[sheetIndex];
-
-    const insertAt = direction === 'lefttop' ? index : index + 1;
-    const shift = (at: number) => (at >= insertAt ? at + count : at);
-    // The calc chain is this tab's recalc list and is never stored, so the engine does not move it.
-    sheet.calcChain = (sheet.calcChain ?? []).map((entry) =>
-        type === 'row' ? { ...entry, r: shift(entry.r) } : { ...entry, c: shift(entry.c) },
-    );
-
-    const { data } = sheet;
+    const data = getFlowdata(ctx, op.id);
     if (changeSelection && data) {
+        const insertAt = direction === 'lefttop' ? index : index + 1;
         const span = [insertAt, insertAt + count - 1];
         ctx.selections =
             type === 'row'
@@ -58,24 +46,7 @@ export function deleteRowCol(
     fromBatch = false,
 ) {
     if (!fromBatch && ctx.allowEdit === false) return;
-    const { id, type, start, end } = op;
-
     writeBackSheets(ctx, applySheetsDeleteRowCol(ctx.sheets, op));
-
-    const sheetIndex = getSheetIndex(ctx, id);
-    if (sheetIndex == null) return;
-    const sheet = ctx.sheets[sheetIndex];
-
-    const deletedCount = end - start + 1;
-    const calcChain: CalcChainEntry[] = [];
-    for (const entry of sheet.calcChain ?? []) {
-        const at = type === 'row' ? entry.r : entry.c;
-        if (at < start) calcChain.push(entry);
-        else if (at > end) {
-            calcChain.push(type === 'row' ? { ...entry, r: at - deletedCount } : { ...entry, c: at - deletedCount });
-        }
-    }
-    sheet.calcChain = calcChain;
 
     if (!fromBatch) ctx.selections = undefined;
 

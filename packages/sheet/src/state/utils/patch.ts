@@ -4,7 +4,7 @@
 // what belongs on the wire, and opToPatch turns a peer's ops back into patches on this client's sheet indices.
 
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
-import { cloneDeep, isEqual, isNumber, partition } from 'es-toolkit/compat';
+import { cloneDeep, isNumber, partition } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import { dataToCelldata } from '../../engine/celldata';
 import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
@@ -55,10 +55,6 @@ export function patchToOp(ctx: Context, patches: Patch[], options: PatchOptions 
         if (p.path[0] === 'sheets' && isNumber(p.path[1])) {
             op.id = ctx.sheets[p.path[1]].id;
             op.path = p.path.slice(2);
-            if (isEqual(op.path, ['calcChain', 'length'])) {
-                op.path = ['calcChain'];
-                op.value = ctx.sheets[p.path[1]].calcChain;
-            }
         }
         return op;
     });
