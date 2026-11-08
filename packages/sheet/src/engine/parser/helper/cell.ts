@@ -81,10 +81,12 @@ export function quoteSheetName(name: string): string {
 }
 
 const SIMPLE_NAME = new RegExp(`^${SIMPLE_SHEET_NAME}$`);
+// What Excel would read as something other than a name: a number, an A1 or R1C1 cell, a boolean.
+const NOT_A_BARE_NAME = /^\d|^[A-Z]{1,3}\d+$|^R\d|^R?C\d|^(?:R|C|RC|TRUE|FALSE)$/i;
 
-// The name as a ref's sheet prefix spells it: bare when it can be, quoted otherwise.
+// The name as a ref's sheet prefix spells it: bare when Excel reads it as one, quoted otherwise, which is always legal.
 export function sheetRefName(name: string): string {
-    return SIMPLE_NAME.test(name) ? name : quoteSheetName(name);
+    return SIMPLE_NAME.test(name) && !NOT_A_BARE_NAME.test(name) ? name : quoteSheetName(name);
 }
 
 // Split a cell label like `Sheet1!$A$1` into [row, column, sheetName], null when

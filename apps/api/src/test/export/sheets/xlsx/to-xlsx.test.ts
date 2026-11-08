@@ -5,6 +5,7 @@ import { recalcSheets } from '@workspace/sheet/engine';
 import type { TransformWarning } from '../../../../lib/document/transform/protocol';
 import { xlsxToSheets } from '../../../../lib/import/sheets/from-xlsx';
 import { openZip } from '../../../../lib/ooxml/zip';
+import { validationsByCell } from '../../../fixtures/validations';
 import { exportXlsx } from '../../../fixtures/xlsx';
 
 function entry(bytes: Uint8Array, path: string): string {
@@ -147,6 +148,53 @@ describe('an xlsx export read back by the import', () => {
             '&apos;History (2)&apos;!A1',
             '&apos;History (2)&apos;!B2',
         ]);
+    });
+
+    test('a formula, a rule and a list name a sheet as Excel reads it', () => {
+        const bytes = exportXlsx([
+            { name: 'Q1', celldata: [{ r: 0, c: 0, v: { v: 1 } }] },
+            { name: 'R1C1', celldata: [] },
+            { name: '2024', celldata: [] },
+            { name: 'TRUE', celldata: [] },
+            { name: 'History', celldata: [] },
+            { name: 'My Sheet', celldata: [] },
+            {
+                name: 'Index',
+                celldata: [
+                    {
+                        r: 0,
+                        c: 0,
+                        v: { f: "=Q1!A1+q1!B2+R1C1!A1+2024!A1+TRUE!A1+History!A1+'My Sheet'!A1+Index!A1+1" },
+                    },
+                ],
+                conditionalFormatRules: [
+                    {
+                        type: 'default',
+                        conditionName: 'formula',
+                        conditionValue: ['=Q1!A1>0'],
+                        cellrange: [{ row: [0, 0], column: [0, 0] }],
+                        format: {},
+                    },
+                ],
+                dataValidations: validationsByCell({
+                    '1_0': {
+                        type: 'dropdown',
+                        type2: '',
+                        value1: 'Q1!A1:A3',
+                        value2: '',
+                        prohibitInput: false,
+                        hintShow: false,
+                        hintValue: '',
+                    },
+                }),
+            },
+        ]);
+        const xml = entry(bytes, 'xl/worksheets/sheet7.xml').replaceAll('&apos;', "'");
+        expect(xml).toContain(
+            "<f>'Q1'!A1+'Q1'!B2+'R1C1'!A1+'2024'!A1+'TRUE'!A1+'History (2)'!A1+'My Sheet'!A1+Index!A1+1</f>",
+        );
+        expect(xml).toContain("<formula>'Q1'!A1&gt;0</formula>");
+        expect(xml).toContain("<formula1>'Q1'!$A$1:$A$3</formula1>");
     });
 
     test('keeps a rich string its runs', async () => {

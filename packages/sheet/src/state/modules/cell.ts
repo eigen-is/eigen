@@ -15,7 +15,7 @@ import {
     SHEET_DEFAULT_FONT_SIZE,
 } from '@workspace/lib/sheets';
 import { cloneDeep, isNil, isNumber, isPlainObject, isString } from 'es-toolkit/compat';
-import { sheetFinder } from '../../engine/a1-notation';
+import { sheetFinder, sheetRefName } from '../../engine/a1-notation';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
 import {
     booleanDisplay,
@@ -719,21 +719,9 @@ export function getRangetxt(ctx: Context, sheetId: string, range: RangeOrWholeAx
     }
 
     if (sheetId !== currentId) {
-        // If the sheet name contains ', replace it with '' when referencing
         const index = getSheetIndex(ctx, sheetId);
         if (index == null) return '';
-        sheettxt = ctx.sheets[index].name.replace(/'/g, "''");
-        // If the name contains characters other than a-z, A-Z, 0-9, underscore, etc., wrap it in single quotes
-        if (
-            // biome-ignore lint/suspicious/noMisleadingCharacterClass: matches XML 1.0 NameStartChar/NameChar — combining marks are spec-required in the continuation class
-            /^[:A-Z_a-zÀ-ÖØ-öø-˿Ͱ-ͽͿ-῿‌-‍⁰-↏Ⰰ-⿯、-퟿\uF900-\uFDCF\uFDF0-\uFFFD][:A-Z_a-zÀ-ÖØ-öø-˿Ͱ-ͽͿ-῿‌-‍⁰-↏Ⰰ-⿯、-퟿\uF900-\uFDCF\uFDF0-\uFFFD\-.0-9·̀-ͯ‿-⁀]*$/.test(
-                sheettxt,
-            )
-        ) {
-            sheettxt += '!';
-        } else {
-            sheettxt = `'${sheettxt}'!`;
-        }
+        sheettxt = `${sheetRefName(ctx.sheets[index].name)}!`;
     }
 
     if (isWholeColumnRef(range)) {

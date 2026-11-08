@@ -43,8 +43,7 @@ export function workbookXml(sheets: Sheet[], names: string[], ids: string[], act
     ].join('');
 }
 
-// Excel keeps History for itself, and each name a sheet changes for it is counted. Formulas naming a repaired sheet keep
-// the name they had.
+// Excel keeps History for itself, and each name a sheet changes for it is counted.
 export function sheetNames(sheets: Pick<Sheet, 'name'>[], lost: Lost): string[] {
     const written = legalSheetNames(
         sheets.map(({ name }) => name),
