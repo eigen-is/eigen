@@ -1211,7 +1211,7 @@ export function copy(ctx: Context, { cut = false }: { cut?: boolean } = {}) {
     setPendingCopy(clipboard.html, clipboard.text, clipboard.cellText);
 }
 
-export function deleteSelectedCellText(ctx: Context): string {
+export function deleteSelectedCellText(ctx: Context) {
     // Record the cells we actually clear so the formula refresh recomputes only
     // those, not every cell in the selection (which is the whole matrix for
     // select-all). Reset up front so an aborted delete never leaves a stale set.
@@ -1222,10 +1222,13 @@ export function deleteSelectedCellText(ctx: Context): string {
     if (selection && !isEmpty(selection)) {
         const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
         const data = sheetIndex == null ? undefined : ctx.sheets[sheetIndex].data;
-        if (sheetIndex == null || !data) return 'dataNullError';
+        if (sheetIndex == null || !data) return;
 
         for (const { row, column } of selection) {
-            if (hasPartMC(ctx, row[0], row[1], column[0], column[1])) return 'partMC';
+            if (hasPartMC(ctx, row[0], row[1], column[0], column[1])) {
+                ctx.warnDialog = 'Cannot perform this operation on partially merged cells';
+                return;
+            }
         }
 
         const hyperlinkMap = ctx.sheets[sheetIndex].hyperlink;
@@ -1258,7 +1261,6 @@ export function deleteSelectedCellText(ctx: Context): string {
             }
         }
     }
-    return 'success';
 }
 
 export function selectIsOverlap(ctx: Context, range?: Range | SheetType['selections']) {

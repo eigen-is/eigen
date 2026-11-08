@@ -43,7 +43,6 @@ Each comes from reading or tracing the code, not from running it, unless it says
 | Bug | Finding | How sure |
 |---|---|---|
 | Sort moves cells but leaves their borders, links and validation behind, and the moved `hl` stamp points at a link that stayed, so the link lands on another row's text | [D2](#d2) | Sort's write read; link outcome traced |
-| A refused table paste still changes row heights (`setRowHeight` runs before the guards) | [D5](#d5) | Traced |
 | The link card over a frozen column of a scrolled sheet shows the cell scrolled underneath; a row-header drag while composing a formula picks rows offset by the grid's page top minus 70 px | [R3](#r3) | Offsets read; outcome traced |
 | The first formula typed on an uncomputed sheet ships chain entries, so the server treats that sheet as computed and its export skips the recalc | [E1](#e1) | Traced |
 
@@ -206,13 +205,6 @@ Root cause: roots 5 and 4.
 Simpler: one series step per source line: numbers (linear trend), dates (days or months), text ending in a number, otherwise copy. `updateDropCell(ctx, copyRange, applyRange, direction)` takes plain arguments.
 Lost: 一, 二 and 周一 copy instead of counting; 1, 2, 4 fills linearly, Excel's default. ~850 LOC, low risk, high confidence.
 
-<a id="d5"></a>**D5. Writers refuse in four styles, and some write before they refuse.**
-String codes (`deleteSelectedCellText` → `'partMC'`, `hideSelectedRowCol` → `'noMulti'`, `CLEAR_ERRORS`), `ctx.warnDialog = …` (`onCellsMoveEnd`), a plain `throw` (`expandRowsAndColumns`), and `ValidationLimitError`, the only one that drops the edit whole. `handlePaste`'s HTML arm calls `setRowHeight` before the guards. `onPaste` (twice) and the overlay's `onMouseUp` catch inside the recipe and keep partial writes (open in SHEETS-TODO).
-History: `d368dcbcc` ("seed config keys after the guards"), `2354a8666`, `60de3a61f`, `eeae07d20`, and `rejected-writes.test.ts`, whose header calls itself a gate against order slips.
-Root cause: pattern 1. "Validate before you write" is a convention a table of tests enforces.
-Simpler: one `EditRefused(message)` any writer throws; `setContextWithProduce` drops the edit and shows the notice. The catch-inside-recipe sites go. With normalization at every entry point, `config` and its collections become non-optional in the `Sheet` type, so the `??=` seeding and the `bareSheet` half of the gate go.
-Lost: nothing. ~50 LOC + ~70 test, low-medium risk, high confidence.
-
 <a id="d8"></a>**D8. A copy over an active filter closes up the block, and a cut doesn't (product).**
 `carriedLines` (the filter-hidden intersection), `carriedSpan`, `landedRuns`, the `cut` flag through `copy`, `rangeValueToClipboard` and `isOwnCopyTable`.
 History: `0e7a1fab1`, `4bc87bf39` (a merge whose rows a filter left out shifted the pasted table), `e74f58b7d`.
@@ -361,7 +353,6 @@ Wave 1 (nothing lost, or decided):
 |---|---|---|
 | Op log | [S7](#s7), [S8](#s8) | `state/utils/patch.ts`, `state/modules/sheet.ts`, `engine/replay-ops.ts`, `use-sheet.ts` |
 | Formulas | [E6](#e6), then [E4](#e4), [E5](#e5) | `engine/formula-shift.ts`, `engine/recalc.ts`, `formula-*` |
-| Editing | [D5](#d5) | `state/api/*`, `paste.ts`, `clipboard.ts`, `filter.ts` |
 | Render and input | [R3](#r3), then [R6](#r6), [R7](#r7) | `state/context.ts`, `context/modal.tsx`, `state/events/*`, `SheetOverlay/*` |
 
 Wave 2 (cross-cutting, after the lanes they depend on merged): [E1](#e1) then [E2](#e2); [F2](#f2) (after D2); [D2](#d2) after D4 is ruled; [S2](#s2) then [S5](#s5); [R1](#r1) (after R3); [D4](#d4), [D8](#d8), [F4](#f4), [F6](#f6), [F7](#f7), [F8](#f8) as ruled. F4, F6 and F7 change `packages/lib/src/charts`, which Docs, Slides and Vector share: tell the other session first.
@@ -374,12 +365,13 @@ Wave 3, the redesigns, in [§ If we built it today](#if-we-built-it-today)'s ord
 
 - This run also takes the API audit's T2 and X2 (the other session agreed). Don't edit `API-SIMPLIFICATION-AUDIT.md` on this branch, because that session keeps editing it: tell it when T2 or X2 lands, and it strikes them. Its X2 ruling: a flat cap, the runner's deadline and its memory limit, and a timeout or out-of-memory is an accepted outcome. X2 joins Wave 2.
 - The owner allows an implementer to hand mechanical work (a grep sweep, rewiring similar test call sites, running a suite) to a cheaper sub-agent: Sonnet, or Haiku for a lookup, at low or medium effort. The implementer keeps Step 0, the design, the diff read and the commit. A sub-agent uses the implementer's worktree with no isolation option, one editing at a time, and never commits.
-- Wave 1 is running. Merged: F3, D7, E3, U2, S3, R2, D1, F1, E9, S1, R5, R4 (`ctx.rowHeaderWidth` and `columnHeaderHeight` stay for R3 to inline), D3 (the ref's `setSelection` stays: 13 test callers and no other door to the stored selection copy; S7 may remove it). Running: S7, E6, D5, U2, E9 and S3 review fixes, R3. Next: S8, E4, E5, D5, R6, R7, then the wave's close.
+- Wave 1 is running. Merged: D5, F3, D7, E3, U2, S3, R2, D1, F1, E9, S1, R5, R4 (`ctx.rowHeaderWidth` and `columnHeaderHeight` stay for R3 to inline), D3 (the ref's `setSelection` stays: 13 test callers and no other door to the stored selection copy; S7 may remove it). Running: S7, S8, E6, U2, E9 and S3 review fixes, R3. Next: E4, E5, D5, R6, R7, then the wave's close.
 - For E4: half-open legs (`B2:1`, `A:B1`, `TRUE:A1`) read more than their dependency list, and `A1\n:B2` is missed because only spaces join a range.
 - For S5 or S10: `sheet.filter ??= {}` means a `['filter','1']` op after a peer cleared the filter should throw and drop its batch, and two first filters at once overwrite each other (D7 read this; not run). The `state/types.ts` line saying filter criteria never reach the stored shape looks false, since `encodeSheetsSnapshot` keeps `filter`.
 - For R6: R2's implementer read that the date shortcut's `updateCell` with the closed, empty editor clears a filled cell before opening the edit, so Escape wouldn't restore it. Not run.
 - For R3: `handleCellAreaMouseDown` sets `ctx.selectionActive = true` and then tests it, so that block is always true.
-- For D5: `handlePaste` sits below its helpers; `setRowHeight` still runs before the guards in `pasteHandler`.
+- A refusal is a guard before the write plus `ctx.warnDialog`; nothing throws or catches inside a recipe (D5). `config` stays optional on `Sheet`: 32 `??=` sites and a type shared with stored sheets.
+- For the close's fix wave: a pasted `rowspan` past the last row throws in `pasteTable`, uncaught since D5; nothing pastes.
 - After S3, `Sheet.data` is optional only because the type is shared with stored sheets. An editor-side required type would remove the guards in `paste.ts`, `refresh.ts`, `api/cell.ts`, `apply-ops.ts`, `applySheetView` and `comment-anchors.ts`.
 - Open for the wave's docs unit: SHEETS.md and SHEETS-TODO.md statements S1, R5 and the units in review make false; the help center and CHANGELOG for U2 (undo limit), E9 (rename rewrites formulas), R4 and S1's fixes. Each unit's report names them, and the orchestrator's merge list holds them.
 - Accepted, for the ledger: at exactly 1,024 rules, the undo of a write that drops one rule and adds one sends `add` before `remove`, so a peer drops the `add` and tabs differ by one rule until compaction (F9 would remove this). The dialog refuses to re-save an imported `1899-12-31` date rule. Past the rule cap the dialog's OK silently adds no rule.

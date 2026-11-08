@@ -3,7 +3,6 @@
 // does a peer's batch through applyOpBatch.
 
 import { sheetDefaultColWidth, sheetDefaultRowHeight } from '@workspace/lib/sheets';
-import { times } from 'es-toolkit/compat';
 import {
     MAX_SHEET_NAME_LENGTH,
     SHEET_NAME_END_QUOTES,
@@ -11,17 +10,10 @@ import {
     SHEET_NAME_RULE,
 } from '../../engine/a1-notation';
 import { celldataToData } from '../../engine/celldata';
-import {
-    DEFAULT_SHEET_COLUMN_COUNT,
-    DEFAULT_SHEET_ROW_COUNT,
-    gridSize,
-    MAX_SHEET_COLUMN_COUNT,
-    MAX_SHEET_ROW_COUNT,
-} from '../../engine/defaults';
+import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT, gridSize } from '../../engine/defaults';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { RenameSheetOp } from '../../engine/sheet-name';
 import { applySheetRename, sheetNameTaken } from '../../engine/sheet-name';
-import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { firstVisibleSheetId, updateContextWithSheetData } from '../context';
 import type { Sheet } from '../types';
@@ -205,33 +197,5 @@ export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
 // read this one now, so the formula map is built again.
 export function renameSheet(ctx: Context, op: RenameSheetOp) {
     writeBackSheets(ctx, applySheetRename(snapshotContext(ctx).sheets, op));
-    ctx.formulaCache.formulaCellInfoMap = null;
-}
-
-// Grows the current grid for a paste that runs past its last row or column. The sheet's size grows with it, because a
-// stored snapshot keeps the size and a reader builds the grid at that size.
-export function expandRowsAndColumns(ctx: Context, rowsToAdd: number, columnsToAdd: number) {
-    const sheet = getSheet(ctx);
-    const { data } = sheet;
-    if (!data || (rowsToAdd <= 0 && columnsToAdd <= 0)) return;
-
-    if (data.length + rowsToAdd > MAX_SHEET_ROW_COUNT) {
-        throw new Error(
-            `This action would increase the number of rows in the workbook above the limit of ${MAX_SHEET_ROW_COUNT}.`,
-        );
-    }
-
-    if (data[0].length + columnsToAdd > MAX_SHEET_COLUMN_COUNT) {
-        throw new Error(
-            `This action would increase the number of columns in the workbook above the limit of ${MAX_SHEET_COLUMN_COUNT}.`,
-        );
-    }
-
-    for (const row of data) row.push(...times(Math.max(columnsToAdd, 0), () => null));
-    const columns = data[0].length;
-    for (let r = 0; r < rowsToAdd; r += 1) data.push(times(columns, () => null));
-    sheet.row = data.length;
-    sheet.column = columns;
-    // A whole column or row in the formula map still ends where the grid ended, as after a row insert.
     ctx.formulaCache.formulaCellInfoMap = null;
 }

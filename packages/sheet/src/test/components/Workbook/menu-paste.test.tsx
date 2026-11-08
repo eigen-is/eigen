@@ -9,6 +9,7 @@ installHappyDom();
 const { act, createElement, createRef } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { Workbook } = await import('../../../components/Workbook');
+const { MAX_SHEET_ROW_COUNT } = await import('../../../engine/defaults');
 type Sheet = import('../../../state').Sheet;
 type WorkbookInstance = import('../../../components/Workbook').WorkbookInstance;
 
@@ -37,18 +38,19 @@ function clipboardItems(clipboard: DataTransfer) {
     ]);
 }
 
-async function mount() {
+async function mount(rows = 10) {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
     const workbook = createRef<WorkbookInstance>();
+    let sent = 0;
     const data: Sheet[] = [
         {
             id: 's1',
             name: 'One',
             order: 0,
             status: 1,
-            row: 10,
+            row: rows,
             column: 5,
             celldata: [
                 { r: 0, c: 0, v: { v: 2, m: '2', f: '=1+1' } },
@@ -58,7 +60,7 @@ async function mount() {
         },
     ];
     await act(async () => {
-        root.render(createElement(Workbook, { ref: workbook, data, hooks: {} }));
+        root.render(createElement(Workbook, { ref: workbook, data, hooks: {}, onOp: () => (sent += 1) }));
     });
     cleanups.push(async () => {
         await act(async () => root.unmount());
@@ -115,8 +117,26 @@ async function mount() {
         await mouse(area, 'mousedown');
         await mouse(document, 'mouseup');
     };
-    return { cellAt, select, shortcut, menuPaste, paintOnce };
+    return { cellAt, select, shortcut, menuPaste, paintOnce, sentOps: () => sent };
 }
+
+// The notice opens a moment after the edit.
+test('a paste past the row limit leaves a notice and no edit', async () => {
+    const { cellAt, select, shortcut, sentOps } = await mount(MAX_SHEET_ROW_COUNT);
+    const clipboard = new DataTransfer();
+    clipboard.setData('text/plain', 'a\nb');
+    await select({ row: [MAX_SHEET_ROW_COUNT - 1, MAX_SHEET_ROW_COUNT - 1], column: [0, 0] });
+    const sentBefore = sentOps();
+    await shortcut('KeyV', clipboard);
+    await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+    });
+    expect(document.querySelector('[role="alertdialog"], [role="dialog"]')?.textContent).toContain(
+        `above the limit of ${MAX_SHEET_ROW_COUNT}`,
+    );
+    expect(cellAt(MAX_SHEET_ROW_COUNT - 1, 0)).toBeNull();
+    expect(sentOps()).toBe(sentBefore);
+});
 
 test('a menu Paste after a cut was pasted lands the clipboard and leaves the source alone', async () => {
     const { cellAt, select, shortcut, menuPaste } = await mount();

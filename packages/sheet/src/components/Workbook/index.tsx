@@ -295,13 +295,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         const pasteClipboard = useCallback(
             (clipboardData: DataTransfer) => {
                 const pasteCells = (cells: DataTransfer) =>
-                    setContextWithProduce((draftCtx) => {
-                        try {
-                            handlePaste(draftCtx, cells);
-                        } catch (err) {
-                            console.error(err);
-                        }
-                    });
+                    setContextWithProduce((draftCtx) => handlePaste(draftCtx, cells));
 
                 // A copy of cells marks its HTML with COPY_ACTION_TABLE_MARKER, and the classifier then reports no
                 // Eigen or SVG content, so the paste goes to handlePaste, which knows its own copy.

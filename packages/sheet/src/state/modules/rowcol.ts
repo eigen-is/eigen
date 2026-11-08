@@ -13,6 +13,8 @@ import { getSheetConfig } from '../context';
 import type { CalcChainEntry, Sheet } from '../types';
 import { getSheetIndex } from '../utils';
 
+export const ONE_AREA_ONLY = 'Cannot perform this operation on multiple selection areas, please select a single area';
+
 export function insertRowCol(
     ctx: Context,
     op: InsertRowColOp,
@@ -82,40 +84,49 @@ export function deleteRowCol(
     ctx.formulaCache.formulaCellInfoMap = null;
 }
 
+// The selection a hide or a show acts on. More than one gets the notice instead.
+function soleSelection(ctx: Context) {
+    if ((ctx.selections?.length ?? 0) > 1) {
+        ctx.warnDialog = ONE_AREA_ONLY;
+        return undefined;
+    }
+    return ctx.selections?.[0];
+}
+
 // Hiding moves the selection one step off the rows or columns it hid: up when they end the sheet or a hidden one
-// follows them, down otherwise. More than one selection returns 'noMulti', which the context menu shows as an alert.
+// follows them, down otherwise.
 export function hideSelectedRowCol(ctx: Context, type: 'row' | 'column') {
-    if (!ctx.selections || ctx.selections.length > 1) return 'noMulti';
+    const selection = soleSelection(ctx);
+    if (!selection) return;
     const sheet = getSheet(ctx);
     const { data } = sheet;
-    if (!data) return '';
+    if (!data) return;
     const config = (sheet.config ??= {});
     const key = type === 'row' ? 'rowhidden' : 'colhidden';
     // A peer's replace can leave a hidden value that is no map. The hide starts a new map then, as on a sheet that
     // has none, because writing into a number or a string throws.
     const kept = config[key];
     const hidden = isRecord(kept) ? kept : (config[key] = {});
-    const span = ctx.selections[0][type];
+    const span = selection[type];
     const [first, last] = span;
     for (let i = first; i <= last; i += 1) hidden[i] = 0;
     const length = type === 'row' ? data.length : data[0].length;
     const step = last === length - 1 || hidden[last + 1] != null ? -1 : 1;
     span[0] += step;
     span[1] += step;
-    return '';
 }
 
 export function showSelectedRowCol(ctx: Context, type: 'row' | 'column') {
-    if (!ctx.selections || ctx.selections.length > 1) return 'noMulti';
+    const selection = soleSelection(ctx);
+    if (!selection) return;
     // Showing never creates the hidden map. On a sheet with nothing hidden, a new empty map would still ship an op
     // to peers and take an undo entry, for a change that does nothing.
     const config = getSheetConfig(ctx);
     const hidden = type === 'row' ? config?.rowhidden : config?.colhidden;
     if (hidden) {
-        const [first, last] = ctx.selections[0][type];
+        const [first, last] = selection[type];
         for (let i = first; i <= last; i += 1) delete hidden[i];
     }
-    return '';
 }
 
 // The cell editors refuse to edit a selection that starts on a hidden row or column, a cell nobody can see.
