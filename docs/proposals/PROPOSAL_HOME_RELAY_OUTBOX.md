@@ -262,7 +262,7 @@ One unit branch lands together, in six commits. Moving verb by verb would keep t
 5. **Report it.** The status field and the `printReport` row, with the `ControlStatus` fixtures in `test/cli/status.test.ts` and `test/server/setup-token.test.ts`.
 6. **Document it.** SCALABILITY.md, ACL.md, SYNC.md, DATABASE.md, BACKUP.md (it lists the runtime files), CHAT.md, FILE-HISTORY.md, NOTIFICATION-CENTER.md, CALENDAR.md, an ARCHITECTURE.md row, the ROADMAP row, CHANGELOG, and the help center's `commands-and-files.md`, whose list of what `./eigen status` shows gets the new row.
 
-"Team-removal collab read-revocation" in [ROADMAP.md](../ROADMAP.md) doesn't use the outbox. It closes open sockets, which only exist in memory, so a row would add nothing. Routing `mailboxDeliver`'s role-address loop is also separate, and comes when a cluster is built.
+Closing a removed member's open collab sockets doesn't use the outbox. Those sockets only exist in memory, so a row would add nothing. Routing `mailboxDeliver`'s role-address loop is also separate, and comes when a cluster is built.
 
 ## Alternatives we rejected
 

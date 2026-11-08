@@ -1,6 +1,7 @@
 // The composer under a chat room or a comment thread: the message box, the files staged with it, and the lists that
 // complete an @-mention or a slash command. It clears as soon as a message goes, and the room's send handler decides
-// where it goes. If that send fails, the text and files come back.
+// where it goes. If that send fails, the text and files come back, and a slash command that runs in the browser
+// leaves the files it had no use for.
 
 import { COMMANDS_HELP, commandNeedsSpace, SLASH_COMMANDS } from '@workspace/lib/chat';
 import type { ChatAttachment, RoomMember } from '@workspace/lib/types/chat';
@@ -29,7 +30,8 @@ export type ChatMessageInputHandle = {
 };
 
 type ChatMessageInputProps = {
-    onSend: (rawContent: string, files?: File[]) => Promise<void>;
+    // Resolves to whether the send took the files.
+    onSend: (rawContent: string, files?: File[]) => Promise<boolean>;
     disabled?: boolean;
     readOnly?: boolean;
     placeholder?: string;
@@ -89,11 +91,17 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
 
     const handleSend = () => {
         if (!canSend) return;
-        onSend(content.trim(), files.length > 0 ? files : undefined).catch(() => {
-            // The handler already toasted. The box cleared at once, so the user may have started the next message.
-            setContent((next) => next || content);
-            setFiles((next) => (next.length > 0 ? next : files));
-        });
+        // The box cleared at once, so the user may have started the next message.
+        const restoreFiles = () => setFiles((next) => (next.length > 0 ? next : files));
+        onSend(content.trim(), files.length > 0 ? files : undefined)
+            .then((filesTaken) => {
+                if (!filesTaken) restoreFiles();
+            })
+            .catch(() => {
+                // The handler already toasted.
+                setContent((next) => next || content);
+                restoreFiles();
+            });
         setContent('');
         setFiles([]);
         setTimeout(focusTextarea, 0);

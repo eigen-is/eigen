@@ -1,5 +1,6 @@
 // One chat room: its messages and the composer, the toolbar that shares and renames the room, and the dialog
-// that deletes a message. The user's permissions on the room decide what they can do.
+// that deletes a message. The user's permissions on the room decide what they can do. Each room gets its own mount, so
+// nothing waiting to be sent follows the user to the next one.
 
 import { createFileRoute } from '@tanstack/react-router';
 import { useChatEditing, useChatRoom } from '@workspace/lib/chat';
@@ -25,6 +26,11 @@ import { UserAvatar } from '@workspace/ui/components/user';
 import { useRef, useState } from 'react';
 
 function ChatView() {
+    const { chatId } = Route.useParams();
+    return <ChatRoomView key={chatId} />;
+}
+
+function ChatRoomView() {
     const { ownerId, mountId, chatId } = Route.useParams();
     const chat = useChatRoom(ownerId, mountId, chatId);
     const editing = useChatEditing(chat);
@@ -77,7 +83,6 @@ function ChatView() {
                 <Column id="messages" width="flex" onBack="sidebar" toolbar={toolbar}>
                     <div className="flex flex-col h-full bg-background">
                         <ChatMessageList
-                            key={chatId}
                             messages={chat.messages}
                             isLoading={chat.isLoading}
                             currentUserEmail={chat.currentUserEmail}

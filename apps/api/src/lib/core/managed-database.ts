@@ -32,7 +32,7 @@ export type DatabaseConfig<S extends SchemaType> = {
         writesPerSnapshot: number;
     };
     // For a database that holds the truth rather than an index of it: a power loss must not lose an
-    // acknowledged write. Every other database keeps WAL's default NORMAL.
+    // acknowledged write. Every other database keeps the default of the SQLite it runs on, which differs by platform.
     synchronous?: 'FULL';
 };
 

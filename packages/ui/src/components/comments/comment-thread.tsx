@@ -101,6 +101,13 @@ export function CommentThread({ ownerId, mountId, pathId, chatName, className }:
     }
 
     return (
-        <CommentThreadInner ownerId={ownerId} mountId={mountId} pathId={pathId} chatId={chatId} className={className} />
+        <CommentThreadInner
+            key={chatId}
+            ownerId={ownerId}
+            mountId={mountId}
+            pathId={pathId}
+            chatId={chatId}
+            className={className}
+        />
     );
 }

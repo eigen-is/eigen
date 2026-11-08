@@ -199,14 +199,15 @@ export const collabRouter = new Elysia({
                 const loadStart = performance.now();
 
                 const { ownerId, mountId, pathId } = ws.data.params;
+                const drive = await getSharedDrive(ownerId, user);
                 // A stale epoch means the tab loaded its document before a restore or an update. Its sync would
-                // bring back what the restore undid, or write structures the new code no longer reads.
+                // bring back what the restore undid, or write structures the new code no longer reads. This waits
+                // for a running restore's 503 from getSharedDrive, because a restore that fails puts the epoch back.
                 const { epoch } = ws.data.query;
                 if (epoch !== undefined && epoch !== getDataEpoch(ownerId)) {
                     ws.close(COLLAB_HOME_REPLACED_CLOSE, COLLAB_HOME_REPLACED_REASON);
                     return;
                 }
-                const drive = await getSharedDrive(ownerId, user);
                 if (!(await drive.canRead(mountId, pathId, user))) {
                     ws.close(1008, 'Access denied');
                     return;
