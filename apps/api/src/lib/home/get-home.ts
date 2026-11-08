@@ -2,7 +2,7 @@
 // every later caller that same Home until it closes. Every request passes through here, so this is where a Home hears
 // of its requests. It keeps a home shut while a restore replaces its folder or a deletion removes it, and every home
 // while the shutdown runs. It also walks the loaded homes, to hand them a server-wide event such as a restart notice,
-// or to close the collab sockets of whoever lost access to the documents they have open.
+// or to reach the documents they have open.
 
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { SSEvent } from '@workspace/lib/types/sse';
@@ -190,18 +190,8 @@ export function broadcastToLoadedHomes(event: SSEvent): void {
     for (const factory of homeFactories.values()) factory.peek()?.broadcast(event);
 }
 
-// Closes the collab sockets of whoever lost read, after a change to a membership that any home's documents may rest on.
-export async function enforceReadAccessOnLoadedHomes(): Promise<void> {
-    await forEachOpenDocument((document) => document.enforceReadAccess());
-}
-
-// Closes the collab sockets of a user locked out whatever they may read, such as by a password reset.
-export async function closeUserSocketsOnLoadedHomes(userId: string): Promise<void> {
-    await forEachOpenDocument(async (document) => document.closeUserConnections(userId));
-}
-
 // It opens no home and counts as no request: a home that is not loaded has no open document.
-async function forEachOpenDocument(visit: (document: CollabDocument) => Promise<void>): Promise<void> {
+export async function forEachOpenDocument(visit: (document: CollabDocument) => Promise<void>): Promise<void> {
     for (const factory of homeFactories.values()) await factory.peek()?.forEachOpenDocument(visit);
 }
 
