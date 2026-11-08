@@ -6,7 +6,7 @@
 //
 // The stamp is the server's part, the build's commit, then the home's part. The server's part changes
 // when the whole server is restored, the commit with every update, the home's part when only that home
-// is restored.
+// is restored. A restore of one home that fails puts the home's part back.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { parseStringRecord } from '@workspace/lib/validation';
@@ -34,13 +34,23 @@ export function getDataEpoch(ownerId: string): string {
             serverFs.writeAtomic(SERVER_RUNTIME_FILES.epoch, serverEpoch).catch(console.error);
         }
     }
-    return serverEpoch + (getBuildCommit() ?? '') + (loadHomeEpochs().get(ownerId) ?? '');
+    return serverEpoch + (getBuildCommit() ?? '') + (getHomeDataEpoch(ownerId) ?? '');
 }
 
-// Called by a restore of one home, after its data is back in place.
+export function getHomeDataEpoch(ownerId: string): string | undefined {
+    return loadHomeEpochs().get(ownerId);
+}
+
 export async function rotateHomeDataEpoch(ownerId: string): Promise<void> {
+    await setHomeDataEpoch(ownerId, crypto.randomUUID());
+}
+
+// Undefined for a home with no stamp of its own. Memory changes even when the save fails: a file left behind costs one
+// more reload at the next restart, and the next save writes all of it again.
+export async function setHomeDataEpoch(ownerId: string, epoch: string | undefined): Promise<void> {
     const epochs = loadHomeEpochs();
-    epochs.set(ownerId, crypto.randomUUID());
+    if (epoch === undefined) epochs.delete(ownerId);
+    else epochs.set(ownerId, epoch);
     // A failed earlier save is that restore's error; this save still runs.
     const save = homeEpochsSaved
         .catch(() => {})
