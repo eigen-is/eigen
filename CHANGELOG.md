@@ -26,8 +26,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Restoring in Slides and Vector** — restoring an earlier version of a deck or drawing brings back the comments deleted since, as Docs and Sheets do. Their replies stay as they are now
 - **Version history in other tabs** — after a restore or a Delete history, another tab open on the same document shows the new list of versions at once
 - **Pictures cropped in Google Slides** — a picture that Google Slides cropped to fit its box, such as a logo, no longer comes in squashed when you convert or import the deck
-- **Validation rules and formats in Sheets** — a rule checks a cell's value, not its text: a date in any format, a number shown as 50% and an unchanged formula pass, and an imported "any date" rule no longer refuses every date
-- **Row and column changes while others edit in Sheets** — a rename, tab color, link, freeze or filter someone sets while you insert or delete rows stays
+- **Validation rules and formats in Sheets** — a rule checks a cell's value, not its text: a date shown in another format, a number shown as 50% and an unchanged formula pass, and an imported "any date" rule no longer refuses every date
+- **Row and column changes while others edit in Sheets** — a rename, tab color or link someone sets while you insert or delete rows stays
 - **Filters while others edit in Sheets** — a filter someone else changes no longer leaves rows hidden for good after your next filter edit
 - **Refused edits in Sheets** — Delete on part of a merged cell shows a notice, a paste past the sheet's size limit says so, and a paste refused over part of a merge changes nothing
 - **Long text in Sheets** — wrapped text grows its row however you confirm it, from the formula bar or by clicking elsewhere too
