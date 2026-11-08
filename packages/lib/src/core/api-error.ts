@@ -1,8 +1,8 @@
 // How a failed request reaches the user: AppError reads a readable message and the status from what Eden or a fetch
 // hands back, getErrorMessage turns it into the toast's text, and onMutationError is the onError every mutation hook
-// passes to show it. onEtagWriteError is that onError for a write that sends the etag it loaded. wasToasted tells a
-// caller that also sees the rejection that a toast already showed it, and isRefusal tells a dialog whether another try
-// could go through.
+// passes to show it. onEtagWriteError is that onError for a write that sends an etag. wasToasted tells a caller that
+// also sees the rejection that a toast already showed it, and isRefusal tells a dialog whether another try could go
+// through.
 
 import { toast } from 'sonner';
 import { isRecord } from './guards';
@@ -26,8 +26,8 @@ function readString(source: Record<string, unknown>, key: string): string | unde
     return typeof field === 'string' && field.trim() !== '' ? field.trim() : undefined;
 }
 
-// Elysia keeps a validation error's `message` and `summary` out of production bodies — a rejected schema
-// arrives as `{ type, on, found }`, with nothing to read — so the status has to carry the meaning there.
+// Elysia keeps a validation error's `message` and `summary` out of production bodies, and a rejected schema arrives
+// as `{ type, on, found }` with nothing to read, so the status has to carry the meaning there.
 function messageFromBody(value: unknown, status: number): string {
     const fallback = STATUS_MESSAGES[status] ?? 'Request failed';
     if (typeof value === 'string') return value.trim() || fallback;
@@ -92,8 +92,8 @@ export function isStaleWrite(error: unknown): boolean {
     return error instanceof AppError && error.status === 412;
 }
 
-// A stale write reloads what the form shows and says so in its own toast. The error counts as toasted either way, so a
-// dialog that awaits the write doesn't log it again.
+// A stale write reloads the data behind the form and says so in its own toast. The error counts as toasted either way,
+// so a dialog that awaits the write doesn't log it again.
 export function onEtagWriteError(error: unknown, staleMessage: string, reload: () => void): void {
     if (!isStaleWrite(error)) {
         onMutationError(error);

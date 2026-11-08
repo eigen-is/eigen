@@ -136,7 +136,7 @@ beforeEach(() => {
 
 async function open(event = dentist, ownerUserId?: string) {
     ({ unmount } = await renderInDocument(
-        createElement(EditEventDialog, { open: true, onOpenChange, event, ownerUserId, onReload: () => {} }),
+        createElement(EditEventDialog, { open: true, onOpenChange, event, ownerUserId }),
     ));
 }
 

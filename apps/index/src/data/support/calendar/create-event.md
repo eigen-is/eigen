@@ -37,7 +37,7 @@ The **New event** form opens as a dialog. Fill in the fields you need:
 
 On an event someone else invited you to, the details are grayed out, because only the organizer can change them. You can still move it to a different calendar, and you can [respond to the invitation](/support/calendar/respond-to-invitation).
 
-If the event changes elsewhere while you edit it, for example on your phone or by someone you share the calendar with, what you typed stays in the form. If you save anyway, your save is refused. A message tells you the event changed elsewhere and has been reloaded, and the form switches to the newer version, so you can make your change again on top of theirs.
+If the event changes elsewhere while you edit it, for example on your phone, by someone you share the calendar with, or when a guest replies, what you typed stays in the form and the fields you haven't changed switch to the newer version. If you have typed something, your next save is refused and a message tells you the event changed elsewhere. Check the form and click **Save** again.
 
 ### Editing a recurring event
 

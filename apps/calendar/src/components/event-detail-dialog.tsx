@@ -62,9 +62,8 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const [showRsvpScopeDialog, setShowRsvpScopeDialog] = useState(false);
     const [pendingRsvpStatus, setPendingRsvpStatus] = useState<'accepted' | 'declined' | 'tentative' | null>(null);
     const [editOpen, setEditOpen] = useState(false);
-    // A bump remounts Edit event on the current event, so its fields and the etag they load with re-seed together.
+    // Each opening mounts Edit event anew, so nothing typed in the last one comes back.
     const [editMount, setEditMount] = useState(0);
-    const remountEdit = () => setEditMount((mount) => mount + 1);
     const deleteEvent = useDeleteEvent(eventOwnerId);
     const createEvent = useCreateEvent(eventOwnerId);
     const updateEvent = useUpdateEvent(eventOwnerId);
@@ -269,7 +268,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                                             icon={Pencil}
                                             tooltipText="Edit event"
                                             onClick={() => {
-                                                remountEdit();
+                                                setEditMount((mount) => mount + 1);
                                                 setEditOpen(true);
                                             }}
                                         />
@@ -335,7 +334,6 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                 }}
                 event={event}
                 ownerUserId={sharedCalendar?.ownerUserId}
-                onReload={remountEdit}
             />
 
             <ProgressDialog open={isExporting} title="Exporting event" />

@@ -1,9 +1,16 @@
 // Two clients on one event, through the real hooks and dialogs against a server stub that judges etags as the API does.
 // A write on a stale etag is refused, says so, and the next try goes through on what was reloaded, with the dialog still
-// open. A refetch that changes nothing leaves typed edits alone, and one that changes the event doesn't let a save
-// overwrite that change unseen. A save of two writes sends the second with the etag the first answered.
+// open. Edit event keeps what was typed and follows the rest: a refetch moves only the fields nobody touched, and typed
+// edits can't overwrite a change unseen. So a guest's reply costs a form nothing, and a second Save doesn't revert it. A
+// save of two writes sends the second with the etag the first answered, and a refused cross-home move copies once.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
-import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
+import type {
+    Attendee,
+    CalendarEvent,
+    CalendarEventOccurrence,
+    CalendarItem,
+    SharedCalendar,
+} from '@workspace/lib/types/calendar';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -23,6 +30,18 @@ const work: CalendarItem = {
     updatedAt: created,
 };
 const personal: CalendarItem = { ...work, id: 'personal', name: 'Personal', isDefault: false };
+const teamCalendar: SharedCalendar = {
+    id: 'share1',
+    calendarId: 'team',
+    calendarName: 'Team',
+    calendarColor: '#000000',
+    color: null,
+    ownerUserId: 'u2',
+    permission: 'write',
+    visible: true,
+    createdAt: created,
+    updatedAt: created,
+};
 const dentist: CalendarEventOccurrence = {
     id: 'e1',
     calendarId: 'work',
@@ -52,7 +71,10 @@ const dentist: CalendarEventOccurrence = {
 const server = {
     event: dentist,
     revision: 1,
+    shared: [] as SharedCalendar[],
     writes: [] as { write: string; etag: string | undefined }[],
+    // What the last new series or cross-home copy was created with.
+    created: null as Partial<CalendarEvent> | null,
     // Answers the next write of this kind with this status once, for a save that fails halfway.
     failNext: null as { write: string; status: number } | null,
 };
@@ -62,11 +84,17 @@ const nextRevision = () => {
     server.revision += 1;
     return `v${server.revision}`;
 };
-const changeElsewhere = (title: string) => {
-    server.event = { ...server.event, title, etag: nextRevision() };
+const changeFieldsElsewhere = (fields: Partial<CalendarEvent>) => {
+    server.event = { ...server.event, ...fields, etag: nextRevision() };
 };
-// The list a client reads: a fresh copy each time, as a refetch's JSON is.
-const eventList = () => (server.event ? [{ ...server.event, startTime: new Date(server.event.startTime) }] : []);
+const changeElsewhere = (title: string) => changeFieldsElsewhere({ title });
+const invited = (...attendees: [email: string, status: Attendee['status']][]) => ({
+    attendees: attendees.map(([email, status]) => ({ email, status, role: 'required' as const })),
+});
+// The list a client reads: a fresh copy each time, as a refetch's JSON is. A truncated series no longer has this
+// occurrence.
+const eventList = () =>
+    server.event.rrule?.includes('UNTIL') ? [] : [{ ...server.event, startTime: new Date(server.event.startTime) }];
 
 const writeEvent = (write: string, etag: string | undefined, apply: () => { data: unknown }) => {
     server.writes.push({ write, etag });
@@ -81,7 +109,7 @@ const writeEvent = (write: string, etag: string | undefined, apply: () => { data
 
 const calendarApi = () => ({
     'event-range': () => () => ({ get: async () => answered(eventList()) }),
-    shared: { get: async () => answered([]) },
+    shared: { get: async () => answered(server.shared) },
     calendars: Object.assign(
         () => ({
             events: Object.assign(
@@ -103,13 +131,15 @@ const calendarApi = () => ({
                     },
                 }),
                 {
-                    post: async ({ etag, parentEventId }: { etag?: string; parentEventId?: string }) =>
-                        // Only an override is judged, as on the server; a new series just gets written.
+                    post: async ({ etag, parentEventId, ...fields }: Partial<CalendarEvent>) =>
+                        // Only an override is judged and lands in this resource, as on the server; a new series or a
+                        // cross-home copy is a resource of its own.
                         writeEvent(
                             parentEventId ? 'override' : 'create',
                             parentEventId ? etag : server.event.etag,
                             () => {
-                                server.event = { ...server.event, etag: nextRevision() };
+                                if (parentEventId) server.event = { ...server.event, etag: nextRevision() };
+                                else server.created = fields;
                                 return answered(server.event);
                             },
                         ),
@@ -180,6 +210,8 @@ afterEach(() => unmount());
 beforeEach(() => {
     server.event = dentist;
     server.revision = 1;
+    server.shared = [];
+    server.created = null;
     server.writes = [];
     server.failNext = null;
     toasts.length = 0;
@@ -210,11 +242,25 @@ const titleField = () => {
     if (!field) throw new Error('no dialog has a title field');
     return field;
 };
-const typeTitle = (value: string) =>
+const descriptionField = () => {
+    const field = document.querySelector<HTMLTextAreaElement>('[role="dialog"] textarea[placeholder="Description"]');
+    if (!field) throw new Error('no dialog has a description field');
+    return field;
+};
+const startDateField = () => {
+    const field = document.querySelector<HTMLInputElement>('[role="dialog"] input[type="date"]');
+    if (!field) throw new Error('no dialog has a date field');
+    return field;
+};
+const typeInto = (field: HTMLInputElement | HTMLTextAreaElement, value: string) =>
     act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(titleField(), value);
-        titleField().dispatchEvent(new Event('input', { bubbles: true }));
+        const prototype =
+            field instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
+        Object.getOwnPropertyDescriptor(prototype, 'value')?.set?.call(field, value);
+        field.dispatchEvent(new Event('input', { bubbles: true }));
     });
+const typeTitle = (value: string) => typeInto(titleField(), value);
+const typeDescription = (value: string) => typeInto(descriptionField(), value);
 const dialogTitles = () => [...document.querySelectorAll('[role="dialog"] h2')].map((title) => title.textContent);
 // Radix opens its Select and picks an option on the pointer events, not on click.
 const pointAt = (element: Element) =>
@@ -235,7 +281,11 @@ const pickCalendar = async (from: string, to: string) => {
     await settle();
 };
 
-const STALE_TOAST = 'This event changed elsewhere. It has been reloaded — please redo your edit.';
+const pickRecurringAction = async (id: string) => {
+    await act(async () => document.querySelector<HTMLElement>(`[role="dialog"] label[for="recurring-${id}"]`)?.click());
+};
+
+const STALE_TOAST = 'This event changed elsewhere. Anything you typed is kept. Check it and try again.';
 
 async function openPanel() {
     ({ unmount } = await renderInDocument(createElement(CalendarPage)));
@@ -302,35 +352,138 @@ test('a change elsewhere keeps typed edits on screen, but saving them over it is
     expect(toasts).toEqual([STALE_TOAST]);
 });
 
-test('after a refusal the open form holds the current event, and Save then goes through', async () => {
+test('a refusal keeps what was typed and follows the rest, and the next Save sends the new etag', async () => {
     await openEdit();
     await typeTitle('Dentist at noon');
-    changeElsewhere('Dentist, moved by a colleague');
+    changeFieldsElsewhere({ location: 'New practice' });
 
     await click('Save');
     expect(toasts).toEqual([STALE_TOAST]);
-    expect(titleField().value).toBe('Dentist, moved by a colleague');
+    expect(titleField().value).toBe('Dentist at noon');
+    expect(document.querySelector<HTMLInputElement>('[role="dialog"] input[placeholder="Location"]')?.value).toBe(
+        'New practice',
+    );
 
-    await typeTitle('Dentist, moved, at noon');
     await click('Save');
     expect(server.writes).toEqual([
         { write: 'update', etag: 'v1' },
         { write: 'update', etag: 'v2' },
     ]);
-    expect(server.event.title).toBe('Dentist, moved, at noon');
+    expect(server.event.title).toBe('Dentist at noon');
+    expect(server.event.location).toBe('New practice');
     expect(dialogTitles()).toEqual([]);
 });
 
-test('a second change elsewhere after a refusal keeps what is typed again', async () => {
+test('typing after a refusal answers to what was reloaded, so a change after it is refused again', async () => {
     await openEdit();
+    await typeTitle('Dentist at noon');
     changeElsewhere('First change');
     await click('Save');
-    expect(titleField().value).toBe('First change');
 
-    await typeTitle('Typed after the reload');
+    await typeTitle('Dentist at one');
     changeElsewhere('Second change');
     await refetch();
-    expect(titleField().value).toBe('Typed after the reload');
+    expect(titleField().value).toBe('Dentist at one');
+
+    await click('Save');
+    expect(server.writes.map(({ etag }) => etag)).toEqual(['v1', 'v2']);
+    expect(server.event.title).toBe('Second change');
+    expect(toasts).toEqual([STALE_TOAST, STALE_TOAST]);
+});
+
+test('a clean form follows the event, and its Save answers to what it shows', async () => {
+    await openEdit();
+    changeElsewhere('Dentist, moved by a colleague');
+    await refetch();
+    expect(titleField().value).toBe('Dentist, moved by a colleague');
+
+    await click('Save');
+    expect(server.writes).toEqual([{ write: 'update', etag: 'v2' }]);
+    expect(toasts).toEqual([]);
+    expect(dialogTitles()).toEqual([]);
+});
+
+test("a guest's reply costs a typed description nothing, and the second Save doesn't revert it", async () => {
+    server.event = { ...dentist, data: invited(['ada@example.org', 'pending']) };
+    await openEdit();
+    await typeDescription('Bring the x-rays');
+    changeFieldsElsewhere({ data: invited(['ada@example.org', 'accepted']) });
+
+    await click('Save');
+    expect(toasts).toEqual([STALE_TOAST]);
+    expect(descriptionField().value).toBe('Bring the x-rays');
+
+    await click('Save');
+    expect(server.writes).toEqual([
+        { write: 'update', etag: 'v1' },
+        { write: 'update', etag: 'v2' },
+    ]);
+    expect(server.event.description).toBe('Bring the x-rays');
+    expect(server.event.data).toEqual(invited(['ada@example.org', 'accepted']));
+    expect(dialogTitles()).toEqual([]);
+});
+
+test("a guest's reply on a series reaches its master's list too, and the second Save keeps it", async () => {
+    server.event = { ...dentist, rrule: 'FREQ=WEEKLY', data: invited(['ada@example.org', 'pending']) };
+    await openEdit();
+    await typeDescription('Bring the x-rays');
+    await click('Save');
+    changeFieldsElsewhere({ data: invited(['ada@example.org', 'accepted']) });
+    await pickRecurringAction('all');
+
+    await click('OK');
+    expect(toasts).toEqual([STALE_TOAST]);
+    expect(dialogTitles()).toEqual(['Edit event']);
+    expect(descriptionField().value).toBe('Bring the x-rays');
+
+    await click('Save');
+    await pickRecurringAction('all');
+    await click('OK');
+    expect(server.writes).toEqual([
+        { write: 'update', etag: 'v1' },
+        { write: 'update', etag: 'v2' },
+    ]);
+    expect(server.event.description).toBe('Bring the x-rays');
+    expect(server.event.data).toEqual(invited(['ada@example.org', 'accepted']));
+});
+
+test('a guest list the user edited says who is on it, and each guest answers as the server says', async () => {
+    server.event = { ...dentist, data: invited(['ada@example.org', 'pending'], ['bob@example.org', 'pending']) };
+    await openEdit();
+    await click('Remove bob@example.org');
+    changeFieldsElsewhere({ data: invited(['ada@example.org', 'accepted'], ['bob@example.org', 'pending']) });
+
+    await click('Save');
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain('bob@example.org');
+
+    await click('Save');
+    expect(server.event.data).toEqual(invited(['ada@example.org', 'accepted']));
+});
+
+test('a date, its times and the repeat stay together: one typed holds them all against a change elsewhere', async () => {
+    const saveToAll = async () => {
+        await click('Save');
+        await pickRecurringAction('all');
+        await click('OK');
+    };
+    server.event = { ...dentist, rrule: 'FREQ=WEEKLY' };
+    await openEdit();
+    await typeInto(startDateField(), '2026-10-20');
+    changeFieldsElsewhere({
+        title: 'Standup, renamed',
+        startTime: new Date(2026, 9, 9, 16, 0),
+        endTime: new Date(2026, 9, 9, 17, 0),
+        rrule: 'FREQ=DAILY',
+    });
+    await saveToAll();
+    expect(toasts).toEqual([STALE_TOAST]);
+    expect(titleField().value).toBe('Standup, renamed');
+
+    await saveToAll();
+    expect(server.event.startTime).toEqual(new Date(2026, 9, 20, 14, 0));
+    expect(server.event.endTime).toEqual(new Date(2026, 9, 20, 14, 30));
+    expect(server.event.rrule).toBe('FREQ=WEEKLY');
+    expect(server.event.title).toBe('Standup, renamed');
 });
 
 test('a refusal behind the recurring choice brings back the form, on the current event', async () => {
@@ -346,6 +499,35 @@ test('a refusal behind the recurring choice brings back the form, on the current
     expect(toasts).toEqual([STALE_TOAST]);
     expect(dialogTitles()).toEqual(['Edit event']);
     expect(titleField().value).toBe('Standup, renamed');
+});
+
+test('a cross-home move refused at its delete copies once: the redo only deletes, and invites nobody twice', async () => {
+    server.shared = [teamCalendar];
+    server.event = { ...dentist, data: invited(['ada@example.org', 'pending']) };
+    await openEdit();
+    await typeTitle('Dentist at noon');
+    await pickCalendar('Work', 'Team');
+    await click('Save');
+    expect(dialogTitles()).toEqual(['Move to another calendar owner?']);
+    changeFieldsElsewhere({ location: 'New practice' });
+
+    await click('Move');
+    expect(server.writes).toEqual([
+        { write: 'create', etag: 'v2' },
+        { write: 'delete', etag: 'v1' },
+    ]);
+    expect(toasts).toEqual([STALE_TOAST]);
+    expect(dialogTitles()).toEqual(['Edit event']);
+    expect(titleField().value).toBe('Dentist at noon');
+
+    await click('Save');
+    await click('Move');
+    expect(server.writes).toEqual([
+        { write: 'create', etag: 'v2' },
+        { write: 'delete', etag: 'v1' },
+        { write: 'delete', etag: 'v2' },
+    ]);
+    expect(dialogTitles()).toEqual([]);
 });
 
 test('a move to another of your calendars sends the etag the update before it answered', async () => {
@@ -392,10 +574,6 @@ test('a move over a change elsewhere is refused at its update, and nothing moves
     expect(toasts).toEqual([STALE_TOAST]);
 });
 
-const pickRecurringAction = async (id: string) => {
-    await act(async () => document.querySelector<HTMLElement>(`[role="dialog"] label[for="recurring-${id}"]`)?.click());
-};
-
 test('this and following truncates on the loaded etag, and its retry goes on from what the truncation answered', async () => {
     server.event = { ...dentist, rrule: 'FREQ=WEEKLY' };
     server.failNext = { write: 'create', status: 500 };
@@ -415,11 +593,14 @@ test('this and following truncates on the loaded etag, and its retry goes on fro
     ]);
     expect(toasts.filter((toast) => toast === STALE_TOAST)).toEqual([]);
     expect(dialogTitles()).toEqual([]);
+    // The truncation took this occurrence out of the list, and the dialog kept the rule it opened with.
+    expect(server.created?.rrule).toBe('FREQ=WEEKLY');
 });
 
-test('this and following over a change elsewhere is refused before it writes anything', async () => {
+test('this and following with typed edits over a change elsewhere is refused before it writes anything', async () => {
     server.event = { ...dentist, rrule: 'FREQ=WEEKLY' };
     await openEdit();
+    await typeDescription('Bring the x-rays');
     await click('Save');
     changeElsewhere('Standup, renamed');
     await refetch();
