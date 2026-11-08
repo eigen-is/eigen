@@ -123,7 +123,7 @@ import { useDrawingTools } from './tools/use-drawing-tools';
 const CREATE_MIN_SIZE = 1;
 const MIN_ELEMENT_SIZE = 1;
 // A bound arrow dragged alone lets go of its shape only past this distance in screen px, so a click that selects it
-// never detaches it. It is Excalidraw's DRAGGING_THRESHOLD.
+// never detaches it.
 const ARROW_UNBIND_SCREEN = 10;
 
 // `pointerId` ties a gesture to the pointer that started it. On touch, a second finger's events would otherwise drive
@@ -210,9 +210,6 @@ type CanvasEditorProps = {
     backgroundMenu?: Omit<MenuSectionsProps, 'clipboard'>;
 };
 
-// The live canvas surface: one absolutely positioned layer per element, with the scene-space overlay and the
-// screen-space chrome above it. Every drag, resize and rotate previews in local state. A gesture writes one Yjs
-// transaction when it ends, and a seal at its start makes that one undo step.
 export function CanvasEditor({
     doc,
     viewport,
@@ -363,8 +360,7 @@ export function CanvasEditor({
 
     // The marked elements: those carrying at least one comment card, with the card's color and the corner the mark sits
     // on. The corner is a zero-size box, so boxToStyle maps it to the screen point at render time. A card id with no
-    // card is skipped. A delete keeps the card, so a restore brings an id back with it, but a card that an older build
-    // removed outright can leave an id behind.
+    // card is skipped.
     const commentedElements = useMemo(
         () =>
             ordered.flatMap((el) => {
@@ -422,8 +418,7 @@ export function CanvasEditor({
         return m;
     }, [ordered, committedById]);
 
-    // The freehand, line and eraser gestures and a line's point handles live in useDrawingTools, and the canvas only
-    // dispatches to them. `busy` hides the point handles while any canvas gesture or overlay owns the surface.
+    // `busy` hides the point handles while any canvas gesture or overlay owns the surface.
     const drawing = useDrawingTools({
         tool,
         setTool,
@@ -861,8 +856,6 @@ export function CanvasEditor({
     // Images insert only where there is a folder to upload into, which a new drawing has, and not while a text editor
     // owns paste and the pointer.
     const imagesEnabled = canEdit && !!mediaFolderId && !textEditing;
-    // ⌘C, ⌘X, ⌘V, the menu's clipboard rows and every paste live in a sibling hook. The canvas hands it the scene, the
-    // selection and its writers.
     const { onMenuCopy, onMenuCut, onMenuPaste, pasteSvgText, downloadImage } = useCanvasClipboard({
         canEdit,
         textEditingRef,
@@ -1040,8 +1033,7 @@ export function CanvasEditor({
     const EditDialog = editDialogElement ? ELEMENT_KIND_UI[editDialogElement.type].EditDialog : undefined;
     const onMenuConvertToShapes = () =>
         convertElementToShapes(selectedIds[0], menuShapes, replaceElement, setSelectedIds, undoManager);
-    // The touch and stylus policy lives in a sibling module, and the canvas only dispatches to it. A second finger ends
-    // the live one-finger gesture through abortActiveGesture: a drawing draft in the tools hook, or else the canvas's
+    // A second finger ends the live one-finger gesture through abortActiveGesture: a drawing draft in the tools hook, or else the canvas's
     // own create, move or marquee.
     const touch = useTouchGestures({
         tool,
@@ -1091,8 +1083,6 @@ export function CanvasEditor({
         // may sweep across the page from outside.
         if (tool !== 'select' && tool !== 'eraser' && offPage(p)) return;
 
-        // A freehand stroke, a line and the eraser run their own gestures. The tools hook takes the event for those
-        // tools, and the canvas does nothing more.
         if (drawing.onPointerDown(e, p)) return;
 
         containerRef.current?.setPointerCapture(e.pointerId);
@@ -1112,7 +1102,6 @@ export function CanvasEditor({
             return;
         }
 
-        // Select tool.
         const hitId = hitTestTopmost(ordered, p, viewportRef.current.zoom, committedById, coarse);
         if (hitId) {
             if (e.shiftKey) {

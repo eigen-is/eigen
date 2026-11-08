@@ -156,7 +156,7 @@ describe('readVectorFromDoc', () => {
         expect(el).toMatchObject({ x: -1_000_000, y: 1_000_000, width: 1_000_000, height: 0, opacity: 100 });
     });
 
-    // Every default but the width, which a new deck writes and a deck from before it had one lacks.
+    // Every default but the width, which a new deck writes and a deck that stores none reads as UNSTORED_SLIDE_WIDTH.
     test('empty doc yields an empty scene with default meta, at the width of a deck that stores none', () => {
         const scene = readVectorFromDoc(new Y.Doc());
         expect(scene.elements).toEqual([]);
@@ -188,7 +188,7 @@ describe('readVectorFromDoc', () => {
                 pressures: '[0.25,0.75,0.5]',
                 simulatePressure: false,
             });
-            // A legacy freedraw (no pressure fields) reads back as simulate with no pressures.
+            // A freedraw with no pressure fields reads back as simulate with no pressures.
             writeElement(elements, 'old', { type: 'freedraw', index: 'a1', points: '[[0,0],[5,5]]' });
         });
         const [pen, old] = readVectorFromDoc(doc).elements;
@@ -952,7 +952,7 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
 
 describe('readVectorFromDoc — rich text', () => {
     // There is no per-box marker color: it is redundant with the box `fill`, and a real highlight is a
-    // TipTap mark inside `html`. A value left in a document written by an older build is dropped.
+    // TipTap mark inside `html`. A value such as this in a document is dropped.
     test('a stored highlightColor is not read back onto the element', () => {
         const doc = docWith((elements) =>
             writeElement(elements, 'rich1', {
