@@ -6,7 +6,7 @@ Open work on the road to a trustworthy 1.0, data integrity first. Status is what
 
 The page holds only open work: when work ships, its row or its done part goes in the same commit. A bug found is fixed, even outside the task; only one that needs the owner's yes, a product choice or more than a small unit gets a row instead, in the same commit, here or in its domain backlog, naming the file and function, the failure and the callers.
 
-**No backward compatibility before 1.0.** A change to a persisted format is done outright: existing data is dropped or converted once, and migrations become mandatory from 1.0. Stickies are the exception, because eigen.is users rely on them. Self-host tooling is never shimmed either: scripts, env files, Compose layouts and archive, snapshot and backup formats change outright, an old script is deleted, and running instances get a short note.
+**No backward compatibility before 1.0.** A change to a persisted format is done outright: existing data is dropped or converted once, and migrations become mandatory from 1.0. Self-host tooling is never shimmed either: scripts, env files, Compose layouts and archive, snapshot and backup formats change outright, an old script is deleted, and running instances get a short note.
 
 **Legend**: Effort: S / M / L / XL (rough T-shirt size). Frozen-format: flags a change to a persisted format (Yjs roots, DB schema, drive MIME values) that drops or converts existing data.
 

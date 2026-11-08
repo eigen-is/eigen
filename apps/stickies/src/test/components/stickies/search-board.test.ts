@@ -14,8 +14,8 @@ function re(q: string): RegExp {
 const board: BoardData = {
     columnOrder: ['c1', 'c2'],
     columns: {
-        c1: { id: 'c1', title: 'To Do', taskIds: ['t1', 't2'], creator: '' },
-        c2: { id: 'c2', title: 'Done', taskIds: [], creator: '' },
+        c1: { id: 'c1', title: 'To Do', taskIds: ['t1', 't2'] },
+        c2: { id: 'c2', title: 'Done', taskIds: [] },
     },
 };
 const cards: Record<string, CommentCard> = {

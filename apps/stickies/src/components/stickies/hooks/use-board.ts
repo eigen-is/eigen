@@ -20,14 +20,11 @@ const WELCOME_CARD = {
         'Drag this sticky to another column to get started. You can add more stickies with the "Add a sticky" button.',
 };
 
-// Reuse the previous column object when its fields are unchanged, so memoized
-// columns skip re-rendering when an edit elsewhere on the board rebuilds state.
+// Reuse the previous column object when its fields are unchanged, so memoized columns skip re-rendering when an edit
+// elsewhere on the board rebuilds state.
 function sameColumn(a: ColumnItem, b: ColumnItem): boolean {
     return (
-        a.title === b.title &&
-        a.creator === b.creator &&
-        a.taskIds.length === b.taskIds.length &&
-        a.taskIds.every((id, i) => id === b.taskIds[i])
+        a.title === b.title && a.taskIds.length === b.taskIds.length && a.taskIds.every((id, i) => id === b.taskIds[i])
     );
 }
 
@@ -37,15 +34,14 @@ export function readBoard(doc: Y.Doc): BoardData {
     const columns: Record<string, ColumnItem> = {};
     for (const [id, columnMap] of getItemMapRoot(doc, 'columns')) {
         if (!(columnMap instanceof Y.Map)) continue;
+        // A peer's non-string title would crash the column's render and the board's search.
         const title = columnMap.get('title');
-        const creator = columnMap.get('creator');
         columns[id] = {
             id,
             title: typeof title === 'string' ? title : '',
             taskIds: (getIdArray(columnMap, 'taskIds')?.toArray() ?? []).filter(
                 (taskId) => tasksMap.get(taskId) instanceof Y.Map,
             ),
-            creator: typeof creator === 'string' ? creator : '',
         };
     }
     const columnOrder = getIdArrayRoot(doc, 'columnOrder')
@@ -58,13 +54,11 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
     const [board, setBoard] = useState<BoardData>({ columns: {}, columnOrder: [] });
     const [isAddColumnDialogOpen, setIsAddColumnDialogOpen] = useState(false);
 
-    // Latched so normalize + seed run once per doc (reset in onInit on every pathId switch), not on
-    // every 'sync' reconnect.
+    // Normalize and seed run once per doc, not on every reconnect's 'sync'.
     const initializedRef = useRef(false);
 
     const { user } = useAuth();
-    // Read the live email inside onSync (held in a ref by the shared hook) so an auth change never
-    // tears down the live board — the doc is keyed strictly on ownerId/mountId/pathId.
+    // A ref, because an auth change must not tear down the live board: the doc is keyed on its path alone.
     const userEmailRef = useRef(user?.email);
     userEmailRef.current = user?.email;
     const createChat = useCreateDriveItem('chat');
@@ -178,7 +172,6 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         onSync: ({ doc }, synced) => {
             if (!synced || initializedRef.current) return;
             initializedRef.current = true;
-            // normalizeBoard runs BEFORE the empty-check + seeding, once per pathId.
             normalizeBoard(doc);
             if (doc.getMap('columns').size === 0) {
                 initializeDefaultBoard(doc, userEmailRef.current || 'user@localhost').catch(console.error);
@@ -186,9 +179,8 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         },
     });
 
-    // Seal discrete ops (column add, card delete) as their own undo step — a stopCapturing() bracket
-    // stops Y.UndoManager from merging into the previous step within its 500ms captureTimeout (vector's
-    // discipline, adopted in U6e). Held in a ref so the `[]`-deps callback reads the live manager.
+    // A stopCapturing bracket seals a column add or a card delete as its own undo step, or Y.UndoManager merges it
+    // into the previous one within its 500 ms captureTimeout. A ref, so the `[]`-deps callback reads the live manager.
     const undoManagerRef = useRef(undoManager);
     undoManagerRef.current = undoManager;
 
@@ -215,8 +207,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
     const deleteCardFromBoard = useCallback((cardId: string) => {
         if (!docRef.current) return;
         const doc = docRef.current;
-        // Walk columns + remove the tasks entry in one transact: single undo step, no orphan
-        // column refs. The `.eigenchat` + comments.db row persist for undo / version revert.
+        // One transaction, so ⌘Z restores both. The card's chat and comments.db row stay for an undo or a revert.
         undoManagerRef.current?.stopCapturing();
         doc.transact(() => {
             const columnsMap = getItemMapRoot(doc, 'columns');
