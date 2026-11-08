@@ -2,7 +2,8 @@
 // cache, and hands every later caller that same Home until it closes. Every request passes through
 // here, so this is where a Home hears of its requests. It keeps a home shut while a restore replaces
 // its folder or a deletion removes it, and every home while the shutdown runs. It also hands a
-// server-wide event, such as a restart notice, to every loaded home.
+// server-wide event, such as a restart notice, to every loaded home, and re-checks who may still read
+// the documents they have open.
 
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { SSEvent } from '@workspace/lib/types/sse';
@@ -187,6 +188,12 @@ export async function evictHome(ownerId: string): Promise<void> {
 // reads no home's data and opens none: a home that is not loaded has no stream to tell.
 export function broadcastToLoadedHomes(event: SSEvent): void {
     for (const factory of homeFactories.values()) factory.peek()?.broadcast(event);
+}
+
+// Closes the collab sockets of whoever lost read, after a change to a membership that any home's documents may rest
+// on. It opens no home and counts as no request: a home that is not loaded has no open document.
+export async function enforceReadAccessOnLoadedHomes(): Promise<void> {
+    for (const factory of homeFactories.values()) await factory.peek()?.enforceReadAccess();
 }
 
 // Closes every home that is open now. A test file's teardown calls it too, and the next file opens homes again.

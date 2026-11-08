@@ -984,6 +984,11 @@ export class Drive {
         await propagateSharedPathChange(updatedItem, oldACL, normalizedACL, actor ?? null, options);
     }
 
+    // After a change to who has access that no path hears of, such as a member leaving a team.
+    public enforceReadAccess(): Promise<void> {
+        return this.documents.enforceReadAccess();
+    }
+
     // Sends a path's sharing to the homes it is shared with, after a change that keeps its ACL, such as
     // a rename, a restore or the trash of a folder above it. It runs in the path's ACL chain and reads
     // the path there, so it can't overtake an ACL change that started first and bring back a removed
