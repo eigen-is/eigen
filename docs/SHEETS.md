@@ -53,7 +53,7 @@ immer records the creation of a key as one `add` carrying the whole new value. S
 
 There is no `ctx.config` shortcut. Read a sheet's config with `getSheetConfig` (`state/context.ts`) and write through `ctx.sheets[i].config`. immer names a patch after the path its draft was reached through, so a second route to the config emits patches at a root `filterPatch` drops, and assigning it back replaces the whole config. `packages/sheet/src/test/state/events/concurrent-config.test.ts` pins it through the real op pipeline: one client merges cells, another drags a row taller, and the drag must not undo the merge.
 
-`state/modules` find a sheet through `getSheet` (`state/api/common.ts`): the current sheet, or the one an id or index names. A bad id throws `sheetNotFound` instead of handing back `undefined`, so a path that may name a sheet that is gone, such as a peer's row op, checks `getSheetIndex` first and returns.
+`state/modules` find a sheet through `getSheet` (`state/api/common.ts`): the current sheet, or the one an id names. A bad id throws instead of handing back `undefined`, so a path that may name a sheet that is gone, such as a peer's row op, checks `getSheetIndex` first and returns.
 
 `filterPatch` and `sheetMetadataOps` (`state/utils/patch.ts`) decide what goes on the wire, and both read one list of per-client `Sheet` fields, `PER_CLIENT_SHEET_FIELDS`. With two lists, a row insert would broadcast state the op path drops.
 
@@ -222,7 +222,7 @@ Once built, the map is kept current cell by cell. Local writers register what th
 
 ## Number display strings go through `numberDisplay`
 
-`numberDisplay(value, fa)` (`engine/format.ts`) turns a number into its `m`. Typed entry, paste, sort, autofill, the toolbar format change, the format painter, `setCellFormat`, recalc and the xlsx importer all call it. A mask renders the exact value. General is Excel's General at default width, so float noise hides (`0.1+0.2` shows `0.3`), long values cut to 11 characters and large or tiny values go scientific. A malformed format, which an xlsx file can carry, falls back to General. The input parser (`parseCellInput`) and autofill's date series still format on their own.
+`numberDisplay(value, fa)` (`engine/format.ts`) turns a number into its `m`. Typed entry, paste, sort, autofill, the toolbar format change, the format painter, recalc and the xlsx importer all call it. A mask renders the exact value. General is Excel's General at default width, so float noise hides (`0.1+0.2` shows `0.3`), long values cut to 11 characters and large or tiny values go scientific. A malformed format, which an xlsx file can carry, falls back to General. The input parser (`parseCellInput`) and autofill's date series still format on their own.
 
 A typed number is stored as a number in `v`, unless the cell is text-formatted. Pasted plain text goes through the same `setCellValue` parse as typing. A formula's text result stays text (`=TEXT(5,"000")` is `"005"`). Copying a General number writes 15 significant digits (`copiedNumberText`), not the 11-character display, so a paste elsewhere keeps the precision. A formula that joins a number into text (`&`, `CONCATENATE`, `CONCAT`, `TEXTJOIN`) writes it the same way, through `numberText` (`engine/format.ts`), at Excel's 15 significant digits: `(0.1+0.2)&""` is `"0.3"`, and a number past 15 digits is E notation (`1E+21`).
 

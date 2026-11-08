@@ -4,12 +4,11 @@ import type { Sheet as LibSheet } from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartSpec } from '@workspace/lib/types/chart';
 import { produce } from 'immer';
 import { celldataToData, dataToCelldata } from '../../../engine/celldata';
-import { getCellValue, setCellValue } from '../../../state/api/cell';
-import { calculateFormula, copySheet, getAllSheets, seedCalcChain } from '../../../state/api/sheet';
-import { addSheet } from '../../../state/api/workbook';
+import { copySheet, getAllSheets, seedCalcChain, setSheetOrder } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
+import { setCellValue } from '../../../state/modules/cell';
 import { execFunctionGroup, groupValuesRefresh, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
-import { deleteSheet } from '../../../state/modules/sheet';
+import { addSheet, deleteSheet } from '../../../state/modules/sheet';
 import type { Sheet } from '../../../state/types';
 import { author, join, receive } from '../factories/collab';
 import { contextFactory, selectionFactory, workbookContextFactory } from '../factories/context';
@@ -25,64 +24,14 @@ describe('sheet/core/api/sheet', () => {
         expect(getAllSheets(ctx)).toMatchObject([{ id: 'id_1' }, { id: 'id_2' }]);
     });
 
-    test('calculateFormula works before currentSheetId is initialized', () => {
-        const ctx = contextFactory({
-            currentSheetId: '',
-            sheets: [
-                {
-                    name: 'Sheet1',
-                    id: 'id_1',
-                    order: 0,
-                    data: [
-                        [
-                            { v: 10, ct: { t: 'n', fa: 'General' } },
-                            { f: '=A1+A2', ct: { t: 'n', fa: 'General' } },
-                        ],
-                        [{ v: 5, ct: { t: 'n', fa: 'General' } }, null],
-                    ],
-                },
-            ],
-        }) as Context;
-
-        expect(() => calculateFormula(ctx)).not.toThrow();
-        expect(getCellValue(ctx, 0, 1, { id: 'id_1', type: 'v' })).toBe(15);
-    });
-
-    test("calculateFormula without id writes each sheet's result to its own sheet", () => {
-        const ctx = contextFactory({
-            currentSheetId: 'id_1',
-            sheets: [
-                {
-                    name: 'Sheet1',
-                    id: 'id_1',
-                    order: 0,
-                    data: [
-                        [
-                            { v: 10, ct: { t: 'n', fa: 'General' } },
-                            { f: '=A1+A2', ct: { t: 'n', fa: 'General' } },
-                        ],
-                        [{ v: 5, ct: { t: 'n', fa: 'General' } }, null],
-                    ],
-                },
-                {
-                    name: 'Sheet2',
-                    id: 'id_2',
-                    order: 1,
-                    data: [
-                        [
-                            { v: 20, ct: { t: 'n', fa: 'General' } },
-                            { f: '=A1+A2', ct: { t: 'n', fa: 'General' } },
-                        ],
-                        [{ v: 7, ct: { t: 'n', fa: 'General' } }, null],
-                    ],
-                },
-            ],
-        }) as Context;
-
-        calculateFormula(ctx);
-
-        expect(getCellValue(ctx, 0, 1, { id: 'id_1', type: 'v' })).toBe(15);
-        expect(getCellValue(ctx, 0, 1, { id: 'id_2', type: 'v' })).toBe(27);
+    test('setSheetOrder renumbers every sheet from 0', () => {
+        const ctx = getContext();
+        setSheetOrder(ctx, { id_1: 2, id_2: 1 });
+        expect(ctx.sheets[0].order).toBe(1);
+        expect(ctx.sheets[1].order).toBe(0);
+        setSheetOrder(ctx, { id_1: 1, id_2: 2 });
+        expect(ctx.sheets[0].order).toBe(0);
+        expect(ctx.sheets[1].order).toBe(1);
     });
 
     test("a copied sheet's charts read the copy, under fresh ids", () => {
@@ -215,12 +164,12 @@ describe('sheet/core/api/sheet', () => {
         });
         const copyId = copied.sheets[1].id ?? '';
         const edited = produce(copied, (draft: Context) => {
-            setCellValue(draft, 0, 0, 5, null, { id: copyId });
+            setCellValue(draft, 0, 0, draft.sheets[1].data, 5);
             execFunctionGroup(draft, 0, 0, null, copyId, draft.sheets[1].data);
             groupValuesRefresh(draft);
         });
-        expect(getCellValue(edited, 0, 1, { id: copyId })).toBe(5);
-        expect(getCellValue(edited, 0, 1, { id: 'id_1' })).toBe(1);
+        expect(edited.sheets[1].data?.[0]?.[1]?.v).toBe(5);
+        expect(edited.sheets[0].data?.[0]?.[1]?.v).toBe(1);
     });
 
     // A copy is a sheet like any other on the tab that made it, as on a peer's, so a read of every sheet's cells, such

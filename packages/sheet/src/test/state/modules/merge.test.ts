@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { range } from 'es-toolkit/compat';
-import { cancelMerge, mergeCells } from '../../../state/api/merge';
 import type { Context } from '../../../state/context';
+import { mergeCells } from '../../../state/modules/merge';
 import { contextFactory, selectionFactory } from '../factories/context';
 
-describe('sheet/core/api/merge', () => {
+describe('state/modules/merge', () => {
     const getContext = () =>
         contextFactory({
             selections: selectionFactory([0, 1], [0, 1], 0, 0),
@@ -41,13 +41,13 @@ describe('sheet/core/api/merge', () => {
                         return undefined;
                 }
             };
-            mergeCells(ctx, ranges, mergeMode);
+            mergeCells(ctx, 'id_1', ranges, mergeMode);
             range(r0, r1 + 1).forEach((r) => {
                 range(c0, c1 + 1).forEach((c) => {
                     expect(ctx.sheets[0]?.data?.[r]?.[c]?.mc).toEqual(expectedValue(r, c, mergeMode));
                 });
             });
-            cancelMerge(ctx, ranges);
+            mergeCells(ctx, 'id_1', ranges, 'merge-cancel');
             range(r0, r1 + 1).forEach((r) => {
                 range(c0, c1 + 1).forEach((c) => {
                     expect(ctx.sheets[0]?.data?.[r]?.[c]?.mc).toEqual(undefined);

@@ -1,22 +1,19 @@
-// The sheet calls on the workbook's context: listing, hiding, showing and copying a sheet, and computing or seeding
-// its formulas. Most of them write the context they are given, so a caller runs them inside an edit's recipe.
+// The sheet calls on the workbook's context, such as hiding, copying or ordering a sheet, and seeding its recalc list.
+// Most of them write the context they are given, so a caller runs them inside an edit's recipe.
 
 import type { CellRangeRef } from '@workspace/lib/types/chart';
-import { cloneDeep } from 'es-toolkit/compat';
+import { cloneDeep, sortBy } from 'es-toolkit/compat';
+import { dataToCelldata } from '../../engine/celldata';
 import { mapChartRefs } from '../../engine/chart-data';
 import { copySheetName } from '../../engine/sheet-name';
-import { api, createContextResolver, execfunction, setCellValue as setCellValueInternal } from '..';
 import type { Context } from '../context';
-import { initSheetData, leaveCurrentSheet } from '../modules';
-import type { FormulaCell, SingleRange } from '../types';
+import { addSheet, initSheetData, leaveCurrentSheet } from '../modules';
+import type { FormulaCell } from '../types';
 import { getSheetIndex, sheetOrder } from '../utils';
-import { dataToCelldata, getSheet } from './common';
 
 export function getAllSheets(ctx: Context) {
     return ctx.sheets;
 }
-
-export { getSheet };
 
 export function hideSheet(ctx: Context, sheetId: string) {
     if (ctx.allowEdit === false) return;
@@ -63,8 +60,8 @@ export function copySheet(ctx: Context, sheetId: string) {
     sheetData.charts = Object.fromEntries(
         Object.values(sheetData.charts ?? {}).map((chart) => withFreshId(mapChartRefs(chart, toCopy))),
     );
-    api.addSheet(ctx, copyId, ctx.sheets[index].isPivotTable, sheetName, sheetData);
-    api.setSheetOrder(ctx, { [copyId]: order });
+    addSheet(ctx, copyId, ctx.sheets[index].isPivotTable, sheetName, sheetData);
+    setSheetOrder(ctx, { [copyId]: order });
     // The copy gets its cell matrix now, as a peer's tab builds it when the add arrives, so every read of the open
     // workbook's cells finds the copy's.
     const copyIndex = getSheetIndex(ctx, copyId);
@@ -74,49 +71,13 @@ export function copySheet(ctx: Context, sheetId: string) {
     ctx.formulaCache.formulaCellInfoMap = null;
 }
 
-function calculateSheetFormula(ctx: Context, id: string, range?: SingleRange) {
-    const index = getSheetIndex(ctx, id);
-    if (index == null) return;
-    const sheet = ctx.sheets[index];
-    const { data } = sheet;
-    if (!data) return;
-
-    const rStart = range?.row[0] ?? 0;
-    const rEnd = range?.row[1] ?? data.length - 1;
-    const cStart = range?.column[0] ?? 0;
-    const cEnd = range?.column[1] ?? data[0].length - 1;
-
-    // The public setCellValue scans the whole recalc list for each cell it writes, which makes a large sheet's
-    // recompute quadratic. This sweep visits every formula cell of the range once, so it rebuilds the list in one
-    // pass and writes each value through the internal setCellValue, which leaves the list alone. Entries outside the
-    // range stay.
-    const newChain: FormulaCell[] = (sheet.calcChain ?? []).filter(
-        (entry) => entry.id !== id || entry.r < rStart || entry.r > rEnd || entry.c < cStart || entry.c > cEnd,
-    );
-
-    // The resolver reads the live cells: the sweep runs in cell order, not in dependency order, and each evaluation
-    // must see the writes before it.
-    const resolver = createContextResolver(ctx);
-    for (let r = rStart; r <= rEnd; r += 1) {
-        for (let c = cStart; c <= cEnd; c += 1) {
-            const cell = data[r][c];
-            if (!cell?.f) continue;
-            const [, value] = execfunction(ctx, cell.f, r, c, id, undefined, false, true, resolver);
-            setCellValueInternal(ctx, r, c, data, value);
-            newChain.push({ r, c, id });
-        }
-    }
-
-    sheet.calcChain = newChain;
-}
-
-export function calculateFormula(ctx: Context, id?: string, range?: SingleRange) {
-    if (id) {
-        calculateSheetFormula(ctx, id, range);
-        return;
-    }
+// Sets the given sheets' orders and renumbers every sheet from 0, so the tab strip and the sheet list agree.
+export function setSheetOrder(ctx: Context, orderList: Record<string, number>) {
     for (const sheet of ctx.sheets) {
-        if (sheet.id) calculateSheetFormula(ctx, sheet.id, range);
+        if (sheet.id in orderList) sheet.order = orderList[sheet.id];
+    }
+    for (const [i, sheet] of sortBy(ctx.sheets, ['order']).entries()) {
+        sheet.order = i;
     }
 }
 

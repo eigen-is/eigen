@@ -7,6 +7,7 @@ Audited 2026-11-08 at `594bc63df` on `api-audit`. Six reviewers each read one ar
 Like ROADMAP and the proposals, this doc holds only open work: strike a finding when it is fixed or ruled out, and delete the doc when it is empty.
 
 **The owner's rulings (2026-11-08).**
+- The measure of every unit: the code ends up flatter, with fewer patches on patches and fixes on fixes, fewer lines, and easier to understand.
 - The goal is cleaner and simpler code. A product loss that removes a whole mechanism is welcome; there is no backward compatibility to keep, stored formats included.
 - [U2](#u2) is accepted: once another user edits, your own row, column or sheet insert or delete can no longer be undone. Pick the simplest cut rule that removes the machinery; a peer batch on that sheet, or any peer batch, are both fine. U1 is folded into U2, and U3 (the alternative if U2 were declined) is ruled out.
 - A tab rename rewrites the formulas that name the tab, as Excel does ([E9](#e9)).
@@ -30,7 +31,7 @@ The API audit's six patterns all show up here. Read across the six areas, though
 2. **Facts stored twice inside the workbook.** `calcChain` beside the cells' `f` ([E1](#e1)), `cell.mc` beside `config.merge` ([D9](#d9)), `cell.hl` beside `sheet.hyperlink` ([F2](#f2)), `ctx.filter` beside `sheet.filter` ([D7](#d7)), the freeze and pixel boxes beside the indices ([R1](#r1), [R9](#r9)), `ctx.copyState` beside the clipboard ([D1](#d1)), `ctx.rangePickerOpen` beside the dialog slot ([R5](#r5)). Every writer has to keep the two in step, and each one that didn't is a fix in the log.
 3. **Two paths for one job.** The editor's batch applier beside the engine's replay ([S2](#s2)), writers doing their own formula bookkeeping beside the patch-derived recompute that undo already uses ([E7](#e7)), sort and fill outside `carryCells` ([D2](#d2)), two hand-written formula walkers ([E3](#e3)), ⌘V beside menu Paste ([D1](#d1)), four ways to turn a pointer into a cell ([R3](#r3)), eight commit paths of which two measure the row ([R2](#r2)), and row and column handlers written twice ([R9](#r9)).
 4. **Structural undo across peers.** Undoing your own row, column or sheet op after a peer edited since needs a three-way merge, trial runs, a refusal path and half the shifter ([U2](#u2)). The refusal path guards a sheet that turned read-only, which no UI or import can make. The owner accepted the smaller undo.
-5. **Fork scaffolding.** Sheet protection, read-only rows, alternate formats, pivot remnants, icon rules ([F1](#f1)), an imperative plugin API only tests call ([D3](#d3)), fill modes no menu can choose and Chinese numeral series ([D4](#d4)), dead context fields and settings ([R4](#r4), [E6](#e6)). Each is still checked on edits, and at least one got a fix (`b6ecee4d3`, protection checked before a delete, for a protection nobody can switch on).
+5. **Fork scaffolding.** Sheet protection, read-only rows, alternate formats, pivot remnants, icon rules ([F1](#f1)), fill modes no menu can choose and Chinese numeral series ([D4](#d4)), dead context fields and settings ([R4](#r4), [E6](#e6)). Each is still checked on edits, and at least one got a fix (`b6ecee4d3`, protection checked before a delete, for a protection nobody can switch on).
 
 The API audit's tripwire applies here unchanged: at the third `fix(x)` on one mechanism within a week, stop and ask which root it is before a fourth patch lands.
 
@@ -61,7 +62,6 @@ The best payoff per unit of risk, with no redesign. **Product** marks a finding 
 | # | Finding | Removes | Risk | Product? | What is lost |
 |---|---------|---------|------|----------|--------------|
 | [F1](#f1) | Delete protection, read-only rows, alternate formats, pivot and icon remnants | ~215 + ~60 test, a per-cell walk on every edit | low | no | nothing |
-| [D3](#d3) | Delete the imperative API only tests call | ~430 + ~550 test | low | no | nothing |
 | [D4](#d4) | Fill keeps four series kinds; dead modes and Chinese series go | ~850 | low | small | 一, 二 and 周一 copy instead of counting; 1, 2, 4 fills linearly |
 | [S1](#s1) | A row op ships its marker only | ~65 + ~40 test, a deny list, two bugs | low-med | no | nothing |
 | [E1](#e1) | Drop `calcChain`; build the formula map from the cells | ~250 + ~200 test, three open TODO rows | med | no | nothing; every edit gets faster |
@@ -251,13 +251,6 @@ History: `a7efb97e1`, `0e127c464`, `bfd05a159`, `58da56564`, `c885c852d`, `53010
 Root cause: root 3. The paths already disagree: sort leaves links, borders and validation behind; fill never carries links and extends a rule over the whole apply range when any source cell overlaps it; a same-sheet paste joins the source validation rule but appends a copy of the conditional-format rule every time; the painter's formats ignore a filter's skipped rows.
 Simpler: conditional formats land inside `carryCells` through `landedRanges` and `withCfRanges`, joined to the rule on the sheet. Sort becomes `carryCells` with the permuted rows as one tile (safe, since `carryCells` reads every source before it writes). Fill precomputes its series and lands through `carryCells`' `land` callback.
 Lost (product): sort moves borders, links and validation with their rows, as Excel does; fill copies links; the per-paste duplicate rules go. Decide whether fill keeps skipping hidden rows. ~100 LOC net + ~60 new test, medium risk, high confidence.
-
-<a id="d3"></a>**D3. About 430 lines of fortune-sheet's imperative API are called only by tests.**
-`state/api/cell.ts` (`getCellValue`, `setCellValue` with `FORMAT_KEYS`, `clearCell`, `autoFillCell`), `state/api/range.ts` (all but `setSelection`), `state/api/rowcol.ts` (`freeze`, `insertRowOrColumn`, `deleteRowOrColumn`, `hideRowOrColumn`, `showRowOrColumn`, `getRowHeight`, `getColumnWidth`), `state/api/merge.ts` (`cancelMerge`), `state/api/sheet.ts` (`calculateFormula`), `getSheetWithLatestCelldata`; the Workbook ref's `setSelection` and `mergeCells` have no caller in `apps/`.
-History: in with `3598a42e3`. Its `invalidParams` checks on typed arguments break "trust the type system".
-Root cause: root 5, a plugin API for an embedder that doesn't exist. Production uses `setCellFormat`, `setSelection`, `setRowHeight`, `setColumnWidth`, `getAllSheets`, `copySheet`, `hideSheet`, `showSheet`, `setSheetOrder` and `seedCalcChain`.
-Simpler: delete the rest; tests seed `data` or call the module functions.
-Lost: nothing. ~430 LOC + ~550 test (about 40 call sites rewired), low risk, high confidence.
 
 <a id="d4"></a>**D4. Most of `drop-cell.ts` is fill modes nothing can choose, and Chinese numeral and weekday series (small product).**
 `state/modules/drop-cell.ts`: `getDataByType` branches `'4'`–`'8'`, the `'2'`/`'3'`/`'8'` arms of `getApplyData`, `chineseToNumber`, `sectionToChinese`, `numberToChinese`, `isChnNumber`, `isChnWeek2/3`, `fillChnWeek*`, `fillChnNumber`, the `chn*` tables, flags 3–6 of `getTypeItemHide`, the geometric branch of `fillSeries`; `dropCellCache` as module state passing arguments.
@@ -471,7 +464,7 @@ Wave 1 (nothing lost, or decided):
 | Op log | [S1](#s1) (leave `alternateFormatRules` to F1), [S3](#s3), [S7](#s7), [S8](#s8) | `state/utils/patch.ts`, `state/modules/sheet.ts`, `engine/replay-ops.ts`, `use-sheet.ts` |
 | Undo | [U2](#u2) | `history.ts`, `history-shift.ts`, `Workbook/api.ts` (merge after S1: both touch `patchToOp`) |
 | Formulas | [E9](#e9), [E3](#e3), [E6](#e6), then [E4](#e4), [E5](#e5) | `engine/formula-shift.ts`, `engine/recalc.ts`, `formula-*` |
-| Editing | [D3](#d3), then [D1](#d1), [D7](#d7), [D5](#d5) | `state/api/*`, `paste.ts`, `clipboard.ts`, `filter.ts` |
+| Editing | [D1](#d1), [D7](#d7), [D5](#d5) | `state/api/*`, `paste.ts`, `clipboard.ts`, `filter.ts` |
 | Render and input | [R4](#r4), [R5](#r5), [R2](#r2), [R3](#r3), then [R6](#r6), [R7](#r7) | `state/context.ts`, `context/modal.tsx`, `state/events/*`, `SheetOverlay/*` |
 | Rules | [F1](#f1) (with `alternateFormatRules`), then [F3](#f3) once ruled | `protection.ts`, `validation*.ts`, `DataValidation/*` |
 
@@ -485,4 +478,4 @@ Wave 3, the redesigns, in [§ If we built it today](#if-we-built-it-today)'s ord
 
 - This run also takes the API audit's T2 and X2 (the other session agreed). Don't edit `API-SIMPLIFICATION-AUDIT.md` on this branch, because that session keeps editing it: tell it when T2 or X2 lands, and it strikes them. Its X2 ruling: a flat cap, the runner's deadline and its memory limit, and a timeout or out-of-memory is an accepted outcome. X2 joins Wave 2.
 - The owner allows an implementer to hand mechanical work (a grep sweep, rewiring similar test call sites, running a suite) to a cheaper sub-agent: Sonnet, or Haiku for a lookup, at low or medium effort. The implementer keeps Step 0, the design, the diff read and the commit. A sub-agent uses the implementer's worktree with no isolation option, one editing at a time, and never commits.
-- Wave 1 is running. Merged: nothing yet. Running: S1, U2, E9, D3, R4. F1 starts when a slot frees.
+- Wave 1 is running. Merged: D3 (the ref's `setSelection` stays: 13 test callers and no other door to the stored selection copy; S7 may remove it). Running: S1, U2, E9, R4, F1. Next: D1, which also has to clear the fake copy state: since D3, `getSheet` treats an empty id as a bad id, so a menu Paste after a cancelled format painter (`dataSheetId: ''`) throws until D1 lands.

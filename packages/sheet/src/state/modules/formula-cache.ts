@@ -57,7 +57,7 @@ export function snapshotContext(ctx: Context): Context {
 // The CellResolver through which the FormulaEngine reads the editor's cells. It reads the context it is handed. A pass
 // in dependency order takes `snapshotContext(ctx)`: the values it computes reach the next formula through
 // execFunctionGlobalData, which the engine reads before the cells. A sweep that writes between evaluations, such as
-// calculateFormula's, takes the live ctx, so each evaluation sees the writes before it.
+// a paste's, takes the live ctx, so each evaluation sees the writes before it.
 export function createContextResolver(source: Context): CellResolver {
     const matrices = new Map<string, CellMatrix | null>();
     const dataFor = (sheetId: string) => {
@@ -287,17 +287,13 @@ export function executeAffectedFormulas(
     calcChains: FormulaCell[],
     resolver: CellResolver,
 ) {
-    const calcChainSet = new Set<string>();
-    for (const item of calcChains) {
-        calcChainSet.add(`${item.r}_${item.c}_${item.id}`);
-    }
+    const calcChainSet = new Set(calcChains.map((item) => `${item.r}_${item.c}_${item.id}`));
 
     // The results are collected here and assigned once. ctx is usually an immer draft, and each push through it would
     // record a patch.
     const refreshed: Context['groupValuesRefreshData'] = [];
 
-    for (let i = 0; i < formulaRunList.length; i += 1) {
-        const formulaCell = formulaRunList[i];
+    for (const formulaCell of formulaRunList) {
         const { calc_funcStr } = formulaCell;
 
         const v = execfunction(

@@ -11,7 +11,6 @@ import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { applyPatches, enablePatches, produceWithPatches } from 'immer';
 import { evaluateConditionalFormat } from '../../../engine/conditional-format';
 import type { CellType } from '../../../engine/types';
-import { setCellValue as apiSetCellValue } from '../../../state/api/cell';
 import type { Context } from '../../../state/context';
 import {
     getCellValue,
@@ -158,7 +157,7 @@ describe('state/modules/cell — updateCell auto-height', () => {
     test('a rich edit recomputes the formulas that read the cell', () => {
         const ctx = editContext();
         ctx.sheets[0].data![0][0] = { ct: { fa: 'General', t: 'inlineStr', s: [{ v: 'Cherry', bl: 1 }] } };
-        apiSetCellValue(ctx, 0, 1, '=A1&"!"', null);
+        updateCell(ctx, 0, 1, null, '=A1&"!"');
         expect(ctx.sheets[0].data![0][1]?.v).toBe('Cherry!');
         const input = win.document.createElement('div');
         input.innerHTML = '<span style="font-weight: bold;">Kiwi</span>';

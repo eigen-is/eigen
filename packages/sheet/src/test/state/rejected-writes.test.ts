@@ -14,7 +14,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { setCellFormat } from '../../state/api/cell';
-import { setColumnWidth, setRowHeight, showRowOrColumn } from '../../state/api/rowcol';
+import { setColumnWidth, setRowHeight } from '../../state/api/rowcol';
 import type { Context } from '../../state/context';
 import { handlePasteByClick } from '../../state/events/paste';
 import { setChartLook, setChartSpec } from '../../state/modules/chart';
@@ -101,8 +101,6 @@ const REJECTED: [name: string, recipe: (ctx: Context) => void][] = [
     ['setting the look of a chart that is not there', (ctx) => setChartLook(ctx, 'gone', { roughness: 1 })],
     ['renaming the media of no image', (ctx) => replaceImageMediaName(ctx, 'pending:gone', 'photo.png')],
     ['removing the media of no image', (ctx) => removeImageByMediaName(ctx, 'pending:gone')],
-    ['unhiding a row via the api when nothing is hidden', (ctx) => showRowOrColumn(ctx, ['1'], 'row')],
-    ['unhiding a column via the api when nothing is hidden', (ctx) => showRowOrColumn(ctx, ['1'], 'column')],
     ['unhiding a selected row when nothing is hidden', (ctx) => showSelectedRowCol(ctx, 'row')],
     ['unhiding a selected column when nothing is hidden', (ctx) => showSelectedRowCol(ctx, 'column')],
     [

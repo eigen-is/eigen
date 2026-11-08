@@ -57,9 +57,7 @@ export const SheetOverlay: React.FC = () => {
         openAtPoint: cellAreaLongPressOpen,
         anchor: cellMenuAnchor,
     } = useSheetContextMenu('cell');
-    // Long-press opens the cell menu on touch, running the same select-then-open flow as right-click.
-    // The 10 px cancel leaves grid scrolling untouched; the allowEdit gate lives in openAtPoint. The
-    // cell surface has a single menu, so bind carries no item — bind(null).
+    // A long press opens the cell menu on touch. The cell surface has a single menu, so bind carries no item.
     const cellAreaLongPress = useLongPress<null>((_item, x, y) => cellAreaLongPressOpen(x, y));
     const containerRef = useRef<HTMLDivElement>(null);
     const bottomAddRowInputRef = useRef<HTMLInputElement>(null);
@@ -68,10 +66,8 @@ export const SheetOverlay: React.FC = () => {
     const cellAreaMouseDown = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
             const { nativeEvent } = e;
-            // Skip cell-selection logic when the click originated inside a floating UI
-            // (validation dropdown, hint box, etc.) that should not move the selection.
-            // React types a mouse event's target as an EventTarget; on this div it is always an element.
-            if ((e.target as HTMLElement).closest?.('.sheet-mousedown-cancel')) return;
+            // A click inside a floating UI, such as a validation dropdown, must not move the selection.
+            if (e.target instanceof Element && e.target.closest('.sheet-mousedown-cancel')) return;
             if (e.button !== 2) {
                 // onContextMenu event will not call onMouseDown
                 setContext((draftCtx) => {
@@ -89,12 +85,8 @@ export const SheetOverlay: React.FC = () => {
                         refs.canvas.current?.getContext('2d') ?? undefined,
                     );
 
-                    // Skip the input focus when the mousedown opened a menu — the
-                    // filter menu, or a validation dropdown off its cell chevron.
-                    // Focusing the off-screen cell input auto-scrolls the cell area,
-                    // which would snap the grid and close the menu via its
-                    // close-on-scroll listener; the focus shift alone dismisses the
-                    // Radix popup.
+                    // Focusing the off-screen cell input scrolls the cell area, and the scroll or the focus shift
+                    // closes a menu this mousedown just opened.
                     if (
                         !consumed &&
                         !draftCtx.validationListOpen &&
@@ -124,10 +116,7 @@ export const SheetOverlay: React.FC = () => {
         [refs.cellArea, refs.globalCache, setContext],
     );
 
-    // cellArea is the native scroll surface; its scroll event is the single
-    // source of truth for scroll position. Write globalCache (read by mouse
-    // hit-testing and the canvas redraw) and fire the bus — never setContext,
-    // which would re-render every context consumer on each scroll tick.
+    // Never setContext here: it would re-render every context consumer on each scroll tick.
     const onCellAreaScroll = useCallback(() => {
         const el = refs.cellArea.current;
         if (!el) return;
@@ -179,8 +168,6 @@ export const SheetOverlay: React.FC = () => {
 
     const onMouseMove = useCallback(
         (nativeEvent: MouseEvent) => {
-            // Store the latest event and coalesce via rAF so that multiple
-            // mousemove events within one frame produce only one state update.
             pendingMouseMoveRef.current = nativeEvent;
             if (mouseMoveRafRef.current) return;
             mouseMoveRafRef.current = requestAnimationFrame(() => {
@@ -250,12 +237,7 @@ export const SheetOverlay: React.FC = () => {
         const ctx = getContext();
         const valueStr = bottomAddRowInputRef.current?.value || ctx.addDefaultRows.toString();
         const value = parseInt(valueStr, 10);
-        if (Number.isNaN(value)) {
-            return;
-        }
-        if (value < 1) {
-            return;
-        }
+        if (Number.isNaN(value) || value < 1) return;
         const data = getFlowdata(ctx);
         if (!data) return;
         const insertRowColOp: SetContextOptions['insertRowColOp'] = {
@@ -278,17 +260,12 @@ export const SheetOverlay: React.FC = () => {
         setContext((draftCtx) => {
             const sheetIndex = getSheetIndex(draftCtx, draftCtx.currentSheetId);
             if (sheetIndex == null) return;
-
-            const currentSheet = draftCtx.sheets[sheetIndex];
-
-            // Only reset selection if there's no existing selection
-            if (!currentSheet.selections?.length) {
-                api.setSelection(draftCtx, [{ row: [0, 0], column: [0, 0] }], {});
+            if (!draftCtx.sheets[sheetIndex].selections?.length) {
+                api.setSelection(draftCtx, [{ row: [0, 0], column: [0, 0] }]);
             }
         });
     }, [setContext]);
 
-    // Warning dialog
     // biome-ignore lint/correctness/useExhaustiveDependencies: fires once per new warnDialog message; showNotice + setContext are stable
     useEffect(() => {
         if (context.warnDialog) {
@@ -301,10 +278,8 @@ export const SheetOverlay: React.FC = () => {
         }
     }, [context.warnDialog]);
 
-    // Apply explicit programmatic scrolls (selection-follow, freeze reset, sheet-switch
-    // restore) to the native scroll surface, post-commit so layout is settled. Keyed on
-    // scrollRequest (a fresh object per request) — NOT on the scrollLeft/scrollTop mirror,
-    // which syncScroll updates every recipe and would otherwise rewind an in-progress scroll.
+    // Keyed on scrollRequest, a fresh object per request, not on the scrollLeft and scrollTop mirror: syncScroll updates
+    // that on every recipe, which would rewind a scroll in progress.
     useEffect(() => {
         const req = context.scrollRequest;
         const el = refs.cellArea.current;
@@ -313,9 +288,6 @@ export const SheetOverlay: React.FC = () => {
         if (req.top != null) el.scrollTop = req.top;
     }, [context.scrollRequest, refs.cellArea]);
 
-    // Keep ctx.filter/filterRange in sync with the current sheet and recompute the
-    // filter-button geometry (ctx.filterOptions) the canvas draws every frame —
-    // row/col metric changes, sheet switches, edit-right changes and filter-range edits all re-derive.
     const sheetIndex = getSheetIndex(context, context.currentSheetId);
     const sheetFilterRange = sheetIndex == null ? undefined : context.sheets[sheetIndex].filterRange;
     // biome-ignore lint/correctness/useExhaustiveDependencies: deps are intentional triggers — body reads `draftCtx` so biome can't see the connection
@@ -330,9 +302,7 @@ export const SheetOverlay: React.FC = () => {
         sheetFilterRange,
     ]);
 
-    // The filter dropdown is position:fixed, positioned once from globalCache scroll
-    // offsets, so it detaches from its column icon once the grid scrolls. Close it on
-    // any scroll (standard dropdown behavior) — only subscribe while it is open.
+    // The filter dropdown is position:fixed, so it detaches from its column icon once the grid scrolls.
     useEffect(() => {
         if (!context.filterContextMenu) return;
         const close = () => {
@@ -376,32 +346,22 @@ export const SheetOverlay: React.FC = () => {
         }
 
         const rawRangeTxt = getRangetxt(context, context.currentSheetId, lastSelection);
-        // Return with formatting for better screen reading
-        // Format single-cell selections (e.g., "AA12" → "AA. 12")
-        // Format range selections (e.g., "A1:BB100" → "A. 1: BB. 100")
+        // "A1:BB100" becomes "A. 1: BB. 100", which a screen reader reads better.
         return rawRangeTxt.replace(/([A-Z]+)(\d+)/g, '$1. $2');
     }, [context.currentSheetId, context.selections]);
 
     const cellValue = () => {
-        if ((context.selections?.length ?? 0) > 0) {
-            const selection = context.selections?.[context.selections.length - 1];
-            if (!selection) return '';
-            const sheetIndex = getSheetIndex(context, context.currentSheetId);
-            if (sheetIndex === undefined || sheetIndex === null) return '';
-            const rowFocus = selection.row_focus ?? 0;
-            const columnFocus = selection.column_focus ?? 0;
-            const cell = context.sheets[sheetIndex]?.data?.[rowFocus]?.[columnFocus];
-            return cellDisplay(cell) ?? '';
-        }
-        return '';
+        const selection = context.selections?.at(-1);
+        const sheetIndex = getSheetIndex(context, context.currentSheetId);
+        if (!selection || sheetIndex == null) return '';
+        const cell = context.sheets[sheetIndex].data?.[selection.row_focus ?? 0]?.[selection.column_focus ?? 0];
+        return cellDisplay(cell) ?? '';
     };
 
     const computedCellValue = cellValue();
 
-    // One overlay region per frozen pane (RENDERING.md § Scrolling): the
-    // passive visuals render into every region and each
-    // region's clip shows exactly its portion; stateful singletons render into
-    // the single region containing their anchor cell.
+    // One overlay region per frozen pane. The passive visuals render into every region, and each region's clip shows its
+    // portion. A stateful singleton renders into the one region that holds its anchor cell.
     const freeze = refs.globalCache.freezen?.[context.currentSheetId];
     const regions = computeOverlayRegions(freeze, context.cellmainWidth, context.cellmainHeight);
     const firstSel = context.selections?.[0];
@@ -471,9 +431,7 @@ export const SheetOverlay: React.FC = () => {
                     }}
                 >
                     <div className="sheet-cell-overlay-layer">
-                        {/* Validation dropdown trigger: its own pane wrapper before the
-                            passive regions, so it keeps painting under the selection
-                            tints (old z-10 vs z-14/15). */}
+                        {/* Before the passive regions, so it paints under the selection tints. */}
                         <OverlayRegion {...dvRegion}>
                             <DropdownList />
                         </OverlayRegion>
@@ -486,9 +444,7 @@ export const SheetOverlay: React.FC = () => {
                         <OverlayRegion {...editorRegion}>
                             <InputBox />
                         </OverlayRegion>
-                        {/* Popup chrome (hint box, link card) pins with its anchor's pane
-                            but never clips — popups overflow pane boundaries, like the
-                            portaled dropdowns. */}
+                        {/* A popup pins with its anchor's pane but never clips, since it overflows the pane. */}
                         <OverlayRegion
                             left={0}
                             top={0}
@@ -549,10 +505,8 @@ export const SheetOverlay: React.FC = () => {
                                         width: context.ch_width,
                                     }}
                                 />
-                                {/* No eigen-paper-chrome: the add-row control sits
-                                    directly ON the light-pinned paper (no opaque card
-                                    behind it), so it renders light in both themes —
-                                    dark-themed controls would be illegible here. */}
+                                {/* No eigen-paper-chrome: this control sits on the light-pinned paper, where
+                                    dark-themed controls would be illegible. */}
                                 <div
                                     id="sheet-bottom-controll-row"
                                     className="sheet-bottom-controll-row flex items-center gap-2"
@@ -582,8 +536,6 @@ export const SheetOverlay: React.FC = () => {
                                         size="sm"
                                         className="ml-2"
                                         onClick={() => {
-                                            // cellArea is the scroll source; its native scroll
-                                            // event syncs globalCache and triggers the redraw.
                                             if (refs.cellArea.current) refs.cellArea.current.scrollTop = 0;
                                         }}
                                     >
