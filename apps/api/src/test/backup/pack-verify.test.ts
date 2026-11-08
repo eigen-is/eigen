@@ -283,7 +283,9 @@ describe('Backup pack and verify', () => {
             expect(headers.some((header) => header.typeflag === 'x')).toBe(true);
             expect(headers.some((header) => header.name === `${folderName}/${EMPTY_DIR}/`)).toBe(true);
             const privateMode = (typeflag: string) => (typeflag === '5' ? 0o700 : 0o600);
-            expect(headers.filter((header) => header.mode !== privateMode(header.typeflag))).toEqual([]);
+            // A pax header carries the mode of the entry that follows it, a long-named folder's as well as a file's.
+            const entryType = (at: number) => headers[headers[at].typeflag === 'x' ? at + 1 : at].typeflag;
+            expect(headers.filter((header, at) => header.mode !== privateMode(entryType(at)))).toEqual([]);
 
             const root = join(await extractFresh('extract-modes-'), folderName);
             const modes = ['', ...new Bun.Glob('**/*').scanSync({ cwd: root, onlyFiles: false, dot: true })].map(
