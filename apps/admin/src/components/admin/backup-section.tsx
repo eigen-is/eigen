@@ -1,5 +1,5 @@
 // The Backup section of one home in the Admin app's user and team details: its archives and safety
-// copies, the job that runs now, and the buttons that back up, upload, verify, restore and delete.
+// copies, the job that runs now, and the buttons that back up, verify, restore and delete, and for the owner upload.
 // Guests never reach it: the admin user list leaves them out and guest homes have their own route.
 
 import {
@@ -7,6 +7,7 @@ import {
     useBackupJobs,
     useDeleteBackupArtifact,
     useDeleteSafetyCopy,
+    useIsOrgOwner,
     useRestoreBackup,
     useRestoreSafetyCopy,
     useStartBackup,
@@ -77,6 +78,7 @@ export function BackupSection({ ownerId }: BackupSectionProps) {
     const { data, isLoading, isError } = useBackupArtifacts(ownerId);
     const { data: jobs = [], isError: jobsFailed } = useBackupJobs(ownerId);
     const startBackup = useStartBackup(ownerId);
+    const isOwner = useIsOrgOwner();
     const uploadBackup = useUploadBackup();
     const verifyBackup = useVerifyBackup(ownerId);
     const restoreBackup = useRestoreBackup(ownerId);
@@ -122,22 +124,26 @@ export function BackupSection({ ownerId }: BackupSectionProps) {
                         <Archive className="h-4 w-4 mr-1" />
                         Create backup
                     </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={!!running || uploadBackup.isPending}
-                        onClick={() => fileInput.current?.click()}
-                    >
-                        <Upload className="h-4 w-4 mr-1" />
-                        Upload backup
-                    </Button>
-                    <input
-                        ref={fileInput}
-                        type="file"
-                        accept={BACKUP_ARTIFACT_EXTENSION}
-                        className="hidden"
-                        onChange={handleUpload}
-                    />
+                    {isOwner && (
+                        <>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={!!running || uploadBackup.isPending}
+                                onClick={() => fileInput.current?.click()}
+                            >
+                                <Upload className="h-4 w-4 mr-1" />
+                                Upload backup
+                            </Button>
+                            <input
+                                ref={fileInput}
+                                type="file"
+                                accept={BACKUP_ARTIFACT_EXTENSION}
+                                className="hidden"
+                                onChange={handleUpload}
+                            />
+                        </>
+                    )}
                 </div>
             </div>
 

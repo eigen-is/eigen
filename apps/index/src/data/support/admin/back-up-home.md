@@ -6,7 +6,7 @@ category: Backups
 tags: [admin, backup, restore, server]
 related: [admin/restore-home, admin/backup-contents]
 order: 90
-updated: 2026-11-03
+updated: 2026-11-08
 ---
 
 You can make a backup of a single user or a single team in Admin. The backup is one archive file that holds everything in that account: files, mail, documents, and settings. It covers one user or one team at a time, not the whole server.
@@ -52,12 +52,12 @@ For what verification looks at, see [What a backup contains](/support/admin/back
 
 ## Upload an archive
 
-If you have a backup file from another machine, you can bring it back in.
+If you have a backup file from another machine, the owner can bring it back in. Other admins see no **Upload backup** button.
 
 1. In the **Backup** section, click **Upload backup**.
 2. Choose the archive file.
 
-The file can be at most about 1 GB, and its name must match the pattern this server uses for that user or team. Only the owner can upload an archive of the owner's account. A file that arrives this way lists as **Not verified**, so click **Verify** afterwards.
+The file can be at most about 1 GB, and its name must match the pattern this server uses for that user or team. A file that arrives this way lists as **Not verified**, so click **Verify** afterwards.
 
 For a file larger than 1 GB, whoever runs the server copies it into `backups/` in the install folder and gives it to user 1000 (`sudo chown 1000:1000 backups/<file>`). It appears in the list, and its row says **Verify first**: click **Verify** before you restore from it.
 

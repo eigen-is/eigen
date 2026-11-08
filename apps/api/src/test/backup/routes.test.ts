@@ -788,6 +788,20 @@ describe('Backup routes', () => {
             expect((await upload(owner)).status).toBe(200);
         });
 
+        test('only the owner uploads an archive, of any home', async () => {
+            const name = buildArtifactName(target.id, new Date('2020-07-07T03:04:05Z'));
+            const bytes = Uint8Array.from(readFileSync(await packTargetHome(name)));
+            const upload = (caller: TestUser) =>
+                authedRequest(caller.sessionToken, uploadPath(name), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/zstd', 'Content-Length': String(bytes.byteLength) },
+                    body: new Blob([bytes]),
+                });
+            expect((await upload(admin)).status).toBe(403);
+            expect((await listArtifacts(target.id)).artifacts.map((artifact) => artifact.name)).not.toContain(name);
+            expect((await upload(ctx.alice.user)).status).toBe(200);
+        });
+
         test('that admin still backs up, lists, verifies, downloads and restores any other home', async () => {
             const job = await startAndFinishAs(admin, `/admin/backup/home/${target.id}`);
             expect(job.state).toBe('done');
