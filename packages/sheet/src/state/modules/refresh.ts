@@ -1,58 +1,27 @@
-// After an edit writes cells, jfrefreshgrid recomputes the formulas that read them: the cells the edit recorded,
-// else every cell of the given or selected ranges, then the formulas that depend on those.
+// After an edit writes cells, these bring the formula map up to date with them and recompute the formulas that read
+// them: the cells the edit names, or every cell of the given or selected ranges.
 
 import type { CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
-import type { Selection } from '../types';
+import type { FormulaCell, Selection } from '../types';
 import { setFormulaCellInfo } from './formula-cache';
 import { execFunctionGroup } from './formula-exec';
 
-function runExecFunction(ctx: Context, range: Selection[], index: string, data: CellMatrix) {
-    // An edit (e.g. delete) may have recorded exactly which cells it changed.
-    // Prefer those: recomputing the whole selection rectangle is O(cells) and
-    // makes clearing a huge, mostly-empty selection (select-all + delete) slow.
-    const pending = ctx.formulaCache.pendingChangedCells;
-    ctx.formulaCache.pendingChangedCells = undefined;
-
-    ctx.formulaCache.execFunctionExist = [];
-    if (pending != null) {
-        for (const cell of pending) {
-            setFormulaCellInfo(ctx, cell, data);
-            ctx.formulaCache.execFunctionExist.push(cell);
-        }
-    } else {
-        for (let s = 0; s < range.length; s += 1) {
-            for (let r = range[s].row[0]; r <= range[s].row[1]; r += 1) {
-                for (let c = range[s].column[0]; c <= range[s].column[1]; c += 1) {
-                    setFormulaCellInfo(ctx, { r, c, id: index }, data);
-                    ctx.formulaCache.execFunctionExist.push({ r, c, id: index });
-                }
-            }
-        }
-    }
-    ctx.formulaCache.execFunctionExist.reverse();
-    execFunctionGroup(ctx, null, null, null, null, data);
-    ctx.formulaCache.execFunctionGlobalData = null;
+export function recomputeCells(ctx: Context, cells: readonly FormulaCell[], data?: CellMatrix | null) {
+    const matrix = data ?? getFlowdata(ctx);
+    // A sheet without data has nothing to refresh.
+    if (!matrix) return;
+    for (const cell of cells) setFormulaCellInfo(ctx, cell, matrix);
+    execFunctionGroup(ctx, cells);
 }
 
-export function jfrefreshgrid(
-    ctx: Context,
-    data: CellMatrix | null,
-    range: Selection[] | undefined,
-    isRunExecFunction = true,
-) {
-    // No data given means the current sheet's, and a sheet without data has nothing to refresh.
-    const cells = data ?? getFlowdata(ctx);
-    if (!cells) return;
-
-    if (range == null) {
-        range = ctx.selections;
-        if (range == null) return;
+export function jfrefreshgrid(ctx: Context, data: CellMatrix | null, range: Selection[] | undefined) {
+    const cells: FormulaCell[] = [];
+    for (const { row, column } of range ?? ctx.selections ?? []) {
+        for (let r = row[0]; r <= row[1]; r += 1) {
+            for (let c = column[0]; c <= column[1]; c += 1) cells.push({ r, c, id: ctx.currentSheetId });
+        }
     }
-
-    // Trigger linked updates when cell data changes
-    if (isRunExecFunction) {
-        runExecFunction(ctx, range, ctx.currentSheetId, cells);
-    }
+    recomputeCells(ctx, cells, data);
 }

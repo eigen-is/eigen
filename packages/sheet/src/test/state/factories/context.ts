@@ -80,7 +80,6 @@ export function contextFactory({
         scrollTop: 0,
         sheetViewRecord: {},
         shiftKeyDown: false,
-        groupValuesRefreshData: [],
         formulaCache: new FormulaCache(),
         defaultCell: {},
         ...params,

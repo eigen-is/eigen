@@ -31,7 +31,7 @@ import { applyOpBatch } from './apply-ops';
 import { setCellValue } from './cell';
 import { withoutDeletedFloatingEdits } from './floating';
 import { snapshotContext } from './formula-cache';
-import { execFunctionGroup, execfunction, groupValuesRefresh } from './formula-exec';
+import { execFunctionGroup, execfunction } from './formula-exec';
 import { isStructural } from './history-shift';
 import { settleCurrentSheet, shiftSheetOrders } from './sheet';
 
@@ -242,10 +242,7 @@ function recalculate(ctx: Context, patches: Patch[]) {
         const [, v] = execfunction(ctx, f, r, c, { id, notInsertFunc: true, resolver });
         setCellValue(ctx, r, c, data, { v, f });
     }
-    ctx.formulaCache.execFunctionExist = [...cells.values()];
-    execFunctionGroup(ctx, null, null, null);
-    groupValuesRefresh(ctx);
-    ctx.formulaCache.execFunctionGlobalData = null;
+    execFunctionGroup(ctx, [...cells.values()]);
 }
 
 // The marker moves the grid back, and the batch is the marker and what it did not bring back of the fields and cells

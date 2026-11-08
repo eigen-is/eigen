@@ -1,9 +1,10 @@
 // A CellResolver over a list of sheets, such as the replayed sheets recalcSheets computes on the server or the sheets
 // of the editor's context. The formula engine reads cells and finds sheets by name through it. It reads each sheet's
-// matrix when asked, so over live sheets an evaluation sees the writes before it.
+// matrix when asked, so over live sheets an evaluation sees the writes before it. withComputedValues puts the values
+// a pass has computed so far in front of a resolver over sheets that pass can't write.
 
 import { sheetFinder } from './parser/helper/cell';
-import type { CellMatrix, CellResolver } from './types';
+import type { Cell, CellMatrix, CellResolver } from './types';
 
 export type { CellResolver } from './types';
 
@@ -34,5 +35,13 @@ export function createArrayResolver(sheets: readonly SheetData[]): CellResolver 
         hasSheet(sheetId) {
             return byId.has(sheetId);
         },
+    };
+}
+
+// `computed` is keyed `${row}_${col}_${sheetId}`.
+export function withComputedValues(resolver: CellResolver, computed: ReadonlyMap<string, Cell>): CellResolver {
+    return {
+        ...resolver,
+        getCell: (sheetId, row, col) => computed.get(`${row}_${col}_${sheetId}`) ?? resolver.getCell(sheetId, row, col),
     };
 }

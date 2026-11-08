@@ -44,7 +44,6 @@ import {
     firstVisibleSheetId,
     getFlowdata,
     getSheetIndex,
-    groupValuesRefresh,
     handleGlobalKeyDown,
     handlePaste,
     initSheetData,
@@ -125,12 +124,6 @@ function loadWorkbook(refs: RefValues, { data, allowEdit, commentCards }: Settin
     applySheetView(ctx);
     return ctx;
 }
-
-const triggerGroupValuesRefresh = (ctx: Context) => {
-    if (ctx.groupValuesRefreshData.length > 0) {
-        groupValuesRefresh(ctx);
-    }
-};
 
 const concatProducer = (...producers: ((ctx: Context) => void)[]) => {
     return (ctx: Context) => {
@@ -217,14 +210,11 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 // A write that records no history, such as a drag that moves the selection, skips the patches, which
                 // cost time on every change and which the selection would never ship anyway.
                 if (options.noHistory) {
-                    commit(produce(base, concatProducer(syncScroll, recipe, triggerGroupValuesRefresh)));
+                    commit(produce(base, concatProducer(syncScroll, recipe)));
                     return;
                 }
 
-                const [result, patches, inversePatches] = produceWithPatches(
-                    base,
-                    concatProducer(syncScroll, recipe, triggerGroupValuesRefresh),
-                );
+                const [result, patches, inversePatches] = produceWithPatches(base, concatProducer(syncScroll, recipe));
                 commit(result);
                 if (patches.length === 0) return;
                 const filteredPatches = filterPatch(patches);

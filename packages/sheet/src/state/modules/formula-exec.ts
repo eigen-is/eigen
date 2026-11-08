@@ -4,7 +4,7 @@
 
 import { current, isDraft } from 'immer';
 import { findSheetByName } from '../../engine/a1-notation';
-import { createArrayResolver } from '../../engine/cell-resolver';
+import { createArrayResolver, withComputedValues } from '../../engine/cell-resolver';
 import { getCalculationOrder } from '../../engine/dependency-graph';
 import { checkBracketNum, LAST_COLUMN, LAST_ROW, matrixWidth, resolveCellRange } from '../../engine/formula-utils';
 import type {
@@ -21,7 +21,7 @@ import { getFlowdata } from '../context';
 import type { FormulaCell } from '../types';
 import { getSheetIndex } from '../utils';
 import { setCellValue } from './cell';
-import { executeAffectedFormulas, setFormulaCellInfo, snapshotContext } from './formula-cache';
+import { setFormulaCellInfo, snapshotContext } from './formula-cache';
 import { error } from './validation';
 
 // The cells a reference in the grid's UI covers, such as a link or a highlighted range: a whole column or row stops at
@@ -124,7 +124,6 @@ export type ExecFunctionResult = [boolean, Cell['v'], string];
 type ExecFunctionOptions = {
     id?: string;
     calcChainSet?: Set<string>;
-    isrefresh?: boolean;
     notInsertFunc?: boolean;
     // A pass over many formulas shares one, so no formula takes its own snapshot of the workbook.
     resolver?: CellResolver;
@@ -138,7 +137,6 @@ export function execfunction(
     {
         id = ctx.currentSheetId,
         calcChainSet,
-        isrefresh,
         notInsertFunc,
         resolver = createArrayResolver(snapshotContext(ctx).sheets),
     }: ExecFunctionOptions = {},
@@ -153,40 +151,11 @@ export function execfunction(
 
     const result = ctx.formulaCache.engine.evaluate(txt, id, resolver).value;
 
-    if (isrefresh) {
-        execFunctionGroup(ctx, r, c, result, id);
-    }
-
     if (!notInsertFunc) {
         insertUpdateFunctionGroup(ctx, r, c, id, calcChainSet);
     }
 
     return [true, result, txt];
-}
-
-export function groupValuesRefresh(ctx: Context): void {
-    if (ctx.groupValuesRefreshData.length === 0) return;
-
-    // Most recomputed formulas land on their previous value. Compare against a
-    // plain snapshot and only write real changes — draft writes are what the
-    // immer finalize/patch pass pays for.
-    const snapshot = snapshotContext(ctx);
-
-    for (const item of ctx.groupValuesRefreshData) {
-        const idx = getSheetIndex(snapshot, item.id);
-        // A deleted sheet's formula-map entries linger until the next rebuild; this skip makes them harmless.
-        if (idx == null) continue;
-
-        const before = snapshot.sheets[idx].data?.[item.r]?.[item.c];
-        if (before != null && before.v === item.v && before.f === item.f) continue;
-
-        const { data } = ctx.sheets[idx];
-        if (data == null) continue;
-
-        setCellValue(ctx, item.r, item.c, data, { v: item.v, f: item.f });
-    }
-
-    ctx.groupValuesRefreshData = [];
 }
 
 export function setFormulaCellInfoMap(ctx: Context, calcChains?: FormulaCell[], data?: CellMatrix | null): void {
@@ -221,39 +190,10 @@ export function warmFormulaCellInfoMapOnIdle(getContext: () => Context): () => v
     return () => clearTimeout(id);
 }
 
-export function execFunctionGroup(
-    ctx: Context,
-    origin_r: number | null,
-    origin_c: number | null,
-    value: unknown,
-    id?: string | null,
-    data?: CellMatrix | null,
-): void {
-    if (ctx.formulaCache.execFunctionGlobalData == null) {
-        ctx.formulaCache.execFunctionGlobalData = {};
-    }
-    if (id == null) {
-        id = ctx.currentSheetId;
-    }
-
-    if (value != null) {
-        const cellCache: Cell[][] = [[{ v: undefined }]];
-        setCellValue(ctx, 0, 0, cellCache, value);
-        [[ctx.formulaCache.execFunctionGlobalData[`${origin_r}_${origin_c}_${id}`]]] = cellCache;
-    }
-
-    // Reading cells through immer drafts is slow, so the recalc reads a plain view. It is taken lazily, because an
-    // edit with no dependents needs none.
-    let snap: Context | null = null;
-    const getSnapshot = () => (snap ??= snapshotContext(ctx));
-    let allChains: FormulaCell[] | null = null;
-    const getChains = () => (allChains ??= getAllFunctionGroup(getSnapshot()));
-
-    const changedCells: FormulaCell[] =
-        ctx.formulaCache.execFunctionExist ??
-        (origin_r != null && origin_c != null ? [{ r: origin_r, c: origin_c, id }] : []);
-
-    const formulaCellInfoMap = warmFormulaCellInfoMap(ctx, id === ctx.currentSheetId ? data : undefined);
+// Recomputes every formula that reads a cell in `changedCells`, directly or through another formula, and writes the
+// values that changed. The cells are already written, and the formula map already knows them.
+export function execFunctionGroup(ctx: Context, changedCells: readonly FormulaCell[]): void {
+    const formulaCellInfoMap = warmFormulaCellInfoMap(ctx);
     const { dependencyIndex } = ctx.formulaCache;
 
     // Each affected formula's `dependents` is refilled so the sort below sees fresh edges.
@@ -267,9 +207,7 @@ export function execFunctionGroup(
     };
 
     for (const cell of changedCells) {
-        for (const key of dependencyIndex.dependentsOf(cell.id ?? id, cell.r, cell.c)) {
-            collect(key);
-        }
+        for (const key of dependencyIndex.dependentsOf(cell.id, cell.r, cell.c)) collect(key);
     }
 
     for (let i = 0; i < affected.length; i += 1) {
@@ -278,11 +216,30 @@ export function execFunctionGroup(
         for (const key of node.dependents) collect(key);
     }
 
-    const formulaRunList = getCalculationOrder(affected, formulaCellInfoMap);
+    const runList = getCalculationOrder(affected, formulaCellInfoMap);
+    if (runList.length === 0) return;
 
-    if (formulaRunList.length > 0) {
-        executeAffectedFormulas(ctx, formulaRunList, getChains(), createArrayResolver(getSnapshot().sheets));
+    // Reading cells through immer drafts is slow, so the pass reads a plain view it can't write. Each value it computes
+    // reaches the next formula through `computed`.
+    const snapshot = snapshotContext(ctx);
+    const computed = new Map<string, Cell>();
+    const resolver = withComputedValues(createArrayResolver(snapshot.sheets), computed);
+    const calcChainSet = new Set(getAllFunctionGroup(snapshot).map((item) => `${item.r}_${item.c}_${item.id}`));
+    const results = runList.map(({ formula, r, c, id }) => {
+        const [, v, f] = execfunction(ctx, formula, r, c, { id, calcChainSet, resolver });
+        const value: Cell = { v, f };
+        computed.set(`${r}_${c}_${id}`, value);
+        return { r, c, id, value };
+    });
+
+    // Most recomputed formulas land on their previous value, and a draft write is what immer's finalize pays for.
+    for (const { r, c, id, value } of results) {
+        const idx = getSheetIndex(snapshot, id);
+        // A deleted sheet's formula-map entries linger until the next rebuild; this skip makes them harmless.
+        if (idx == null) continue;
+        const before = snapshot.sheets[idx].data?.[r]?.[c];
+        if (before != null && before.v === value.v && before.f === value.f) continue;
+        const { data } = ctx.sheets[idx];
+        if (data != null) setCellValue(ctx, r, c, data, value);
     }
-
-    ctx.formulaCache.execFunctionExist = undefined;
 }

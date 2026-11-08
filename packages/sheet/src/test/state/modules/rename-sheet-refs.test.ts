@@ -8,9 +8,7 @@ installHappyDom();
 
 const { defaultContext } = await import('../../../state/context');
 const { setCellValue } = await import('../../../state/modules/cell');
-const { execFunctionGroup, getcellrange, groupValuesRefresh, warmFormulaCellInfoMap } = await import(
-    '../../../state/modules/formula-exec'
-);
+const { execFunctionGroup, getcellrange, warmFormulaCellInfoMap } = await import('../../../state/modules/formula-exec');
 const { insertRowCol } = await import('../../../state/modules/rowcol');
 const { editSheetName } = await import('../../../state/modules/sheet');
 const { dataToCelldata } = await import('../../../engine/celldata');
@@ -100,9 +98,8 @@ describe('a tab rename rewrites the text that names the tab', () => {
         tabEdit(t, (ctx) => {
             const { data } = ctx.sheets[0];
             if (!data) return;
-            execFunctionGroup(ctx, 0, 0, 9, 'id_1');
             setCellValue(ctx, 0, 0, data, 9);
-            groupValuesRefresh(ctx);
+            execFunctionGroup(ctx, [{ r: 0, c: 0, id: 'id_1' }]);
         });
         expect(t.ctx.sheets[1].data?.[0][0]?.v).toBe(10);
     });
@@ -411,9 +408,8 @@ describe('a tab rename rewrites the text that names the tab', () => {
             tabEdit(author, (ctx) => {
                 const { data } = ctx.sheets[0];
                 if (!data) return;
-                execFunctionGroup(ctx, 0, 0, 9, 'id_1');
                 setCellValue(ctx, 0, 0, data, 9);
-                groupValuesRefresh(ctx);
+                execFunctionGroup(ctx, [{ r: 0, c: 0, id: 'id_1' }]);
             });
             expect(author.ctx.sheets[1].data?.[0][0]?.v).toBe(10);
 

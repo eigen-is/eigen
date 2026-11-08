@@ -1,11 +1,9 @@
-// One editor cycle the way Workbook runs it: the recipe and groupValuesRefresh inside
-// produceWithPatches, the syncable patches kept as history, undo/redo applying them and
+// One editor cycle the way Workbook runs it: the recipe inside produceWithPatches, the syncable patches kept as history, undo/redo applying them and
 // then updateFormulaCache. For tests of the formula dependency map across edits.
 
 import { applyPatches, enablePatches, produceWithPatches } from 'immer';
 import type { Context } from '../../../state/context';
 import { updateCell } from '../../../state/modules/cell';
-import { groupValuesRefresh } from '../../../state/modules/formula-exec';
 import { copy } from '../../../state/modules/selection';
 import type { History } from '../../../state/types';
 import { filterPatch } from '../../../state/utils/patch';
@@ -14,10 +12,7 @@ import { pasteCopy } from './clipboard';
 enablePatches();
 
 export function edit(ctx: Context, recipe: (draft: Context) => void): [Context, History] {
-    const [next, patches, inversePatches] = produceWithPatches(ctx, (draft: Context) => {
-        recipe(draft);
-        if (draft.groupValuesRefreshData.length > 0) groupValuesRefresh(draft);
-    });
+    const [next, patches, inversePatches] = produceWithPatches(ctx, recipe);
     return [next, { patches: filterPatch(patches), inversePatches: filterPatch(inversePatches) }];
 }
 

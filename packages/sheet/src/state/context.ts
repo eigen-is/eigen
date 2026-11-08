@@ -155,13 +155,6 @@ export type Context = {
 
     defaultCell: Cell;
 
-    groupValuesRefreshData: {
-        r: number;
-        c: number;
-        v: Cell['v'];
-        f: string;
-        id: string;
-    }[];
     formulaCache: FormulaCache;
     commentCards?: Record<string, CommentCard>;
 
@@ -246,7 +239,6 @@ export function defaultContext(refs: RefValues): Context {
             v: '',
         },
 
-        groupValuesRefreshData: [],
         // Immer doesn't freeze a class, so this stays mutable inside and outside a recipe.
         formulaCache: new FormulaCache(),
 

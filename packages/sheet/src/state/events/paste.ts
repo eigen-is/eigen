@@ -166,9 +166,7 @@ function pasteCut(ctx: Context, copyState: NonNullable<Context['copyState']>) {
 
     if (d.length > rowsBefore || d[0].length > columnsBefore) updateContextWithSheetData(ctx, d);
     ctx.selections = [{ row: targetRange.row, column: targetRange.column }];
-    ctx.formulaCache.execFunctionExist = [...queued.values()].reverse();
-    execFunctionGroup(ctx, null, null, null, null, d);
-    ctx.formulaCache.execFunctionGlobalData = null;
+    execFunctionGroup(ctx, [...queued.values()]);
     // A cut moves its cells once. The clipboard still holds them, and a next paste lands them as a table.
     ctx.copyState = undefined;
     ctx.formulaRangeSelections = [];
@@ -224,7 +222,7 @@ function pasteCopy(ctx: Context, copyState: NonNullable<Context['copyState']>) {
             return cell;
         }
         const func = r === sr && c === sc ? cell.f : `=${functionCopy(cell.f, r - sr, c - sc)}`;
-        const funcV = execfunction(ctx, func, r, c, { isrefresh: true, resolver });
+        const funcV = execfunction(ctx, func, r, c, { resolver });
         [, cell.v, cell.f] = funcV;
         cell.m = numberDisplay(funcV[1], cell.ct?.fa);
         return cell;
@@ -566,7 +564,7 @@ function pasteFormula(ctx: Context, formulaStr: string) {
     const r = selection.row[0];
     const c = selection.column[0];
 
-    const funcV = execfunction(ctx, formulaStr, r, c, { isrefresh: true });
+    const funcV = execfunction(ctx, formulaStr, r, c);
 
     const val = funcV[1];
 
@@ -578,8 +576,7 @@ function pasteFormula(ctx: Context, formulaStr: string) {
     cell.v = val;
     cell.f = formulaStr;
 
-    setFormulaCellInfo(ctx, { r, c, id: ctx.currentSheetId });
-    ctx.formulaCache.execFunctionGlobalData = null;
+    jfrefreshgrid(ctx, d, [{ row: [r, r], column: [c, c] }]);
 }
 
 // The grid a paste lands in, grown when the paste runs past its last row or column. Every paste asks here before it

@@ -102,7 +102,7 @@
     "packages/lib/src/core/public/hooks/use-public.ts": 1,
     "packages/lib/src/core/team/hooks/use-team-members.ts": 1,
     "packages/sheet/src/state/events/mouse-header.ts": 6,
-    "packages/sheet/src/state/modules/toolbar.ts": 5,
+    "packages/sheet/src/state/modules/toolbar.ts": 1,
     "packages/ui/src/components/drive/eigendoc-list-view.tsx": 2,
     "packages/ui/src/components/drive/eigendoc-shared-view.tsx": 1,
     "packages/ui/src/components/layout/sidebar/app-sidebar.tsx": 1,

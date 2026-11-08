@@ -138,7 +138,6 @@ export type EvaluationResult = {
 };
 
 export type FormulaEngineState = {
-    execFunctionGlobalData: Record<string, Cell>;
     formulaCellInfoMap: FormulaCellInfoMap | null;
     // Reverse lookup cell → formulas reading it; mirrors formulaCellInfoMap
     // and must reset with it.

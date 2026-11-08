@@ -36,9 +36,8 @@ import { getSheetIndex, rgbToHex } from '../utils';
 import { carrySides, getBorderInfoCompute } from './border';
 import { checkCF, getComputeMap } from './condition-format';
 import { describeValidationRule, inputPassesRule } from './data-validation';
-import { setFormulaCellInfo } from './formula-cache';
 import { functionHTMLGenerate } from './formula-editor';
-import { delFunctionGroup, execFunctionGroup, execfunction, getcellrange } from './formula-exec';
+import { delFunctionGroup, execfunction, getcellrange } from './formula-exec';
 import type { RunStyleKey } from './inline-string';
 import {
     committedRuns,
@@ -49,6 +48,7 @@ import {
     runsHtml,
     sameRunStyle,
 } from './inline-string';
+import { recomputeCells } from './refresh';
 import { getCellTextInfo, measuringContext } from './text';
 import { ID_CARD_NUMBER, isPlainNumber, isRealNull, isRealNum, valueIsError } from './validation';
 import { addValidation, clearValidations, validationAt } from './validation-rules';
@@ -613,12 +613,11 @@ export function updateCell(
     if (curv && isPlainObject(curv)) {
         if (!isCurInline) {
             if (isFormula(value)) {
-                const v = execfunction(ctx, value, r, c, { isrefresh: true });
+                const v = execfunction(ctx, value, r, c);
                 curv = cloneDeep(d?.[r]?.[c] || {});
                 [, curv.v, curv.f] = v;
             } else {
                 delFunctionGroup(ctx, r, c);
-                execFunctionGroup(ctx, r, c, value);
 
                 curv = cloneDeep(d?.[r]?.[c] || {});
                 curv.v = value;
@@ -635,21 +634,18 @@ export function updateCell(
                 }
             }
         } else {
-            // A rich edit's dependents read its runs, as a plain edit's read its value.
             delFunctionGroup(ctx, r, c);
-            execFunctionGroup(ctx, r, c, curv);
         }
         value = curv;
     } else {
         if (isFormula(value)) {
-            const v = execfunction(ctx, value, r, c, { isrefresh: true });
+            const v = execfunction(ctx, value, r, c);
             value = {
                 v: v[1],
                 f: v[2],
             };
         } else {
             delFunctionGroup(ctx, r, c);
-            execFunctionGroup(ctx, r, c, value);
         }
     }
 
@@ -679,8 +675,7 @@ export function updateCell(
         }
     }
 
-    setFormulaCellInfo(ctx, { r, c, id: ctx.currentSheetId });
-    ctx.formulaCache.execFunctionGlobalData = null;
+    recomputeCells(ctx, [{ r, c, id: ctx.currentSheetId }], d);
 }
 
 export function getOrigincell(ctx: Context, r: number, c: number, i: string) {

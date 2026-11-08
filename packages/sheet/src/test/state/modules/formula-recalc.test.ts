@@ -1,5 +1,5 @@
 // The per-edit recalc pipeline: reverse dependency index → affected closure →
-// topological order → evaluate → groupValuesRefresh. These pin the behaviors
+// topological order → evaluate → write. These pin the behaviors
 // the index rewrite must preserve: cross-sheet transitive recompute, index
 // updates when formulas change, and rebuild-after-reset.
 
@@ -9,12 +9,7 @@ import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import * as cellModule from '../../../state/modules/cell';
 import { setFormulaCellInfo } from '../../../state/modules/formula-cache';
-import {
-    execFunctionGroup,
-    getcellrange,
-    groupValuesRefresh,
-    warmFormulaCellInfoMap,
-} from '../../../state/modules/formula-exec';
+import { execFunctionGroup, getcellrange, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import { insertRowCol } from '../../../state/modules/rowcol';
 import { addSheet, deleteSheet, renameSheet } from '../../../state/modules/sheet';
 import { contextFactory } from '../factories/context';
@@ -43,12 +38,9 @@ function makeCtx(): Context {
 }
 
 function editCell(ctx: Context, r: number, c: number, value: number, id: string) {
-    // Mirrors updateCell: recalc sees the new value via execFunctionGlobalData,
-    // then the cell itself is written, then refresh applies dependent results.
-    execFunctionGroup(ctx, r, c, value, id);
     const data = ctx.sheets[ctx.sheets.findIndex((s) => s.id === id)].data!;
     cellModule.setCellValue(ctx, r, c, data, value);
-    groupValuesRefresh(ctx);
+    execFunctionGroup(ctx, [{ r, c, id }]);
 }
 
 describe('execFunctionGroup — index-driven recalc', () => {
@@ -66,9 +58,13 @@ describe('execFunctionGroup — index-driven recalc', () => {
         const ctx = makeCtx();
         warmFormulaCellInfoMap(ctx);
 
-        execFunctionGroup(ctx, 3, 3, 42, 'id_1');
+        const data = ctx.sheets[0].data;
+        const before = data![0][1];
 
-        expect(ctx.groupValuesRefreshData).toHaveLength(0);
+        execFunctionGroup(ctx, [{ r: 3, c: 3, id: 'id_1' }]);
+
+        expect(ctx.sheets[0].data).toBe(data);
+        expect(ctx.sheets[0].data![0][1]).toBe(before);
     });
 
     it('builds the map and index lazily when not warmed', () => {
@@ -95,7 +91,7 @@ describe('execFunctionGroup — index-driven recalc', () => {
         const ctx = makeCtx();
 
         // Search-and-replace recalcs a cell on Two while One is on screen.
-        execFunctionGroup(ctx, 3, 3, 1, 'id_2', ctx.sheets[1].data);
+        execFunctionGroup(ctx, [{ r: 3, c: 3, id: 'id_2' }]);
         editCell(ctx, 0, 0, 7, 'id_1');
 
         expect(ctx.sheets[0].data![0][1]?.v).toBe(14);
@@ -108,7 +104,7 @@ describe('execFunctionGroup — index-driven recalc', () => {
         let draftReads = 0;
 
         produceWithPatches(base, (draft) => {
-            execFunctionGroup(draft as Context, 0, 0, 7, 'id_1');
+            execFunctionGroup(draft as Context, [{ r: 0, c: 0, id: 'id_1' }]);
             allReads = reads.mock.calls.length;
             draftReads = reads.mock.calls.filter(([ctx]) => isDraft(ctx)).length;
         });
@@ -155,10 +151,9 @@ describe('execFunctionGroup — index-driven recalc', () => {
         ctx.sheets[0].data![0][1] = null;
         setFormulaCellInfo(ctx, { r: 0, c: 1, id: 'id_1' });
 
-        execFunctionGroup(ctx, 0, 0, 9, 'id_1');
+        execFunctionGroup(ctx, [{ r: 0, c: 0, id: 'id_1' }]);
 
-        // Two!A1 still recomputes (it reads One!B1, now empty), but One!B1 must not.
-        expect(ctx.groupValuesRefreshData.every((e) => !(e.r === 0 && e.c === 1 && e.id === 'id_1'))).toBe(true);
+        expect(ctx.sheets[0].data![0][1]).toBeNull();
     });
 
     it('rebuilds map and index after a reset (row/col ops set the map to null)', () => {
@@ -173,22 +168,19 @@ describe('execFunctionGroup — index-driven recalc', () => {
         expect(ctx.sheets[1].data![0][0]?.v).toBe(17);
     });
 
-    it('handles multi-cell edits via execFunctionExist', () => {
+    it('handles a multi-cell edit', () => {
         const ctx = makeCtx();
         warmFormulaCellInfoMap(ctx);
 
         // Simulate a paste/delete that changed One!A1 and a cell nothing reads.
         ctx.sheets[0].data![0][0] = { v: 20, m: '20' };
-        ctx.formulaCache.execFunctionExist = [
+        execFunctionGroup(ctx, [
             { r: 0, c: 0, id: 'id_1' },
             { r: 2, c: 2, id: 'id_2' },
-        ];
-        execFunctionGroup(ctx, null, null, null, null);
-        groupValuesRefresh(ctx);
+        ]);
 
         expect(ctx.sheets[0].data![0][1]?.v).toBe(40);
         expect(ctx.sheets[1].data![0][0]?.v).toBe(41);
-        expect(ctx.formulaCache.execFunctionExist).toBeUndefined();
     });
 
     it('produces identical results when run inside an immer draft', () => {
@@ -213,7 +205,6 @@ describe('execFunctionGroup — index-driven recalc', () => {
         warmFormulaCellInfoMap(ctx);
 
         cellModule.updateCell(ctx, 1, 0, null, 7);
-        groupValuesRefresh(ctx);
 
         expect(ctx.sheets[0].data![0][2]?.v).toBe(12);
         expect(ctx.sheets[0].data![1][3]?.v).toBe(22);
@@ -325,12 +316,10 @@ describe('updateCell — the formulas that read an edited cell through a functio
         const shown = () => formulas.map(([r, c]) => ctx.sheets[0].data![r][c]?.m);
 
         cellModule.updateCell(ctx, 0, 0, null, 10);
-        groupValuesRefresh(ctx);
         expect(shown()).toEqual(['10', '18', '#NAME?', '#ERROR!', '33', '6', '1', '11']);
 
         ctx.currentSheetId = 's2';
         cellModule.updateCell(ctx, 0, 0, null, 10);
-        groupValuesRefresh(ctx);
         expect(shown()).toEqual(['10', '18', '#NAME?', '#ERROR!', '33', '15', '10', '11']);
     });
 });
