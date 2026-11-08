@@ -1,8 +1,8 @@
 // A Radix dialog dismisses on Escape from a document capture listener, which runs before the textarea
 // hears the key. Pinned here: Escape with the @-mention list open closes only the list, inside a dialog
 // as well, and Escape with nothing open still closes the dialog. Also pinned: a send clears the box at
-// once, and a failed one puts its text and files back unless the user has started the next message. A send that takes
-// no files, a slash command that runs here, puts its files back too.
+// once, and a failed one puts its text and files back unless the user has started the next message, and one no toast
+// told the user about still surfaces. A send that takes no files, a slash command that runs here, puts its files back too.
 import { expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
@@ -13,12 +13,23 @@ const realAuth = await import('@workspace/lib/auth');
 mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => ({ user: null }), useIsGuest: () => false }));
 
 const { act, createElement, createRef } = await import('react');
+const { onMutationError } = await import('@workspace/lib/api-error');
 const { Dialog, DialogContent, DialogDescription, DialogTitle } = await import('../../../components/dialog');
 const { ChatMessageInput } = await import('../../../components/chat/chat-message-input');
 type ChatMessageInputHandle = import('../../../components/chat/chat-message-input').ChatMessageInputHandle;
 
 const roomMembers = [{ email: 'ada@example.com', displayName: 'Ada' }];
-const attachProps = { onAttachClick: () => {}, driveAttachments: [], onRemoveDriveAttachment: () => {} };
+const inputProps = {
+    disabled: false,
+    readOnly: false,
+    placeholder: 'Reply...',
+    roomMembers,
+    currentUserEmail: 'me@example.com',
+    messageCount: 0,
+    onAttachClick: () => {},
+    driveAttachments: [],
+    onRemoveDriveAttachment: () => {},
+};
 
 async function mount() {
     const closed = { count: 0 };
@@ -36,7 +47,7 @@ async function mount() {
                 null,
                 createElement(DialogTitle, null, 'Card'),
                 createElement(DialogDescription, null, 'Replies'),
-                createElement(ChatMessageInput, { ...attachProps, onSend: async () => true, roomMembers }),
+                createElement(ChatMessageInput, { ...inputProps, onSend: async () => true }),
             ),
         ),
     );
@@ -81,14 +92,35 @@ test('Escape on an @-mention with no matches closes the dialog', async () => {
 });
 
 // A send's promise stays open until the test settles it, as on a slow network.
+// The composer drops the end of its send's promise chain, and `.then` builds each link with this class, so the last one
+// built is what the composer leaves to the runtime.
+class WatchedSend<T> extends Promise<T> {
+    public static lastLink: Promise<unknown> | null = null;
+    public constructor(executor: ConstructorParameters<typeof Promise<T>>[0]) {
+        super(executor);
+        WatchedSend.lastLink = this;
+    }
+}
+
 async function mountSending() {
-    const sends: { content: string; files?: File[]; resolve: (filesTaken: boolean) => void; reject: () => void }[] = [];
+    const sends: {
+        content: string;
+        files?: File[];
+        resolve: (filesTaken: boolean) => void;
+        reject: () => void;
+        break: (error: Error) => void;
+    }[] = [];
     const onSend = (content: string, files?: File[]) =>
-        new Promise<boolean>((resolve, reject) => {
-            sends.push({ content, files, resolve, reject: () => reject(new Error('server down')) });
+        new WatchedSend<boolean>((resolve, reject) => {
+            const rejectToasted = () => {
+                const error = new Error('server down');
+                onMutationError(error);
+                reject(error);
+            };
+            sends.push({ content, files, resolve, reject: rejectToasted, break: reject });
         });
     const input = createRef<ChatMessageInputHandle>();
-    const { unmount } = await renderInDocument(createElement(ChatMessageInput, { ...attachProps, onSend, ref: input }));
+    const { unmount } = await renderInDocument(createElement(ChatMessageInput, { ...inputProps, onSend, ref: input }));
     const textarea = document.querySelector('textarea');
     if (!textarea) throw new Error('the input drew no textarea');
 
@@ -148,6 +180,18 @@ test('a failed send puts the text and files back, and they send again', async ()
     await pressEnter();
     expect(sends[1].content).toBe('hello');
     expect(sends[1].files).toEqual([photo]);
+    await cleanup();
+});
+
+test('a failed send no toast told the user about puts the text back and surfaces', async () => {
+    const { sends, textarea, type, pressEnter, cleanup } = await mountSending();
+    await type('hello');
+    await pressEnter();
+    const bug = new Error('a bug in the send handler');
+    const surfaced = WatchedSend.lastLink?.catch((error: unknown) => error);
+    await act(async () => sends[0].break(bug));
+    expect(await surfaced).toBe(bug);
+    expect(textarea.value).toBe('hello');
     await cleanup();
 });
 
