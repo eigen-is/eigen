@@ -626,6 +626,29 @@ describe('Collab', () => {
             collab.unsubscribe(aliceConn);
         });
 
+        test('an ACL change on one path leaves the readers of other open documents connected', async () => {
+            const aliceHome = await getHome(ctx.alice.user.id);
+            const bobUser = (await getHome(ctx.bob.user.id)).user;
+            const aliceUser = aliceHome.user;
+            const share = [{ id: 'bob@test.eigen.is', read: true, write: true }];
+            const untouched = await aliceHome.drive.create(aliceMountId, aliceRootId, 'Untouched', 'doc', aliceUser);
+            const revoked = await aliceHome.drive.create(aliceMountId, aliceRootId, 'Revoked', 'doc', aliceUser);
+            await aliceHome.drive.updateACL(aliceMountId, untouched.id, share, undefined, undefined, aliceUser);
+            await aliceHome.drive.updateACL(aliceMountId, revoked.id, share, undefined, undefined, aliceUser);
+            const untouchedDoc = await aliceHome.drive.getCollabDocument(aliceMountId, untouched.id);
+            const revokedDoc = await aliceHome.drive.getCollabDocument(aliceMountId, revoked.id);
+            const stays = makeSpyConn();
+            const closes = makeSpyConn();
+            untouchedDoc.subscribe(bobUser, stays);
+            revokedDoc.subscribe(bobUser, closes);
+
+            await aliceHome.drive.updateACL(aliceMountId, revoked.id, [], undefined, undefined, aliceUser);
+
+            expect(closes.closedWith?.code).toBe(COLLAB_ACCESS_LOST_CLOSE);
+            expect(stays.closedWith).toBeNull();
+            untouchedDoc.unsubscribe(stays);
+        });
+
         test('revoking only write (read intact) does NOT close the connection', async () => {
             const aliceHome = await getHome(ctx.alice.user.id);
             const bobHome = await getHome(ctx.bob.user.id);
