@@ -4,6 +4,7 @@
 // and says so. Helpers such as useCalendarOptions list the owner's own calendars and the shared ones they may write
 // to, for a picker.
 
+import type { QueryClient } from '@tanstack/react-query';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { calendarApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
@@ -38,6 +39,11 @@ import {
 // An event write echoes the etag its dialog holds, and a 412 means the event changed elsewhere first. A dialog may have
 // nothing typed, such as a delete's, so the toast promises nothing about typing.
 const STALE_WRITE_TOAST = 'This event changed elsewhere. Check it and try again.';
+
+function onEventWriteError(queryClient: QueryClient, ownerId: string) {
+    return (error: unknown) =>
+        onEtagWriteError(error, STALE_WRITE_TOAST, () => invalidateEventList(queryClient, ownerId));
+}
 
 // Eden's reviver makes a UTC-midnight Date of a bare YYYY-MM-DD, for a year of 19xx or 20xx only, and a range read keeps
 // its timestamps revived. So what the type promises holds only from here on, whichever of the two arrived.
@@ -143,7 +149,7 @@ export function useCreateEvent(ownerId: string) {
             return response.data;
         },
         onSuccess: () => invalidateEventList(queryClient, ownerId),
-        onError: (error) => onEtagWriteError(error, STALE_WRITE_TOAST, () => invalidateEventList(queryClient, ownerId)),
+        onError: onEventWriteError(queryClient, ownerId),
     });
 }
 
@@ -157,7 +163,7 @@ export function useUpdateEvent(ownerId: string) {
             return response.data;
         },
         onSuccess: () => invalidateEventList(queryClient, ownerId),
-        onError: (error) => onEtagWriteError(error, STALE_WRITE_TOAST, () => invalidateEventList(queryClient, ownerId)),
+        onError: onEventWriteError(queryClient, ownerId),
     });
 }
 
@@ -174,7 +180,7 @@ export function useDeleteEvent(ownerId: string) {
             return response.data;
         },
         onSuccess: () => invalidateEventList(queryClient, ownerId),
-        onError: (error) => onEtagWriteError(error, STALE_WRITE_TOAST, () => invalidateEventList(queryClient, ownerId)),
+        onError: onEventWriteError(queryClient, ownerId),
     });
 }
 
@@ -201,7 +207,7 @@ export function useMoveEvent(ownerId: string) {
             return response.data;
         },
         onSuccess: () => invalidateEventList(queryClient, ownerId),
-        onError: (error) => onEtagWriteError(error, STALE_WRITE_TOAST, () => invalidateEventList(queryClient, ownerId)),
+        onError: onEventWriteError(queryClient, ownerId),
     });
 }
 

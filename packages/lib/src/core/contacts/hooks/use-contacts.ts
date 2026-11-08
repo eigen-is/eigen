@@ -2,6 +2,7 @@
 // meets a 412 because the card changed elsewhere reloads the list and says so in its own toast. The Contacts app calls
 // them, and so do other readers of the address book, such as the contact suggestions and the profile editor.
 
+import type { QueryClient } from '@tanstack/react-query';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { contactsApi, getContactsAvatarUploadUrl } from '@workspace/lib/api';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
@@ -10,9 +11,13 @@ import type { CreateContactInput, UpdateContactInput } from '@workspace/lib/type
 import { AppError, onEtagWriteError, onMutationError } from '../../api-error';
 import { contactKeys, invalidateContactList } from './keys';
 
-// A write echoes the etag its form holds, and a 412 means the card changed elsewhere first. The hook reloads the list
-// and tells the user.
-const STALE_WRITE_TOAST = 'This contact changed elsewhere. What you typed is still here. Check it and save again.';
+// A write echoes the etag its form holds, and a 412 means the card changed elsewhere first. A delete has nothing typed.
+const STALE_UPDATE_TOAST = 'This contact changed elsewhere. What you typed is still here. Check it and save again.';
+const STALE_DELETE_TOAST = 'This contact changed elsewhere. Check it and try again.';
+
+function onContactWriteError(queryClient: QueryClient, ownerId: string, staleMessage: string) {
+    return (error: unknown) => onEtagWriteError(error, staleMessage, () => invalidateContactList(queryClient, ownerId));
+}
 
 export function useContacts() {
     const { user } = useAuth();
@@ -59,8 +64,7 @@ export function useUpdateContact() {
             return response.data;
         },
         onSuccess: () => invalidateContactList(queryClient, ownerId),
-        onError: (error) =>
-            onEtagWriteError(error, STALE_WRITE_TOAST, () => invalidateContactList(queryClient, ownerId)),
+        onError: onContactWriteError(queryClient, ownerId, STALE_UPDATE_TOAST),
     });
 }
 
@@ -76,8 +80,7 @@ export function useDeleteContact() {
             return response.data;
         },
         onSuccess: () => invalidateContactList(queryClient, ownerId),
-        onError: (error) =>
-            onEtagWriteError(error, STALE_WRITE_TOAST, () => invalidateContactList(queryClient, ownerId)),
+        onError: onContactWriteError(queryClient, ownerId, STALE_DELETE_TOAST),
     });
 }
 
