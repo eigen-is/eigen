@@ -451,6 +451,7 @@ describe('Backup boot', () => {
             appVersion: 'test',
             server: { domain: 'test', orgId: 'test' },
             counts: { databases: 0, files: 0, bytes: 0, dirs: 1 },
+            level: 'full',
             mounts: [],
             entries: [],
         };

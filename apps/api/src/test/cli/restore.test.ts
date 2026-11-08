@@ -28,7 +28,6 @@ import {
     copyArchiveMember,
     createServerArchiveWriter,
     declaredUnpackBytes,
-    ENTRY_ALLOWANCE_BYTES,
     packFolder,
     readArtifactManifest,
     withUnpackSlack,
@@ -1120,7 +1119,7 @@ describe('restore --stage and --swap', () => {
             const needed = await stageBytesNeeded({ name: basename(fullArchive), manifest, members });
             expect(needed).toBe(withUnpackSlack(declared));
             // Every file and folder of a home takes its allowance, as each member's unpack charges it.
-            expect(needed).toBeGreaterThan(entries * ENTRY_ALLOWANCE_BYTES);
+            expect(needed).toBeGreaterThan(entries * 4096);
         },
         JOB_TIMEOUT_MS,
     );
@@ -1395,7 +1394,9 @@ describe('restore --check-data, which a rollback runs first with the build it go
             expect((await restoreCli(dir, sinceArgs)).code).toBe(0);
 
             // An unpack writes each file's mtime back from the archive, so only the file's ctime is new.
-            await archiveModule.extractArtifact(archive, join(homes, 'u2'), 1e9);
+            const unpackedTo = scratch('restore-since-unpack-');
+            await archiveModule.extractArtifact(archive, unpackedTo, 1e9);
+            renameSync(join(unpackedTo, PATHS.MAIL.ROOT, 'mail.db'), join(homes, 'u2', PATHS.MAIL.DB));
             expect(statSync(join(homes, 'u2', PATHS.MAIL.DB)).mtimeMs).toBeLessThan(since);
             const unpacked = await restoreCli(dir, sinceArgs);
             expect(unpacked.code).toBe(CANNOT_OPEN);

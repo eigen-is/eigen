@@ -1241,6 +1241,7 @@ describe('verifyFolder', () => {
             appVersion: 'test',
             server: { domain: 'test', orgId: 'test' },
             counts: { databases: 0, files: 0, bytes: 0, dirs: 0 },
+            level: 'full',
             mounts: [],
             entries: [],
         };

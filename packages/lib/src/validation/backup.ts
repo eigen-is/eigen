@@ -45,7 +45,7 @@ function isKind(value: unknown): value is BackupManifest['kind'] {
     return BACKUP_KINDS.some((kind) => kind === value);
 }
 
-// An unknown level is refused rather than read as complete: a restore trusts this field to say so.
+// An unknown level is refused: the stage of ./eigen restore compares a home's level with its archive's.
 function isLevel(value: unknown): value is BackupLevel {
     return BACKUP_LEVELS.some((level) => level === value);
 }
@@ -137,7 +137,7 @@ function isManifest(value: unknown): value is BackupManifest {
         Array.isArray(value.entries) &&
         value.entries.every(isEntry) &&
         (!('email' in value) || value.email === undefined || typeof value.email === 'string') &&
-        (!('level' in value) || isLevel(value.level)) &&
+        ('level' in value ? isLevel(value.level) : value.kind === 'server') &&
         (!('warnings' in value) || isStringList(value.warnings))
     );
 }

@@ -1847,9 +1847,7 @@ describe('Backup restore of one home judges, then takes the home', () => {
         const manifestBytes = Buffer.byteLength(archiveModule.serializeManifest(manifest));
         const entries = manifest.entries.length + manifest.counts.dirs;
         expect(manifest.counts.dirs).toBeGreaterThan(0);
-        expect(checked?.needed).toBeGreaterThan(
-            manifest.counts.bytes + manifestBytes + archiveModule.ENTRY_ALLOWANCE_BYTES * entries,
-        );
+        expect(checked?.needed).toBeGreaterThan(manifest.counts.bytes + manifestBytes + 4096 * entries);
         expect(existsSync(pathsModule.buildRestoreStagingDir(homeDir, jobId))).toBe(false);
         await expectNotTaken(user.id, before);
         rmSync(join(getBackupsDir(), artifact), { force: true });

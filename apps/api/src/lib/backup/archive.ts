@@ -1,7 +1,8 @@
 // Packs, lists and unpacks Eigen's backup archives. A home archive is one home folder as a tar through zstd,
 // so `tar --zstd -xf` unpacks it anywhere. A whole-server archive is a plain tar of members that are compressed
-// already, and its manifest is always the last member. An unpack stops at the bound its manifest declares, so an
-// archive that holds more cannot write more. The backup, verify and restore code calls it, ./eigen restore included.
+// already, and its manifest is always the last member. An unpack checks the disk for the bound its manifest declares
+// and stops there, so an archive that holds more cannot write more. The backup, verify and restore code calls it,
+// ./eigen restore included.
 // The tar bytes themselves come from headerChunks and tarEntries.
 
 /// <reference path="./node-zstd.d.ts" />
@@ -192,7 +193,7 @@ export async function copyArchiveMember(member: ArchiveMemberLocation, destPath:
 
 // What the disk spends on one entry beyond its bytes, such as a block a small file rounds up to, or a folder's own
 // block. A million empty files or folders declare no bytes and still take gigabytes, so every entry is charged it.
-export const ENTRY_ALLOWANCE_BYTES = 4096;
+const ENTRY_ALLOWANCE_BYTES = 4096;
 // What an unpack allows beyond what the manifest declares: a tenth more, and a fixed
 // reserve, so a small home is not unpacked onto the disk's last free bytes.
 const UNPACK_SLACK = 1.1;
@@ -243,12 +244,7 @@ export async function extractArtifact(source: ArtifactSource, targetDir: string,
     const made = fs.mkdirSync(targetDir, { recursive: true, mode: ARCHIVE_FOLDER_MODE });
     let bytes = 0;
     try {
-        const shortfall = roomShortfall(
-            `Unpacking ${sourceName(source)}`,
-            maxBytes,
-            targetDir,
-            'the disk it unpacks on',
-        );
+        const shortfall = roomShortfall(`Unpacking ${sourceName(source)}`, maxBytes, targetDir, 'its disk');
         if (shortfall) throw new ApiError(507, shortfall);
         for await (const entry of tarEntries(artifactBytes(source))) {
             const target = path.join(targetDir, entry.path);

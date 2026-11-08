@@ -1525,9 +1525,8 @@ pre_update_archives() {
 # Eigen runs, checks it opens every database here and asks; then the rollback warns the open tabs as put_back does,
 # stops Eigen, checks again what Eigen wrote since (check_again) and switches back to the pins the update recorded.
 # The archive stays for ./eigen restore. Sets switched once Eigen runs on that build. Leaves it empty, and says why,
-# when that build cannot open the data, is too old to check it, or the launcher that made the update recorded no
-# pins: the rollback then puts the archive back. A check that stopped without a verdict on the data ends the
-# rollback, which keeps today's data.
+# when that build cannot open the data or the launcher that made the update recorded no pins: the rollback then puts
+# the archive back. A check that stopped without a verdict on the data ends the rollback, which keeps today's data.
 switch_back() {
     switched=''
     PINS=$(sed -n '2,$p' .eigen/last-update)
@@ -1543,15 +1542,6 @@ switch_back() {
     NEXT=''
     old=$(describe "$old_image")
     say "$ACCENT" '◆' "Back from Eigen $current to Eigen $old, on the data as it is"
-    # A build older than restore --check-data would refuse it with its whole usage, which reads like a failure, so its
-    # usage is read first. The refusal itself cannot be hidden: on a terminal, Docker joins stderr to the output.
-    usage=$(with_image "$old_image" cli restore --help </dev/null) ||
-        die "Could not run Eigen $old; Eigen $current runs on as it was." "Fix what it says, then run ./eigen rollback again."
-    case $usage in *--check-data*) ;; *)
-        say "$YELLOW" '▲' "Eigen $old is too old to check the data here."
-        return
-        ;;
-    esac
     # In ms, as check_again passes it. The margin covers a clock that differs between this host and Docker's VM.
     since=$((($(date +%s) - 300) * 1000))
     checked=0
@@ -1605,12 +1595,6 @@ check_again() {
         "$CANNOT_OPEN")
             say "$YELLOW" '▲' "Eigen $old cannot open what Eigen $current wrote since the first check."
             return 1
-            ;;
-        # A build from before --since refuses it as an unknown argument. Taking the first verdict would leave the
-        # writes since unchecked, and putting the archive back would throw away what users did since the update.
-        2)
-            die "Eigen $old cannot check again what Eigen $current wrote since the first check; Eigen $current starts again." \
-                "./eigen restore backups/$1 puts back the backup the last update made."
             ;;
         *)
             die "The second check stopped (exit $rechecked); Eigen $current starts again." \
