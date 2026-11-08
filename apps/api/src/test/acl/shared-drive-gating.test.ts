@@ -285,7 +285,7 @@ describe('SharedDrive gating enumeration', () => {
             call: (sd) =>
                 sd.recordClientFileEvent(mountId, docId, charlie, {
                     eventType: 'sticky-added',
-                    details: { card: 'x', toColumn: 'y' },
+                    details: { card: 'x', toColumn: 'y', cardId: 'c' },
                 }),
         },
         assignComment: {

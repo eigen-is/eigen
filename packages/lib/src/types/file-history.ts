@@ -17,9 +17,9 @@ export type FileEventDetailsMap = {
     'version-restored': { versionName: string };
     // A row may lack chatName, and then its link opens the document.
     commented: { preview: string; chatName?: string };
-    'sticky-added': { card: string; toColumn: string; cardId?: string };
-    'sticky-moved': { card: string; toColumn: string; cardId?: string };
-    'sticky-removed': { card: string; cardId?: string };
+    'sticky-added': { card: string; toColumn: string; cardId: string };
+    'sticky-moved': { card: string; toColumn: string; cardId: string };
+    'sticky-removed': { card: string; cardId: string };
     // card is the card's title, named as in the sticky events.
     assigned: { assignee: string; card?: string; chatName?: string };
     resolved: { card?: string; chatName?: string };
@@ -62,13 +62,10 @@ export type FileEventRecord = {
 
 export type ClientFileEventRecord = Extract<FileEventRecord, { eventType: ClientFileEventType }>;
 
-// What a client may post to the history route. A posted event must carry its cardId, while a stored row may lack it.
+// What a client may post to the history route.
 export type ClientFileEventInput = {
-    [K in ClientFileEventType]: { eventType: K; details: Flatten<FileEventDetailsMap[K] & { cardId: string }> };
+    [K in ClientFileEventType]: { eventType: K; details: FileEventDetailsMap[K] };
 }[ClientFileEventType];
-
-// A plain object type, so the route schema's Static can be checked for identity against it.
-type Flatten<T> = { [P in keyof T]: T[P] };
 
 export type FileEventInput = FileEventRecord & { pathId: string; actor: { id: string; email: string } };
 
