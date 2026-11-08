@@ -148,72 +148,79 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string, co
                 setPendingDriveAttachments([]);
             }
 
-            if (files && files.length > 0 && chatPath && mediaFolder) {
-                const uploaded = await Promise.all(
-                    files.map((file) => uploadFile.mutateAsync({ parentId: mediaFolder.id, file })),
-                );
-                attachments = [...(attachments ?? []), ...uploaded.map((u) => u.name)];
-            }
+            try {
+                if (files && files.length > 0 && chatPath && mediaFolder) {
+                    const uploaded = await Promise.all(
+                        files.map((file) => uploadFile.mutateAsync({ parentId: mediaFolder.id, file })),
+                    );
+                    attachments = [...(attachments ?? []), ...uploaded.map((u) => u.name)];
+                }
 
-            if (isUnknownCommand(rawContent)) {
-                addLocalMessage(`Unknown command: ${rawContent.split(' ')[0]}\nType /help to see available commands.`);
-                return;
-            }
+                if (isUnknownCommand(rawContent)) {
+                    addLocalMessage(
+                        `Unknown command: ${rawContent.split(' ')[0]}\nType /help to see available commands.`,
+                    );
+                    return;
+                }
 
-            const local = getLocalCommand(rawContent);
-            if (local) {
-                switch (local.kind) {
-                    case 'error': {
-                        addLocalMessage(local.error);
-                        return;
-                    }
-                    case 'help': {
-                        const lines = COMMANDS_HELP.map((c) => `  ${c.cmd}  —  ${c.desc}`).join('\n');
-                        addLocalMessage(`Available commands:\n${lines}`);
-                        return;
-                    }
-                    case 'inspect': {
-                        addLocalMessage(`inspect:${local.target}`);
-                        return;
-                    }
-                    case 'whoami': {
-                        if (user?.email) addLocalMessage(`inspect:${user.email}`);
-                        return;
-                    }
-                    case 'reply': {
-                        const target = findLastWhisperFrom();
-                        if (!target) {
-                            addLocalMessage('No one has whispered to you yet.');
+                const local = getLocalCommand(rawContent);
+                if (local) {
+                    switch (local.kind) {
+                        case 'error': {
+                            addLocalMessage(local.error);
                             return;
                         }
-                        lastWhisperFromRef.current = target;
-                        await postMessage.mutateAsync({
-                            content: local.content,
-                            type: 'whisper',
-                            whisperTo: target,
-                            attachments,
-                        });
-                        return;
-                    }
-                    case 'invite': {
-                        if (!chatPath) return;
-                        const inviteError = validateEmailTarget(local.target, 'Invite');
-                        if (inviteError) {
-                            addLocalMessage(inviteError);
+                        case 'help': {
+                            const lines = COMMANDS_HELP.map((c) => `  ${c.cmd}  —  ${c.desc}`).join('\n');
+                            addLocalMessage(`Available commands:\n${lines}`);
                             return;
                         }
-                        const result = await inviteToChat.mutateAsync({ email: local.target });
-                        if (result?.alreadyHasAccess) {
-                            addLocalMessage(`${local.target} already has access.`);
-                        } else {
-                            addLocalMessage(`You invited ${local.target}.`);
+                        case 'inspect': {
+                            addLocalMessage(`inspect:${local.target}`);
+                            return;
                         }
-                        return;
+                        case 'whoami': {
+                            if (user?.email) addLocalMessage(`inspect:${user.email}`);
+                            return;
+                        }
+                        case 'reply': {
+                            const target = findLastWhisperFrom();
+                            if (!target) {
+                                addLocalMessage('No one has whispered to you yet.');
+                                return;
+                            }
+                            lastWhisperFromRef.current = target;
+                            await postMessage.mutateAsync({
+                                content: local.content,
+                                type: 'whisper',
+                                whisperTo: target,
+                                attachments,
+                            });
+                            return;
+                        }
+                        case 'invite': {
+                            if (!chatPath) return;
+                            const inviteError = validateEmailTarget(local.target, 'Invite');
+                            if (inviteError) {
+                                addLocalMessage(inviteError);
+                                return;
+                            }
+                            const result = await inviteToChat.mutateAsync({ email: local.target });
+                            if (result.alreadyHasAccess) {
+                                addLocalMessage(`${local.target} already has access.`);
+                            } else {
+                                addLocalMessage(`You invited ${local.target}.`);
+                            }
+                            return;
+                        }
                     }
                 }
-            }
 
-            await postMessage.mutateAsync({ content: rawContent, attachments });
+                await postMessage.mutateAsync({ content: rawContent, attachments });
+            } catch (error) {
+                setPendingDriveAttachments((next) => [...pendingDriveAttachments, ...next]);
+                throw error;
+            }
         },
         [
             chatPath,
