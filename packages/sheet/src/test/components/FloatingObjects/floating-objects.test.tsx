@@ -56,7 +56,6 @@ async function mount({ allowEdit = true, aspectLocked = false, images = { i1: im
             id: 's1',
             name: 'One',
             order: 0,
-            status: 1,
             row: 40,
             column: 20,
             celldata: [{ r: 0, c: 0, v: { v: 'x', m: 'x' } }],

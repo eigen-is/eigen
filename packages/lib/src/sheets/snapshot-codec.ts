@@ -54,28 +54,14 @@ type SnapshotV2 = {
     sheets: EncodedSheet[];
 };
 
-// Fields the editor keeps that the snapshot leaves out. `selections` is one client's cursor. The decoder rebuilds
-// `calcChain` from the formulas.
-type RuntimeSheet = SheetWithCalcChain & { selections?: unknown };
-
 export function encodeSheetsSnapshot(sheets: Sheet[], opts: { computed: boolean }): string {
     const styles: StyleTuple[] = [];
     const styleIndex = new Map<string, number>();
     const borders: CellBorderSides[] = [];
     const borderIndex = new Map<string, number>();
 
-    const encoded = sheets.map((sheet: RuntimeSheet) => {
-        const {
-            celldata,
-            data,
-            selections: _selections,
-            calcChain: _calcChain,
-            config,
-            images,
-            charts,
-            dataValidations,
-            ...rest
-        } = sheet;
+    const encoded = sheets.map((sheet: SheetWithCalcChain) => {
+        const { celldata, data, calcChain: _calcChain, config, images, charts, dataValidations, ...rest } = sheet;
         const out: EncodedSheet = { ...rest };
         if (images && Object.keys(images).length > 0) out.images = images;
         if (charts && Object.keys(charts).length > 0) out.charts = charts;
@@ -138,7 +124,7 @@ export function decodeSheetsWorkbook(snapshot: string): { sheets: Sheet[]; compu
         // Every sheet gets all three maps, even empty ones. The editor writes each image, chart or validation under its
         // own key, and that patch needs the map to exist. A value that is no map is dropped, and so is a chart past the
         // entry cap and a validation that is not well formed.
-        const sheet: RuntimeSheet = {
+        const sheet: SheetWithCalcChain = {
             ...rest,
             images: isRecord(images) ? images : {},
             charts: isRecord(charts) ? chartsWithinEntryCap(charts) : {},

@@ -19,10 +19,10 @@ afterEach(async () => {
     cleanups = [];
 });
 
-const A1 = { row: [0, 0], column: [0, 0] };
-const B1 = { row: [0, 0], column: [1, 1] };
-const C1 = { row: [0, 0], column: [2, 2] };
-const B2 = { row: [1, 1], column: [1, 1] };
+const A1 = { sheetId: 's1', r: 0, c: 0 };
+const B1 = { sheetId: 's1', r: 0, c: 1 };
+const C1 = { sheetId: 's1', r: 0, c: 2 };
+const B2 = { sheetId: 's1', r: 1, c: 1 };
 
 // What the browser's async clipboard hands a menu row: the items of the system clipboard, or a refusal.
 function stubClipboard(read: () => Promise<{ types: string[]; getType: (type: string) => Promise<Blob> }[]>) {
@@ -49,7 +49,6 @@ async function mount(rows = 10) {
             id: 's1',
             name: 'One',
             order: 0,
-            status: 1,
             row: rows,
             column: 5,
             celldata: [
@@ -68,9 +67,9 @@ async function mount(rows = 10) {
     });
 
     const cellAt = (r: number, c: number) => workbook.current?.getAllSheets()[0].data?.[r]?.[c];
-    const select = (range: { row: number[]; column: number[] }) =>
+    const select = (cell: { sheetId: string; r: number; c: number }) =>
         act(async () => {
-            workbook.current?.setSelection([{ row: [...range.row], column: [...range.column] }]);
+            workbook.current?.revealSearchMatch(cell);
         });
     // The key as the workbook sees it on the grid's input, then the event the browser fires after it.
     const shortcut = async (code: 'KeyC' | 'KeyX' | 'KeyV', clipboardData: DataTransfer) => {
@@ -130,7 +129,7 @@ test('a paste past the row limit leaves a notice and no edit', async () => {
     const { cellAt, select, shortcut, sentOps } = await mount(MAX_SHEET_ROW_COUNT);
     const clipboard = new DataTransfer();
     clipboard.setData('text/plain', 'a\nb');
-    await select({ row: [MAX_SHEET_ROW_COUNT - 1, MAX_SHEET_ROW_COUNT - 1], column: [0, 0] });
+    await select({ sheetId: 's1', r: MAX_SHEET_ROW_COUNT - 1, c: 0 });
     const sentBefore = sentOps();
     await shortcut('KeyV', clipboard);
     await act(async () => {

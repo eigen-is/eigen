@@ -20,7 +20,6 @@ export function hideSheet(ctx: Context, sheetId: string) {
     if (index == null) return;
     if (sheetId === ctx.currentSheetId && !leaveCurrentSheet(ctx, sheetId)) return;
     ctx.sheets[index].hide = 1;
-    ctx.sheets[index].status = 0;
 }
 
 export function showSheet(ctx: Context, sheetId: string) {
@@ -42,7 +41,6 @@ export function copySheet(ctx: Context, sheetId: string) {
     const sheetData = cloneDeep(ctx.sheets[index]);
     const copyId = crypto.randomUUID();
     sheetData.id = copyId;
-    delete sheetData.status;
     // A copy starts without comments, as a duplicated canvas element does: a card stays on the cells it was put on.
     for (const row of sheetData.data ?? []) {
         for (const cell of row) delete cell?.commentCardIds;

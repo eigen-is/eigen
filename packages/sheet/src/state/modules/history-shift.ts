@@ -25,7 +25,7 @@ import type { History, Op, Sheet, SheetValidation } from '../types';
 import type { PatchOptions } from '../utils';
 
 // What one row or column op does to the indices on its axis, with the engine's shifter for each kind of map.
-type RowColMove = {
+export type RowColMove = {
     id: string;
     type: 'row' | 'column';
     // Where an index ends up, or null for a row or column the op deletes.
@@ -393,7 +393,6 @@ const POSITION_FREE_FIELDS = new Set<string | number>([
     'color',
     'hide',
     'order',
-    'status',
     'showGridLines',
     'zoomRatio',
     'defaultRowHeight',

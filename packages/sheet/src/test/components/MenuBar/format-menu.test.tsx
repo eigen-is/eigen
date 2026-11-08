@@ -20,9 +20,7 @@ async function mountWorkbook() {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
-    const data: Sheet[] = [
-        { id: 's1', name: 'One', order: 0, status: 1, row: 10, column: 5, celldata: [], config: {} },
-    ];
+    const data: Sheet[] = [{ id: 's1', name: 'One', order: 0, row: 10, column: 5, celldata: [], config: {} }];
     await act(async () => {
         root.render(createElement(Workbook, { data, hooks: {} }));
     });

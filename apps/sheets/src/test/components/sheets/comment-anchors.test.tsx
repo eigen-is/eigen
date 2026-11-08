@@ -17,7 +17,6 @@ function sheets(): Sheet[] {
             id: 's1',
             name: 'One',
             order: 0,
-            status: 1,
             row: 5,
             column: 5,
             celldata: [{ r: 1, c: 1, v: { v: 'a', commentCardIds: ['c1', 'c2'] } }],

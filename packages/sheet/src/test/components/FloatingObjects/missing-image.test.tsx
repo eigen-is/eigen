@@ -24,7 +24,6 @@ test('a missing image selects on click and Delete removes it', async () => {
             id: 's1',
             name: 'One',
             order: 0,
-            status: 1,
             row: 20,
             column: 5,
             celldata: [],

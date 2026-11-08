@@ -29,14 +29,10 @@ export type PatchOptions = {
     renamedSheet?: { id: string; from: string; to: string };
 };
 
-// `Sheet` fields that are per-client UI state and must never reach a peer. Typed against `keyof Sheet`, so a field that
-// is renamed or deleted fails the build instead of silently no longer matching.
-const PER_CLIENT_SHEET_FIELDS: ReadonlySet<unknown> = new Set<keyof Sheet>(['selections']);
-
 // Only `sheets[*]` belongs on the wire. The rest of the Context is per-client UI state, such as the scroll position,
 // the hover and the dialogs, which patchToOp could not give a sheet id anyway.
 export function filterPatch(patches: readonly Patch[]) {
-    return patches.filter((p) => p.path[0] === 'sheets' && !PER_CLIENT_SHEET_FIELDS.has(p.path[2]));
+    return patches.filter((p) => p.path[0] === 'sheets');
 }
 
 // A rename as its one op. Every receiver's engine rewrites the text naming the sheet on the sheets it holds, so a
@@ -117,7 +113,6 @@ function orderOps(changed: Sheet, sheets: readonly Sheet[]): Op[] {
 export function storedCopy(sheet: Sheet): Sheet {
     const { data, ...value } = cloneDeep(sheet);
     if (data) value.celldata = dataToCelldata(data);
-    value.status = 0;
     return value;
 }
 

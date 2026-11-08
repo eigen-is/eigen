@@ -19,7 +19,6 @@ import { cellDisplay } from '../../engine/format';
 import { useDialog } from '../../hooks/useDialog';
 import type { Context, GlobalCache } from '../../state';
 import {
-    api,
     computeOverlayRegions,
     createFilterOptions,
     getCellHyperlink,
@@ -32,6 +31,7 @@ import {
     handleCellAreaMouseDown,
     handleOverlayMouseMove,
     handleOverlayMouseUp,
+    normalizeSelection,
     overlayRegionForCell,
     selectAll,
     showLinkCard,
@@ -240,11 +240,8 @@ export const SheetOverlay: React.FC = () => {
 
     useEffect(() => {
         setContext((draftCtx) => {
-            const sheetIndex = getSheetIndex(draftCtx, draftCtx.currentSheetId);
-            if (sheetIndex == null) return;
-            if (!draftCtx.sheets[sheetIndex].selections?.length) {
-                api.setSelection(draftCtx, [{ row: [0, 0], column: [0, 0] }]);
-            }
+            if (!draftCtx.selections?.length)
+                draftCtx.selections = normalizeSelection(draftCtx, [{ row: [0, 0], column: [0, 0] }]);
         });
     }, [setContext]);
 

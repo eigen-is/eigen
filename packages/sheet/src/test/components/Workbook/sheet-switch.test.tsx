@@ -11,12 +11,12 @@ const contextModule = await import('../../../state/context');
 type Sheet = import('../../../state').Sheet;
 type WorkbookInstance = import('../../../components/Workbook').WorkbookInstance;
 
-// Tab order is `order`, not array position: array-first "Hidden" must never become current.
+// Tab order is `order`, not array position: the workbook opens on One, not on array-first Two or on Hidden.
 function sheets(): Sheet[] {
     return [
+        { id: 's2', name: 'Two', order: 2, row: 30, column: 6, celldata: [], config: {}, defaultRowHeight: 40 },
         { id: 'hidden', name: 'Hidden', order: 0, hide: 1, row: 10, column: 5, celldata: [], config: {} },
-        { id: 's1', name: 'One', order: 2, status: 1, row: 20, column: 5, celldata: [], config: {} },
-        { id: 's2', name: 'Two', order: 1, row: 30, column: 6, celldata: [], config: {}, defaultRowHeight: 40 },
+        { id: 's1', name: 'One', order: 1, row: 20, column: 5, celldata: [], config: {} },
     ];
 }
 
@@ -119,7 +119,7 @@ test("a viewer applies a peer's sheet deletion and addition", async () => {
         workbook()
             .getAllSheets()
             .map((sheet) => sheet.id),
-    ).toEqual(['hidden', 's2', 's3']);
+    ).toEqual(['s2', 'hidden', 's3']);
     expect(current()).toBe('Two');
 });
 
@@ -134,7 +134,7 @@ test('undoing an added sheet lands on the first visible sheet in tab order', asy
         workbook().undo();
     });
     expect(workbook().getAllSheets()).toHaveLength(3);
-    expect(current()).toBe('Two');
+    expect(current()).toBe('One');
 });
 
 // All sheets is the choice of sheet: the visible ones in tab order, the current one checked.
@@ -148,15 +148,15 @@ test('All sheets lists the visible sheets in tab order, checks the current one a
         });
     await open();
     expect(checkRows()).toEqual([
-        ['Two', 'false'],
         ['One', 'true'],
+        ['Two', 'false'],
     ]);
     await clickRow('Two');
     expect(current()).toBe('Two');
     await open();
     expect(checkRows()).toEqual([
-        ['Two', 'true'],
         ['One', 'false'],
+        ['Two', 'true'],
     ]);
 });
 

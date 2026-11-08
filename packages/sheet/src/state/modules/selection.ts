@@ -13,7 +13,7 @@ import { cfSplitRange, withCfRanges } from '../../engine/conditional-format';
 import { cellDisplay, numberDisplay, numberText } from '../../engine/format';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
-import type { CalcChainEntry, Cell, CellMatrix, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
+import type { CalcChainEntry, Cell, CellMatrix, Range, Selection, SingleRange } from '../types';
 import { getSheetIndex, replaceHtml, styleObjectToCss } from '../utils';
 import type { CarryTile } from './cell';
 import {
@@ -109,13 +109,7 @@ export function seletedHighlistByindex(ctx: Context, r1: number, r2: number, c1:
     return null;
 }
 
-// Overload preserves non-undefined input on return: callers that pass a literal
-// `[...]` get a non-undefined `Selection[]` back, callers that pass
-// `ctx.selections` get the same `Selection[] | undefined`.
-export function normalizeSelection(ctx: Context, selection: Selection[]): Selection[];
-export function normalizeSelection(ctx: Context, selection: undefined): undefined;
-export function normalizeSelection(ctx: Context, selection: SheetType['selections']): SheetType['selections'];
-export function normalizeSelection(ctx: Context, selection: SheetType['selections']) {
+export function normalizeSelection<T extends Selection[] | undefined>(ctx: Context, selection: T): T {
     if (!selection) return selection;
 
     const flowdata = getFlowdata(ctx);
@@ -1263,7 +1257,7 @@ export function deleteSelectedCellText(ctx: Context) {
     }
 }
 
-export function selectIsOverlap(ctx: Context, range?: Range | SheetType['selections']) {
+export function selectIsOverlap(ctx: Context, range?: Range) {
     const ranges = cloneDeep(range ?? ctx.selections) ?? [];
 
     let overlap = false;

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import { hideSheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
-import { firstVisibleSheetId, initSheetIndex } from '../../../state/context';
+import { firstVisibleSheetId } from '../../../state/context';
 import { changeSheet, deleteSheet, settleCurrentSheet } from '../../../state/modules/sheet';
 import { contextFactory } from '../factories/context';
 
@@ -53,13 +53,6 @@ describe('changeSheet', () => {
         expect(ctx.selections?.[0]).toMatchObject({ row: [0, 0], column: [1, 1] });
     });
 
-    test('restores the selection a sheet stores while it is not current', () => {
-        const ctx = twoSheetContext();
-        ctx.sheets[1].selections = [{ row: [2, 3], column: [2, 2] }];
-        changeSheet(ctx, 'id_2');
-        expect(ctx.selections?.[0]).toMatchObject({ row: [2, 3], column: [2, 2] });
-    });
-
     test('refuses a hidden sheet', () => {
         const ctx = twoSheetContext();
         ctx.sheets[1].hide = 1;
@@ -107,13 +100,6 @@ describe('firstVisibleSheetId', () => {
         const ctx = tabOrderContext();
         delete ctx.sheets[3].order;
         expect(firstVisibleSheetId(ctx, 'b')).toBe('d');
-    });
-
-    test('initSheetIndex opens the first visible sheet in tab order when none is active', () => {
-        const ctx = tabOrderContext();
-        ctx.currentSheetId = '';
-        initSheetIndex(ctx);
-        expect(ctx.currentSheetId).toBe('b');
     });
 });
 

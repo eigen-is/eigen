@@ -18,12 +18,6 @@ import { createFilterOptions } from './filter';
 import { snapshotContext } from './formula-cache';
 import { writeBackSheets } from './rowcol';
 
-export function storeSheetSelections(ctx: Context) {
-    const index = getSheetIndex(ctx, ctx.currentSheetId);
-    if (index == null) return;
-    ctx.sheets[index].selections = ctx.selections;
-}
-
 export function changeSheet(ctx: Context, id: string) {
     if (id === ctx.currentSheetId) return;
 
@@ -32,21 +26,21 @@ export function changeSheet(ctx: Context, id: string) {
     const sheet = ctx.sheets[index];
     if (sheet.hide === 1) return;
 
-    storeSheetSelections(ctx);
-    ctx.sheetScrollRecord[ctx.currentSheetId] = {
+    ctx.sheetViewRecord[ctx.currentSheetId] = {
         scrollLeft: ctx.scrollLeft,
         scrollTop: ctx.scrollTop,
         selectionActive: ctx.selectionActive,
+        selections: ctx.selections,
     };
 
     cancelNormalSelected(ctx);
     ctx.validationListOpen = false;
     ctx.activeObject = undefined;
     ctx.currentSheetId = id;
-    const record = ctx.sheetScrollRecord[id];
+    const record = ctx.sheetViewRecord[id];
     ctx.scrollRequest = { left: record?.scrollLeft ?? 0, top: record?.scrollTop ?? 0 };
     ctx.selectionActive = record?.selectionActive ?? false;
-    ctx.selections = sheet.selections;
+    ctx.selections = record?.selections;
     ctx.formulaRangeSelections = [];
     applySheetView(ctx);
 }
@@ -93,7 +87,6 @@ export function addSheet(
     const id = newSheetID ?? sheetData?.id ?? crypto.randomUUID();
     const sheet: Sheet = sheetData ?? {
         name: sheetName || nextSheetName(ctx.sheets),
-        status: 0,
         order: ctx.sheets.length,
         id,
         row: DEFAULT_SHEET_ROW_COUNT,

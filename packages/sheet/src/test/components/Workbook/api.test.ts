@@ -11,6 +11,7 @@ import { MAX_SHEET_ROW_COUNT } from '../../../engine/defaults';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
+import { changeSheet } from '../../../state/modules/sheet';
 import type { Op } from '../../../state/types';
 import { emitOps, join } from '../../state/factories/collab';
 import { workbookContextFactory } from '../../state/factories/context';
@@ -526,6 +527,45 @@ describe('replayOps', () => {
             expect(ctx.selections?.[0].row).toEqual([0, 0]);
         });
 
+        // The tab left id_1 with its selection on row 2 and is on id_2.
+        const leftBehind = (ctx: Context) =>
+            produce(ctx, (draft: Context) => {
+                draft.selections = sel(2, 2, 1, 1);
+                changeSheet(draft, 'id_2');
+            });
+        const insertAbove: Op[] = [
+            {
+                op: 'insertRowCol',
+                id: 'id_1',
+                path: [],
+                value: { type: 'row', index: 0, count: 1, direction: 'lefttop' },
+            },
+        ];
+        const deleteAbove: Op[] = [
+            { op: 'deleteRowCol', id: 'id_1', path: [], value: { type: 'row', start: 0, end: 0 } },
+        ];
+        const kept = (ctx: Context) => ctx.sheetViewRecord.id_1?.selections?.[0].row;
+
+        it('a row op it applied before moved the selection of a sheet the tab left once', () => {
+            const base = makeCtx(null);
+            const shown = applyPeerOps(leftBehind(base), insertAbove);
+            expect(kept(replay(shown, base.sheets, [insertAbove, typed], [typed]).ctx)).toEqual([3, 3]);
+        });
+
+        it('a new row op moves it', () => {
+            const base = makeCtx(null);
+            const { ctx } = replay(leftBehind(base), base.sheets, [insertAbove, typed], [insertAbove]);
+            expect(kept(ctx)).toEqual([3, 3]);
+        });
+
+        it('a new row op ahead of an applied one drops it, since the tab cannot tell where it went', () => {
+            const base = makeCtx(null);
+            const shown = applyPeerOps(leftBehind(base), insertAbove);
+            const { ctx } = replay(shown, base.sheets, [deleteAbove, insertAbove], [deleteAbove]);
+            expect(kept(ctx)).toBeUndefined();
+            expect(ctx.selections).toBe(shown.selections);
+        });
+
         it('a hide and a show of the current sheet leave the tab on it', () => {
             const shown = makeCtx(null);
             const hide: Op[] = [{ op: 'replace', id: 'id_1', path: ['hide'], value: 1 }];
@@ -591,5 +631,24 @@ describe("the selection follows a peer's row and column ops", () => {
 
     it('a delete of its cell drops it', () => {
         expect(applyPeerOps(selected(2, 1), [remove('row', 1, 2)]).selections).toBeUndefined();
+    });
+
+    // The tab left id_1 with its selection on row 2 and is on id_2.
+    const leftBehind = () =>
+        produce(selected(2, 1), (draft: Context) => {
+            changeSheet(draft, 'id_2');
+        });
+    const backOnFirst = (ctx: Context) =>
+        produce(ctx, (draft: Context) => {
+            changeSheet(draft, 'id_1');
+        });
+
+    it('on a sheet the tab left it moves too, and a switch back finds it on its cell', () => {
+        expect(focus(backOnFirst(applyPeerOps(leftBehind(), [remove('row', 0, 0)])))).toEqual([[1, 1], [1, 1], 1, 1]);
+        expect(focus(backOnFirst(applyPeerOps(leftBehind(), [insert('column', 0)])))).toEqual([[2, 2], [2, 2], 2, 2]);
+    });
+
+    it('on a sheet the tab left a delete of its cell drops it', () => {
+        expect(backOnFirst(applyPeerOps(leftBehind(), [remove('row', 2, 2)])).selections).toBeUndefined();
     });
 });

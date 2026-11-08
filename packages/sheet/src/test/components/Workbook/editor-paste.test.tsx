@@ -33,9 +33,7 @@ async function mount() {
     document.body.append(container);
     const root = createRoot(container);
     const workbook = createRef<WorkbookInstance>();
-    const data: Sheet[] = [
-        { id: 's1', name: 'One', order: 0, status: 1, row: 20, column: 10, celldata: [], config: {} },
-    ];
+    const data: Sheet[] = [{ id: 's1', name: 'One', order: 0, row: 20, column: 10, celldata: [], config: {} }];
     await act(async () => {
         root.render(createElement(Workbook, { ref: workbook, data }));
     });

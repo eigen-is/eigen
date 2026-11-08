@@ -19,7 +19,6 @@ import type {
     GlobalCache,
     Op,
     Presence,
-    Range,
     SearchHighlight,
     SearchResult,
     Sheet,
@@ -83,15 +82,18 @@ export function generateAPIs(
 
         // Puts the workbook back to `base`, sheets an earlier getAllSheets returned, and applies `batches` on it in
         // order. The tab's view moved with the batches it applied before, so only the `fresh` ones move it again. A
-        // fresh batch that moves rows ahead of an applied one that moves rows leaves the tab unable to tell where its
-        // editor and selection went, so both go. The undo and redo entries fit an order that is gone, so both stacks
-        // empty. True when every batch applied.
+        // fresh batch that moves a sheet's rows ahead of an applied one that moves them leaves the tab unable to tell
+        // where its selection on that sheet went, so it goes, and on the current sheet the editor too. The undo and redo
+        // entries fit an order that is gone, so both stacks empty. True when every batch applied.
         replayOps: (base: Sheet[], batches: Op[][], fresh: ReadonlySet<Op[]>): boolean => {
             let accepted = true;
             const { currentSheetId } = getContext();
-            const movesRows = (ops: Op[]) => ops.some((op) => isRowColOp(op) && op.id === currentSheetId);
-            const firstMove = batches.findIndex((ops) => fresh.has(ops) && movesRows(ops));
-            const lost = firstMove !== -1 && batches.slice(firstMove).some((ops) => !fresh.has(ops) && movesRows(ops));
+            const overtaken = (sheetId: string) => {
+                const movesRows = (ops: Op[]) => ops.some((op) => isRowColOp(op) && op.id === sheetId);
+                const firstMove = batches.findIndex((ops) => fresh.has(ops) && movesRows(ops));
+                return firstMove !== -1 && batches.slice(firstMove).some((ops) => !fresh.has(ops) && movesRows(ops));
+            };
+            const lost = overtaken(currentSheetId);
             // The formula engine starts empty, so the replay skips the formula map, and it is built once the browser
             // is idle.
             getContext().formulaCache.resetEngine();
@@ -100,6 +102,9 @@ export function generateAPIs(
                     if (lost) {
                         cancelNormalSelected(ctx_);
                         ctx_.selections = undefined;
+                    }
+                    for (const [sheetId, left] of Object.entries(ctx_.sheetViewRecord)) {
+                        if (overtaken(sheetId)) left.selections = undefined;
                     }
                     let next: Context = { ...current(ctx_), sheets: base };
                     for (const ops of batches) {
@@ -126,8 +131,6 @@ export function generateAPIs(
             value: Cell[K],
             options: api.SheetLookup = {},
         ) => setContext((draftCtx) => api.setCellFormat(draftCtx, row, column, attr, value, options)),
-
-        setSelection: (range: Range) => setContext((draftCtx) => api.setSelection(draftCtx, range)),
 
         getAllSheets: () => api.getAllSheets(getContext()),
 

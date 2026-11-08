@@ -38,15 +38,15 @@ import {
     defaultContext,
     defaultSettings,
     deleteActiveObject,
-    ensureSheetIndex,
+    ensureUniqueSheetIds,
     filterPatch,
+    firstVisibleSheetId,
     getFlowdata,
     getSheetIndex,
     groupValuesRefresh,
     handleGlobalKeyDown,
     handlePaste,
     initSheetData,
-    initSheetIndex,
     pasteChart,
     patchToOp,
     pushEntry,
@@ -59,6 +59,7 @@ import {
     undoEntry,
     warmFormulaCellInfoMapOnIdle,
 } from '../../state';
+
 import { consumePendingCopy } from '../../state/modules/clipboard';
 import { FilterMenu } from '../ContextMenu/FilterMenu';
 import { FxEditor } from '../FxEditor';
@@ -406,17 +407,12 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             ...sheet,
                             id: sheet.id ?? crypto.randomUUID(),
                         }));
-                        ensureSheetIndex(draftCtx.sheets);
+                        ensureUniqueSheetIds(draftCtx.sheets);
                         for (const sheet of draftCtx.sheets) initSheetData(sheet);
                         // The list of formula cells is seeded without computing them. An imported or stored sheet
                         // carries its computed values, and an edit computes the formulas it affects.
                         api.seedCalcChain(draftCtx);
-                        if (!draftCtx.currentSheetId) initSheetIndex(draftCtx);
-                        const sheetIdx = getSheetIndex(draftCtx, draftCtx.currentSheetId);
-                        if (sheetIdx == null) return;
-                        const stored = draftCtx.sheets[sheetIdx].selections;
-                        if (!draftCtx.selections?.length && stored?.length) draftCtx.selections = stored;
-                        // A sheet with no stored selection gets its first one when the grid overlay mounts.
+                        draftCtx.currentSheetId ||= firstVisibleSheetId(draftCtx) ?? '';
                         applySheetView(draftCtx);
                     }
                 },
