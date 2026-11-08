@@ -168,7 +168,7 @@ export async function unpackArtifact(artifactPath: string, targetDir: string): P
 
 // Null when there is no sidecar or it does not read. An artifact copied in by hand has none, and the list shows
 // it as unverified until a verify job writes one.
-export async function readSidecar(
+async function readSidecar(
     artifactPath: string,
 ): Promise<{ manifest: BackupManifest; verify: BackupVerifyRecord } | null> {
     const text = await Bun.file(sidecarPath(artifactPath))

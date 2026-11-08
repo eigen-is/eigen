@@ -202,7 +202,7 @@ async function replaceHomeFolder<Judged>(
     parkOnFailure: (stamp: string) => string,
 ): Promise<Judged> {
     const restoreDir = buildRestoreStagingDir(homeDir, jobId);
-    // Set when the rollback below could not put the home back. Its notes and its mark then stay, for the next boot
+    // Set when the rollback below could not put the home back. Its note and its mark then stay, for the next boot
     // to finish it.
     let homeOutOfPlace = false;
     try {

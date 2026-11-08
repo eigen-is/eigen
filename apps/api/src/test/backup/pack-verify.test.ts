@@ -15,7 +15,12 @@ import { basename, join } from 'node:path';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { BackupJob, BackupManifest, ServerArchiveManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { parseBackupArtifactName, parseServerArchiveManifest, parseServerArchiveName } from '@workspace/lib/validation';
+import {
+    parseBackupArtifactName,
+    parseBackupSidecar,
+    parseServerArchiveManifest,
+    parseServerArchiveName,
+} from '@workspace/lib/validation';
 import * as encoding from 'lib0/encoding';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
@@ -29,7 +34,7 @@ import {
     readArtifactManifest,
     readUnpackedHome,
 } from '../../lib/backup/archive';
-import { listArtifacts, readSidecar, writeSidecar } from '../../lib/backup/artifacts';
+import { listArtifacts, writeSidecar } from '../../lib/backup/artifacts';
 import { runArtifactVerify } from '../../lib/backup/jobs';
 import {
     ARCHIVE_MANIFEST_FILE,
@@ -533,14 +538,13 @@ describe('Backup pack and verify', () => {
         PACK_TIMEOUT_MS,
     );
 
-    test('the sidecar round-trips and is null when missing', async () => {
-        expect(await readSidecar(artifact)).toBeNull();
+    test('the sidecar round-trips', async () => {
         // The record travels as a Date; the sidecar on disk is JSON, so it round-trips through ISO.
         const verify = { status: 'verified' as const, checkedAt: new Date(), failures: [] };
         await writeSidecar(artifact, manifest, verify);
         // It names every file of the home, so it is as private as the archive.
         expect(fs.statSync(`${artifact}.manifest.json`).mode & 0o777).toBe(0o600);
-        const read = await readSidecar(artifact);
+        const read = parseBackupSidecar(readFileSync(`${artifact}.manifest.json`, 'utf8'));
         expect(read?.verify).toEqual(verify);
         expect(read?.manifest).toEqual(JSON.parse(JSON.stringify(manifest)));
     });
@@ -578,9 +582,7 @@ describe('Backup pack and verify', () => {
         'a sidecar that is not one reads as none, and an artifact that is not one is an error',
         async () => {
             const dir = mkdtempSync(join(TEST_DATA_DIR, 'bad-sidecar-'));
-            const fake = join(dir, freeArtifactName(ownerId, new Date()));
-            writeFileSync(`${fake}.manifest.json`, '{"manifest": {"formatVersion": 2}, "verify": {}}');
-            expect(await readSidecar(fake)).toBeNull();
+            expect(parseBackupSidecar('{"manifest": {"formatVersion": 2}, "verify": {}}')).toBeNull();
 
             const folder = join(dir, buildHomeFolderName('bogus'));
             mkdirSync(folder, { recursive: true });

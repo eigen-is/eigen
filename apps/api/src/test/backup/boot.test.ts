@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, spyOn, test } from 'bun:test';
 import * as nodeFs from 'node:fs';
 import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import * as nodeFsPromises from 'node:fs/promises';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -296,6 +297,26 @@ describe('Backup boot', () => {
         expect(parked.length).toBe(1);
         expect(readFileSync(join(homeRoot, parked[0], 'marker'), 'utf8')).toBe('half-written, no copy');
         made.push(join(homeRoot, parked[0]));
+    });
+
+    test('a staging folder that will not go still loses its note, so no later boot parks a home made since', async () => {
+        const id = 'bootrecoverZZZZZZZZZZZZZZZZZZZZZ';
+        seedFolder(id, 'a home made since the restore');
+        const staged = seedRestoringMarker('boot-job-t', id, null);
+        const refused = spyOn(nodeFsPromises, 'rm').mockRejectedValue(new Error('EBUSY'));
+        try {
+            await expect(recoveryModule.wipeRestoreStagingDir(join(homeRoot, id), 'boot-job-t')).rejects.toThrow(
+                'EBUSY',
+            );
+        } finally {
+            refused.mockRestore();
+        }
+
+        await recoverBackupsAfterRestart();
+
+        expect(existsSync(staged)).toBe(false);
+        expect(readFileSync(join(homeRoot, id, 'marker'), 'utf8')).toBe('a home made since the restore');
+        expect(readdirSync(homeRoot).filter((name) => name.startsWith(`${id}${FAILED_RESTORE_SUFFIX}`))).toEqual([]);
     });
 
     test('a folder whose restore finished has no marker, and the boot only removes it', async () => {
