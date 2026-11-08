@@ -41,12 +41,10 @@ export function insertRowCol(
     const { data } = sheet;
     if (changeSelection && data) {
         const span = [insertAt, insertAt + count - 1];
-        const selections =
+        ctx.selections =
             type === 'row'
                 ? [{ row: span, column: [0, data[0].length - 1] }]
                 : [{ row: [0, data.length - 1], column: span }];
-        sheet.selections = selections;
-        if (id === ctx.currentSheetId) ctx.selections = selections;
     }
 
     ctx.formulaCache.formulaCellInfoMap = null;

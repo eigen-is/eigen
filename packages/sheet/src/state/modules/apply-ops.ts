@@ -2,19 +2,19 @@
 // column ops first, then the cell and field patches, whole or not at all. An op the replay's shape check refuses is
 // skipped. A batch that changes the open workbook outside an edit's own recipe comes through here, such as a peer's
 // batch, a log replay or a structural undo, so every tab ends the same. It reports the ops that moved rows, which the
-// undo stacks follow, and a batch new to the tab moves the tab's view too, such as the cell editor and the selection.
+// undo stacks follow, and a batch new to the tab moves the tab's view too, such as the cell editor and the selections.
 
 import { cloneDeep } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import { applyPatches, current, produce } from 'immer';
 import { deleteRowColOf, insertRowColOf, isNewSheet, isRowColOp, renameSheetOf } from '../../engine/replay-ops';
-import { shiftRangeForDelete, shiftRangeForInsert } from '../../engine/rowcol';
 import type { Context } from '../context';
 import type { Op, Selection, Sheet } from '../types';
 import type { PatchOptions } from '../utils';
 import { opToPatch } from '../utils';
 import { cancelNormalSelected } from './cell';
 import { registerSheetFormulas } from './formula-cache';
+import type { RowColMove } from './history-shift';
 import { rowColMove } from './history-shift';
 import { deleteRowCol, insertRowCol } from './rowcol';
 import { addSheet, deleteSheet, leaveCurrentSheet, renameSheet } from './sheet';
@@ -50,7 +50,7 @@ export function applyOpBatch(
                     if (rowCol.insertRowColOp) insertRowCol(draft, rowCol.insertRowColOp, false, true);
                     else if (rowCol.deleteRowColOp) deleteRowCol(draft, rowCol.deleteRowColOp, true);
                     moved.push({ op, sheets });
-                    if (moveView && id === draft.currentSheetId) followView(draft, rowCol);
+                    if (moveView) followView(draft, rowCol);
                 } else if (op.op === 'addSheet') {
                     if (!isNewSheet(op.value, draft.sheets)) continue;
                     // addSheet keeps the value it is given, so the op itself never ends up in the frozen context.
@@ -84,12 +84,17 @@ export function applyOpBatch(
     return { ctx: next, moved };
 }
 
-// The open cell editor and the selection move with their cells, so a commit or the next keystroke lands where the
-// person chose, not in the row that slid under it. A delete of the editor's cell closes the editor without writing,
-// and a selected range the delete takes whole goes.
+// The open cell editor and the selections, the kept one of a sheet the tab left too, move with their cells, so a commit
+// or the next keystroke lands where the person chose, not in the row that slid under it. A delete of the editor's cell
+// closes the editor without writing.
 function followView(draft: Context, rowCol: PatchOptions) {
     const move = rowColMove(rowCol);
     if (!move) return;
+    if (move.id !== draft.currentSheetId) {
+        const left = draft.sheetViewRecord[move.id];
+        if (left) left.selections = movedSelections(left.selections, move);
+        return;
+    }
     const row = move.type === 'row';
     const [r, c] = draft.editingCellPosition;
     if (r != null && c != null) {
@@ -97,18 +102,21 @@ function followView(draft: Context, rowCol: PatchOptions) {
         if (moved == null) cancelNormalSelected(draft);
         else draft.editingCellPosition = row ? [moved, c] : [r, moved];
     }
-    if (!draft.selections) return;
-    const { insertRowColOp: insert, deleteRowColOp: remove } = rowCol;
-    const selections: Selection[] = [];
-    for (const selection of draft.selections) {
-        const shifted = insert
-            ? shiftRangeForInsert(selection, insert)
-            : remove && shiftRangeForDelete(selection, remove);
+    draft.selections = movedSelections(draft.selections, move);
+}
+
+// A selected range the op's delete takes whole goes.
+function movedSelections(selections: Selection[] | undefined, move: RowColMove): Selection[] | undefined {
+    if (!selections) return undefined;
+    const row = move.type === 'row';
+    const moved: Selection[] = [];
+    for (const selection of selections) {
+        const shifted = move.range(selection);
         if (!shifted) continue;
         const [start] = row ? shifted.row : shifted.column;
         const focus = row ? selection.row_focus : selection.column_focus;
         const at = focus == null ? start : (move.to(focus) ?? start);
-        selections.push(row ? { ...shifted, row_focus: at } : { ...shifted, column_focus: at });
+        moved.push(row ? { ...shifted, row_focus: at } : { ...shifted, column_focus: at });
     }
-    draft.selections = selections.length > 0 ? selections : undefined;
+    return moved.length > 0 ? moved : undefined;
 }

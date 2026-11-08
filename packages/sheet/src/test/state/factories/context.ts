@@ -78,7 +78,7 @@ export function contextFactory({
         visibledatacolumn: [74, 148, 222, 296, 370],
         scrollLeft: 0,
         scrollTop: 0,
-        sheetScrollRecord: {},
+        sheetViewRecord: {},
         shiftKeyDown: false,
         groupValuesRefreshData: [],
         formulaCache: new FormulaCache(),

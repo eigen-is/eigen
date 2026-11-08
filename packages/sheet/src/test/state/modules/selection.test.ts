@@ -5,8 +5,9 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { Context } from '../../../state/context';
+import { getRangetxt } from '../../../state/modules/cell';
 import { consumePendingCopy } from '../../../state/modules/clipboard';
-import { copy, rangeValueToClipboard } from '../../../state/modules/selection';
+import { copy, normalizeSelection, rangeValueToClipboard } from '../../../state/modules/selection';
 import { contextFactory } from '../factories/context';
 
 describe('state/modules/selection — rangeValueToClipboard', () => {
@@ -101,4 +102,10 @@ describe('state/modules/selection — copy', () => {
         expect(pending?.plainText).toBe('12" pizza\t"""Hi"""\n"two\nlines"\t');
         expect(pending?.cellText).toBe('12" pizza\t"Hi"\ntwo\nlines\t');
     });
+});
+
+test('normalizeSelection backfills a one-element range, so the name box reads A1, not A1:NaN', () => {
+    const ctx = contextFactory() as Context;
+    const [selection] = normalizeSelection(ctx, [{ row: [0], column: [0] }]);
+    expect(getRangetxt(ctx, ctx.currentSheetId, selection)).toBe('A1');
 });

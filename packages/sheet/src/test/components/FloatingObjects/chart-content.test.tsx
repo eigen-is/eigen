@@ -68,7 +68,6 @@ async function mount(allowEdit = true, look: Partial<ChartLook> = {}) {
             id: 's1',
             name: 'One',
             order: 0,
-            status: 1,
             row: 20,
             column: 10,
             celldata: [
@@ -136,7 +135,7 @@ test('a source cell edit redraws the chart; an edit on another sheet or a select
         expect(drawn).toBeGreaterThan(0);
 
         await step((w) => w.applyOp(peerSets('s2', 0, 0, 7)));
-        await step((w) => w.setSelection([{ row: [5, 5], column: [5, 5] }]));
+        await step((w) => w.revealSearchMatch({ sheetId: 's1', r: 5, c: 5 }));
         expect(renders.mock.calls.length).toBe(drawn);
 
         await step((w) => w.applyOp(peerSets('s1', 1, 1, 420)));

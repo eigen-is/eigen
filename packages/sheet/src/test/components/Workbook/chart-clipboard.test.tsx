@@ -82,7 +82,6 @@ async function mount({
             id: 's1',
             name: 'One',
             order: 0,
-            status: 1,
             row: 20,
             column: 10,
             celldata: [

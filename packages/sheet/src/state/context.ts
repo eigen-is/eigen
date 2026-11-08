@@ -92,17 +92,20 @@ export type Context = {
     // position, so a fresh object here is what tells the effect to scroll.
     scrollRequest?: { left?: number; top?: number };
 
-    sheetScrollRecord: Record<
+    // What this tab had on each sheet when it left it, which a switch back restores. A peer's row or column op moves
+    // the selection kept here too.
+    sheetViewRecord: Record<
         string,
         {
             scrollLeft: number;
             scrollTop: number;
             selectionActive: boolean;
+            selections: Selection[] | undefined;
         }
     >;
 
     selectionActive: boolean;
-    selections: Sheet['selections'];
+    selections: Selection[] | undefined;
     formulaRangeSelections: SingleRange[];
     formulaRangeHighlight: ({
         rangeIndex: number;
@@ -194,7 +197,7 @@ export function defaultContext(refs: RefValues): Context {
         scrollTop: 0,
         scrollRequest: undefined,
 
-        sheetScrollRecord: {},
+        sheetViewRecord: {},
 
         selectionActive: false,
         selections: undefined,
@@ -306,32 +309,18 @@ function calcRowColSize(ctx: Context, rowCount: number, colCount: number) {
     ctx.ch_width = ch_width + 120; // add blank space at the far right
 }
 
-// Gives a sheet whose id another sheet already has a fresh one, and leaves exactly one sheet active: the first one
-// marked active, or else the first sheet.
-export function ensureSheetIndex(data: Sheet[]) {
-    if (data.length === 0) return;
+// Gives a sheet whose id another sheet already has a fresh one.
+export function ensureUniqueSheetIds(data: Sheet[]) {
     const ids = new Set<string>();
-    let hasActive = false;
     for (const item of data) {
         if (ids.has(item.id)) item.id = crypto.randomUUID();
         else ids.add(item.id);
-        item.status ??= 0;
-        if (item.status === 1) {
-            if (hasActive) item.status = 0;
-            else hasActive = true;
-        }
     }
-    if (!hasActive) data[0].status = 1;
 }
 
 export function firstVisibleSheetId(ctx: Context, excludeId?: string) {
     const shown = ctx.sheets.filter((sheet) => sheet.hide !== 1 && sheet.id !== excludeId);
     return sortBy(shown, sheetOrder)[0]?.id;
-}
-
-export function initSheetIndex(ctx: Context) {
-    const id = ctx.sheets.find((sheet) => sheet.status === 1 && sheet.hide !== 1)?.id ?? firstVisibleSheetId(ctx);
-    if (id != null) ctx.currentSheetId = id;
 }
 
 export function updateContextWithSheetData(ctx: Context, data: CellMatrix) {

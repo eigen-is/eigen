@@ -28,7 +28,7 @@ Like ROADMAP and the proposals, this doc holds only open work: strike a finding 
 
 The API audit's six patterns all show up here. Read across the six areas, though, most findings trace back to five roots, and fixing a root removes several findings at once.
 
-1. **The wire is whatever immer wrote.** An op is a raw immer patch. So everything a reducer happens to write reaches every peer, and every leak got its own filter or repair: the recalc list on the wire ([E1](#e1)), per-tab fields on the shared sheet ([S7](#s7)), merge stamps that must land after the cells ([D9](#d9)), a link companion op for `hl` ([F2](#f2)), a pre-apply simulation of what `applyPatches` would throw on ([S5](#s5)), and `normalizeSheetConfig` at six entry points because a first write to a missing collection ships it whole. The cure is a closed op vocabulary ([S10](#s10)).
+1. **The wire is whatever immer wrote.** An op is a raw immer patch. So everything a reducer happens to write reaches every peer, and every leak got its own filter or repair: the recalc list on the wire ([E1](#e1)), merge stamps that must land after the cells ([D9](#d9)), a link companion op for `hl` ([F2](#f2)), a pre-apply simulation of what `applyPatches` would throw on ([S5](#s5)), and `normalizeSheetConfig` at six entry points because a first write to a missing collection ships it whole. The cure is a closed op vocabulary ([S10](#s10)).
 2. **Facts stored twice inside the workbook.** `calcChain` beside the cells' `f` ([E1](#e1)), `cell.mc` beside `config.merge` ([D9](#d9)), `cell.hl` beside `sheet.hyperlink` ([F2](#f2)), the freeze and pixel boxes beside the indices ([R1](#r1), [R9](#r9)), the clipboard. Every writer has to keep the two in step, and each one that didn't is a fix in the log.
 3. **Two paths for one job.** The editor's batch applier beside the engine's replay ([S2](#s2)), writers doing their own formula bookkeeping beside the patch-derived recompute that undo already uses ([E7](#e7)), sort and fill outside `carryCells` ([D2](#d2)), and row and column handlers written twice ([R9](#r9)).
 4. **Structural undo across peers.** Undoing your own row, column or sheet op after a peer edited since needed a three-way merge, trial runs, a refusal path and half the shifter. The owner accepted the smaller undo, and that is done.
@@ -61,7 +61,7 @@ The best payoff per unit of risk, with no redesign. **Product** marks a finding 
 
 The owner's message for this audit: the package is old, there is no backward compatibility to keep, and with hindsight the design could differ. These are the redesigns the reviewers proposed, put in an order where each step stands on its own and makes the next smaller. None needs a migration beyond "old documents are converted once at decode, or lose the field", which the no-compatibility ruling allows.
 
-1. **Close the vocabulary** ([S10](#s10)). Seven op kinds instead of raw patches. Do [S5](#s5), [E1](#e1), [S7](#s7) and [F2](#f2) first, since each is a local step towards it. Then [D9](#d9) (merges recorded once) removes the stamp-ordering rules, and normalization stops being a correctness rule.
+1. **Close the vocabulary** ([S10](#s10)). Seven op kinds instead of raw patches. Do [S5](#s5), [E1](#e1) and [F2](#f2) first, since each is a local step towards it. Then [D9](#d9) (merges recorded once) removes the stamp-ordering rules, and normalization stops being a correctness rule.
 2. **Let the server order the log** ([S9](#s9)). A tab sends batches and the server appends them, so the log grows only at its end. The anchors, the mid-log insert handling, the compaction's no-swap-while-connected rule and the base chain ([S4](#s4)) go, and folding the log while editors are connected becomes cheap.
 3. **One block of cells and one rule store** ([D10](#d10), [F9](#f9)). Every writer lands a `Block` through one function, and conditional formats and validation rules become keyed, ordered records with one shifter, one carry and one write rule shared with floating objects.
 4. **Derive formula state from patches, read formulas with one tokenizer** ([E7](#e7), [E8](#e8)). Writers only write cells. The commit works out the formula map and the recompute, as undo already does.
@@ -94,13 +94,6 @@ Root cause: root 1, pattern 1. The filter predicts what `applyPatches` would thr
 Simpler: one sequential applier (~35 lines) with JSON Patch semantics: a write needs its parent to exist, or that op alone is skipped. Delete-wins for rules, images and charts falls out. The entry caps and the "matrix is an array" check stay at the op, because a peer's op is untrusted.
 Lost: a cell or field write is no longer all-or-nothing with its batch; a refused row or sheet op still rolls back the batch. ~60 LOC net + ~40 test, medium risk, medium confidence.
 
-<a id="s7"></a>**S7. Per-tab view state lives on the shared `Sheet`, so the wire needs `PER_CLIENT_SHEET_FIELDS`.**
-`state/utils/patch.ts` (`PER_CLIENT_SHEET_FIELDS`), `lib/sheets/snapshot-codec.ts` (strips `selections`), `sheet.selections` in `state/api/range.ts`, `state/modules/rowcol.ts` and `Workbook/index.tsx`, `sheet.status`.
-History: `2bf964067` (a stored selection came back on the wrong row after a peer's delete).
-Root cause: roots 2 and 5. `selections` is one tab's memory of each sheet's cursor; `status` is upstream's active-tab flag that nothing sets to 1.
-Simpler: a `selectionsBySheet` map on the Context; delete `status`. `filterPatch` becomes `path[0] === 'sheets'`, and the list and the codec strip go.
-Lost: nothing. ~20 LOC + ~20 test, low risk, high confidence.
-
 <a id="s8"></a>**S8. Four readers each decide what a workbook without a snapshot is.**
 `api/document/sheets.ts` (`readSheetsFromDoc`, `compactSheetsSnapshot`, `readLiveSheets`), `use-sheet.ts` (`loadSnapshot`), the fixed `'sheet-1'` id in `engine/defaults.ts`.
 Root cause: root 3. A new workbook's ops are recorded against defaults no stored state holds.
@@ -115,7 +108,7 @@ Design: a tab sends `{id, ops}` in a new collab message; the server appends it i
 Removes ~150 prod, adds ~120; most of `use-sheet-order.test.tsx` (713 lines) is rewritten. High risk. A user sees an offline tab's edits apply after the edits made meanwhile, which is arguably better. Migration: none. Medium confidence that the payoff is in mechanisms, not lines.
 
 <a id="s10"></a>**S10. Redesign: ops are a closed vocabulary, not raw immer patches.**
-Every leak in root 1 got a filter or a shipped repair: [E1](#e1), [S7](#s7), [S5](#s5), the `hl` companion op, the merge stamps, `normalizeSheetConfig` at six entry points, and a whole-list write of conditional formats that loses a peer's rule (open in SHEETS-TODO).
+Every leak in root 1 got a filter or a shipped repair: [E1](#e1), [S5](#s5), the `hl` companion op, the merge stamps, `normalizeSheetConfig` at six entry points, and a whole-list write of conditional formats that loses a peer's rule (open in SHEETS-TODO).
 Design: seven ops. `cell(sheet, r, c, cell|null)`; `key(sheet, collection, key, value|null)` for config maps, links, images, charts and rules; `field(sheet, name, value)` for scalars; `appendRule`/`removeRule` for ordered lists (or none, with [F9](#f9)); `insertRowCol`/`deleteRowCol`; `addSheet`/`deleteSheet`. `patchToOp` maps patches onto these by path shape and drops anything else. The receiver applies them with S5's applier and creates a missing collection, so normalization stops being a correctness rule. With [D9](#d9), the stamps and undo's "a merge and its `mc` pass together" go too.
 Removes ~250 prod, adds ~150; ~300 test lines that pin batch shapes are rewritten. High risk, nothing lost for a user. Migration: none; compaction folds old logs at first close. Medium confidence.
 
@@ -335,7 +328,7 @@ Wave 1 (nothing lost, or decided):
 
 | Lane | Units, in order | Main files |
 |---|---|---|
-| Op log | [S7](#s7), [S8](#s8) | `state/utils/patch.ts`, `state/modules/sheet.ts`, `engine/replay-ops.ts`, `use-sheet.ts` |
+| Op log | [S8](#s8) | `state/utils/patch.ts`, `state/modules/sheet.ts`, `engine/replay-ops.ts`, `use-sheet.ts` |
 | Formulas | [E4](#e4), [E5](#e5) | `engine/formula-shift.ts`, `engine/recalc.ts`, `formula-*` |
 | Render and input | [R6](#r6), [R7](#r7) | `state/context.ts`, `context/modal.tsx`, `state/events/*`, `SheetOverlay/*` |
 
@@ -350,9 +343,11 @@ Wave 3, the redesigns, in [§ If we built it today](#if-we-built-it-today)'s ord
 - This run also takes the API audit's T2 and X2 (the other session agreed). Don't edit `API-SIMPLIFICATION-AUDIT.md` on this branch, because that session keeps editing it: tell it when T2 or X2 lands, and it strikes them. Its X2 ruling: a flat cap, the runner's deadline and its memory limit, and a timeout or out-of-memory is an accepted outcome. X2 joins Wave 2.
 - The owner's standing word on merging: at a logical moment to merge, or to continue with a clean context, tell the owner and give the hand-off prompt. Merging with the other sessions' work is fine and a good idea. The first such moment is the end of Wave 1.
 - The owner allows an implementer to hand mechanical work (a grep sweep, rewiring similar test call sites, running a suite) to a cheaper sub-agent: Sonnet, or Haiku for a lookup, at low or medium effort. The implementer keeps Step 0, the design, the diff read and the commit. A sub-agent uses the implementer's worktree with no isolation option, one editing at a time, and never commits.
-- Wave 1 is running. Merged: E6, the U2 and E9 fixes, R3, D5, F3, D7, E3, U2, S3, R2, D1, F1, E9, S1, R5, R4, D3 (the ref's `setSelection` stays: 13 test callers and no other door to the stored selection copy; S7 may remove it). Running: S7, S8, R6, E4. Next: E4, E5, D5, R6, R7, then the wave's close.
+- Wave 1 is running. Merged: S7 (in cold review; the ref's `setSelection` went with it), E6, the U2 and E9 fixes, R3, D5, F3, D7, E3, U2, S3, R2, D1, F1, E9, S1, R5, R4, D3. Running: S8, R6, E4. In scoped review: the U2 and E9 fixes. Next: E4, E5, D5, R6, R7, then the wave's close.
 - For E4: half-open legs (`B2:1`, `A:B1`, `TRUE:A1`) read more than their dependency list, and `A1\n:B2` is missed because only spaces join a range.
 - For S5 or S10: `sheet.filter ??= {}` means a `['filter','1']` op after a peer cleared the filter should throw and drop its batch, and two first filters at once overwrite each other (D7 read this; not run). The `state/types.ts` line saying filter criteria never reach the stored shape looks false, since `encodeSheetsSnapshot` keeps `filter`.
+- For F10: the owner ruled that ROADMAP's row "The zombie media sweep can remove a peer's upload" waits for F10. When F10 lands, remove that row. eigen-c6 adds a pointer in it on `relay-outbox`, so expect a one-line ROADMAP merge.
+- For R7: S7's implementer read that a never-visited sheet opens with no selection, since the A1 seed runs once at the overlay's mount. Not run.
 - For R6: R2's implementer read that the date shortcut's `updateCell` with the closed, empty editor clears a filled cell before opening the edit, so Escape wouldn't restore it. Not run.
 - The browser pass must drive what R3 changed, each a bug fix on a reading of the code, two of them on the CSS alone: the link card over a frozen, scrolled column; the clamps in `rangeDragRow`, `rangeDragColumn`, `onCellsMove` and `onCellsMoveEnd`, now relative to the grid; `rangeDrag`, move and fill in a frozen, scrolled sheet; the freeze-line drop; row header press, hover, size and freeze handles (2 px); the overlay-frame paths (1.5 px).
 - For R9: pressing a resize handle in a frozen band while scrolled puts the line off by the scroll until the first move.

@@ -151,7 +151,7 @@ async function openTab(from: YDoc, clientID: number) {
     const cell = (r: number, c: number) => workbook().getFlowdata()?.[r]?.[c] ?? null;
     // Types `text` into a cell through this tab's own cell editor and commits it with Enter, as a person does.
     const type = async (r: number, c: number, text: string) => {
-        await edit((w) => w.setSelection([{ row: [r, r], column: [c, c] }]));
+        await edit((w) => w.revealSearchMatch({ sheetId: 's1', r: r, c: c }));
         const input = container.querySelector<HTMLElement>('#sheet-rich-text-editor');
         if (!input) throw new Error('no cell editor');
         input.focus();
@@ -571,7 +571,7 @@ test('a row op that overtakes another row op takes the focus off the grid', asyn
     const early = replica(s, 1);
     const tab = await openTab(s, 50);
     const late = replica(s, 100);
-    await tab.edit((w) => w.setSelection([{ row: [5, 5], column: [1, 1] }]));
+    await tab.edit((w) => w.revealSearchMatch({ sheetId: 's1', r: 5, c: 1 }));
     const input = document.getElementById('sheet-rich-text-editor');
     input?.focus();
     expect(document.activeElement === input).toBe(true);
@@ -589,13 +589,13 @@ test('a row op that overtakes another row op takes the focus off the grid', asyn
     expectJoined(tab);
 });
 
-// The sheet keeps its own copy of the selection for a switch back to it. A peer's sheet add must not bring back the
-// copy the row delete left behind, or the keystroke lands on the row that slid up.
+// A peer's sheet add must not bring back the selection the row delete took, or the keystroke lands on the row that slid
+// up.
 test("a peer's sheet add after a peer deleted the selected row brings no selection back", async () => {
     const s = server({ '3_0': 'mine', '4_0': 'theirs' });
     const tab = await openTab(s, 50);
     const peer = replica(s, 100);
-    await tab.edit((w) => w.setSelection([{ row: [3, 3], column: [0, 0] }]));
+    await tab.edit((w) => w.revealSearchMatch({ sheetId: 's1', r: 3, c: 0 }));
     const input = document.getElementById('sheet-rich-text-editor');
     input?.focus();
     push(peer, [{ op: 'deleteRowCol', id: 's1', path: [], value: { type: 'row', start: 3, end: 3 } }]);
@@ -626,7 +626,7 @@ for (const [name, rowOp, to] of [
         const s = server();
         const tab = await openTab(s, 50);
         const peer = replica(s, 100);
-        await tab.edit((w) => w.setSelection([{ row: [5, 5], column: [1, 1] }]));
+        await tab.edit((w) => w.revealSearchMatch({ sheetId: 's1', r: 5, c: 1 }));
         const input = document.getElementById('sheet-rich-text-editor');
         input?.focus();
         await act(async () => {

@@ -24,7 +24,6 @@ import { carriedLines, carryCells, getQKBorder, landedRanges, setCellValue } fro
 import { setFormulaCellInfo } from '../modules/formula-cache';
 import { delFunctionGroup, execFunctionGroup, execfunction } from '../modules/formula-exec';
 import { jfrefreshgrid } from '../modules/refresh';
-import { storeSheetSelections } from '../modules/sheet';
 import { hasPartMC } from '../modules/validation';
 import type { Selection } from '../types';
 import { getSheetIndex } from '../utils';
@@ -170,7 +169,6 @@ function pasteCut(ctx: Context, copyState: NonNullable<Context['copyState']>) {
     ctx.formulaCache.execFunctionExist = [...queued.values()].reverse();
     execFunctionGroup(ctx, null, null, null, null, d);
     ctx.formulaCache.execFunctionGlobalData = null;
-    storeSheetSelections(ctx);
     // A cut moves its cells once. The clipboard still holds them, and a next paste lands them as a table.
     ctx.copyState = undefined;
     ctx.formulaRangeSelections = [];

@@ -418,7 +418,7 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         expect(hex).toBe('0e352cbab7206951a95446a0374d3c34a169e0595ed19631b7b1d0773b66f2b7');
     });
 
-    test('data and selections never reach the snapshot', () => {
+    test('data never reaches the snapshot', () => {
         const sheets: Sheet[] = [
             {
                 id: 'sheet-1',
@@ -426,12 +426,10 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
                 order: 0,
                 celldata: [{ r: 0, c: 0, v: { v: 1, m: '1' } }],
                 data: [[{ v: 1, m: '1' }]],
-                selections: [{ row: [0, 0], column: [0, 0] }],
-            } as Sheet,
+            },
         ];
         const encoded = encodeSheetsSnapshot(sheets, { computed: true });
         expect(encoded).not.toContain('"data":');
-        expect(encoded).not.toContain('"selections":');
         const decoded = decodeSheetsSnapshot(encoded);
         expect(decoded[0].data).toBeUndefined();
     });
