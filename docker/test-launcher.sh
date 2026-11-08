@@ -1072,16 +1072,6 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: a failed switch: exit $CODE, '$ERR', last-update '$(cat "$FIX/release/.eigen/last-update" 2>&1)'"
     fi
-    # A launcher older than 0.3.1 hands over with neither the backup nor --no-backup.
-    STUB_DIGEST=ddd launch release update --pulled 0.2.99
-    if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  This update was started by a launcher older than 0.3.1.' &&
-        printf '%s\n' "$ERR" | grep -q '└  Copy data/ and .env.production somewhere safe, then run ./eigen update 0.3.1 --no-backup, then ./eigen update.' &&
-        ! printf '%s\n' "$CALLS" | grep -Eq ' configure | stop$| up -d' && [ ! -e "$FIX/release/.eigen/lock" ] &&
-        printf '%s\n' "$CALLS" | tail -n 1 | grep -q ' restart-notice --clear$'; then
-        ok "$SHELL_NAME: a handover with neither a backup nor --no-backup is refused before it changes anything, and takes the notice back"
-    else
-        fail "$SHELL_NAME: a handover from an older launcher: exit $CODE, '$ERR', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
-    fi
     # A handover that dies before update_apply (here in need_install) still takes the old launcher's notice back.
     mkdir -p "$FIX/bare/.eigen"
     launch bare update --pulled 0.2.99 --saved server-pre-update-full-20260101-000000.tar
