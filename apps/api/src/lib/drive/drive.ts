@@ -44,7 +44,7 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import { validateACLEntries, validateEmailAddress } from '@workspace/lib/validation';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
-import { assertCommentChatExists, ChatRoom, withCommentIndex } from '../chat';
+import { ChatRoom, withCommentIndex } from '../chat';
 import { broadcastCommentIndexUpdated } from '../chat/sse-events';
 import { CollabDocument } from '../collab/collab-document';
 import { enforceMaxUploadSize, enforceMountQuota } from '../config/enforcement';
@@ -447,9 +447,7 @@ export class Drive {
         if (!container) return;
         const chatPath = await this.getPath(mountId, chatPathId);
         if (!chatPath) return;
-        await withCommentIndex(this, mountId, container.id, (index) =>
-            index.ensureComment(chatPath.name, { createdBy }),
-        );
+        await withCommentIndex(this, mountId, container.id, (index) => index.ensureComment(chatPath.name, createdBy));
     }
 
     public async uploadFiles(
@@ -1189,14 +1187,14 @@ export class Drive {
                 throw new ApiError(400, 'Assignee is not a member of this document');
             }
         }
-        await assertCommentChatExists(this, mountId, pathId, chatName);
         const card = title?.slice(0, CARD_TITLE_MAX_LENGTH);
         const changed = await withCommentIndex(this, mountId, pathId, async (index) => {
             const current = await index.get(chatName);
+            if (!current) throw new ApiError(404, 'Comment thread not found');
             // The client sends the card title, which may have changed in the same edit. So the title is
             // saved even when the assignee stays the same.
             if (card) await index.setTitle(chatName, card);
-            const assigneeChanged = (current?.assignee ?? null) !== assignee;
+            const assigneeChanged = current.assignee !== assignee;
             if (assigneeChanged) await index.assign(chatName, assignee);
             return assigneeChanged;
         });
@@ -1246,10 +1244,9 @@ export class Drive {
         user: User,
         title?: string,
     ): Promise<void> {
-        // An unknown chat is a 404, so no history row is written for a comment that doesn't exist.
-        await assertCommentChatExists(this, mountId, pathId, chatName);
         const card = title?.slice(0, CARD_TITLE_MAX_LENGTH);
         await withCommentIndex(this, mountId, pathId, async (index) => {
+            if (!(await index.get(chatName))) throw new ApiError(404, 'Comment thread not found');
             if (card) await index.setTitle(chatName, card);
             if (status === 'resolved') await index.resolve(chatName, user.email);
             else await index.reopen(chatName);

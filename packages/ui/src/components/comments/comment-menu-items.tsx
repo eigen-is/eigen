@@ -57,8 +57,8 @@ export function CommentMenuItems({
         );
     }
     const { card, entry } = item;
-    // Missing entry = a thread with no row, open and unassigned (matchesCommentFilter's rule);
-    // its first message or assignment seeds it server-side.
+    // A missing entry is a thread with no row, open and unassigned (matchesCommentFilter's rule). Its first message
+    // adds the row.
     const chatName = card.chatName;
     const status = entry?.status ?? 'open';
     const view = onOpen && (

@@ -279,21 +279,8 @@ function touch(vevent: ICAL.Component, ctx: WriteContext, scheduling: boolean, s
     vevent.updatePropertyWithValue('sequence', sequenceOf(vevent) + 1);
 }
 
-// Only irregular zones need the horizon, since regular ones compress to open-ended RRULE observances. The span cap
-// keeps a far-future event from stalling the transition scan.
-function timezoneHorizon(years: number[], hasRrule: boolean): { minYear: number; maxYear: number } {
-    const minYear = Math.min(...years);
-    const stated = Math.max(...years);
-    const maxYear = hasRrule ? Math.max(stated, new Date().getUTCFullYear() + 5) : stated;
-    return { minYear, maxYear: Math.min(maxYear, minYear + 50) };
-}
-
-function vtimezoneComponent(tzid: string, minYear: number, maxYear: number): ICAL.Component {
-    return new ICAL.Component(ICAL.parse(buildVTimezone(tzid, minYear, maxYear).join('\r\n')));
-}
-
-// A referenced VTIMEZONE is the client's own and is never rewritten, and an unreferenced one goes. A referenced IANA
-// zone the file leaves undefined gets Eigen's, or strict parsers read the wall times as floating (RFC 5545 §3.6.5).
+// A referenced VTIMEZONE is the client's own and stays; an unreferenced one goes. A referenced IANA zone the file leaves
+// undefined gets Eigen's, or strict parsers, ical.js included, read the wall times as floating (RFC 5545 §3.6.5).
 function syncVTimezones(resource: ICAL.Component): void {
     const vevents = resource.getAllSubcomponents('vevent');
     const referenced = new Set<string>();
@@ -316,15 +303,20 @@ function syncVTimezones(resource: ICAL.Component): void {
         if (referenced.delete(String(vtimezone.getFirstPropertyValue('tzid') ?? ''))) continue;
         resource.removeSubcomponent(vtimezone);
     }
-    if (!years.length) return;
-
-    const { minYear, maxYear } = timezoneHorizon(years, hasRrule);
     const added = [...referenced].filter((tzid) => normalizeTimezone(tzid) === tzid);
-    if (!added.length) return;
+    if (!years.length || !added.length) return;
 
-    // A client reads top to bottom, so a TZID met before its definition is floating to it: new blocks go in front and
-    // re-adding the VEVENTs moves them behind.
-    for (const tzid of added) resource.addSubcomponent(vtimezoneComponent(tzid, minYear, maxYear));
+    // Only irregular zones need the horizon, as regular ones compress to open-ended RRULE observances. The span cap keeps
+    // a far-future event from stalling the transition scan.
+    const minYear = Math.min(...years);
+    const stated = Math.max(...years);
+    const horizon = hasRrule ? Math.max(stated, new Date().getUTCFullYear() + 5) : stated;
+    const maxYear = Math.min(horizon, minYear + 50);
+
+    // A client reads top to bottom, so a TZID met before its definition is floating to it: new blocks go in front and re-adding the VEVENTs moves them behind.
+    for (const tzid of added) {
+        resource.addSubcomponent(new ICAL.Component(ICAL.parse(buildVTimezone(tzid, minYear, maxYear).join('\r\n'))));
+    }
     for (const vevent of vevents) resource.addSubcomponent(vevent);
 }
 
@@ -355,8 +347,8 @@ function buildVEvent(event: CalendarEvent, options: BuildOptions = {}): ICAL.Com
     const exclusions = options.exclusions ?? [];
     for (const { key } of exclusions) vevent.addProperty(exdateProperty(event, key, tzid));
 
-    // RECURRENCE-ID names the ORIGINAL occurrence in the master's DTSTART form, value type included (RFC 5545
-    // §3.8.4.4): echoing a moved startTime or the override's own all-day toggle matches no occurrence.
+    // RECURRENCE-ID names the ORIGINAL occurrence in the master's DTSTART form, value type included (RFC 5545 §3.8.4.4).
+    // A moved startTime or the override's own all-day toggle would match no occurrence.
     if (event.recurrenceDate) {
         const master = options.master ?? event;
         const when = occurrenceInstant(master, event.recurrenceDate);
@@ -448,16 +440,16 @@ function shapeForImip(vevent: ICAL.Component, method: ImipMethod): void {
     );
 }
 
-// `series` is the master of the one occurrence `event` is: only its recurrence knows the ORIGINAL instant once the
-// override moved. A master travels with its `exceptions`, or the guest renders a moved occurrence at its original slot.
+// `series` is the master of the one occurrence `event` is, because only it knows the ORIGINAL instant of a moved override.
+// A master travels with its `exceptions`, or the guest renders a moved occurrence at its old slot and a deleted one at all.
 export function serializeEventForImip(
     event: CalendarEvent,
     method: ImipMethod,
     series?: CalendarEvent,
     exceptions: CalendarEvent[] = [],
 ): string {
-    // An override that states no guests inherits the series' list. The stored bytes keep it as written, but a guest's
-    // client would read the bare override as an occurrence they are not invited to.
+    // An override that states no guests inherits the series' list. A guest's client would read the bare override as an
+    // occurrence they are not invited to.
     const withGuests = (override: CalendarEvent, master: CalendarEvent): CalendarEvent => ({
         ...override,
         data: { ...override.data, attendees: heldAttendees(override, master) },
@@ -537,8 +529,8 @@ function patchReminders(vevent: ICAL.Component, reminders: Reminder[]): boolean 
     return true;
 }
 
-// A series-wide edit reaches the overrides whose value equals the master's BEFORE the edit, and one that set its own
-// keeps it. Times never follow. Caller runs this before the master is patched.
+// A series-wide edit reaches an override whose value equals the master's BEFORE the edit; one that set its own keeps it.
+// Times never follow. It has to run before the master is patched.
 function followMaster(resource: ICAL.Component, master: ICAL.Component, patch: EventPatch): boolean {
     const fields: Array<[string, string, string]> = [];
     for (const [name, value] of [
@@ -563,8 +555,8 @@ function followMaster(resource: ICAL.Component, master: ICAL.Component, patch: E
     return changed;
 }
 
-// Only changed values are written: writing all the form carries would rebuild rich VALARMs from a {type, minutes} pair,
-// drop unmodelled attendee parameters and rewrite the RRULE from a lossy projection.
+// Only changed values are written. The save form carries every field, and writing all of it would rebuild rich VALARMs
+// from a {type, minutes} pair, drop unmodelled attendee parameters and rewrite the RRULE from a lossy projection.
 export function patchEvent(
     resource: ICAL.Component,
     recurrenceKey: string | null,
@@ -725,8 +717,8 @@ export function removeExclusion(resource: ICAL.Component, recurrenceKey: string,
 // What one revision of an event is known by: the sender's SEQUENCE and the instant it stamped.
 export type Revision = { sequence: number; dtstamp?: Date | null };
 
-// RFC 5546 § 2.1.5 orders on SEQUENCE then DTSTAMP. DTSTAMP's one-second resolution cannot separate two revisions, so
-// an equal stamp is applied as the redelivery it is and only a strictly lower SEQUENCE loses.
+// RFC 5546 § 2.1.5 orders on SEQUENCE then DTSTAMP. A one-second DTSTAMP cannot separate two revisions, so an equal stamp
+// is applied as the redelivery it is and only a strictly lower SEQUENCE loses.
 export function isNewerRevision(incoming: Revision, stored: Revision | null): boolean {
     if (!stored) return true;
     if (incoming.sequence !== stored.sequence) return incoming.sequence > stored.sequence;
@@ -790,8 +782,8 @@ export function stripEigenStamps(comp: ICAL.Component): void {
     for (const sub of comp.getAllSubcomponents()) stripEigenStamps(sub);
 }
 
-// An incoming body is untrusted: Eigen's lines come back from the stored resource, matched by UID and recurrence key,
-// because clients rewrite RECURRENCE-ID and EXDATE between TZID, UTC and comma-joined forms.
+// An incoming body is untrusted, so Eigen's lines come back from the stored resource, matched by UID and recurrence key:
+// clients rewrite RECURRENCE-ID and EXDATE between TZID, UTC and comma-joined forms.
 export function restampResource(
     incoming: ICAL.Component,
     stored: ICAL.Component | null,

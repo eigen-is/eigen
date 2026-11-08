@@ -82,7 +82,7 @@ A backup of a home with a few holes is better than none, so a lost file or a row
 | A `metadata.db` whose root row is gone | Fails | Nothing in it can be placed |
 | A file with no bytes on record | Keeps its row | There is nothing to take |
 
-The warnings are in the home manifest's `warnings`, one line per mount and kind with up to five names, and the log names every one. A home archive with warnings verifies and restores: it is complete in every other respect. Its row in the admin pane lists them. It is not a complete archive for retention and the status, though ([A home that fails is named, and the archive goes on](#a-home-that-fails-is-named-and-the-archive-goes-on)). Every archive a capture writes has rows that all reach the root, so a row with no path in an archive means it is damaged, and verify says so. A Full backup of an `s3` mount reads no object, so it cannot see a lost one.
+The warnings are in the home manifest's `warnings`, one line per mount and kind with up to five names, and the log names every one. A home archive with warnings verifies and restores: it is complete in every other respect. Its row in the admin pane lists them. It is not a complete archive for retention and the status, though ([A home that fails is named, and the archive goes on](#a-home-that-fails-is-named-and-the-archive-goes-on)). Every archive a capture writes has rows that all reach the root. Verify fails a plain file row with no path; an orphan folder or container database passes, and only a hand edit makes one. A Full backup of an `s3` mount reads no object, so it cannot see a lost one.
 
 ## A home archive leaves out caches, sessions and other homes
 

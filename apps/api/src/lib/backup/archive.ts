@@ -221,8 +221,9 @@ export async function readArtifactManifest(source: ArtifactSource): Promise<Back
         manifest = parseBackupManifest(new TextDecoder().decode(await collect(entry.body)));
         break;
     }
-    if (!manifest) throw new ApiError(400, `${sourceName(source)} is not an Eigen backup archive`);
-    return manifest;
+    if (manifest) return manifest;
+    const name = typeof source === 'string' ? path.basename(source) : source.name;
+    throw new ApiError(400, `${name} is not an Eigen backup archive`);
 }
 
 // The manifest of an unpacked or staged folder, or null when it has none this build can read.
@@ -293,10 +294,6 @@ async function* artifactBytes(source: ArtifactSource): AsyncGenerator<Uint8Array
     } finally {
         file.destroy();
     }
-}
-
-function sourceName(source: ArtifactSource): string {
-    return typeof source === 'string' ? path.basename(source) : source.name;
 }
 
 function memberStream(member: ArchiveMemberLocation): fs.ReadStream {

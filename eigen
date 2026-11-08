@@ -1323,7 +1323,7 @@ release_name() {
 update_get() {
     # Any other tag, such as a candidate the publish workflow pushes, is no release.
     if [ -n "$target" ] && ! release_name "$target"; then
-        die "Eigen has no \"$target\"." "Name a version (./eigen update 0.3.1), latest, or the main channel (./eigen update main)."
+        die "Eigen has no \"$target\"." "Name a version (./eigen update 1.2.3), latest, or the main channel (./eigen update main)."
     fi
     follows=$(env_value EIGEN_VERSION)
     if [ -z "$follows" ]; then die ".env.production names no Eigen release." "Run ./eigen setup first."; fi
@@ -1558,7 +1558,7 @@ switch_back() {
     # From the stop on, whatever ends the rollback starts Eigen again, on the build .env.production pins by then.
     AT_EXIT=restart
     stop
-    if ! check_again "$1"; then return; fi
+    if ! check_again; then return; fi
     step "Switching to Eigen $old" "Switched to Eigen $old" "Could not write Eigen $old into .env.production" \
         with_image "$old_image" with_pins cli configure --backfill
     write_bundle "$old_image"
@@ -1571,7 +1571,7 @@ switch_back() {
     switched=1
 }
 
-# check_again <archive>: with Eigen stopped, the build before the update checks once more the databases written since
+# check_again: with Eigen stopped, the build before the update checks once more the databases written since
 # the first check began. The wait for the tabs and for a server backup ran on the new build, and a server backup opens
 # every home, so a database may have moved to a schema the build before cannot open. Returns 1 when one did: Eigen
 # stays stopped and the rollback puts the archive back. A check that stopped without a verdict ends the rollback, and

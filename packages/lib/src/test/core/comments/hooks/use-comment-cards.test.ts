@@ -103,7 +103,14 @@ describe('readCards', () => {
             dirtyElements.set('id', 'a3');
             dirtyElements.set('title', 'Dirty elements');
             dirtyElements.set('description', '');
-            dirtyElements.set('attachments', [null, 42, 'ok.png']);
+            dirtyElements.set('attachments', [
+                null,
+                42,
+                'ok.png',
+                { id: 'no-type', name: 'x' },
+                { ...reference, name: 7 },
+                { ...reference, mimeType: 7 },
+            ]);
             tasks.set('a3', dirtyElements);
         });
 

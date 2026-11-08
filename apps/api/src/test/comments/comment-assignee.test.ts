@@ -44,14 +44,17 @@ describe('Comment assignee', () => {
         );
     }
 
-    async function assignedEvents(): Promise<FileEvent[]> {
-        const events = await assertJson<FileEvent[]>(
+    async function allEvents(): Promise<FileEvent[]> {
+        return assertJson<FileEvent[]>(
             await authedRequest(
                 ctx.alice.user.sessionToken,
                 `/drive/${ctx.alice.user.id}/${mountId}/path/${docId}/history`,
             ),
         );
-        return events.filter((e) => e.eventType === 'assigned');
+    }
+
+    async function assignedEvents(): Promise<FileEvent[]> {
+        return (await allEvents()).filter((e) => e.eventType === 'assigned');
     }
 
     beforeAll(async () => {
@@ -227,9 +230,38 @@ describe('Comment assignee', () => {
         expect(row.assignee).toBe(ghost);
     });
 
+    test('a thread with no index row answers 404 to a status or assignee write, with no event and no notification', async () => {
+        // A drive call with no user seeds no row, which is the one way a thread goes without.
+        const home = await getHome(ctx.alice.user.id);
+        const thread = await home.drive.create(mountId, chatFolderId, 'no-row', 'chat');
+        const eventsBefore = await allEvents();
+
+        const assign = await patchAssignee(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            docId,
+            thread.name,
+            ctx.bob.user.email,
+        );
+        const status = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/collab/${ctx.alice.user.id}/${mountId}/${docId}/comments/${thread.name}/status`,
+            {
+                method: 'PATCH',
+                body: JSON.stringify({ status: 'resolved' }),
+                headers: { 'Content-Type': 'application/json' },
+            },
+        );
+
+        expect([assign.status, status.status]).toEqual([404, 404]);
+        expect((await allEvents()).length).toBe(eventsBefore.length);
+        const tag = `assigned:${ctx.alice.user.id}:${mountId}:${docId}:${thread.name}`;
+        expect((await notificationsFor(ctx.bob.user.id)).some((n) => n.tag === tag)).toBe(false);
+    });
+
     test('assigning on a nonexistent chatName → 404, no row, no event, no notification', async () => {
-        // No .eigenchat exists under this name, so it can't be healed — the write must 404 rather
-        // than mint a phantom row + immutable 'assigned' event + dead-link notification.
+        // The write must 404 rather than mint a phantom row + immutable 'assigned' event + dead-link notification.
         const ghostName = 'ghost-thread.eigenchat';
         const res = await patchAssignee(
             ctx.alice.user.sessionToken,

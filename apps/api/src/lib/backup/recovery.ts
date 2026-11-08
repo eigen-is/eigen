@@ -44,9 +44,11 @@ export function dropRestoringMarker(restoreDir: string): void {
 }
 
 // Everything a per-home restore staged beside the home: the unpacked archive and any note left. The job removes it
-// however it ends.
+// however it ends. The note goes first: if the folder stays, a later boot acting on it could park a home made since.
 export async function wipeRestoreStagingDir(homeDir: string, jobId: string): Promise<void> {
-    await fsp.rm(buildRestoreStagingDir(homeDir, jobId), { recursive: true, force: true });
+    const restoreDir = buildRestoreStagingDir(homeDir, jobId);
+    dropRestoringMarker(restoreDir);
+    await fsp.rm(restoreDir, { recursive: true, force: true });
 }
 
 // Every folder a per-home restore staged beside the homes is one whose job never ended, since a job removes its own.
