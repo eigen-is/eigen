@@ -14,7 +14,6 @@ import type { Op, Selection, Sheet } from '../types';
 import type { PatchOptions } from '../utils';
 import { opToPatch } from '../utils';
 import { cancelNormalSelected } from './cell';
-import { createFilterOptions } from './filter';
 import { registerSheetFormulas } from './formula-cache';
 import { rowColMove } from './history-shift';
 import { deleteRowCol, insertRowCol } from './rowcol';
@@ -68,11 +67,9 @@ export function applyOpBatch(
             }
             [patches] = opToPatch(draft, ops);
             const [first] = ops;
-            if (moveView && first?.path[0] === 'filterRange') draft.filterRange = first.value;
-            else if (moveView && first?.path[0] === 'hide' && first.id === draft.currentSheetId) {
+            if (moveView && first?.path[0] === 'hide' && first.id === draft.currentSheetId) {
                 leaveCurrentSheet(draft, first.id);
             }
-            createFilterOptions(draft, draft.filterRange, first?.id);
             if (patches.length > 0) applyPatches(draft, patches);
         });
     } catch (e) {

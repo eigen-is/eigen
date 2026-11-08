@@ -28,6 +28,7 @@ import {
     saveFilter,
     sortFilterRange,
 } from '../../state';
+import { getSheet } from '../../state/api/common';
 
 type ColorKind = 'bgColors' | 'fcColors';
 
@@ -135,6 +136,8 @@ const DateSelectTree: React.FC<{
         ))}
     </>
 );
+
+const rowMap = (rows: number[]) => Object.fromEntries(rows.map((r) => [r, 0]));
 
 export const FilterMenu: React.FC = () => {
     const { context, setContext } = useContext(WorkbookContext);
@@ -265,21 +268,23 @@ export const FilterMenu: React.FC = () => {
     );
 
     useEffect(() => {
-        if (col == null) return;
+        if (!filterContextMenu) return;
         setSearchText('');
         setShowSubMenu(false);
         dateTreeExpandState.current = {};
-        hiddenRows.current = filterContextMenu?.hiddenRows || [];
-        const res = getFilterColumnValues(contextRef.current, col, startRow, endRow, startCol);
+        const menu = filterContextMenu;
+        const saved = getSheet(contextRef.current).filter?.[menu.col - menu.startCol];
+        hiddenRows.current = Object.keys(saved?.rowhidden ?? {}).map(Number);
+        const res = getFilterColumnValues(contextRef.current, menu.col, menu.startRow, menu.endRow, menu.startCol);
         setData(omit(res, ['datesUncheck', 'valuesUncheck']));
         setDatesUncheck(res.datesUncheck);
         setValuesUncheck(res.valuesUncheck);
         setShowValues(res.flattenValues);
-        const savedCondition = contextRef.current.filter[col - startCol]?.byCondition;
+        const savedCondition = saved?.byCondition;
         setConditionName(savedCondition?.conditionName ?? 'none');
         setConditionValues([savedCondition?.values[0] ?? '', savedCondition?.values[1] ?? '']);
         setConditionExpanded(savedCondition != null);
-    }, [col, endRow, startRow, startCol, filterContextMenu?.hiddenRows]);
+    }, [filterContextMenu]);
 
     useEffect(() => {
         if (col == null) return;
@@ -416,13 +421,7 @@ export const FilterMenu: React.FC = () => {
                                                         const uncheckedRows = Object.values(filterColors)
                                                             .flat()
                                                             .flatMap((v) => (v.checked ? [] : v.rows));
-                                                        const rowHidden = uncheckedRows.reduce(
-                                                            (pre, curr) => {
-                                                                pre[curr] = 0;
-                                                                return pre;
-                                                            },
-                                                            {} as Record<string, number>,
-                                                        );
+                                                        const rowHidden = rowMap(uncheckedRows);
                                                         saveFilter(
                                                             draftCtx,
                                                             Object.keys(rowHidden).length > 0,
@@ -640,13 +639,7 @@ export const FilterMenu: React.FC = () => {
                                               startCol,
                                               byCondition,
                                           )
-                                        : hiddenRows.current.reduce(
-                                              (pre, curr) => {
-                                                  pre[curr] = 0;
-                                                  return pre;
-                                              },
-                                              {} as Record<string, number>,
-                                          );
+                                        : rowMap(hiddenRows.current);
                                     saveFilter(
                                         draftCtx,
                                         byCondition != null || hiddenRows.current.length > 0,

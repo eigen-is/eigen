@@ -29,7 +29,7 @@ Like ROADMAP and the proposals, this doc holds only open work: strike a finding 
 The API audit's six patterns all show up here. Read across the six areas, though, most findings trace back to five roots, and fixing a root removes several findings at once.
 
 1. **The wire is whatever immer wrote.** An op is a raw immer patch. So everything a reducer happens to write reaches every peer, and every leak got its own filter or repair: the recalc list on the wire ([E1](#e1)), per-tab fields on the shared sheet ([S7](#s7)), merge stamps that must land after the cells ([D9](#d9)), a link companion op for `hl` ([F2](#f2)), a pre-apply simulation of what `applyPatches` would throw on ([S5](#s5)), and `normalizeSheetConfig` at six entry points because a first write to a missing collection ships it whole. The cure is a closed op vocabulary ([S10](#s10)).
-2. **Facts stored twice inside the workbook.** `calcChain` beside the cells' `f` ([E1](#e1)), `cell.mc` beside `config.merge` ([D9](#d9)), `cell.hl` beside `sheet.hyperlink` ([F2](#f2)), `ctx.filter` beside `sheet.filter` ([D7](#d7)), the freeze and pixel boxes beside the indices ([R1](#r1), [R9](#r9)), the clipboard. Every writer has to keep the two in step, and each one that didn't is a fix in the log.
+2. **Facts stored twice inside the workbook.** `calcChain` beside the cells' `f` ([E1](#e1)), `cell.mc` beside `config.merge` ([D9](#d9)), `cell.hl` beside `sheet.hyperlink` ([F2](#f2)), the freeze and pixel boxes beside the indices ([R1](#r1), [R9](#r9)), the clipboard. Every writer has to keep the two in step, and each one that didn't is a fix in the log.
 3. **Two paths for one job.** The editor's batch applier beside the engine's replay ([S2](#s2)), writers doing their own formula bookkeeping beside the patch-derived recompute that undo already uses ([E7](#e7)), sort and fill outside `carryCells` ([D2](#d2)), four ways to turn a pointer into a cell ([R3](#r3)), and row and column handlers written twice ([R9](#r9)).
 4. **Structural undo across peers.** Undoing your own row, column or sheet op after a peer edited since needed a three-way merge, trial runs, a refusal path and half the shifter. The owner accepted the smaller undo, and that is done.
 5. **Fork scaffolding.** fill modes no menu can choose and Chinese numeral series ([D4](#d4)), dead formula state ([E6](#e6)). Each is still checked on edits, and at least one got a fix (`b6ecee4d3`, protection checked before a delete, for a protection nobody can switch on).
@@ -44,7 +44,6 @@ Each comes from reading or tracing the code, not from running it, unless it says
 |---|---|---|
 | Sort moves cells but leaves their borders, links and validation behind, and the moved `hl` stamp points at a link that stayed, so the link lands on another row's text | [D2](#d2) | Sort's write read; link outcome traced |
 | A refused table paste still changes row heights (`setRowHeight` runs before the guards) | [D5](#d5) | Traced |
-| A peer's column filter change leaves this tab's `ctx.filter` stale, so the next local filter edit can leave the peer's rows hidden for good | [D7](#d7) | Traced |
 | The link card over a frozen column of a scrolled sheet shows the cell scrolled underneath; a row-header drag while composing a formula picks rows offset by the grid's page top minus 70 px | [R3](#r3) | Offsets read; outcome traced |
 | The first formula typed on an uncomputed sheet ships chain entries, so the server treats that sheet as computed and its export skips the recalc | [E1](#e1) | Traced |
 
@@ -214,13 +213,6 @@ Root cause: pattern 1. "Validate before you write" is a convention a table of te
 Simpler: one `EditRefused(message)` any writer throws; `setContextWithProduce` drops the edit and shows the notice. The catch-inside-recipe sites go. With normalization at every entry point, `config` and its collections become non-optional in the `Sheet` type, so the `??=` seeding and the `bareSheet` half of the gate go. [F3](#f3) is compatible: the validation cap stops refusing at all.
 Lost: nothing. ~50 LOC + ~70 test, low-medium risk, high confidence.
 
-<a id="d7"></a>**D7. `ctx.filter` and `ctx.filterRange` mirror the current sheet's filter, as the deleted `ctx.config` mirror did.**
-`state/modules/filter.ts` (`applySheetFilter`, `saveFilter` writes both, `getFilterHiddenRows` and `clearFilter` read the mirror), `state/events/mouse-cell.ts`, the sync effect in `SheetOverlay` (fires on `filterRange`, not `filter`), the special case in `apply-ops.ts`.
-History: `12eddde7c` deleted the `ctx.config` mirror after `e74cb5c54`, `5727c45c7` and `60de3a61f`; `62925f961`, `1602a406b`.
-Root cause: root 2. A peer's filter change updates `sheet.filter` but not the mirror (the bug in [§ Bugs](#bugs-found-on-the-way)).
-Simpler: read `getSheet(ctx).filter` and `.filterRange`; keep `ctx.filterOptions` (button geometry), derived in the commit by [R1](#r1).
-Lost: nothing. ~30 LOC, low risk, high confidence.
-
 <a id="d8"></a>**D8. A copy over an active filter closes up the block, and a cut doesn't (product).**
 `carriedLines` (the filter-hidden intersection), `carriedSpan`, `landedRuns`, the `cut` flag through `copy`, `rangeValueToClipboard` and `isOwnCopyTable`.
 History: `0e7a1fab1`, `4bc87bf39` (a merge whose rows a filter left out shifted the pasted table), `e74f58b7d`.
@@ -250,7 +242,7 @@ Judged essential: `carryCells` and `carrySides`' overwrite rule; `numberDisplay`
 `components/Sheet/index.tsx` (`useStableJson` over `rowlen`, `columnlen`, `rowhidden`, `colhidden`; the geometry effect with its `geometrySheetId` skip; the `initFreeze` effect), `state/modules/freeze.ts` (`initFreeze`, `FreezenAxisData.scroll` always 0, `cumulative`, `edge`), `GlobalCache.freezen` (33 readers), `SheetOverlay`'s `applySheetFilter` effect, the Workbook's `viewStale`.
 History: `1602a406b`, `792b0ac6a` (a switch computed geometry three times), `e5ad62798` (the first frame painted the new sheet on the old layout), `2bf964067`, `3ff83720d`. The precedent is the `ctx.config` mirror, deleted in `12eddde7c`.
 Root cause: roots 1 and 2 (pattern 1). A recipe changes the config, frozen panes or filter, React renders, and only then effects recompute `visibledatarow`, the panes and the filter rects with a second `setContext`, or for the freeze a silent `globalCache` write that triggers no render. In between, a peer's row op moves the selection's indices but not its pixel box, and after a freeze the overlay builds regions from the old panes. The effect depends on `data`, whose identity changes on every edit, so every commit reruns `calcRowColSize` over all rows (34 ms at 100k rows, `792b0ac6a`'s measurement) and renders twice; `useStableJson` stringifies four maps on every render, each drag frame included.
-Simpler: one `deriveView(base, next)` inside `commit`, so edits, undo, redo and peer batches all pass through it, running only when the current sheet, `data.length` or the identity of a geometry map, `frozen` or `filterRange` changed. The freeze becomes an O(1) read, `freezeOf(ctx)`; `scroll`, `cumulative` and `globalCache.freezen` go. With [D7](#d7), readers take the sheet's filter directly.
+Simpler: one `deriveView(base, next)` inside `commit`, so edits, undo, redo and peer batches all pass through it, running only when the current sheet, `data.length` or the identity of a geometry map, `frozen` or `filterRange` changed. The freeze becomes an O(1) read, `freezeOf(ctx)`; `scroll`, `cumulative` and `globalCache.freezen` go.
 Lost: nothing; a cell edit gets faster. ~110 LOC + ~40 test, medium risk, high confidence.
 
 <a id="r3"></a>**R3. Every pointer handler turns page coordinates into sheet coordinates itself, four different ways, and two are wrong.**
@@ -376,11 +368,11 @@ Wave 1 (nothing lost, or decided):
 |---|---|---|
 | Op log | [S7](#s7), [S8](#s8) | `state/utils/patch.ts`, `state/modules/sheet.ts`, `engine/replay-ops.ts`, `use-sheet.ts` |
 | Formulas | [E6](#e6), then [E4](#e4), [E5](#e5) | `engine/formula-shift.ts`, `engine/recalc.ts`, `formula-*` |
-| Editing | [D7](#d7), [D5](#d5) | `state/api/*`, `paste.ts`, `clipboard.ts`, `filter.ts` |
+| Editing | [D5](#d5) | `state/api/*`, `paste.ts`, `clipboard.ts`, `filter.ts` |
 | Render and input | [R3](#r3), then [R6](#r6), [R7](#r7) | `state/context.ts`, `context/modal.tsx`, `state/events/*`, `SheetOverlay/*` |
 | Rules | [F3](#f3) | `protection.ts`, `validation*.ts`, `DataValidation/*` |
 
-Wave 2 (cross-cutting, after the lanes they depend on merged): [E1](#e1) then [E2](#e2); [F2](#f2) (after D2); [D2](#d2) after D4 is ruled; [S2](#s2) then [S5](#s5); [R1](#r1) (after D7 and R3); [D4](#d4), [D8](#d8), [F4](#f4), [F6](#f6), [F7](#f7), [F8](#f8) as ruled. F4, F6 and F7 change `packages/lib/src/charts`, which Docs, Slides and Vector share: tell the other session first.
+Wave 2 (cross-cutting, after the lanes they depend on merged): [E1](#e1) then [E2](#e2); [F2](#f2) (after D2); [D2](#d2) after D4 is ruled; [S2](#s2) then [S5](#s5); [R1](#r1) (after R3); [D4](#d4), [D8](#d8), [F4](#f4), [F6](#f6), [F7](#f7), [F8](#f8) as ruled. F4, F6 and F7 change `packages/lib/src/charts`, which Docs, Slides and Vector share: tell the other session first.
 
 Wave 3, the redesigns, in [§ If we built it today](#if-we-built-it-today)'s order. Each is sized again at its Step 0 and shown to the owner before it is built: [S10](#s10) with [D9](#d9), [S9](#s9) (which supersedes [S4](#s4)), [D10](#d10), [F9](#f9), [E7](#e7) and [E8](#e8), [R9](#r9) with [R10](#r10), [F10](#f10) (touches Docs and Canvas: tell the other session), [U6](#u6) only if still worth it. [U7](#u7) stays parked in ROADMAP-POST-1.
 
@@ -390,8 +382,9 @@ Wave 3, the redesigns, in [§ If we built it today](#if-we-built-it-today)'s ord
 
 - This run also takes the API audit's T2 and X2 (the other session agreed). Don't edit `API-SIMPLIFICATION-AUDIT.md` on this branch, because that session keeps editing it: tell it when T2 or X2 lands, and it strikes them. Its X2 ruling: a flat cap, the runner's deadline and its memory limit, and a timeout or out-of-memory is an accepted outcome. X2 joins Wave 2.
 - The owner allows an implementer to hand mechanical work (a grep sweep, rewiring similar test call sites, running a suite) to a cheaper sub-agent: Sonnet, or Haiku for a lookup, at low or medium effort. The implementer keeps Step 0, the design, the diff read and the commit. A sub-agent uses the implementer's worktree with no isolation option, one editing at a time, and never commits.
-- Wave 1 is running. Merged: E3, U2, S3, R2, D1, F1, E9, S1, R5, R4 (`ctx.rowHeaderWidth` and `columnHeaderHeight` stay for R3 to inline), D3 (the ref's `setSelection` stays: 13 test callers and no other door to the stored selection copy; S7 may remove it). Running: E6, F1 fixes then F3, D7, U2 and E9 review fixes, R3. In cold review: S3. Next: S7, S8, E4, E5, D5, R6, R7, then the wave's close.
+- Wave 1 is running. Merged: D7, E3, U2, S3, R2, D1, F1, E9, S1, R5, R4 (`ctx.rowHeaderWidth` and `columnHeaderHeight` stay for R3 to inline), D3 (the ref's `setSelection` stays: 13 test callers and no other door to the stored selection copy; S7 may remove it). Running: S7, E6, F1 fixes then F3, U2, E9 and S3 review fixes, R3. Next: S8, D5, E4, E5, D5, R6, R7, then the wave's close.
 - For E4: half-open legs (`B2:1`, `A:B1`, `TRUE:A1`) read more than their dependency list, and `A1\n:B2` is missed because only spaces join a range.
+- For S5 or S10: `sheet.filter ??= {}` means a `['filter','1']` op after a peer cleared the filter should throw and drop its batch, and two first filters at once overwrite each other (D7 read this; not run). The `state/types.ts` line saying filter criteria never reach the stored shape looks false, since `encodeSheetsSnapshot` keeps `filter`.
 - For R6: R2's implementer read that the date shortcut's `updateCell` with the closed, empty editor clears a filled cell before opening the edit, so Escape wouldn't restore it. Not run.
 - For R3: `handleCellAreaMouseDown` sets `ctx.selectionActive = true` and then tests it, so that block is always true.
 - For D5: `handlePaste` sits below its helpers; `setRowHeight` still runs before the guards in `pasteHandler`.

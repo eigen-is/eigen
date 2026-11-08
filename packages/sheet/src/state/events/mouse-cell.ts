@@ -124,9 +124,6 @@ export function handleCellAreaMouseDown(
                 endRow,
                 startCol,
                 endCol,
-                hiddenRows: Object.keys(ctx.filter[filterButton.col - startCol]?.rowhidden ?? {}).map((r) =>
-                    parseInt(r, 10),
-                ),
             };
             // Keep the browser from focusing the overlay on this mousedown — that
             // focus shift would dismiss the just-opened menu via onFocusOutside.
