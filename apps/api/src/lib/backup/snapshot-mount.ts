@@ -117,7 +117,8 @@ export async function snapshotMountData(
                     (await isGone()) ? null : stageManagedDbCopy(mount, row.id, destPath, 'open-handle-first'),
                 )
                 .catch(async (error: unknown) => {
-                    // Empty trash takes no path lock, so a row can still go between the check and the read.
+                    // A permanent delete from the trash locks the item it deletes, which can be a folder around this
+                    // container, so a row can still go between the check and the read.
                     const storageKey = await mount.findStorageKey(row.id);
                     if (storageKey !== null) rethrowStorageFailure(mount.id, storageKey, error);
                     fs.rmSync(destPath, { force: true });
