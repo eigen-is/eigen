@@ -49,7 +49,7 @@ A doc gets shorter only by cutting narration, repetition, edge cases and code to
 | A reason that matters at one line | One terse comment there, if a maintainer could not derive it |
 | History ("used to", "previously", "no longer", dates, incidents) | Nowhere: git keeps it |
 | A measurement | The doc, once, when a decision rests on it ("a 48 MB snapshot is 1 MB at zstd" is why the codec exists); an example's numbers come from its test, never invented. Otherwise nowhere |
-| A stored format with live user data (stickies) | The doc, as a contract: every root, field and default the reader tolerates |
+| A stored format a collaborator writes (stickies) | The doc, as a contract: every root, field and default the reader tolerates |
 | Open work and known bugs | `docs/ROADMAP.md` |
 | What a user sees and clicks | The help center (support-article skill) |
 | Another domain's mechanics | That domain's doc, linked |
