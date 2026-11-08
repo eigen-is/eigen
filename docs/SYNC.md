@@ -28,7 +28,7 @@ Only container databases and the plain files a per-home restore stages go throug
 
 ## Only `s3` mounts queue
 
-A queue exists only when `buildUploadDestinationKey` (`apps/api/src/lib/mount/helpers.ts`) returns a key, which it does for storage type `s3`. `local` and `local-key` keep synchronous writes: a local write never 503s, and queuing it would only weaken its on-completion durability. The crash-temp recovery ([A crash temp is adopted and re-synced](#a-crash-temp-is-adopted-and-re-synced)) applies to both temp-copy backends, `s3` and `local`.
+A queue exists only when `buildUploadDestinationKey` (`apps/api/src/lib/mount/helpers.ts`) returns a key, which it does for storage type `s3`. `local` and `local-key` keep synchronous writes: a local write never 503s, and queuing it would only weaken its on-completion durability. The crash-temp recovery ([A crash temp is adopted and re-synced](#a-crash-temp-is-adopted-and-re-synced)) applies to both temp-copy backends, `s3` and `local`. A `local-key` document opens its stored file in place, so what a crash leaves is that file and its `-wal`, which the next open replays and a read of a closed document folds in first (`stageManagedDbCopy`).
 
 ## Code comments cite seven numbered invariants
 
