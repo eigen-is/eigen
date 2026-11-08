@@ -165,7 +165,7 @@ A restore of a deleted owner pushes nothing. A recipient who listed at any time 
 
 ### An ACL entry naming a deleted person stays
 
-A deletion leaves the entries naming that person on other owners' paths on purpose, so a restored user gets their shares back. The cost is that a new account taking that address inherits those entries for now. It is a known open gap, tracked in the "A deleted user's email address stays taken" row of [ROADMAP.md](ROADMAP.md).
+A deletion leaves the entries naming that person on other owners' paths on purpose, so a restored user gets their shares back. The cost is that a new account taking that address inherits those entries for now. It is a known open gap, tracked in the "A new account can take a deleted user's email address" row of [ROADMAP.md](ROADMAP.md).
 
 ### Share Emails
 
