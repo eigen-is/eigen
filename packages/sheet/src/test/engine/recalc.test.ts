@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Cell, Sheet } from '@workspace/lib/sheets';
+import { createArrayResolver } from '../../engine/cell-resolver';
+import { FormulaEngine } from '../../engine/formula-engine';
 import { sheetFinder } from '../../engine/parser/helper/cell';
 import { extractDependencies, recalcSheets, sheetsNeedRecalc } from '../../engine/recalc';
 
@@ -592,8 +594,7 @@ describe('engine/recalc — extractDependencies', () => {
         cellTextToIndexList: {},
     });
 
-    // Each quoted sheet name is glued to the reference after it as the formula is split, never by moving the rest of
-    // the parts, so a crafted file can't make the walk quadratic.
+    // The walk is linear in the text, so a crafted file can't make it quadratic.
     test('walks a 2 MB formula of quoted sheet names in well under a second', () => {
         const g = walkOver([{ id: 's2', name: 'My Data', data: [[num(1)]] }]);
         const f = `=${"'My Data'!A1+".repeat(160_000)}1`;
@@ -605,13 +606,70 @@ describe('engine/recalc — extractDependencies', () => {
         expect(deps[0]).toEqual({ row: [0, 0], column: [0, 0], sheetId: 's2' });
     });
 
-    // A function's name is matched only where a word starts, so a long run of letters with no bracket after it is
-    // read once, not once per letter.
     test('walks a 1 MB run of letters in well under a second', () => {
         const g = walkOver([{ id: 's1', name: 'Sheet1', data: [[num(1)]] }]);
         const start = performance.now();
         expect(extractDependencies(g, `=${'A'.repeat(1_000_000)}`, 's1', [[num(1)]])).toEqual([]);
         expect(performance.now() - start).toBeLessThan(1_000);
+    });
+
+    // Whatever the engine reads must be listed, or a change in that cell leaves the formula stale. So each formula runs
+    // through the engine over a resolver that records the cells, and the walk has to cover them.
+    test.each([
+        '=A1 + B1',
+        '=SUM(A1 : B2)',
+        '=SUM(A1  :  B2)+C1',
+        '=SUM(-1:2)',
+        '=2*-1:2',
+        '=-A1',
+        '=LOG10(A1)+ATAN2(B2,1)',
+        '=_xlfn.STDEV.S(A1:A3)',
+        '=A1&"B1"&C1',
+        '="\'"&C1&"\'"',
+        '=SUM(A:A)',
+        '=SUM(1:2)',
+        '=SUM(B3:A1)',
+        '=$A$1+B$2',
+        '=Data!A1+Data!B2',
+        '=SUM(Data!A:Data!B)',
+        "=SUM('my sheet-1'!A1:'my sheet-1'!B2)",
+        "='my sheet-1'!A1+5",
+        "='it''s'!B1",
+        "='a!b'!B1",
+        "=SUM('a!b'!A:A)",
+        '=INDEX(A1:B3,2,1)',
+        '=IF(A1>=1,"B2",C1)',
+    ])('lists every cell the engine reads for %s', (text) => {
+        const grid = () => [
+            [num(1), num(2), num(3)],
+            [num(4), num(5), num(6)],
+            [num(7), num(8), num(9)],
+        ];
+        const sheets = ['Sheet1', 'Data', 'my sheet-1', "it's", 'a!b'].map((name, i) => ({
+            id: `s${i}`,
+            name,
+            data: grid(),
+        }));
+        const resolver = createArrayResolver(
+            sheets.map((sheet) => ({ ...sheet, calculationChain: [], dynamicArrayCompute: [] })),
+        );
+        const read: string[] = [];
+        new FormulaEngine().evaluate(text, 's0', {
+            ...resolver,
+            getCell(sheetId, row, col) {
+                read.push(`${sheetId} ${row} ${col}`);
+                return resolver.getCell(sheetId, row, col);
+            },
+        });
+        expect(read.length).toBeGreaterThan(0);
+
+        const listed = new Set<string>();
+        for (const { sheetId, row, column } of extractDependencies(walkOver(sheets), text, 's0', sheets[0].data)) {
+            for (let r = row[0]; r <= row[1]; r += 1) {
+                for (let c = column[0]; c <= column[1]; c += 1) listed.add(`${sheetId} ${r} ${c}`);
+            }
+        }
+        expect(read.filter((cell) => !listed.has(cell))).toEqual([]);
     });
 
     test("a function's name reads as no cell, after an operator or a colon", () => {

@@ -197,8 +197,9 @@ describe('setFormulaCellInfo — the cells a formula reads', () => {
         ["=SUM(Data!A1:'Data'!B2)", [on('s2', [0, 1], [0, 1])]],
         ["=SUM('Data'!A1:Data!B2)", [on('s2', [0, 1], [0, 1])]],
         ["=SUM('my sheet-1'!A1:'my sheet-1'!B2)", [on('s3', [0, 1], [0, 1])]],
-        ['=SUM(Data!A1:Empty!B2)', []],
-        ["=SUM('Data'!A1:'my sheet-1'!B2)", []],
+        // The engine answers #VALUE! and reads nothing, so what is listed here can only cost a recompute.
+        ['=SUM(Data!A1:Empty!B2)', [on('s2', [0, 1], [0, 1])]],
+        ["=SUM('Data'!A1:'my sheet-1'!B2)", [on('s2', [0, 1], [0, 1])]],
         ['=SUM(A1:Data!B2)', []],
         ["='my sheet-1'!A1+1", [on('s3', [0, 0], [0, 0])]],
         ["='my sheet-1'!A1:B2", [on('s3', [0, 1], [0, 1])]],
@@ -232,7 +233,13 @@ describe('setFormulaCellInfo — the cells a formula reads', () => {
         ['=IF(A1>=1,C1,D1)', [on('s1', [0, 0], [0, 0]), on('s1', [0, 0], [2, 2]), on('s1', [0, 0], [3, 3])]],
         ['=A1<>B1', [on('s1', [0, 0], [0, 0]), on('s1', [0, 0], [1, 1])]],
         ['=LOG10(A1)+ATAN2(B2,1)', [on('s1', [0, 0], [0, 0]), on('s1', [1, 1], [1, 1])]],
-        ['=LOG10 (A1)', [on('s1', [0, 0], [0, 0])]],
+        // Excel reads the space as an intersection, so LOG10 is a cell. The engine answers #ERROR! and reads neither.
+        ['=LOG10 (A1)', [on('s1', [9, 9], [8508, 8508]), on('s1', [0, 0], [0, 0])]],
+        ['=SUM(A1 : B2)', [on('s1', [0, 1], [0, 1])]],
+        ['=SUM(-1:2)', [on('s1', [0, 1], [0, 3])]],
+        ["='a!b'!A1", [on('s7', [0, 0], [0, 0])]],
+        ["=SUM('a!b'!A1:'a!b'!B2)", [on('s7', [0, 1], [0, 1])]],
+        ['=T[(A1)]+B1', [on('s1', [0, 0], [1, 1])]],
         ['=A1==B1', [on('s1', [0, 0], [0, 0]), on('s1', [0, 0], [1, 1])]],
         ['=#REF!+A1', [on('s1', [0, 0], [0, 0])]],
         ['=Missing!A1+B1', [on('s1', [0, 0], [1, 1])]],
@@ -249,6 +256,7 @@ describe('setFormulaCellInfo — the cells a formula reads', () => {
                 { name: "it's", id: 's4', order: 3, data: grid(2, 2) },
                 { name: 'Empty', id: 's5', order: 4, data: [] },
                 { name: 'Holey', id: 's6', order: 5, data: JSON.parse('[null, [null, null]]') },
+                { name: 'a!b', id: 's7', order: 6, data: grid(2, 2) },
             ],
         }) as Context;
     // Types the formula into D6 and returns the cells the formula map says it reads.

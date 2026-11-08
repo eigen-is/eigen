@@ -71,6 +71,11 @@ describe('engine/formula-utils — iscelldata', () => {
         expect(iscelldata('Sheet1!A1:B3')).toBe(true);
     });
 
+    test('a quoted sheet name may hold a `!`', () => {
+        expect(iscelldata("'a!b'!A1")).toBe(true);
+        expect(iscelldata("'a!b'!Name")).toBe(false);
+    });
+
     test('rejects plain text', () => {
         expect(iscelldata('hello')).toBe(false);
     });

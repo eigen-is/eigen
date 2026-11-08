@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
     detectAbsolute,
+    forEachRef,
     functionCopy,
     functionStrChange,
     inlineNames,
@@ -213,6 +214,7 @@ describe('engine/formula-shift — functionCopy sheet names, intersections and c
         expect(functionCopy('=A1 (B1:C2)', 1, 1)).toBe('B2 (C2:D3)');
         expect(functionCopy('=SUM(A1:B2 (B1:C3))', 1, 1)).toBe('SUM(B2:C3 (C2:D4))');
         expect(functionCopy('=LOG10 (A1)', 1, 1)).toBe('LOH11 (B2)');
+        expect(functionCopy("='a!b'!A1", 1, 1)).toBe("'a!b'!B2");
         expect(functionCopy('=A1  B1', 1, 1)).toBe('B2  C2');
     });
 
@@ -469,24 +471,38 @@ describe('functionStrChange — formulas', () => {
     });
 });
 
-describe('functionStrChange — unary-minus predecessor scan', () => {
-    // A `-` immediately after `(` is a unary sign, so `-1:3` / `-3:A10` are glued literals,
-    // not recognizable refs, and must pass through unshifted — exactly what functionCopy does.
-    // Both walkers now locate the unary predecessor by reading i-1 (the `(`); the former
-    // decrement-then-read scan skipped it, read the function-name char, misclassified `-` as
-    // binary and shifted the trailing range (`CONCAT(-1:3)` → `CONCAT(-2:4)`).
-    test('treats `-` after `(` as a unary sign and leaves the glued token unshifted', () => {
+describe('engine/formula-shift — a minus before a whole row', () => {
+    // The engine reads `-1:3` as minus the rows 1 to 3, so the range moves as any other.
+    test('moves the range after the sign', () => {
         expect(functionStrChange('CONCAT(-1:3)', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe(
-            'CONCAT(-1:3)',
+            'CONCAT(-2:4)',
         );
-        expect(functionStrChange('CONCAT(-3:A10)', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe(
-            'CONCAT(-3:A10)',
-        );
+        expect(functionCopy('CONCAT(-1:3)', 1, 0)).toBe('CONCAT(-2:4)');
+        expect(functionCopy('=1+-1:3', 1, 0)).toBe('1+-2:4');
     });
 
-    test('functionCopy output is unchanged on the same input (already reads i-1)', () => {
-        expect(functionCopy('CONCAT(-1:3)', 1, 0)).toBe('CONCAT(-1:3)');
-        expect(functionCopy('CONCAT(-3:A10)', 1, 0)).toBe('CONCAT(-3:A10)');
+    test('keeps a negative number', () => {
+        expect(functionCopy('=-1+A1*-2', 1, 0)).toBe('-1+A2*-2');
+    });
+});
+
+describe('engine/formula-shift — forEachRef', () => {
+    const refs = (formula: string) => {
+        const found: string[] = [];
+        forEachRef(formula, (ref) => found.push(ref));
+        return found;
+    };
+
+    test('hands over each ref once, as the rewrites read it', () => {
+        expect(refs('=SUM(A1 : B2)+LOG10(C3)&"D4"&Name')).toEqual(['A1:B2', 'C3']);
+        expect(refs("='a!b'!A1:'a!b'!B2+Data!A:A")).toEqual(["'a!b'!A1:B2", 'Data!A:A']);
+        expect(refs('=A1:INDEX(B:B,1):C3')).toEqual(['A1', 'B:B', 'C3']);
+    });
+
+    // A leading colon is read off once. Off every colon, a formula of them overflowed the stack.
+    test('reads a 1 MB run of colons without overflowing the stack', () => {
+        expect(refs(`=${':'.repeat(1_000_000)}`)).toEqual([]);
+        expect(functionCopy(`=${' :'.repeat(10)}A1`, 1, 0)).toBe(`${':'.repeat(10)}A1`);
     });
 });
 
