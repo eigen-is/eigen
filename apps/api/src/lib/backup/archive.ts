@@ -15,7 +15,7 @@ import { formatFileSize } from '@workspace/lib/format';
 import type { BackupEntry, BackupManifest, BackupProgress, ServerArchiveManifest } from '@workspace/lib/types/backup';
 import { parseBackupManifest } from '@workspace/lib/validation';
 import { ApiError } from '../core/errors';
-import { ARCHIVE_MANIFEST_FILE, buildHomeFolderName, getBackupTempPath } from './paths';
+import { ARCHIVE_MANIFEST_FILE, buildHomeFolderName, getBackupTempPath, roomShortfall } from './paths';
 import {
     archiveEnd,
     BLOCK,
@@ -193,7 +193,7 @@ export async function copyArchiveMember(member: ArchiveMemberLocation, destPath:
 // What the disk spends on one entry beyond its bytes, such as a block a small file rounds up to, or a folder's own
 // block. A million empty files or folders declare no bytes and still take gigabytes, so every entry is charged it.
 export const ENTRY_ALLOWANCE_BYTES = 4096;
-// What a restore's room check and its unpack allow beyond what the manifest declares: a tenth more, and a fixed
+// What an unpack allows beyond what the manifest declares: a tenth more, and a fixed
 // reserve, so a small home is not unpacked onto the disk's last free bytes.
 const UNPACK_SLACK = 1.1;
 const UNPACK_RESERVE_BYTES = 64 * 1024 * 1024;
@@ -219,7 +219,7 @@ export function declaredUnpackBytes(manifest: BackupManifest): number {
     return manifest.counts.bytes + manifestBytes + entries * ENTRY_ALLOWANCE_BYTES;
 }
 
-// The most an unpack of the archive may write. A restore checks the disk for it first, and every unpack stops there.
+// The most an unpack of the archive may write. Every unpack checks the disk for it first, and stops there.
 export function unpackBound(manifest: BackupManifest): number {
     return withUnpackSlack(declaredUnpackBytes(manifest));
 }
@@ -232,17 +232,24 @@ export function withUnpackSlack(bytes: number): number {
 // An artifact's compressed bytes are a file of their own, or a member read in place from a whole-server archive.
 type ArtifactSource = string | ArchiveMemberLocation;
 
-// Unpacks an artifact into `targetDir`. Every folder it makes is 0700 and every file 0600, whatever the header
-// says. Only the API's user reads a restored home, so an archive packed elsewhere with 0644 files restores as private
-// as one of ours. A crafted archive cannot ask for a setuid bit, which root would then move into data/. It cannot ask
-// for a folder that its own extract cannot enter either. It refuses an archive whose entries add up to more than
-// `maxBytes`, each with its ENTRY_ALLOWANCE_BYTES, before it writes the entry that would pass it.
+// Unpacks an artifact into `targetDir`, once the disk it sits on has room for `maxBytes`. Every folder it makes is 0700
+// and every file 0600, whatever the header says. Only the API's user reads a restored home, so an archive packed
+// elsewhere with 0644 files restores as private as one of ours. A crafted archive cannot ask for a setuid bit, which
+// root would then move into data/. It cannot ask for a folder that its own extract cannot enter either. It refuses an
+// archive whose entries add up to more than `maxBytes`, each with its ENTRY_ALLOWANCE_BYTES, before it writes the entry
+// that would pass it. An entry whose folder has not come yet fails on its missing parent, so no folder goes uncharged.
 export async function extractArtifact(source: ArtifactSource, targetDir: string, maxBytes: number): Promise<void> {
-    const makeFolder = (folder: string) => fs.mkdirSync(folder, { recursive: true, mode: ARCHIVE_FOLDER_MODE });
     // The outermost folder this call made, or undefined when `targetDir` was there already.
-    const made = makeFolder(targetDir);
+    const made = fs.mkdirSync(targetDir, { recursive: true, mode: ARCHIVE_FOLDER_MODE });
     let bytes = 0;
     try {
+        const shortfall = roomShortfall(
+            `Unpacking ${sourceName(source)}`,
+            maxBytes,
+            targetDir,
+            'the disk it unpacks on',
+        );
+        if (shortfall) throw new ApiError(507, shortfall);
         for await (const entry of tarEntries(artifactBytes(source))) {
             const target = path.join(targetDir, entry.path);
             bytes += entry.size + ENTRY_ALLOWANCE_BYTES;
@@ -253,11 +260,9 @@ export async function extractArtifact(source: ArtifactSource, targetDir: string,
                 );
             }
             if (entry.typeflag === DIRECTORY_TYPEFLAG) {
-                makeFolder(target);
+                fs.mkdirSync(target, { mode: ARCHIVE_FOLDER_MODE });
                 continue;
             }
-            // A foreign archive may name a file before the directory entry it sits in.
-            makeFolder(path.dirname(target));
             await pipeline(Readable.from(entry.body), fs.createWriteStream(target, { mode: ARCHIVE_MODE }));
             // Keep the mtime, as `tar -x` does, because Dovecot dates a Maildir message by its file's mtime.
             await fsp.utimes(target, entry.mtime, entry.mtime);
@@ -291,10 +296,7 @@ export async function readArtifactManifest(source: ArtifactSource): Promise<Back
         manifest = parseBackupManifest(new TextDecoder().decode(await collect(entry.body)));
         break;
     }
-    if (!manifest) {
-        const name = typeof source === 'string' ? path.basename(source) : source.name;
-        throw new ApiError(400, `${name} is not an Eigen backup archive`);
-    }
+    if (!manifest) throw new ApiError(400, `${sourceName(source)} is not an Eigen backup archive`);
     return manifest;
 }
 
@@ -368,6 +370,10 @@ async function* artifactBytes(source: ArtifactSource): AsyncGenerator<Uint8Array
     } finally {
         file.destroy();
     }
+}
+
+function sourceName(source: ArtifactSource): string {
+    return typeof source === 'string' ? path.basename(source) : source.name;
 }
 
 function memberStream(member: ArchiveMemberLocation): fs.ReadStream {

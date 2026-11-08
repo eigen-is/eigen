@@ -274,8 +274,7 @@ export function nextFreeTime(at: Date, taken: (candidate: Date) => boolean): Dat
     return candidate;
 }
 
-// Why the disk of `dir` has no room for `needed` bytes, or null. Every backup's and stage's room check words
-// its refusal this way.
+// Why the disk of `dir` has no room for `needed` bytes, or null. Every room check words its refusal this way.
 export function roomShortfall(what: string, needed: number, dir: string, where: string): string | null {
     const { bavail, bsize } = fs.statfsSync(dir);
     const free = bavail * bsize;

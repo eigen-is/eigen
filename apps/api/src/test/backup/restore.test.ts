@@ -1831,27 +1831,26 @@ describe('Backup restore of one home judges, then takes the home', () => {
             checked = { needed, dir };
             return `${what} has no room by the test; ${where} is full`;
         });
-        const extractSpy = spyOn(archiveModule, 'extractArtifact');
-        let extracted = -1;
+        const jobId = `restore-room-${Date.now()}`;
+        const homeDir = join(getDataRoot(), 'home', user.id);
         try {
-            await expect(restoreHome(artifact, user.id, `restore-room-${Date.now()}`)).rejects.toMatchObject({
-                status: 507,
-            });
-            extracted = extractSpy.mock.calls.length;
+            await expect(restoreHome(artifact, user.id, jobId)).rejects.toMatchObject({ status: 507 });
         } finally {
             roomSpy.mockRestore();
-            extractSpy.mockRestore();
         }
 
         // The bound the unpack stops at, which counts the manifest and an allowance for every entry beside the bytes.
-        expect(checked).toEqual({ needed: archiveModule.unpackBound(manifest), dir: getDataRoot() });
+        expect(checked).toEqual({
+            needed: archiveModule.unpackBound(manifest),
+            dir: pathsModule.buildRestoreUnpackDir(homeDir, jobId),
+        });
         const manifestBytes = Buffer.byteLength(archiveModule.serializeManifest(manifest));
         const entries = manifest.entries.length + manifest.counts.dirs;
         expect(manifest.counts.dirs).toBeGreaterThan(0);
         expect(checked?.needed).toBeGreaterThan(
             manifest.counts.bytes + manifestBytes + archiveModule.ENTRY_ALLOWANCE_BYTES * entries,
         );
-        expect(extracted).toBe(0);
+        expect(existsSync(pathsModule.buildRestoreStagingDir(homeDir, jobId))).toBe(false);
         await expectNotTaken(user.id, before);
         rmSync(join(getBackupsDir(), artifact), { force: true });
     });
