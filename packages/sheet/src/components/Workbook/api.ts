@@ -31,6 +31,7 @@ import {
     collectMatches,
     createContextResolver,
     deleteFloatingObject,
+    dropStructuralEntries,
     getFlowdata,
     getSheetIndex,
     initSheetData,
@@ -64,17 +65,17 @@ export function generateAPIs(
         // True when the batch applied, false when an op failed and the whole batch was rolled back.
         applyOp: (ops: Op[]): boolean => {
             let accepted = false;
-            // A peer's row or column op moves the cells under this tab's undo and redo entries. They shift by the ops
-            // the batch applied, against the sheets it applied them to.
             setContext(
                 (ctx_) => {
                     const applied = applyOpBatch(current(ctx_), ops);
                     if (!applied) return;
                     accepted = true;
                     Object.assign(ctx_, applied.ctx);
+                    history.undoList = dropStructuralEntries(history.undoList);
+                    history.redoList = dropStructuralEntries(history.redoList);
                     for (const { op, sheets } of applied.moved) {
-                        history.undoList = shiftEntries(history.undoList, op, sheets, 'undo');
-                        history.redoList = shiftEntries(history.redoList, op, sheets, 'redo');
+                        history.undoList = shiftEntries(history.undoList, op, sheets);
+                        history.redoList = shiftEntries(history.redoList, op, sheets);
                     }
                 },
                 { noHistory: true },
@@ -83,13 +84,10 @@ export function generateAPIs(
         },
 
         // Puts the workbook back to `base`, sheets an earlier getAllSheets returned, and applies `batches` on it in
-        // order, as a host does when a peer's batch lands in the log before batches this tab already applied. The
-        // tab's view, its open cell editor, selection, current sheet and filter, moved with the batches the tab
-        // applied before, so only the `fresh` batches, those new to this tab, move it again. A fresh batch that moves
-        // rows ahead of an applied one that moves rows leaves the tab unable to tell where its editor and selection
-        // went. The editor then closes without writing, the selection goes and the grid gives up the focus, so a
-        // keystroke writes nowhere. The undo and redo entries were recorded against the order that is gone, so both
-        // stacks empty. True when every batch applied.
+        // order. The tab's view moved with the batches it applied before, so only the `fresh` ones move it again. A
+        // fresh batch that moves rows ahead of an applied one that moves rows leaves the tab unable to tell where its
+        // editor and selection went, so both go. The undo and redo entries fit an order that is gone, so both stacks
+        // empty. True when every batch applied.
         replayOps: (base: Sheet[], batches: Op[][], fresh: ReadonlySet<Op[]>): boolean => {
             let accepted = true;
             const { currentSheetId } = getContext();
