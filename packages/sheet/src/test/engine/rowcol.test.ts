@@ -690,6 +690,35 @@ const OTHER: Span = [0, 1];
 const onAxis = (type: 'row' | 'column', span: Span) =>
     type === 'row' ? { row: span, column: OTHER } : { row: OTHER, column: span };
 
+describe('applySheetsInsertRowCol/Delete — links', () => {
+    const link = { linkType: 'webpage', linkAddress: 'https://eigen.is' };
+    const grid = () => [
+        [cell('a'), cell('b')],
+        [cell('c'), cell('d')],
+    ];
+    const linked = () => [makeSheet('s1', 'Sheet1', grid(), { hyperlink: { '0_0': link, '1_1': link } })];
+
+    test('an insert moves the links past it', () => {
+        const rows = { type: 'row', index: 1, count: 2, direction: 'lefttop', id: 's1' } as const;
+        expect(applySheetsInsertRowCol(linked(), rows)[0].hyperlink).toEqual({ '0_0': link, '3_1': link });
+        const columns = { ...rows, type: 'column', index: 0, direction: 'rightbottom' } as const;
+        expect(applySheetsInsertRowCol(linked(), columns)[0].hyperlink).toEqual({ '0_0': link, '1_3': link });
+    });
+
+    test('a delete drops the links it takes and moves the ones past it', () => {
+        const rows = { type: 'row', start: 0, end: 0, id: 's1' } as const;
+        expect(applySheetsDeleteRowCol(linked(), rows)[0].hyperlink).toEqual({ '0_1': link });
+        const columns = { ...rows, type: 'column' } as const;
+        expect(applySheetsDeleteRowCol(linked(), columns)[0].hyperlink).toEqual({ '1_0': link });
+    });
+
+    test('a sheet without links stays without a map', () => {
+        const sheets = [makeSheet('s1', 'Sheet1', grid())];
+        const op = { type: 'row', index: 0, count: 1, direction: 'lefttop', id: 's1' } as const;
+        expect(applySheetsInsertRowCol(sheets, op)[0].hyperlink).toBeUndefined();
+    });
+});
+
 describe('conditional-format ranges follow the membership rule', () => {
     const cfSheet = (type: 'row' | 'column') =>
         makeSheet('s1', 'Sheet1', grid(), {
