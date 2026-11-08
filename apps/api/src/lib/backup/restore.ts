@@ -1,8 +1,8 @@
 // Restores one home from a backup, or from a safety copy of an earlier restore. The backup is unpacked beside the
 // home, on the data disk, and judged and put in place there while the home still serves. Then two renames swap it in:
 // the current home folder goes aside as a new safety copy and the unpacked one takes its place. A failed restore puts
-// both folders back. Once the home serves again, the owner's rows outside the folder go in, such as their auth rows,
-// shares and avatar. The backup routes call it.
+// both folders and the data epoch back. Once the home serves again, the owner's rows outside the folder go in, such as
+// their auth rows, shares and avatar. The backup routes call it.
 
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -12,7 +12,7 @@ import { parseOwnerId } from '@workspace/lib/types/owner';
 import { buildBackupStamp, incompleteReason, parseBackupShares } from '@workspace/lib/validation';
 import { getAvatarsDir, getDataRoot } from '../config/paths';
 import { ApiError } from '../core';
-import { rotateHomeDataEpoch } from '../home/data-epoch';
+import { getHomeDataEpoch, rotateHomeDataEpoch, setHomeDataEpoch } from '../home/data-epoch';
 import { clearHomeRestoring, evictHome, markHomeRestoring } from '../home/get-home';
 import { addRegistryEntry } from '../share/registry';
 import { getTeam } from '../team/team';
@@ -62,6 +62,10 @@ export async function restoreHome(
 ): Promise<void> {
     const { artifactPath } = requireArtifact(artifactName);
     const homeDir = await resolveHomeDir(ownerId);
+    // A deleted user's archive carries the auth rows that bring them back. Nothing brings a team back, and its home
+    // would answer 404 for good.
+    const owner = parseOwnerId(ownerId);
+    if (owner.type === 'team' && !(await getTeam(owner.id))) throw new ApiError(404, `${ownerId} no longer exists`);
 
     const identity = await replaceHomeFolder(
         ownerId,
@@ -242,6 +246,7 @@ async function replaceHomeFolder<Judged>(
             // restore did not finish with, and only this note tells the next boot which.
             writeRestoringMarker(restoreDir, marker);
             if (movedAside) fs.renameSync(homeDir, movedAside);
+            const previousEpoch = getHomeDataEpoch(ownerId);
 
             try {
                 await install();
@@ -266,6 +271,10 @@ async function replaceHomeFolder<Judged>(
                         { cause: error },
                     );
                 }
+                // Only now: while the new folder may be in place, a tab on the old epoch could sync over it.
+                await setHomeDataEpoch(ownerId, previousEpoch).catch((epochError: unknown) => {
+                    console.error(`[backup] could not save ${ownerId}'s data epoch back:`, epochError);
+                });
                 throw error;
             }
         } finally {
