@@ -1,16 +1,13 @@
-// The Edit event dialog: every field of an existing event and its guests. Save, or Enter in the title, saves the
-// change. A change to a repeating event first asks which occurrences it applies to. A move to another owner's calendar
-// that loses something, such as a series' changed occurrences, warns first. An invitation from someone else only lets
-// you pick the calendar that holds it. It opens over an event, such as from the event detail dialog, which mounts it
-// anew for each opening. A field shows what the user changed, else the event as it is now, so a refetch or a refused
-// Save moves only what nobody touched.
+// The Edit event dialog: every field of an existing event and its guests. A change to a repeating event first asks
+// which occurrences it applies to, and a move to another owner's calendar that loses something warns first. An
+// invitation from someone else only lets you pick the calendar that holds it. It opens over an event, such as from the
+// event detail dialog, which mounts it anew for each opening. A field shows what the user changed, else the event as it
+// is now, so a refetch or a refused Save moves only what nobody touched.
 
-import { isStaleWrite } from '@workspace/lib/api-error';
 import { useAuth } from '@workspace/lib/auth';
 import {
     heldAttendees,
     isSeriesOccurrence,
-    occurrenceDateToString,
     parseOccurrenceDate,
     seriesEditFromOccurrence,
     toLocalDateString,
@@ -28,6 +25,7 @@ import {
     viewerTimeZone,
 } from '@workspace/lib/calendar';
 import type { Attendee, CalendarEventOccurrence } from '@workspace/lib/types/calendar';
+import { useHeldEtag } from '@workspace/lib/use-held-etag';
 import { ConfirmDialog, FormDialog, FormDialogForm } from '@workspace/ui';
 import { AttendeeList } from '@workspace/ui/components/calendar';
 import { UsersRound } from 'lucide-react';
@@ -73,24 +71,16 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
     const [showRecurringDialog, setShowRecurringDialog] = useState(false);
     const [showMoveConfirm, setShowMoveConfirm] = useState(false);
 
-    // The etag typed edits answer to: the event's when typing began, so a save can't overwrite a change it never showed.
-    // With nothing typed a save answers to the event as it is now. A refusal lets it move on once, to the event the toast
-    // says to check.
-    const [heldEtag, setHeldEtag] = useState<string | null>(null);
-    const [refused, setRefused] = useState(false);
-    if (refused && event.etag !== heldEtag) {
-        setHeldEtag(event.etag);
-        setRefused(false);
-    }
+    // A refused save goes back to the form the toast says to check.
+    const { heldEtag, holdEtag, refuse, saveHeld } = useHeldEtag(event.etag, Object.keys(typed).length > 0, () => {
+        setShowRecurringDialog(false);
+        setShowMoveConfirm(false);
+    });
 
     const times = typed.times ?? fieldTimes(event);
-    const edit = (change: TypedFields) => {
-        setHeldEtag((held) => held ?? event.etag);
-        setTyped((current) => ({ ...current, ...change }));
-    };
+    const edit = (change: TypedFields) => setTyped((current) => ({ ...current, ...change }));
     // One user action can set several of these in a row, so each builds on the last.
     const editTimes = (change: Partial<typeof times>) => {
-        setHeldEtag((held) => held ?? event.etag);
         setTyped((current) => ({ ...current, times: { ...(current.times ?? times), ...change } }));
     };
 
@@ -140,7 +130,6 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
     if (isRecurring) moveLossReasons.push("modified occurrences of the series won't move");
 
     const write = async (action: RecurringAction) => {
-        const etag = heldEtag ?? event.etag;
         const { start, end } = buildEventTimes(allDay, startDate, endDate, startTime, endTime);
 
         const data = { ...event.data, attendees: attendees.length > 0 ? attendees : undefined };
@@ -178,10 +167,10 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
                 const updated = await updateEvent.mutateAsync({
                     id: targetId,
                     calendarId: event.calendarId,
-                    etag,
+                    etag: heldEtag,
                     ...seriesUpdates,
                 });
-                setHeldEtag(updated.etag);
+                holdEtag(updated.etag);
                 await moveEvent.mutateAsync({
                     calendarId: event.calendarId,
                     id: targetId,
@@ -190,21 +179,29 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
                 });
             } else {
                 // Two Homes have no atomic move. The event is recreated, then deleted, and the organizer link and the
-                // overrides stay behind. A form already behind the event would only leave its copy beside the original.
-                if (etag !== event.etag) refuseStaleEvent();
+                // overrides stay behind.
                 await createEvent.mutateAsync({ calendarId: selectedCal.id, ...updates });
-                await deleteEventOnSource.mutateAsync({ id: targetId, calendarId: event.calendarId, etag });
+                await deleteEventOnSource.mutateAsync({
+                    id: targetId,
+                    calendarId: event.calendarId,
+                    etag: heldEtag,
+                });
             }
         } else if (action === 'all') {
-            await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, etag, ...seriesUpdates });
+            await updateEvent.mutateAsync({
+                id: targetId,
+                calendarId: event.calendarId,
+                etag: heldEtag,
+                ...seriesUpdates,
+            });
         } else if (action === 'this') {
             await createEvent.mutateAsync({
                 calendarId: event.calendarId,
                 ...updates,
                 rrule: null,
                 parentEventId: targetId,
-                recurrenceDate: occurrenceDateToString(event.occurrenceDate),
-                etag,
+                recurrenceDate: event.occurrenceDate,
+                etag: heldEtag,
             });
         } else if (action === 'this-and-following') {
             if (event.rrule) {
@@ -212,33 +209,28 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
                 const updated = await updateEvent.mutateAsync({
                     id: targetId,
                     calendarId: event.calendarId,
-                    etag,
+                    etag: heldEtag,
                     rrule: truncated,
                 });
-                setHeldEtag(updated.etag);
+                holdEtag(updated.etag);
             }
             await createEvent.mutateAsync({ calendarId: event.calendarId, ...updates });
         }
     };
 
-    // A refused save goes back to the form the toast says to check.
-    const save = async (action: RecurringAction) => {
-        try {
-            await write(action);
-        } catch (error) {
-            if (isStaleWrite(error)) {
-                setRefused(heldEtag !== null);
-                setShowRecurringDialog(false);
-                setShowMoveConfirm(false);
-            }
-            throw error;
+    // A cross-home copy made by a form already behind the event would only stand beside the original.
+    const save = async (action: RecurringAction): Promise<false | undefined> => {
+        if (crossHomeMove && heldEtag !== event.etag) {
+            refuseStaleEvent();
+            refuse();
+            return false;
         }
+        await saveHeld(() => write(action));
     };
 
     // Edit event is hidden while the recurring choice or the move warning is up, so their save closes it too.
     const saveAndClose = async (action: RecurringAction) => {
-        await save(action);
-        onOpenChange(false);
+        if ((await save(action)) !== false) onOpenChange(false);
     };
 
     return (
@@ -262,7 +254,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
                             setShowRecurringDialog(true);
                             return false;
                         }
-                        await save('all');
+                        return save('all');
                     }}
                 >
                     {isLinkedEvent && (

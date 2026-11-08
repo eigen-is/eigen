@@ -1,8 +1,7 @@
 // How a failed request reaches the user: AppError reads a readable message and the status from what Eden or a fetch
 // hands back, getErrorMessage turns it into the toast's text, and onMutationError is the onError every mutation hook
 // passes to show it. onEtagWriteError is that onError for a write that sends an etag. wasToasted tells a caller that
-// also sees the rejection that a toast already showed it, and isRefusal tells a dialog whether another try could go
-// through.
+// also sees the rejection that a toast already showed it, and isRefusal tells a dialog whether another try could help.
 
 import { toast } from 'sonner';
 import { isRecord } from './guards';
@@ -44,8 +43,7 @@ function messageFromBody(value: unknown, status: number): string {
 export class AppError extends Error {
     public status: number;
 
-    // error.status is `unknown`, not `number`: the untyped-error GET routes (/p/config, /settings/server,
-    // /settings/s3config) declare no response schema, so Eden can't enumerate their codes. Coerced below.
+    // error.status is `unknown`: a route that declares no response schema leaves Eden no codes to enumerate.
     public constructor(response: { error: { status: unknown; value: unknown } | null; status: number }) {
         const errorStatus = response.error?.status;
         const status = typeof errorStatus === 'number' ? errorStatus : response.status;
@@ -106,4 +104,9 @@ export function onEtagWriteError(error: unknown, staleMessage: string, reload: (
 
 export function wasToasted(error: unknown): boolean {
     return error !== null && typeof error === 'object' && toastedErrors.has(error);
+}
+
+// For a form with no dialog to take the rejection: a toast has told the user, and anything else must still surface.
+export function rethrowUntoasted(error: unknown): void {
+    if (!wasToasted(error)) throw error;
 }

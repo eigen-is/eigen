@@ -10,6 +10,7 @@ import {
     COLLAB_STORAGE_UNAVAILABLE_CLOSE,
 } from '../../../../constants/collab';
 import type { CollabDoc, UseCollabDocOptions } from '../../../../core/collab/hooks/use-collab-doc';
+import { DATA_EPOCHS_KEY } from '../../../../core/home/reload-replaced-home';
 import { installHappyDom } from '../../../happy-dom';
 
 // The hook news up a WebsocketProvider itself, so the test swaps the module for a fake that never
@@ -352,6 +353,21 @@ describe('useCollabDoc connection state', () => {
         expect(h.state.unsyncedEdits).toBe(false);
         // Not a storage outage and not a plain drop: nothing retries, nothing syncs this tab back.
         expect(h.state.storageUnavailable).toBe(false);
+    });
+
+    test("a replaced home's reload forgets the stored epochs, and a lost read's keeps them", () => {
+        Object.defineProperty(window.location, 'reload', { value: jest.fn(), configurable: true });
+        const closeWith = (code: number) => {
+            window.sessionStorage.setItem(DATA_EPOCHS_KEY, '{}');
+            active?.unmount();
+            active = mount(OPTIONS);
+            const h = active;
+            act(() => h.provider.close(code));
+            return window.sessionStorage.getItem(DATA_EPOCHS_KEY);
+        };
+
+        expect(closeWith(COLLAB_HOME_REPLACED_CLOSE)).toBeNull();
+        expect(closeWith(COLLAB_ACCESS_LOST_CLOSE)).toBe('{}');
     });
 
     test('a replaced home reloads only once the guard has disarmed, so the reload meets no prompt', () => {

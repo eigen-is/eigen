@@ -4,6 +4,7 @@
 // and says so. Helpers such as useCalendarOptions list the owner's own calendars and the shared ones they may write
 // to, for a picker.
 
+import type { QueryClient } from '@tanstack/react-query';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { calendarApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
@@ -16,13 +17,13 @@ import type {
     CalendarOption,
     CreateEventInput,
     EventData,
-    FreeBusyBlock,
     SharedCalendar,
     UpdateCalendarInput,
     UpdateEventInput,
     UpdateSharedCalendarInput,
 } from '@workspace/lib/types/calendar';
 import { useCallback, useMemo } from 'react';
+import { toast } from 'sonner';
 import { AppError, onEtagWriteError, onMutationError } from '../../api-error';
 import { usePublicUser, usePublicUsers } from '../../public';
 import { formatFreeBusyTitle, isInvitationFromOthers, occurrenceDateToString } from '../calendar-utils';
@@ -38,7 +39,16 @@ import {
 // nothing typed, such as a delete's, so the toast promises nothing about typing.
 const STALE_WRITE_TOAST = 'This event changed elsewhere. Check it and try again.';
 
-// --- Calendar CRUD ---
+function onEventWriteError(queryClient: QueryClient, ownerId: string) {
+    return (error: unknown) =>
+        onEtagWriteError(error, STALE_WRITE_TOAST, () => invalidateEventList(queryClient, ownerId));
+}
+
+// Eden's reviver makes a UTC-midnight Date of a bare YYYY-MM-DD, for a year of 19xx or 20xx only, and a range read
+// needs its timestamps revived. So what the type promises holds only from here on, whichever of the two arrived.
+function withOccurrenceDay(event: CalendarEventOccurrence): CalendarEventOccurrence {
+    return { ...event, occurrenceDate: occurrenceDateToString(new Date(event.occurrenceDate)) };
+}
 
 export function useCalendars(ownerId: string, enabled = true) {
     return useQuery({
@@ -95,9 +105,7 @@ export function useDeleteCalendar(ownerId: string) {
     });
 }
 
-// --- Event CRUD ---
-
-export function useEvents(ownerId: string, from: number, to: number, enabled = true) {
+export function useEvents(ownerId: string, from: number, to: number) {
     return useQuery({
         queryKey: calendarKeys.eventRange(ownerId, from, to),
         queryFn: async (): Promise<CalendarEventOccurrence[]> => {
@@ -105,10 +113,10 @@ export function useEvents(ownerId: string, from: number, to: number, enabled = t
                 ['event-range']({ from: String(from) })({ to: String(to) })
                 .get();
             if (response.error) throw new AppError(response);
-            return response.data;
+            return response.data.map(withOccurrenceDay);
         },
         staleTime: STALE_TIME.TWO_MINUTES,
-        enabled: !!ownerId && enabled && from > 0 && to > 0,
+        enabled: !!ownerId && from > 0 && to > 0,
     });
 }
 
@@ -136,7 +144,7 @@ export function useCreateEvent(ownerId: string) {
             return response.data;
         },
         onSuccess: () => invalidateEventList(queryClient, ownerId),
-        onError: (error) => onEtagWriteError(error, STALE_WRITE_TOAST, () => invalidateEventList(queryClient, ownerId)),
+        onError: onEventWriteError(queryClient, ownerId),
     });
 }
 
@@ -150,7 +158,7 @@ export function useUpdateEvent(ownerId: string) {
             return response.data;
         },
         onSuccess: () => invalidateEventList(queryClient, ownerId),
-        onError: (error) => onEtagWriteError(error, STALE_WRITE_TOAST, () => invalidateEventList(queryClient, ownerId)),
+        onError: onEventWriteError(queryClient, ownerId),
     });
 }
 
@@ -167,7 +175,7 @@ export function useDeleteEvent(ownerId: string) {
             return response.data;
         },
         onSuccess: () => invalidateEventList(queryClient, ownerId),
-        onError: (error) => onEtagWriteError(error, STALE_WRITE_TOAST, () => invalidateEventList(queryClient, ownerId)),
+        onError: onEventWriteError(queryClient, ownerId),
     });
 }
 
@@ -194,18 +202,17 @@ export function useMoveEvent(ownerId: string) {
             return response.data;
         },
         onSuccess: () => invalidateEventList(queryClient, ownerId),
-        onError: (error) => onEtagWriteError(error, STALE_WRITE_TOAST, () => invalidateEventList(queryClient, ownerId)),
+        onError: onEventWriteError(queryClient, ownerId),
     });
 }
 
 // A form that can see it is behind before it writes anything gets the same answer as the server's 412.
-export function useRefuseStaleEvent(ownerId: string): () => never {
+export function useRefuseStaleEvent(ownerId: string): () => void {
     const queryClient = useQueryClient();
 
     return () => {
-        const error = new AppError({ error: { status: 412, value: null }, status: 412 });
-        onEtagWriteError(error, STALE_WRITE_TOAST, () => invalidateEventList(queryClient, ownerId));
-        throw error;
+        invalidateEventList(queryClient, ownerId);
+        toast.error(STALE_WRITE_TOAST);
     };
 }
 
@@ -236,7 +243,7 @@ export function useCalendarAccess(ownerId: string, calendarId: string, enabled =
     });
 }
 
-export function useAllSharedCalendarEvents(sharedCalendars: SharedCalendar[], from: number, to: number) {
+export function useAllSharedCalendarEvents(sharedCalendars: readonly SharedCalendar[], from: number, to: number) {
     const visibleShared = sharedCalendars.filter((sc) => sc.visible);
 
     const results = useQueries({
@@ -248,36 +255,33 @@ export function useAllSharedCalendarEvents(sharedCalendars: SharedCalendar[], fr
                     ['event-range']({ from: String(from) })({ to: String(to) })
                     .get();
                 if (response.error) throw new AppError(response);
-                const data = response.data;
-                if (sc.permission === 'free-busy') {
-                    return (data as FreeBusyBlock[]).map(
-                        (block): CalendarEventOccurrence => ({
-                            id: '',
-                            calendarId: sc.calendarId,
-                            uid: '',
-                            uri: '',
-                            title: block.allDay ? 'Busy' : formatFreeBusyTitle(block.endTime),
-                            description: null,
-                            location: null,
-                            startTime: block.startTime,
-                            endTime: block.endTime,
-                            allDay: block.allDay,
-                            rrule: null,
-                            timezone: null,
-                            parentEventId: null,
-                            recurrenceDate: null,
-                            status: block.status,
-                            sequence: 0,
-                            etag: '',
-                            data: null,
-                            createByUserId: null,
-                            createdAt: new Date(0),
-                            updatedAt: new Date(0),
-                            occurrenceDate: occurrenceDateToString(block.startTime),
-                        }),
-                    );
-                }
-                return data as CalendarEventOccurrence[];
+                return response.data.map((item): CalendarEventOccurrence => {
+                    if ('etag' in item) return withOccurrenceDay(item);
+                    return {
+                        id: '',
+                        calendarId: sc.calendarId,
+                        uid: '',
+                        uri: '',
+                        title: item.allDay ? 'Busy' : formatFreeBusyTitle(item.endTime),
+                        description: null,
+                        location: null,
+                        startTime: item.startTime,
+                        endTime: item.endTime,
+                        allDay: item.allDay,
+                        rrule: null,
+                        timezone: null,
+                        parentEventId: null,
+                        recurrenceDate: null,
+                        status: item.status,
+                        sequence: 0,
+                        etag: '',
+                        data: null,
+                        createByUserId: null,
+                        createdAt: new Date(0),
+                        updatedAt: new Date(0),
+                        occurrenceDate: occurrenceDateToString(item.startTime),
+                    };
+                });
             },
             staleTime: STALE_TIME.TWO_MINUTES,
             enabled: from > 0 && to > 0,
@@ -289,8 +293,6 @@ export function useAllSharedCalendarEvents(sharedCalendars: SharedCalendar[], fr
 
     return { data: allEvents, isLoading };
 }
-
-// --- Shared calendars ---
 
 export function useSharedCalendars(ownerId: string, enabled = true) {
     return useQuery({
@@ -306,7 +308,7 @@ export function useSharedCalendars(ownerId: string, enabled = true) {
 }
 
 // A team the viewer is not in still resolves to a name; an unresolved one keeps the calendar's name, never `team_<id>`.
-export function useSharedCalendarLabel(sharedCalendars: SharedCalendar[]): (sc: SharedCalendar) => string {
+export function useSharedCalendarLabel(sharedCalendars: readonly SharedCalendar[]): (sc: SharedCalendar) => string {
     const teamOwnerIds = useMemo(
         () => [
             ...new Set(
@@ -332,8 +334,8 @@ export function useSharedCalendarLabel(sharedCalendars: SharedCalendar[]): (sc: 
 
 export function useCalendarOptions(
     ownerId: string,
-    calendars: CalendarItem[],
-    sharedCalendars: SharedCalendar[],
+    calendars: readonly CalendarItem[],
+    sharedCalendars: readonly SharedCalendar[],
 ): CalendarOption[] {
     const label = useSharedCalendarLabel(sharedCalendars);
 
@@ -380,8 +382,6 @@ export function useDeleteSharedCalendar(ownerId: string) {
         onError: onMutationError,
     });
 }
-
-// --- RSVP ---
 
 export function useRsvp(ownerId: string) {
     const queryClient = useQueryClient();

@@ -7,7 +7,6 @@ import {
     heldAttendees,
     isSeriesOccurrence,
     isTransferableCalendarHome,
-    occurrenceDateToString,
     parseOccurrenceDate,
     truncateRRule,
     useCreateEvent,
@@ -103,51 +102,49 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                     eventId,
                     status: 'declined',
                     scope: action,
-                    recurrenceDate: occurrenceDateToString(event.occurrenceDate),
+                    recurrenceDate: event.occurrenceDate,
                     remove: true,
                 });
             }
-        } else {
-            if (action === 'this') {
-                if (isException) {
-                    await updateEvent.mutateAsync({
-                        id: event.id,
-                        calendarId: event.calendarId,
-                        etag: event.etag,
-                        status: 'cancelled',
-                    });
-                } else if (isRecurring) {
-                    await createEvent.mutateAsync({
-                        calendarId: event.calendarId,
-                        title: event.title,
-                        startTime: event.startTime,
-                        endTime: event.endTime,
-                        allDay: Boolean(event.allDay),
-                        parentEventId: event.id,
-                        recurrenceDate: occurrenceDateToString(event.occurrenceDate),
-                        status: 'cancelled',
-                        etag: event.etag,
-                    });
-                } else {
-                    await deleteEvent.mutateAsync({ id: event.id, calendarId: event.calendarId, etag: event.etag });
-                }
-            } else if (action === 'this-and-following') {
-                if (event.rrule) {
-                    const truncated = truncateRRule(event.rrule, parseOccurrenceDate(event.occurrenceDate));
-                    await updateEvent.mutateAsync({
-                        id: event.parentEventId || event.id,
-                        calendarId: event.calendarId,
-                        etag: event.etag,
-                        rrule: truncated,
-                    });
-                }
+        } else if (action === 'this') {
+            if (isException) {
+                await updateEvent.mutateAsync({
+                    id: event.id,
+                    calendarId: event.calendarId,
+                    etag: event.etag,
+                    status: 'cancelled',
+                });
+            } else if (isRecurring) {
+                await createEvent.mutateAsync({
+                    calendarId: event.calendarId,
+                    title: event.title,
+                    startTime: event.startTime,
+                    endTime: event.endTime,
+                    allDay: event.allDay,
+                    parentEventId: event.id,
+                    recurrenceDate: event.occurrenceDate,
+                    status: 'cancelled',
+                    etag: event.etag,
+                });
             } else {
-                await deleteEvent.mutateAsync({
+                await deleteEvent.mutateAsync({ id: event.id, calendarId: event.calendarId, etag: event.etag });
+            }
+        } else if (action === 'this-and-following') {
+            if (event.rrule) {
+                const truncated = truncateRRule(event.rrule, parseOccurrenceDate(event.occurrenceDate));
+                await updateEvent.mutateAsync({
                     id: event.parentEventId || event.id,
                     calendarId: event.calendarId,
                     etag: event.etag,
+                    rrule: truncated,
                 });
             }
+        } else {
+            await deleteEvent.mutateAsync({
+                id: event.parentEventId || event.id,
+                calendarId: event.calendarId,
+                etag: event.etag,
+            });
         }
         // The panel closes only after the delete is done. If it fails, the confirm dialog stays open for a retry.
         onOpenChange(false);
@@ -175,7 +172,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                 eventId,
                 status: pendingRsvpStatus,
                 scope: 'this',
-                recurrenceDate: occurrenceDateToString(event.occurrenceDate),
+                recurrenceDate: event.occurrenceDate,
             });
         } else {
             rsvp.mutate({ calendarId: event.calendarId, eventId, status: pendingRsvpStatus });

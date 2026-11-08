@@ -3,6 +3,7 @@
 // where it goes. If that send fails, the text and files come back, and a slash command that runs in the browser
 // leaves the files it had no use for.
 
+import { rethrowUntoasted } from '@workspace/lib/api-error';
 import { COMMANDS_HELP, commandNeedsSpace, SLASH_COMMANDS } from '@workspace/lib/chat';
 import type { ChatAttachment, RoomMember } from '@workspace/lib/types/chat';
 import { Paperclip, Send } from 'lucide-react';
@@ -32,27 +33,27 @@ export type ChatMessageInputHandle = {
 type ChatMessageInputProps = {
     // Resolves to whether the send took the files.
     onSend: (rawContent: string, files?: File[]) => Promise<boolean>;
-    disabled?: boolean;
-    readOnly?: boolean;
-    placeholder?: string;
-    roomMembers?: RoomMember[];
-    currentUserEmail?: string;
-    messageCount?: number;
+    disabled: boolean;
+    readOnly: boolean;
+    placeholder: string;
+    roomMembers: RoomMember[];
+    currentUserEmail: string;
+    messageCount: number;
     onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>, content: string) => boolean | undefined;
     onAttachClick: () => void;
-    driveAttachments: ChatAttachment[];
+    driveAttachments: readonly ChatAttachment[];
     onRemoveDriveAttachment: (attachment: ChatAttachment) => void;
 };
 
 export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageInputProps>(function ChatMessageInput(
     {
         onSend,
-        disabled = false,
-        readOnly = false,
-        placeholder = 'Type a message...',
-        roomMembers = [],
-        currentUserEmail = '',
-        messageCount = 0,
+        disabled,
+        readOnly,
+        placeholder,
+        roomMembers,
+        currentUserEmail,
+        messageCount,
         onKeyDown: onKeyDownProp,
         onAttachClick,
         driveAttachments,
@@ -97,10 +98,10 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
             .then((filesTaken) => {
                 if (!filesTaken) restoreFiles();
             })
-            .catch(() => {
-                // The handler already toasted.
+            .catch((error: unknown) => {
                 setContent((next) => next || content);
                 restoreFiles();
+                rethrowUntoasted(error);
             });
         setContent('');
         setFiles([]);

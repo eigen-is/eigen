@@ -1,8 +1,7 @@
-// Everything a chat room view needs, in one hook: the messages in order, the members, the attachments
-// waiting to be sent, and the send handler, which also runs slash commands such as /help or /invite. Such a command
-// leaves the attachments waiting.
-// A chat file and a comment thread on a document both render through it. Its state belongs to one room, so the
-// component that calls it is keyed by the chat's id.
+// Everything a chat room view needs, in one hook: the messages in order, the members, the attachments waiting to be
+// sent, and the send handler, which also runs slash commands such as /help or /invite. Such a command leaves the
+// attachments waiting. A chat file and a comment thread on a document both render through it. Its state belongs to one
+// room, so the component that calls it is keyed by the chat's id.
 
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { CONTAINER_MEDIA_FOLDER } from '../../../constants/container';
@@ -229,8 +228,6 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string, co
         [messages, localMessages],
     );
 
-    const mediaFolderId = mediaFolder?.id ?? null;
-
     const handleDeleteMessage = useCallback(
         (messageId: string) => deleteMessage.mutateAsync(messageId),
         [deleteMessage.mutateAsync],
@@ -251,7 +248,7 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string, co
         // Until the media folder is known, a staged file has nowhere to go.
         disabled: postMessage.isPending || uploadFile.isPending || !mediaFolder,
         currentUserEmail: user?.email ?? '',
-        mediaFolderId,
+        mediaFolderId: mediaFolder?.id ?? null,
         handleSendMessage,
         handleEditMessage,
         handleDeleteMessage,

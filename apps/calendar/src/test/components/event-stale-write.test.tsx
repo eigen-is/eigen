@@ -91,10 +91,18 @@ const changeElsewhere = (title: string) => changeFieldsElsewhere({ title });
 const invited = (...attendees: [email: string, status: Attendee['status']][]) => ({
     attendees: attendees.map(([email, status]) => ({ email, status, role: 'required' as const })),
 });
-// The list a client reads: a fresh copy each time, as a refetch's JSON is. A truncated series no longer has this
-// occurrence.
+// The list a client reads: a fresh copy each time, as a refetch's JSON is, with the bare occurrence date a Date because
+// Eden's reviver makes one of it. A truncated series no longer has this occurrence.
 const eventList = () =>
-    server.event.rrule?.includes('UNTIL') ? [] : [{ ...server.event, startTime: new Date(server.event.startTime) }];
+    server.event.rrule?.includes('UNTIL')
+        ? []
+        : [
+              {
+                  ...server.event,
+                  startTime: new Date(server.event.startTime),
+                  occurrenceDate: new Date(server.event.occurrenceDate),
+              },
+          ];
 
 const writeEvent = (write: string, etag: string | undefined, apply: () => { data: unknown }) => {
     server.writes.push({ write, etag });
@@ -520,6 +528,66 @@ test('a date, its times and the repeat stay together: one typed holds them all a
     expect(server.event.endTime).toEqual(new Date(2026, 9, 20, 14, 30));
     expect(server.event.rrule).toBe('FREQ=WEEKLY');
     expect(server.event.title).toBe('Standup, renamed');
+});
+
+test('a series occurrence follows a refetch: a refused Save goes through on the second try', async () => {
+    const saveToAll = async () => {
+        await click('Save');
+        await pickRecurringAction('all');
+        await click('OK');
+    };
+    server.event = { ...dentist, rrule: 'FREQ=WEEKLY' };
+    await openEdit();
+    await typeDescription('Bring the x-rays');
+    changeElsewhere('Standup, renamed');
+
+    await saveToAll();
+    expect(toasts).toEqual([STALE_TOAST]);
+    expect(titleField().value).toBe('Standup, renamed');
+
+    await saveToAll();
+    expect(server.writes).toEqual([
+        { write: 'update', etag: 'v1' },
+        { write: 'update', etag: 'v2' },
+    ]);
+    expect(server.event.description).toBe('Bring the x-rays');
+    expect(dialogTitles()).toEqual([]);
+});
+
+test('a series occurrence follows a refetch: a refused delete goes through on the second try', async () => {
+    server.event = { ...dentist, rrule: 'FREQ=WEEKLY' };
+    await openPanel();
+    await click('Delete event');
+    changeElsewhere('Standup, renamed');
+
+    await pickRecurringAction('all');
+    await click('OK');
+    expect(toasts).toEqual([STALE_TOAST]);
+    expect(dialogTitles()).toEqual(['Delete recurring event']);
+
+    await pickRecurringAction('all');
+    await click('OK');
+    expect(server.writes).toEqual([
+        { write: 'delete', etag: 'v1' },
+        { write: 'delete', etag: 'v2' },
+    ]);
+    expect(dialogTitles()).toEqual([]);
+});
+
+test("a series occurrence's cross-home move over a change the form has seen writes nothing", async () => {
+    server.shared = [teamCalendar];
+    server.event = { ...dentist, rrule: 'FREQ=WEEKLY' };
+    await openEdit();
+    await typeTitle('Standup at noon');
+    await pickCalendar('Work', 'Team');
+    changeFieldsElsewhere({ location: 'New practice' });
+    await refetch();
+
+    await click('Save');
+    await click('Move');
+    expect(server.writes).toEqual([]);
+    expect(toasts).toEqual([STALE_TOAST]);
+    expect(dialogTitles()).toEqual(['Edit event']);
 });
 
 test('a refusal behind the recurring choice brings back the form, on the current event', async () => {

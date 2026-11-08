@@ -1,8 +1,9 @@
 // Both calendar dialogs lock an invitation's details through useIsInvitationFromOthers, so what it answers
-// while the owner's address is still on its way is pinned here.
-import { afterAll, describe, expect, mock, test } from 'bun:test';
+// while the owner's address is still on its way is pinned here. So is the occurrence date the read hooks hand out, from
+// a real response through the real reviving treaty.
+import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
-import type { EventData } from '@workspace/lib/types/calendar';
+import type { CalendarEventOccurrence, EventData, SharedCalendar } from '@workspace/lib/types/calendar';
 import { publicUserKeys } from '../../../../core/public/hooks/keys';
 import { installHappyDom } from '../../../happy-dom';
 import { renderHook } from '../../../render-hook';
@@ -26,7 +27,10 @@ afterAll(() => {
     mock.module('../../../../core/public/user-batcher', () => realUserBatcherModule);
 });
 
-const { useIsInvitationFromOthers } = await import('../../../../core/calendar/hooks/use-calendar');
+const { act } = await import('react');
+const { useAllSharedCalendarEvents, useEvents, useIsInvitationFromOthers } = await import(
+    '../../../../core/calendar/hooks/use-calendar'
+);
 
 const organizedBy = (email: string): { data: EventData } => ({ data: { organizer: { userId: '', email } } });
 
@@ -51,5 +55,64 @@ describe('useIsInvitationFromOthers', () => {
         expect(latest(organizedBy('viewer@eigen.test'))).toBe(false);
         expect(latest(organizedBy('someone@else.test'))).toBe(true);
         await unmount();
+    });
+});
+
+// A zone behind UTC, where a day read off a revived UTC midnight with local getters comes out one early.
+describe('the occurrence date a read hook hands out', () => {
+    const originalTz = process.env.TZ;
+    beforeEach(() => {
+        process.env.TZ = 'America/Los_Angeles';
+    });
+    afterEach(() => {
+        process.env.TZ = originalTz ?? 'UTC';
+        mock.restore();
+    });
+
+    const shared: SharedCalendar = {
+        id: 'share1',
+        ownerUserId: OWNER,
+        calendarId: 'team',
+        calendarName: 'Team',
+        calendarColor: '#000000',
+        permission: 'read',
+        color: null,
+        visible: true,
+        createdAt: new Date(0),
+        updatedAt: new Date(0),
+    };
+
+    async function firstOccurrence(
+        day: string,
+        use: () => { data?: readonly CalendarEventOccurrence[] },
+    ): Promise<CalendarEventOccurrence | undefined> {
+        spyOn(globalThis, 'fetch').mockResolvedValue(
+            Response.json([{ id: 's1', etag: 'v1', startTime: '2026-10-09T14:00:00.000Z', occurrenceDate: day }]),
+        );
+        let first: CalendarEventOccurrence | undefined;
+        const { unmount } = await renderHook(() => {
+            first = use().data?.[0];
+        }, new QueryClient());
+        await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
+        await unmount();
+        return first;
+    }
+
+    // The reviver takes a year of 19xx or 20xx and leaves any other as it came, so the hooks answer both alike.
+    for (const day of ['2026-10-09', '2100-01-01', '0500-03-07']) {
+        test(`the owner's own range keeps ${day} as written`, async () => {
+            const event = await firstOccurrence(day, () => useEvents(OWNER, 1, 2));
+            expect(event?.occurrenceDate).toBe(day);
+        });
+
+        test(`a shared calendar's range keeps ${day} as written`, async () => {
+            const event = await firstOccurrence(day, () => useAllSharedCalendarEvents([shared], 1, 2));
+            expect(event?.occurrenceDate).toBe(day);
+        });
+    }
+
+    test('the rest of the occurrence stays revived', async () => {
+        const event = await firstOccurrence('2026-10-09', () => useEvents(OWNER, 1, 2));
+        expect(event?.startTime).toEqual(new Date('2026-10-09T14:00:00.000Z'));
     });
 });

@@ -102,10 +102,10 @@ const settle = () =>
         await new Promise((resolve) => setTimeout(resolve, 20));
     });
 
-async function open() {
+async function open(url = '/edit/book/all?contactId=c1') {
     const router = createRouter({
         routeTree,
-        history: createMemoryHistory({ initialEntries: ['/edit/book/all?contactId=c1'] }),
+        history: createMemoryHistory({ initialEntries: [url] }),
         context: { auth },
     });
     await router.load();
@@ -148,6 +148,14 @@ const save = async () => {
 };
 
 const STALE_TOAST = 'This contact changed elsewhere. What you typed is still here. Check it and save again.';
+
+test('the page edits a contact that exists: without one it leaves for the list', async () => {
+    for (const url of ['/edit/book/all', '/edit/book/all?contactId=gone']) {
+        const page = await open(url);
+        expect(page.pathname()).toBe('/book/all');
+        await unmount();
+    }
+});
 
 test('a refused Save keeps what was typed and follows the rest, and the next Save sends the new etag', async () => {
     const page = await open();

@@ -177,3 +177,19 @@ test('a clean form follows the card, and its Save answers to what it shows', asy
     expect(server.contact.avatar).toBe('/avatars/ada.png');
     expect(page.pathname()).toBe('/');
 });
+
+test('a name typed back to what it held follows the card, so its Save overwrites nothing', async () => {
+    await open();
+    await type(field('First name'), 'Augusta');
+    changeElsewhere({ firstName: 'Augusta Ada' });
+    await sync();
+    expect(field('First name').value).toBe('Augusta');
+
+    await type(field('First name'), 'Ada');
+    await settle();
+    expect(field('First name').value).toBe('Augusta Ada');
+
+    await save();
+    expect(server.writes).toEqual(['v2']);
+    expect(server.contact.firstName).toBe('Augusta Ada');
+});
