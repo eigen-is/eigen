@@ -422,8 +422,6 @@ function multisetDiff<T>(source: T[], imported: T[]): { missing: T[]; extra: T[]
     return { missing, extra };
 }
 
-// ── Source: what Word shows ─────────────────────────────────────────────────────────────────────────────────────
-
 type Styles = {
     chain: (id: string | undefined) => XmlElement[];
     paragraph?: string;
@@ -1305,8 +1303,6 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
     return { ...tally, elements };
 }
 
-// ── Imported: what the eigendoc JSON holds ──────────────────────────────────────────────────────────────────────
-
 const MARK_FEATURES = new Map<string | undefined, Feature>([
     ['bold', 'bold'],
     ['italic', 'italic'],
@@ -1486,8 +1482,6 @@ export function auditImported(json: JSONContent, normalFont = DOCUMENT_FONT): Ta
     tally.counts.set('itemNumbers', tally.numbers.length);
     return tally;
 }
-
-// ── Comparing the two sides ─────────────────────────────────────────────────────────────────────────────────────
 
 // The per-file JSON keeps only this many of the words that differ, so the out folder of a private corpus can stay
 // out of the repo.
@@ -1704,8 +1698,6 @@ export function compareRuns(outA: string, outB: string): string {
     ].join('\n');
 }
 
-// ── Running an importer ─────────────────────────────────────────────────────────────────────────────────────────
-
 const DEFAULT_IMPORTER = path.join(import.meta.dir, '../lib/import/doc/from-docx.ts');
 const DEFAULT_TIMEOUT_MS = 60_000;
 const LOAD_TIMEOUT_MS = 60_000;
@@ -1918,8 +1910,6 @@ export async function runAudit(options: {
     return meta;
 }
 
-// ── Round trip: the import, our export and its import again ─────────────────────────────────────────────────────
-
 type Imported = ReturnType<typeof docxToPmJson>;
 
 // A picture as the doc shows it: its type and its size in pixels, none for one sharp can't read.
@@ -1927,7 +1917,7 @@ type Picture = { contentType: string; width?: number; height?: number };
 
 // What the two imports hold, the first with its textblocks split as the writer splits them, each picture by its media
 // name, and the media the export was handed, by the first import's name.
-export type DocxRoundtripContext = {
+type DocxRoundtripContext = {
     a: Imported;
     b: Imported;
     pictures: { a: ReadonlyMap<string, Picture>; b: ReadonlyMap<string, Picture> };
@@ -2030,7 +2020,7 @@ function diffContent(a: JSONContent[], b: JSONContent[], at: string, pictures: P
 }
 
 // The doc's body and bands, its page and its Normal key by key.
-export function diffDocs(a: Imported, b: Imported, pictures: Pictures): RoundtripDifference[] {
+function diffDocs(a: Imported, b: Imported, pictures: Pictures): RoundtripDifference[] {
     const differences: RoundtripDifference[] = [];
     const keyed = (prefix: string, x: object, y: object) => {
         const [left, right] = [entries(x), entries(y)];
@@ -2078,7 +2068,7 @@ function joined(nodes: JSONContent[]): JSONContent[] {
 // the text is anchored at the start of the textblock's first piece in the body and the lists and quotes in it, and is a
 // block figure in a table cell or a band; a figure the export has no picture for writes its caption alone, as a
 // paragraph, or nothing. `captions` holds those paragraphs' places.
-export function asWritten(
+function asWritten(
     imported: Imported,
     prepared: ReadonlyMap<string, Picture>,
 ): { imported: Imported; changes: RoundtripDifference[]; captions: Set<string> } {
@@ -2218,7 +2208,7 @@ function spaceBelowAsWritten(node: JSONContent | undefined, style: Imported['sty
 
 // The differences the writer explains, each with why it is no loss or a loss the writer accepts. A difference none
 // matches is unlisted, and fails the gate.
-export const DOCX_LISTED: Listed<RoundtripDifference, DocxRoundtripContext>[] = [
+const DOCX_LISTED: Listed<RoundtripDifference, DocxRoundtripContext>[] = [
     {
         kind: 'figures and display equations split their textblock',
         why: 'Word holds a picture in a paragraph and a display equation in a paragraph of their own, so the writer splits the textblock around each block figure and display equation, the pieces sharing its margins',
@@ -2318,8 +2308,7 @@ const DOCX_GATE: RoundtripGate = {
     listed: DOCX_LISTED,
 };
 
-// The round trip's child: the file imported, written by our writer with its pictures prepared as an export prepares
-// them, pasted pictures drawn as the export draws them, imported again, and the two imports compared.
+// The round-trip gate's child process: import, write, import again, compare.
 async function docxRoundtripChild(
     file: string,
     options: { writer: string; reports: string; dump?: string },
@@ -2362,7 +2351,6 @@ export function runRoundtrip(options: RoundtripOptions): Promise<RoundtripMeta> 
 
 declare var self: Worker;
 
-// The worker side: reads a source, or loads the importer once and then imports one file per message.
 if (!Bun.isMainThread) {
     let importer: Importer | undefined;
     self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
@@ -2386,12 +2374,11 @@ if (!Bun.isMainThread) {
                 return;
             }
             if (!importer) throw new Error('no importer loaded');
-            // An importer from before the doc's Normal returns no style: its text draws in the document font.
             const { json, media, style } = await importer(Buffer.from(request.bytes));
             postMessage({
                 kind: 'imported',
                 json,
-                font: style?.font ?? DOCUMENT_FONT,
+                font: style.font,
                 images: media.length,
                 ms: performance.now() - started,
             } satisfies WorkerReply);
