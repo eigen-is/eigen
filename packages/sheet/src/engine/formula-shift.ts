@@ -115,8 +115,7 @@ export function inlineNames(
 }
 
 // The text of a formula a cut or a drag moved, by Excel's rule: a ref wholly inside the moved block follows its cells,
-// `$` or not, and any other ref still means the cell it meant, so on another sheet it names the one it came from.
-// `from` and `to` are the sheets' names. The text comes back without its leading `=`.
+// `$` or not, and any other ref stays. `from` and `to` are the sheets' names. The text comes back without its leading `=`.
 export function moveFormulaRefs(
     txt: string,
     block: { row: readonly number[]; column: readonly number[] },
@@ -139,9 +138,7 @@ export function moveFormulaRefs(
         const [startTxt, endTxt] = ref.slice(sheetEnd).split(':');
         const start = extractLabel(startTxt);
         const end = endTxt == null ? start : extractLabel(endTxt);
-        if (!start || !end || !inBlock(start) || !inBlock(end)) {
-            return sheetEnd === 0 && from !== to ? `${sheetRefName(from)}!${ref}` : ref;
-        }
+        if (!start || !end || !inBlock(start) || !inBlock(end)) return ref;
         const prefix = sheetEnd > 0 ? `${sheetRefName(to)}!` : '';
         return endTxt == null ? prefix + moved(start) : `${prefix}${moved(start)}:${moved(end)}`;
     });
