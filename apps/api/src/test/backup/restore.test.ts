@@ -807,7 +807,7 @@ describe('Backup restoreHome', () => {
         const before = await rootNames(target.sessionToken, target.id, mountId, rootId);
         const epoch = getDataEpoch(target.id);
         const onDisk = homeEpochsOnDisk()[target.id];
-        const spy = spyOn(recoveryModule, 'writeRestoreCompleteMarker').mockImplementation(() => {
+        const spy = spyOn(recoveryModule, 'dropRestoringMarker').mockImplementation(() => {
             throw new Error('failed by the test');
         });
         try {
@@ -828,7 +828,7 @@ describe('Backup restoreHome', () => {
         await authedRequest(user.sessionToken, `/drive/${user.id}/mounts`);
         const firstArtifact = await backup(user.id, new Date());
         const epoch = getDataEpoch(user.id);
-        const spy = spyOn(recoveryModule, 'writeRestoreCompleteMarker').mockImplementation(() => {
+        const spy = spyOn(recoveryModule, 'dropRestoringMarker').mockImplementation(() => {
             throw new Error('failed by the test');
         });
         try {
@@ -870,7 +870,7 @@ describe('Backup restoreHome', () => {
         const onDisk = homeEpochsOnDisk()[target.id];
         let saves = 0;
         const saveSpy = failHomeEpochSaves(() => ++saves === 2);
-        const noteSpy = spyOn(recoveryModule, 'writeRestoreCompleteMarker').mockImplementation(() => {
+        const noteSpy = spyOn(recoveryModule, 'dropRestoringMarker').mockImplementation(() => {
             throw new Error('failed by the test');
         });
         try {
@@ -894,7 +894,7 @@ describe('Backup restoreHome', () => {
         const before = await rootNames(target.sessionToken, target.id, mountId, rootId);
         const homeDir = join(TEST_DATA_DIR, 'home', target.id);
         const epoch = getDataEpoch(target.id);
-        const noteSpy = spyOn(recoveryModule, 'writeRestoreCompleteMarker').mockImplementation(() => {
+        const noteSpy = spyOn(recoveryModule, 'dropRestoringMarker').mockImplementation(() => {
             throw new Error('failed by the test');
         });
         const rename = nodeFs.renameSync;
