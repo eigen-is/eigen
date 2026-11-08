@@ -13,7 +13,7 @@ import {
 import type { DrivePath } from '@workspace/lib/types/drive';
 import * as decoding from 'lib0/decoding';
 import { SERVER_RUNTIME_FILES } from '../../lib/config/paths';
-import { getDataEpoch, getHomeDataEpoch, rotateHomeDataEpoch, setHomeDataEpoch } from '../../lib/home/data-epoch';
+import { getDataEpoch, rotateHomeDataEpoch } from '../../lib/home/data-epoch';
 import { clearHomeRestoring, evictHome, markHomeRestoring } from '../../lib/home/get-home';
 import { waitFor } from '../fault-storage-helpers';
 import { driveGet, drivePost, getTestContext, TEST_DATA_DIR } from '../setup';
@@ -122,14 +122,12 @@ describe('Collab data epoch', () => {
         expect(fresh.synced).toBe(true);
     });
 
-    test('a restore that rolls back after rotating the epoch keeps the tab: it retries, then syncs', async () => {
+    test('a stale tab retries while the restore holds the home, and reloads only once it is done', async () => {
         const before = getDataEpoch(ownerId);
-        const previous = getHomeDataEpoch(ownerId);
         markHomeRestoring(ownerId);
         await evictHome(ownerId);
         await rotateHomeDataEpoch(ownerId);
         const during = await open(`?epoch=${before}`);
-        await setHomeDataEpoch(ownerId, previous);
         clearHomeRestoring(ownerId);
         expect(during.synced).toBe(false);
         expect(during.close).toEqual({
@@ -137,7 +135,8 @@ describe('Collab data epoch', () => {
             reason: COLLAB_STORAGE_UNAVAILABLE_REASON,
         });
         const after = await open(`?epoch=${before}`);
-        expect(after.synced).toBe(true);
+        expect(after.synced).toBe(false);
+        expect(after.close).toEqual({ code: COLLAB_HOME_REPLACED_CLOSE, reason: COLLAB_HOME_REPLACED_REASON });
     });
 
     test('a signed-in user who may not read the document is closed as access lost, with no epoch', async () => {
