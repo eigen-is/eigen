@@ -29,23 +29,14 @@ export function getDataEpoch(ownerId: string): string {
             serverFs.writeAtomic(SERVER_RUNTIME_FILES.epoch, serverEpoch).catch(console.error);
         }
     }
-    return serverEpoch + (getBuildCommit() ?? '') + (getHomeDataEpoch(ownerId) ?? '');
+    return serverEpoch + (getBuildCommit() ?? '') + (loadHomeEpochs().get(ownerId) ?? '');
 }
 
-export function getHomeDataEpoch(ownerId: string): string | undefined {
-    return loadHomeEpochs().get(ownerId);
-}
-
+// Memory changes even when the save fails: a file left behind costs one more reload at the next restart, and the next
+// save writes all of it again.
 export async function rotateHomeDataEpoch(ownerId: string): Promise<void> {
-    await setHomeDataEpoch(ownerId, crypto.randomUUID());
-}
-
-// Undefined for a home with no stamp of its own. Memory changes even when the save fails: a file left behind costs one
-// more reload at the next restart, and the next save writes all of it again.
-export async function setHomeDataEpoch(ownerId: string, epoch: string | undefined): Promise<void> {
     const epochs = loadHomeEpochs();
-    if (epoch === undefined) epochs.delete(ownerId);
-    else epochs.set(ownerId, epoch);
+    epochs.set(ownerId, crypto.randomUUID());
     // A failed earlier save is that restore's error; this save still runs.
     const save = homeEpochsSaved
         .catch(() => {})

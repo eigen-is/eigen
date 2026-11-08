@@ -9,10 +9,12 @@ export function useFollowedFields<Values extends FieldValues, Name extends Field
     names: readonly Name[],
     record: { [Field in Name]?: FieldPathValue<Values, Field> } | undefined,
 ): boolean {
+    // react-hook-form mutates dirtyFields in place, so the compiler's cache keyed on that object would never change.
+    'use no memo';
+
     const dirtyNames = Object.keys(form.formState.dirtyFields).join();
 
-    // A whole list field stays or follows as one: its rows have no identity to merge them by. A field goes clean when
-    // typed back to its old value, and follows then. Resetting an unchanged list would remount its rows.
+    // Resetting an unchanged list would remount its rows.
     useEffect(() => {
         if (!record) return;
         for (const name of names) {

@@ -2,7 +2,7 @@
 // each document once, however many people connect, and closes it again. When sharing or a membership
 // changes, it walks the open documents, which close the connections of people who may no longer read.
 
-import { isCollabType, isContainerType } from '@workspace/lib/types/drive';
+import { isCollabType } from '@workspace/lib/types/drive';
 import type { AsyncSingleton } from '../../utils/singleton';
 import { createAsyncSingleton } from '../../utils/singleton';
 import { CollabDocument } from '../collab/collab-document';
@@ -94,35 +94,17 @@ export class CollabRegistry {
         }
     }
 
-    // Read comes from the whole chain of folders, so a check per connection also catches a share taken away from a
-    // folder above the document, which comparing the removed ACL entries would miss.
-    public async enforceReadAccessBelow(mount: Mount, pathId: string): Promise<void> {
-        const path = await mount.getPath(pathId);
-        if (!path) return;
-
-        if (isCollabType(path.type)) {
-            await this.visitIfOpen(this.key(mount.id, pathId), (document) => document.enforceReadAccess());
-        } else if (isContainerType(path.type)) {
-            const children = await mount.listFolderAll(pathId);
-            for (const child of children) {
-                await this.enforceReadAccessBelow(mount, child.id);
-            }
-        }
-    }
-
-    public async forEachOpenDocument(visit: (document: CollabDocument) => Promise<void>): Promise<void> {
-        for (const key of this.documents.keys()) await this.visitIfOpen(key, visit);
-    }
-
     // A document that is still loading has no connections yet, and its load can take as long as a download, so
     // nothing waits for it. One document that fails must not stop the walk over the others.
-    private async visitIfOpen(key: string, visit: (document: CollabDocument) => Promise<void>): Promise<void> {
-        const document = this.documents.get(key)?.peek();
-        if (!document) return;
-        try {
-            await visit(document);
-        } catch (error) {
-            console.error(`Failed to check the connections of ${key}:`, error);
+    public async forEachOpenDocument(visit: (document: CollabDocument) => Promise<void>): Promise<void> {
+        for (const [key, getter] of this.documents) {
+            const document = getter.peek();
+            if (!document) continue;
+            try {
+                await visit(document);
+            } catch (error) {
+                console.error(`Failed to check the connections of ${key}:`, error);
+            }
         }
     }
 

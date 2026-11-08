@@ -7,7 +7,7 @@ import { apikey } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../auth/auth';
 import { setCredentialPassword } from '../auth/credential-password';
 import { ApiError } from '../core/errors';
-import { closeUserSocketsOnLoadedHomes } from '../home/get-home';
+import { closeUserSocketsOnLoadedHomes } from '../home/home-relay';
 import { isGuest } from './guest';
 import type { User } from './user';
 import { getUserByEmail } from './user';

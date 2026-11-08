@@ -1,7 +1,8 @@
 // Every time one owner's Home reaches into another, it goes through this file. sendToHome pushes a
 // message into another home, and each pull reads one answer from one, such as the paths shared
-// with a user. A few calls write server-wide data instead, such as a user's avatar. Today every
-// call runs in this process. When homes live in several processes, only this file has to change.
+// with a user. A few calls write server-wide data instead, such as a user's avatar, and a walk checks
+// the open documents of every loaded home. Today every call runs in this process. When homes live in
+// several processes, only this file has to change.
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -38,7 +39,7 @@ import type { EventPatch } from '../ical/ical-component';
 import { readMailTotalSize } from '../mail/maildir-store';
 import type { User } from '../user';
 import { getMemberships, getUserById, getUsersByEmails, isGuest, updateUser } from '../user';
-import { getHome, getTeamHome, loadedHome, openHome } from './get-home';
+import { forEachOpenDocument, getHome, getTeamHome, loadedHome, openHome } from './get-home';
 import { homeSize, userHomeSize } from './home';
 import { TeamHome } from './team-home';
 
@@ -236,6 +237,18 @@ export async function pullSharedPaths(ownerUserId: string, user: User): Promise<
 export async function pullDrivePath(ownerUserId: string, mountId: string, pathId: string): Promise<DrivePath | null> {
     const home = await getHome(ownerUserId);
     return home.drive.getPath(mountId, pathId);
+}
+
+// --- Open documents ---
+
+// Closes the collab sockets of whoever lost read, after a change to a membership that any home's documents may rest on.
+export async function enforceReadAccessOnLoadedHomes(): Promise<void> {
+    await forEachOpenDocument((document) => document.enforceReadAccess());
+}
+
+// Closes the collab sockets of a user locked out whatever they may read, such as by a password reset.
+export async function closeUserSocketsOnLoadedHomes(userId: string): Promise<void> {
+    await forEachOpenDocument(async (document) => document.closeUserConnections(userId));
 }
 
 // --- Calendar ---

@@ -304,7 +304,7 @@ async function busyHomeAsConflict(run: () => unknown): Promise<void> {
 // A socket checks read only when it opens, and the membership row that gave the read is gone by now. The import is
 // lazy for the same cycle as the team hooks. Nothing below it throws, so a removal never fails over it.
 async function enforceReadAccessAfterMembershipChange(): Promise<void> {
-    const { enforceReadAccessOnLoadedHomes } = await import('../home/get-home');
+    const { enforceReadAccessOnLoadedHomes } = await import('../home/home-relay');
     await enforceReadAccessOnLoadedHomes();
 }
 
