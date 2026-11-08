@@ -24,21 +24,6 @@ let homeEpochsSaved: Promise<void> = Promise.resolve();
 
 const serverFs = new LocalFilesystem(getServerDataPath());
 
-// A file that can't be read counts as "no restores yet": the tabs of a restored home then reload
-// one more time, which is better than every event stream and collab socket failing. The next
-// restore writes the file whole again.
-function readHomeEpochs(file: string): Record<string, string> {
-    if (!existsSync(file)) return {};
-    const epochs = parseStringRecord(readFileSync(file, 'utf8'));
-    if (!epochs) console.error(`[data-epoch] ${file} does not parse, so every home starts without an epoch of its own`);
-    return epochs ?? {};
-}
-
-function loadHomeEpochs(): Map<string, string> {
-    homeEpochs ??= new Map(Object.entries(readHomeEpochs(getServerDataPath(SERVER_RUNTIME_FILES.homeEpochs))));
-    return homeEpochs;
-}
-
 export function getDataEpoch(ownerId: string): string {
     if (!serverEpoch) {
         const file = getServerDataPath(SERVER_RUNTIME_FILES.epoch);
@@ -62,4 +47,19 @@ export async function rotateHomeDataEpoch(ownerId: string): Promise<void> {
         .then(() => serverFs.writeAtomic(SERVER_RUNTIME_FILES.homeEpochs, JSON.stringify(Object.fromEntries(epochs))));
     homeEpochsSaved = save;
     await save;
+}
+
+function loadHomeEpochs(): Map<string, string> {
+    homeEpochs ??= new Map(Object.entries(readHomeEpochs(getServerDataPath(SERVER_RUNTIME_FILES.homeEpochs))));
+    return homeEpochs;
+}
+
+// A file that can't be read counts as "no restores yet": the tabs of a restored home then reload
+// one more time, which is better than every event stream and collab socket failing. The next
+// restore writes the file whole again.
+function readHomeEpochs(file: string): Record<string, string> {
+    if (!existsSync(file)) return {};
+    const epochs = parseStringRecord(readFileSync(file, 'utf8'));
+    if (!epochs) console.error(`[data-epoch] ${file} does not parse, so every home starts without an epoch of its own`);
+    return epochs ?? {};
 }
