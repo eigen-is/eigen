@@ -29,7 +29,7 @@ const SHUTDOWN_DELIVERY_BOUND_MS = 10_000;
 
 await recoverBackupsAfterRestart();
 
-await assertMailDomainUnchanged();
+assertMailDomainUnchanged();
 
 const server = app.listen({
     // 8000 in every deployment, because Caddy, Dovecot and the container healthcheck all name it. The

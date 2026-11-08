@@ -1,6 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { rmSync } from 'node:fs';
-import type { SeriesEdit } from '@workspace/lib/calendar/calendar-utils';
 import { seriesEditFromOccurrence } from '@workspace/lib/calendar/calendar-utils';
 import type {
     CalendarEvent,
@@ -2599,6 +2598,8 @@ describe('A series-wide edit from a later occurrence', () => {
     }
 
     // The master the dialog reads before it saves, and the fields it opens on the clicked occurrence with.
+    type SeriesEdit = Parameters<typeof seriesEditFromOccurrence>[0];
+
     async function readMaster(id: string): Promise<Pick<SeriesEdit, 'startTime' | 'endTime'>> {
         const master = await assertJson<CalendarEvent>(
             await authedRequest(ctx.alice.user.sessionToken, `${eventsUrl()}/${id}`),

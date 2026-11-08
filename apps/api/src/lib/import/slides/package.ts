@@ -18,7 +18,7 @@ import { pictureMediaPart } from '../image-types';
 import { IMPORT_MESSAGES, SAVE_AS_PPTX } from '../messages';
 import { cachedBy, charge, childOf, childrenOf, firstChildOf, prefixedAttrOf } from './lookup';
 
-export const MAX_SLIDES = 500;
+const MAX_SLIDES = 500;
 
 // What PowerPoint saves a macro-enabled deck, a template and a slideshow as: each a presentation too, refused by name.
 const NOT_A_PRESENTATION = new Set([
@@ -59,7 +59,7 @@ export type PptxPackage = {
     readMedia: OoxmlPackage['readMedia'];
 };
 
-export type Diagram = { data: XmlElement | undefined; drawing: Part | undefined };
+type Diagram = { data: XmlElement | undefined; drawing: Part | undefined };
 
 export type Frame = { width: number; height: number };
 

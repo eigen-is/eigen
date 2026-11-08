@@ -316,6 +316,13 @@ describe('CardDAV', () => {
         expect(etag).toBe(`"${computeResourceEtag(new TextEncoder().encode(body))}"`);
     });
 
+    test('a stale If-None-Match: * with the bytes already stored is 412, not an unchanged success', async () => {
+        const uid = crypto.randomUUID();
+        const uri = `${uid}.vcf`;
+        expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
+        expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(412);
+    });
+
     test('GET under an unknown book segment is 404 even for an existing card', async () => {
         const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;

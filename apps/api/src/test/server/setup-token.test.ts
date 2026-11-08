@@ -1,4 +1,3 @@
-import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import {
     closeSync,
@@ -386,49 +385,6 @@ describe('the /setup routes before setup', () => {
             );
             await expect(started).rejects.toThrow(`Set MAIL_DOMAIN=${MAIL_DOMAIN} in .env.production`);
             expect(proc.exitCode).toBe(1);
-        },
-        LISTEN_TIMEOUT_MS + 5_000,
-    );
-
-    test(
-        'an install set up before the mail domain was recorded records none from a boot its owner is not on',
-        async () => {
-            const { mailDomain: _, ...config } = storedConfig();
-            writeFileSync(join(dataRoot, 'server/config.json'), JSON.stringify(config));
-            await startApi({ MAIL_DOMAIN: 'elsewhere.example', PRODUCTION: '1' });
-            expect(storedConfig().mailDomain).toBeFalsy();
-            expect(readFileSync(logPath, 'utf8')).toContain(
-                `The owner's address ${ADMIN_EMAIL} is not on the mail domain elsewhere.example.`,
-            );
-        },
-        LISTEN_TIMEOUT_MS + 5_000,
-    );
-
-    test(
-        'an install set up before the mail domain was recorded records the one it runs on',
-        async () => {
-            proc.kill('SIGTERM');
-            await proc.exited;
-            const { mailDomain: _, ...config } = storedConfig();
-            writeFileSync(join(dataRoot, 'server/config.json'), JSON.stringify(config));
-            await startApi();
-            expect(storedConfig().mailDomain).toBe(MAIL_DOMAIN);
-        },
-        LISTEN_TIMEOUT_MS + 5_000,
-    );
-
-    test(
-        'an owner address off the mail domain, which older setups allowed, only warns, even in production',
-        async () => {
-            proc.kill('SIGTERM');
-            await proc.exited;
-            const db = new Database(join(dataRoot, 'server/users3.db'));
-            db.run('UPDATE user SET email = ? WHERE email = ?', ['ada@legacy.example', ADMIN_EMAIL]);
-            db.close();
-            await startApi({ PRODUCTION: '1' });
-            expect(readFileSync(logPath, 'utf8')).toContain(
-                `The owner's address ada@legacy.example is not on the mail domain ${MAIL_DOMAIN}.`,
-            );
         },
         LISTEN_TIMEOUT_MS + 5_000,
     );

@@ -40,7 +40,7 @@ export type PptxOptions = { deck?: SlidePage; maxMediaBytes: number };
 // transforms applied, paragraph and run nodes and characters read, shapes walked, and a chart part's elements and
 // points for each color map it is painted with. Whatever a file repeats, or makes each cache key anew, the read does
 // no more than this. It is over ten times the corpus's most, 260,005 in a 369-slide deck.
-export const MAX_PPTX_WORK = 3_000_000;
+const MAX_PPTX_WORK = 3_000_000;
 
 // PowerPoint's 4:3, 10 by 7.5 in, where the file states none.
 const DEFAULT_SLIDE_EMU = { cx: 9_144_000, cy: 6_858_000 };

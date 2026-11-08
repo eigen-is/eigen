@@ -41,7 +41,7 @@ function screenCacheName(drivePath: DrivePath, ext: 'webp' | 'svg'): string {
 }
 
 // A format names the shape of its renderer's output and is part of the cache name. Bump it whenever that shape or a
-// typed payload's type changes: a cached file is read back unchecked, so the old shape would be served.
+// typed payload's type changes: a parser refuses only a body it can't read, so the old shape would be served.
 export const TEXT_FORMAT = 'f8';
 export const VCARD_FORMAT = 'vcard-f1';
 // Bumped on every DOMPurify upgrade too: a cached message is HTML the previous sanitizer filtered.
@@ -149,7 +149,7 @@ type Served<T> = { value: T; stale: boolean };
 // under load. A plain file's generator ignores it.
 type TextPreviewGenerator = (priority: TransformPriority) => Promise<PreviewResult | null>;
 
-// The only check this module makes on a file it reads back, so a body the parser rejects counts as a corrupt file.
+// A body the parser rejects counts as a corrupt file.
 type CachedTextParser<T> = (cached: PreviewResult) => T;
 
 // The typed previews' payload is the JSON their body holds.
@@ -206,19 +206,13 @@ async function getOrCacheText<T>(
             JSON.stringify,
         );
 
-    // A cached previous version is served while the current one regenerates in the background. Checked synchronously,
-    // so a regeneration that landed since the read above shows either its in-flight entry or its finished file.
+    // A cached previous version is served while the current one regenerates in the background.
     const stale = await readNewestStaleText(previewsDir, pathId, cacheName, format, parse);
     if (stale !== null) {
-        if (!failed && !fs.existsSync(cacheFile)) generateText('background').catch(() => {});
+        if (!failed) generateText('background').catch(() => {});
         return { value: stale, stale: true };
     }
     if (failed) return null;
-
-    // No previous version either. A regeneration that landed during the reads above pruned
-    // the previous version and wrote the current one, so read it before generating again.
-    const landed = await readCachedText(cacheFile, parse);
-    if (landed !== null) return { value: landed, stale: false };
 
     const generated = await generateText('foreground');
     return generated === null ? null : { value: parse(generated), stale: false };

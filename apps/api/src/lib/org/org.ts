@@ -7,7 +7,7 @@ import { auth, getAuthDrizzleDb } from '../auth/auth';
 import { getOrgName, getServerConfig, updateServerConfig } from '../config/server-config';
 import { ApiError } from '../core/errors';
 
-export async function getOrgExists(orgId: string) {
+export async function getOrgExists(orgId: string): Promise<boolean> {
     const db = getAuthDrizzleDb();
     return (
         (await db.select({ id: organization.id }).from(organization).where(eq(organization.id, orgId)).get()) !==

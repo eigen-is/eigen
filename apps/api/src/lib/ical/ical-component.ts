@@ -284,26 +284,7 @@ function vtimezoneComponent(tzid: string, minYear: number, maxYear: number): ICA
     return new ICAL.Component(ICAL.parse(buildVTimezone(tzid, minYear, maxYear).join('\r\n')));
 }
 
-// One VTIMEZONE per referenced IANA TZID (RFC 5545 §3.6.5): without it strict parsers, ical.js included, read the wall times as floating.
-function vtimezoneComponents(events: CalendarEvent[]): ICAL.Component[] {
-    const tzids = new Set<string>();
-    const years: number[] = [];
-    let hasRrule = false;
-    for (const event of events) {
-        if (event.allDay) continue;
-        const tzid = normalizeTimezone(event.timezone);
-        if (!tzid) continue;
-        tzids.add(tzid);
-        years.push(event.startTime.getUTCFullYear(), event.endTime.getUTCFullYear());
-        if (event.rrule) hasRrule = true;
-    }
-    if (!tzids.size) return [];
-
-    const { minYear, maxYear } = timezoneHorizon(years, hasRrule);
-    return [...tzids].map((tzid) => vtimezoneComponent(tzid, minYear, maxYear));
-}
-
-// A referenced VTIMEZONE is the client's own definition and is never rewritten; an unreferenced one goes, and a referenced IANA zone the file leaves undefined gets Eigen's.
+// A referenced VTIMEZONE is the client's own definition and is never rewritten; an unreferenced one goes, and a referenced IANA zone the file leaves undefined gets Eigen's: without it strict parsers, ical.js included, read the wall times as floating (RFC 5545 §3.6.5).
 function syncVTimezones(resource: ICAL.Component): void {
     const vevents = resource.getAllSubcomponents('vevent');
     const referenced = new Set<string>();
@@ -315,7 +296,7 @@ function syncVTimezones(resource: ICAL.Component): void {
             const tzid = Array.isArray(raw) ? raw[0] : raw;
             if (tzid) referenced.add(String(tzid));
         }
-        for (const name of ['dtstart', 'dtend']) {
+        for (const name of ['dtstart', 'dtend', 'recurrence-id']) {
             const instant = instantOf(vevent, name, null);
             if (instant) years.push(instant.getUTCFullYear());
         }
@@ -403,7 +384,6 @@ export function newVCalendar(): ICAL.Component {
 
 export function buildResource(events: CalendarEvent[]): ICAL.Component {
     const vcalendar = newVCalendar();
-    for (const vtimezone of vtimezoneComponents(events)) vcalendar.addSubcomponent(vtimezone);
 
     // The master leads its group, because every override's RECURRENCE-ID is computed from it.
     const groups = new Map<string, CalendarEvent[]>();
@@ -430,6 +410,7 @@ export function buildResource(events: CalendarEvent[]): ICAL.Component {
         }
     }
 
+    syncVTimezones(vcalendar);
     return vcalendar;
 }
 
@@ -469,8 +450,8 @@ export function serializeEventForImip(
         : buildResource([event, ...exceptions.map((exception) => withGuests(exception, event))]);
     if (series) {
         // A RECURRENCE-ID names its instant in the SERIES' zone, which the occurrence's own may not be.
-        for (const vtimezone of vtimezoneComponents([event, series])) vcalendar.addSubcomponent(vtimezone);
         vcalendar.addSubcomponent(buildVEvent(withGuests(event, series), { master: series }));
+        syncVTimezones(vcalendar);
     }
     vcalendar.addPropertyWithValue('method', method);
     for (const vevent of vcalendar.getAllSubcomponents('vevent')) shapeForImip(vevent, method);

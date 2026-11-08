@@ -37,7 +37,8 @@ import { grantAccessForReferences } from './access-grants';
 import { verifyImipSender } from './imip-auth';
 import type { PartHeaders } from './mail-parser';
 import { parseMail, splitMime } from './mail-parser';
-import type { DraftMeta, DraftMetaAttachment, MailSearchOptions, MailStore } from './mail-store';
+import type { DraftMeta, MailSearchOptions } from './mail-store';
+import type { MaildirStore } from './maildir-store';
 import type { EmlAttachment } from './mailfile';
 import { createEmlContent } from './mailfile';
 import { createUniqueMessageId } from './mailutils';
@@ -72,7 +73,7 @@ function appendReferenceLinks(html: string, refs: AttachmentReference[], recipie
 export class Mail {
     public constructor(
         public readonly home: Home,
-        private store: MailStore,
+        private store: MaildirStore,
     ) {}
 
     private emit(type: SSEventMail['type'], mail: SSEventMail['mail']): void {
@@ -323,18 +324,14 @@ export class Mail {
             if (dbRecord) {
                 const meta = await this.store.readDraftMeta(existingId);
                 if (meta && meta.attachments.length > 0) {
-                    // The keep list names raw EML parts: anything but the sidecar's exact set, or an unvalidated index, needs a rebuild.
-                    const parts = meta.attachments.flatMap((a) =>
-                        typeof a.index !== 'number' ? [] : [{ ...a, index: a.index }],
-                    );
+                    // The keep list names raw EML parts: anything but the sidecar's exact set needs a rebuild.
+                    const parts = meta.attachments;
                     const kept = options.keepAttachmentIndexes ? new Set(options.keepAttachmentIndexes) : null;
-                    const keepAll =
-                        parts.length === meta.attachments.length &&
-                        (!kept || (kept.size === parts.length && parts.every((a) => kept.has(a.index))));
+                    const keepAll = !kept || (kept.size === parts.length && parts.every((a) => kept.has(a.index)));
 
                     const stale = meta.lastFullSaveAt && Date.now() - meta.lastFullSaveAt > FULL_SAVE_INTERVAL_MS;
                     if (keepAll && !stale) {
-                        return this.draftFastSave(email, existingId, meta, parts, dbRecord);
+                        return this.draftFastSave(email, existingId, meta, dbRecord);
                     }
                 }
             }
@@ -347,7 +344,6 @@ export class Mail {
         email: NewDraft,
         existingId: string,
         prevMeta: DraftMeta,
-        parts: Array<Required<DraftMetaAttachment>>,
         dbRecord: EmailSummary,
     ): Promise<EmailDraft> {
         const driveReferences = email.driveReferences ?? prevMeta.driveReferences;
@@ -358,7 +354,7 @@ export class Mail {
             bcc: email.bcc,
             text: email.text || '',
             html: email.html || '',
-            attachments: parts,
+            attachments: prevMeta.attachments,
             driveReferences,
             inReplyTo: email.inReplyTo,
             references: email.references,
@@ -373,7 +369,7 @@ export class Mail {
         this.emit(SSEventType.MAIL_DRAFT_UPDATED, { messageId: existingId, mailbox: MAILBOX_DRAFTS });
 
         const user = this.home.user;
-        const attachments = parts.map((a) => ({
+        const attachments = prevMeta.attachments.map((a) => ({
             contentType: a.contentType,
             filename: a.filename,
             content: Buffer.alloc(0),

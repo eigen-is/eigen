@@ -7,7 +7,8 @@ import type { Email, EmailDraft, EmailSummary } from '@workspace/lib/types/mail'
 import { mailAttachmentName } from '@workspace/lib/types/mail';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { getHome } from '../../lib/home';
-import type { DraftMeta, MailStore } from '../../lib/mail/mail-store';
+import type { DraftMeta } from '../../lib/mail/mail-store';
+import type { MaildirStore } from '../../lib/mail/maildir-store';
 import { mailRootOf, makeEml, seedMaildirFile } from '../mail-test-helpers';
 import type { TestUser } from '../setup';
 import {
@@ -172,7 +173,7 @@ describe.skipIf(isWindows)('Mail — draft sidecar', () => {
         );
         expect((await authedRequest(user.sessionToken, `/home/${user.id}/size`)).status).toBe(200);
         const home = await getHome(user.id);
-        const store = (home.mail as unknown as { store: MailStore }).store;
+        const store = (home.mail as unknown as { store: MaildirStore }).store;
         // Decomposed, each accent costs a byte more and the id overruns the segment budget its folded
         // spelling sits under: a gate on the id as sent would miss the sidecar the write stored.
         const draftId = `${'é'.repeat(80)}.draft`.normalize('NFD');

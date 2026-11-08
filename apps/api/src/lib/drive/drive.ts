@@ -1207,8 +1207,6 @@ export class Drive {
         await assertCommentChatExists(this, mountId, pathId, chatName);
         const card = title?.slice(0, CARD_TITLE_MAX_LENGTH);
         const changed = await withCommentIndex(this, mountId, pathId, async (index) => {
-            // Cards from before the comment index have a chat but no row yet.
-            await index.ensureComment(chatName);
             const current = await index.get(chatName);
             // The client sends the card title, which may have changed in the same edit. So the title is
             // saved even when the assignee stays the same.
@@ -1242,7 +1240,6 @@ export class Drive {
         await assertCommentChatExists(this, mountId, pathId, chatName);
         const card = title?.slice(0, CARD_TITLE_MAX_LENGTH);
         await withCommentIndex(this, mountId, pathId, async (index) => {
-            await index.ensureComment(chatName);
             if (card) await index.setTitle(chatName, card);
             if (status === 'resolved') await index.resolve(chatName, user.email);
             else await index.reopen(chatName);

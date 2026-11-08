@@ -9,7 +9,6 @@ import type { Tx as DatabaseTx } from '../core';
 import { computeResourceEtag, readBlobTableSize, sanitizeResourceUri } from '../core';
 import type { LocalFilesystem } from '../core/local-filesystem';
 import type { ParsedCard } from '../vcard/types';
-import { CONTACTS_DB_CONFIG } from './db-config';
 import * as schema from './schema';
 
 export type Tx = DatabaseTx<typeof schema>;
@@ -49,13 +48,7 @@ export function sanitizeCardUri(raw: string): string | null {
 export async function readContactsTotalSize(homeFs: LocalFilesystem): Promise<number> {
     // The avatars are counted whether or not any card is: a photo outlives the card it was cropped for.
     const avatars = await homeFs.dirSize(`${PATHS.CONTACTS.ROOT}/${PATHS.CONTACTS.AVATARS}`);
-    const cards = readBlobTableSize(
-        homeFs.absolutePath(PATHS.CONTACTS.DB),
-        'contacts',
-        'vcard',
-        CONTACTS_DB_CONFIG.currentVersion,
-    );
-    return avatars + cards;
+    return avatars + readBlobTableSize(homeFs.absolutePath(PATHS.CONTACTS.DB), 'contacts', 'vcard');
 }
 
 // Hashed by the photo bytes, so a superseded photo's cache falls out of reference and the sweep reclaims it.

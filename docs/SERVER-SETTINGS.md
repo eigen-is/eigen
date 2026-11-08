@@ -22,7 +22,7 @@ The secret is made at first boot and never changes, so a session signed in right
 
 Every account's address was made on the mail domain, so on another one nobody can sign in. Setup records `MAIL_DOMAIN` as `mailDomain` in `config.json`. Once it is recorded, `./eigen setup` states it instead of asking and refuses a different `--mail-domain` (`apps/api/src/cli/configure.ts`).
 
-At boot `assertMailDomainUnchanged()` compares `MAIL_DOMAIN` with the recorded value. On a mismatch it exits in production, naming the value to put back, and warns in development. A `config.json` without `mailDomain` records it at the first boot whose `MAIL_DOMAIN` the owner's address is on. A boot it is not on records nothing, so a wrong value at that boot is never taken as the truth. An owner address on another domain only logs a warning.
+At boot `assertMailDomainUnchanged()` compares `MAIL_DOMAIN` with the recorded value. On a mismatch it exits in production, naming the value to put back, and warns in development.
 
 ## Renaming the organization renames its default team
 

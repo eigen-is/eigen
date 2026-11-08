@@ -179,9 +179,8 @@ export async function withCommentIndex<T>(
     );
 }
 
-// Callers run this before ensureComment, which adds the row a real thread lacks. A made-up chatName must never get
-// a row, because the row would bring a history event and a notification that links nowhere. A comment thread is a
-// chat in the document's chat folder.
+// A made-up chatName would bring a history event and a notification that link nowhere, so a change of a
+// comment's state runs this first. A comment thread is a chat in the document's chat folder.
 export async function assertCommentChatExists(
     drive: DriveLike,
     mountId: string,

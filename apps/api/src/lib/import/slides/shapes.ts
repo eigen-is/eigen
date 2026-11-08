@@ -82,7 +82,7 @@ import { PRESET_KINDS, presetGeometry } from './preset-geometry';
 import { richTextOf, verticalTurnOf } from './text';
 
 export const MAX_ELEMENTS = 20_000;
-export const MAX_GROUP_DEPTH = 32;
+const MAX_GROUP_DEPTH = 32;
 
 // An element is a Y.Map of about thirty fields, and a string costs per character besides: the weight caps both before
 // the update is built, and so the update the main thread reads back. The corpus's heaviest weighs 4,022 (a 2.9 MB
