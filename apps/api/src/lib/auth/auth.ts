@@ -194,6 +194,8 @@ export const auth = betterAuth({
             // Eigen has one org. A user who could create another would own it and get past requireAdmin.
             // Setup creates the default org as a server call without a session, which this does not block.
             allowUserToCreateOrganization: false,
+            // Deleting the one org would wreck the install, and nothing calls it.
+            disableOrganizationDeletion: true,
             // Default caps the org at 100 members and fails every later user creation in the create hook.
             // The function form lifts the cap without turning the plugin's list-query limit into Infinity.
             membershipLimit: () => Number.POSITIVE_INFINITY,
@@ -238,9 +240,15 @@ export const auth = betterAuth({
     appName: 'eigen',
     baseURL: process.env['API_URL'],
     basePath: '/auth',
-    // set-user-password revokes no sessions or app passwords, impersonation hands an admin a member's session, and a
-    // ban leaves the app passwords working.
-    disabledPaths: ['/admin/set-user-password', '/admin/impersonate-user', '/admin/ban-user', '/admin/unban-user'],
+    // set-user-password revokes no sessions or app passwords, impersonation hands an admin a member's session, a ban
+    // leaves the app passwords working, and a member who leaves the one org joins again at the next sign-in.
+    disabledPaths: [
+        '/admin/set-user-password',
+        '/admin/impersonate-user',
+        '/admin/ban-user',
+        '/admin/unban-user',
+        '/organization/leave',
+    ],
     logger: { disabled: isTest() },
     secret: getAuthSecret(),
 });

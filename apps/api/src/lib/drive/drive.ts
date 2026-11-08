@@ -984,7 +984,6 @@ export class Drive {
         await propagateSharedPathChange(updatedItem, oldACL, normalizedACL, actor ?? null, options);
     }
 
-    // After a change to who has access that no path hears of, such as a member leaving a team.
     public enforceReadAccess(): Promise<void> {
         return this.documents.enforceReadAccess();
     }
