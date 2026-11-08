@@ -44,8 +44,7 @@ const FREE_TEXT = { maxLength: EVENT_MAX_BYTES };
 // An attendee or a reminder is one line of the file, and a file holds no more lines than it holds bytes.
 const LINES = { maxItems: EVENT_MAX_BYTES };
 const NAME = { maxLength: CALENDAR_NAME_MAX_LENGTH };
-// The etag the client loaded, so a write it no longer applies to answers 412. A caller that loaded none, such as a
-// script, sends none.
+// The etag the client loaded, so a write it no longer applies to answers 412.
 const LoadedEtag = t.Optional(t.String({ ...TEXT, minLength: 1 }));
 
 const CalendarShareSchema = t.Object({

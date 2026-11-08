@@ -125,10 +125,8 @@ export function restoreAuthRows(ownerId: string, archive: BackupAuthRows): void 
     });
 }
 
-// The rows of the archive's auth.json a restore would insert, or null when it inserts none: a team has no auth.json,
-// and a user who is still here keeps every row they have, since a restore puts a home's data back and never rewrites
-// who somebody is. It throws for an archive that is not this user's or whose email somebody else now holds, so a
-// restore calls it while it judges the archive, before it takes the home.
+// The archive's auth.json rows a restore would insert, or null for a team or for a user who is still here and keeps
+// their rows. It throws for an archive that is not this user's, so a restore calls it before it takes the home.
 export function authRowsToRestore(ownerId: string, manifest: BackupManifest, folder: string): BackupAuthRows | null {
     const authPath = path.join(folder, ARCHIVE_AUTH_FILE);
     if (!fs.existsSync(authPath)) return null;

@@ -1,9 +1,8 @@
-// getHome is the way in to every owner's data. It builds the owner's Home on first use, keeps it in a
-// cache, and hands every later caller that same Home until it closes. Every request passes through
-// here, so this is where a Home hears of its requests. It keeps a home shut while a restore replaces
-// its folder or a deletion removes it, and every home while the shutdown runs. It also hands a
-// server-wide event, such as a restart notice, to every loaded home, and re-checks who may still read
-// the documents they have open.
+// getHome is the way in to every owner's data. It builds the owner's Home on first use, keeps it in a cache, and hands
+// every later caller that same Home until it closes. Every request passes through here, so this is where a Home hears
+// of its requests. It keeps a home shut while a restore replaces its folder or a deletion removes it, and every home
+// while the shutdown runs. It also walks the loaded homes, to hand them a server-wide event such as a restart notice,
+// or to close the collab sockets of whoever lost access to the documents they have open.
 
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { SSEvent } from '@workspace/lib/types/sse';

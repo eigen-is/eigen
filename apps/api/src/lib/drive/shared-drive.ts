@@ -451,7 +451,7 @@ export class SharedDrive {
         assignee: string | null,
         _user: User,
         title?: string,
-    ): Promise<boolean> {
+    ): Promise<void> {
         await this.requireWrite(mountId, pathId);
         return this.drive.assignComment(mountId, pathId, chatName, assignee, this.user, title);
     }
