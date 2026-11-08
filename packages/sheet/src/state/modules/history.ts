@@ -11,6 +11,7 @@ import type { Patch } from 'immer';
 import { applyPatches, produce, produceWithPatches } from 'immer';
 import { computedKey, createArrayResolver } from '../../engine/cell-resolver';
 import type { Cell, CellMatrix } from '../../engine/types';
+import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import type { FormulaCell, History, Op, Sheet } from '../types';
@@ -49,9 +50,11 @@ export function recordEntry(
     const structural = (options: EntryOptions): History => ({ patches: [], inversePatches: [], options });
     if (renameSheetOp) {
         const { id } = renameSheetOp;
-        return structural({ renamedSheet: { id, from: sheetOf(before, id).name, to: sheetOf(after, id).name } });
+        return structural({
+            renamedSheet: { id, from: getSheet(before, { id }).name, to: getSheet(after, { id }).name },
+        });
     }
-    if (deleteSheetOp) return structural({ deletedSheet: storedCopy(sheetOf(before, deleteSheetOp.id)) });
+    if (deleteSheetOp) return structural({ deletedSheet: storedCopy(getSheet(before, { id: deleteSheetOp.id })) });
     // An add puts its sheet last in the list, whatever its order.
     if (addSheetOp) return structural({ addedSheet: storedCopy(after.sheets[after.sheets.length - 1]) });
     const rowCol = { insertRowColOp, deleteRowColOp };
@@ -60,11 +63,6 @@ export function recordEntry(
         inversePatches: bySheetId(inversePatches, before.sheets),
         options: rowCol,
     };
-}
-
-// The sheet an edit's option names, which the edit found or wrote nothing and recorded no entry.
-function sheetOf(ctx: Context, id: string): Sheet {
-    return ctx.sheets[ctx.sheets.findIndex((sheet) => sheet.id === id)];
 }
 
 // How far back undo reaches. A structural entry may hold whole cell matrices, so fewer of those stay.

@@ -618,7 +618,7 @@ describe('engine/formula-shift — inlineNames', () => {
 });
 
 // Excel's rule for a formula a cut or a drag moved: a ref wholly inside the block follows its cells, `$` or not, and any
-// other ref stays.
+// other ref still means the cell it meant.
 describe('engine/formula-shift — moveFormulaRefs', () => {
     // The block D5:E6 moved 2 rows up and 3 columns right.
     const block = { row: [4, 5], column: [3, 4] };
@@ -645,14 +645,20 @@ describe('engine/formula-shift — moveFormulaRefs', () => {
 
     test.each([
         ['=D5*2', 'G3*2'],
-        ['=A1', 'A1'],
+        ['=A1', 'Sheet1!A1'],
+        ['=SUM(D5:F6)', 'SUM(Sheet1!D5:F6)'],
+        ['=SUM(D:D)', 'SUM(Sheet1!D:D)'],
+        ['=A1+D5', 'Sheet1!A1+G3'],
         ['=Sheet1!D5', 'Sheet2!G3'],
+        ['=Sheet1!A1', 'Sheet1!A1'],
         ['=Sheet2!A1', 'Sheet2!A1'],
-    ])('onto another sheet, a ref inside the block follows it there: %s', (formula, moved) => {
+        ['="A1"&LOG10(2)', '"A1"&LOG10(2)'],
+    ])('onto another sheet, a ref keeps its meaning: %s', (formula, moved) => {
         expect(move(formula, 'Sheet2')).toBe(moved);
     });
 
     test('a sheet name that needs quotes gets them', () => {
+        expect(moveFormulaRefs('=A1', block, 0, 0, 'My Sheet', 'Sheet1', workbook)).toBe("'My Sheet'!A1");
         expect(moveFormulaRefs('=Sheet1!D5', block, 0, 0, 'Sheet1', 'My Sheet', workbook)).toBe("'My Sheet'!D5");
     });
 });

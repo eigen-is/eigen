@@ -299,15 +299,6 @@ function calcRowColSize(ctx: Context, rowCount: number, colCount: number) {
     ctx.ch_width = ch_width + 120; // add blank space at the far right
 }
 
-// Gives a sheet whose id another sheet already has a fresh one.
-export function ensureUniqueSheetIds(data: Sheet[]) {
-    const ids = new Set<string>();
-    for (const item of data) {
-        if (ids.has(item.id)) item.id = crypto.randomUUID();
-        else ids.add(item.id);
-    }
-}
-
 export function firstVisibleSheetId(ctx: Context, excludeId?: string) {
     const shown = ctx.sheets.filter((sheet) => sheet.hide !== 1 && sheet.id !== excludeId);
     return sortBy(shown, sheetOrder)[0]?.id;

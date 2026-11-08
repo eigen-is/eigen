@@ -133,7 +133,7 @@ export const SheetTab: React.FC = () => {
                     <ChoiceMenuItems
                         value={context.currentSheetId}
                         options={context.sheets
-                            .filter((s): s is typeof s & { id: string } => s.hide !== 1 && s.id != null)
+                            .filter((s) => s.hide !== 1)
                             .sort((s1, s2) => sheetOrder(s1) - sheetOrder(s2))
                             .map((singleSheet) => ({
                                 value: singleSheet.id,

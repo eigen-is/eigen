@@ -194,6 +194,7 @@ export function embeddedChartSheet(spec: ChartSpec): Sheet | undefined {
     const format = spec.axes.y.labels.format;
     const number = format === null || format === 'General' ? {} : { ct: { fa: format, t: 'n' } };
     return {
+        id: EMBEDDED_SHEET,
         name: EMBEDDED_SHEET,
         celldata: [
             ...series.map(({ name }, i) => ({ r: 0, c: seriesColumn(i), v: { v: stripNonXmlChars(name) } })),

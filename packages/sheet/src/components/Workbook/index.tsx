@@ -47,7 +47,6 @@ import {
     COPY_ACTION_TABLE_MARKER,
     defaultContext,
     deleteActiveObject,
-    ensureUniqueSheetIds,
     filterPatch,
     firstVisibleSheetId,
     getFlowdata,
@@ -166,8 +165,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             const ctx = defaultContext(refs);
             ctx.allowEdit = allowEdit;
             ctx.commentCards = commentCards;
-            ctx.sheets = data.map((sheet) => ({ ...sheet, id: sheet.id ?? crypto.randomUUID() }));
-            ensureUniqueSheetIds(ctx.sheets);
+            ctx.sheets = data.map((sheet) => ({ ...sheet }));
             for (const sheet of ctx.sheets) initSheetData(sheet);
             ctx.currentSheetId = firstVisibleSheetId(ctx) ?? '';
             applySheetView(ctx);

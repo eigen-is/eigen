@@ -532,11 +532,6 @@ describe('engine/recalc — recalcSheets', () => {
     });
 });
 
-test('recalcSheets leaves an id-less sheet as it is', () => {
-    const idless: Sheet = { name: 'Loose', order: 0, config: {}, data: [[num(1), formula('=A1+1')]] };
-    expect(recalcSheets([idless])[0]).toBe(idless);
-});
-
 describe('engine/recalc — extractDependencies', () => {
     const walkOver = (sheets: Pick<Sheet, 'id' | 'name' | 'data'>[]) => ({
         findSheet: sheetFinder(sheets),

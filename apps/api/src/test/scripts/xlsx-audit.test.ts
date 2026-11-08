@@ -125,6 +125,7 @@ describe('tallies', () => {
 
     test('a map fingerprints alike whatever order an importer builds it in, and a cell by its value, formula and look', () => {
         const sheet = (merge: [string, number][], bold: number): Sheet => ({
+            id: 'fixture-9',
             name: 'S',
             config: { merge: Object.fromEntries(merge.map(([key, r]) => [key, { r, c: 0, rs: 1, cs: 2 }])) },
             celldata: [{ r: 0, c: 0, v: { v: 1, m: '1', f: '=1', bl: bold } }],
@@ -375,7 +376,7 @@ describe('round trip', () => {
     }, 60_000);
 
     test('a difference the writer explains is listed under its kind, any other under its feature', () => {
-        const sheet = (cell: Sheet['celldata']): Sheet[] => [{ name: 'S', celldata: cell }];
+        const sheet = (cell: Sheet['celldata']): Sheet[] => [{ id: 'fixture-8', name: 'S', celldata: cell }];
         const groups = classifyDifferences({
             warnings: new Map(),
             media: { a: new Map(), b: new Map() },
@@ -395,7 +396,7 @@ describe('round trip', () => {
     });
 
     test('a sheet name is listed as repaired only as the writer repairs it', () => {
-        const names = (...names: string[]): Sheet[] => names.map((name) => ({ name }));
+        const names = (...names: string[]): Sheet[] => names.map((name, i) => ({ id: `fixture-${i}`, name }));
         const classify = (b: Sheet[]) =>
             classifyDifferences({
                 warnings: new Map([['sheet-names-changed', 1]]),
@@ -418,6 +419,7 @@ describe('round trip', () => {
         const column = { row: [55, 61], column: [4, 4] };
         const rules = (...entries: { ranges: { row: number[]; column: number[] }[]; value: string }[]): Sheet[] => [
             {
+                id: 'fixture-7',
                 name: 'S',
                 dataValidations: Object.fromEntries(
                     entries.map(({ ranges, value }, i) => [`validation-${i + 1}`, { ranges, rule: list(value) }]),
@@ -454,8 +456,8 @@ describe('round trip', () => {
         const classify = (warnings: Map<string, number>, a: Sheet['dataValidations'], b: Sheet['dataValidations']) =>
             classifyDifferences({
                 warnings,
-                a: [{ name: 'S', dataValidations: a }],
-                b: [{ name: 'S', dataValidations: b }],
+                a: [{ id: 'fixture-5', name: 'S', dataValidations: a }],
+                b: [{ id: 'fixture-5', name: 'S', dataValidations: b }],
                 media: { a: new Map(), b: new Map() },
             }).map(({ kind, listed, count }) => [kind, listed, count]);
         // A cut that lets the lower rule keep the cell the higher one holds.
@@ -489,6 +491,7 @@ describe('round trip', () => {
         const scattered = Array.from({ length: 2000 }, (_, i) => ({ row: [3 * i, 3 * i], column: [3 * i, 3 * i] }));
         const sheet = (value1: string): Sheet[] => [
             {
+                id: 'fixture-4',
                 name: 'S',
                 dataValidations: {
                     'validation-1': { ranges: [{ row: [0, 1048575], column: [0, 16383] }], rule: list(value1) },
@@ -510,6 +513,7 @@ describe('round trip', () => {
     test('a prompt cut to the length Excel holds is listed when the cut is counted', () => {
         const prompt = (hintValue: string): Sheet[] => [
             {
+                id: 'fixture-3',
                 name: 'S',
                 dataValidations: {
                     v: {
@@ -534,7 +538,11 @@ describe('round trip', () => {
 
     test("a picture over the same box whose media changed its type or its pixels differs, whatever it's named", () => {
         const image = (mediaName: string): Sheet[] => [
-            { name: 'S', images: { i: { id: 'i', index: 'a0', x: 0, y: 0, width: 10, height: 10, mediaName } } },
+            {
+                id: 'fixture-2',
+                name: 'S',
+                images: { i: { id: 'i', index: 'a0', x: 0, y: 0, width: 10, height: 10, mediaName } },
+            },
         ];
         const classify = (b: { contentType: string; width: number; height: number }) =>
             classifyDifferences({
@@ -568,6 +576,7 @@ describe('round trip', () => {
         };
         const chart = (spec: ChartSpec): Sheet[] => [
             {
+                id: 'fixture-1',
                 name: 'S',
                 charts: {
                     c: { id: 'c', index: 'a0', x: 0, y: 0, width: 10, height: 10, ...newSheetChartSpecParts(spec) },

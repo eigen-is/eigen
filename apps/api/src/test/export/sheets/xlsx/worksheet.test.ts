@@ -24,6 +24,7 @@ describe('a worksheet part', () => {
     test('writes its parts in the order CT_Worksheet sets', () => {
         const { xml } = partOf(
             {
+                id: 'fixture-8',
                 name: 'Sheet1',
                 color: '#FF0000',
                 celldata: [{ r: 0, c: 0, v: { v: 'x', mc: { r: 0, c: 0, rs: 1, cs: 2 } } }],
@@ -70,16 +71,17 @@ describe('a worksheet part', () => {
     });
 
     test("the sheet's default width and height, or the app's, are its sheetFormatPr", () => {
-        expect(partOf({ name: 'Excel', celldata: [], defaultColWidth: 72, defaultRowHeight: 17 }).xml).toContain(
-            '<sheetFormatPr defaultColWidth="8" defaultRowHeight="12.75" customHeight="1"/>',
-        );
-        expect(partOf({ name: 'Eigen', celldata: [] }).xml).toContain(
+        expect(
+            partOf({ id: 'fixture-7', name: 'Excel', celldata: [], defaultColWidth: 72, defaultRowHeight: 17 }).xml,
+        ).toContain('<sheetFormatPr defaultColWidth="8" defaultRowHeight="12.75" customHeight="1"/>');
+        expect(partOf({ id: 'fixture-6', name: 'Eigen', celldata: [] }).xml).toContain(
             '<sheetFormatPr defaultColWidth="11.109375" defaultRowHeight="15" customHeight="1"/>',
         );
     });
 
     test('columns of one width and one hidden flag are one run', () => {
         const { xml } = partOf({
+            id: 'fixture-5',
             name: 'Sheet1',
             celldata: [],
             config: { columnlen: { 0: 90, 1: 90, 2: 131, 4: 90 }, colhidden: { 2: 0, 3: 0, 4: 0 } },
@@ -98,7 +100,7 @@ describe('a worksheet part', () => {
 
     test('a frozen pane splits after the last frozen row and column; gridlines and the selected tab share its view', () => {
         const view = (sheet: Partial<Sheet>, selected = false) =>
-            partOf({ name: 'Sheet1', celldata: [], ...sheet }, { selected }).xml.match(
+            partOf({ id: 'fixture', name: 'Sheet1', celldata: [], ...sheet }, { selected }).xml.match(
                 /<sheetViews>.*<\/sheetViews>/,
             )?.[0];
         expect(view({}, true)).toBe('<sheetViews><sheetView tabSelected="1" workbookViewId="0"/></sheetViews>');
@@ -118,6 +120,7 @@ describe('a worksheet part', () => {
     test('a bare frozen type splits the same axes as its range form', () => {
         const pane = (type: NonNullable<Sheet['frozen']>['type']) =>
             partOf({
+                id: 'fixture-4',
                 name: 'Sheet1',
                 celldata: [],
                 frozen: { type, range: { row_focus: 1, column_focus: 2 } },
@@ -136,6 +139,7 @@ describe('a worksheet part', () => {
     test('links are a block of their own: web links by relationship, places in the workbook by location, the whole range kept; one it cannot write is counted', () => {
         const { xml, relationships, lost } = partOf(
             {
+                id: 'fixture-3',
                 name: 'Sheet1',
                 celldata: [
                     { r: 0, c: 0, v: { v: 'web', m: 'web' } },
@@ -176,6 +180,7 @@ describe('a worksheet part', () => {
     test('a drawing is the first relationship, the links after it', () => {
         const { relationships } = partOf(
             {
+                id: 'fixture-2',
                 name: 'Sheet1',
                 celldata: [],
                 hyperlink: { '0_0': { linkType: 'webpage', linkAddress: 'https://example.com' } },
@@ -191,7 +196,7 @@ describe('a worksheet part', () => {
     test("past Excel's 65,530 links a sheet's further links are left out, counted", () => {
         const hyperlink: NonNullable<Sheet['hyperlink']> = {};
         for (let r = 0; r < 65_532; r++) hyperlink[`${r}_0`] = { linkType: 'cellrange', linkAddress: 'B1' };
-        const { xml, lost } = partOf({ name: 'Sheet1', celldata: [], hyperlink });
+        const { xml, lost } = partOf({ id: 'fixture-1', name: 'Sheet1', celldata: [], hyperlink });
         expect(xml.match(/<hyperlink /g)).toHaveLength(65_530);
         expect(lost).toEqual(['links-dropped', 'links-dropped']);
     });

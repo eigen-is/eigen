@@ -38,7 +38,6 @@ export function recalcSheets(
     const working: WorkingSheet[] = [];
     const byId = new Map<string, WorkingSheet>();
     for (const sheet of sheets) {
-        if (!sheet.id) continue;
         const w = { id: sheet.id, name: sheet.name, data: ensureWorkingData(sheet) };
         byId.set(w.id, w);
         working.push(w);
@@ -224,7 +223,7 @@ function writeCellValue(cell: Cell, result: EvaluationResult): void {
 
 function finalize(byId: ReadonlyMap<string, WorkingSheet>, sheets: readonly Sheet[]): Sheet[] {
     return sheets.map((sheet) => {
-        const w = sheet.id ? byId.get(sheet.id) : undefined;
+        const w = byId.get(sheet.id);
         return w ? { ...sheet, data: w.data, celldata: dataToCelldata(w.data) } : sheet;
     });
 }

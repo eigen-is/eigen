@@ -11,6 +11,7 @@ import {
 import type { Sheet } from '../../sheets/types';
 
 const sheet: Sheet = {
+    id: 'fixture-2',
     name: 'Sheet1',
     defaultRowHeight: 25,
     config: { columnlen: { 0: 50, 2: 80 }, colhidden: { 1: 0 }, rowlen: { 1: 40 }, rowhidden: { 0: 0, 3: 0 } },
@@ -41,7 +42,7 @@ describe('sheetTrackAt', () => {
     });
 
     test('past the grid is the last track, the rest its offset', () => {
-        const plain: Sheet = { name: 'Plain' };
+        const plain: Sheet = { id: 'fixture-1', name: 'Plain' };
         const width = REFERENCE_COLUMN_COUNT * SHEET_DEFAULT_COL_WIDTH;
         expect(sheetTrackAt(plain, 'column', width + 10)).toEqual({
             index: REFERENCE_COLUMN_COUNT - 1,

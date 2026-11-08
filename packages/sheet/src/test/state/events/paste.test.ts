@@ -482,6 +482,29 @@ describe('conditional-format migration on cut/paste (cfSplitRange contract)', ()
     });
 });
 
+describe('a paste over a whole merge replaces it', () => {
+    const merged = () => {
+        const ctx = makeCtx(4, 4, (d) => {
+            d[0][0] = { v: 'a', m: 'a', mc: { r: 0, c: 0, rs: 1, cs: 2 } };
+            d[0][1] = { mc: { r: 0, c: 0 } };
+        });
+        ctx.sheets[0].config = { merge: { '0_0': { r: 0, c: 0, rs: 1, cs: 2 } } };
+        return ctx;
+    };
+
+    it('for plain text, whose second value shows', () => {
+        const ctx = merged();
+        pasteText(ctx, 'x\ty');
+
+        expect(ctx.sheets[0].config?.merge).toEqual({});
+        const d = ctx.sheets[0].data!;
+        expect(d[0][0]).toMatchObject({ v: 'x' });
+        expect(d[0][0]?.mc).toBeUndefined();
+        expect(d[0][1]).toMatchObject({ v: 'y' });
+        expect(d[0][1]?.mc).toBeUndefined();
+    });
+});
+
 describe('partial-merge guard (hasPartMC)', () => {
     it('refuses a plain-text paste that would split a merged cell', () => {
         const ctx = makeCtx(6, 6);
@@ -577,11 +600,13 @@ describe('pasted formulas and the dependency map', () => {
         expect(ctx.sheets[0].data![0][1]).toBeNull();
     });
 
-    it('a formula cut to another sheet evaluates against its new sheet at once', () => {
+    it('a formula cut to another sheet keeps reading the cell it read', () => {
         const ctx = cutAcrossSheets();
 
-        expect(ctx.sheets[1].data![0][3]?.v).toBe(200);
-        expect(ctx.sheets[1].data![0][3]?.m).toBe('200');
+        const cell = ctx.sheets[1].data![0][3];
+        expect(cell?.f).toBe('=One!A1*2');
+        expect(cell?.v).toBe(10);
+        expect(cell?.m).toBe('10');
     });
 
     it('a same-sheet cut keeps the formula value and recalcs the vacated cell dependents', () => {
@@ -598,13 +623,17 @@ describe('pasted formulas and the dependency map', () => {
         expect(data[0][2]?.v).toBe(1);
     });
 
-    it('a formula cut to another sheet recalcs there', () => {
+    it("a formula cut to another sheet recalcs when the cell it reads changes, not the new sheet's", () => {
         let ctx = cutAcrossSheets();
-        expect(ctx.sheets[1].data![0][3]?.f).toBe('=A1*2');
 
         [ctx] = edit(ctx, typed(0, 0, '3'));
+        expect(ctx.sheets[1].data![0][3]?.v).toBe(10);
 
-        expect(ctx.sheets[1].data![0][3]?.v).toBe(6);
+        [ctx] = edit(ctx, (d) => {
+            d.currentSheetId = 'id_1';
+            typed(0, 0, '7')(d);
+        });
+        expect(ctx.sheets[1].data![0][3]?.v).toBe(14);
     });
 });
 

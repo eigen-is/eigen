@@ -429,7 +429,7 @@ function renderSheet(
     const cfMap: ComputeMap | null =
         rules && sheet.data
             ? evaluateConditionalFormat(rules, sheet.data, {
-                  evaluateFormula: createCfFormulaEvaluator(engine, resolver, sheet.id ?? sheet.name),
+                  evaluateFormula: createCfFormulaEvaluator(engine, resolver, sheet.id),
               })
             : null;
 

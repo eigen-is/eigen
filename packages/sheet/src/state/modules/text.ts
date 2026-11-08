@@ -166,9 +166,10 @@ export function measuringContext() {
 }
 
 // Grows a row to show a cell's text whole. The painter lays the text out in a box 2 px smaller than the cell each way,
-// and 2 px in from its edge. A row sized by hand stays, and so does a row another cell made taller.
+// and 2 px in from its edge. A row sized by hand stays, and so does a row another cell made taller. A merged cell's text
+// fits the merge, which this column doesn't measure, so it grows nothing.
 export function growRowToFit(ctx: Context, config: SheetConfig, cell: Cell, r: number, c: number) {
-    if (config.customHeight?.[r]) return;
+    if (cell.mc || config.customHeight?.[r]) return;
     const measuring = measuringContext();
     if (!measuring) return;
     const cellWidth = (config.columnlen?.[c] ?? ctx.defaultcollen) - 2;

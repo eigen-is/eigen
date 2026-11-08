@@ -365,7 +365,9 @@ describe('Sheets xlsx import/convert', () => {
     async function pictureWorkbook(celldata: CellWithRowAndCol[] = []): Promise<ArrayBuffer> {
         const image = { id: 'photo', index: 'a0', x: 100, y: 20, width: 40, height: 30, mediaName: 'photo.png' };
         const media = [{ name: 'photo.png', contentType: 'image/png', data: toTransferableBuffer(PIXEL_PNG) }];
-        return toTransferableBuffer(exportXlsx([{ name: 'Pictures', celldata, images: { photo: image } }], { media }));
+        return toTransferableBuffer(
+            exportXlsx([{ id: 'fixture-2', name: 'Pictures', celldata, images: { photo: image } }], { media }),
+        );
     }
 
     async function mediaFiles(pathId: string): Promise<Map<string, Uint8Array>> {
@@ -1082,7 +1084,7 @@ describe('Sheets xlsx conversion fidelity', () => {
     test("a width counts the file's default font: Calibri's 7 px digit beside Calibri, Inter's digit beside Inter", async () => {
         // Excel's default column, 8.43 characters and the padding, stored as 9.140625.
         expect(parseXlsx(widthOf(9.140625))[0].config?.columnlen?.['0']).toBe(64);
-        const inter = exportXlsx([{ name: 'Sheet1', celldata: [], config: { columnlen: { 0: 67 } } }]);
+        const inter = exportXlsx([{ id: 'fixture-1', name: 'Sheet1', celldata: [], config: { columnlen: { 0: 67 } } }]);
         expect(xlsxToSheets(inter)[0].config?.columnlen).toEqual({ 0: 67 });
     });
 

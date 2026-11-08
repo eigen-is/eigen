@@ -16,11 +16,16 @@ export function recomputeCells(ctx: Context, cells: readonly FormulaCell[]) {
 }
 
 export function jfrefreshgrid(ctx: Context, range: readonly Selection[] = ctx.selections ?? []) {
+    recomputeCells(
+        ctx,
+        range.flatMap((selection) => cellsIn(selection, ctx.currentSheetId)),
+    );
+}
+
+export function cellsIn({ row, column }: Pick<Selection, 'row' | 'column'>, id: string): FormulaCell[] {
     const cells: FormulaCell[] = [];
-    for (const { row, column } of range) {
-        for (let r = row[0]; r <= row[1]; r += 1) {
-            for (let c = column[0]; c <= column[1]; c += 1) cells.push({ r, c, id: ctx.currentSheetId });
-        }
+    for (let r = row[0]; r <= row[1]; r += 1) {
+        for (let c = column[0]; c <= column[1]; c += 1) cells.push({ r, c, id });
     }
-    recomputeCells(ctx, cells);
+    return cells;
 }

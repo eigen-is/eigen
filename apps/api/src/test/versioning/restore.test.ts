@@ -98,7 +98,7 @@ describe('a sheet version in an encoding the editor cannot read', () => {
         // The first encoding: the bare Sheet[] array, which decodeSheetsSnapshot refuses.
         state.set('snapshot', JSON.stringify([{ name: 'Sheet1', celldata: [] }]));
         const old = await drive.saveVersion(M, sheets.id);
-        const current = encodeSheetsSnapshot([{ name: 'Sheet1', celldata: [] }], { computed: true });
+        const current = encodeSheetsSnapshot([{ id: 'fixture-1', name: 'Sheet1', celldata: [] }], { computed: true });
         state.set('snapshot', current);
 
         await expect(drive.restoreContainer(M, sheets.id, old.name)).rejects.toMatchObject({ status: 409 });
