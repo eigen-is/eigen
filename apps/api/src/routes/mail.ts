@@ -331,9 +331,8 @@ export const mailRouter = new Elysia({ name: 'mail' })
         },
         { auth: true, params: AttachmentParamsSchema },
     )
-    // A preview runs the same renderers as Drive's preview routes on the part's bytes, so it answers the same
-    // shapes. It takes two segments after the index, like /embed/:fileName, because the sender names the part,
-    // and a part named like a one-segment preview route would shadow it.
+    // A preview runs Drive's renderers on the part's bytes. It takes two segments after the index because the sender
+    // names the part, and a part named like a one-segment preview route would shadow it.
     .get(
         '/mail/:ownerId/message/:id/attachment/:index/preview/text',
         async ({ params, request, user, set }): Promise<TextPreviewResult | ElysiaCustomStatusResponse<304>> => {

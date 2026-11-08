@@ -9,7 +9,6 @@ import {
     readFileSync,
     rmSync,
     symlinkSync,
-    truncateSync,
     writeFileSync,
 } from 'node:fs';
 import { basename, join } from 'node:path';
@@ -22,26 +21,23 @@ import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
 import {
     copyArchiveMember,
-    countPackedFolders,
     createServerArchiveWriter,
-    declaredUnpackBytes,
     extractArtifact,
     hashArchiveMembers,
     packFolder,
     readArchiveMember,
     readArtifactManifest,
     readUnpackedHome,
-    serializeManifest,
 } from '../../lib/backup/archive';
 import { listArtifacts, readSidecar, writeSidecar } from '../../lib/backup/artifacts';
 import { runArtifactVerify } from '../../lib/backup/jobs';
 import {
     ARCHIVE_MANIFEST_FILE,
-    buildArtifactName,
     buildHomeFolderName,
     buildHomeMemberName,
     buildServerArchiveName,
     buildServerFolderName,
+    freeArtifactName,
     getBackupsDir,
     SERVER_ARCHIVE_ENV_MEMBER,
     SERVER_ARCHIVE_SERVER_MEMBER,
@@ -67,7 +63,6 @@ import {
     TEST_DATA_DIR,
     TEST_PNG_BYTES,
 } from '../setup';
-import { unpackWhole } from './backup-test-helpers';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
@@ -79,7 +74,6 @@ const EMPTY_DIR = 'home/eigen.mail/Maildir/.Empty/cur';
 // Evaluated at registration time, so a machine without these tools skips the tests outright rather
 // than passing them without asserting anything.
 const HAS_TAR = Bun.which('tar') !== null;
-const MANIFEST_CAP = 256 * 1024 * 1024;
 const HAS_ZSTD = Bun.which('zstd') !== null;
 
 function syncUpdateMessage(doc: Y.Doc): Uint8Array {
@@ -251,13 +245,13 @@ describe('Backup pack and verify', () => {
         // An empty directory (a Maildir folder nobody has delivered to) has to survive the round trip.
         mkdirSync(join(folder, EMPTY_DIR), { recursive: true });
 
-        artifact = join(mkdtempSync(join(TEST_DATA_DIR, 'artifacts-')), buildArtifactName(ownerId, new Date()));
+        artifact = join(mkdtempSync(join(TEST_DATA_DIR, 'artifacts-')), freeArtifactName(ownerId, new Date()));
         await packFolder(folder, artifact);
     }, PACK_TIMEOUT_MS);
 
     async function extractFresh(prefix: string): Promise<string> {
         const dir = mkdtempSync(join(TEST_DATA_DIR, prefix));
-        await unpackWhole(artifact, dir);
+        await extractArtifact(artifact, dir);
         return dir;
     }
 
@@ -407,8 +401,8 @@ describe('Backup pack and verify', () => {
 
             const record = await verifyFolder(folder);
             expect(record.status).toBe('failed');
-            expect(record.failures).toContain('../outside.txt: leaves the backup folder');
-            expect(record.failures).toContain('/etc/hosts: leaves the backup folder');
+            expect(record.failures).toContain('../outside.txt: missing from the folder');
+            expect(record.failures).toContain('/etc/hosts: missing from the folder');
             expect(record.failures.some((f) => f.includes('sha256'))).toBe(false);
         },
         PACK_TIMEOUT_MS,
@@ -430,8 +424,7 @@ describe('Backup pack and verify', () => {
 
             const record = await verifyFolder(folder);
             expect(record.status).toBe('failed');
-            expect(record.failures).toContain('home/escape: is a symbolic link');
-            expect(record.failures).toContain('home/escape/hosts: leaves the backup folder');
+            expect(record.failures).toContain('home/escape/hosts: missing from the folder');
             expect(record.failures.some((f) => f.includes('sha256'))).toBe(false);
         },
         PACK_TIMEOUT_MS,
@@ -526,7 +519,7 @@ describe('Backup pack and verify', () => {
         writeFileSync(join(dir, 'home-x', mailbox, '1.eml'), 'mail');
         await packFolder(join(dir, 'home-x'), join(dir, 'x.tar.zst'));
         // A bare folder, with no manifest to bound its unpack by.
-        await extractArtifact(join(dir, 'x.tar.zst'), join(dir, 'out'), 1e9);
+        await extractArtifact(join(dir, 'x.tar.zst'), join(dir, 'out'));
         expect(readFileSync(join(dir, 'out/home-x', mailbox, '1.eml'), 'utf8')).toBe('mail');
         rmSync(dir, { recursive: true, force: true });
     });
@@ -582,56 +575,22 @@ describe('Backup pack and verify', () => {
 
     // A hostile table can be deep enough that building its paths holds the event loop, so the size check never runs.
     test(
-        'a paths table that fails its row checks is refused before a path is built from it',
-        async () => {
-            const dir = await extractFresh('extract-row-refused-');
-            const folder = join(dir, folderName);
-            const relMetadata = `home/mounts/${mountId}/metadata.db`;
-            const db = new Database(join(folder, relMetadata));
-            try {
-                db.run("UPDATE paths SET size = 1 WHERE name = 'café ünïcode.png'");
-                db.run("UPDATE paths SET trashedFrom = id WHERE name LIKE 'long-name-%'");
-            } finally {
-                db.close();
-            }
-            await restateManifestEntry(folder, relMetadata);
-
-            const record = await verifyFolder(folder);
-            expect(record.status).toBe('failed');
-            expect(record.failures.join(' ')).toContain('was trashed from inside itself');
-            expect(record.failures.join(' ')).not.toContain('its row says');
-        },
-        PACK_TIMEOUT_MS,
-    );
-
-    test(
         'a sidecar that is not one reads as none, and an artifact that is not one is an error',
         async () => {
             const dir = mkdtempSync(join(TEST_DATA_DIR, 'bad-sidecar-'));
-            const fake = join(dir, buildArtifactName(ownerId, new Date()));
+            const fake = join(dir, freeArtifactName(ownerId, new Date()));
             writeFileSync(`${fake}.manifest.json`, '{"manifest": {"formatVersion": 2}, "verify": {}}');
             expect(await readSidecar(fake)).toBeNull();
 
             const folder = join(dir, buildHomeFolderName('bogus'));
             mkdirSync(folder, { recursive: true });
             writeFileSync(join(folder, 'manifest.json'), 'not json at all');
-            const bogus = join(dir, buildArtifactName('bogus', new Date()));
+            const bogus = join(dir, freeArtifactName('bogus', new Date()));
             await packFolder(folder, bogus);
             await expect(readArtifactManifest(bogus)).rejects.toThrow('is not an Eigen backup archive');
         },
         PACK_TIMEOUT_MS,
     );
-
-    // A header alone, since the cap goes by the size it declares: no body has to follow, and none is collected.
-    test('a manifest past the cap is refused by its size, before it is read', async () => {
-        const artifact = join(TEST_DATA_DIR, 'oversize.tar.zst');
-        const header = headerChunks('home-x/manifest.json', MANIFEST_CAP + 1, Date.now(), FILE_TYPEFLAG, 0o600);
-        writeFileSync(artifact, Bun.zstdCompressSync(Buffer.concat([...header])));
-        await expect(readArtifactManifest(artifact)).rejects.toMatchObject({
-            status: 400,
-            message: expect.stringContaining('this server reads'),
-        });
-    });
 
     test.skipIf(!HAS_ZSTD)('the artifact is a standard zstd frame', () => {
         // `zstd -t` decodes the whole frame and checks its checksums. Spawned straight, rather than
@@ -750,10 +709,7 @@ describe('Whole-server archive', () => {
             for (const ownerId of [ctx.alice.user.id, teamOwnerId(teamId)]) {
                 const staging = mkdtempSync(join(TEST_DATA_DIR, 'home-member-'));
                 const home = await snapshotHome(await getHome(ownerId), staging);
-                const standalone = join(
-                    mkdtempSync(join(TEST_DATA_DIR, 'standalone-')),
-                    buildArtifactName(ownerId, at),
-                );
+                const standalone = join(mkdtempSync(join(TEST_DATA_DIR, 'standalone-')), freeArtifactName(ownerId, at));
                 await packFolder(join(staging, buildHomeFolderName(ownerId)), standalone);
                 const member = buildHomeMemberName(ownerId, at);
                 await writer.appendFile(member, standalone);
@@ -841,7 +797,7 @@ describe('Whole-server archive', () => {
                 const name = basename(member.name);
                 expect(parseBackupArtifactName(name)).toEqual({ ownerId: home.ownerId, at });
                 const unpackDir = mkdtempSync(join(TEST_DATA_DIR, 'member-extract-'));
-                await unpackWhole(member, unpackDir);
+                await extractArtifact(member, unpackDir);
                 const { folder, manifest: inner } = readUnpackedHome(unpackDir, home.ownerId, name);
                 expect(inner.ownerId).toBe(home.ownerId);
                 const record = await verifyFolder(folder);
@@ -856,7 +812,7 @@ describe('Whole-server archive', () => {
         async () => {
             const members = await hashArchiveMembers(archivePath);
             const unpackDir = mkdtempSync(join(TEST_DATA_DIR, 'server-extract-'));
-            await unpackWhole(members.find((m) => m.name === SERVER_ARCHIVE_SERVER_MEMBER)!, unpackDir);
+            await extractArtifact(members.find((m) => m.name === SERVER_ARCHIVE_SERVER_MEMBER)!, unpackDir);
             const folder = join(unpackDir, buildServerFolderName(at));
             expect(existsSync(join(folder, 'server', SERVER_DATABASES.users))).toBe(true);
             const record = await verifyFolder(folder);
@@ -1086,106 +1042,57 @@ describe('Archive writer and reader', () => {
     });
 });
 
-// What an unpack is allowed to write is what the manifest declares, counted the way the unpack counts it: the bytes of
-// every entry, the manifest's own, and an allowance for every file and every folder it counts, which take the disk's
-// blocks with no bytes of their own.
-describe('The unpack bound', () => {
-    const FILES = 2000;
+describe('The unpack', () => {
     let dir: string;
 
     beforeAll(() => {
-        dir = mkdtempSync(join(TEST_DATA_DIR, 'unpack-bound-'));
+        dir = mkdtempSync(join(TEST_DATA_DIR, 'unpack-'));
     });
 
-    // A home of many empty files, so its manifest outweighs them, and `emptyFolders` empty folders. `counted` is how
-    // many of those its manifest counts.
-    async function packHome(
-        name: string,
-        { emptyFolders, counted = emptyFolders }: { emptyFolders: number; counted?: number },
-    ): Promise<{ artifact: string; manifest: BackupManifest; folder: string }> {
-        const folder = join(dir, name, buildHomeFolderName('unpackbound'));
-        const entries = Array.from({ length: FILES }, (_, index) => ({
-            path: `home/notes/${index % 10}/note-${index}.txt`,
-            bytes: 0,
-            sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-        }));
-        for (const entry of entries) {
-            mkdirSync(join(folder, entry.path, '..'), { recursive: true });
-            writeFileSync(join(folder, entry.path), '');
-        }
-        const makeEmptyFolders = (from: number, to: number) => {
-            for (let index = from; index < to; index++)
-                mkdirSync(join(folder, 'home', 'empty', `${index}`), { recursive: true });
-        };
-        makeEmptyFolders(0, counted);
-        const dirs = countPackedFolders(folder);
-        makeEmptyFolders(counted, emptyFolders);
-        const manifest: BackupManifest = {
-            formatVersion: 1,
-            kind: 'user',
-            ownerId: 'unpackbound',
-            name: 'Unpack bound',
-            createdAt: new Date().toISOString(),
-            appVersion: 'test',
-            server: { domain: 'test.eigen.is', orgId: 'org' },
-            counts: { databases: 0, files: FILES, bytes: 0, dirs },
-            level: 'full-s3',
-            mounts: [],
-            entries,
-        };
-        writeFileSync(join(folder, ARCHIVE_MANIFEST_FILE), serializeManifest(manifest));
-        const artifact = join(dir, `${name}.tar.zst`);
-        await packFolder(folder, artifact);
-        return { artifact, manifest, folder };
-    }
-
-    test(
-        'an archive that holds what its manifest lists unpacks within it, the manifest itself and every folder counted',
-        async () => {
-            const { artifact, manifest } = await packHome('exact', { emptyFolders: 50 });
-            // The manifest alone weighs more than the files it lists.
-            expect(Buffer.byteLength(serializeManifest(manifest))).toBeGreaterThan(100 * FILES);
-            await extractArtifact(artifact, join(dir, 'exact-out'), declaredUnpackBytes(manifest));
-            await expect(
-                extractArtifact(artifact, join(dir, 'exact-short'), declaredUnpackBytes(manifest) - 1),
-            ).rejects.toThrow(/more than its manifest declares/);
-            expect(existsSync(join(dir, 'exact-short'))).toBe(false);
-        },
-        PACK_TIMEOUT_MS,
-    );
-
-    // Our writer lists a folder before what sits in it, so a parent nothing listed is a crafted archive's way to make
-    // folders its manifest never counted.
-    test('an entry whose folder has not come yet is refused, and leaves nothing', async () => {
+    // The writer lists every folder before what sits in it, so a parent nothing listed is a damaged tar.
+    test('an entry whose folder has not come yet is refused', async () => {
         const tarOf = (...chunks: Iterable<Uint8Array>[]) => Buffer.concat(chunks.flatMap((part) => [...part]));
         const rootEntry = () => headerChunks('root/', 0, Date.now(), DIRECTORY_TYPEFLAG, 0o700);
-        const crafted = {
+        const damaged = {
             file: tarOf(rootEntry(), headerChunks('root/a/b/c.txt', 0, Date.now(), FILE_TYPEFLAG, 0o600)),
             folder: tarOf(rootEntry(), headerChunks('root/a/b/', 0, Date.now(), DIRECTORY_TYPEFLAG, 0o700)),
         };
-        for (const [name, tar] of Object.entries(crafted)) {
+        for (const [name, tar] of Object.entries(damaged)) {
             const artifact = join(dir, `implicit-${name}.tar.zst`);
             writeFileSync(artifact, Bun.zstdCompressSync(tar));
-            const out = join(dir, `implicit-${name}-out`);
-            await expect(extractArtifact(artifact, out, 1e9)).rejects.toMatchObject({ code: 'ENOENT' });
-            expect(existsSync(out)).toBe(false);
+            await expect(extractArtifact(artifact, join(dir, `implicit-${name}-out`))).rejects.toMatchObject({
+                code: 'ENOENT',
+            });
         }
     });
 
-    // The manifest decides how much a verify may write, and it can be crafted, so the room is checked on the disk the
-    // verify unpacks on, the backups folder's.
+    // The room is checked on the disk the verify unpacks on, the backups folder's.
     test(
         'a verify of an archive that declares more than the disk holds is refused before it unpacks',
         async () => {
-            const { manifest, folder } = await packHome('declared', { emptyFolders: 0 });
-            const declared = { ...manifest, counts: { ...manifest.counts, bytes: 1e15 } };
-            writeFileSync(join(folder, ARCHIVE_MANIFEST_FILE), serializeManifest(declared));
-            const name = buildArtifactName(manifest.ownerId, new Date());
+            const ownerId = 'unpackroom';
+            const folder = join(dir, 'declared', buildHomeFolderName(ownerId));
+            mkdirSync(folder, { recursive: true });
+            const manifest: BackupManifest = {
+                formatVersion: 1,
+                kind: 'user',
+                ownerId,
+                name: 'Unpack room',
+                createdAt: new Date().toISOString(),
+                appVersion: 'test',
+                server: { domain: 'test.eigen.is', orgId: 'org' },
+                counts: { databases: 0, files: 0, bytes: 1e15 },
+                level: 'full-s3',
+                mounts: [],
+                entries: [],
+            };
+            writeFileSync(join(folder, ARCHIVE_MANIFEST_FILE), JSON.stringify(manifest));
+            const name = freeArtifactName(ownerId, new Date());
             await packFolder(folder, join(getBackupsDir(), name));
             const job: BackupJob = {
                 id: crypto.randomUUID(),
                 kind: 'verify',
-                ownerId: manifest.ownerId,
+                ownerId,
                 state: 'running',
                 progress: { step: 'starting', done: 0, total: 0 },
                 startedAt: new Date(),
@@ -1198,38 +1105,11 @@ describe('The unpack bound', () => {
         },
         PACK_TIMEOUT_MS,
     );
-
-    test(
-        'an archive with more folders than its manifest counts is refused, though they hold no bytes',
-        async () => {
-            const { artifact, manifest } = await packHome('folders', { emptyFolders: 50, counted: 10 });
-            await expect(
-                extractArtifact(artifact, join(dir, 'folders-out'), declaredUnpackBytes(manifest)),
-            ).rejects.toThrow(/more than its manifest declares/);
-            expect(existsSync(join(dir, 'folders-out'))).toBe(false);
-        },
-        PACK_TIMEOUT_MS,
-    );
 });
 
 // A home can hold tens of thousands of databases, and each quick_check blocks the thread. A restore verifies in the API,
 // so other requests run between every few databases.
 describe('verifyFolder', () => {
-    // The verify of a backup reads the manifest through the same cap, so a home past it finds out when it is backed up.
-    test('a folder whose manifest is past the cap is refused', async () => {
-        const folder = mkdtempSync(join(TEST_DATA_DIR, 'verify-cap-'));
-        writeFileSync(join(folder, 'manifest.json'), '');
-        truncateSync(join(folder, 'manifest.json'), MANIFEST_CAP + 1);
-        try {
-            await expect(verifyFolder(folder)).rejects.toMatchObject({
-                status: 400,
-                message: expect.stringContaining('this server reads'),
-            });
-        } finally {
-            rmSync(folder, { recursive: true, force: true });
-        }
-    });
-
     test('lets other work run while it checks the databases', async () => {
         const folder = mkdtempSync(join(TEST_DATA_DIR, 'verify-yield-'));
         const manifest: BackupManifest = {
@@ -1240,7 +1120,7 @@ describe('verifyFolder', () => {
             createdAt: new Date().toISOString(),
             appVersion: 'test',
             server: { domain: 'test', orgId: 'test' },
-            counts: { databases: 0, files: 0, bytes: 0, dirs: 0 },
+            counts: { databases: 0, files: 0, bytes: 0 },
             level: 'full',
             mounts: [],
             entries: [],

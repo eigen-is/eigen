@@ -329,9 +329,8 @@ describe('ManagedDatabase lifecycle serialization', () => {
 
 describe('ManagedDatabase close teardown', () => {
     test('close() tears down (db closed, journals gone, onClose ran) even when onSync throws', async () => {
-        // A throwing onSync used to abort close() before the teardown, leaking the raw db
-        // handle and the working copy until process exit. The sync error must still reach
-        // the caller (they catch + log), but the teardown must run regardless.
+        // A throwing onSync must not leak the raw db handle and the working copy until process exit. The sync error
+        // still reaches the caller, who catches and logs it.
         let onCloseRan = false;
         const dbPath = nextDbPath();
         const db = new ManagedDatabase(makeConfig(1000), dbPath, {
@@ -452,9 +451,8 @@ describe('ManagedDatabase dirty tracking', () => {
 
     test('a write landing DURING the sync callback stays dirty and re-syncs (AUDIT 2b)', async () => {
         // onSync freezes the bytes it stages up front (Mount's VACUUM INTO); a write that lands
-        // during the callback's later awaits is NOT in that copy. sync() used to set the watermark
-        // to total_changes() AFTER the await, so that racing write was counted as synced but never
-        // staged — silent tail-loss. It must remain dirty and re-sync on the next tick.
+        // during the callback's later awaits is NOT in that copy. A watermark set to total_changes() after the await
+        // would count that write as synced though it was never staged, so it must stay dirty and re-sync on the next tick.
         let syncs = 0;
         const db = new ManagedDatabase(makeConfig(1000), nextDbPath(), {
             onSync: async () => {

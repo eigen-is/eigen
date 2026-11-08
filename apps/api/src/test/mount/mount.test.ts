@@ -1427,7 +1427,7 @@ describe('restorePath (local-key storage)', () => {
         expect(restored.trashedAt).toBeNull();
     });
 
-    // A live folder inside a trashed one is legacy data, or a create that raced the trash off `local`.
+    // A live folder inside a trashed one is a create that raced the trash off `local`.
     test('restore when an ancestor of the original parent is trashed restores to root', async () => {
         const outerId = await mount.createFolder(rootId, 'RestoreTrashedAncestor');
         const innerId = await mount.createFolder(outerId, 'Inner');

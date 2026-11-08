@@ -268,9 +268,8 @@ export class ChatRoom {
                 );
             }
 
-            // The history gets a 'commented' row on the document, or on a chat on its own. A whisper is
-            // private to its recipient, so it never reaches the history. The watchers skip everyone the
-            // notifications above reached, so nobody hears about one message twice.
+            // A whisper is private to its recipient, so it never reaches the history. The watchers skip everyone the
+            // notifications above reached, so nobody hears of one message twice.
             if (type !== 'whisper') {
                 const coveredEmails = new Set<string>([
                     authorEmail.toLowerCase(),

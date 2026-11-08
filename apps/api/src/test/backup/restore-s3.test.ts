@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { packFolder } from '../../lib/backup/archive';
-import { buildArtifactName, buildHomeFolderName, getBackupsDir } from '../../lib/backup/paths';
+import { buildHomeFolderName, freeArtifactName, getBackupsDir } from '../../lib/backup/paths';
 import { restoreHome } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { getHome } from '../../lib/home/get-home';
@@ -162,7 +162,7 @@ describe('Backup restore of an s3 mount', () => {
         const staging = mkdtempSync(join(TEST_DATA_DIR, 'restore-s3-backup-'));
         const manifest = await snapshotHome(home, staging);
         expect(manifest.mounts.find((m) => m.id === MOUNT_ID)?.storageType).toBe('s3');
-        artifact = buildArtifactName(userId, new Date());
+        artifact = freeArtifactName(userId, new Date());
         await packFolder(join(staging, buildHomeFolderName(userId)), join(getBackupsDir(), artifact));
         rmSync(staging, { recursive: true, force: true });
 

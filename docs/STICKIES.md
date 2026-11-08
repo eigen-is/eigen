@@ -1,6 +1,6 @@
 # Stickies (Kanban Board)
 
-> **TLDR:** A collaborative Kanban board in `apps/stickies/src/components/stickies/`, stored as an `.eigenstickies` Drive folder whose Yjs doc is the source of truth. The board owns only columns and their order: a card is the shared `CommentCard` with its own chat, so most of the board is the comment machinery. Three things are not obvious. Stickies data stays readable in every shape that ever shipped. A concurrent merge can put a card in two columns or none, so a shared repair ranks columns by `columnOrder`. A drag writes to Yjs once, on drop.
+> **TLDR:** A collaborative Kanban board in `apps/stickies/src/components/stickies/`, stored as an `.eigenstickies` Drive folder whose Yjs doc is the source of truth. The board owns only columns and their order: a card is the shared `CommentCard` with its own chat, so most of the board is the comment machinery. Two things are not obvious. A concurrent merge can put a card in two columns or none, so a shared repair ranks columns by `columnOrder`. A drag writes to Yjs once, on drop.
 
 A Stickies board is a file in Drive with columns of cards, which people drag from column to column as work moves along. Everyone the file is shared with can open it at the same time and sees the others' changes live, with an outline on the card someone is editing or dragging.
 
@@ -22,16 +22,17 @@ Y.Array<string>  "columnOrder"  ordered column ids
 
 The undo manager tracks all three roots. So a card and its column reference undo as one step, and so does a column and its place in `columnOrder`.
 
-## Stickies data stays readable in every shape that shipped
+## A reader checks a collaborator's edit, not an older board
 
-Real boards live on eigen.is, so stickies are the exception to the pre-1.0 format policy in [ROADMAP.md](ROADMAP.md): the readers keep handling every stickies shape that ever shipped. They default a field an older board lacks rather than assume it. The root name `tasks` stays for the same reason, although its entries are cards.
+Stickies follow the format policy in [ROADMAP.md](ROADMAP.md) like every other document. The `tasks` root holds the cards. Any collaborator can write any value into the Yjs doc, so a reader's checks are the boundary for that edit, and each one stops a crash or an injection:
 
-What a reader tolerates is the contract:
-
-- A card is read by `readCards` (`packages/lib/src/core/comments/hooks/use-comment-cards.ts`). `title` and `description` default to '', and the description is sanitized. `color`, `chatName`, `creator`, `createdAt` and `attachments` are optional, and a value of the wrong type reads as absent. An `attachments` list keeps only its string and object elements.
-- A column is read by `readBoard` (`hooks/use-board.ts`). A `title` or `creator` that is missing or not a string reads as '', a `createdAt` that is not a number as 0, and a missing `taskIds` as an empty list. The add-card dialog creates the list before it inserts.
+- A card is read by `readCards` (`packages/lib/src/core/comments/hooks/use-comment-cards.ts`). The description is sanitized, because every viewer renders it as HTML. A field of the wrong type reads as '' or absent, because the renderers call string and date methods on it. `chatName`, `creator` and `createdAt` are optional. An `attachments` list keeps only its string and object elements.
+- A column is read by `readBoard` (`hooks/use-board.ts`). A `title` that isn't a string reads as '', and a `taskIds` that isn't a list as an empty one. A new card has no list to land in on such a column, so it stays off the board until the ref repair places it.
 - A card's id and a column's id are their keys in `tasks` and `columns`. The stored `id` field is written but never read.
-- Every entry of `tasks` and `columns` is written as a map. Every reader, the server's search reader included, and the ref repair (`normalizeParentChildRefs`) skip an entry that is not one, so a peer's scalar entry drops out instead of breaking the board. `readBoard` also drops an id from `columnOrder` or a column's `taskIds` when it names no readable entry, because the board looks up every id it lists.
+- An entry of `tasks` or `columns` that isn't a map is skipped by every reader and by the ref repair (`normalizeParentChildRefs`).
+- `readBoard` drops an id from `columnOrder` or a column's `taskIds` when it names no readable entry, because the board looks up every id it lists. A peer's concurrent delete leaves such an id normally.
+
+The server's search reader keeps the map check and takes each field as stored. A wrong type can't crash it: at worst the board's search text stops early.
 
 ## A card is a shared CommentCard
 
@@ -49,7 +50,7 @@ The repair is idempotent. Run on sync it writes under `NORMALIZE_ORIGIN`, which 
 
 ## Roots are read through typed accessors
 
-The board reads its roots and id lists through `getItemMapRoot`, `getIdArrayRoot` and `getIdArray` (`packages/lib/src/core/collab/yjs-utils.ts`) instead of casting. `getItemMapRoot` types its entries `unknown`, because a peer can write a scalar where a map belongs, so the compiler makes every reader check for a `Y.Map` first. A root needs no runtime check: `doc.get` upgrades the `AbstractType` root that `Y.applyUpdate` leaves on the server, and throws only on a real mismatch. A nested list is checked with `instanceof Y.Array`, which is sound because nested types always decode with their real constructors. `getIdArray` returns undefined for a missing list, which is how an older column without `taskIds` stays readable.
+The board reads its roots and id lists through `getItemMapRoot`, `getIdArrayRoot` and `getIdArray` (`packages/lib/src/core/collab/yjs-utils.ts`) instead of casting. `getItemMapRoot` types its entries `unknown`, because a peer can write a scalar where a map belongs, so the compiler makes every reader check for a `Y.Map` first. A root needs no runtime check: `doc.get` upgrades the `AbstractType` root that `Y.applyUpdate` leaves on the server, and throws only on a real mismatch. A nested list is checked with `instanceof Y.Array`, which is sound because nested types always decode with their real constructors. `getIdArray` returns undefined for a missing list.
 
 The server reads a board for search indexing in `apps/api/src/lib/document/stickies.ts`. It imports `getItemMapRoot` through the React-free `@workspace/lib/collab/yjs-utils` subpath, because the backend never imports a `core/` domain barrel.
 

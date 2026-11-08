@@ -5,7 +5,6 @@ export {
     canUploadServerArchive,
     incompleteReason,
     isCompleteArchive,
-    listUnusableMountIds,
     ON_DEMAND_BACKUP_REASONS,
     parseBackupAuthRows,
     parseBackupManifest,

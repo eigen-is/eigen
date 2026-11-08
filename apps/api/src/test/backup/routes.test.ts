@@ -14,8 +14,7 @@ import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
 import { landUpload } from '../../lib/backup/artifacts';
 import { withHomeSlot } from '../../lib/backup/jobs';
-import { buildArtifactName, buildHomeFolderName, buildRestoreStagingDir, getBackupsDir } from '../../lib/backup/paths';
-import { measureFolder } from '../../lib/backup/safety-copy';
+import { buildHomeFolderName, buildRestoreStagingDir, freeArtifactName, getBackupsDir } from '../../lib/backup/paths';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import * as verifyModule from '../../lib/backup/verify';
 import { getServerConfig } from '../../lib/config/server-config';
@@ -148,7 +147,7 @@ describe('Backup routes', () => {
     });
 
     test('every route refuses a non-admin', async () => {
-        const name = buildArtifactName(target.id, new Date());
+        const name = freeArtifactName(target.id, new Date());
         const calls: [string, RequestInit][] = [
             [`/admin/backup/home/${target.id}`, { method: 'POST' }],
             ['/admin/backup/jobs', {}],
@@ -253,7 +252,7 @@ describe('Backup routes', () => {
     });
 
     test('an uploaded artifact lists unverified and a verify job flips it to verified', async () => {
-        const name = buildArtifactName(target.id, new Date('2020-01-02T03:04:05Z'));
+        const name = freeArtifactName(target.id, new Date('2020-01-02T03:04:05Z'));
         const packed = await packTargetHome(name);
         const bytes = Uint8Array.from(readFileSync(packed));
         const res = await uploadRequest(name, bytes);
@@ -280,7 +279,7 @@ describe('Backup routes', () => {
     });
 
     test('refuses to delete an archive while a verify of its home runs', async () => {
-        const name = buildArtifactName(target.id, new Date('2020-01-03T03:04:05Z'));
+        const name = freeArtifactName(target.id, new Date('2020-01-03T03:04:05Z'));
         expect((await uploadRequest(name, Uint8Array.from(readFileSync(await packTargetHome(name))))).status).toBe(200);
 
         // A verify that ran on past a delete would write a sidecar for an archive that is gone.
@@ -314,14 +313,14 @@ describe('Backup routes', () => {
     });
 
     test('refuses an upload over the size limit', async () => {
-        const name = buildArtifactName(target.id, new Date('2020-02-02T03:04:05Z'));
+        const name = freeArtifactName(target.id, new Date('2020-02-02T03:04:05Z'));
         const res = await uploadRequest(name, Uint8Array.from([1, 2, 3]), 2 * 1024 * 1024 * 1024);
         expect(res.status).toBe(413);
         expect(existsSync(join(getBackupsDir(), name))).toBe(false);
     });
 
     test('an upload is staged 0600 from its first byte, so no other user reads one that is refused', async () => {
-        const name = buildArtifactName(target.id, new Date('2020-02-03T03:04:05Z'));
+        const name = freeArtifactName(target.id, new Date('2020-02-03T03:04:05Z'));
         const bytes = Uint8Array.from([1, 2, 3]);
         const modes: number[] = [];
         const rm = fs.rmSync;
@@ -345,7 +344,7 @@ describe('Backup routes', () => {
         const staging = mkdtempSync(join(TEST_DATA_DIR, 'routes-bogus-'));
         const folder = join(staging, buildHomeFolderName(target.id));
         await Bun.write(join(folder, 'manifest.json'), '{"formatVersion":99}');
-        const name = buildArtifactName(target.id, new Date('2020-03-03T03:04:05Z'));
+        const name = freeArtifactName(target.id, new Date('2020-03-03T03:04:05Z'));
         const artifactPath = join(staging, name);
         await packFolder(folder, artifactPath);
 
@@ -365,7 +364,7 @@ describe('Backup routes', () => {
 
         // A restore of a guest home is refused by the route, not by the job: park an artifact under
         // the guest's name so the guard is reached rather than the missing-artifact 404.
-        const guestArtifact = buildArtifactName(guestId, new Date('2020-04-04T03:04:05Z'));
+        const guestArtifact = freeArtifactName(guestId, new Date('2020-04-04T03:04:05Z'));
         writeFileSync(join(getBackupsDir(), guestArtifact), '');
         const res = await adminJson(`/admin/backup/artifacts/${guestArtifact}/restore`, { ownerId: guestId });
         rmSync(join(getBackupsDir(), guestArtifact));
@@ -502,7 +501,7 @@ describe('Backup routes', () => {
     });
 
     test('refuses a second upload of a name already in the folder and keeps the first', async () => {
-        const name = buildArtifactName(target.id, new Date('2020-05-05T03:04:05Z'));
+        const name = freeArtifactName(target.id, new Date('2020-05-05T03:04:05Z'));
         const packed = await packTargetHome(name);
         const first = await uploadRequest(name, Uint8Array.from(readFileSync(packed)));
         expect(first.status).toBe(200);
@@ -522,7 +521,7 @@ describe('Backup routes', () => {
     // An artifact that appears while a body streams — another admin's upload, or a job's own pack —
     // must not be overwritten when this one lands.
     test('an artifact that appears while the body streams is not overwritten', async () => {
-        const name = buildArtifactName(target.id, new Date('2020-05-05T04:04:05Z'));
+        const name = freeArtifactName(target.id, new Date('2020-05-05T04:04:05Z'));
         const packed = readFileSync(await packTargetHome(name));
         const half = Math.floor(packed.byteLength / 2);
         let release = (): void => {};
@@ -555,7 +554,7 @@ describe('Backup routes', () => {
     // Not every filesystem has hard links: a ./backups bind mount from CIFS/SMB rejects link with
     // EPERM, and an upload there must still land.
     test('an upload lands on a filesystem without hard links', async () => {
-        const name = buildArtifactName(target.id, new Date('2020-05-06T03:04:05Z'));
+        const name = freeArtifactName(target.id, new Date('2020-05-06T03:04:05Z'));
         const bytes = Uint8Array.from(readFileSync(await packTargetHome(name)));
         const spy = spyOn(fs, 'linkSync').mockImplementation(() => {
             throw Object.assign(new Error('link not supported'), { code: 'EPERM' });
@@ -572,7 +571,7 @@ describe('Backup routes', () => {
     });
 
     test('lists an artifact with a missing or unreadable sidecar as unverified', async () => {
-        const name = buildArtifactName(target.id, new Date('2020-06-06T03:04:05Z'));
+        const name = freeArtifactName(target.id, new Date('2020-06-06T03:04:05Z'));
         const packed = await packTargetHome(name);
         expect((await uploadRequest(name, Uint8Array.from(readFileSync(packed)))).status).toBe(200);
         const sidecar = join(getBackupsDir(), `${name}.manifest.json`);
@@ -651,19 +650,19 @@ describe('Backup routes', () => {
         rmSync(copyDir, { recursive: true, force: true });
     });
 
-    // The walk gives up after a cap so a huge home is not re-walked on every poke, and what it
-    // reports is then a floor. Saying so is the difference between "52.79 MB" and "at least
-    // 52.79 MB" for a 284 MB copy — the first is a number an admin would act on.
+    // The walk gives up after a cap so a huge home is not re-walked on every poke, and what it reports is then a floor.
+    // Saying so is the difference between "52.79 MB" and "at least 52.79 MB" for a 284 MB copy: the first is a number an
+    // admin would act on.
     test('a folder too big to walk reports its size as a floor', async () => {
-        const dir = mkdtempSync(join(TEST_DATA_DIR, 'measure-'));
-        for (const name of ['a.bin', 'b.bin', 'c.bin']) writeFileSync(join(dir, name), Buffer.alloc(1024));
-
-        expect(await measureFolder(dir, 50)).toEqual({ bytes: 3072, truncated: false });
-        const capped = await measureFolder(dir, 2);
-        expect(capped.truncated).toBe(true);
-        expect(capped.bytes).toBeLessThan(3072);
-        rmSync(dir, { recursive: true, force: true });
-    });
+        const copyName = `${target.id}${PRE_RESTORE_SUFFIX}20200808-030405`;
+        const copyDir = join(TEST_DATA_DIR, 'home', copyName);
+        mkdirSync(copyDir, { recursive: true });
+        for (let index = 0; index <= 50_000; index++) writeFileSync(join(copyDir, `${index}.bin`), 'x');
+        const listed = (await listArtifacts(target.id)).safetyCopies.find((entry) => entry.name === copyName);
+        expect(listed?.truncated).toBe(true);
+        expect(listed?.bytes).toBeLessThan(50_001);
+        rmSync(copyDir, { recursive: true, force: true });
+    }, 120_000);
 
     test('a failed verify fails the backup job, keeps the artifact and tells the admin', async () => {
         const spy = spyOn(verifyModule, 'verifyFolder').mockResolvedValue({
@@ -812,6 +811,20 @@ describe('Backup routes', () => {
                 });
             expect((await upload(admin)).status).toBe(403);
             expect((await upload(owner)).status).toBe(200);
+        });
+
+        test('only the owner uploads an archive, of any home', async () => {
+            const name = freeArtifactName(target.id, new Date('2020-07-07T03:04:05Z'));
+            const bytes = Uint8Array.from(readFileSync(await packTargetHome(name)));
+            const upload = (caller: TestUser) =>
+                authedRequest(caller.sessionToken, uploadPath(name), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/zstd', 'Content-Length': String(bytes.byteLength) },
+                    body: new Blob([bytes]),
+                });
+            expect((await upload(admin)).status).toBe(403);
+            expect((await listArtifacts(target.id)).artifacts.map((artifact) => artifact.name)).not.toContain(name);
+            expect((await upload(ctx.alice.user)).status).toBe(200);
         });
 
         test('that admin still backs up, lists, verifies, downloads and restores any other home', async () => {

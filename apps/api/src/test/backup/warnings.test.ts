@@ -67,7 +67,7 @@ function metadataPath(homeDir: string, mountId: string): string {
     return join(homeDir, PATHS.DRIVE.ROOT, mountId, PATHS.DRIVE.METADATA_DB);
 }
 
-// What a salvaged database or a hand edit in the sqlite3 CLI leaves: a write with foreign keys off.
+// What a hand edit in the sqlite3 CLI leaves: a write with foreign keys off.
 function writeWithoutForeignKeys(homeDir: string, mountId: string, statements: [string, string[]][]): void {
     const db = new Database(metadataPath(homeDir, mountId));
     try {

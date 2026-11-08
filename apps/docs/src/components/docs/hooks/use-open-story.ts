@@ -77,9 +77,8 @@ function forwardStory(body: Editor, story: Editor, anchor: StoryAnchor): void {
     );
 }
 
-// Each story editor's doc as it opened, or as the last pull that brought a peer's text into it left it. Once its doc
-// differs, it holds keystrokes a peer may lack. A pull that brings nothing, as a peer's caret makes, leaves it, and so
-// does this tab's own undo or move: no peer has this tab's text from those.
+// Each story editor's doc as it opened or as the last pull left it. Once its doc differs it holds keystrokes a peer may
+// lack. A pull that brings nothing, or this tab's own undo or move, leaves it.
 const pulled = new WeakMap<Editor, PMNode>();
 
 // y-tiptap marks a peer's change and an undo alike. This is the peer's.
@@ -95,9 +94,8 @@ function storyDecorations(found: FoundStory, doc: PMNode): DecorationSet {
     return DecorationSet.create(doc, decorations);
 }
 
-// After the story's own keystroke, the body's decorations inside it where they stand elsewhere than the story's editor
-// mapped them: a comment's colour, built again from its mark, takes in the text typed at its end. Only then, so a
-// keystroke makes one transaction in the story's editor.
+// After the story's own keystroke, hand over the body's decorations inside it that the story's editor mapped elsewhere
+// (a comment's colour taking in text typed at its end), and only then, so a keystroke stays one transaction.
 function handDecorations(body: Editor, story: Editor, anchor: StoryAnchor): void {
     const found = followStory(body, anchor);
     if (!found) return;
@@ -110,11 +108,8 @@ function handDecorations(body: Editor, story: Editor, anchor: StoryAnchor): void
     if (moved) story.view.dispatch(story.state.tr.setMeta(storyDecorationsKey, next));
 }
 
-// The body's version of the story into its editor, with the body's decorations inside it. When a peer's change gave the
-// story a new element, the new node may lack the typist's keystrokes of that round trip: they landed in the deleted
-// element. So an editor that changed since its last pull keeps its text, and forwards it into the new node once the
-// change ends. An editor that didn't change takes the new node, with the peer's edits. This tab's own move and its undo
-// always pull, as the body holds every keystroke forwarded.
+// A peer's change that gives the story a new element can leave the typist's keystrokes in the deleted one, so an editor
+// that changed since its last pull keeps its text and forwards it into the new node once the change ends.
 function pullStory(
     body: Editor,
     story: Editor,
@@ -155,11 +150,8 @@ export function useOpenStory(body: Editor, editors: StoryEditors, allowed: boole
     // The story subscribed below, so `open` tells a fresh open from the find bar's reveal inside the open story.
     const subscribed = useRef<StoryAnchor | null>(null);
 
-    // The story goes into its editor here, before React mounts the editor in the list or the box: a node view React
-    // draws, an image's, would otherwise mount inside a layout effect, where React refuses its flushSync. A story with
-    // no id, such as a box a web page's HTML pasted, takes one first: the box draws the
-    // open editor by it, and a re-anchor finds the story again by it. Opening the open story again keeps what it typed
-    // as typed.
+    // The story goes into its editor before React mounts it, or a node view React draws (an image's) would mount inside
+    // a layout effect, where React refuses flushSync. A story with no id, such as a pasted box, takes one first.
     const open = useCallback(
         (pos: number, how: Omit<StoryOpening, 'anchor'>) => {
             const node = body.state.doc.nodeAt(pos);
@@ -180,10 +172,8 @@ export function useOpenStory(body: Editor, editors: StoryEditors, allowed: boole
 
     useLayoutEffect(() => {
         if (!anchor || !story) return;
-        // A story that goes while the caret is in it, its node deleted by a peer or by undo, hands the caret to the
-        // body where the node stood, or typing and ⇧⌘Z would reach nothing. After the transaction, as a focus inside it
-        // draws a selection the DOM doesn't hold yet (Chrome throws, and the story's ⌘Z then falls through to the
-        // browser's own undo), at a text position.
+        // A story deleted while the caret is in it hands the caret to the body where the node stood. It runs after the
+        // transaction, since a focus inside it draws a selection the DOM doesn't hold yet (Chrome throws).
         let stood = anchor.pos;
         const pull = (transactions: readonly Transaction[]) => {
             const pos = pullStory(body, story, anchor, transactions);

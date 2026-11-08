@@ -13,20 +13,18 @@ describe('readBoard', () => {
             const good = new Y.Map<unknown>();
             good.set('title', 'To Do');
             good.set('taskIds', Y.Array.from(['t1']));
-            good.set('creator', 'alice@example.com');
             columns.set('c1', good);
 
             const malformed = new Y.Map<unknown>();
             malformed.set('title', 42);
-            malformed.set('creator', { name: 'bob' });
             columns.set('c2', malformed);
 
             columns.set('c3', 'not-a-column');
         });
 
         expect(readBoard(doc).columns).toEqual({
-            c1: { id: 'c1', title: 'To Do', taskIds: ['t1'], creator: 'alice@example.com' },
-            c2: { id: 'c2', title: '', taskIds: [], creator: '' },
+            c1: { id: 'c1', title: 'To Do', taskIds: ['t1'] },
+            c2: { id: 'c2', title: '', taskIds: [] },
         });
     });
 

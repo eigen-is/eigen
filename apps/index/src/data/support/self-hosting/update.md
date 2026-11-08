@@ -27,7 +27,7 @@ In the install folder, run:
 
 Eigen is down only for the switch. Meanwhile the open tabs say that Eigen is updating. When it is back, every open browser tab reloads by itself onto the new version. Anything a tab had not saved yet is lost, such as text typed while Eigen was down or a comment not yet sent. What people change between the end of the backup and the stop is not in the backup, so the update prints the time the backup ends. When it is done, it removes older images. It keeps the images of the version before, so `./eigen rollback` can go back to it.
 
-To see whether there is an update, and what it brings, without installing it: `./eigen update --check`. To install a specific release: `./eigen update 0.3.1`.
+To see whether there is an update, and what it brings, without installing it: `./eigen update --check`. To install a specific release: `./eigen update 1.2.3`.
 
 ## Warn everyone first
 
@@ -39,7 +39,7 @@ To give people time to save their work, warn them and wait before the restart:
 
 Every open Eigen page shows a banner at its foot, like the message `shutdown` sends to every terminal: "Eigen restarts for an update in 10 minutes", with your message below it. It counts down in minutes, and in seconds in the last minute. The terminal counts down too.
 
-The time needs its unit: `90s`, `10m`, or `1h`, the longest wait. The message is optional, up to 200 characters, and comes right after the time. A version goes before `--in`: `./eigen update 0.3.2 --in 10m`.
+The time needs its unit: `90s`, `10m`, or `1h`, the longest wait. The message is optional, up to 200 characters, and comes right after the time. A version goes before `--in`: `./eigen update 1.2.3 --in 10m`.
 
 The wait comes after the download and the question about breaking changes, and before the backup. Ctrl+C cancels it, and so does a lost SSH session, so run a long wait in tmux or screen. When you cancel, or the update fails, the banner goes away and Eigen runs on as it was.
 
@@ -53,7 +53,7 @@ It is named `server-pre-update-<level>-<date>-<time>.tar`. Eigen keeps the two n
 
 The backup runs on the running server, so with Eigen stopped `./eigen update` refuses. Start Eigen with `./eigen restart`, or copy `data/` and `.env.production` somewhere safe and run `./eigen update --no-backup`. Without a backup, `./eigen rollback` has nothing to go back to.
 
-On 0.3.2 and later, it refuses too when you edited `.env.production` since Eigen started and Eigen still reads the file as it was. Run `./eigen restart`, then `./eigen update` again.
+It refuses too when you edited `.env.production` since Eigen started and Eigen still reads the file as it was. Run `./eigen restart`, then `./eigen update` again.
 
 ## Go back with a rollback
 
@@ -70,14 +70,6 @@ When the version before cannot open the data, the rollback puts back the backup 
 When the check itself stops before it can tell, for example because the server ran out of memory or a database stayed busy, the rollback stops too, and Eigen keeps running on your data as it is. Only a database the version before finds damaged, or one too new for it, makes the rollback put the backup back. Fix what it says, then run `./eigen rollback` again. When the second check stops, Eigen starts again on the version you updated to. If you press Ctrl+C at the question, the rollback stops and changes nothing.
 
 `./eigen rollback --yes` skips the questions, for scripts. A rollback goes back one update, not further. To go back further, `./eigen rollback --help` lists the backups earlier updates made that Eigen kept, and `./eigen restore <file>` puts one of them back.
-
-### After the update from 0.3.0
-
-Close every open document before you update from 0.3.0. When Eigen comes back, an open document reloads, and every edit it had not sent to the server is lost, edits made while it was offline included. A Drive, Mail, Calendar, or Contacts tab opened on 0.3.0 does not reload by itself: it keeps the page it had until you reload it.
-
-After the update, two files of 0.3.0 may be left over: `data/server/collab-epoch` and `data/server/collab-home-epochs.json`. Eigen does not read them, so you can delete them.
-
-Does cron run `./eigen backup` for you? Check its line. The `--keep` option of 0.3.0 is gone: with it, `./eigen backup` stops with exit 2 and makes no backup. A stop before the backup has to go too, since the backup needs Eigen running. Backups made with `./eigen backup` stay until you delete them. To have Eigen keep a set number, turn on the nightly backup in **Settings → Backups** instead: it is off until the owner turns it on. See [Back up every night](/support/self-hosting/back-up-and-restore#back-up-every-night).
 
 ## What 1.0 means for your data
 

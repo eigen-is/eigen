@@ -20,9 +20,8 @@ export async function trashPath(mount: Mount, pathId: string): Promise<DrivePath
     if (!root) throw new ApiError(500, 'Root folder not found');
     if (pathId === root.id) throw new ApiError(400, 'Cannot trash root folder');
 
-    // The open databases under the item close before the storage rename. Their last bytes then land at
-    // the old key and move into .trash/ with the rest. A later sync can't write a data.db outside
-    // .trash/ either. The collab close never closes a chat's data.db, so this one does.
+    // The open databases under the item close before the rename, so their last bytes move into .trash/ with the rest
+    // and no later sync writes outside it. The collab close skips a chat's data.db, so this one covers it.
     await closeCachedDbsUnder(mount, pathId);
 
     return mount.withPathLock(pathId, () =>
@@ -51,9 +50,8 @@ export async function trashPath(mount: Mount, pathId: string): Promise<DrivePath
                 const rename = mount.storage.rename.bind(mount.storage);
                 const trashKey = trashStorageKey(pathId, item.name);
                 const oldKey = await mount.getStorageKey(pathId);
-                // Bytes at the trash key alone are this item's, left by a crash or a failed move-back, so this
-                // finishes that trash. Beside bytes at the old key they are an orphan that only this row could
-                // have written.
+                // Bytes at the trash key alone are this item's, left by a crash or a failed move-back, so this finishes
+                // that trash.
                 const atTrashKey = onDisk(mount, trashKey);
                 if (atTrashKey && !onDisk(mount, oldKey)) {
                     await writeRow(trashKey);
@@ -147,9 +145,8 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
                     const parentKey = await mount.getStorageKey(targetParentId);
                     const targetKey = parentKey ? `${parentKey}/${restoreName}` : restoreName;
                     const currentKey = await mount.getStorageKey(pathId);
-                    // The mirror of trash. Bytes at the target alone are this item's, left by a restore whose
-                    // row write was lost. Beside bytes still in the trash they are a leftover, unless a live
-                    // row's name points at them on disk.
+                    // The mirror of trash: bytes at the target alone are this item's, left by a restore whose row write
+                    // was lost.
                     const occupant = await renameTarget(mount, targetParentId, targetKey, currentKey);
                     if (occupant === 'live') {
                         throw new ApiError(
@@ -189,11 +186,8 @@ function onDisk(mount: Mount, key: string): boolean {
     return fs.existsSync(path.join(mount.dataDir, key));
 }
 
-// What a `local` disk rename of sourceKey onto targetKey, or a create at targetKey, would replace.
-// - `source` is the item itself, which a rename that changes only the case finds on a case-insensitive disk.
-// - `live` is a live sibling's bytes, whose name the disk folds onto the target, though no name in the table
-//   matches. Both names lead to the same inode.
-// - `leftover` is bytes that no row owns.
+// What a `local` disk rename onto targetKey would replace. `live` is a sibling's bytes that the disk folds onto the
+// target though no name in the table matches: both names lead to one inode.
 export async function renameTarget(
     mount: Mount,
     parentId: string,
@@ -312,9 +306,8 @@ export async function listTrashRootsInside(mount: Mount, folderId: string): Prom
     return found;
 }
 
-// The trash roots whose original folder is the path or lies under it. They hang under the mount root,
-// and once the path is deleted they could never go back to it.
-// One subquery, not a variable per descendant: SQLite caps a statement's variables.
+// The trash roots whose original folder is the path or lies under it, which could never go back once the path is
+// deleted. One subquery, not a variable per descendant: SQLite caps a statement's variables.
 function trashRootsFrom(mount: Mount, pathId: string): (typeof paths.$inferSelect)[] {
     return mount.db
         .select()

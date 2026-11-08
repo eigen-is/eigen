@@ -77,7 +77,7 @@ function breakingLines(lines: string[]): string[] {
 }
 
 // The CHANGELOG sections after `from` up to `to`, oldest first, with their intro and their (breaking) lines.
-export function releaseNotes(changelog: string, from: string, to: string): ReleaseNote[] {
+function releaseNotes(changelog: string, from: string, to: string): ReleaseNote[] {
     const sections = changelog.split(/^## /m).flatMap((section) => {
         const [heading = '', ...lines] = section.split('\n');
         const version = HEADING.exec(heading)?.[1];

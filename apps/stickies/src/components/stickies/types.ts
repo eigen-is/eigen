@@ -4,7 +4,6 @@ export type ColumnItem = {
     id: string;
     title: string;
     taskIds: string[];
-    creator: string;
 };
 
 export type BoardData = {

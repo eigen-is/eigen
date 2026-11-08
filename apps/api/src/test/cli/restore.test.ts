@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite';
-import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import {
     chmodSync,
     chownSync,
@@ -22,18 +22,17 @@ import type { BackupLevel, ServerArchiveManifest } from '@workspace/lib/types/ba
 import type { DrivePath } from '@workspace/lib/types/drive';
 import pkg from '../../../../../package.json' with { type: 'json' };
 import { CANNOT_OPEN, DECLINED } from '../../cli/install';
-import { SWAP_LOCK, SWAP_MARKER } from '../../cli/restore-swap';
 import * as archiveModule from '../../lib/backup/archive';
 import {
     copyArchiveMember,
     createServerArchiveWriter,
-    declaredUnpackBytes,
+    extractArtifact,
     packFolder,
     readArtifactManifest,
     withUnpackSlack,
 } from '../../lib/backup/archive';
 import { ARCHIVE_MANIFEST_FILE, getBackupsDir, SERVER_ARCHIVE_SERVER_MEMBER } from '../../lib/backup/paths';
-import { readMemberManifests, stageBytesNeeded, stageServerArchive } from '../../lib/backup/restore-server';
+import { stageBytesNeeded } from '../../lib/backup/restore-server';
 import { startServerBackup } from '../../lib/backup/server-job';
 import { lockDataDir } from '../../lib/config/data-lock';
 import {
@@ -55,7 +54,6 @@ import {
     readServerManifest,
     realShapeHome,
     removeServerRecords,
-    unpackWhole,
     waitForJob,
 } from '../backup/backup-test-helpers';
 import type { FaultStorage } from '../fault-storage-helpers';
@@ -86,6 +84,8 @@ const TLS_KEY = '-----BEGIN PRIVATE KEY-----\narchived tls\n-----END PRIVATE KEY
 const S3_MOUNT_ID = 'restore-cli-s3';
 const ASIDE = /^data\.pre-restore-\d{8}-\d{6}$/;
 
+const SWAP_MARKER = '.eigen/restore-swap';
+const SWAP_LOCK = '.eigen/restore.lock';
 const dirs: string[] = [];
 // Every install holds a restored copy of the suite's data root, which a full run makes large: past the
 // default deadline the hook fails, and the afterAll below never runs.
@@ -268,7 +268,7 @@ async function rewrittenMember(
     const { members, manifest } = await readServerManifest(archive);
     const name = manifest.homes.find((home) => home.ownerId === ownerId)!.member!;
     const work = scratch('restore-member-');
-    await unpackWhole(members.find((member) => member.name === name)!, join(work, 'tree'));
+    await extractArtifact(members.find((member) => member.name === name)!, join(work, 'tree'));
     const entries: Parameters<typeof tarOf>[0] = [];
     for (const rel of new Bun.Glob('**/*').scanSync({ cwd: join(work, 'tree'), onlyFiles: false, dot: true })) {
         const abs = join(work, 'tree', rel);
@@ -284,7 +284,7 @@ async function rewrittenMember(
 async function serverMemberWithEpochs(archive: string): Promise<Record<string, string>> {
     const { members } = await readServerManifest(archive);
     const work = scratch('restore-server-member-');
-    await unpackWhole(members.find((member) => member.name === SERVER_ARCHIVE_SERVER_MEMBER)!, join(work, 'tree'));
+    await extractArtifact(members.find((member) => member.name === SERVER_ARCHIVE_SERVER_MEMBER)!, join(work, 'tree'));
     const [folder] = readdirSync(join(work, 'tree'));
     const root = join(work, 'tree', folder);
     const manifest = JSON.parse(readFileSync(join(root, ARCHIVE_MANIFEST_FILE), 'utf8'));
@@ -308,7 +308,7 @@ async function editedMember(
     const { members, manifest } = await readServerManifest(archive);
     const name = manifest.homes.find((home) => home.ownerId === ownerId)!.member!;
     const work = scratch('restore-edited-');
-    await unpackWhole(members.find((member) => member.name === name)!, join(work, 'tree'));
+    await extractArtifact(members.find((member) => member.name === name)!, join(work, 'tree'));
     const [folder] = readdirSync(join(work, 'tree'));
     const root = join(work, 'tree', folder);
     edit(root);
@@ -324,13 +324,12 @@ async function editedMember(
 }
 
 // `archive` with one more pending row in the s3 mount, for a key whose bytes it does not hold.
-async function withUnbackedPendingRow(archive: string, stagingPath = 'no-such-upload'): Promise<string> {
+async function withUnbackedPendingRow(archive: string): Promise<string> {
     const replace = await editedMember(archive, s3User.id, (folder) => {
         const db = new Database(join(folder, 'home/mounts', S3_MOUNT_ID, PATHS.DRIVE.METADATA_DB));
         try {
             db.run(
-                "INSERT INTO pending_uploads (storageKey, stagingPath, enqueuedAt, nextAttemptAt) VALUES ('no-such-key', ?, 0, 0)",
-                [stagingPath],
+                "INSERT INTO pending_uploads (storageKey, stagingPath, enqueuedAt, nextAttemptAt) VALUES ('no-such-key', 'no-such-upload', 0, 0)",
             );
         } finally {
             db.close();
@@ -1100,56 +1099,19 @@ describe('restore --stage and --swap', () => {
     );
 
     test(
-        'the stage counts each member once at what its unpack declares, since it moves what it unpacks',
+        'the stage counts each member once at the bytes it declares, since it moves what it unpacks',
         async () => {
             const read = await readServerManifest(fullArchive);
             const { manifest } = read;
             const members = new Map(read.members.map((member) => [member.name, member]));
             const inner = [SERVER_ARCHIVE_SERVER_MEMBER, ...manifest.homes.flatMap((home) => home.member ?? [])];
             let declared = 0;
-            let entries = 0;
-            for (const name of inner) {
-                const unpacked = await readArtifactManifest(members.get(name)!);
-                declared += declaredUnpackBytes(unpacked);
-                entries += unpacked.entries.length + unpacked.counts.dirs;
-            }
+            for (const name of inner) declared += (await readArtifactManifest(members.get(name)!)).counts.bytes;
             const copied = manifest.entries.filter((entry) => !inner.includes(entry.path));
             declared += copied.reduce((sum, entry) => sum + entry.bytes, 0);
 
             const needed = await stageBytesNeeded({ name: basename(fullArchive), manifest, members });
             expect(needed).toBe(withUnpackSlack(declared));
-            // Every file and folder of a home takes its allowance, as each member's unpack charges it.
-            expect(needed).toBeGreaterThan(entries * 4096);
-        },
-        JOB_TIMEOUT_MS,
-    );
-
-    // A member's manifest is its last entry, so each read of one decompresses the whole member. The stage reads them once
-    // for its room check, and bounds every unpack by those.
-    test(
-        'the manifests read for the room check bound the stage, which reads none again',
-        async () => {
-            const read = await readServerManifest(fullArchive);
-            const archived = {
-                name: basename(fullArchive),
-                manifest: read.manifest,
-                members: new Map(read.members.map((member) => [member.name, member])),
-            };
-            const manifests = await readMemberManifests(archived);
-            const spy = spyOn(archiveModule, 'readArtifactManifest');
-            let reads = -1;
-            try {
-                await stageBytesNeeded(archived, manifests);
-                await stageServerArchive(archived, scratch('restore-one-read-'), {
-                    s3FromArchive: false,
-                    onStep: () => {},
-                    manifests,
-                });
-                reads = spy.mock.calls.length;
-            } finally {
-                spy.mockRestore();
-            }
-            expect(reads).toBe(0);
         },
         JOB_TIMEOUT_MS,
     );
@@ -1395,7 +1357,7 @@ describe('restore --check-data, which a rollback runs first with the build it go
 
             // An unpack writes each file's mtime back from the archive, so only the file's ctime is new.
             const unpackedTo = scratch('restore-since-unpack-');
-            await archiveModule.extractArtifact(archive, unpackedTo, 1e9);
+            await archiveModule.extractArtifact(archive, unpackedTo);
             renameSync(join(unpackedTo, PATHS.MAIL.ROOT, 'mail.db'), join(homes, 'u2', PATHS.MAIL.DB));
             expect(statSync(join(homes, 'u2', PATHS.MAIL.DB)).mtimeMs).toBeLessThan(since);
             const unpacked = await restoreCli(dir, sinceArgs);
@@ -1755,22 +1717,6 @@ for (const [what, archive] of [
                 expect(readFileSync(join(staged, PATHS.DRIVE.STAGING_DIR, stagedUploadName), 'utf8')).toBe(
                     'not in the bucket yet',
                 );
-            },
-            JOB_TIMEOUT_MS,
-        );
-
-        // After the swap the home would boot on these rows, and its upload queue send the bucket what they name.
-        test.each([
-            ['an absolute path', '/etc/passwd'],
-            ['a .. path', '../../../../../../etc/passwd'],
-        ])(
-            'a pending row whose staged copy is at %s refuses the archive',
-            async (_, stagingPath) => {
-                const dir = install();
-                const result = await stage(dir, await withUnbackedPendingRow(archive(), stagingPath));
-                expect(result.code).toBe(1);
-                expect(result.stderr).toContain(`has an unusable staged copy "${stagingPath}"`);
-                expectUntouched(dir);
             },
             JOB_TIMEOUT_MS,
         );

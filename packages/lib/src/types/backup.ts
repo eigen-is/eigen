@@ -28,15 +28,12 @@ export type BackupManifest = {
     createdAt: string;
     appVersion: string;
     server: { domain: string; orgId: string };
-    // databases and files are disjoint, so entries.length === databases + files. `dirs` is every folder entry the
-    // archive holds, its root folder included.
-    counts: { databases: number; files: number; bytes: number; dirs: number };
+    // databases and files are disjoint, so entries.length === databases + files.
+    counts: { databases: number; files: number; bytes: number };
     // A user's or team's archive always has one. A server member has none, since it holds no mounts.
     level?: BackupLevel;
-    // `skipped` is set only for a mount the home has turned off whose storage could not be read: it
-    // carries the reason, holds no files, and a restore leaves it disabled and absent. An enabled
-    // mount's storage failure fails the whole backup instead. `contents: 'metadata'` marks a mount
-    // whose file bodies the archive does not hold: an s3 one at level full.
+    // `skipped` marks a mount the home turned off whose storage could not be read: it carries the reason and holds no
+    // files. `contents: 'metadata'` marks a mount whose file bodies the archive lacks (an s3 one at level full).
     mounts: {
         id: string;
         storageType: MountConfig['storageType'];
@@ -65,10 +62,8 @@ export type BackupShare = { targetIdentifier: string };
 export const BACKUP_REASONS = ['scheduled', 'manual', 'pre-update'] as const;
 export type BackupReason = (typeof BACKUP_REASONS)[number];
 
-// The last member of a whole-server archive. `entries` lists every other member of the outer tar,
-// so the archive is checked member by member without unpacking one. A home whose capture failed
-// has no `member` and says why in `failed`; `bytes` is its inner manifest's `counts.bytes`.
-// `envFile`, `dkim` and `certs` say whether those members are in it: each can be unreadable to the API.
+// `entries` lists every other member of the outer tar, so the archive is checked member by member without unpacking. A
+// home whose capture failed has no `member` and says why in `failed`.
 export type ServerArchiveManifest = {
     formatVersion: 1;
     level: BackupLevel;
@@ -118,10 +113,8 @@ export type ServerArchiveUpload = {
     error?: string;
 };
 
-// `{archive}.json` beside a whole-server archive, written when its job starts and again when it
-// ends, so a crash or a refusal still leaves a dated record for the schedule and the list. `running`
-// with no job behind it is an interrupted attempt. `manifest` is the finished archive's, `verify` the
-// transport check of it. `upload` is absent until an upload was tried.
+// Written when the job starts and again when it ends, so a crash or a refusal still leaves a dated record. A `running`
+// one with no job behind it is an interrupted attempt.
 export type ServerArchiveSidecar = {
     state: BackupJob['state'];
     startedAt: Date;
@@ -132,8 +125,7 @@ export type ServerArchiveSidecar = {
     upload?: ServerArchiveUpload;
 };
 
-// A whole-server archive in the backups folder as the owner's list shows it, read off its name and
-// sidecar and never out of the archive. `bytes` is null for an attempt refused before it wrote one,
+// Read off its name and sidecar, never out of the archive. `bytes` is null for an attempt refused before it wrote one,
 // `record` for a sidecar that is missing or does not read.
 export type ServerArchive = {
     name: string;
@@ -152,9 +144,8 @@ export type ServerArchiveList = {
 
 export const BACKUP_JOB_STATES = ['running', 'done', 'failed'] as const;
 
-// A backup, verify or restore running on the server. The job map in the API is the truth; the
-// `backup:job-updated` SSE event only tells the admin's browser to refetch this. A server backup's
-// `ownerId` is the org's, and it names its archive from the start.
+// The job map in the API is the truth; the `backup:job-updated` SSE event only tells the browser to refetch. A server
+// backup's `ownerId` is the org's.
 export type BackupJob = {
     id: string;
     // `upload` sends a server archive to the backup bucket, as a server backup ends or on the owner's click.

@@ -258,7 +258,7 @@ describe('Server backup job', () => {
             const rootId = (await mount.getRootFolder())!.id;
             const folderId = await mount.createFolder(rootId, 'Salvaged');
             await mount.createFile(folderId, 'left.txt', 'text/plain', 4, new TextEncoder().encode('left'));
-            // What a salvaged database leaves: the folder row gone, its child still naming it.
+            // What a hand edit leaves: the folder row gone, its child still naming it.
             const db = new Database(join(home.homeDir, PATHS.DRIVE.ROOT, mount.id, PATHS.DRIVE.METADATA_DB));
             db.run('PRAGMA foreign_keys = OFF');
             db.run('DELETE FROM paths WHERE id = ?', [folderId]);

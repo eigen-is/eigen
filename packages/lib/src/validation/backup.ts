@@ -104,9 +104,7 @@ function isCounts(value: unknown): value is BackupManifest['counts'] {
         'files' in value &&
         typeof value.files === 'number' &&
         'bytes' in value &&
-        typeof value.bytes === 'number' &&
-        'dirs' in value &&
-        typeof value.dirs === 'number'
+        typeof value.bytes === 'number'
     );
 }
 
@@ -196,9 +194,8 @@ function isServerArchiveManifest(value: unknown): value is ServerArchiveManifest
     );
 }
 
-// Whether an archive restores every home it lists whole: none failed and none was backed up with warnings. Only such
-// an archive counts as good for local retention, the bucket's and ./eigen status, so warned nights never push out the
-// last complete one. A record without a manifest has none.
+// Only a complete archive counts as good for local retention, the bucket's and ./eigen status, so warned nights never
+// push out the last complete one.
 export function isCompleteArchive(manifest: Pick<ServerArchiveManifest, 'homes'> | undefined): boolean {
     return manifest?.homes.every((home) => !home.failed && !home.warnings?.length) ?? false;
 }
@@ -303,9 +300,8 @@ function parseUploadRecord(value: unknown): ServerArchiveUpload | null {
     return upload;
 }
 
-// Whether the owner can upload an archive, for the Upload route, its button and ./eigen status: a verified archive,
-// not a pre-update one (that stays on this server for ./eigen rollback), with no job still writing or uploading it,
-// while a backup bucket is set. One the bucket holds already goes again.
+// A pre-update archive stays on this server for ./eigen rollback, so it is not uploaded. One the bucket holds already
+// can go again.
 export function canUploadServerArchive(
     { name, reason, record }: Pick<ServerArchive, 'name' | 'reason' | 'record'>,
     { uploadEnabled, jobs }: { uploadEnabled: boolean; jobs: readonly Pick<BackupJob, 'state' | 'artifact'>[] },
@@ -365,15 +361,6 @@ function isS3Config(value: unknown): value is S3Config {
 // The two facts an archive's or safety copy's `settings.json` says about where a mount's objects
 // live. A mount whose entry is not those is left out, so the caller touches nothing of it.
 export type BackupMountSettings = { storageType: MountConfig['storageType']; s3Config?: S3Config };
-
-// The ids in a home's `settings.json` that are no folder of their own. A home opens every id the file names, and
-// parseHomeMountSettings leaves these out, so a verify asks here.
-export function listUnusableMountIds(text: string): string[] {
-    const value = parseJson(text);
-    if (typeof value !== 'object' || value === null || !('mounts' in value)) return [];
-    if (typeof value.mounts !== 'object' || value.mounts === null) return [];
-    return Object.keys(value.mounts).filter((id) => !BACKUP_MOUNT_ID.test(id));
-}
 
 export function parseHomeMountSettings(text: string): Record<string, BackupMountSettings> | null {
     const value = parseJson(text);

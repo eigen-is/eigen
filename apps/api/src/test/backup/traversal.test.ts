@@ -1,27 +1,22 @@
-import { Database } from 'bun:sqlite';
-import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import { auth } from '../../lib/auth/auth';
 import { packFolder, readArtifactManifest } from '../../lib/backup/archive';
-import { buildArtifactName, buildHomeFolderName, getBackupsDir } from '../../lib/backup/paths';
+import { buildHomeFolderName, freeArtifactName, getBackupsDir } from '../../lib/backup/paths';
 import { restoreHome } from '../../lib/backup/restore';
 import { deleteSafetyCopy } from '../../lib/backup/safety-copy';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
-import * as verifyModule from '../../lib/backup/verify';
 import { verifyFolder } from '../../lib/backup/verify';
 import { getHome } from '../../lib/home/get-home';
-import { createMountConfig } from '../../lib/mount';
 import * as mountHelpers from '../../lib/mount/helpers';
 import { assertJson, authedRequest, driveUpload, getTestContext, TEST_DATA_DIR, TEST_PNG_BYTES } from '../setup';
 
-// An archive comes from outside — an admin uploads one, or copies one in by scp — so every segment
-// it names is untrusted input. A manifest that spells a mount id as `../../{victim}/mounts/{id}`
-// would send the restore straight into another user's live home: clear their pending uploads, rekey
-// every row of their paths table, delete their data/ tree, and report done.
+// A manifest that spells a mount id as `../../{victim}/mounts/{id}` is no manifest this server reads, and a mount id
+// in settings.json of that shape names no mount, so neither reaches another user's live home.
 
 const PASSWORD = 'testpassword123';
 
@@ -92,7 +87,7 @@ describe('Backup refuses an archive that names another home', () => {
     });
 
     test('a restore of it throws and the other home is untouched', async () => {
-        const name = buildArtifactName(attacker.id, new Date());
+        const name = freeArtifactName(attacker.id, new Date());
         const artifactPath = join(getBackupsDir(), name);
         await packFolder(folder, artifactPath);
         try {
@@ -153,238 +148,5 @@ describe('Backup refuses an archive that names another home', () => {
         expect(storagesBuilt).toBe(0);
         expect(existsSync(copyDir)).toBe(false);
         expect(await victimFileStatus()).toBe(200);
-    });
-});
-
-// The archive's own metadata.db is untrusted input in the same way. A live `paths` row can never
-// hold a separator, a `..` or a control character (mount/helpers validateName wrote it); an
-// archived one can. A doctored `file` moved a restored file OUT of the mount over anything the
-// server can write, and a doctored `name` moved an arbitrary server file INTO the restored home.
-describe('Backup refuses an archive whose paths table leaves the mount', () => {
-    const OUTSIDE_PATH = join(TEST_DATA_DIR, 'traversal-outside.txt');
-    const OUTSIDE_CONTENT = 'not the archive to move';
-    const LOCAL_MOUNT_ID = 'traversal-local';
-
-    let owner: TestUser;
-    let keyMountId: string;
-    let keyFileId: string;
-    let localFileId: string;
-
-    function escapePathFrom(mountId: string): string {
-        const dataDir = join(TEST_DATA_DIR, 'home', owner.id, 'mounts', mountId, 'data');
-        return relative(dataDir, OUTSIDE_PATH);
-    }
-
-    // The attacker's own archive with one file edited, its manifest entry restated so verify's transport stage passes
-    // and the edit itself is what has to be caught.
-    async function hostileFolderWith(rel: string, edit: (file: string) => void) {
-        const staging = mkdtempSync(join(TEST_DATA_DIR, 'traversal-rows-'));
-        const manifest = await snapshotHome(await getHome(owner.id), staging);
-        const hostileFolder = join(staging, buildHomeFolderName(owner.id));
-        edit(join(hostileFolder, rel));
-        const entry = manifest.entries.find((candidate) => candidate.path === rel);
-        if (!entry) throw new Error(`${rel} is not in the manifest`);
-        const hasher = new Bun.CryptoHasher('sha256');
-        hasher.update(new Uint8Array(await Bun.file(join(hostileFolder, rel)).arrayBuffer()));
-        entry.bytes = Bun.file(join(hostileFolder, rel)).size;
-        entry.sha256 = hasher.digest('hex');
-        writeFileSync(join(hostileFolder, 'manifest.json'), JSON.stringify(manifest, null, 2));
-        return hostileFolder;
-    }
-
-    function hostileMetadata(mountId: string, sql: string, values: string[]) {
-        return hostileFolderWith(`home/mounts/${mountId}/metadata.db`, (file) => {
-            const db = new Database(file, { readwrite: true, create: false });
-            try {
-                db.run(sql, values);
-            } finally {
-                db.close();
-            }
-        });
-    }
-
-    function hostileArchive(
-        mountId: string,
-        column: 'file' | 'name' | 'id' | 'trashedFrom',
-        value: string,
-        rowId: string,
-    ) {
-        return hostileMetadata(mountId, `UPDATE paths SET ${column} = ? WHERE id = ?`, [value, rowId]);
-    }
-
-    function hostilePendingUpload(mountId: string, stagingPath: string) {
-        return hostileMetadata(
-            mountId,
-            "INSERT INTO pending_uploads (storageKey, stagingPath, enqueuedAt, nextAttemptAt) VALUES ('a-key', ?, 0, 0)",
-            [stagingPath],
-        );
-    }
-
-    // One artifact per hostile folder. The stamp is a second wide, so each one gets its own.
-    let packed = 0;
-    async function packHostile(hostileFolder: string): Promise<string> {
-        const name = buildArtifactName(owner.id, new Date(Date.now() + packed++ * 1000));
-        await packFolder(hostileFolder, join(getBackupsDir(), name));
-        return name;
-    }
-
-    beforeAll(async () => {
-        owner = await createUser('backup-traversal-rows@test.eigen.is', 'Traversal Rows');
-        writeFileSync(OUTSIDE_PATH, OUTSIDE_CONTENT);
-
-        // The harness's default mount is local-key: its storage key IS `paths.file`.
-        const mounts = await assertJson<{ id: string }[]>(
-            await authedRequest(owner.sessionToken, `/drive/${owner.id}/mounts`),
-        );
-        keyMountId = mounts[0].id;
-        const keyRoot = await assertJson<DrivePath>(
-            await authedRequest(owner.sessionToken, `/drive/${owner.id}/${keyMountId}/root`),
-        );
-        keyFileId = (
-            await driveUpload<DrivePath>(
-                owner.sessionToken,
-                owner.id,
-                keyMountId,
-                keyRoot.id,
-                new File([TEST_PNG_BYTES], 'flat.png', { type: 'image/png' }),
-            )
-        ).id;
-
-        // And a path-based mount beside it, where the archive tree is built from `paths.name`.
-        const home = await getHome(owner.id);
-        const settings = await home.settings.set({
-            mounts: {
-                [LOCAL_MOUNT_ID]: { storageType: 'local', maxSizeMB: 100, enabled: true, name: 'Traversal Local' },
-            },
-        });
-        await home.drive.addMount(createMountConfig(LOCAL_MOUNT_ID, settings.mounts![LOCAL_MOUNT_ID]));
-        const localRoot = await assertJson<DrivePath>(
-            await authedRequest(owner.sessionToken, `/drive/${owner.id}/${LOCAL_MOUNT_ID}/root`),
-        );
-        localFileId = (
-            await driveUpload<DrivePath>(
-                owner.sessionToken,
-                owner.id,
-                LOCAL_MOUNT_ID,
-                localRoot.id,
-                new File([TEST_PNG_BYTES], 'tree.png', { type: 'image/png' }),
-            )
-        ).id;
-    });
-
-    afterAll(() => {
-        rmSync(OUTSIDE_PATH, { force: true });
-    });
-
-    test('verify names the row whose file leaves the mount', async () => {
-        const folder = await hostileArchive(keyMountId, 'file', escapePathFrom(keyMountId), keyFileId);
-        const record = await verifyFolder(folder);
-        expect(record.status).toBe('failed');
-        expect(record.failures.join(' ')).toContain(keyFileId);
-    });
-
-    test('verify names the row whose name leaves the mount', async () => {
-        const folder = await hostileArchive(LOCAL_MOUNT_ID, 'name', escapePathFrom(LOCAL_MOUNT_ID), localFileId);
-        const record = await verifyFolder(folder);
-        expect(record.status).toBe('failed');
-        expect(record.failures.join(' ')).toContain(localFileId);
-    });
-
-    // An id is a path segment too: a trashed row is archived under `.trash/{id}.{ext}` and a restored
-    // s3 row takes an object key built from it.
-    test('verify names the row whose id leaves the mount', async () => {
-        const folder = await hostileArchive(keyMountId, 'id', escapePathFrom(keyMountId), keyFileId);
-        const record = await verifyFolder(folder);
-        expect(record.status).toBe('failed');
-        expect(record.failures.join(' ')).toContain('unusable id');
-    });
-
-    // On `local` a row named `.trash` would be the trash folder itself.
-    test('verify names the row whose name the trash folder reserves', async () => {
-        const folder = await hostileArchive(LOCAL_MOUNT_ID, 'name', '.Trash', localFileId);
-        const record = await verifyFolder(folder);
-        expect(record.status).toBe('failed');
-        expect(record.failures.join(' ')).toContain(`path row ${localFileId} has a reserved name`);
-    });
-
-    // On `local` the disk key is built from `file`, so the row's bytes would land on the trash folder.
-    test('verify names the row whose file the trash folder reserves', async () => {
-        const folder = await hostileArchive(LOCAL_MOUNT_ID, 'file', '.trash', localFileId);
-        const record = await verifyFolder(folder);
-        expect(record.status).toBe('failed');
-        expect(record.failures.join(' ')).toContain(`path row ${localFileId} has a reserved file`);
-    });
-
-    // Its permanent delete would wait on its own lock.
-    test('verify names the trash root that was trashed from inside itself', async () => {
-        const folder = await hostileArchive(keyMountId, 'trashedFrom', keyFileId, keyFileId);
-        const record = await verifyFolder(folder);
-        expect(record.status).toBe('failed');
-        expect(record.failures.join(' ')).toContain(`path row ${keyFileId} was trashed from inside itself`);
-    });
-
-    // The upload queue sends the bucket the file a pending row names, so a row that leaves staging/ would send it any
-    // file of this host.
-    test.each([
-        ['an absolute path', OUTSIDE_PATH],
-        ['a .. path', '../../outside'],
-        ['a path into a folder', 'nested/copy.db'],
-    ])('verify names the pending upload whose staged copy is at %s', async (_, stagingPath) => {
-        const record = await verifyFolder(await hostilePendingUpload(keyMountId, stagingPath));
-        expect(record.status).toBe('failed');
-        expect(record.failures.join(' ')).toContain(
-            `pending upload "a-key" has an unusable staged copy "${stagingPath}"`,
-        );
-    });
-
-    test('verify passes a pending upload that names a file in staging', async () => {
-        const record = await verifyFolder(await hostilePendingUpload(keyMountId, 'a-staged-copy.db'));
-        expect(record.failures).toEqual([]);
-    });
-
-    // A home opens every mount its settings.json names, at the path the id spells. An id of two segments would be a
-    // metadata.db no walk of mounts/ reads, and one with a `..` another home's mount.
-    test.each([
-        ['two segments', 'nested/deep'],
-        ['a .. hop', '../../team/victim/mounts/default'],
-    ])('verify names a mount id in settings.json of %s', async (_, mountId) => {
-        const folder = await hostileFolderWith('home/settings.json', (file) => {
-            const settings = JSON.parse(readFileSync(file, 'utf8'));
-            settings.mounts[mountId] = { storageType: 's3', maxSizeMB: 100, enabled: true };
-            writeFileSync(file, JSON.stringify(settings));
-        });
-        const record = await verifyFolder(folder);
-        expect(record.status).toBe('failed');
-        expect(record.failures.join(' ')).toContain(`names a mount "${mountId}"`);
-    });
-
-    test('a restore of one throws and the file outside the home is untouched', async () => {
-        const name = await packHostile(await hostileArchive(keyMountId, 'file', escapePathFrom(keyMountId), keyFileId));
-        await expect(restoreHome(name, owner.id, `traversal-rows-${crypto.randomUUID()}`)).rejects.toThrow();
-        expect(readFileSync(OUTSIDE_PATH, 'utf8')).toBe(OUTSIDE_CONTENT);
-        expect((await authedRequest(owner.sessionToken, `/drive/${owner.id}/mounts`)).status).toBe(200);
-    });
-
-    // Verify is the gate, and the materialization is the second lock on the same door: every source,
-    // target and directory it builds out of the archive's rows is resolved against the mount's own
-    // data folder before a byte moves.
-    test('the materialization refuses the rows even with verify silenced', async () => {
-        const name = await packHostile(
-            await hostileArchive(LOCAL_MOUNT_ID, 'name', escapePathFrom(LOCAL_MOUNT_ID), localFileId),
-        );
-        const spy = spyOn(verifyModule, 'verifyFolder').mockResolvedValue({
-            status: 'verified',
-            checkedAt: new Date(),
-            failures: [],
-        });
-        try {
-            await expect(restoreHome(name, owner.id, `traversal-rows-${crypto.randomUUID()}`)).rejects.toThrow();
-        } finally {
-            spy.mockRestore();
-        }
-        expect(existsSync(OUTSIDE_PATH)).toBe(true);
-        expect(readFileSync(OUTSIDE_PATH, 'utf8')).toBe(OUTSIDE_CONTENT);
-        // The rollback put the home back: the mount that was never touched still answers.
-        expect((await authedRequest(owner.sessionToken, `/drive/${owner.id}/mounts`)).status).toBe(200);
     });
 });

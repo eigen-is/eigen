@@ -9,7 +9,7 @@ import { copyArchiveMember } from '../lib/backup/archive';
 import { describeError } from '../lib/backup/errors';
 import { backupsDirPath, roomShortfall, SERVER_ARCHIVE_ENV_MEMBER } from '../lib/backup/paths';
 import type { ServerArchiveFile } from '../lib/backup/restore-server';
-import { RESTORING_DIR, readMemberManifests, stageBytesNeeded, stageServerArchive } from '../lib/backup/restore-server';
+import { RESTORING_DIR, stageBytesNeeded, stageServerArchive } from '../lib/backup/restore-server';
 import { describeFailures } from '../lib/backup/verify';
 import { readServerArchive } from '../lib/backup/verify-server-archive';
 import { getEnvFile, isMailEnabled } from '../lib/config/env';
@@ -83,12 +83,9 @@ export async function stage(archive: string | undefined, flags: RestoreFlags): P
         manifest,
         members: new Map(read.members.map((member) => [member.name, member])),
     };
-    // Each member's manifest is its last entry, so a read of one decompresses the whole member. They are read once,
-    // for the room check and for the bound of each unpack.
-    const manifests = await readMemberManifests(archived).catch((error) =>
+    const needed = await stageBytesNeeded(archived).catch((error) =>
         refuse(`${name} cannot be restored: ${describeError(error)}.`, 'Restore another archive.'),
     );
-    const needed = await stageBytesNeeded(archived, manifests);
     const shortfall = roomShortfall(`Staging ${name}`, needed, dataRoot, 'data/');
     if (shortfall) return refuse(`${shortfall}.`, 'Free space on that disk, then run ./eigen restore again.');
 
@@ -147,7 +144,6 @@ export async function stage(archive: string | undefined, flags: RestoreFlags): P
     const staged = await stageServerArchive(archived, restoring, {
         s3FromArchive: flags['s3-from-archive'] === true,
         onStep: (step) => console.log(glyphLine('bar', step)),
-        manifests,
     }).catch((error) => refuse(`${name} cannot be restored: ${describeError(error)}.`, 'Restore another archive.'));
     const record: StagedRestore = { archive: name, appVersion: manifest.appVersion };
     writeFileSync(join(restoring, STAGE_RECORD), JSON.stringify(record));
@@ -170,10 +166,8 @@ export async function stage(archive: string | undefined, flags: RestoreFlags): P
     }
 }
 
-// Whether Eigen `appVersion`, such as the build an archive was made by, is newer than `version`. Its databases may then
-// carry a schema that `version` cannot open. The stage does not check every one of them, as the documents of an s3
-// mount that stays on its bucket are never read, so it refuses such an archive. What is not a version counts as newer:
-// Bun.semver.order throws on it.
+// A newer build's databases may carry a schema `version` cannot open, and the stage does not read every one, so it
+// refuses such an archive. A non-version counts as newer: Bun.semver.order throws on it.
 function isNewerBuild(appVersion: string, version: string): boolean {
     try {
         return Bun.semver.order(appVersion, version) > 0;

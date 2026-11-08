@@ -8,8 +8,8 @@ import { ApiError } from '../core';
 import { pullHomeSnapshot, sendToHome } from '../home/home-relay';
 import { getOrgAdmins, getOrgOwner } from '../user';
 import { alertUser } from '../user/alert-owner';
-import { extractArtifact, packFolder, readUnpackedHome, unpackBound } from './archive';
-import { readDeclaredManifest, writeSidecar } from './artifacts';
+import { packFolder, readUnpackedHome } from './archive';
+import { unpackArtifact, writeSidecar } from './artifacts';
 import { describeError } from './errors';
 import {
     buildHomeFolderName,
@@ -86,11 +86,8 @@ export function startBackupJob(
     return job;
 }
 
-// One piece of work per home at a time. A second backup while one runs would read a folder the first is
-// still walking. A second restore would move aside a folder the first is writing. A safety-copy delete
-// during a restore would judge the wrong home's keys as garbage. An archive deleted under a verify would
-// get its sidecar back. A server job's archive is the owner's to know, so only another server job is told
-// its name. A job holds the slot until it has settled, the same span slotBusy makes a waiter wait for.
+// One piece of work per home at a time, since two would read, move or delete the same folder.
+// A job holds the slot until it has settled.
 export function requireHomeSlotFree(ownerId: string, starting?: BackupJob['kind']): void {
     const held = heldSlots.get(ownerId);
     if (held) throw new ApiError(409, `A ${held.holder} of this home is running`);
@@ -103,10 +100,8 @@ export function requireHomeSlotFree(ownerId: string, starting?: BackupJob['kind'
     }
 }
 
-// Work that takes the same slot without being a job: the safety-copy delete reads the live home's
-// storage keys to decide what is garbage, and a restore swapping the folder underneath it would turn
-// that answer into "delete what the home now points at". It never sets the restoring mark, since a
-// delete is not a user-facing outage, and its route awaits it, so the slot lives exactly as long.
+// The safety-copy delete takes the slot too: a restore swapping the folder under it would turn its answer into deleting
+// live keys. It sets no restoring mark, since a delete is no outage.
 export async function withHomeSlot(ownerId: string, run: () => Promise<void>): Promise<void> {
     requireHomeSlotFree(ownerId);
     const release = holdSlot(ownerId, 'safety-copy delete');
@@ -155,11 +150,8 @@ export function getBackupJob(id: string): BackupJob | undefined {
     return jobs.get(id);
 }
 
-// Shutdown: a running snapshot reads databases the home teardown is about to close, and a restore
-// killed halfway leaves a home folder that only the boot-time recovery can put back. Restores are
-// waited out in full; a backup or verify gets a budget and is then left to die with the process
-// (its staging folder goes in the next boot's wipe). An upload may take hours, so it is aborted,
-// which aborts its multipart upload, and gets the same budget to record that it did not finish.
+// A killed restore leaves a half-moved home only boot recovery can fix, so restores are waited out in full.
+// A backup or verify gets a budget; an upload is aborted and gets the same budget to record that it did not finish.
 export async function drainBackupJobs(): Promise<void> {
     const running = [...inFlight.values()];
     if (running.length === 0) return;
@@ -171,9 +163,8 @@ export async function drainBackupJobs(): Promise<void> {
     if (rest.length > 0) await Promise.race([Promise.all(rest), Bun.sleep(SHUTDOWN_JOB_BUDGET_MS)]);
 }
 
-// The backup job: snapshot into staging, judge the folder before it is packed, pack it, write the
-// sidecar. A failed verify still keeps the archive, because an admin needs to see a bad backup and the
-// sidecar is where its failures are recorded, but it ends the job failed and tells the admin.
+// A failed verify keeps the archive, since an admin needs to see a bad backup, but ends the job failed and tells the
+// admin.
 export async function runHomeBackup(ownerId: string, job: BackupJob, onProgress: BackupProgress): Promise<string> {
     const staging = getBackupStagingDir(job.id);
     try {
@@ -210,7 +201,7 @@ export async function runArtifactVerify(
     try {
         const unpackDir = path.join(staging, 'verify');
         onProgress('extract', 0, 1);
-        await extractArtifact(artifactPath, unpackDir, unpackBound(await readDeclaredManifest(artifactPath)));
+        await unpackArtifact(artifactPath, unpackDir);
         onProgress('extract', 1, 1);
 
         // The job's owner is the one in the artifact's name, which the route parsed.
@@ -237,10 +228,7 @@ function dropExpiredJobs(): void {
     }
 }
 
-// Every admin sees the same pane, so the poke goes to all of them, not only to the one who pressed
-// the button. A server job's poke goes to the owner alone, the only one who sees it. sendToHome drops
-// the ones with no home loaded, which is every admin who has nothing open. The event carries no
-// state, so one that lands out of order costs nothing.
+// Every admin sees the same pane, so the poke goes to all of them. A server job's goes to the owner alone.
 function poke(job: BackupJob): void {
     const event = buildBackupJobEvent(job.id, job.ownerId);
     const recipients = isServerJob(job.kind) ? getOrgOwner().then((owner) => (owner ? [owner] : [])) : getOrgAdmins();

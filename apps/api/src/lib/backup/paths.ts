@@ -1,7 +1,6 @@
 // Where backups live and what they are called. It builds the names of archives, home folders, safety copies and the
 // folder a restore unpacks into, and the places inside an archive where each part of a home goes. It makes the private
-// staging folder every job works in. It also resolves a path inside a folder without ever leaving it, which every
-// restore step needs before it touches the disk.
+// staging folder every job works in.
 
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -15,7 +14,6 @@ import {
     BACKUP_STAMP_PATTERN,
     buildBackupStamp,
     FAILED_RESTORE_SUFFIX,
-    NO_CONTROL_PATTERN,
     PRE_RESTORE_SUFFIX,
     parseBackupStamp,
     SERVER_ARCHIVE_EXTENSION,
@@ -30,9 +28,8 @@ export function backupsDirPath(): string {
     return process.env['EIGEN_BACKUPS_DIR'] || path.join(getDataRoot(), '..', 'backups');
 }
 
-// Only the writers ensure the folder: a server that has never made a backup should not grow one
-// because an admin opened the pane, and in the container the path may not be writable at all.
-// Readers take backupsDirPath() and treat a missing folder as an empty one.
+// Only the writers ensure the folder: a server that never made a backup should not grow one because an admin opened the
+// pane.
 export function getBackupsDir(): string {
     const dir = backupsDirPath();
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -81,8 +78,8 @@ export function buildRestoreStagingDir(homeDir: string, jobId: string): string {
     return path.join(path.dirname(homeDir), `${RESTORE_STAGING_PREFIX}${jobId}`);
 }
 
-// The archive goes in a folder of its own inside that one. The notes the next boot reads sit beside it, so no entry
-// of the archive can be taken for one of them.
+// The archive goes in a folder of its own inside that one. The note the next boot reads sits beside it, so no entry
+// of the archive can be taken for it.
 export function buildRestoreUnpackDir(homeDir: string, jobId: string): string {
     return path.join(buildRestoreStagingDir(homeDir, jobId), 'unpack');
 }
@@ -91,44 +88,10 @@ export function isRestoreStagingName(name: string): boolean {
     return name.startsWith(RESTORE_STAGING_PREFIX);
 }
 
-// Scratch space for packing: the half-written artifact, the half-written sidecar. Under
-// the staging root so a crash leaves nothing behind that the boot-time wipe does not clear, and on
-// the same filesystem as the artifacts, so the last rename of a pack is atomic.
+// Under the staging root so the boot wipe clears a crash's leftovers, and on the artifacts' filesystem so the last
+// rename of a pack is atomic.
 export function getBackupTempPath(suffix: string): string {
     return path.join(getBackupStagingDir('archive'), `${crypto.randomUUID()}${suffix}`);
-}
-
-const NO_CONTROL = new RegExp(NO_CONTROL_PATTERN);
-
-// An archive comes from outside: its manifest, its mount trees and the settings.json of a folder it
-// left behind all name paths this server then reads, opens and deletes. Anything that would leave
-// `root` is refused before it reaches the filesystem, such as an absolute path, a `..` hop, a control
-// character, or a path that walks through a symlink. `root` is resolved to its real path here, so the
-// comparison holds on a macOS temp folder too, where /var is /private/var.
-export function resolveInside(root: string, relPath: string): string | null {
-    if (relPath === '' || path.isAbsolute(relPath) || !NO_CONTROL.test(relPath)) return null;
-    if (relPath.split(/[\\/]/).includes('..')) return null;
-    const realRoot = fs.existsSync(root) ? fs.realpathSync(root) : root;
-    const abs = path.resolve(realRoot, relPath);
-    if (!abs.startsWith(`${realRoot}${path.sep}`)) return null;
-    // Lexically inside is not enough: one symlinked directory along the way and the bytes read are
-    // somebody else's.
-    const real = fs.existsSync(abs) ? fs.realpathSync(abs) : abs;
-    return real.startsWith(`${realRoot}${path.sep}`) ? abs : null;
-}
-
-// The mount folder inside a home, for a mount id that came from outside (a manifest, a home's
-// settings.json). Null when the id would leave the home, so the caller refuses rather than touching
-// another home's databases and files.
-export function resolveMountDir(homeDir: string, mountId: string): string | null {
-    return resolveInside(homeDir, `${PATHS.DRIVE.ROOT}/${mountId}`);
-}
-
-// The same folder, refusing a mount id that would leave the home.
-export function requireMountDir(homeDir: string, mountId: string): string {
-    const mountDir = resolveMountDir(homeDir, mountId);
-    if (!mountDir) throw new ApiError(400, `${mountId} is not a mount of this home`);
-    return mountDir;
 }
 
 // The layout inside a backup folder: `home/` mirrors the home directory one-for-one, and every
@@ -157,7 +120,7 @@ export function buildHomeFolderName(ownerId: string): string {
     return `${BACKUP_HOME_PREFIX}${ownerId}`;
 }
 
-export function buildArtifactName(ownerId: string, at: Date): string {
+function buildArtifactName(ownerId: string, at: Date): string {
     return `${buildHomeFolderName(ownerId)}-${buildBackupStamp(at)}${BACKUP_ARTIFACT_EXTENSION}`;
 }
 
@@ -239,9 +202,7 @@ export function buildSafetyCopyName(homeDir: string, kind: BackupSafetyCopy['kin
     return `${homeDir}${kind === 'pre-restore' ? PRE_RESTORE_SUFFIX : FAILED_RESTORE_SUFFIX}${stamp}`;
 }
 
-// The stamp the two safety copies of one restore share, under the same collision rule: a second
-// restore of a home inside one second must not rename onto the first's copy (ENOTEMPTY, with the
-// home already moved aside).
+// Shares the collision rule: a second restore of a home inside one second must not rename onto the first's copy.
 export function freeSafetyCopyStamp(homeDir: string, at: Date): string {
     return buildBackupStamp(
         nextFreeTime(at, (candidate) => {
@@ -265,9 +226,7 @@ export function parseSafetyCopyName(
     return { homeName, kind: groups['suffix'] === PRE_RESTORE_SUFFIX ? 'pre-restore' : 'failed-restore', at };
 }
 
-// The one collision rule these names have: a stamp is a second wide, and two of a home's artifacts
-// or safety copies can land inside one. The later one is stamped a second on, so every name in
-// both grammars keeps exactly one shape.
+// A stamp is a second wide, so the later of two names inside one is stamped a second on.
 export function nextFreeTime(at: Date, taken: (candidate: Date) => boolean): Date {
     let candidate = at;
     while (taken(candidate)) candidate = new Date(candidate.getTime() + 1000);

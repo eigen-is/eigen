@@ -17,15 +17,15 @@ import { clearHomeRestoring, evictHome, markHomeRestoring } from '../home/get-ho
 import { addRegistryEntry } from '../share/registry';
 import { getTeamExists } from '../team/team';
 import { getOwnerExists } from '../user/user';
-import { extractArtifact, readUnpackedHome, unpackBound } from './archive';
-import { readDeclaredManifest, requireArtifact } from './artifacts';
+import { readUnpackedHome } from './archive';
+import { requireArtifact, unpackArtifact } from './artifacts';
 import { authRowsToRestore, restoreAuthRows } from './auth-rows';
 import { describeError } from './errors';
 import { resolveHomeDir } from './home-dir';
 import {
-    checkRestoredDatabases,
-    checkUnpackedHome,
+    checkDatabases,
     containerDatabasesIn,
+    homeDatabasesIn,
     materializeMount,
     mountIdsIn,
     redateTrash,
@@ -39,12 +39,9 @@ import {
     buildSafetyCopyName,
     freeSafetyCopyStamp,
 } from './paths';
-import { putHomeBack, wipeRestoreStagingDir, writeRestoreCompleteMarker, writeRestoringMarker } from './recovery';
+import { dropRestoringMarker, putHomeBack, wipeRestoreStagingDir, writeRestoringMarker } from './recovery';
 import { forgetSafetyCopySize, resolveSafetyCopy } from './safety-copy';
 import { requireVerified, verifyFolder } from './verify';
-
-// One picture from the archive's avatar folder, read into memory while the archive is judged.
-type RestoredAvatar = { name: string; bytes: Uint8Array };
 
 // What a restore does once the home is out of everyone's hands and its folder is aside: put the new
 // folder at `homeDir`. The step that prepared it returns it, so it closes over whatever that step judged.
@@ -76,7 +73,7 @@ export async function restoreHome(
             // Beside the home, so the swap is a rename on one disk.
             const unpackDir = buildRestoreUnpackDir(homeDir, jobId);
             onProgress?.('extract', 0, 1);
-            await extractArtifact(artifactPath, unpackDir, unpackBound(await readDeclaredManifest(artifactPath)));
+            await unpackArtifact(artifactPath, unpackDir);
             onProgress?.('extract', 1, 1);
             const { folder, manifest } = readUnpackedHome(unpackDir, ownerId, artifactName);
             // A member of a whole-server archive that left out what only a restore of that archive puts back.
@@ -87,19 +84,16 @@ export async function restoreHome(
             // snapshotHome left its folder out.
             const carried = manifest.mounts.filter((summary) => !summary.skipped);
             const unpackedHome = path.join(folder, ARCHIVE_HOME_DIR);
-            await checkUnpackedHome(unpackedHome, carried);
             // Before materializeMount, which leaves every trash date alone.
             redateRestoredTrash(
                 ownerId,
                 unpackedHome,
                 carried.map((summary) => summary.id),
             );
-            // The rows outside the home folder are judged before the home is taken. The avatar is read now because
-            // the staging folder is gone by the time it is written.
+            // The rows outside the home folder are judged before the home is taken.
             const judged = {
                 authRows: authRowsToRestore(ownerId, manifest, folder),
                 shares: readShares(folder),
-                avatars: await readAvatars(ownerId, folder),
             };
             // An s3 mount's restored files take fresh keys from this stamp. The job id makes it this restore's alone,
             // even when the clock steps back to a second another restore of this home used.
@@ -108,8 +102,12 @@ export async function restoreHome(
                 await materializeMount(unpackedHome, summary, keyStamp);
                 onProgress?.('mounts', index + 1, carried.length);
             }
-            // The archive's `home/` is the home folder, one for one.
-            const install: InstallHome = async () => fs.renameSync(unpackedHome, homeDir);
+            const install: InstallHome = async () => {
+                // The archive's `home/` is the home folder, one for one.
+                fs.renameSync(unpackedHome, homeDir);
+                // Before the job removes the staging folder that holds it.
+                await restoreAvatars(ownerId, folder);
+            };
             return { install, judged };
         },
         // The new folder of a restore that failed after its swap is not trusted as a home: it keeps a name of its
@@ -120,13 +118,6 @@ export async function restoreHome(
     // missing, so a failure here fails the job with the home restored, and a retry finishes it.
     if (identity.authRows) restoreAuthRows(ownerId, identity.authRows);
     for (const row of identity.shares) await addRegistryEntry(ownerId, row.targetIdentifier);
-    // An avatar goes back only where the server has none, so a picture the user changed after the backup is not
-    // quietly reverted.
-    for (const avatar of identity.avatars) {
-        const target = path.join(getAvatarsDir(), avatar.name);
-        if (fs.existsSync(target)) continue;
-        await Bun.write(target, avatar.bytes);
-    }
     onProgress?.('done', 1, 1);
 }
 
@@ -163,7 +154,7 @@ export async function restoreSafetyCopy(
         jobId,
         // Nothing to unpack, but the copy gets the database checks an unpacked archive gets, while the home serves.
         async () => {
-            await checkRestoredDatabases(folder, mountIds, containerDatabasesIn(folder, mountIds));
+            await checkDatabases([...homeDatabasesIn(folder, mountIds), ...containerDatabasesIn(folder, mountIds)]);
             return { install, judged: null };
         },
         // Back under the name it came from, here and at boot after a kill. A `.failed-restore-` name would make a
@@ -191,20 +182,19 @@ function readShares(folder: string): BackupShare[] {
     return rows;
 }
 
-// The name comes from the archive and lands in the server-wide avatars folder, so only `{ownerId}.{ext}` passes, or
-// a hostile archive could plant a picture for somebody who has none.
-async function readAvatars(ownerId: string, folder: string): Promise<RestoredAvatar[]> {
+// The name lands in the server-wide avatars folder, so only `{ownerId}.{ext}` passes. An avatar goes back only where
+// the server has none, so a picture the user changed after the backup is not quietly reverted.
+async function restoreAvatars(ownerId: string, folder: string): Promise<void> {
     const avatarDir = path.join(folder, ARCHIVE_AVATAR_DIR);
-    if (!fs.existsSync(avatarDir)) return [];
-    const avatars: RestoredAvatar[] = [];
+    if (!fs.existsSync(avatarDir)) return;
     for (const name of fs.readdirSync(avatarDir)) {
         if (path.parse(name).name !== ownerId) {
             console.warn(`[backup] ${ownerId}: ${name} in the archive is not this user's avatar, not restored`);
             continue;
         }
-        avatars.push({ name, bytes: await Bun.file(path.join(avatarDir, name)).bytes() });
+        const target = path.join(getAvatarsDir(), name);
+        if (!fs.existsSync(target)) await fsp.copyFile(path.join(avatarDir, name), target);
     }
-    return avatars;
 }
 
 // The replacement is judged while the home still serves, so a refusal costs nobody a page.
@@ -232,7 +222,6 @@ async function replaceHomeFolder<Judged>(
             const movedAside = fs.existsSync(homeDir) ? buildSafetyCopyName(homeDir, 'pre-restore', stamp) : null;
             const marker = {
                 ownerId,
-                homeDir,
                 preRestoreName: movedAside && path.basename(movedAside),
                 parkName: path.basename(parkOnFailure(stamp)),
             };
@@ -244,10 +233,10 @@ async function replaceHomeFolder<Judged>(
 
             try {
                 await install();
-                // Every tab of the home reloads, once the folder is whole and before the completion note: a crash
-                // between the two costs an extra reload, never a stale tab over the new home.
+                // Every tab of the home reloads, once the folder is whole and before the note goes: a crash between
+                // the two costs an extra reload, never a stale tab over the new home.
                 await rotateHomeDataEpoch(ownerId);
-                writeRestoreCompleteMarker(restoreDir);
+                dropRestoringMarker(restoreDir);
             } catch (error) {
                 // The boot's own undo, from the same note. A failure in it must not hide the one that brought us here.
                 try {

@@ -21,15 +21,13 @@ export const SLIDE_SIZES: Readonly<Record<SlideSize, Readonly<Extent>>> = {
     '4:3': { width: FRAME_WIDTH, height: 1440 },
 };
 
-// A deck's physical width in pt, `meta.slideWidth` (DEFAULT_SCENE_META holds a new deck's, which the seeder writes;
-// a pptx keeps its own). The frame stays 1920 px wide whatever it is, so this sets the deck's pt per px, and every
-// px↔pt a deck converts goes through the two below: the Size and Letter rows, the pptx reader and writer, the PDF's
-// sheet. Bounded by PowerPoint's 1 to 56 in on both sides; a 16:9 slide's height is the short side.
+// The frame stays 1920 px wide whatever the width, so this sets the deck's pt per px, and every px↔pt a deck converts
+// goes through the two helpers below. Bounded by PowerPoint's 1 to 56 in.
 export const MIN_SLIDE_WIDTH = (72 * FRAME_WIDTH) / SLIDE_SIZES['16:9'].height;
 export const MAX_SLIDE_WIDTH = 4032;
 
-// A deck without a width reads as this, so its 1920 px print as 10 in.
-export const UNSTORED_SLIDE_WIDTH = 720;
+// 10 in, the deck whose font sizes reach the highest px.
+export const TEN_INCH_SLIDE_WIDTH = 720;
 
 export function slidePxToPt(px: number, slideWidth: number): number {
     return (px * slideWidth) / FRAME_WIDTH;
@@ -39,8 +37,8 @@ export function slidePtToPx(pt: number, slideWidth: number): number {
     return (pt * FRAME_WIDTH) / slideWidth;
 }
 
-// A canvas font size as the pt the shared clipboard's text carries (EigenClipboardTypography), and back: a deck's at its
-// own width, a drawing's, which has none, at CSS's 96 dpi, the scale its PDF and SVG print at.
+// A canvas font size as the pt the shared clipboard's text carries (EigenClipboardTypography), and back: a deck's at
+// its own width, a drawing's, which has none, at CSS's 96 dpi, the scale its PDF and SVG print at.
 export function canvasPxToPt(px: number, slideWidth: number | undefined): number {
     return slideWidth === undefined ? pxToPt(px) : slidePxToPt(px, slideWidth);
 }
@@ -49,8 +47,8 @@ export function canvasPtToPx(pt: number, slideWidth: number | undefined): number
     return slideWidth === undefined ? ptToPx(pt) : slidePtToPx(pt, slideWidth);
 }
 
-// A stored px size as a deck shows it: pt on fonts.ts' half-point grid. Showing it writes nothing: the stored px changes
-// only when the user sets a size, so a box pasted between a deck and a drawing keeps its size to the bit.
+// A stored px size as a deck shows it: pt on fonts.ts' half-point grid. Showing it writes nothing: the stored px
+// changes only when the user sets a size, so a box pasted between a deck and a drawing keeps its size to the bit.
 export function slideFontSize(px: number, slideWidth: number): number {
     return snapFontSize(slidePxToPt(px, slideWidth));
 }
@@ -60,11 +58,10 @@ export function snapSlideFontSize(px: number, slideWidth: number): number {
     return slidePtToPx(slideFontSize(px, slideWidth), slideWidth);
 }
 
-// The px range a stored size may hold, for a deck and a drawing alike, as a paste between them keeps its px: fonts.ts'
-// pt range on the widest deck and on a 10 in one, so every deck Eigen makes reaches all of it and a drawing tops out
-// near 1,067 px. A pptx's deck under 10 in wide tops out under 400 pt.
+// The px range a stored size may hold, for a deck and a drawing alike, so a paste between them keeps its px: fonts.ts'
+// pt range on the widest deck and on a 10 in one.
 export const MIN_FONT_SIZE_PX = slidePtToPx(MIN_FONT_SIZE, MAX_SLIDE_WIDTH);
-export const MAX_FONT_SIZE_PX = slidePtToPx(MAX_FONT_SIZE, UNSTORED_SLIDE_WIDTH);
+export const MAX_FONT_SIZE_PX = slidePtToPx(MAX_FONT_SIZE, TEN_INCH_SLIDE_WIDTH);
 
 // The slide size closest in shape to a page of any size, for an importer: widescreen and 16:10 read as
 // 16:9, 4:3 and A4 as 4:3.
@@ -88,9 +85,7 @@ export type VectorFrame = {
 // frame's own keys, so a writer that tried to persist them would be inventing a second source for it.
 export const FRAME_FIELDS: readonly string[] = ['id', 'index', 'name', 'background'];
 
-// What a NEW page is painted with, for every writer that makes one (the editor's +, the deck seeder).
-// White, not '': a background-less frame is invisible against the present-mode backdrop and exports as
-// a hole. '' stays reachable — it is what the panel's None writes — but nothing defaults to it.
+// White, not '': a background-less frame is invisible against the present-mode backdrop and exports as a hole.
 export const DEFAULT_FRAME_BACKGROUND: string = serializeBackgroundFill({ type: 'solid', color: '#ffffff' });
 
 // Whether a scene point is ON the page. A frame clips its overhang, so a creation gesture that starts
@@ -104,10 +99,8 @@ export function elementsInFrame<T extends { frameId: string }>(elements: readonl
     return elements.filter((el) => el.frameId === frameId);
 }
 
-// The frame the shell should activate. `lastIndex` is the position the active frame held; when it is
-// gone (a peer's delete, an undo of the add) the frame that now occupies that position takes over,
-// clamped to the ends — deleting the last slide steps BACK rather than off the end. '' means the deck
-// has no frames at all, which is a state only an empty document is in.
+// When the active frame is gone (a peer's delete, an undo of the add), the frame now at its position takes over,
+// clamped to the ends, so deleting the last slide steps back. '' means the deck has no frames at all.
 export function nearestFrameId(frames: VectorFrame[], activeId: string, lastIndex: number): string {
     if (frames.length === 0) return '';
     if (frames.some((frame) => frame.id === activeId)) return activeId;

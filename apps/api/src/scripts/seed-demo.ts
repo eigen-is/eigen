@@ -665,10 +665,7 @@ async function main(): Promise<void> {
         for (const rootName of ['tasks', 'columns']) {
             for (const [, entry] of getItemMapRoot(board.doc, rootName)) {
                 if (!(entry instanceof Y.Map)) continue;
-                const creator = entry.get('creator');
-                if (typeof creator === 'string' && !creator.includes('@')) entry.set('creator', emailFor(creator));
-                // The baked createdAt is the day the fixture was made, weeks before the replies.
-                entry.set('createdAt', boardCreatedAt);
+                entry.set('creator', emailFor(entry.get('creator')));
             }
         }
         const tasksMap = getItemMapRoot(board.doc, 'tasks');

@@ -11,7 +11,6 @@ import {
     canUploadServerArchive,
     incompleteReason,
     isCompleteArchive,
-    listUnusableMountIds,
     parseBackupManifest,
     parseBackupSidecar,
     parseServerArchiveManifest,
@@ -52,26 +51,11 @@ const homeManifest: BackupManifest = {
     createdAt: '2026-09-30T02:03:04.000Z',
     appVersion: '0.3.1',
     server: { domain: 'example.org', orgId: 'org' },
-    counts: { databases: 1, files: 0, bytes: 10, dirs: 3 },
+    counts: { databases: 1, files: 0, bytes: 10 },
     level: 'full',
     mounts: [mount('drive', 'local')],
     entries: [{ path: 'home/mounts/drive/metadata.db', bytes: 10, sha256: 'a'.repeat(64) }],
 };
-
-describe('listUnusableMountIds', () => {
-    test('names an id that is no one folder, whatever its entry holds', () => {
-        const text = JSON.stringify({
-            mounts: { default: {}, 'a/b': null, '../x': { storageType: 's3' }, 'c-1_d': {} },
-        });
-        expect(listUnusableMountIds(text)).toEqual(['a/b', '../x']);
-    });
-
-    test('finds none in a file with no mounts, or one that does not read', () => {
-        expect(listUnusableMountIds('{}')).toEqual([]);
-        expect(listUnusableMountIds('{"mounts":null}')).toEqual([]);
-        expect(listUnusableMountIds('not json')).toEqual([]);
-    });
-});
 
 describe('parseBackupManifest', () => {
     test('reads the warnings of a home backed up with them, and a manifest without them', () => {
@@ -83,13 +67,8 @@ describe('parseBackupManifest', () => {
         expect(parseBackupManifest(JSON.stringify(homeManifest))).toEqual(homeManifest);
     });
 
-    test('refuses a manifest without a folder count, since an unpack charges every folder', () => {
-        const counts = { databases: 1, files: 0, bytes: 10 };
-        expect(parseBackupManifest(JSON.stringify({ ...homeManifest, counts }))).toBeNull();
-    });
-
-    test('refuses a folder count that is not a number', () => {
-        const counts = { ...homeManifest.counts, dirs: '3' };
+    test('refuses a byte count that is not a number', () => {
+        const counts = { ...homeManifest.counts, bytes: '3' };
         expect(parseBackupManifest(JSON.stringify({ ...homeManifest, counts }))).toBeNull();
     });
 

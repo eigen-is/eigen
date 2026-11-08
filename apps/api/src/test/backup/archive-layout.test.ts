@@ -1,10 +1,16 @@
 // A backup copies the databases a mount manages under the lock of their document, and every other file byte for
-// byte. A document's versions folder is found the way every lookup finds it, whatever the case of its name.
-// Verify refuses a trash root whose permanent delete would wait on itself.
+// byte. A document's versions folder is found the way every lookup finds it, whatever the case of its name. A row that
+// no path can be built for is told apart from the rest, and has no path of its own.
 import { expect, test } from 'bun:test';
 import type { DrivePathType } from '@workspace/lib/types/drive';
 import type { MountPathRow } from '../../lib/backup/archive-layout';
-import { checkArchivedPathRows, managedDbContainer } from '../../lib/backup/archive-layout';
+import {
+    archivePaths,
+    listManagedDatabases,
+    managedDbContainer,
+    storageKeys,
+    unreachableRows,
+} from '../../lib/backup/archive-layout';
 
 const row = (id: string, name: string, type: DrivePathType, parentId: string | null): MountPathRow => ({
     id,
@@ -34,62 +40,50 @@ test('a database in a plain folder is a file like any other', () => {
     expect(managedDbContainer(upload, byId)).toBeNull();
 });
 
-test('verify refuses two trash roots that were each trashed from inside the other', () => {
+test('a row builds its path from the names above it, and a trash root sits in the trash folder', () => {
     const root = row('root', 'Drive', 'folder', null);
-    const a = { ...row('a', 'A', 'folder', root.id), trashedFrom: 'inB' };
-    const inA = row('inA', 'In A', 'folder', a.id);
-    const b = { ...row('b', 'B', 'folder', root.id), trashedFrom: 'inA' };
-    const inB = row('inB', 'In B', 'folder', b.id);
-    expect(checkArchivedPathRows([root, a, inA, b, inB])).toEqual(['path row a was trashed from inside itself']);
+    const folder = { ...row('folder', 'Folder', 'folder', root.id), file: 'on-disk' };
+    const file = row('file', 'a.txt', 'file', folder.id);
+    const trashed = { ...row('trashed', 'b.txt', 'file', root.id), trashedFrom: folder.id };
+    const rows = [file, trashed, folder, root];
+    expect(archivePaths(rows)(file)).toBe('Folder/a.txt');
+    expect(archivePaths(rows)(trashed)).toBe('.trash/trashed.txt');
+    expect(storageKeys(rows, true)(file)).toBe('on-disk/a.txt');
+    expect(storageKeys(rows, false)(file)).toBe('a.txt');
 });
 
-test('verify passes trash roots trashed from a live folder and from inside another trash root', () => {
+test('a row under a missing parent or in a parent cycle is orphaned, with what is under it, and has no path', () => {
     const root = row('root', 'Drive', 'folder', null);
-    const live = row('live', 'Live', 'folder', root.id);
-    const a = { ...row('a', 'A', 'folder', root.id), trashedFrom: live.id };
-    const inA = row('inA', 'In A', 'folder', a.id);
-    const b = { ...row('b', 'B', 'file', root.id), trashedFrom: inA.id };
-    expect(checkArchivedPathRows([root, live, a, inA, b])).toEqual([]);
+    const kept = row('kept', 'Kept', 'folder', root.id);
+    const lost = row('lost', 'Lost', 'folder', 'gone');
+    const inLost = row('inLost', 'In lost', 'file', lost.id);
+    const a = row('a', 'A', 'folder', 'b');
+    const b = row('b', 'B', 'folder', a.id);
+    const rows = [root, kept, lost, inLost, a, b];
+    expect(unreachableRows(rows).orphaned.map((orphan) => orphan.id)).toEqual(['lost', 'inLost', 'a', 'b']);
+    expect(() => archivePaths(rows)(inLost)).toThrow('path row inLost does not reach the root');
 });
 
-// A live delete of a folder can leave a trash root trashed from it, and a restore sends that one to the root.
-test('verify passes a trash root whose original folder is gone', () => {
+test('a managed database under a row that does not reach the root is not listed', () => {
     const root = row('root', 'Drive', 'folder', null);
-    const orphan = { ...row('orphan', 'Orphan', 'file', root.id), trashedFrom: 'deleted-folder' };
-    expect(checkArchivedPathRows([root, orphan])).toEqual([]);
+    const doc = row('doc', 'Plan.eigendoc', 'doc', root.id);
+    const data = row('data', 'data.db', 'file', doc.id);
+    const stray = row('stray', 'Stray.eigendoc', 'doc', 'gone');
+    const strayData = row('strayData', 'data.db', 'file', stray.id);
+    expect(listManagedDatabases([root, doc, data, stray, strayData]).map((found) => found.row.id)).toEqual(['data']);
 });
 
-// C is trashed from inside the loop but is not on it, so the refusal never names it.
-test('verify refuses a loop of trash roots by a root on it, and passes the tree once the loop is broken', () => {
-    const root = row('root', 'Drive', 'folder', null);
-    const live = row('live', 'Live', 'folder', root.id);
-    const a = { ...row('a', 'A', 'folder', root.id), trashedFrom: 'inB' };
-    const inA = row('inA', 'In A', 'folder', a.id);
-    const inB = row('inB', 'In B', 'folder', 'b');
-    const c = { ...row('c', 'C', 'file', root.id), trashedFrom: inA.id };
-    const looped = { ...row('b', 'B', 'folder', root.id), trashedFrom: inA.id };
-    expect(checkArchivedPathRows([c, root, live, a, inA, looped, inB])).toEqual([
-        'path row a was trashed from inside itself',
-    ]);
-    const unlooped = { ...looped, trashedFrom: live.id };
-    expect(checkArchivedPathRows([c, root, live, a, inA, unlooped, inB])).toEqual([]);
-});
-
-// Verify and restore walk every row's ancestors, so a table deeper than a live drive allows is refused, whichever
-// end of the chain the walk starts from.
-test('verify refuses a row 257 levels deep and passes a chain 256 deep', () => {
-    const chain = [row('root', 'Drive', 'folder', null)];
-    for (let depth = 1; depth <= 257; depth++) chain.push(row(`f${depth}`, `F${depth}`, 'folder', chain[depth - 1].id));
-    const refusal = ['path row f257 sits 257 levels deep, past the 256 a drive allows'];
-    expect(checkArchivedPathRows(chain.slice(0, 257))).toEqual([]);
-    expect(checkArchivedPathRows(chain)).toEqual(refusal);
-    expect(checkArchivedPathRows(chain.toReversed())).toEqual(refusal);
-});
-
-test('verify takes an empty file on a folder of a flat-key mount, and refuses one on a file', () => {
+test('an empty file passes on a folder of a flat-key mount, and is unusable on a file', () => {
     const root = { ...row('root', 'Drive', 'folder', null), file: '' };
     const folder = { ...row('folder', 'Folder', 'folder', root.id), file: '' };
-    expect(checkArchivedPathRows([root, folder])).toEqual([]);
+    expect(unreachableRows([root, folder]).unusable).toEqual([]);
     const file = { ...row('file', 'a.txt', 'file', folder.id), file: '' };
-    expect(checkArchivedPathRows([root, folder, file])).toEqual(['path row file has an unusable file ""']);
+    expect(unreachableRows([root, folder, file]).unusable).toEqual([file]);
+});
+
+test('a name or file the trash folder reserves is unusable, and so is a separator', () => {
+    const root = { ...row('root', 'Drive', 'folder', null), file: '' };
+    const reserved = row('reserved', '.trash', 'file', root.id);
+    const separator = { ...row('separator', 'a.txt', 'file', root.id), file: '../a.txt' };
+    expect(unreachableRows([root, reserved, separator]).unusable).toEqual([reserved, separator]);
 });
