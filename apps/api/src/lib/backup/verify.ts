@@ -1,7 +1,7 @@
 // Checks that an unpacked backup can be restored before anyone relies on it. It compares the folder's sizes and
-// hashes with its manifest, asks SQLite about every database, and decodes a sample of the documents. The result is
-// a record of failures, which a restore refuses on and the backup pane shows. A backup job runs it on its staging
-// folder, and a restore on the archive it just unpacked.
+// hashes with its manifest, refuses a table or settings file that names a path no restore may build, asks SQLite about
+// every database, and decodes a sample of the documents. The result is a record of failures, which a restore refuses
+// on and the backup pane shows. A backup job runs it on its staging folder, and a restore on the archive it just unpacked.
 
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
@@ -9,7 +9,7 @@ import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import type { BackupEntry, BackupProgress, BackupVerifyRecord } from '@workspace/lib/types/backup';
 import { isCollabType } from '@workspace/lib/types/drive';
-import { parseBackupManifest } from '@workspace/lib/validation';
+import { listUnusableMountIds, parseBackupManifest } from '@workspace/lib/validation';
 import * as Y from 'yjs';
 import { readYjsStateFromFile } from '../collab/yjs-loader';
 import { PATHS, SERVER_DATABASES } from '../config/paths';
@@ -18,6 +18,7 @@ import { hashFile } from '../storage/deadline';
 import {
     archivePaths,
     checkArchivedPathRows,
+    checkArchivedPendingUploads,
     HOME_DATABASE_PATHS,
     listManagedDatabases,
     managedDbContainer,
@@ -104,6 +105,16 @@ function listArchiveDatabases(
         if (abs && fs.existsSync(abs)) found.push({ path: relDatabase, abs, isYjsDocument: false });
     }
 
+    // A home opens every mount its settings.json names, at the path the id spells. An id of one segment is a folder
+    // the walk below reads, so every metadata.db a home can open was judged here.
+    const relSettings = archiveHomePath(PATHS.SETTINGS);
+    const settings = path.join(root, relSettings);
+    if (fs.existsSync(settings)) {
+        for (const id of listUnusableMountIds(fs.readFileSync(settings, 'utf8'))) {
+            fail(`${relSettings}: names a mount "${id}", which is no folder of its own`);
+        }
+    }
+
     const mountsDir = path.join(root, ARCHIVE_HOME_DIR, PATHS.DRIVE.ROOT);
     if (!fs.existsSync(mountsDir)) return found;
     for (const entry of fs.readdirSync(mountsDir, { withFileTypes: true })) {
@@ -121,8 +132,8 @@ function listArchiveDatabases(
             try {
                 const rows = readMountPathRows(db);
                 // Before a path is derived from them, and none is once one fails: every path a restore builds is a
-                // join of these rows' name columns, and the table came in inside a file somebody uploaded.
-                const refusals = checkArchivedPathRows(rows);
+                // join of these rows' name columns, and the tables came in inside a file somebody uploaded.
+                const refusals = [...checkArchivedPathRows(rows), ...checkArchivedPendingUploads(db)];
                 for (const failure of refusals) fail(`${relMetadata}: ${failure}`);
                 if (refusals.length > 0) continue;
                 // A restore serves a plain file's size and ETag from its row, so the row describes the bytes the

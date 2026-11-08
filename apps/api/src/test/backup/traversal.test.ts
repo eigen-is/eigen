@@ -175,24 +175,13 @@ describe('Backup refuses an archive whose paths table leaves the mount', () => {
         return relative(dataDir, OUTSIDE_PATH);
     }
 
-    // The attacker's own archive with one `paths` row doctored, its manifest entry restated so
-    // verify's transport stage passes and the row itself is what has to be caught.
-    async function hostileArchive(
-        mountId: string,
-        column: 'file' | 'name' | 'id' | 'trashedFrom',
-        value: string,
-        rowId: string,
-    ) {
+    // The attacker's own archive with one file edited, its manifest entry restated so verify's transport stage passes
+    // and the edit itself is what has to be caught.
+    async function hostileFolderWith(rel: string, edit: (file: string) => void) {
         const staging = mkdtempSync(join(TEST_DATA_DIR, 'traversal-rows-'));
         const manifest = await snapshotHome(await getHome(owner.id), staging);
         const hostileFolder = join(staging, buildHomeFolderName(owner.id));
-        const rel = `home/mounts/${mountId}/metadata.db`;
-        const db = new Database(join(hostileFolder, rel), { readwrite: true, create: false });
-        try {
-            db.run(`UPDATE paths SET ${column} = ? WHERE id = ?`, [value, rowId]);
-        } finally {
-            db.close();
-        }
+        edit(join(hostileFolder, rel));
         const entry = manifest.entries.find((candidate) => candidate.path === rel);
         if (!entry) throw new Error(`${rel} is not in the manifest`);
         const hasher = new Bun.CryptoHasher('sha256');
@@ -201,6 +190,34 @@ describe('Backup refuses an archive whose paths table leaves the mount', () => {
         entry.sha256 = hasher.digest('hex');
         writeFileSync(join(hostileFolder, 'manifest.json'), JSON.stringify(manifest, null, 2));
         return hostileFolder;
+    }
+
+    function hostileMetadata(mountId: string, sql: string, values: string[]) {
+        return hostileFolderWith(`home/mounts/${mountId}/metadata.db`, (file) => {
+            const db = new Database(file, { readwrite: true, create: false });
+            try {
+                db.run(sql, values);
+            } finally {
+                db.close();
+            }
+        });
+    }
+
+    function hostileArchive(
+        mountId: string,
+        column: 'file' | 'name' | 'id' | 'trashedFrom',
+        value: string,
+        rowId: string,
+    ) {
+        return hostileMetadata(mountId, `UPDATE paths SET ${column} = ? WHERE id = ?`, [value, rowId]);
+    }
+
+    function hostilePendingUpload(mountId: string, stagingPath: string) {
+        return hostileMetadata(
+            mountId,
+            "INSERT INTO pending_uploads (storageKey, stagingPath, enqueuedAt, nextAttemptAt) VALUES ('a-key', ?, 0, 0)",
+            [stagingPath],
+        );
     }
 
     // One artifact per hostile folder. The stamp is a second wide, so each one gets its own.
@@ -304,6 +321,41 @@ describe('Backup refuses an archive whose paths table leaves the mount', () => {
         const record = await verifyFolder(folder);
         expect(record.status).toBe('failed');
         expect(record.failures.join(' ')).toContain(`path row ${keyFileId} was trashed from inside itself`);
+    });
+
+    // The upload queue sends the bucket the file a pending row names, so a row that leaves staging/ would send it any
+    // file of this host.
+    test.each([
+        ['an absolute path', OUTSIDE_PATH],
+        ['a .. path', '../../outside'],
+        ['a path into a folder', 'nested/copy.db'],
+    ])('verify names the pending upload whose staged copy is at %s', async (_, stagingPath) => {
+        const record = await verifyFolder(await hostilePendingUpload(keyMountId, stagingPath));
+        expect(record.status).toBe('failed');
+        expect(record.failures.join(' ')).toContain(
+            `pending upload "a-key" has an unusable staged copy "${stagingPath}"`,
+        );
+    });
+
+    test('verify passes a pending upload that names a file in staging', async () => {
+        const record = await verifyFolder(await hostilePendingUpload(keyMountId, 'a-staged-copy.db'));
+        expect(record.failures).toEqual([]);
+    });
+
+    // A home opens every mount its settings.json names, at the path the id spells. An id of two segments would be a
+    // metadata.db no walk of mounts/ reads, and one with a `..` another home's mount.
+    test.each([
+        ['two segments', 'nested/deep'],
+        ['a .. hop', '../../team/victim/mounts/default'],
+    ])('verify names a mount id in settings.json of %s', async (_, mountId) => {
+        const folder = await hostileFolderWith('home/settings.json', (file) => {
+            const settings = JSON.parse(readFileSync(file, 'utf8'));
+            settings.mounts[mountId] = { storageType: 's3', maxSizeMB: 100, enabled: true };
+            writeFileSync(file, JSON.stringify(settings));
+        });
+        const record = await verifyFolder(folder);
+        expect(record.status).toBe('failed');
+        expect(record.failures.join(' ')).toContain(`names a mount "${mountId}"`);
     });
 
     test('a restore of one throws and the file outside the home is untouched', async () => {

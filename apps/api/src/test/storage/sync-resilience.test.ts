@@ -1,7 +1,18 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, afterEach, beforeAll, describe, expect, jest, test } from 'bun:test';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, unlinkSync, utimesSync } from 'node:fs';
-import { join } from 'node:path';
+import {
+    copyFileSync,
+    existsSync,
+    mkdirSync,
+    readdirSync,
+    readFileSync,
+    renameSync,
+    rmSync,
+    unlinkSync,
+    utimesSync,
+    writeFileSync,
+} from 'node:fs';
+import { dirname, join } from 'node:path';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import type { DatabaseConfig } from '../../lib/core';
 import { ApiError, ManagedDatabase } from '../../lib/core';
@@ -515,6 +526,24 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
         await mountB.uploadQueue?.drain({ flushNow: true });
         expect(mountB.pendingUploadCount).toBe(0);
         expect(await countBackingRows(mountB, dataDbId, TEST_DIR)).toBe(1);
+    });
+
+    test('a pending row is a name in staging: an absolute path names nothing, so the file there is not uploaded', async () => {
+        const { mount, fault } = createS3Mount('absolute-staging-path');
+        await mount.init();
+        const outside = join(TEST_DIR, `outside-${Date.now()}`);
+        writeFileSync(outside, 'a file of this host');
+        const db = new Database(join(dirname(mount.stagingDir), 'metadata.db'));
+        db.run(
+            "INSERT INTO pending_uploads (storageKey, stagingPath, enqueuedAt, nextAttemptAt) VALUES ('stolen', ?, 0, 0)",
+            [outside],
+        );
+        db.close();
+        mount.uploadQueue?.reconcile();
+        await mount.uploadQueue?.drain({ flushNow: true });
+        expect(mount.pendingUploadCount).toBe(0);
+        expect(await fault.exists('stolen')).toBe(false);
+        expect(readFileSync(outside, 'utf8')).toBe('a file of this host');
     });
 
     // downloadToTemp's staged branch, as mount.test.ts pins its stored one: handleApiError answers a raw error 500.

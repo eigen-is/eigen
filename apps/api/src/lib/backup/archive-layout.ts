@@ -171,6 +171,19 @@ export function checkArchivedPathRows(rows: readonly MountPathRow[]): string[] {
     return failures;
 }
 
+// The upload queue joins a pending row's stagingPath onto the mount's staging folder and sends the bucket that file, so
+// a row in an uploaded table that names a path would send it any file of this host.
+export function checkArchivedPendingUploads(db: Database): string[] {
+    return db
+        .query<{ storageKey: string; stagingPath: string }, []>('SELECT storageKey, stagingPath FROM pending_uploads')
+        .all()
+        .filter(({ stagingPath }) => !isUsableName(stagingPath))
+        .map(
+            ({ storageKey, stagingPath }) =>
+                `pending upload "${storageKey}" has an unusable staged copy "${stagingPath}"`,
+        );
+}
+
 // Each row's depth below the root, the root's 0, or where its parent chain ends when it does not reach the root: at
 // a parent the table does not hold, or in a cycle. A walk stops at the first row it has a verdict for, and the rows
 // it passed take theirs from it.

@@ -366,6 +366,15 @@ function isS3Config(value: unknown): value is S3Config {
 // live. A mount whose entry is not those is left out, so the caller touches nothing of it.
 export type BackupMountSettings = { storageType: MountConfig['storageType']; s3Config?: S3Config };
 
+// The ids in a home's `settings.json` that are no folder of their own. A home opens every id the file names, and
+// parseHomeMountSettings leaves these out, so a verify asks here.
+export function listUnusableMountIds(text: string): string[] {
+    const value = parseJson(text);
+    if (typeof value !== 'object' || value === null || !('mounts' in value)) return [];
+    if (typeof value.mounts !== 'object' || value.mounts === null) return [];
+    return Object.keys(value.mounts).filter((id) => !BACKUP_MOUNT_ID.test(id));
+}
+
 export function parseHomeMountSettings(text: string): Record<string, BackupMountSettings> | null {
     const value = parseJson(text);
     if (typeof value !== 'object' || value === null) return null;
