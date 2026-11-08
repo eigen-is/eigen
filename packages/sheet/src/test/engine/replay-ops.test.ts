@@ -434,6 +434,18 @@ describe('replaySheetsOps', () => {
 // replaySheetsOps throws "path doesn't resolve" and rolls back the WHOLE batch: the edit is
 // lost, not degraded, on every reader (a second client opening the doc, the preview renderer,
 // and every xlsx/HTML/PDF export).
+describe('a sheet added under a name the rule refuses', () => {
+    test.each([
+        ['past the length limit', 'x'.repeat(32)],
+        ['with a colon', 'a:b'],
+        ['with a quote at its end', "x'"],
+        ['empty', ''],
+    ])('a name %s is left out, as a live tab leaves it out', (_, name) => {
+        const added: Op = { op: 'addSheet', id: 's2', path: [], value: baseSheet('s2', name) };
+        expect(replaySheetsOps([baseSheet('s1', 'One')], [[added]]).map((sheet) => sheet.id)).toEqual(['s1']);
+    });
+});
+
 describe('ops from a normalizing editor apply to an un-normalized stored sheet', () => {
     const storedBeforeThisBranch = (): Sheet[] => [{ name: 'Sheet1', id: 'id_1', order: 0, celldata: [], config: {} }];
 

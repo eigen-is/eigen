@@ -63,6 +63,24 @@ describe('engine/dependency-index — DependencyIndex', () => {
         expect(index.dependentsOf('s1', 0, 0)).toEqual(['f1']);
     });
 
+    test('a formula that reads a cell twice leaves the formulas beside it when it goes', () => {
+        const index = new DependencyIndex();
+        index.set('twice', [dep(0, 0, 0, 0), dep(0, 0, 0, 0)]);
+        index.set('other', [dep(0, 0, 0, 0)]);
+        index.delete('twice');
+        expect(index.dependentsOf('s1', 0, 0)).toEqual(['other']);
+    });
+
+    test('formulas that read one cell cost about one write each', () => {
+        const index = new DependencyIndex();
+        const shared = [dep(0, 0, 0, 0)];
+        const start = performance.now();
+        for (let i = 0; i < 120_000; i += 1) index.set(`f${i}`, shared);
+        // A scan of the cell's list per formula takes about 18 s, and this takes about 30 ms.
+        expect(performance.now() - start).toBeLessThan(3_000);
+        expect(index.dependentsOf('s1', 0, 0)).toHaveLength(120_000);
+    }, 60_000);
+
     test('set replaces earlier dependencies for the same key', () => {
         const index = new DependencyIndex();
         index.set('f1', [dep(0, 0, 0, 0)]);

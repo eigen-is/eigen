@@ -72,7 +72,7 @@ Copied cells paste into other apps as rows and columns, the same ones a paste in
 
 Both are also available under **Edit → Undo** and **Edit → Redo**.
 
-When someone else edits the spreadsheet with you, you can no longer undo your last insert or delete of rows or columns, your last added, duplicated, deleted or renamed sheet, or anything you did before it. What you did after it still undoes.
+When someone else edits the spreadsheet with you, you can no longer undo your last insert or delete of rows or columns, your last added, duplicated, deleted or renamed sheet, or anything you did before it. What you did after it still undoes. If someone else renames a sheet, you can no longer undo or redo anything you did before that.
 
 ## Format cells
 

@@ -14,11 +14,12 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Deleted comments** — a link, notification, activity entry or search result for a deleted comment opens it as "This comment was deleted" under its grayed title, with nothing to reply to, resolve or assign
 - **Copies in Drive** — a copy or Duplicate of a document leaves out the images and comments deleted from the original
 - **Comments in Sheets** — the comments pane lists the comments on every tab, with the tab's name, such as Sheet2 · B2. Deleting a comment removes it from every cell it sits on, and a duplicated tab starts without comments
-- **Undo in Sheets** — once someone else edits the spreadsheet, you can no longer undo or redo your last insert or delete of rows or columns, your last added, duplicated, deleted or renamed tab, or anything before it. What you did after it still undoes
+- **Undo in Sheets** — once someone else edits the spreadsheet, you can no longer undo or redo your last insert or delete of rows or columns, your last added, duplicated, deleted or renamed tab, or anything before it. What you did after it still undoes. When someone else renames a tab, you can no longer undo or redo anything before that
 - **Renaming a tab in Sheets** — formulas, formula rules, dropdown lists and links that name the tab follow its new name, as in Excel, and undo renames it back
 - **Paste from a menu in Sheets** — **Edit › Paste** and the right-click **Paste** paste what is on the clipboard, from any app. Where the browser blocks that, a notice says to press ⌘V (Ctrl+V on Windows and Linux)
 - **Pasting edited cells in Sheets** — if you edit cells after copying them, a paste in the same tab brings them as they are now
 - **Validation limits in Sheets** — an edit that would push a validation rule past its limit goes through, and the cells past it get no rule
+- **Speed in Sheets** — editing a cell in a workbook of 100,000 formulas takes milliseconds, where it took over a tenth of a second, and a cell that 100,000 formulas read no longer stalls a sheet for a minute
 - **Default drive size reaches existing users** — raising **Default mount (MB)** in Admin's server settings now gives every user's drive the new size at once, not only users who sign in for the first time. Lowering it shrinks no one's drive
 
 ### Fixed
@@ -38,7 +39,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Pasting tables in Sheets** — numbers from a table with no alignment of its own land on the right, and a cell spanning past the table's last row pastes instead of failing
 - **Several selected ranges in Sheets** — the cell editor and the formula bar show the cell you are editing, in the last range you selected
 - **Date shortcut in Sheets** — Ctrl+Shift+; on a filled cell no longer wipes it, so Escape brings back what was there
-- **Formulas in Sheets** — `A1 : B2` with spaces recalculates, a formula reading a tab nobody opened stays current, and undoing a replace restores the formulas that read those cells
+- **Formulas in Sheets** — `A1 : B2` with spaces recalculates, a formula reading a tab nobody opened stays current, undoing a replace restores the formulas that read those cells, and deleting a formula that reads a cell twice leaves the others reading it current
+- **Undo while others type formulas in Sheets** — two people typing formulas at once no longer lose their undo
+- **Excel downloads from Sheets** — a tab named like a cell, such as Q1, gets the quotes Excel expects in formulas, a formula follows a tab the file has to rename, and a fill down from a linked cell no longer makes the download fail
+- **Tab names from a file in Sheets** — an import repairs a tab name Sheets would refuse, such as one past 31 characters, and the formulas naming it follow
 - **Paste past the last row in Sheets** — a paste that adds rows to a workbook full of formulas no longer pauses to read them all again
 - **A tab opened for the first time in Sheets** — arrow keys and typing work at once, on A1, without a click first
 - **Downloading an empty spreadsheet** — a spreadsheet nobody edited downloads with its blank sheet

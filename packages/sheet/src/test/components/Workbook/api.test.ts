@@ -421,7 +421,7 @@ describe('replayOps', () => {
         path: [],
         value: { type: 'row', index: 0, count: 1, direction: 'lefttop' },
     };
-    const entry = { patches: [], inversePatches: [] };
+    const entry = { patches: [], inversePatches: [], options: {} };
 
     function replay(ctx: Context, base: Context['sheets'], batches: Op[][], fresh: Op[][]) {
         let next = ctx;

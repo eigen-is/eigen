@@ -9,12 +9,12 @@ import { parseCellKey } from '@workspace/lib/sheets';
 import { get, isEqual } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import { applyPatches, produce, produceWithPatches } from 'immer';
-import { createArrayResolver } from '../../engine/cell-resolver';
+import { computedKey, createArrayResolver } from '../../engine/cell-resolver';
 import type { Cell, CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import type { FormulaCell, History, Op, Sheet } from '../types';
-import type { PatchOptions } from '../utils';
+import type { EntryOptions, PatchOptions } from '../utils';
 import {
     addSheetOps,
     deleteSheetOps,
@@ -37,38 +37,34 @@ import { settleCurrentSheet, shiftSheetOrders } from './sheet';
 
 type Step = { ctx: Context; ops: Op[] };
 
-// What setContextWithProduce keeps of one edit. Its options are the ones the edit's batch is built from. A sheet
-// delete adds the deleted sheet to them and keeps nothing else, because its undo and redo are ops and its patches
-// would hold the whole sheet list twice. A rename adds its two names and keeps nothing else, since its undo and redo
-// rename again. A row or column op keeps what its undo brings back, because its redo is its marker again.
+// What setContextWithProduce keeps of one edit. A sheet add, delete or rename keeps only what its undo needs, because
+// undo and redo are ops. A row or column op keeps what its undo brings back, because its redo is its marker again.
 export function recordEntry(
     before: Context,
     after: Context,
     patches: Patch[],
     inversePatches: Patch[],
-    options: PatchOptions,
+    { insertRowColOp, deleteRowColOp, addSheetOp, deleteSheetOp, renameSheetOp }: PatchOptions,
 ): History {
-    if (options.renameSheetOp) {
-        const { id } = options.renameSheetOp;
-        const from = before.sheets.find((s) => s.id === id)?.name;
-        const to = after.sheets.find((s) => s.id === id)?.name;
-        const renamedSheet = from != null && to != null ? { id, from, to } : undefined;
-        return { patches: [], inversePatches: [], options: { ...options, renamedSheet } };
+    const structural = (options: EntryOptions): History => ({ patches: [], inversePatches: [], options });
+    if (renameSheetOp) {
+        const { id } = renameSheetOp;
+        return structural({ renamedSheet: { id, from: sheetOf(before, id).name, to: sheetOf(after, id).name } });
     }
-    if (options.deleteSheetOp) {
-        const { id } = options.deleteSheetOp;
-        const sheet = before.sheets.find((s) => s.id === id);
-        return {
-            patches: [],
-            inversePatches: [],
-            options: sheet ? { ...options, deletedSheet: storedCopy(sheet) } : options,
-        };
-    }
+    if (deleteSheetOp) return structural({ deletedSheet: storedCopy(sheetOf(before, deleteSheetOp.id)) });
+    // An add puts its sheet last in the list, whatever its order.
+    if (addSheetOp) return structural({ addedSheet: storedCopy(after.sheets[after.sheets.length - 1]) });
+    const rowCol = { insertRowColOp, deleteRowColOp };
     return {
-        patches: rowColMarker(options) ? [] : bySheetId(patches, after.sheets),
+        patches: rowColMarker(rowCol) ? [] : bySheetId(patches, after.sheets),
         inversePatches: bySheetId(inversePatches, before.sheets),
-        options,
+        options: rowCol,
     };
+}
+
+// The sheet an edit's option names, which the edit found or wrote nothing and recorded no entry.
+function sheetOf(ctx: Context, id: string): Sheet {
+    return ctx.sheets[ctx.sheets.findIndex((sheet) => sheet.id === id)];
 }
 
 // How far back undo reaches. A structural entry may hold whole cell matrices, so fewer of those stay.
@@ -105,70 +101,41 @@ export function stepNewestEntry(
     return next;
 }
 
-export function undoEntry(ctx: Context, entry: History): Step {
-    const { options } = entry;
-    if (options?.deleteSheetOp) {
-        const deleted = options.deletedSheet;
-        return deleted ? sheetStep(ctx, (sheets) => addSheetOps(deleted, sheets)) : { ctx, ops: [] };
-    }
-    if (options?.addSheetOp) {
-        const added = addedSheet(entry);
-        const sheet = added && ctx.sheets.find((s) => s.id === added.id);
-        return sheet ? sheetStep(ctx, (sheets) => deleteSheetOps(sheet, sheets)) : { ctx, ops: [] };
-    }
-    const marker = options && rowColMarker(inverseRowColOptions(options));
-    if (marker) return undoRowCol(ctx, marker, entry.inversePatches);
-    if (options?.renamedSheet) {
-        return batchStep(ctx, renameSheetOps(options.renamedSheet.id, options.renamedSheet.from));
-    }
-    return patchStep(ctx, entry.inversePatches, entry.patches);
+export function undoEntry(ctx: Context, { options, patches, inversePatches }: History): Step {
+    const { addedSheet, deletedSheet, renamedSheet } = options;
+    if (deletedSheet) return sheetStep(ctx, (sheets) => addSheetOps(deletedSheet, sheets));
+    if (addedSheet) return sheetStep(ctx, (sheets) => deleteSheetOps(addedSheet, sheets));
+    if (renamedSheet) return batchStep(ctx, renameSheetOps(renamedSheet.id, renamedSheet.from));
+    const marker = rowColMarker(inverseRowColOptions(options));
+    if (marker) return undoRowCol(ctx, marker, inversePatches);
+    return patchStep(ctx, inversePatches, patches);
 }
 
-export function redoEntry(ctx: Context, entry: History): Step {
-    const { options } = entry;
-    if (options?.deleteSheetOp) {
-        const sheet = ctx.sheets.find((s) => s.id === options.deleteSheetOp?.id);
-        return sheet ? sheetStep(ctx, (sheets) => deleteSheetOps(sheet, sheets)) : { ctx, ops: [] };
-    }
-    if (options?.addSheetOp) {
-        const added = addedSheet(entry);
-        return added ? sheetStep(ctx, (sheets) => addSheetOps(added, sheets)) : { ctx, ops: [] };
-    }
-    const marker = options && rowColMarker(options);
+export function redoEntry(ctx: Context, { options, patches, inversePatches }: History): Step {
+    const { addedSheet, deletedSheet, renamedSheet } = options;
+    if (deletedSheet) return sheetStep(ctx, (sheets) => deleteSheetOps(deletedSheet, sheets));
+    if (addedSheet) return sheetStep(ctx, (sheets) => addSheetOps(addedSheet, sheets));
+    if (renamedSheet) return batchStep(ctx, renameSheetOps(renamedSheet.id, renamedSheet.to));
+    const marker = rowColMarker(options);
     if (marker) return batchStep(ctx, [marker]);
-    if (options?.renamedSheet) return batchStep(ctx, renameSheetOps(options.renamedSheet.id, options.renamedSheet.to));
-    return patchStep(ctx, entry.patches, entry.inversePatches);
+    return patchStep(ctx, patches, inversePatches);
 }
 
-// The sheet an add or copy entry put in, as its redo adds it back.
-function addedSheet(entry: History): Sheet | undefined {
-    return entry.patches.find((patch) => patch.op === 'add' && patch.path.length === 2)?.value;
-}
-
-// Rewrites a cell or field path from ['sheets', index, …] to ['sheets', id, …]. A shorter path, such as a whole sheet
-// or the sheet list, occurs only in a sheet add, copy or delete entry, which undo and redo replay as ops.
+// An entry's path names its sheet by id, ['sheets', id, …], where an edit's names it by index.
 function bySheetId(patches: Patch[], sheets: Sheet[]): Patch[] {
     return patches.map((patch) => {
-        const [root, index, ...rest] = patch.path;
-        const id = root === 'sheets' && typeof index === 'number' ? sheets[index].id : undefined;
-        if (id == null || rest.length === 0) return patch;
-        return { ...patch, path: ['sheets', id, ...rest] };
+        const [, index, ...rest] = patch.path;
+        return { ...patch, path: ['sheets', sheets[Number(index)].id, ...rest] };
     });
 }
 
 // The entry's paths on today's sheet indices; a patch on a sheet that is gone is dropped.
 function atSheetIndex(ctx: Context, patches: Patch[]): Patch[] {
-    const resolved: Patch[] = [];
-    for (const patch of patches) {
-        const [root, id, ...rest] = patch.path;
-        if (root !== 'sheets' || typeof id !== 'string') {
-            resolved.push(patch);
-            continue;
-        }
-        const index = getSheetIndex(ctx, id);
-        if (index != null) resolved.push({ ...patch, path: ['sheets', index, ...rest] });
-    }
-    return resolved;
+    return patches.flatMap((patch) => {
+        const [, id, ...rest] = patch.path;
+        const index = getSheetIndex(ctx, String(id));
+        return index == null ? [] : [{ ...patch, path: ['sheets', index, ...rest] }];
+    });
 }
 
 // A batch that says all it does, such as a rename or a row op's redo, runs here as it does on a peer.
@@ -207,7 +174,7 @@ function patchStep(ctx: Context, apply: Patch[], written: Patch[]): Step {
     const patches = withoutComputedValues(ctx, kept);
     if (patches.length === 0) return { ctx, ops: [] };
     const restored = produce(applyPatches(ctx, patches), settleCurrentSheet);
-    restored.formulaCache.updateFormulaCache(restored, { patches, inversePatches: [] }, 'redo');
+    restored.formulaCache.updateFormulaCache(restored, patches);
     const [next, recalculated] = produceWithPatches(restored, (draft: Context) => recalculate(draft, patches));
     return { ctx: next, ops: patchToOp(next, [...patches, ...filterPatch(recalculated)]) };
 }
@@ -231,7 +198,7 @@ function recalculate(ctx: Context, patches: Patch[]) {
         const [, index, field, r, c] = path;
         if (field !== 'data' || typeof index !== 'number' || typeof r !== 'number' || typeof c !== 'number') continue;
         const { id } = ctx.sheets[index];
-        if (id != null) cells.set(`${r}_${c}_${id}`, { r, c, id });
+        cells.set(computedKey(r, c, id), { r, c, id });
     }
     if (cells.size === 0) return;
     const resolver = createArrayResolver(snapshotContext(ctx).sheets);
@@ -245,27 +212,21 @@ function recalculate(ctx: Context, patches: Patch[]) {
     execFunctionGroup(ctx, [...cells.values()]);
 }
 
-// The marker moves the grid back, and the batch is the marker and what it did not bring back of the fields and cells
-// the entry recorded. The live context gets only those ops, so it ends as a peer does.
+// The batch is the marker and what it did not bring back of the recorded fields and cells. A write the marker already
+// made stays off the wire, so a receiver keeps its own shift of a batch on its way.
 function undoRowCol(ctx: Context, marker: Op, recorded: Patch[]): Step {
     const moved = applyOpBatch(ctx, [marker]);
     if (!moved) return { ctx, ops: [] };
-    const restored = restoreOps(moved.ctx, recorded);
-    const applied = applyOpBatch(moved.ctx, restored, false);
-    return applied ? { ctx: produce(applied.ctx, settleCurrentSheet), ops: [marker, ...restored] } : { ctx, ops: [] };
-}
-
-// A write the marker already made stays off the wire, so a receiver keeps its own shift of a batch on its way.
-function restoreOps(moved: Context, recorded: Patch[]): Op[] {
-    const ops: Op[] = [];
+    const restored: Op[] = [];
     for (const { op, path, value } of recorded) {
         const [, id, ...rest] = path;
-        const sheet = moved.sheets.find((s) => s.id === id);
+        const sheet = moved.ctx.sheets.find((s) => s.id === id);
         if (!sheet) continue;
-        if (rest.length === 1 && rest[0] === 'data') ops.push(...repairOps(sheet, value));
-        else if (!isEqual(get(sheet, rest), value)) ops.push({ op, id: sheet.id, path: rest, value });
+        if (rest.length === 1 && rest[0] === 'data') restored.push(...repairOps(sheet, value));
+        else if (!isEqual(get(sheet, rest), value)) restored.push({ op, id: sheet.id, path: rest, value });
     }
-    return ops;
+    const applied = applyOpBatch(moved.ctx, restored, false);
+    return applied ? { ctx: produce(applied.ctx, settleCurrentSheet), ops: [marker, ...restored] } : { ctx, ops: [] };
 }
 
 // The cells the marker left different from the recorded matrix, such as rows a delete took and a formula it made #REF!.

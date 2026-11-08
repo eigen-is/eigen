@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import type { SheetData } from '../../engine/cell-resolver';
 import { createArrayResolver } from '../../engine/cell-resolver';
-import { FormulaEngine, isFormula } from '../../engine/formula-engine';
+import { FormulaEngine } from '../../engine/formula-engine';
 import { functionCopy } from '../../engine/formula-shift';
+import { isFormula } from '../../engine/formula-utils';
 
 const sheets: SheetData[] = [
     {

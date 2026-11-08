@@ -38,9 +38,8 @@ export function unquoteSheetName(raw: string): string {
     return raw.replace(/^'|'$/g, '').replace(/''/g, "'");
 }
 
-// What two sheet names are compared by. Excel ignores case, so `data!A1` reads the sheet named Data. Each character
-// folds to its uppercase on its own, so the Greek final ς matches σ. A character whose uppercase is longer keeps its
-// case, so ß never matches ss.
+// What two sheet names are compared by. Each character folds to its uppercase on its own, so the Greek final ς
+// matches σ, and one whose uppercase is longer keeps its case, so ß never matches ss.
 export function sheetNameKey(name: string): string {
     let key = '';
     for (const char of name) {
@@ -50,9 +49,8 @@ export function sheetNameKey(name: string): string {
     return key;
 }
 
-// The sheet a name reads: the one of exactly that name, else one of that name in another case. A rename refuses a
-// name another sheet holds in any case, but a workbook can still hold Data and data, such as one stored before that
-// rule or a peer's. Then each name keeps reading its own sheet.
+// The sheet a name reads: the one of exactly that name, else one in another case. A workbook can still hold Data and
+// data, from before the rename rule or a peer, and then each name keeps reading its own sheet.
 export function findSheetByName<S extends { name: string }>(sheets: readonly S[], name: string): S | undefined {
     const exact = sheets.find((sheet) => sheet.name === name);
     if (exact) return exact;
@@ -81,10 +79,16 @@ export function quoteSheetName(name: string): string {
 }
 
 const SIMPLE_NAME = new RegExp(`^${SIMPLE_SHEET_NAME}$`);
+const MISREAD_BARE = /^\d|^[A-Z]{1,3}\d+$|^R\d|^R?C\d|^(?:R|C|RC|TRUE|FALSE)$/i;
 
-// The name as a ref's sheet prefix spells it: bare when it can be, quoted otherwise.
+// A name Excel would read as something else when bare: a number, an A1 or R1C1 cell, a boolean.
+export function misreadBare(name: string): boolean {
+    return MISREAD_BARE.test(name);
+}
+
+// The name as a ref's sheet prefix spells it: bare when Excel reads it as one, quoted otherwise, which is always legal.
 export function sheetRefName(name: string): string {
-    return SIMPLE_NAME.test(name) ? name : quoteSheetName(name);
+    return SIMPLE_NAME.test(name) && !misreadBare(name) ? name : quoteSheetName(name);
 }
 
 // Split a cell label like `Sheet1!$A$1` into [row, column, sheetName], null when
@@ -133,7 +137,7 @@ export function sortLegs(start: CellCoordinate, end: CellCoordinate): [CellCoord
     return start.index !== -1 && end.index !== -1 && start.index > end.index ? [end, start] : [start, end];
 }
 
-// Both axes move at once and legs sort before and after, as in Excel (`A$3:A1` down 1 is `A2:A$3`, `A1:$B$2` by (2,3) is `$B$2:D3`).
+// Both axes move at once and legs sort before and after, as in Excel (`A$3:A1` down 1 is `A2:A$3`).
 export function offsetRange(
     start: CellLeg,
     end: CellLeg,

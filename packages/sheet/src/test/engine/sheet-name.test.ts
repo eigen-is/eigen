@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { findSheetByName, sheetFinder, sheetNameKey } from '../../engine/a1-notation';
-import { copySheetName } from '../../engine/sheet-name';
+import { findSheetByName, isSheetName, sheetFinder, sheetNameKey } from '../../engine/a1-notation';
+import { copySheetName, legalSheetNames } from '../../engine/sheet-name';
 
 describe('engine/sheet-name — copySheetName', () => {
     test('the first copy is "(Copy)", the next one numbered past the highest taken', () => {
@@ -21,6 +21,19 @@ describe('engine/sheet-name — copySheetName', () => {
         const copy = copySheetName('A name of exactly thirty-one ch', ['A name of exactly thirty-one ch']);
         expect(copy).toBe('A name of exactly thirty…(Copy)');
         expect(copy).toHaveLength(31);
+    });
+});
+
+describe('engine/sheet-name — legalSheetNames', () => {
+    test('every name it gives follows the rule, a cut through a surrogate pair too', () => {
+        const emoji = String.fromCodePoint(0x1f600);
+        const names = legalSheetNames(['a:b', "'x'", '', "''", 'x'.repeat(40), `${'y'.repeat(30)}${emoji}`, 'a[b]/c']);
+        expect(names.every(isSheetName)).toBe(true);
+        expect(names[5]).toBe('y'.repeat(30));
+    });
+
+    test('a reserved name is numbered, and the first holding any other keeps it', () => {
+        expect(legalSheetNames(['history', 'Data', 'DATA'], ['History'])).toEqual(['history (2)', 'Data', 'DATA (2)']);
     });
 });
 

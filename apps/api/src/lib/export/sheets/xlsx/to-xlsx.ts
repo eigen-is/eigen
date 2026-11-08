@@ -7,7 +7,8 @@
 import type { Sheet } from '@workspace/lib/sheets';
 import { SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
-import { sheetFinder } from '@workspace/sheet/engine';
+import { renameSheetTexts, sheetFinder } from '@workspace/sheet/engine';
+import { misreadBare } from '@workspace/sheet/engine/a1-notation';
 import type { LossCounter } from '../../../document/transform/protocol';
 import { THEME_TYPE, themeXml } from '../../../ooxml/drawingml';
 import type { PackagePart } from '../../../ooxml/opc';
@@ -27,21 +28,27 @@ export function writeXlsx(
 ): Uint8Array {
     const names = sheetNames(sheets, lost);
     const active = activeTabOf(sheets);
-    const written = sheetFinder(sheets.map(({ name }, index) => ({ name, written: names[index] })));
-    // A chart's refs name its sheets as the workbook writes them.
-    const named = sheets.map((sheet, index) =>
-        sheet.name === names[index] ? sheet : { ...sheet, name: names[index] },
+    // A repaired sheet's new name, and a name a person may have typed bare that Excel refuses so, such as Q1!A1.
+    const respelled = new Map(
+        sheets.flatMap(({ name }, index) => (name !== names[index] || misreadBare(name) ? [[name, names[index]]] : [])),
     );
+    const findSheet = sheetFinder(sheets);
+    // Every text and chart ref naming a sheet names it as the workbook writes it.
+    const named = sheets.map((sheet, index) => ({
+        ...renameSheetTexts(sheet, findSheet, respelled),
+        name: names[index],
+    }));
+    const written = sheetFinder(named);
     const styles = styleRegistry(lost);
     const strings = sharedStringTable(lost);
     const parts: PackagePart[] = [];
     const pictures = officeImages(media, 'xl/media');
-    for (const [index, sheet] of sheets.entries()) {
+    for (const [index, sheet] of named.entries()) {
         const path = `xl/worksheets/sheet${index + 1}.xml`;
-        const drawing = drawingOf(named[index], index + 1, named, pictures, lost);
+        const drawing = drawingOf(sheet, index + 1, named, pictures, lost);
         const part = worksheetPart(sheet, {
-            name: names[index],
-            writtenName: (name) => written(name)?.written,
+            name: sheet.name,
+            writtenName: (name) => written(name)?.name,
             selected: index === active,
             // The drawing's part name, as the sheet's relationship targets it from xl/worksheets/.
             drawing: drawing?.path.replace(/^xl\//, '../'),

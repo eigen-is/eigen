@@ -30,8 +30,8 @@ import type * as Y from 'yjs';
 // What the server's recalc lets an untrusted workbook's formulas cost. Past any bound the recalc fails like any other,
 // and the sheets keep the values they hold.
 export const SERVER_RECALC_BUDGET = {
-    // The slots the dependency index lists each range in, the range cut to its sheet. A range lies in the 64 × 16 blocks
-    // it meets, but a long range from the top or left takes one slot per column or row instead.
+    // The slots the dependency index lists each range in, the range cut to its sheet. A range lies in the 64 × 16
+    // blocks it meets, but a long range from the top or left takes one slot per column or row instead.
     maxDependencySlots: 280_000_000,
     // The index entries the formula cells' lookups visit, whether a range covers the cell or not. A range that covers
     // no cell makes no link, so the links alone would not bound the time spent counting.
@@ -43,22 +43,19 @@ export const SERVER_RECALC_BUDGET = {
     maxCellsRead: 32_000_000,
 };
 
-// Every reader of a stored workbook reads it in the transform process, which loads the Yjs doc first. `recalcError` is
-// set when the recalc failed and the sheets keep their replayed values. The caller decides how to report it, such as a
-// warning on the export.
+// A stored workbook is read in the transform process, which loads the Yjs doc first. `recalcError` is set when the
+// recalc failed and the sheets keep their replayed values.
 export function readSheetsFromDoc(
     doc: Y.Doc,
     { recalc = true }: { recalc?: boolean } = {},
 ): { sheets: Sheet[]; recalcError: string | null } {
     const { sheets, computed } = decodeOrDefault(readSheetsSnapshotJson(doc));
-    // The snapshot stores cells as a list, but the renderers' conditional formats and the cross-sheet formula resolver
-    // read the dense `data` matrix, so every sheet gets one. One far-flung cell, such as XFD1048576, makes a huge grid,
-    // and the transform's deadline bounds it.
+    // The snapshot stores cells as a list, but conditional formats and the cross-sheet formula resolver read the dense
+    // `data` matrix. One far-flung cell makes a huge grid, which the transform's deadline bounds.
     const replayed = replaySheetsOps(sheets, sheetsOpLog(doc).toArray()).map(withMaterializedData);
 
-    // Only a workbook nobody computed is recalculated here, such as an xlsx import whose recalc failed. Only the export
-    // asks for it, because a recalc can outlast a preview or a search extract. A recalc that fails leaves the replayed
-    // values, because an export must not fail on it.
+    // Only a workbook nobody computed is recalculated, and only for an export: a recalc can outlast a preview or a
+    // search extract. A recalc that fails leaves the replayed values, because an export must not fail on it.
     if (!recalc || computed) return { sheets: replayed, recalcError: null };
     try {
         return {
@@ -70,10 +67,8 @@ export function readSheetsFromDoc(
     }
 }
 
-// A compaction, in the transform process. It replays the log over the snapshot and encodes the result as an import
-// does, and the main thread swaps it in. The batches come as JSON text, which crosses to the process much faster than
-// the objects. A batch the replay rejects is skipped, as every reader skips it, and `dropped` counts them for the
-// caller to log.
+// A compaction in the transform process: it replays the log over the snapshot and encodes the result as an import does.
+// The batches come as JSON text, which crosses to the process much faster than objects.
 export function compactSheetsSnapshot(
     snapshotJson: string | null,
     batchesJson: string,
@@ -102,10 +97,8 @@ export function restampRestoredSheetsBase(type: DrivePathType, doc: Y.Doc): void
     if (type === DRIVE_TYPE_SHEETS) stampSheetsBase(doc, null);
 }
 
-// Import… as new tabs. The file's sheets go in after the workbook's own as addSheet ops, the way a peer's new tab
-// arrives, so an open tab adds them live and keeps its view and its undo. Each sheet takes a fresh id. One whose name the
-// workbook already has is renamed the way Duplicate names a copy. The file's references to its own sheets follow them.
-// Formulas, conditional formats, list sources and links name a sheet by name. Charts and link cells name it by id. `current` is the workbook as readLiveSheets reads it in the same write.
+// Import… as new tabs: addSheet ops after the workbook's own, so an open tab adds them live as a peer's and keeps its
+// view and its undo. `current` is the workbook as readLiveSheets reads it in the same write.
 export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string, current: Sheet[]): void {
     const imported = decodeSheetsSnapshot(snapshotJson);
     const taken = current.map((sheet) => sheet.name);

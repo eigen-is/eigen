@@ -4,16 +4,16 @@
 // extractDependencies, the walk that finds the cells a formula reads, builds the editor's formula map too.
 
 import type { Cell, CellMatrix, Sheet } from '@workspace/lib/sheets';
-import { createArrayResolver, withComputedValues } from './cell-resolver';
+import { computedKey, createArrayResolver, withComputedValues } from './cell-resolver';
 import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
 import { getCalculationOrder } from './dependency-graph';
 import { cellsOf, DependencyIndex, dependencySlots } from './dependency-index';
 import { booleanDisplay, numberDisplay } from './format';
-import { FormulaEngine, isFormula } from './formula-engine';
-import { forEachRef, inlineNames } from './formula-shift';
+import { FormulaEngine } from './formula-engine';
+import { inlineNames, walkFormulaRefs } from './formula-shift';
 import type { WalkContext } from './formula-utils';
-import { matrixWidth, resolveCellRange } from './formula-utils';
+import { isFormula, matrixWidth, resolveCellRange } from './formula-utils';
 import { valueIsError } from './parser/error';
 import { sheetFinder } from './parser/helper/cell';
 import type { EvaluationResult, FormulaCellInfoMap, FormulaDependency } from './types';
@@ -23,13 +23,8 @@ type WorkingSheet = { id: string; name: string; data: CellMatrix };
 
 type SheetExtent = { rows: number; columns: number };
 
-// Four budgets bound what an untrusted workbook's formulas may cost, and past any of them the recalc throws before the
-// work. `maxDependencySlots` bounds the slots the dependency index lists the formulas' ranges in (dependencySlots).
-// `maxDependencyVisits` bounds the entries a lookup of each formula cell visits in the index (lookupVisits), which is
-// the time the links take to weigh and to make. `maxDependencyEdges` bounds the links between the formulas, one for
-// each formula and formula cell it reads, which is their memory. `maxCellsRead` bounds the cells their evaluation
-// reads, each range read cut to its sheet. So many ranges over a large sheet can't cost minutes and gigabytes. The
-// server passes all four, and without them there is no bound.
+// The budgets bound what an untrusted workbook's formulas may cost, and past any of them the recalc throws before the
+// work. Without them there is no bound.
 export function recalcSheets(
     sheets: readonly Sheet[],
     {
@@ -63,7 +58,7 @@ export function recalcSheets(
             if (!rowArr) continue;
             for (let c = 0; c < rowArr.length; c += 1) {
                 const f = rowArr[c]?.f;
-                if (typeof f !== 'string' || !isFormula(f)) continue;
+                if (!isFormula(f)) continue;
                 const key = `r${r}c${c}i${w.id}`;
                 const deps = extractDependencies(walk, f, w.id);
                 infoMap[key] = {
@@ -87,10 +82,8 @@ export function recalcSheets(
         return finalize(byId, sheets);
     }
 
-    // 3. Weigh the links before making them. A whole column read by every formula in it costs the index one slot per
-    //    formula, but the formulas square: 20,000 `=COUNT(A:A)` make 400 million links, minutes and gigabytes to build.
-    //    The visits come first and cost nothing to count. A range near many formula cells that covers none makes no
-    //    link but costs each of them a visit, so without them counting the links could take as long as making them.
+    // 3. Weigh the links before making them, since formulas reading one whole column square into links. The visits come
+    //    first and cost nothing to count, because a range that covers no formula cell makes no link but costs a visit.
     let visits = 0;
     for (const info of allInfos) {
         visits += depIndex.lookupVisits(info.id, info.r, info.c);
@@ -108,9 +101,8 @@ export function recalcSheets(
     // 5. Order them. A cycle neither throws nor hangs.
     const order = getCalculationOrder(allInfos, infoMap);
 
-    // 6. Evaluate in order. A computed value reaches the formulas downstream through `computed`, which the resolver reads
-    //    before the matrices the pass writes, so they read the value without the type the cell keeps. Volatiles keep their
-    //    value. Each cell is guarded, so one poisoned formula never stops the pass.
+    // 6. Evaluate in order. A computed value reaches the formulas downstream through `computed`, which the resolver
+    //    reads before the matrices, so they read the value without the type the cell keeps.
     const engine = new FormulaEngine({ maxCellsRead });
     const computed = new Map<string, Cell>();
     const resolver = withComputedValues(createArrayResolver(working), computed);
@@ -127,13 +119,11 @@ export function recalcSheets(
             if (!rowArr) continue;
             const existing = rowArr[info.c];
             if (existing == null) continue;
-            // Our result is unreliable when it is an error, or when the formula uses a name the engine can't resolve.
-            // It never overwrites a cached value that is no error, because that value is Excel's. A function Excel has
-            // and the engine lacks is such an error, even inside IFERROR. Leaving it out of `computed` too makes the formulas
-            // downstream read the cached value. A cell with no cached value still shows the error.
+            // An unreliable result never overwrites a cached value that is no error, because that value is Excel's.
+            // Leaving it out of `computed` too makes the formulas downstream read the cached value.
             const unreliable = () => result.type === 'error' || usesUnknownName(engine, info.formula);
             if (hasNonErrorCachedValue(existing) && unreliable()) continue;
-            computed.set(`${info.r}_${info.c}_${info.id}`, { v: result.value });
+            computed.set(computedKey(info.r, info.c, info.id), { v: result.value });
             // The matrix may hold the input snapshot's frozen cells, so write a copy.
             const cell: Cell = { ...existing };
             writeCellValue(cell, result);
@@ -158,15 +148,14 @@ function ensureWorkingData(sheet: Sheet): CellMatrix {
     return celldataToData(sheet.celldata ?? [], row, column);
 }
 
-// The ranges a formula reads, for the server's pass and the editor's formula map alike: every reference in its text,
-// a function's arguments included, as Excel lists a cell's precedents. The reference INDEX returns lies inside its range
-// argument, so that argument covers it. OFFSET and INDIRECT build a reference the text doesn't hold, which only matters
-// once the engine can compute them.
+// The ranges a formula reads: every reference in its text, as Excel lists a cell's precedents. The reference INDEX
+// returns lies inside its range argument, so that argument covers it.
 export function extractDependencies(walk: WalkContext, formula: string, sheetId: string): FormulaDependency[] {
     const dependencies: FormulaDependency[] = [];
-    forEachRef(formula, (reference) => {
+    walkFormulaRefs(formula, (reference) => {
         const range = resolveCellRange(walk, reference, sheetId);
         if (range != null) dependencies.push(range);
+        return reference;
     });
     return dependencies;
 }
@@ -183,18 +172,15 @@ function withinSheet(dep: FormulaDependency, extents: ReadonlyMap<string, SheetE
     return { row: [cells.r0, r1], column: [cells.c0, c1], sheetId: cells.sheetId };
 }
 
-// A formula that reads the clock or a random number. The server keeps its cached value, as Excel does when it reads a
-// closed file, so an export is the same every time. The check reads the formula text, so a string such as "NOW()"
-// matches too, which only keeps a value that could have been recomputed. RANDBETWEEN comes before RAND, so the longer
-// name wins.
+// A formula that reads the clock or a random number keeps its cached value, so an export is the same every time.
+// RANDBETWEEN comes before RAND, so the longer name wins.
 const VOLATILE_RE = /\b(?:NOW|TODAY|RANDBETWEEN|RAND)\s*\(/i;
 
 // A name as Excel spells one: a letter, `_` or `\` first, then letters, digits, `_`, `.`, `\` or `?`.
 const NAME_RE = /^[\p{L}_\\][\p{L}\p{N}_.\\?]*$/u;
 
-// True when the formula uses a name the engine can't resolve, such as a defined name the import couldn't inline. Its
-// #NAME? is one IFERROR traps, and the fallback is not what Excel computed. inlineNames hands over every leaf that is
-// no ref, such as a number or TRUE, and a name Excel reads past its last column (RhoCO2) where the engine reads a cell.
+// True when the formula uses a name the engine can't resolve, whose #NAME? an IFERROR would trap into a fallback Excel
+// didn't compute. A name Excel reads past its last column (RhoCO2) is one the engine reads as a cell.
 function usesUnknownName(engine: FormulaEngine, formula: string): boolean {
     let unknown = false;
     inlineNames(formula, (name) => {

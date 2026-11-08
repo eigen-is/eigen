@@ -15,7 +15,7 @@ import {
     SHEET_DEFAULT_FONT_SIZE,
 } from '@workspace/lib/sheets';
 import { cloneDeep, isNil, isNumber, isPlainObject, isString } from 'es-toolkit/compat';
-import { sheetFinder } from '../../engine/a1-notation';
+import { sheetFinder, sheetRefName } from '../../engine/a1-notation';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
 import {
     booleanDisplay,
@@ -26,9 +26,10 @@ import {
     parseCellInput,
     richText,
 } from '../../engine/format';
-import { isFormula } from '../../engine/formula-engine';
+
 import { moveFormulaRefs } from '../../engine/formula-shift';
-import { iscelldata } from '../../engine/formula-utils';
+import { iscelldata, isFormula } from '../../engine/formula-utils';
+
 import type { Cell, CellMatrix, FormulaDependency } from '../../engine/types';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
@@ -55,9 +56,8 @@ import { growRowToFit } from './text';
 import { ID_CARD_NUMBER, isPlainNumber, isRealNull, isRealNum, valueIsError } from './validation';
 import { addValidation, clearValidations, validationAt } from './validation-rules';
 
-// Returns the cell attribute value, normalized to a default when missing. Result is a
-// value-space union (string for color/format/alignment, number for fs, CellType for ct, …);
-// callers narrow at use, e.g. `Number(value)` or `String(value)` per attr.
+// Returns the cell attribute value, normalized to a default when missing. The result is a union of strings and numbers
+// that callers narrow per attr.
 // biome-ignore lint/suspicious/noExplicitAny: per-attr return shape varies (string default vs Cell[attr]); tightening forces casts at every call site
 export function normalizedCellAttr(cell: Cell, attr: keyof Cell): any {
     const tf = { bl: 1, it: 1, ff: 1, cl: 1, un: 1 };
@@ -101,8 +101,8 @@ export function normalizedAttr(data: CellMatrix, r: number, c: number, attr: key
     return normalizedCellAttr(cell, attr);
 }
 
-// Polymorphic accessor: returns Cell, row, column, full matrix, or a single attr value
-// depending on which of r/c are nil. Callers narrow at use.
+// Polymorphic accessor: returns Cell, row, column, full matrix, or a single attr value depending on which of r/c are
+// nil.
 // biome-ignore lint/suspicious/noExplicitAny: per-overload result varies (Cell | row | col | matrix | Cell[attr]); tightening forces casts at every call site
 export function getCellValue(r: number, c: number, data: CellMatrix, attr?: keyof Cell): any {
     if (!attr) {
@@ -204,7 +204,7 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
     }
 
     // 1. Is null
-    // 2. Data from pivot table, each data in flowdata might be a string, result is cell === v === a string or number data
+    // 2. Data from a pivot table, which may be a bare string or number.
     if (isRealNull(cell) || ((isString(cell) || isNumber(cell)) && cell === v)) {
         cell = {};
     }
@@ -279,7 +279,7 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
             const mask = numberDisplay(vupdate, cell.ct.fa);
 
             if (mask === vupdate) {
-                // If the original cell format cannot be applied to the updated value, get the format of the updated value
+                // A format the updated value can't take is replaced by the value's own.
                 [cell.m, cell.ct, cell.v] = parseCellInput(vupdate);
             } else {
                 cell.m = mask;
@@ -304,9 +304,8 @@ export function getRealCellValue(r: number, c: number, data: CellMatrix, attr?: 
     return isNil(value) ? getCellValue(r, c, data, attr) : value;
 }
 
-// A number stored as text (qp === 1) that still reads as a number. The painter marks it with a
-// green corner triangle; the glyph hit-test claims that same corner. One predicate so the two
-// never drift over what "forced string" means.
+// A number stored as text (qp === 1) that still reads as a number. One predicate for the painter's corner mark and the
+// glyph hit test, so the two never drift over what "forced string" means.
 export function isForcedStringNumber(cell: Cell | null | undefined): boolean {
     return cell?.qp === 1 && !Number.isNaN(Number(cell.v));
 }
@@ -708,9 +707,8 @@ function isWholeRowRef(range: RangeOrWholeAxis): range is { row: number[]; colum
     return range.row[0] !== null && range.column[0] === null;
 }
 
-// Convert a selection range array to a string like A1:A2. `range.row = [null, null]`
-// produces a whole-column ref (`A:A`); `range.column = [null, null]` a whole-row
-// ref (`1:1`) — emitted by column-header / row-header clicks in formula-edit mode.
+// Convert a selection range array to a string like A1:A2. A range with null rows is a whole-column ref (`A:A`) and
+// one with null columns a whole-row ref (`1:1`).
 export function getRangetxt(ctx: Context, sheetId: string, range: RangeOrWholeAxis, currentId?: string) {
     let sheettxt = '';
 
@@ -719,21 +717,9 @@ export function getRangetxt(ctx: Context, sheetId: string, range: RangeOrWholeAx
     }
 
     if (sheetId !== currentId) {
-        // If the sheet name contains ', replace it with '' when referencing
         const index = getSheetIndex(ctx, sheetId);
         if (index == null) return '';
-        sheettxt = ctx.sheets[index].name.replace(/'/g, "''");
-        // If the name contains characters other than a-z, A-Z, 0-9, underscore, etc., wrap it in single quotes
-        if (
-            // biome-ignore lint/suspicious/noMisleadingCharacterClass: matches XML 1.0 NameStartChar/NameChar — combining marks are spec-required in the continuation class
-            /^[:A-Z_a-zÀ-ÖØ-öø-˿Ͱ-ͽͿ-῿‌-‍⁰-↏Ⰰ-⿯、-퟿\uF900-\uFDCF\uFDF0-\uFFFD][:A-Z_a-zÀ-ÖØ-öø-˿Ͱ-ͽͿ-῿‌-‍⁰-↏Ⰰ-⿯、-퟿\uF900-\uFDCF\uFDF0-\uFFFD\-.0-9·̀-ͯ‿-⁀]*$/.test(
-                sheettxt,
-            )
-        ) {
-            sheettxt += '!';
-        } else {
-            sheettxt = `'${sheettxt}'!`;
-        }
+        sheettxt = `${sheetRefName(ctx.sheets[index].name)}!`;
     }
 
     if (isWholeColumnRef(range)) {

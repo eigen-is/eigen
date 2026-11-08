@@ -89,6 +89,18 @@ describe('applySheetsInsertRowCol — row', () => {
         expect(result[0].data![3][0]?.v).toBe('c');
     });
 
+    test('insert column (rightbottom) lands right of its index', () => {
+        const sheets: Sheet[] = [makeSheet('s1', 'Sheet1', [[cell('a'), cell('b'), cell('c')]])];
+        const [{ data }] = applySheetsInsertRowCol(sheets, {
+            type: 'column',
+            index: 1,
+            count: 1,
+            direction: 'rightbottom',
+            id: 's1',
+        });
+        expect(data?.[0].map((value) => value?.v ?? null)).toEqual(['a', 'b', null, 'c']);
+    });
+
     test('insert shifts config.merge entries spanning the insert row', () => {
         const sheets: Sheet[] = [
             makeSheet(

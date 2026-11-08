@@ -3,14 +3,16 @@
 // step with each write, through the dependency walk the server's recalc uses too, and an undo or redo replays its
 // patches.
 
+import type { Patch } from 'immer';
 import { current, isDraft } from 'immer';
 import { findSheetByName } from '../../engine/a1-notation';
 import type { DependencyIndex } from '../../engine/dependency-index';
 import { FormulaEngine } from '../../engine/formula-engine';
+import { isFormula } from '../../engine/formula-utils';
 import { extractDependencies } from '../../engine/recalc';
 import type { Cell, CellMatrix, FormulaCellInfoMap, FormulaDependency } from '../../engine/types';
 import type { Context } from '../context';
-import type { FormulaCell, History, Selection } from '../types';
+import type { FormulaCell, Selection } from '../types';
 import { getcellFormula } from './cell';
 import { warmFormulaCellInfoMap } from './formula-exec';
 
@@ -106,8 +108,7 @@ export class FormulaCache {
         this.cellTextToIndexList = {};
     }
 
-    public updateFormulaCache(ctx: Context, history: History, type: 'undo' | 'redo') {
-        const patches = type === 'undo' ? history.inversePatches : history.patches;
+    public updateFormulaCache(ctx: Context, patches: readonly Patch[]) {
         // An unbuilt map reads the patched cells when it builds.
         const map = this.formulaCellInfoMap;
         if (map == null) return;
@@ -138,9 +139,8 @@ export class FormulaCache {
     }
 }
 
-// Records one cell's formula in the formula map with the cells it reads, so it runs after the cell was written. `data`
-// stands in for the matrix of `dataSheetId`, the current sheet by default. It is read only for a cell on that sheet: a
-// cell of another sheet at the same row and column would give the wrong formula.
+// Records one cell's formula in the formula map, so it runs after the cell was written. `data` stands in for the matrix
+// of `dataSheetId` and is read only for a cell on that sheet: another sheet's cell there would give the wrong formula.
 export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?: CellMatrix, dataSheetId?: string) {
     const dataSheet = dataSheetId ?? ctx.currentSheetId;
     // An entry written into an unbuilt map would pass for the whole map, and the build would never run.
@@ -148,7 +148,7 @@ export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?
     const key = `r${formulaCell.r}c${formulaCell.c}i${formulaCell.id}`;
     const cellData = formulaCell.id === dataSheet ? data : undefined;
     const formula = getcellFormula(ctx, formulaCell.r, formulaCell.c, formulaCell.id, cellData);
-    if (formula == null) {
+    if (!isFormula(formula)) {
         delete formulaCellInfoMap[key];
         ctx.formulaCache.dependencyIndex.delete(key);
         return;
@@ -193,7 +193,7 @@ export function registerFormulas(ctx: Context, id: string, data: CellMatrix) {
         const row = data[r];
         if (!row) continue;
         for (let c = 0; c < row.length; c += 1) {
-            if (row[c]?.f != null) setFormulaCellInfo(ctx, { r, c, id }, data, id);
+            if (isFormula(row[c]?.f)) setFormulaCellInfo(ctx, { r, c, id }, data, id);
         }
     }
 }

@@ -6,7 +6,7 @@
 
 import type { Sheet } from '@workspace/lib/sheets';
 import { a1RangeRef, extractLabel, parseA1Range, sheetRefName, toLabel, unquoteSheetName } from './a1-notation';
-import { formulaOperators, iscelldata } from './formula-utils';
+import { formulaOperators, iscelldata, isFormula } from './formula-utils';
 import { offsetCoordinate, offsetRange, sortLegs } from './parser/helper/cell';
 import { error } from './validation';
 
@@ -46,7 +46,7 @@ export function rewriteSheetFormulas<S extends Sheet>(sheet: S, rewrite: (txt: s
             if (!row) continue;
             for (let c = 0; c < row.length; c += 1) {
                 const cell = row[c];
-                if (!cell?.f) continue;
+                if (!isFormula(cell?.f)) continue;
                 const f = rewrite(cell.f);
                 if (f === cell.f) continue;
                 data ??= [...sheet.data];
@@ -59,7 +59,7 @@ export function rewriteSheetFormulas<S extends Sheet>(sheet: S, rewrite: (txt: s
         let celldata: typeof sheet.celldata | null = null;
         for (let i = 0; i < sheet.celldata.length; i += 1) {
             const entry = sheet.celldata[i];
-            if (!entry.v?.f) continue;
+            if (!isFormula(entry.v?.f)) continue;
             const f = rewrite(entry.v.f);
             if (f === entry.v.f) continue;
             celldata ??= [...sheet.celldata];
@@ -83,10 +83,8 @@ export function rewriteSheetFormulas<S extends Sheet>(sheet: S, rewrite: (txt: s
     return newRules ? { ...next, conditionalFormatRules: newRules } : next;
 }
 
-// Replaces each defined name in a formula with the text `resolve` gives for it, as an xlsx import does, since the
-// engine has no names. `resolve` gets every leaf that is no ref, such as a name or a number, as written, and the sheet
-// a `Sheet1!Name` qualifies it with, unquoted. It returns nothing for a leaf that stays. A function of the same name
-// is still called. A formula without a name comes back as written, and a leading `=` is kept.
+// Replaces each defined name in a formula with the text `resolve` gives for it, since the engine has no names.
+// `resolve` gets every leaf that is no ref, a number included, and returns nothing for a leaf that stays.
 export function inlineNames(
     txt: string,
     resolve: (name: string, sheet: string | undefined) => string | undefined,
@@ -142,11 +140,8 @@ export function moveFormulaRefs(
     });
 }
 
-// Moves a formula's refs for a row or column insert ('add') or delete ('del'), on the editor and in the op replay
-// alike. `stindex` is the first row or column the op touches and `step` how many. `orient` says whether an insert at
-// `stindex` moves a ref that starts there. `targetSheet` names the sheet the op runs on, and `onTargetSheet` says
-// whether the formula lives on it. Only refs to that sheet move. `findSheet` reads a ref's name against the
-// workbook's sheets, so in a workbook holding Data and data an op on one moves only its own refs.
+// Moves a formula's refs for a row or column insert ('add') or delete ('del'). Only refs to `targetSheet` move, and
+// `findSheet` reads names by case, so in a workbook holding Data and data an op on one moves only its own refs.
 export function functionStrChange(
     txt: string,
     type: 'add' | 'del',
@@ -171,14 +166,6 @@ export function functionStrChange(
     });
 }
 
-// Hands over every ref in a formula's text, as the rewrites above read them, for a reader that only wants to know them.
-export function forEachRef(formula: string, onRef: (ref: string) => void): void {
-    walkFormulaRefs(formula, (ref) => {
-        onRef(ref);
-        return ref;
-    });
-}
-
 // Returns [rowAbsolute, colAbsolute] for a single ref like "$A$1" → [true, true].
 export function detectAbsolute(txt: string): [boolean, boolean] {
     const row = txt.replace(/[^0-9]/g, '');
@@ -191,7 +178,7 @@ export function detectAbsolute(txt: string): [boolean, boolean] {
 
 // The character walker every reader here shares. It drops one leading `=` and reads the text as leaves and structure.
 // A leaf `iscelldata` reads as a ref goes to `onRef`; any other leaf goes to `onName`. A function name is no leaf.
-function walkFormulaRefs(
+export function walkFormulaRefs(
     txt: string,
     onRef: (ref: string) => string,
     onName: (token: string) => string = (token) => token,
@@ -260,9 +247,8 @@ function walkFormulaRefs(
     return result + leaf();
 }
 
-// A leaf the walker found: a ref is handed to `onRef` as one or two legs behind one sheet prefix. A range naming its
-// sheet on both legs (`'S 1'!A1:'S 1'!B2`) moves as the one naming it once, and a chained range (`A1:A2:A3`) leg by
-// leg, so its result is #REF! when any leg's is.
+// A range naming its sheet on both legs (`'S 1'!A1:'S 1'!B2`) moves as the one naming it once. A chained range
+// (`A1:A2:A3`) moves leg by leg and is #REF! when any leg is.
 function refOf(token: string, onRef: (ref: string) => string, onName: (token: string) => string): string {
     // The second leg of a range a function starts, `INDEX(…):A5`.
     if (token.startsWith(':') && token[1] !== ':') return `:${refOf(token.slice(1), onRef, onName)}`;
@@ -359,7 +345,7 @@ function shiftRefForRowCol(
 
     const formatRange = () => {
         const start = prefix + toLabel({ ...row0, index: r1 }, { ...column0, index: c1 });
-        // A whole-column (`A:A`) or whole-row (`1:1`) range also meets this through its -1 sentinels, and keeps both legs.
+        // A whole-column or whole-row range meets this through its -1 sentinels and keeps both legs.
         if (!rowsMissing && !colsMissing && r1 === r2 && c1 === c2) {
             return start;
         }
