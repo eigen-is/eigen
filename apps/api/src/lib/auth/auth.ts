@@ -124,6 +124,7 @@ export const auth = betterAuth({
                 after: async (user) => {
                     const { clearHomeDeleting } = await import('../home/get-home');
                     clearHomeDeleting(user.id);
+                    await enforceReadAccessAfterMembershipChange();
                 },
             },
         },
@@ -193,6 +194,8 @@ export const auth = betterAuth({
             // Eigen has one org. A user who could create another would own it and get past requireAdmin.
             // Setup creates the default org as a server call without a session, which this does not block.
             allowUserToCreateOrganization: false,
+            // Deleting the one org would wreck the install, and nothing calls it.
+            disableOrganizationDeletion: true,
             // Default caps the org at 100 members and fails every later user creation in the create hook.
             // The function form lifts the cap without turning the plugin's list-query limit into Infinity.
             membershipLimit: () => Number.POSITIVE_INFINITY,
@@ -204,6 +207,9 @@ export const auth = betterAuth({
                     const user = await getUserById(teamMember.userId);
                     if (user) await reconcileShares(user, teamMember.teamId);
                 },
+                afterRemoveTeamMember: enforceReadAccessAfterMembershipChange,
+                // A member's team rows go with the member row, and better-auth calls no team hook for them.
+                afterRemoveMember: enforceReadAccessAfterMembershipChange,
                 // The team row still exists here, and a throw keeps it, as user.delete.before does for a user.
                 // The default team holds the org-wide drive every member joins, and its teardown can't be undone.
                 beforeDeleteTeam: async ({ team }) => {
@@ -219,6 +225,7 @@ export const auth = betterAuth({
                     // Lazy imports to avoid the static cycle (home-relay → get-home → team → auth).
                     const { clearHomeDeleting } = await import('../home/get-home');
                     clearHomeDeleting(teamOwnerId(team.id));
+                    await enforceReadAccessAfterMembershipChange();
                     const { pushTeamAvatar } = await import('../home/home-relay');
                     await pushTeamAvatar(team.id, null);
                 },
@@ -233,9 +240,15 @@ export const auth = betterAuth({
     appName: 'eigen',
     baseURL: process.env['API_URL'],
     basePath: '/auth',
-    // set-user-password revokes no sessions or app passwords, impersonation hands an admin a member's session, and a
-    // ban leaves the app passwords working.
-    disabledPaths: ['/admin/set-user-password', '/admin/impersonate-user', '/admin/ban-user', '/admin/unban-user'],
+    // set-user-password revokes no sessions or app passwords, impersonation hands an admin a member's session, a ban
+    // leaves the app passwords working, and a member who leaves the one org joins again at the next sign-in.
+    disabledPaths: [
+        '/admin/set-user-password',
+        '/admin/impersonate-user',
+        '/admin/ban-user',
+        '/admin/unban-user',
+        '/organization/leave',
+    ],
     secret: getAuthSecret(),
 });
 
@@ -250,11 +263,7 @@ export function getTrustedOrigins(): string[] {
 let authDrizzleDb: ReturnType<typeof drizzle> | undefined;
 
 export function getAuthDrizzleDb(): ReturnType<typeof drizzle> {
-    if (!authDrizzleDb) {
-        authDrizzleDb = drizzle(getServerDataPath(SERVER_DATABASES.users), {
-            schema: authSchema,
-        });
-    }
+    authDrizzleDb ??= drizzle(getServerDataPath(SERVER_DATABASES.users), { schema: authSchema });
     return authDrizzleDb;
 }
 
@@ -290,6 +299,13 @@ async function busyHomeAsConflict(run: () => unknown): Promise<void> {
         }
         throw error;
     }
+}
+
+// A socket checks read only when it opens, and the membership row that gave the read is gone by now. The import is
+// lazy for the same cycle as the team hooks. Nothing below it throws, so a removal never fails over it.
+async function enforceReadAccessAfterMembershipChange(): Promise<void> {
+    const { enforceReadAccessOnLoadedHomes } = await import('../home/get-home');
+    await enforceReadAccessOnLoadedHomes();
 }
 
 // Joins the default org that setup pinned in the config, and its default team. The sign-up hook and every sign-in

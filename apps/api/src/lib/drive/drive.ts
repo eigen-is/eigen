@@ -5,6 +5,7 @@
 // public methods serve server code, such as chat, collab and the home relay.
 
 import { SWEEP_GRACE_MS } from '@workspace/lib/constants/sweep';
+import { commentAssignedTag } from '@workspace/lib/notification/tags';
 import { CHATS_FOLDER_NAME } from '@workspace/lib/types/chat';
 import type {
     DriveACL,
@@ -25,6 +26,7 @@ import {
     DRIVE_TYPE_FOLDER,
     isContainerType,
     isDocumentType,
+    stripEigenExtension,
     withEigenExtension,
 } from '@workspace/lib/types/drive';
 import type {
@@ -43,13 +45,14 @@ import type { Snapshot } from '@workspace/lib/types/versioning';
 import { validateACLEntries, validateEmailAddress } from '@workspace/lib/validation';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { ChatRoom, withCommentIndex } from '../chat';
+import { broadcastCommentIndexUpdated } from '../chat/sse-events';
 import { CollabDocument } from '../collab/collab-document';
 import { enforceMaxUploadSize, enforceMountQuota } from '../config/enforcement';
 import { getServerSettings } from '../config/server-settings';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
 import { ApiError, computeEtag } from '../core';
 import type { Home } from '../home';
-import { broadcastToOwnerAndMembers } from '../home/home-relay';
+import { broadcastToOwnerAndMembers, sendToHome } from '../home/home-relay';
 import { composeCollaboratorsEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
 import type { DatabaseHold } from '../mount';
@@ -960,6 +963,10 @@ export class Drive {
         await propagateSharedPathChange(updatedItem, oldACL, normalizedACL, actor ?? null, options);
     }
 
+    public forEachOpenDocument(visit: (document: CollabDocument) => Promise<void>): Promise<void> {
+        return this.documents.forEachOpenDocument(visit);
+    }
+
     // Sends a path's sharing to its homes after a change that keeps its ACL, such as a rename. It runs in the path's
     // ACL chain, so it can't overtake an ACL change and bring back a removed sharee.
     public async pushSharing(
@@ -1167,10 +1174,19 @@ export class Drive {
         mountId: string,
         pathId: string,
         chatName: string,
-        assignee: string | null,
+        assigneeEmail: string | null,
         user: User,
         title?: string,
-    ): Promise<boolean> {
+    ): Promise<void> {
+        const assignee = assigneeEmail ? assigneeEmail.toLowerCase() : null;
+        // Read once for the check and the broadcast, because it walks the whole ACL.
+        let members: EffectiveMember[] | undefined;
+        if (assignee) {
+            members = await this.getEffectiveMembers(mountId, pathId);
+            if (!members.some((member) => member.email === assignee)) {
+                throw new ApiError(400, 'Assignee is not a member of this document');
+            }
+        }
         const card = title?.slice(0, CARD_TITLE_MAX_LENGTH);
         const changed = await withCommentIndex(this, mountId, pathId, async (index) => {
             const current = await index.get(chatName);
@@ -1182,8 +1198,7 @@ export class Drive {
             if (assigneeChanged) await index.assign(chatName, assignee);
             return assigneeChanged;
         });
-        if (!changed) return false;
-        if (assignee) {
+        if (changed && assignee) {
             await this.recordFileEvent(
                 mountId,
                 pathId,
@@ -1192,7 +1207,33 @@ export class Drive {
                 { excludeEmails: new Set([assignee]) },
             );
         }
-        return true;
+        broadcastCommentIndexUpdated(this, this.owner.id, mountId, pathId, members).catch(() => {});
+        if (changed && assignee && assignee !== user.email.toLowerCase()) {
+            // The assignment stands whatever happens to the notice, such as a home a restore holds.
+            await this.notifyAssignee(mountId, pathId, chatName, assignee, user).catch(() => {});
+        }
+    }
+
+    private async notifyAssignee(
+        mountId: string,
+        pathId: string,
+        chatName: string,
+        assignee: string,
+        actor: User,
+    ): Promise<void> {
+        const assigneeUser = await getUserByEmail(assignee);
+        const path = await this.getPath(mountId, pathId);
+        if (!assigneeUser || !path) return;
+        await sendToHome(assigneeUser.id, {
+            type: 'notification',
+            notification: {
+                type: 'assigned',
+                actorEmail: actor.email,
+                title: `${actor.name} assigned you a comment on "${stripEigenExtension(path.name)}"`,
+                tag: commentAssignedTag({ ownerId: this.owner.id, mountId, pathId, chatName }),
+                details: { pathType: path.type },
+            },
+        });
     }
 
     public async setCommentStatus(

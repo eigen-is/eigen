@@ -3,12 +3,14 @@ import * as decoding from 'lib0/decoding';
 import * as encoding from 'lib0/encoding';
 import type * as Y from 'yjs';
 import {
+    COLLAB_ACCESS_LOST_CLOSE,
     COLLAB_EPOCH_MESSAGE,
     COLLAB_HOME_REPLACED_CLOSE,
     COLLAB_STORAGE_GONE_CLOSE,
     COLLAB_STORAGE_UNAVAILABLE_CLOSE,
 } from '../../../../constants/collab';
 import type { CollabDoc, UseCollabDocOptions } from '../../../../core/collab/hooks/use-collab-doc';
+import { DATA_EPOCHS_KEY } from '../../../../core/home/reload-replaced-home';
 import { installHappyDom } from '../../../happy-dom';
 
 // The hook news up a WebsocketProvider itself, so the test swaps the module for a fake that never
@@ -353,6 +355,21 @@ describe('useCollabDoc connection state', () => {
         expect(h.state.storageUnavailable).toBe(false);
     });
 
+    test("a replaced home's reload forgets the stored epochs, and a lost read's keeps them", () => {
+        Object.defineProperty(window.location, 'reload', { value: jest.fn(), configurable: true });
+        const closeWith = (code: number) => {
+            window.sessionStorage.setItem(DATA_EPOCHS_KEY, '{}');
+            active?.unmount();
+            active = mount(OPTIONS);
+            const h = active;
+            act(() => h.provider.close(code));
+            return window.sessionStorage.getItem(DATA_EPOCHS_KEY);
+        };
+
+        expect(closeWith(COLLAB_HOME_REPLACED_CLOSE)).toBeNull();
+        expect(closeWith(COLLAB_ACCESS_LOST_CLOSE)).toBe('{}');
+    });
+
     test('a replaced home reloads only once the guard has disarmed, so the reload meets no prompt', () => {
         active = mount(OPTIONS);
         const h = active;
@@ -372,6 +389,58 @@ describe('useCollabDoc connection state', () => {
         act(() => h.provider.open());
         act(() => h.provider.close(COLLAB_HOME_REPLACED_CLOSE));
         expect(armedAtReload).toEqual([false]);
+    });
+
+    test('losing read stops the provider for good and reloads onto the screen that applies now', () => {
+        active = mount(OPTIONS);
+        const h = active;
+        act(() => {
+            h.provider.open();
+            h.provider.finishSync();
+        });
+        const reload = jest.fn();
+        Object.defineProperty(window.location, 'reload', { value: reload, configurable: true });
+
+        act(() => h.provider.close(COLLAB_ACCESS_LOST_CLOSE));
+        act(() => void jest.advanceTimersByTime(STORAGE_RETRY_PASSED_MS));
+
+        expect(reload).toHaveBeenCalledTimes(1);
+        expect(h.provider.disconnected).toBe(true);
+        expect(h.provider.connects).toBe(0);
+    });
+
+    test('losing read reloads only once the guard has disarmed, so the reload meets no prompt', () => {
+        active = mount(OPTIONS);
+        const h = active;
+        act(() => {
+            h.provider.open();
+            h.provider.finishSync();
+            h.provider.close();
+        });
+        act(() => h.doc.getMap('items').set('offline', 1));
+        expect(h.state.unsyncedEdits).toBe(true);
+        const armedAtReload: boolean[] = [];
+        Object.defineProperty(window.location, 'reload', {
+            value: () => armedAtReload.push(h.state.unsyncedEdits),
+            configurable: true,
+        });
+
+        act(() => h.provider.open());
+        act(() => h.provider.close(COLLAB_ACCESS_LOST_CLOSE));
+
+        expect(armedAtReload).toEqual([false]);
+    });
+
+    test('a refusal on the first open reloads too, with nothing loaded', () => {
+        active = mount(OPTIONS);
+        const h = active;
+        const reload = jest.fn();
+        Object.defineProperty(window.location, 'reload', { value: reload, configurable: true });
+
+        act(() => h.provider.close(COLLAB_ACCESS_LOST_CLOSE));
+
+        expect(reload).toHaveBeenCalledTimes(1);
+        expect(h.state.loaded).toBe(false);
     });
 
     test("the server's epoch frame names the epoch on every reconnect and opens a BroadcastChannel of it, once", () => {

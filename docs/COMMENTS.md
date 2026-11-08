@@ -94,7 +94,7 @@ A status or assignee write answers 404 when the name has no row. Without that it
 
 ## Every index write reaches the other clients
 
-`ChatRoom.updateCommentIndex` wraps every write a message causes: it opens the index, runs the change, recomputes the search text and sends `CHAT_COMMENT_INDEX_UPDATED` to the owner's home and every effective member. The status and assignee routes send the same event through `broadcastCommentIndexUpdated` (`apps/api/src/lib/chat/sse-events.ts`), so a resolve or an assignment shows up live in every open tab. The seed at creation sends nothing; the creating client refetches the list itself in `useCreateCommentCard`. Cross-home delivery goes through the home relay ([SCALABILITY.md](SCALABILITY.md)).
+`ChatRoom.updateCommentIndex` wraps every write a message causes: it opens the index, runs the change, recomputes the search text and sends `CHAT_COMMENT_INDEX_UPDATED` to the owner's home and every effective member. The status route and `Drive.assignComment` send the same event through `broadcastCommentIndexUpdated` (`apps/api/src/lib/chat/sse-events.ts`), so a resolve or an assignment shows up live in every open tab. The seed at creation sends nothing; the creating client refetches the list itself in `useCreateCommentCard`. Cross-home delivery goes through the home relay ([SCALABILITY.md](SCALABILITY.md)).
 
 ## Search reads a recomputed tail of each thread
 

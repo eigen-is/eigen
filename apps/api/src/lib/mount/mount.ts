@@ -64,15 +64,6 @@ type FolderLocks = { paths: Map<string, Promise<void>>; tree: RWLock };
 // same locks. An entry is small and stays for the process.
 const folderLocks = new Map<string, FolderLocks>();
 
-function locksFor(folder: string): FolderLocks {
-    let locks = folderLocks.get(folder);
-    if (!locks) {
-        locks = { paths: new Map(), tree: new RWLock() };
-        folderLocks.set(folder, locks);
-    }
-    return locks;
-}
-
 export class Mount {
     public readonly id: string;
     public readonly config: MountConfig;
@@ -111,8 +102,8 @@ export class Mount {
     // Holds the Home open while the upload queue has a PUT on the wire. A mount that no Home serves,
     // such as a backup's read of a disabled mount, has none.
     private readonly holdHome?: () => () => void;
-    // One map holds three kinds of lock key: a path id, a folder id with a folded name for a create, and
-    // the one key that permanent deletes share. Ids are UUIDs, so the kinds never collide.
+    // One map holds two kinds of lock key: a path id, and a folder id with a folded name for a create. Ids are
+    // UUIDs, so the kinds never collide.
     private readonly pathLocks: Map<string, Promise<void>>;
     private readonly treeLock: RWLock;
 
@@ -176,11 +167,6 @@ export class Mount {
     // opened in place.
     public get needsTempCopy(): boolean {
         return this.isRemote || this.isPathBased;
-    }
-
-    // How many uploads on this mount still wait for the bucket to accept them.
-    public get pendingUploadCount(): number {
-        return this.uploadQueue?.pendingCount ?? 0;
     }
 
     // ---- Lifecycle ----
@@ -495,12 +481,12 @@ export class Mount {
             hash: row.hash,
             thumbnail: row.thumbnail,
             acl: row.acl,
-            visibility: row.visibility ?? 'private',
+            visibility: row.visibility,
             sharingRestricted: row.sharingRestricted,
-            details: row.details ?? null,
-            trashedAt: row.trashedAt ?? null,
-            createdAt: row.createdAt ?? new Date(),
-            updatedAt: row.updatedAt ?? new Date(),
+            details: row.details,
+            trashedAt: row.trashedAt,
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
         };
     }
 
@@ -844,7 +830,8 @@ export class Mount {
         // another delete of the row got there first.
         const deleteDir = this.storage.deleteDir;
         if (pathEntry.type === 'file') {
-            await this.withTreeShared(async () => {
+            // Exclusive, because on `local` a create of this name writes this same key once the row is gone.
+            await this.withTreeExclusive(async () => {
                 const storageKey = await this.findStorageKey(pathId);
                 if (storageKey === null) return;
                 const deleted = await this.db
@@ -1112,8 +1099,8 @@ export class Mount {
         if (ifMatch !== undefined && !matchesIfMatch(ifMatch, etag)) throw new StaleWriteError(etag);
     }
 
-    // deletePath takes no path lock, so a delete during the write leaves new bytes, which go here. The stored row
-    // is answered because its column keeps whole seconds, which a GET's etag reads.
+    // Off `local` no lock keeps a delete out of the write, and the bytes it leaves at this row's own key go here. The
+    // stored row is answered because its column keeps whole seconds, which a GET's etag reads.
     private async commitOverwrite(pathId: string, storageKey: string, size: number, hash: string): Promise<DrivePath> {
         const row = await this.db
             .select({ name: paths.name, mimeType: paths.mimeType })
@@ -1452,4 +1439,13 @@ export class Mount {
         tx.update(paths).set({ size: total }).where(eq(paths.id, folderId)).run();
         return total;
     }
+}
+
+function locksFor(folder: string): FolderLocks {
+    let locks = folderLocks.get(folder);
+    if (!locks) {
+        locks = { paths: new Map(), tree: new RWLock() };
+        folderLocks.set(folder, locks);
+    }
+    return locks;
 }

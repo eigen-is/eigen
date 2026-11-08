@@ -70,9 +70,13 @@ A post, edit or delete sends a `chat:` event to the home that owns the room and 
 
 Delete sets `deletedAt`, empties the content and trashes the message's attachments from the room's `media/` folder. The list hides a deleted row entirely, with no tombstone.
 
+## What waits to be sent belongs to one room
+
+A draft, the files staged with it and the drive attachments beside it live in the composer and in `useChatRoom`. The chat route and `CommentThread` key the component holding both by the chat's id, so a change of room remounts it. That also covers a send or a copy that ends after the user left: what it puts back lands on the unmounted room, and never in the next one.
+
 ## Attachments live in the room's media folder
 
-An attachment is a file name in the room's `media/` folder, or a reference to a drive container. A device file uploads into `media/`. A regular drive file is copied there (`useChatRoom`), because the room's ACL has to cover the file for every member. A container document stays a reference. Comment cards follow the same rule ([COMMENTS.md](COMMENTS.md)).
+An attachment is a file name in the room's `media/` folder, or a reference to a drive container. A device file uploads into `media/`, so the composer stays disabled until `useChatRoom` has found that folder, rather than post a message without its files. A slash command that runs in the browser, such as `/help` or `/invite`, is decided before anything uploads, and leaves the drive attachments and the staged files waiting. A regular drive file is copied there (`useChatRoom`), because the room's ACL has to cover the file for every member. A container document stays a reference. Comment cards follow the same rule ([COMMENTS.md](COMMENTS.md)).
 
 A chip opens the file's actions from the shared chip menu ([PREVIEWS.md § One hook wires every attachment chip to the menu](PREVIEWS.md#one-hook-wires-every-attachment-chip-to-the-menu)), and **Save attachments** copies the files into Drive server-side through `SaveToDrivePicker`, with **Download instead** as the escape hatch.
 

@@ -15,13 +15,10 @@ import { getPublicConfig } from '../config/server-config';
 import { ApiError } from '../core';
 import { ARCHIVE_AUTH_FILE } from './paths';
 
-// The keys auth.json is written and read under. A union, not a string: restore branches on the key
-// (`user` gets a role, `member` a single membership), and a typo would read as a table nobody
-// archived.
+// A union, not a string: restore branches on the key, and a typo would read as a table nobody archived.
 type AuthArchiveKey = 'user' | 'account' | 'two_factor' | 'apikey' | 'member' | 'team_member';
 
-// A users3.db table one user's archive carries: the key it has in auth.json, the column that scopes
-// its rows to that user, and for a membership the parent row it would be an orphan without.
+// The column that scopes a table's rows to one user, and for a membership the parent row it would be an orphan without.
 type AuthTableSpec = {
     key: AuthArchiveKey;
     table: SQLiteTable;
@@ -29,9 +26,8 @@ type AuthTableSpec = {
     parent?: { table: SQLiteTable; id: SQLiteColumn; column: string };
 };
 
-// In insert order: the user row first, then the rows that reference it. Sessions and verification rows are left
-// out on purpose, because a restore re-inserts identity and does not hand out logins. Every column of the rest
-// rides along, so the insert on restore is complete.
+// In insert order: the user row first, then the rows that reference it. Sessions and verification rows stay out,
+// because a restore re-inserts identity and does not hand out logins.
 const AUTH_TABLES: AuthTableSpec[] = [
     { key: 'user', table: user, owner: user.id },
     { key: 'account', table: account, owner: account.userId },
@@ -51,10 +47,8 @@ const AUTH_TABLES: AuthTableSpec[] = [
     },
 ];
 
-// What a restored identity comes back as, whatever the archive says. `user.role` is better-auth's
-// own admin flag and a `member` row of the default org is what requireAdmin reads, so neither is
-// carried in from a file an admin uploaded: a restore puts a home's data back, it never hands out
-// privilege. An admin who was one before their restore is made one again by hand.
+// A restore puts a home's data back and never hands out privilege, so an uploaded file carries in no role. An admin
+// who was one before their restore is made one again by hand.
 const RESTORED_USER_ROLE = 'user';
 const RESTORED_MEMBER_ROLE = 'member';
 
@@ -125,10 +119,8 @@ export function restoreAuthRows(ownerId: string, archive: BackupAuthRows): void 
     });
 }
 
-// The rows of the archive's auth.json a restore would insert, or null when it inserts none: a team has no auth.json,
-// and a user who is still here keeps every row they have, since a restore puts a home's data back and never rewrites
-// who somebody is. It throws for an archive that is not this user's, so a restore calls it while it judges the archive,
-// before it takes the home.
+// The archive's auth.json rows a restore would insert, or null for a team or for a user who is still here and keeps
+// their rows. It throws for an archive that is not this user's, so a restore calls it before it takes the home.
 export function authRowsToRestore(ownerId: string, manifest: BackupManifest, folder: string): BackupAuthRows | null {
     const authPath = path.join(folder, ARCHIVE_AUTH_FILE);
     if (!fs.existsSync(authPath)) return null;
@@ -147,11 +139,16 @@ export function authRowsToRestore(ownerId: string, manifest: BackupManifest, fol
     // The identity itself is exactly one user row, with this owner's id and the email the manifest was
     // written with. Anything else and no row goes in: a second user row is somebody the archive invented.
     const identity = (archive['user'] ?? []).filter((row) => row['id'] === ownerId);
-    if (identity.length !== 1 || (manifest.email && identity[0]['email'] !== manifest.email)) {
+    const email = identity[0]?.['email'];
+    if (identity.length !== 1 || typeof email !== 'string' || (manifest.email && email !== manifest.email)) {
         throw new ApiError(
             400,
             `${ARCHIVE_AUTH_FILE} does not hold exactly one ${ownerId} row for ${manifest.email ?? 'this home'}`,
         );
+    }
+    // The insert comes after the swap, where this clash would leave a home nobody can sign in to.
+    if (getAuthDrizzleDb().select({ id: user.id }).from(user).where(eq(user.email, email)).get()) {
+        throw new ApiError(409, `Another account now uses ${email}, the email in this backup of ${ownerId}`);
     }
     return archive;
 }

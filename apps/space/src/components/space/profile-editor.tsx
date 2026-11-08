@@ -1,71 +1,65 @@
 // The form that edits the user's name and avatar. Space's Personal info page shows it. It saves them to the
-// user's own contact card, and then returns to Space's start page.
+// user's own contact card, and then returns to Space's start page. A field the user changed stays, and every other
+// field follows the card, so a sync or a refused Save moves only what nobody touched.
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigate } from '@tanstack/react-router';
+import { rethrowUntoasted } from '@workspace/lib/api-error';
 import { useMeContact, useUpdateContact } from '@workspace/lib/contacts';
+import type { Contact } from '@workspace/lib/types/contact';
+import { useHeldEtag } from '@workspace/lib/use-held-etag';
 import { AvatarEditor, ErrorState, LoadingState, useContactAvatarUpload } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
 import { Input } from '@workspace/ui/components/input';
+import { useFollowedFields } from '@workspace/ui/hooks/use-followed-fields';
 import { InfoIcon } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 const formSchema = z.object({
     firstName: z.string().min(1, 'First name is required'),
-    lastName: z.string().optional(),
+    lastName: z.string(),
+    avatar: z.string().nullable(),
 });
 
 type ProfileFormValues = z.infer<typeof formSchema>;
 
+const FORM_FIELDS = formSchema.keyof().options;
+
 export function ProfileEditor() {
     const { data: contact, isLoading, error: fetchError } = useMeContact();
-    const [avatar, setAvatar] = useState<string | null>(null);
-    // Captured alongside the field values when the form first initializes, so the save submits the etag it
-    // loaded rather than one a later refetch advanced past — pairing a stale form with a fresh etag would clobber.
-    // Empty until the profile has loaded; a stored card's etag is never empty, so it doubles as the seeded flag.
-    const loadedEtagRef = useRef('');
-
-    const uploadAvatar = useContactAvatarUpload(setAvatar);
     const updateContactMutation = useUpdateContact();
+    const navigate = useNavigate();
 
     const form = useForm<ProfileFormValues>({
         resolver: zodResolver(formSchema),
-        defaultValues: {
-            firstName: '',
-            lastName: '',
-        },
+        defaultValues: { firstName: '', lastName: '', avatar: null },
     });
 
-    useEffect(() => {
-        if (!contact) return;
-        // Seed once on first load, and re-seed whenever a refetch (e.g. after a 412 recovery) advances the etag
-        // past the frozen snapshot — otherwise the form keeps stale fields + a stale etag and the next save
-        // 412s again, an unbreakable loop.
-        if (contact.etag === loadedEtagRef.current) return;
-        loadedEtagRef.current = contact.etag;
-        form.reset({
-            firstName: contact.firstName || '',
-            lastName: contact.lastName || '',
-        });
-        setAvatar(contact.avatar || null);
-    }, [contact, form]);
+    const record = useMemo(() => (contact ? formValues(contact) : undefined), [contact]);
+    const typing = useFollowedFields(form, FORM_FIELDS, record);
+    const { heldEtag, saveHeld } = useHeldEtag(contact?.etag ?? '', typing);
 
-    const navigate = useNavigate();
+    form.register('avatar');
+    const avatar = form.watch('avatar');
+    const setAvatar = (url: string | null) => form.setValue('avatar', url, { shouldDirty: true });
+    const uploadAvatar = useContactAvatarUpload(setAvatar);
 
     const handleSubmit = form.handleSubmit(async (data) => {
         if (!contact) return;
 
-        await updateContactMutation.mutateAsync({
-            ...contact,
-            firstName: data.firstName,
-            lastName: data.lastName || '',
-            avatar: avatar || '',
-            etag: loadedEtagRef.current,
-        });
-        await navigate({ to: '/' });
+        await saveHeld(async () => {
+            await updateContactMutation.mutateAsync({
+                ...contact,
+                firstName: data.firstName,
+                lastName: data.lastName,
+                avatar: data.avatar || '',
+                etag: heldEtag,
+            });
+            await navigate({ to: '/' });
+        }).catch(rethrowUntoasted);
     });
 
     if (isLoading && !contact) {
@@ -82,7 +76,7 @@ export function ProfileEditor() {
                 <div className="flex justify-center mb-8">
                     <AvatarEditor
                         name={contact ? `${contact.firstName} ${contact.lastName}` : ''}
-                        email={contact?.email?.[0]}
+                        email={contact?.email[0]}
                         imageUrl={avatar || ''}
                         onRemove={avatar ? () => setAvatar(null) : undefined}
                         onUpload={uploadAvatar}
@@ -138,4 +132,12 @@ export function ProfileEditor() {
             </form>
         </Form>
     );
+}
+
+function formValues(contact: Contact): ProfileFormValues {
+    return {
+        firstName: contact.firstName,
+        lastName: contact.lastName,
+        avatar: contact.avatar || null,
+    };
 }

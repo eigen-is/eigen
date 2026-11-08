@@ -166,7 +166,7 @@ describe('delete/trash must evict the cached document DB (no resurrection, no le
         // The cached DB was closed: its live temp (and 30s sync timer) are gone, so no later tick can
         // re-stage the dead key.
         expect(existsSync(mount.getTempPath(dataDbId))).toBe(false);
-        expect(mount.pendingUploadCount).toBe(0);
+        expect(mount.uploadQueue?.pendingCount).toBe(0);
 
         await mount.uploadQueue?.drain({ flushNow: true });
         expect(await backing.exists(storageKey)).toBe(false); // never resurrected

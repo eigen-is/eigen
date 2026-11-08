@@ -95,9 +95,8 @@ export class SharedDrive {
         if (!(await this.canWrite(mountId, pathId, this.user, memberships))) throw new ApiError(403, message);
     }
 
-    // Some actions cover the whole drive and not one path, such as listing its files of one type or
-    // emptying its trash. Only an owner may do them. The owner of a user's drive never comes through
-    // SharedDrive, so on a user's drive nobody may.
+    // Some actions cover the whole drive, such as emptying its trash, and only an owner may do them. The owner of a
+    // user's drive never comes through SharedDrive, so on a user's drive nobody may.
     private async requireDriveOwner(message: string): Promise<void> {
         if (!this.isEffectiveOwner(this.owner.id, await getMemberships(this.user.id))) {
             throw new ApiError(403, message);
@@ -290,9 +289,8 @@ export class SharedDrive {
 
     // ---- Trash ----
 
-    // A path shared directly with the caller is left, not trashed. Only their own ACL entry goes,
-    // whatever their permission level. Any other path goes to the trash, and that needs write access.
-    // A path in the trash can't be left. The caller gets the same 403 as for a path they can't see.
+    // A path shared directly with the caller is left: only their own ACL entry goes, whatever their permission. Any
+    // other path goes to the trash, which needs write. A path in the trash answers the 403 of a path they can't see.
     public async deletePath(mountId: string, pathId: string, _user?: User): Promise<void> {
         const path = await this.drive.getPath(mountId, pathId);
         const own = path?.acl?.find((entry) => canonicalACLId(entry.id) === canonicalACLId(this.user.email));
@@ -451,7 +449,7 @@ export class SharedDrive {
         assignee: string | null,
         _user: User,
         title?: string,
-    ): Promise<boolean> {
+    ): Promise<void> {
         await this.requireWrite(mountId, pathId);
         return this.drive.assignComment(mountId, pathId, chatName, assignee, this.user, title);
     }

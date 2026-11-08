@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
 import { eq } from 'drizzle-orm';
@@ -15,6 +15,7 @@ import { buildHomeFolderName, freeArtifactName, getBackupsDir } from '../../lib/
 import { restoreHome } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { getServerConfig } from '../../lib/config/server-config';
+import { ApiError } from '../../lib/core';
 import { getHome } from '../../lib/home/get-home';
 import type { TestUser } from '../setup';
 import { authedRequest, createTestUser, getTestContext, TEST_DATA_DIR } from '../setup';
@@ -33,7 +34,7 @@ const PLANTED_ID = 'plantedattackerrowAAAAAAAAAAAAAA';
 async function backupWithAuthRows(
     userId: string,
     at: Date,
-    patch?: (rows: Record<string, Record<string, unknown>[]>) => void,
+    patch?: (rows: Record<string, Record<string, unknown>[]>, manifest: BackupManifest) => void,
 ): Promise<string> {
     const staging = mkdtempSync(join(TEST_DATA_DIR, 'auth-rows-'));
     const manifest: BackupManifest = await snapshotHome(await getHome(userId), staging);
@@ -41,7 +42,7 @@ async function backupWithAuthRows(
     if (patch) {
         const authPath = join(folder, 'auth.json');
         const rows = JSON.parse(readFileSync(authPath, 'utf8'));
-        patch(rows);
+        patch(rows, manifest);
         writeFileSync(authPath, JSON.stringify(rows, null, 2));
         const entry = manifest.entries.find((candidate) => candidate.path === 'auth.json');
         if (!entry) throw new Error('auth.json is not in the manifest');
@@ -151,5 +152,59 @@ describe('Backup restore of the identity an archive carries', () => {
         const db = getAuthDrizzleDb();
         expect(db.select().from(userScheme).where(eq(userScheme.id, PLANTED_ID)).all()).toEqual([]);
         expect(db.select().from(userScheme).where(eq(userScheme.id, stranger.id)).all()).toEqual([]);
+    });
+
+    // The UNIQUE email insert comes after the swap, so a clash found there leaves a home nobody can sign in to, and
+    // every retry parks another full-size copy of it.
+    test('an email another account now holds is refused before the home is taken, and a retry can finish', async () => {
+        const email = 'backup-authrows-taken@test.eigen.is';
+        const deleted = await createTestUser(email, PASSWORD, 'Auth Rows Taken');
+        await authedRequest(deleted.sessionToken, `/drive/${deleted.id}/mounts`);
+        const artifact = await backupWithAuthRows(deleted.id, new Date());
+        expect((await authedRequest(admin, `/settings/user/${deleted.id}`, { method: 'DELETE' })).status).toBe(200);
+        const holder = await createTestUser(email, PASSWORD, 'Auth Rows Holder');
+
+        const db = getAuthDrizzleDb();
+        const homesDir = join(TEST_DATA_DIR, 'home');
+        const refused = async (role: string): Promise<void> => {
+            db.update(userScheme).set({ role }).where(eq(userScheme.id, holder.id)).run();
+            const failed = await restoreHome(artifact, deleted.id, `auth-rows-taken-${role}-${Date.now()}`).catch(
+                (error: unknown) => error,
+            );
+            expect(failed instanceof ApiError && failed.status).toBe(409);
+            expect(failed instanceof Error && failed.message).toBe(
+                `Another account now uses ${email}, the email in this backup of ${deleted.id}`,
+            );
+            // Nothing in place and nothing aside: the refusal cost no home folder and no safety copy.
+            expect(readdirSync(homesDir).filter((name) => name.startsWith(deleted.id))).toEqual([]);
+        };
+        await refused('user');
+        await refused('guest');
+
+        db.update(userScheme)
+            .set({ email: 'backup-authrows-moved@test.eigen.is' })
+            .where(eq(userScheme.id, holder.id))
+            .run();
+        await restoreHome(artifact, deleted.id, `auth-rows-taken-retry-${Date.now()}`);
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+        expect(db.select().from(userScheme).where(eq(userScheme.id, deleted.id)).get()?.email).toBe(email);
+    });
+
+    test('an identity row with no email is refused before the home is taken', async () => {
+        const stranger = await createTestUser('backup-authrows-noemail@test.eigen.is', PASSWORD, 'Auth Rows No Email');
+        await authedRequest(stranger.sessionToken, `/drive/${stranger.id}/mounts`);
+        // With no email in the manifest either, so only the row itself can say.
+        const artifact = await backupWithAuthRows(stranger.id, new Date(), (rows, manifest) => {
+            delete rows['user'][0]['email'];
+            delete manifest.email;
+        });
+        expect((await authedRequest(admin, `/settings/user/${stranger.id}`, { method: 'DELETE' })).status).toBe(200);
+        const failed = await restoreHome(artifact, stranger.id, `auth-rows-noemail-${Date.now()}`).catch(
+            (error: unknown) => error,
+        );
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+
+        expect(failed instanceof ApiError && failed.status).toBe(400);
+        expect(readdirSync(join(TEST_DATA_DIR, 'home')).filter((name) => name.startsWith(stranger.id))).toEqual([]);
     });
 });

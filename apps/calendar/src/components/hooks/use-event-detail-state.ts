@@ -1,11 +1,15 @@
-import { isFreeBusyEvent } from '@workspace/lib/calendar';
+// The event-detail selection the calendar views share, such as the month view: the clicked occurrence, the dialog's open
+// flag, the once-only ?eventId deep-link auto-open, and the calendar lookup the dialog needs. The dialog always gets the
+// occurrence as the current list has it, so what it shows and the etag it writes with follow every refetch.
+
+import { isFreeBusyEvent, isSeriesOccurrence } from '@workspace/lib/calendar';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { useEffect, useRef, useState } from 'react';
 
 type UseEventDetailStateOptions = {
-    events: CalendarEventOccurrence[];
-    calendars: CalendarItem[];
-    sharedCalendars?: SharedCalendar[];
+    events: readonly CalendarEventOccurrence[];
+    calendars: readonly CalendarItem[];
+    sharedCalendars?: readonly SharedCalendar[];
     initialEventId?: string;
 };
 
@@ -20,17 +24,27 @@ type UseEventDetailStateReturn = {
     };
 };
 
-// Event-detail selection shared by MonthView and WeekView so the two can't drift: the picked event,
-// the dialog's open flag, the once-only ?eventId deep-link auto-open, and the calendar lookup the
-// dialog needs. detailDialogProps spreads straight onto <EventDetailDialog>.
 export function useEventDetailState({
     events,
     calendars,
     sharedCalendars,
     initialEventId,
 }: UseEventDetailStateOptions): UseEventDetailStateReturn {
-    const [selectedEvent, setSelectedEvent] = useState<CalendarEventOccurrence | null>(null);
+    const [clicked, setClicked] = useState<CalendarEventOccurrence | null>(null);
     const [detailOpen, setDetailOpen] = useState(false);
+
+    // Gone from the list, it stays on screen as clicked: a save of two writes is still running, or the event left this
+    // view, and the next write's answer says what became of it.
+    // An override keeps the occurrence date and series of the occurrence it replaces. A lone event is its id alone, since
+    // its date moves with it.
+    const current =
+        clicked &&
+        events.find(
+            (e) =>
+                (e.parentEventId || e.id) === (clicked.parentEventId || clicked.id) &&
+                (!isSeriesOccurrence(e) || !isSeriesOccurrence(clicked) || e.occurrenceDate === clicked.occurrenceDate),
+        );
+    const selectedEvent = current ?? clicked;
 
     const didAutoOpen = useRef(false);
     useEffect(() => {
@@ -40,7 +54,7 @@ export function useEventDetailState({
         );
         if (match && !isFreeBusyEvent(match)) {
             didAutoOpen.current = true;
-            setSelectedEvent(match);
+            setClicked(match);
             setDetailOpen(true);
         }
     }, [initialEventId, events]);
@@ -48,7 +62,7 @@ export function useEventDetailState({
     const handleEventClick = (event: CalendarEventOccurrence, e: React.MouseEvent) => {
         e.stopPropagation();
         if (isFreeBusyEvent(event)) return;
-        setSelectedEvent(event);
+        setClicked(event);
         setDetailOpen(true);
     };
 

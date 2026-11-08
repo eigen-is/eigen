@@ -43,21 +43,22 @@ describe('a write that meets a 412', () => {
         });
         await unmount();
         expect(toasts).toEqual([
-            'error: This contact changed elsewhere. It has been reloaded — please redo your edit.',
+            'error: This contact changed elsewhere. What you typed is still here. Check it and save again.',
         ]);
         expect(hasKey(invalidated, contactKeys.lists(OWNER))).toBe(true);
         expect(wasToasted(failure)).toBe(true);
     });
 
-    test('a delete counts as toasted too', async () => {
-        const { queryClient } = trackingClient();
+    test('a delete says so without promising anything typed, reloads the list, and counts as toasted', async () => {
+        const { queryClient, invalidated } = trackingClient();
         const { latest, unmount } = await renderHook(() => useDeleteContact(), queryClient);
         let failure: unknown = null;
         await act(async () => {
             await latest.mutateAsync({ id: 'c1', etag: '1' }).catch((error: unknown) => (failure = error));
         });
         await unmount();
-        expect(toasts).toHaveLength(1);
+        expect(toasts).toEqual(['error: This contact changed elsewhere. Check it and try again.']);
+        expect(hasKey(invalidated, contactKeys.lists(OWNER))).toBe(true);
         expect(wasToasted(failure)).toBe(true);
     });
 });

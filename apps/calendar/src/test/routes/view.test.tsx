@@ -228,6 +228,7 @@ test('deleting one occurrence of a series cancels that day and keeps the series'
         parentEventId: 'Weekly',
         recurrenceDate: '2026-10-22',
         status: 'cancelled',
+        etag: 'e1',
     });
 });
 

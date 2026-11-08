@@ -13,7 +13,7 @@ import type {
     ServerArchiveManifest,
     ServerArchiveSidecar,
 } from '@workspace/lib/types/backup';
-import { orgOwnerId, parseOwnerId } from '@workspace/lib/types/owner';
+import { orgOwnerId } from '@workspace/lib/types/owner';
 import { BACKUP_FORMAT_VERSION, SERVER_ARCHIVE_EXTENSION } from '@workspace/lib/validation';
 import { getDataRoot, getServerDataPath, ORG_HOMES_DIR, SERVER_DATABASES, SERVER_FILES } from '../config/paths';
 import { PIN_KEYS } from '../config/release';
@@ -22,8 +22,7 @@ import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core';
 import { isHomeDeleting } from '../home/get-home';
 import { pullHomeBackupBytes, pullHomeSnapshot } from '../home/home-relay';
-import { getTeamExists } from '../team/team';
-import { getUserById } from '../user';
+import { getOwnerExists } from '../user';
 import { alertOwner } from '../user/alert-owner';
 import type { ServerArchiveWriter } from './archive';
 import { createServerArchiveWriter, packFolder } from './archive';
@@ -256,10 +255,7 @@ async function appendHome(
         warnings = manifest.warnings;
     } catch (error) {
         // A delete mid-capture throws whatever the torn-down home throws: the mark or the row says whether it is gone.
-        const id = parseOwnerId(home.ownerId).id;
-        const gone =
-            isHomeDeleting(home.ownerId) ||
-            (home.kind === 'team' ? !(await getTeamExists(id)) : !(await getUserById(home.ownerId)));
+        const gone = isHomeDeleting(home.ownerId) || !(await getOwnerExists(home.ownerId));
         return gone ? { ...home, skipped: HOME_DELETED } : { ...home, failed: describeError(error) };
     } finally {
         await fsp.rm(folder, { recursive: true, force: true });

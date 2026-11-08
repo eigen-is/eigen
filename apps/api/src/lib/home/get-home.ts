@@ -1,13 +1,14 @@
-// getHome is the way in to every owner's data. It builds the owner's Home on first use, keeps it in a
-// cache, and hands every later caller that same Home until it closes. Every request passes through
-// here, so this is where a Home hears of its requests. It keeps a home shut while a restore replaces
-// its folder or a deletion removes it, and every home while the shutdown runs. It also hands a
-// server-wide event, such as a restart notice, to every loaded home.
+// getHome is the way in to every owner's data. It builds the owner's Home on first use, keeps it in a cache, and hands
+// every later caller that same Home until it closes. Every request passes through here, so this is where a Home hears
+// of its requests. It keeps a home shut while a restore replaces its folder or a deletion removes it, and every home
+// while the shutdown runs. It also walks the loaded homes, to hand them a server-wide event such as a restart notice,
+// or to close the collab sockets of whoever lost access to the documents they have open.
 
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import type { AsyncSingleton } from '../../utils/singleton';
 import { createAsyncSingleton } from '../../utils/singleton';
+import type { CollabDocument } from '../collab/collab-document';
 import { ApiError } from '../core';
 import { getOrgExists } from '../org';
 import { getTeam } from '../team';
@@ -187,6 +188,21 @@ export async function evictHome(ownerId: string): Promise<void> {
 // reads no home's data and opens none: a home that is not loaded has no stream to tell.
 export function broadcastToLoadedHomes(event: SSEvent): void {
     for (const factory of homeFactories.values()) factory.peek()?.broadcast(event);
+}
+
+// Closes the collab sockets of whoever lost read, after a change to a membership that any home's documents may rest on.
+export async function enforceReadAccessOnLoadedHomes(): Promise<void> {
+    await forEachOpenDocument((document) => document.enforceReadAccess());
+}
+
+// Closes the collab sockets of a user locked out whatever they may read, such as by a password reset.
+export async function closeUserSocketsOnLoadedHomes(userId: string): Promise<void> {
+    await forEachOpenDocument(async (document) => document.closeUserConnections(userId));
+}
+
+// It opens no home and counts as no request: a home that is not loaded has no open document.
+async function forEachOpenDocument(visit: (document: CollabDocument) => Promise<void>): Promise<void> {
+    for (const factory of homeFactories.values()) await factory.peek()?.forEachOpenDocument(visit);
 }
 
 // Closes every home that is open now. A test file's teardown calls it too, and the next file opens homes again.

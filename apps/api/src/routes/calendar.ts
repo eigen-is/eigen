@@ -44,6 +44,8 @@ const FREE_TEXT = { maxLength: EVENT_MAX_BYTES };
 // An attendee or a reminder is one line of the file, and a file holds no more lines than it holds bytes.
 const LINES = { maxItems: EVENT_MAX_BYTES };
 const NAME = { maxLength: CALENDAR_NAME_MAX_LENGTH };
+// The etag the client loaded, so a write it no longer applies to answers 412.
+const LoadedEtag = t.Optional(t.String({ ...TEXT, minLength: 1 }));
 
 const CalendarShareSchema = t.Object({
     targetId: t.String(TEXT),
@@ -95,6 +97,8 @@ const CreateEventSchema = t.Object({
     recurrenceDate: t.Optional(t.Nullable(t.String(TEXT))),
     status: t.Optional(t.Union([t.Literal('confirmed'), t.Literal('tentative'), t.Literal('cancelled')])),
     data: t.Optional(t.Nullable(EventDataSchema)),
+    // Judged only for an override, which writes into its master's resource.
+    etag: LoadedEtag,
 });
 
 const UpdateEventSchema = t.Object({
@@ -108,11 +112,12 @@ const UpdateEventSchema = t.Object({
     timezone: t.Optional(t.Nullable(t.String(TEXT))),
     status: t.Optional(t.Union([t.Literal('confirmed'), t.Literal('tentative'), t.Literal('cancelled')])),
     data: t.Optional(t.Nullable(EventDataSchema)),
-    etag: t.Optional(t.String({ ...TEXT, minLength: 1 })),
+    etag: LoadedEtag,
 });
 
 const MoveEventSchema = t.Object({
     targetCalendarId: t.String(TEXT),
+    etag: LoadedEtag,
 });
 
 const UpdateSharedCalendarSchema = t.Object({
@@ -228,18 +233,12 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
                 new Date(params.to * 1000),
             );
             if (permission === 'free-busy') {
-                // A cancelled event's existence must not leak into a free/busy view. Dropping it also makes the
-                // cast valid.
-                return events
-                    .filter((e) => e.status !== 'cancelled')
-                    .map(
-                        (e): FreeBusyBlock => ({
-                            startTime: e.startTime,
-                            endTime: e.endTime,
-                            allDay: e.allDay,
-                            status: e.status as FreeBusyBlock['status'],
-                        }),
-                    );
+                // A cancelled event's existence must not leak into a free/busy view.
+                return events.flatMap((e): FreeBusyBlock[] =>
+                    e.status === 'cancelled'
+                        ? []
+                        : [{ startTime: e.startTime, endTime: e.endTime, allDay: e.allDay, status: e.status }],
+                );
             }
             return events;
         },
@@ -287,13 +286,13 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
 
     .delete(
         '/calendar/:ownerId/calendars/:calId/events/:id',
-        async ({ params, user }): Promise<void> => {
+        async ({ params, query, user }): Promise<void> => {
             requireNonGuest(user);
             const { permission } = await checkCalendarAccess(user, params.ownerId, params.calId);
             if (permission !== 'write') throw new ApiError(403, 'Write permission required');
-            await deleteEventAt(params.ownerId, params.calId, params.id, user);
+            await deleteEventAt(params.ownerId, params.calId, params.id, user, query.etag);
         },
-        { auth: true },
+        { query: t.Object({ etag: LoadedEtag }), auth: true },
     )
 
     // The server moves the event, so the move keeps the organizer link, the timezone and the data a client cannot
@@ -306,7 +305,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             if (permission !== 'write') throw new ApiError(403, 'Write permission required');
             const target = await checkCalendarAccess(user, params.ownerId, body.targetCalendarId);
             if (target.permission !== 'write') throw new ApiError(403, 'Write permission required');
-            return moveEventAt(params.ownerId, params.calId, params.id, body.targetCalendarId);
+            return moveEventAt(params.ownerId, params.calId, params.id, body.targetCalendarId, body.etag);
         },
         { body: MoveEventSchema, auth: true },
     )

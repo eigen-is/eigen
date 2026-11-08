@@ -8,27 +8,15 @@ import { contactsApi, getContactsAvatarUploadUrl } from '@workspace/lib/api';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { CreateContactInput, UpdateContactInput } from '@workspace/lib/types/contact';
-import { toast } from 'sonner';
-import { AppError, markToasted, onMutationError } from '../../api-error';
+import { AppError, onEtagWriteError, onMutationError } from '../../api-error';
 import { contactKeys, invalidateContactList } from './keys';
 
-// A write echoes the etag its form loaded, and a 412 means the card changed elsewhere first. The hook reloads the list
-// so the form shows the current card, and tells the user.
-const STALE_WRITE_TOAST = 'This contact changed elsewhere. It has been reloaded — please redo your edit.';
+// A write echoes the etag its form holds, and a 412 means the card changed elsewhere first. A delete has nothing typed.
+const STALE_UPDATE_TOAST = 'This contact changed elsewhere. What you typed is still here. Check it and save again.';
+const STALE_DELETE_TOAST = 'This contact changed elsewhere. Check it and try again.';
 
-// The edit form re-seeds after one, since the toast tells the user the card was reloaded.
-export function isStaleWrite(error: unknown): boolean {
-    return error instanceof AppError && error.status === 412;
-}
-
-// The update and the delete recover a 412 the same way. It returns true when it handled one, so the caller skips
-// onMutationError. The error counts as toasted, so a dialog that awaits the write doesn't log it again.
-function handleStaleWrite(queryClient: QueryClient, ownerId: string, error: unknown): boolean {
-    if (!isStaleWrite(error)) return false;
-    invalidateContactList(queryClient, ownerId);
-    markToasted(error);
-    toast.error(STALE_WRITE_TOAST);
-    return true;
+function onContactWriteError(queryClient: QueryClient, ownerId: string, staleMessage: string) {
+    return (error: unknown) => onEtagWriteError(error, staleMessage, () => invalidateContactList(queryClient, ownerId));
 }
 
 export function useContacts() {
@@ -76,10 +64,7 @@ export function useUpdateContact() {
             return response.data;
         },
         onSuccess: () => invalidateContactList(queryClient, ownerId),
-        onError: (error) => {
-            if (handleStaleWrite(queryClient, ownerId, error)) return;
-            onMutationError(error);
-        },
+        onError: onContactWriteError(queryClient, ownerId, STALE_UPDATE_TOAST),
     });
 }
 
@@ -95,10 +80,7 @@ export function useDeleteContact() {
             return response.data;
         },
         onSuccess: () => invalidateContactList(queryClient, ownerId),
-        onError: (error) => {
-            if (handleStaleWrite(queryClient, ownerId, error)) return;
-            onMutationError(error);
-        },
+        onError: onContactWriteError(queryClient, ownerId, STALE_DELETE_TOAST),
     });
 }
 
@@ -119,26 +101,25 @@ export function useMeContact() {
     });
 }
 
-// Multipart avatar upload bypasses Eden Treaty (which serializes bodies as JSON) and goes through
-// raw fetch, mirroring useUploadDraftAttachment. Returns the stored avatar path.
-async function uploadContactAvatarRequest(ownerId: string, file: File): Promise<string> {
-    const formData = new FormData();
-    formData.append('file', file);
-    const res = await fetch(getContactsAvatarUploadUrl(ownerId), {
-        method: 'POST',
-        body: formData,
-        credentials: 'include',
-    });
-    if (!res.ok) throw new AppError({ status: res.status, error: { status: res.status, value: await res.text() } });
-    return await res.text();
-}
-
 export function useUploadContactAvatar() {
     const { user } = useAuth();
     const ownerId = user?.id ?? '';
 
     return useMutation({
-        mutationFn: (file: File) => uploadContactAvatarRequest(ownerId, file),
+        // Eden Treaty serializes bodies as JSON, so this multipart upload is a raw fetch. It returns the avatar's path.
+        mutationFn: async (file: File): Promise<string> => {
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await fetch(getContactsAvatarUploadUrl(ownerId), {
+                method: 'POST',
+                body: formData,
+                credentials: 'include',
+            });
+            if (!res.ok) {
+                throw new AppError({ status: res.status, error: { status: res.status, value: await res.text() } });
+            }
+            return await res.text();
+        },
         onError: onMutationError,
     });
 }

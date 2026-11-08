@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+    COLLAB_ACCESS_LOST_CLOSE,
     COLLAB_STORAGE_GONE_CLOSE,
     COLLAB_STORAGE_GONE_REASON,
     COLLAB_STORAGE_UNAVAILABLE_CLOSE,
@@ -204,8 +205,8 @@ describe('Collab WS open under unreachable storage', () => {
         expect(await fakeS3.store.exists(dataKey)).toBe(true);
     }, 10_000);
 
-    test('an ordinary failed open still closes 1008', async () => {
-        expect((await openCollabClient('no-such-path').closed).code).toBe(1008);
+    test('a path that does not exist closes as access lost, as the info route reads it', async () => {
+        expect((await openCollabClient('no-such-path').closed).code).toBe(COLLAB_ACCESS_LOST_CLOSE);
     });
 });
 
