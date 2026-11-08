@@ -1,8 +1,9 @@
 // Everything a chat room view needs, in one hook: the messages in order, the members, the attachments
 // waiting to be sent, and the send handler, which also runs slash commands such as /help or /invite.
-// A chat file and a comment thread on a document both render through it.
+// A chat file and a comment thread on a document both render through it. Its state belongs to one room, so the
+// component that calls it is keyed by the chat's id.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { CONTAINER_MEDIA_FOLDER } from '../../../constants/container';
 import type { ChatAttachment, ChatMessage, RoomMember } from '../../../types/chat';
 import { isAttachmentReference } from '../../../types/chat';
@@ -51,12 +52,6 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string, co
     const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
     const [pendingDriveAttachments, setPendingDriveAttachments] = useState<ChatAttachment[]>([]);
     const lastWhisperFromRef = useRef<string | null>(null);
-
-    useEffect(() => {
-        setLocalMessages([]);
-        setPendingDriveAttachments([]);
-        lastWhisperFromRef.current = null;
-    }, [chatId]);
 
     const chatName = chatPath ? stripEigenExtension(chatPath.name) : 'Chat';
 

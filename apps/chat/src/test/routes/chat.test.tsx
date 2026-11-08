@@ -1,6 +1,7 @@
 // Chat's list is its sidebar: personal chats first, team chats under their own heading, an unread chat
 // marked. The index opens the first chat, or offers to create one when there is none. A chat the viewer
-// can't read asks for access, and one they can shows its messages and sends what they type.
+// can't read asks for access, and one they can shows its messages and sends what they type. What waits to be sent
+// belongs to one room, so neither a draft nor an attachment follows the user to the next.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { ChatMessage } from '@workspace/lib/types/chat';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -68,6 +69,9 @@ const room = {
     removeDriveAttachment: () => {},
 };
 
+// The setter of the room on screen. A send that ends after its room was left calls the setter of that room.
+const roomAttachments: { set: (attachments: string[]) => void } = { set: () => {} };
+
 // Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts the originals back.
 const realAuth = { ...(await import('@workspace/lib/auth')) };
 const realChat = { ...(await import('@workspace/lib/chat')) };
@@ -78,7 +82,11 @@ mock.module('@workspace/lib/chat', () => ({
     useChatSections: () => sections,
     useAllChats: () => allChats,
     useUnreadChatIds: () => unread,
-    useChatRoom: () => room,
+    useChatRoom: () => {
+        const [driveAttachments, setDriveAttachments] = useState<string[]>([]);
+        roomAttachments.set = setDriveAttachments;
+        return { ...room, driveAttachments };
+    },
 }));
 mock.module('@workspace/lib/drive', () => ({ ...realDrive, useCheckPermissions: () => permissions }));
 afterAll(() => {
@@ -87,7 +95,7 @@ afterAll(() => {
     mock.module('@workspace/lib/drive', () => realDrive);
 });
 
-const { act, createElement } = await import('react');
+const { act, createElement, useState } = await import('react');
 const { createMemoryHistory, createRouter, RouterProvider } = await import('@tanstack/react-router');
 const { PreviewProvider } = await import('@workspace/ui/components/preview-provider');
 const { UploadProvider } = await import('@workspace/ui/components/upload-provider');
@@ -135,6 +143,13 @@ async function open(url: string) {
     return {
         text: () => rendered.container.textContent ?? '',
         path: () => decodeURIComponent(router.state.location.pathname),
+        goToRoom: (chatId: string) =>
+            act(async () => {
+                await router.navigate({
+                    to: '/$ownerId/$mountId/$chatId',
+                    params: { ownerId: 'me@test.eigen.is', mountId: 'default', chatId },
+                });
+            }),
     };
 }
 
@@ -206,20 +221,50 @@ test("a chat the viewer can't read asks for access instead of showing it", async
     expect(page.text()).not.toContain('Morning all');
 });
 
+function messageInput(): HTMLTextAreaElement {
+    const input = document.querySelector<HTMLTextAreaElement>('textarea[placeholder="Message General"]');
+    if (!input) throw new Error('the chat has no message input');
+    return input;
+}
+
+const typeInto = (input: HTMLTextAreaElement, value: string) =>
+    act(async () => {
+        const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+        setValue?.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
 test('a readable chat shows its messages, and Enter sends what was typed', async () => {
     const page = await open('/me@test.eigen.is/default/c1');
     expect(page.text()).toContain('Morning all');
     expect(page.text()).toContain('Lunch at noon?');
 
-    const input = document.querySelector<HTMLTextAreaElement>('textarea[placeholder="Message General"]');
-    if (!input) throw new Error('the chat has no message input');
-    await act(async () => {
-        const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
-        setValue?.call(input, '  On my way  ');
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    const input = messageInput();
+    await typeInto(input, '  On my way  ');
     await act(async () => {
         input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }));
     });
     expect(sent).toEqual(['On my way']);
+});
+
+test('a draft stays behind when the user changes room, so Enter sends nothing there', async () => {
+    const page = await open('/me@test.eigen.is/default/c1');
+    await typeInto(messageInput(), 'For General only');
+
+    await page.goToRoom('c2');
+    const input = messageInput();
+    expect(input.value).toBe('');
+    await act(async () => {
+        input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }));
+    });
+    expect(sent).toEqual([]);
+});
+
+test('an attachment that comes back after the user left its room stays out of the next room', async () => {
+    const page = await open('/me@test.eigen.is/default/c1');
+    const backInGeneral = roomAttachments.set;
+
+    await page.goToRoom('c2');
+    await act(async () => backInGeneral(['late.png']));
+    expect(page.text()).not.toContain('late.png');
 });
