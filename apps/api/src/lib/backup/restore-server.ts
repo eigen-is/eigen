@@ -7,7 +7,7 @@ import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupManifest, ServerArchiveManifest } from '@workspace/lib/types/backup';
-import { BACKUP_OWNER_ID, buildBackupStamp, parseBackupManifest } from '@workspace/lib/validation';
+import { BACKUP_OWNER_ID, buildBackupStamp } from '@workspace/lib/validation';
 import { getDataRoot, homeDirUnder, ORG_HOMES_DIR, PATHS, SERVER_DIR, SERVER_RUNTIME_FILES } from '../config/paths';
 import { ApiError } from '../core/errors';
 import { isUsableName } from '../mount/names';
@@ -17,17 +17,17 @@ import {
     declaredUnpackBytes,
     extractArtifact,
     readArtifactManifest,
+    readManifestFile,
     readUnpackedHome,
     unpackBound,
     withUnpackSlack,
 } from './archive';
-import { archivePaths, flatStorageKey, readMountPathRows } from './archive-layout';
+import { archivePaths, readMountPathRows } from './archive-layout';
 import { describeError } from './errors';
 import type { VersionedDatabase } from './materialize-mount';
 import { checkRestoredDatabases, materializeMount, movePath, openToCheck, redateTrash } from './materialize-mount';
 import {
     ARCHIVE_HOME_DIR,
-    ARCHIVE_MANIFEST_FILE,
     buildServerFolderName,
     INSTALL_FOLDERS,
     requireMountDir,
@@ -151,9 +151,7 @@ async function stageServerMember(
     if (!member) throw new ApiError(400, `${archive.name} holds no ${SERVER_ARCHIVE_SERVER_MEMBER}`);
     await extractArtifact(member, unpackDir, await boundOf(member));
     const folder = path.join(unpackDir, buildServerFolderName(new Date(archive.manifest.createdAt)));
-    const manifestPath = path.join(folder, ARCHIVE_MANIFEST_FILE);
-    const manifest = fs.existsSync(manifestPath) ? parseBackupManifest(fs.readFileSync(manifestPath, 'utf8')) : null;
-    if (manifest?.kind !== 'server') {
+    if (readManifestFile(folder)?.kind !== 'server') {
         throw new ApiError(400, `${SERVER_ARCHIVE_SERVER_MEMBER} carries no server manifest`);
     }
     requireVerified(await verifyFolder(folder), SERVER_ARCHIVE_SERVER_MEMBER);
@@ -231,7 +229,7 @@ function replayPendingUploads(mountDir: string, liveMountDir: string, fromFiles:
     try {
         const rows = fromFiles ? readMountPathRows(db) : [];
         const archivePath = archivePaths(rows);
-        const byKey = new Map(rows.filter((row) => row.type === 'file').map((row) => [flatStorageKey(row), row]));
+        const byKey = new Map(rows.filter((row) => row.type === 'file').map((row) => [row.file, row]));
         const pending = db
             .query<{ storageKey: string; stagingPath: string }, []>(
                 'SELECT storageKey, stagingPath FROM pending_uploads',
@@ -268,10 +266,8 @@ function liveUploadedKeys(liveMountDir: string): Set<string> | null {
     let db: Database | undefined;
     try {
         db = openToCheck(metadata);
-        const files = db
-            .query<{ id: string; file: string }, []>("SELECT id, file FROM paths WHERE type = 'file'")
-            .all();
-        const uploaded = new Set(files.map(flatStorageKey));
+        const files = db.query<{ file: string }, []>("SELECT file FROM paths WHERE type = 'file'").all();
+        const uploaded = new Set(files.map((row) => row.file));
         for (const { storageKey } of db
             .query<{ storageKey: string }, []>('SELECT storageKey FROM pending_uploads')
             .all()) {

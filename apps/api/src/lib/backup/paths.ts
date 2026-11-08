@@ -45,7 +45,7 @@ const STAGING_DIR = '.staging';
 // backups folder for ./eigen, so the staging folders are what keep that group out.
 const STAGING_MODE = 0o700;
 
-export function getStagingRoot(): string {
+function getStagingRoot(): string {
     return path.join(backupsDirPath(), STAGING_DIR);
 }
 
@@ -204,7 +204,7 @@ export function freeArtifactName(ownerId: string, at: Date): string {
 
 // Beside the archive, so the list and retention never open one. A home artifact's caches its manifest
 // and last verify; a server archive's is its job's record, which a refused attempt leaves with no archive.
-export const SIDECAR_SUFFIX = '.manifest.json';
+const SIDECAR_SUFFIX = '.manifest.json';
 export const SERVER_SIDECAR_SUFFIX = '.json';
 // Beside a partial archive in the bucket, which may outlive this box's record of it.
 export const BUCKET_PARTIAL_SUFFIX = '.partial';
@@ -274,8 +274,7 @@ export function nextFreeTime(at: Date, taken: (candidate: Date) => boolean): Dat
     return candidate;
 }
 
-// Why the disk of `dir` has no room for `needed` bytes, or null. Every backup's and stage's room check words
-// its refusal this way.
+// Why the disk of `dir` has no room for `needed` bytes, or null. Every room check words its refusal this way.
 export function roomShortfall(what: string, needed: number, dir: string, where: string): string | null {
     const { bavail, bsize } = fs.statfsSync(dir);
     const free = bavail * bsize;

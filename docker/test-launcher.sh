@@ -39,25 +39,24 @@ FIX=$(cd "$FIX" && pwd -P)
 trap 'rm -rf "$FIX"' EXIT
 
 # The stub logs every call to $STUB_LOG. STUB_INFO (version, architecture, operating system) and STUB_COMPOSE answer
-# info and compose version, empty for a failure; STUB_FAIL names the compose subcommands and docker commands that
-# fail, and the images whose pull fails; STUB_IMAGE=1 makes image inspect fail on an image the launch has not
-# pulled; STUB_LATEST and STUB_REVISION are the version and commit the registry's manifest of any image names;
-# STUB_LABEL_VERSION and STUB_LABEL_REVISION the labels of any local image, STUB_LABEL_REVISION_DOVECOT that of a dovecot
-# image, and STUB_MOVED that of any image once api was pulled twice, as a tag that moves; STUB_DIGEST the registry
-# digest of every local image; a docker run with STUB_RUN_FAIL among its arguments fails, with STUB_RUN_CODE or 1, one
-# of restore --help prints a usage with --check-data, or with STUB_OLD_RESTORE=1 that of a build without it, one with
-# --staged also prints STUB_CHECKED, one of restore --env writes a
-# .env.production that pins sha256:eee, and one of restore --swap removes .eigen/restore-swap, or with STUB_SWAP_CUT=1
-# leaves one and fails, after 3 s with STUB_SWAP_SLOW=1; with STUB_SWAP_KEPT=<folder> it keeps that folder aside and
-# says so, as the CLI does. A run of bootstrap writes a Compose file into this folder, the starter keys into
-# .env.production when it names no release, keeping the registry it names, and a launcher that prints STUB_LAUNCHER on
-# stderr. Compose ps names eigen-api as running unless STUB_RUNNING=0, compose run (the stage) exits STUB_STAGE,
-# compose exec of backup prints archive=STUB_ARCHIVE and exits STUB_EXEC, one of restart-notice --in prints an at= and
-# exits STUB_NOTICE, one of status --running prints the file STUB_JOBS names while it is there, or with STUB_ASK=fail
-# fails as one that is not answering. With
-# STUB_ASKS=<file> each ask takes that file's first line instead: fail fails, - names nothing and any other is printed,
-# and once the file is empty it names nothing. An exec that checksums $EIGEN_ENV_FILE checksums STUB_MOUNTED, the file
-# eigen-api mounts, or else .env.production. A run of restore --env refuses a folder with a .env.production.
+# info and compose version, empty for a failure; STUB_FAIL names the compose subcommands and docker commands that fail,
+# and the images whose pull fails; STUB_IMAGE=1 makes image inspect fail on an image the launch has not pulled;
+# STUB_LATEST and STUB_REVISION are the version and commit the registry's manifest of any image names;
+# STUB_LABEL_VERSION and STUB_LABEL_REVISION the labels of any local image, STUB_LABEL_REVISION_DOVECOT that of a
+# dovecot image, and STUB_MOVED that of any image once api was pulled twice, as a tag that moves; STUB_DIGEST the
+# registry digest of every local image; a docker run with STUB_RUN_FAIL among its arguments fails, with STUB_RUN_CODE or
+# 1, one with --staged also prints STUB_CHECKED, one of restore --env writes a .env.production that pins sha256:eee, and
+# one of restore --swap removes .eigen/restore-swap, or with STUB_SWAP_CUT=1 leaves one and fails, after 3 s with
+# STUB_SWAP_SLOW=1; with STUB_SWAP_KEPT=<folder> it keeps that folder aside and says so, as the CLI does. A run of
+# bootstrap writes a Compose file into this folder, the starter keys into .env.production when it names no release,
+# keeping the registry it names, and a launcher that prints STUB_LAUNCHER on stderr. Compose ps names eigen-api as
+# running unless STUB_RUNNING=0, compose run (the stage) exits STUB_STAGE, compose exec of backup prints
+# archive=STUB_ARCHIVE and exits STUB_EXEC, one of restart-notice --in prints an at= and exits STUB_NOTICE, one of
+# status --running prints the file STUB_JOBS names while it is there, or with STUB_ASK=fail fails as one that is not
+# answering. With STUB_ASKS=<file> each ask takes that file's first line instead: fail fails, - names nothing and any
+# other is printed, and once the file is empty it names nothing. An exec that checksums $EIGEN_ENV_FILE checksums
+# STUB_MOUNTED, the file eigen-api mounts, or else .env.production. A run of restore --env refuses a folder with a
+# .env.production.
 mkdir "$FIX/bin"
 cat >"$FIX/bin/docker" <<'EOF'
 #!/bin/sh
@@ -133,14 +132,6 @@ case $1 in
         shift
         echo "stub run: $*"
         case " $* " in *" ${STUB_RUN_FAIL:-none} "*) exit "${STUB_RUN_CODE:-1}" ;; esac
-        case " $* " in *" restore --help "*)
-            if [ "${STUB_OLD_RESTORE:-0}" = 1 ]; then
-                echo 'Usage: restore <archive> --stage [--yes] [--s3-from-archive]'
-            else
-                echo 'Usage: restore --check-data [--yes] [--since <ms>]'
-            fi
-            ;;
-        esac
         case " $* " in *" --staged "*) printf '%s\n' "${STUB_CHECKED:-}" ;; esac
         case " $* " in *" --env "*)
             if [ -e .env.production ]; then echo 'This folder has a .env.production already.' >&2; exit 1; fi
@@ -250,7 +241,7 @@ launch() {
     for name in STUB_INFO STUB_COMPOSE STUB_FAIL STUB_IMAGE STUB_LATEST STUB_REVISION STUB_LABEL_VERSION \
         STUB_LABEL_REVISION STUB_LABEL_REVISION_DOVECOT STUB_MOVED STUB_DIGEST STUB_RUN_FAIL STUB_CHECKED STUB_RUN_CODE \
         STUB_SWAP_CUT STUB_SWAP_SLOW STUB_SWAP_KEPT STUB_RUNNING STUB_STAGE STUB_ARCHIVE STUB_EXEC STUB_NOTICE \
-        STUB_MOUNTED STUB_ASK STUB_ASKS STUB_JOBS STUB_OLD_RESTORE; do
+        STUB_MOUNTED STUB_ASK STUB_ASKS STUB_JOBS; do
         if [ -n "${!name+set}" ]; then vars+=("$name=${!name}"); fi
     done
     CODE=0
@@ -1515,7 +1506,7 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     fi
 
     # The first way back keeps data/: the build before the update checks it opens it, and Eigen switches to the pins the
-    # update recorded. When that build cannot open it, or is too old to check, the update's Full backup goes back.
+    # update recorded. When that build cannot open it, the update's Full backup goes back.
     full=server-pre-update-full-20260101-000000.tar
     old=ghcr.io/eigen-is/eigen/api@sha256:old
     pinned="$full|EIGEN_REGISTRY=ghcr.io/eigen-is/eigen|EIGEN_VERSION=0.2.98|EIGEN_API_IMAGE=$old"
@@ -1530,41 +1521,26 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     else
         fail "$SHELL_NAME: rollback with a failed pull of the build before: exit $CODE, steps '$(steps)', '$ERR'"
     fi
-    # A build too old to check is known by its usage, which the operator never sees, and is not asked to check.
-    failed=''
-    for case in cannot-open too-old; do
-        why='cannot open the data here.' checks="restore --check-data --yes ($old)|"
-        if [ "$case" = too-old ]; then
-            why='is too old to check the data here.' checks=''
-            STUB_OLD_RESTORE=1 STUB_CHECKED=$checked launch release rollback --yes
-        else
-            STUB_RUN_FAIL=--check-data STUB_RUN_CODE=4 STUB_CHECKED=$checked launch release rollback --yes
-        fi
-        if [ "$CODE" != 0 ] || ! printf '%s\n' "$OUT" | grep -q "▲  Eigen 0.2.99 (abc1234) $why\$" ||
-            ! printf '%s\n' "$OUT" | grep -q '◆  Back from Eigen 0.2.99 (abc1234) to the backup the last update made' ||
-            printf '%s\n' "$OUT" "$ERR" | grep -q 'Usage:' ||
-            [ "$(steps)" != "restore --help ($old)|${checks}share|stage eigen-api restore $full --stage --yes|restore --staged (ghcr.io/eigen-is/eigen/api:local)|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|bootstrap ghcr.io/eigen-is/eigen/api@sha256:bbb|share|up|" ] ||
-            [ -e "$FIX/release/.eigen/last-update" ]; then
-            failed="$failed $case (exit $CODE, steps '$(steps)', '$OUT', '$ERR')"
-        fi
-        rm -f "$FIX/release/.eigen/bundle"
-        reset_release
-        record_pins
-    done
-    if [ -z "$failed" ]; then
-        ok "$SHELL_NAME: rollback whose build before cannot open the data, or is too old to check it, says so in one line and restores the update's Full backup"
+    STUB_RUN_FAIL=--check-data STUB_RUN_CODE=4 STUB_CHECKED=$checked launch release rollback --yes
+    if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q "▲  Eigen 0.2.99 (abc1234) cannot open the data here.\$" &&
+        printf '%s\n' "$OUT" | grep -q '◆  Back from Eigen 0.2.99 (abc1234) to the backup the last update made' &&
+        [ "$(steps)" = "restore --check-data --yes ($old)|share|stage eigen-api restore $full --stage --yes|restore --staged (ghcr.io/eigen-is/eigen/api:local)|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|bootstrap ghcr.io/eigen-is/eigen/api@sha256:bbb|share|up|" ] &&
+        [ ! -e "$FIX/release/.eigen/last-update" ]; then
+        ok "$SHELL_NAME: rollback whose build before cannot open the data says so in one line and restores the update's Full backup"
     else
-        fail "$SHELL_NAME: rollback after a failed check:$failed"
+        fail "$SHELL_NAME: rollback after a failed check: exit $CODE, steps '$(steps)', '$OUT', '$ERR'"
     fi
+    rm -f "$FIX/release/.eigen/bundle"
+    reset_release
+    record_pins
     # A no to the check's question, a Ctrl+C at it, and a check that stopped without a verdict, as when a database stays
-    # locked, Docker cannot run the image or the OOM killer ends it, keep today's data and the way back. So does a 2
-    # from a build whose usage names --check-data: it is no sign of a build too old to check.
+    # locked, Docker cannot run the image or the OOM killer ends it, keep today's data and the way back.
     failed=''
     for code in 3 130 1 137 2; do
         STUB_RUN_FAIL=--check-data STUB_RUN_CODE=$code launch release rollback --yes
         ended=1
         case $code in 3) ended=0 ;; 130) ended=130 ;; esac
-        if [ "$CODE" != "$ended" ] || [ "$(steps)" != "restore --help ($old)|restore --check-data --yes ($old)|" ] ||
+        if [ "$CODE" != "$ended" ] || [ "$(steps)" != "restore --check-data --yes ($old)|" ] ||
             [ ! -e "$FIX/release/.eigen/last-update" ]; then
             failed="$failed check exit $code (exit $CODE, steps '$(steps)', '$ERR')"
         fi
@@ -1575,19 +1551,14 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
         if [ "$ended" = 1 ]; then want=1; fi
         if [ "$said" != "$want" ] || [ "$stopped" != "$want" ]; then failed="$failed check exit $code says '$ERR'"; fi
     done
-    STUB_RUN_FAIL=--help launch release rollback --yes
-    if [ "$CODE" != 1 ] || [ "$(steps)" != "restore --help ($old)|" ] || [ ! -e "$FIX/release/.eigen/last-update" ] ||
-        ! printf '%s\n' "$ERR" | grep -q '■  Could not run Eigen 0.2.99 (abc1234); Eigen 0.2.99 (abc1234) runs on as it was.$'; then
-        failed="$failed usage not read (exit $CODE, steps '$(steps)', '$ERR')"
-    fi
     if [ -z "$failed" ]; then
-        ok "$SHELL_NAME: rollback whose check is declined, cut off, or stops without a verdict, or whose build before does not run, changes nothing"
+        ok "$SHELL_NAME: rollback whose check is declined, cut off, or stops without a verdict changes nothing"
     else
         fail "$SHELL_NAME: rollback after a declined or stopped check:$failed"
     fi
     # Cut off after the stop, it starts Eigen again and keeps the way back, so the next rollback below finishes it.
     STUB_RUN_FAIL=bootstrap launch release rollback --yes
-    if [ "$CODE" = 1 ] && [ "$(steps)" = "restore --help ($old)|restore --check-data --yes ($old)|stop|restore --check-data --yes --since T ($old)|configure $old|bootstrap $old|share|up|" ] &&
+    if [ "$CODE" = 1 ] && [ "$(steps)" = "restore --check-data --yes ($old)|stop|restore --check-data --yes --since T ($old)|configure $old|bootstrap $old|share|up|" ] &&
         [ -e "$FIX/release/.eigen/last-update" ]; then
         ok "$SHELL_NAME: rollback on the data as it is that fails writing the files starts Eigen and keeps .eigen/last-update"
     else
@@ -1598,7 +1569,7 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     since=$(printf '%s\n' "$CALLS" | sed -n 's/^run .* restore --check-data --yes --since \([0-9]*\)$/\1/p')
     if [ "$CODE" = 0 ] &&
         printf '%s\n' "$OUT" | grep -q '◆  Back from Eigen 0.2.99 (abc1234) to Eigen 0.2.99 (abc1234), on the data as it is' &&
-        [ "$(steps)" = "restore --help ($old)|restore --check-data --yes ($old)|stop|restore --check-data --yes --since T ($old)|configure $old|bootstrap $old|share|up|" ] &&
+        [ "$(steps)" = "restore --check-data --yes ($old)|stop|restore --check-data --yes --since T ($old)|configure $old|bootstrap $old|share|up|" ] &&
         [ -n "$since" ] && [ "$since" -le "$((started * 1000))" ] &&
         printf '%s\n' "$CALLS" | grep " configure --backfill$" | grep -q ' -e EIGEN_API_IMAGE ' &&
         [ ! -e "$FIX/release/.eigen/last-update" ] && [ -e "$FIX/release/backups/$full" ] &&
@@ -1615,7 +1586,7 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     STUB_RUN_FAIL=--since STUB_RUN_CODE=4 STUB_CHECKED=$checked launch release rollback --yes
     if [ "$CODE" = 0 ] &&
         printf '%s\n' "$OUT" | grep -q '▲  Eigen 0.2.99 (abc1234) cannot open what Eigen 0.2.99 (abc1234) wrote since the first check.$' &&
-        [ "$(steps)" = "restore --help ($old)|restore --check-data --yes ($old)|stop|restore --check-data --yes --since T ($old)|share|stage eigen-api restore $full --stage --yes|restore --staged (ghcr.io/eigen-is/eigen/api:local)|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|bootstrap ghcr.io/eigen-is/eigen/api@sha256:bbb|share|up|" ] &&
+        [ "$(steps)" = "restore --check-data --yes ($old)|stop|restore --check-data --yes --since T ($old)|share|stage eigen-api restore $full --stage --yes|restore --staged (ghcr.io/eigen-is/eigen/api:local)|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|bootstrap ghcr.io/eigen-is/eigen/api@sha256:bbb|share|up|" ] &&
         [ ! -e "$FIX/release/.eigen/last-update" ]; then
         ok "$SHELL_NAME: rollback whose second check finds a database the build before cannot open puts the update's Full backup back"
     else
@@ -1628,14 +1599,13 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
         record_pins
         STUB_RUN_FAIL=--since STUB_RUN_CODE=$code launch release rollback --yes
         why="The second check stopped (exit $code); Eigen 0.2.99 (abc1234) starts again."
-        if [ "$code" = 2 ]; then why="Eigen 0.2.99 (abc1234) cannot check again what Eigen 0.2.99 (abc1234) wrote since the first check; Eigen 0.2.99 (abc1234) starts again."; fi
-        if [ "$CODE" != 1 ] || [ "$(steps)" != "restore --help ($old)|restore --check-data --yes ($old)|stop|restore --check-data --yes --since T ($old)|share|up|" ] ||
+        if [ "$CODE" != 1 ] || [ "$(steps)" != "restore --check-data --yes ($old)|stop|restore --check-data --yes --since T ($old)|share|up|" ] ||
             ! printf '%s\n' "$ERR" | grep -qF "■  $why" || [ ! -e "$FIX/release/.eigen/last-update" ]; then
             failed="$failed second check exit $code (exit $CODE, steps '$(steps)', '$ERR')"
         fi
     done
     if [ -z "$failed" ]; then
-        ok "$SHELL_NAME: rollback whose second check stops, or whose build before cannot check again, starts Eigen again on the build it ran and keeps the way back"
+        ok "$SHELL_NAME: rollback whose second check stops starts Eigen again on the build it ran and keeps the way back"
     else
         fail "$SHELL_NAME: rollback after a stopped second check:$failed"
     fi

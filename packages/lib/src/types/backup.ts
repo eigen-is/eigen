@@ -31,7 +31,7 @@ export type BackupManifest = {
     // databases and files are disjoint, so entries.length === databases + files. `dirs` is every folder entry the
     // archive holds, its root folder included.
     counts: { databases: number; files: number; bytes: number; dirs: number };
-    // Absent means the archive is complete.
+    // A user's or team's archive always has one. A server member has none, since it holds no mounts.
     level?: BackupLevel;
     // `skipped` is set only for a mount the home has turned off whose storage could not be read: it
     // carries the reason, holds no files, and a restore leaves it disabled and absent. An enabled

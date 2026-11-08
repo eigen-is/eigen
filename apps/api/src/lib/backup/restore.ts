@@ -10,7 +10,7 @@ import * as path from 'node:path';
 import type { BackupProgress, BackupShare } from '@workspace/lib/types/backup';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { buildBackupStamp, incompleteReason, parseBackupShares } from '@workspace/lib/validation';
-import { getAvatarsDir, getDataRoot } from '../config/paths';
+import { getAvatarsDir } from '../config/paths';
 import { ApiError } from '../core';
 import { getHomeDataEpoch, rotateHomeDataEpoch, setHomeDataEpoch } from '../home/data-epoch';
 import { clearHomeRestoring, evictHome, markHomeRestoring } from '../home/get-home';
@@ -38,7 +38,6 @@ import {
     buildRestoreUnpackDir,
     buildSafetyCopyName,
     freeSafetyCopyStamp,
-    roomShortfall,
 } from './paths';
 import { putHomeBack, wipeRestoreStagingDir, writeRestoreCompleteMarker, writeRestoringMarker } from './recovery';
 import { forgetSafetyCopySize, resolveSafetyCopy } from './safety-copy';
@@ -74,13 +73,8 @@ export async function restoreHome(
         async () => {
             // Beside the home, so the swap is a rename on one disk.
             const unpackDir = buildRestoreUnpackDir(homeDir, jobId);
-            // Refused before a byte is written. The unpack stops at the same bound, so an archive that holds more than
-            // it declares takes no more of the disk the homes share than the room check found free.
-            const bound = unpackBound(await readDeclaredManifest(artifactPath));
-            const shortfall = roomShortfall(`Restoring ${artifactName}`, bound, getDataRoot(), 'data/');
-            if (shortfall) throw new ApiError(507, shortfall);
             onProgress?.('extract', 0, 1);
-            await extractArtifact(artifactPath, unpackDir, bound);
+            await extractArtifact(artifactPath, unpackDir, unpackBound(await readDeclaredManifest(artifactPath)));
             onProgress?.('extract', 1, 1);
             const { folder, manifest } = readUnpackedHome(unpackDir, ownerId, artifactName);
             // A member of a whole-server archive that left out what only a restore of that archive puts back.

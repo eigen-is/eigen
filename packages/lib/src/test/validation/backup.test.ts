@@ -93,6 +93,13 @@ describe('parseBackupManifest', () => {
         expect(parseBackupManifest(JSON.stringify({ ...homeManifest, counts }))).toBeNull();
     });
 
+    test('refuses a home without a level, and takes a server member without one', () => {
+        const { level: _level, ...levelless } = homeManifest;
+        expect(parseBackupManifest(JSON.stringify(levelless))).toBeNull();
+        const serverMember = { ...levelless, kind: 'server' };
+        expect(parseBackupManifest(JSON.stringify(serverMember))).toEqual({ ...levelless, kind: 'server' });
+    });
+
     test('refuses warnings that are not a list of strings', () => {
         for (const warnings of ['a.png', [3], [null], {}]) {
             expect(parseBackupManifest(JSON.stringify({ ...homeManifest, warnings }))).toBeNull();

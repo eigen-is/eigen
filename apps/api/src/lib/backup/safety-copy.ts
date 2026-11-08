@@ -13,7 +13,6 @@ import { PATHS } from '../config/paths';
 import { ApiError } from '../core';
 import { createMountConfig, createMountStorage } from '../mount/helpers';
 import type { StorageBackend } from '../storage';
-import { flatStorageKey } from './archive-layout';
 import { readHomeMounts } from './enumerate-homes';
 import { resolveHomeDir } from './home-dir';
 import { parseSafetyCopyName, resolveMountDir } from './paths';
@@ -248,8 +247,8 @@ function storageKeysIn(metadataPath: string): Set<string> {
     const db = new Database(metadataPath, { readwrite: true, create: false });
     try {
         const keys = new Set<string>();
-        const rows = db.query<{ id: string; file: string }, []>("SELECT id, file FROM paths WHERE type = 'file'");
-        for (const row of rows.iterate()) keys.add(flatStorageKey(row));
+        const rows = db.query<{ file: string }, []>("SELECT file FROM paths WHERE type = 'file'");
+        for (const row of rows.iterate()) keys.add(row.file);
         return keys;
     } finally {
         db.close();
