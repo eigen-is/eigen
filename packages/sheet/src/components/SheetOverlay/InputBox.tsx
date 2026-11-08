@@ -198,9 +198,8 @@ export const InputBox: React.FC = () => {
                           left: selection.left,
                           top: selection.top,
                           zIndex: context.editingCellPosition.length === 0 ? -1 : 19,
-                          // A closed editor stays focusable at its cell, because hiding it would break focus and
-                          // focus off-screen scrolls the grid. It must not take clicks, or its stopPropagation would
-                          // swallow them. An open one needs an explicit auto, since the pane-region wrapper sets none.
+                          // A closed editor stays focusable at its cell, as focus off-screen scrolls the grid.
+                          // It takes no clicks, or its stopPropagation would swallow them. Open needs an explicit auto.
                           opacity: context.editingCellPosition.length === 0 ? 0 : 1,
                           pointerEvents: context.editingCellPosition.length === 0 ? 'none' : 'auto',
                           display: 'block',

@@ -160,10 +160,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             [],
         );
 
-        // The workbook this mount opens on, with A1 selected. Each sheet is copied one level deep and its cells stay
-        // shared, because a deep copy of a large import takes about a second. The init writes only a sheet's own fields,
-        // so a remount can run it again on the same data, and the shared cells, which immer freezes, are never written.
-        // Nothing is computed: a stored sheet carries its computed values, and an edit computes the formulas it affects.
+        // Sheets are copied one level deep and their cells stay shared, as a deep copy of a large import is slow.
+        // The init writes only a sheet's own fields, so the cells, which immer freezes, are never written.
         const [context, setContext] = useState(() => {
             const ctx = defaultContext(refs);
             ctx.allowEdit = allowEdit;
@@ -261,8 +259,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             if (step.ops.length > 0) onOp?.(step.ops);
         }, [commit, onOp]);
 
-        // A changed right opens or closes the grid's controls, and a card's new colour repaints its corner mark. Both take
-        // a new context, which every reader and the painter follow.
+        // A changed right opens or closes the grid's controls, and a card's new colour repaints its corner mark.
+        // Both take a new context, which every reader and the painter follow.
         useEffect(() => {
             setContextWithProduce(
                 (ctx) => {
@@ -324,11 +322,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 // Eigen or SVG content, so the paste goes to handlePaste, which knows its own copy.
                 const paste = classifyPaste(clipboardData, { internalMarkerText: COPY_ACTION_TABLE_MARKER });
 
-                // A Vector selection or a pasted SVG document becomes one floating image, through the app's image
-                // file path. It goes before the split into Eigen items, so a Vector selection lands as one image and
-                // not as its separate items. An SVG with images names them as eigen-media references, so it goes to
-                // onPasteSvgFile, which stores each image before the SVG. An SVG without images goes to
-                // onPasteImageFile.
+                // An SVG goes before the split into Eigen items, so a Vector selection lands as one image.
+                // One with images names them as eigen-media references, so onPasteSvgFile stores them first.
                 if (paste.svg) {
                     const svgImageItems = paste.svg.items.filter(
                         (item): item is EigenClipboardImageItem => item.type === 'image',
@@ -347,9 +342,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 }
 
                 if (paste.eigen) {
-                    // A mixed Eigen payload splits by kind. Image and chart items become floating objects, and text
-                    // items land in cells, all in one paste. The app inserts the images itself, at their copied size
-                    // and re-uploaded from another mount, so they paste only when its hook is set.
+                    // Image and chart items become floating objects and text items land in cells, in one paste.
+                    // The app inserts the images itself, so they paste only when its hook is set.
                     const { onPasteEigenImage } = hooks;
                     const imageItems = onPasteEigenImage
                         ? paste.eigen.items.filter((item): item is EigenClipboardImageItem => item.type === 'image')

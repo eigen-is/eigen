@@ -59,8 +59,8 @@ export type OverlayRegionSpec = {
     fixedTop: number | null;
 };
 
-// The overlay panes, laid out as the canvas draws its panes. A band shows the sheet up to pos, pinned at the edge of the
-// view. The rects change only with the freeze or the row and column sizes, never with a scroll.
+// The overlay panes, laid out as the canvas draws them. A band shows the sheet up to pos, pinned at the view's edge.
+// The rects change only with the freeze or the row and column sizes, never with a scroll.
 export function computeOverlayRegions(
     freeze: Freezen | undefined,
     viewWidth: number,
@@ -163,8 +163,8 @@ export function computeRowHeaderRegions(
     }));
 }
 
-// The one region holding a cell, where an overlay that must exist once renders, such as the cell editor. boundary is the
-// first index outside the frozen pane.
+// The one region holding a cell, where an overlay that must exist once renders, such as the cell editor.
+// boundary is the first index outside the frozen pane.
 export function overlayRegionForCell(
     regions: OverlayRegionSpec[],
     freeze: Freezen | undefined,

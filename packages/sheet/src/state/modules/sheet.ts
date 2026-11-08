@@ -60,9 +60,8 @@ export function settleCurrentSheet(ctx: Context) {
     if (index == null || ctx.sheets[index].hide === 1) leaveCurrentSheet(ctx);
 }
 
-// Everything the grid paints per sheet, derived in the recipe that makes the sheet current: the
-// first frame after a switch must not draw the new cells on the previous sheet's geometry. A sheet nobody
-// selected in yet, at a mount, a first visit or a copy, opens on A1, since a key does nothing without a cursor.
+// The per-sheet paint data is derived in the recipe that makes the sheet current, so no frame mixes sheets.
+// A sheet nobody selected in opens on A1: a key needs a cursor.
 export function applySheetView(ctx: Context) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
@@ -103,9 +102,8 @@ export function addSheet(
     if (!newSheetID) changeSheet(ctx, id);
 }
 
-// A sheet's cells come stored as a sparse list and the editor works on a full matrix. So a sheet gets its matrix where
-// it enters the editor, at the mount or an add, and every sheet the editor holds has one. A sheet the replay gave a
-// matrix keeps it.
+// A sheet's cells are stored as a sparse list but the editor works on a full matrix, so a sheet gets its matrix
+// where it enters the editor. A sheet the replay gave a matrix keeps it.
 export function initSheetData(sheet: Sheet) {
     if (!sheet.data) {
         const { row, column } = gridSize(sheet);

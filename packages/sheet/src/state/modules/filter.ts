@@ -248,7 +248,7 @@ function toIsoDay(input: string): string | null {
     return update('YYYY-MM-DD', v);
 }
 
-// A blank cell matches only isEmpty and the negative conditions, since each negative is its positive's exact complement.
+// A blank cell matches only isEmpty and the negative conditions, as each negative is its positive's complement.
 // An incomplete condition, such as a blank operand or an unparseable date, filters nothing.
 export function buildFilterConditionMatcher(condition: FilterCondition): (cell: Cell | null | undefined) => boolean {
     const { conditionName, values } = condition;

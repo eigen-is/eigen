@@ -28,9 +28,7 @@ import type {
 import type { ConditionRuleType } from './modules/condition-format';
 import type { PatchOptions } from './utils';
 
-// Re-exported so state code needn't know where each type lives. The cell and range shapes
-// are lib's and reach this file through the engine's types. Op and the conditional-format and
-// validation rules come from lib directly, because the server reads them without the engine.
+// Re-exported so state code needn't know where each type lives.
 export type {
     Cell,
     CellMatrix,
@@ -92,11 +90,8 @@ export type Presence = {
 
 export type SheetConfig = LibSheetConfig & EditorSheetConfigExtras;
 
-// The sheet as the editor holds it: lib's stored fields plus editor-only ones, such as the filter criteria, which never
-// reach the stored shape. `config` widens to the editor's SheetConfig. `id` is
-// required, because the editor names every sheet by it. A stored sheet may lack one: the Workbook takes lib's Sheet in
-// its `data` and gives such a sheet an id when it mounts. Fields that persist, such as the frozen panes, the hyperlinks
-// and the tab colour, live on lib's Sheet, since the server reads them too.
+// The sheet as the editor holds it: lib's stored fields plus editor-only ones that never reach the stored shape.
+// `id` is required here, but a stored sheet may lack one: the Workbook gives it an id when it mounts.
 export type Sheet = Omit<LibSheet, 'config' | 'id'> & {
     id: string;
     config?: SheetConfig;

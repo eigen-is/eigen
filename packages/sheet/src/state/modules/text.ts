@@ -1,7 +1,8 @@
 // Measures and lays out a cell's text for the canvas: the font set it draws in, where its lines wrap, and where each
-// piece of text sits, a rich cell's runs included. The painter lays out here on its grid's canvas, and a commit fits its
-// row on measuringContext. Measurements are cached until a font slice loads, when the font watcher clears them and tells
-// the grids to redraw. The cell editors ask for the slices of the text being typed, so a commit measures the real face.
+// piece of text sits, a rich cell's runs included. The painter lays out here on its grid's canvas, and a commit fits
+// its row on measuringContext. Measurements are cached until a font slice loads, when the font watcher clears them
+// and tells the grids to redraw. The cell editors ask for the slices of the text being typed, so a commit measures
+// the real face.
 
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { cellFontName, cellFontSize, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
@@ -164,9 +165,8 @@ export function measuringContext() {
     return measuring;
 }
 
-// Grows a row to show a cell's text whole, the height a commit or a format stores for every reader. The painter lays
-// the text out in the cell's text box, 2 px smaller than the cell each way, and 2 px in from the box's edge. A row sized
-// by hand stays, and a row another cell made taller stays too.
+// Grows a row to show a cell's text whole. The painter lays the text out in a box 2 px smaller than the cell each way,
+// and 2 px in from its edge. A row sized by hand stays, and so does a row another cell made taller.
 export function growRowToFit(ctx: Context, config: SheetConfig, cell: Cell, r: number, c: number) {
     if (config.customHeight?.[r]) return;
     const measuring = measuringContext();
@@ -291,8 +291,7 @@ export function drawLineInfo(
 }
 
 // Lays out the cell's text for the painter, or returns null when the cell has no value. Without `option.cellWidth`
-// it computes only the totals. Without `option.cellHeight` the caller fits the row to the text, so a plain cell's
-// wrapped lines are all laid out rather than only those that fit the row.
+// it computes only the totals. Without `option.cellHeight` all wrapped lines are laid out, to fit the row to them.
 export function getCellTextInfo(
     cell: Cell,
     renderCtx: CanvasRenderingContext2D,

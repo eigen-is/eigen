@@ -1,7 +1,7 @@
 // The link card over a cell: hovering a cell's link shows it, with buttons to open, copy, edit or remove the link. The
 // card sits under the cell inside the grid. Insert link and the card's pencil set ctx.linkCard editing, and the card
-// then opens the link dialog in the sheet's dialog slot in its own place. The card hides while the range picker is open,
-// so a pick over a linked cell draws none.
+// then opens the link dialog in the sheet's dialog slot in its own place. The card hides while the range picker is
+// open, so a pick over a linked cell draws none.
 
 import { cn } from '@workspace/ui/lib/utils';
 import type { LucideIcon } from 'lucide-react';

@@ -249,8 +249,8 @@ export const SheetOverlay: React.FC = () => {
         }
     }, [context.warnDialog]);
 
-    // Keyed on scrollRequest, a fresh object per request, not on the scrollLeft and scrollTop mirror: syncScroll updates
-    // that on every recipe, which would rewind a scroll in progress.
+    // Keyed on scrollRequest, not on the scrollLeft and scrollTop mirror: syncScroll updates that on every recipe,
+    // which would rewind a scroll in progress.
     useEffect(() => {
         const req = context.scrollRequest;
         const el = refs.cellArea.current;
@@ -331,8 +331,8 @@ export const SheetOverlay: React.FC = () => {
 
     const computedCellValue = cellValue();
 
-    // One overlay region per frozen pane. The passive visuals render into every region, and each region's clip shows its
-    // portion. A stateful singleton renders into the one region that holds its anchor cell.
+    // One overlay region per frozen pane. Passive visuals render into every region, and its clip shows its portion.
+    // A stateful singleton renders into the one region that holds its anchor cell.
     const freeze = refs.globalCache.freezen?.[context.currentSheetId];
     const regions = computeOverlayRegions(freeze, context.cellmainWidth, context.cellmainHeight);
     const lastSel = context.selections?.at(-1);

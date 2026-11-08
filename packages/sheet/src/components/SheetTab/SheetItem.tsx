@@ -59,9 +59,8 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
         selection?.addRange(range);
     }, [editing]);
 
-    // Radix would focus the menu's trigger as the menu goes, and its typeahead would take the next keys: an H runs Hide.
-    // So the grid takes them, unless Rename was picked, and that starts here so that the closing menu can't take the
-    // focus from the name.
+    // Radix would refocus the menu's trigger and its typeahead would take the next keys, so the grid takes them.
+    // Rename starts here, so that the closing menu can't take the focus from the name.
     const refocusGrid = useCellEditorRefocus();
     const renamePicked = useRef(false);
     const onMenuCloseAutoFocus = useCallback(

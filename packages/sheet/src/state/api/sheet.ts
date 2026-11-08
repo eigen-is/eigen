@@ -1,5 +1,5 @@
-// The sheet calls on the workbook's context, such as hiding, copying or ordering a sheet. Most of them write the context
-// they are given, so a caller runs them inside an edit's recipe.
+// The sheet calls on the workbook's context, such as hiding, copying or ordering a sheet. Most of them write the
+// context they are given, so a caller runs them inside an edit's recipe.
 
 import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { cloneDeep, sortBy } from 'es-toolkit/compat';

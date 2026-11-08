@@ -1,6 +1,6 @@
 // The grid's right-click menu, with items for a cell, a row header or a column header, such as the clipboard, inserting
-// and deleting rows and columns, hiding, sorting and filters. useSheetContextMenu selects what was clicked and opens the
-// menu for one area, on a right click or a long press on touch.
+// and deleting rows and columns, hiding, sorting and filters. useSheetContextMenu selects what was clicked and opens
+// the menu for one area, on a right click or a long press on touch.
 
 import { CommentLifecycleMenuItems } from '@workspace/ui/components/comments';
 import {

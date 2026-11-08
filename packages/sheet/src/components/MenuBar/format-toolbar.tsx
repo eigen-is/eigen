@@ -1,4 +1,4 @@
-// The workbook bar's format icon row, modeled on the docs toolbar, such as the font, bold, the colors and the alignment.
+// The workbook bar's format icon row, modeled on the docs toolbar: the font, bold, the colors and the alignment.
 // It drives the same handlers as the Format menu and replaces none of it, so every icon it folds away on a narrow bar
 // is still a row of that menu. A viewer gets no icon row.
 

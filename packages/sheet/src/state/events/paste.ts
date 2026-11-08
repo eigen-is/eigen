@@ -31,10 +31,8 @@ import { SHEET_HOTKEYS } from './keyboard';
 // What a paste reads of the clipboard: a paste event's DataTransfer, or one a menu row filled.
 type PastedData = { getData: (type: string) => string; files: ArrayLike<File> };
 
-// The one paste of the grid, from a paste event or a menu row. A paste is the workbook's own copy exactly when the
-// clipboard's table carries its id, and then it lands the live cells with their formulas and formats. A copy whose sheet
-// is gone pastes as a table. An image file goes to the app's fit-to-pane insert and upload, as the Insert menu and an OS
-// drop run it.
+// The one paste of the grid. It is the workbook's own copy only when the clipboard's table carries its id.
+// An image file goes to the app's insert and upload.
 export function handlePaste(ctx: Context, clipboardData: PastedData, onImageFile?: (file: File) => void) {
     // A paste into several ranges is not supported.
     if (ctx.allowEdit === false || (ctx.selections?.length ?? 0) > 1) return;
@@ -243,8 +241,7 @@ function pasteTable(ctx: Context, html: string) {
     const anchor = ctx.selections?.[0];
     if (!anchor) return;
 
-    // Parse into an inert document, never a live <div>: a live element's innerHTML loads <img> and fires its onerror even
-    // while detached.
+    // Parse into an inert document, never a live <div>: a detached element's innerHTML still loads <img>.
     const parsed = new DOMParser().parseFromString(html, 'text/html');
 
     const trList = parsed.querySelectorAll('table tr');
@@ -485,11 +482,8 @@ function pasteFormula(ctx: Context, formulaStr: string) {
     jfrefreshgrid(ctx, [{ row: [r, r], column: [c, c] }]);
 }
 
-// The grid a paste lands in, grown when the paste runs past its last row or column. Every paste asks here before it
-// writes, so a refused one ships no op and takes no undo step. Nothing comes back when the paste would land over part
-// of a merge, or would grow the sheet past its limits, and a notice says which. A paste that covers a merge whole
-// replaces it, as in Excel. The sheet's size grows with the grid,
-// because a stored snapshot keeps the size and a reader builds the grid at that size.
+// The grid a paste lands in, grown when the paste runs past it; undefined when the paste is refused, before any op.
+// The sheet's size grows too, because a reader builds the grid at the stored size.
 function roomFor(ctx: Context, top: number, bottom: number, left: number, right: number): CellMatrix | undefined {
     if (hasPartMC(ctx, top, bottom, left, right)) {
         ctx.warnDialog = PART_MERGE_REFUSAL;

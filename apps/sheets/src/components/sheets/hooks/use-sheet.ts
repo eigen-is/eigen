@@ -94,8 +94,8 @@ export function useSheet(
         if (loadSnapshot(doc, true)) setSnapshotVersion((v) => v + 1);
     };
 
-    // The grid's own seed runs in its effect, before this host's, so the queue applies on top of the seed. The seed is
-    // the first anchor.
+    // The grid seeds its workbook as it mounts, before this effect, so the queue applies on top of the seed. The seed
+    // is the first anchor.
     useEffect(() => {
         const pending = pendingRef.current;
         const workbook = workbookRef.current;

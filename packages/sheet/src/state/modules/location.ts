@@ -7,9 +7,8 @@ import { sortedIndex } from 'es-toolkit/compat';
 import type { Context } from '../context';
 import type { OverlayRegionSpec } from './freeze';
 
-// viewX and viewY are relative to the cell area's top left, and width and height are its size. x and y are the place on
-// the sheet the pointer shows, which in a frozen pane doesn't follow the scroll. A point over a header or past the grid
-// has a view coordinate outside the cell area.
+// viewX and viewY are relative to the cell area's top left; x and y are the sheet place under the pointer.
+// In a frozen pane x and y don't follow the scroll, and a point over a header or past the grid lies outside the area.
 type SheetPoint = {
     viewX: number;
     viewY: number;

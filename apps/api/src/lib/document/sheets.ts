@@ -30,25 +30,16 @@ import type * as Y from 'yjs';
 // What the server's recalc lets an untrusted workbook's formulas cost. Past any bound the recalc fails like any other,
 // and the sheets keep the values they hold.
 export const SERVER_RECALC_BUDGET = {
-    // The slots the dependency index lists each range in (dependencySlots), the range cut to its sheet. A range lies in
-    // the 64 × 16 blocks it meets. Cut to its sheet, a long range from the top takes one slot per column instead, and
-    // one from the left takes one slot per row, as layoutOf decides by shape. No workbook of the
-    // 1,062-file corpus needs more than 68.8 million (3.3 s), and this is four times that.
+    // The slots the dependency index lists each range in, the range cut to its sheet. A range lies in the 64 × 16 blocks
+    // it meets, but a long range from the top or left takes one slot per column or row instead.
     maxDependencySlots: 280_000_000,
-    // The entries the lookups of the formula cells visit in the index, whether each range covers the cell or not. They
-    // bound the time the links take to count and to make. A range near many formula cells that covers none makes no
-    // link, so without this a crafted workbook of no links spent 20 s counting them. The largest corpus workbook that
-    // recalcs needs 43.2 million, and this is twice that. The two past it need 121 and 285 million. The first failed
-    // the cell budget below after 16 s, the second the edge budget, and both now fail before any link is counted.
+    // The index entries the formula cells' lookups visit, whether a range covers the cell or not. A range that covers
+    // no cell makes no link, so the links alone would not bound the time spent counting.
     maxDependencyVisits: 90_000_000,
-    // The links between formulas, one for each formula and each formula cell it reads. They bound the graph's memory:
-    // 43 million links took 7 GB. The slots don't bound them, because a whole column costs one slot, but 20,000
-    // `=COUNT(A:A)` in that column make 400 million links. The largest corpus workbook that recalcs needs 21 million,
-    // and this is twice that.
+    // The links between formulas, one per formula cell a formula reads. They bound the graph's memory, which the slots
+    // don't, because a whole column costs one slot but many formulas reading it make many links.
     maxDependencyEdges: 40_000_000,
-    // The cells the evaluation of its ranges reads. The most a corpus workbook reads that recalcs in under 10 s is
-    // 30 million (9.9 s), just under this. 2,000 COUNTIFs over A1:Z1048576 fail at it in 17 s, well inside an export's
-    // deadline.
+    // The cells the evaluation of ranges reads, which bounds the recalc time.
     maxCellsRead: 32_000_000,
 };
 
@@ -66,8 +57,8 @@ export function readSheetsFromDoc(
     const replayed = replaySheetsOps(sheets, sheetsOpLog(doc).toArray()).map(withMaterializedData);
 
     // Only a workbook nobody computed is recalculated here, such as an xlsx import whose recalc failed. Only the export
-    // asks for it. A large recalc took 39 s, more than a preview or a search extract may take, so those read the
-    // replayed values. A recalc that fails leaves the replayed values, because an export must not fail on it.
+    // asks for it, because a recalc can outlast a preview or a search extract. A recalc that fails leaves the replayed
+    // values, because an export must not fail on it.
     if (!recalc || computed) return { sheets: replayed, recalcError: null };
     try {
         return {

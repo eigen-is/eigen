@@ -37,9 +37,8 @@ export function resetRangeIndexes() {
     formulaUIState.rangeIndexes = [];
 }
 
-// A plain copy of the context, not an immer draft. Evaluation reads cells one at a time. Each read through a draft is
-// several times slower, and it makes child drafts that immer must walk when the recipe ends. A sweep that writes between
-// evaluations, such as a paste's, resolves over the live sheets instead.
+// A plain copy of the context, not an immer draft: each cell read through a draft is slower and makes child drafts.
+// A sweep that writes between evaluations, such as a paste's, resolves over the live sheets instead.
 export function snapshotContext(ctx: Context): Context {
     return isDraft(ctx) ? current(ctx) : ctx;
 }
@@ -89,9 +88,8 @@ export class FormulaCache {
 
     public set formulaCellInfoMap(v: FormulaCellInfoMap | null) {
         this.engine.state.formulaCellInfoMap = v;
-        // Code assigns the map only to reset it, such as after a row insert or a sheet rename. The reverse index
-        // mirrors the map, so it resets too. The resolved references go as well, because they hold the sheets' old
-        // names. setFormulaCellInfo fills them all again.
+        // The map is assigned only to reset it, so the reverse index and the resolved references, which hold the
+        // sheets' old names, reset with it. setFormulaCellInfo fills them all again.
         this.engine.state.dependencyIndex.clear();
         this.cellTextToIndexList = {};
     }

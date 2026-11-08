@@ -95,9 +95,8 @@ export function revealSearchMatch(ctx: Context, cell: SearchHighlight) {
     centerCellInView(ctx, cell.r, cell.c);
 }
 
-// Rewrite every occurrence of the query inside one cell via the recalc path. Returns true iff the
-// cell was rewritten. A formula cell (its COMPUTED value matched — the Excel/Google convention is not
-// to rewrite inside formula results) or a value that no longer matches (a stale id under collab) all no-op and return false, so they're excluded from the replaced count.
+// Rewrites every occurrence of the query in one cell via the recalc path, and returns whether it did.
+// A formula cell is left alone, as in Excel and Google Sheets, and so is a value a peer changed since the search.
 function replaceInCell(
     ctx: Context,
     cell: SearchHighlight,

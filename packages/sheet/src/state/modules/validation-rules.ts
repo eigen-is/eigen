@@ -65,9 +65,8 @@ export function validationLookup(
     };
 }
 
-// Takes an area out of every rule on the sheet, and drops a rule left with no cell or split past the range cap. A
-// changed rule is written whole under its id: a write into its ranges alone would fail where a peer deleted the rule meanwhile, and take the rest
-// of its batch with it.
+// Takes an area out of every rule on the sheet, and drops a rule left with no cell or split past the range cap.
+// A changed rule is written whole under its id: a write into its ranges alone fails if a peer deleted the rule.
 export function clearValidations(sheet: Sheet, area: SingleRange) {
     const validations = (sheet.dataValidations ??= {});
     for (const [id, entry] of Object.entries(validations)) {
@@ -78,9 +77,8 @@ export function clearValidations(sheet: Sheet, area: SingleRange) {
     }
 }
 
-// Puts a rule on ranges of the sheet under an id. The ranges join the ones the id already has, and its rule stays.
-// They are coalesced on the way in, so a paste or a fill that lands one range per cell leaves the rule a few ranges.
-// Past a cap the cells keep no rule, and the id's rule stays as it was.
+// Puts a rule on ranges of the sheet under an id; they join the id's ranges and are coalesced, so a paste or fill
+// that lands one range per cell leaves a few. Past a cap the cells keep no rule, and the id's rule stays as it was.
 export function addValidation(sheet: Sheet, id: string, rule: DataValidationRule, ranges: readonly SingleRange[]) {
     const landed = coalescedRanges(ranges);
     for (const range of landed) clearValidations(sheet, range);
