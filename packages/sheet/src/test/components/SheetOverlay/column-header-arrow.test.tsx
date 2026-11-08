@@ -10,7 +10,7 @@ const { act, createElement, createRef } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { WorkbookContext } = await import('../../../context');
 const { ColumnHeader } = await import('../../../components/SheetOverlay/ColumnHeader');
-const { defaultContext, defaultSettings } = await import('../../../state');
+const { defaultContext } = await import('../../../state');
 type GlobalCache = import('../../../state').GlobalCache;
 type Context = import('../../../state').Context;
 type SheetConfig = import('../../../state').SheetConfig;
@@ -30,6 +30,7 @@ const refs = {
     canvas: createRef<HTMLCanvasElement | null>(),
     cellArea: createRef<HTMLDivElement | null>(),
     workbookContainer: createRef<HTMLDivElement | null>(),
+    hooks: { current: {} },
 };
 
 let cleanup: (() => Promise<void>) | undefined;
@@ -63,7 +64,7 @@ test('losing edit rights while the same column stays hovered hides its menu arro
                             context,
                             getContext: () => context,
                             setContext: () => {},
-                            settings: defaultSettings,
+                            aspectLocked: false,
                             refs,
                             handleUndo: () => {},
                             handleRedo: () => {},

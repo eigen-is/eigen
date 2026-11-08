@@ -1,10 +1,11 @@
 // The React context the Workbook provides to every part of the grid: the workbook it renders, the way to write it, the
-// settings, the DOM refs, undo and redo, and the paste a menu row runs. `context` is the workbook as it was last rendered. A read that must see a
-// write made since that render, such as one right after an edit, goes through `getContext()`.
+// DOM refs and the host's hooks, undo and redo, and the paste a menu row runs. `context` is the workbook as it was last
+// rendered. A read that must see a write made since that render, such as one right after an edit, goes through
+// `getContext()`. A host render changes none of this, so the parts behind a memo stay as they are.
 
 import React from 'react';
-import type { Context, GlobalCache, PatchOptions, Settings } from '../state';
-import { defaultContext, defaultSettings } from '../state';
+import type { Context, GlobalCache, Hooks, PatchOptions } from '../state';
+import { defaultContext } from '../state';
 
 export type RefValues = {
     globalCache: GlobalCache;
@@ -13,6 +14,7 @@ export type RefValues = {
     canvas: React.MutableRefObject<HTMLCanvasElement | null>;
     cellArea: React.MutableRefObject<HTMLDivElement | null>;
     workbookContainer: React.MutableRefObject<HTMLDivElement | null>;
+    hooks: React.MutableRefObject<Hooks>;
 };
 
 export type SetContextOptions = {
@@ -45,6 +47,7 @@ const defaultRefs: RefValues = {
     canvas: React.createRef<HTMLCanvasElement | null>(),
     cellArea: React.createRef<HTMLDivElement | null>(),
     workbookContainer: React.createRef<HTMLDivElement | null>(),
+    hooks: { current: {} },
 };
 
 const defaultWorkbook = defaultContext(defaultRefs);
@@ -53,7 +56,7 @@ const WorkbookContext = React.createContext<{
     context: Context;
     getContext: () => Context;
     setContext: (recipe: (ctx: Context) => void, options?: SetContextOptions) => void;
-    settings: Required<Settings>;
+    aspectLocked: boolean;
     refs: RefValues;
     handleUndo: () => void;
     handleRedo: () => void;
@@ -62,7 +65,7 @@ const WorkbookContext = React.createContext<{
     context: defaultWorkbook,
     getContext: () => defaultWorkbook,
     setContext: () => {},
-    settings: defaultSettings,
+    aspectLocked: false,
     handleUndo: () => {},
     handleRedo: () => {},
     pasteClipboard: () => {},

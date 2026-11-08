@@ -34,8 +34,9 @@ type PastedData = { getData: (type: string) => string; files: ArrayLike<File> };
 
 // The one paste of the grid, from a paste event or a menu row. A paste is the workbook's own copy exactly when the
 // clipboard's table carries its id, and then it lands the live cells with their formulas and formats. A copy whose sheet
-// is gone pastes as a table.
-export function handlePaste(ctx: Context, clipboardData: PastedData) {
+// is gone pastes as a table. An image file goes to the app's fit-to-pane insert and upload, as the Insert menu and an OS
+// drop run it.
+export function handlePaste(ctx: Context, clipboardData: PastedData, onImageFile?: (file: File) => void) {
     // A paste into several ranges is not supported.
     if (ctx.allowEdit === false || (ctx.selections?.length ?? 0) > 1) return;
     ctx.editingCellPosition = [];
@@ -52,8 +53,7 @@ export function handlePaste(ctx: Context, clipboardData: PastedData) {
     } else if (/<table\b/i.test(html)) {
         pasteTable(ctx, html);
     } else if (clipboardData.files.length === 1 && clipboardData.files[0].type.startsWith('image')) {
-        // The app's fit-to-pane insert and upload, as the Insert menu and an OS drop run it.
-        ctx.hooks.onPasteImageFile?.(clipboardData.files[0]);
+        onImageFile?.(clipboardData.files[0]);
     } else {
         const text = clipboardData.getData('text/plain');
         if (text.startsWith('=')) pasteFormula(ctx, text);

@@ -8,13 +8,13 @@ import {
     SHEET_DEFAULT_ROW_HEIGHT,
     SHEET_ROW_HEADER_WIDTH,
 } from '@workspace/lib/sheets';
+import type { CommentCard } from '@workspace/lib/types/comments';
 import { isNil, sortBy } from 'es-toolkit/compat';
 import type { Cell, CellMatrix } from '../engine/types';
 import { FormulaCache } from './modules';
 import type { CellGlyph } from './modules/cell-glyph';
 import type { FloatingRef } from './modules/floating';
 import { normalizeSelection } from './modules/selection';
-import type { Hooks } from './settings';
 import type {
     FilterOptions,
     GlobalCache,
@@ -55,7 +55,6 @@ export type Context = {
     searchHighlights?: SearchHighlight[];
     searchActive?: SearchHighlight | null;
     linkCard?: LinkCardProps;
-    // Whether a range picker is open. While it is, the cell editor and the link card keep out of the way of the pick.
     // A notice for the overlay to show, such as why an edit was refused. A write sets it, and the
     // overlay opens the notice and clears it.
     warnDialog?: string;
@@ -164,7 +163,7 @@ export type Context = {
         id: string;
     }[];
     formulaCache: FormulaCache;
-    hooks: Hooks;
+    commentCards?: Record<string, CommentCard>;
 
     sheetFocused: boolean;
 
@@ -250,7 +249,6 @@ export function defaultContext(refs: RefValues): Context {
         groupValuesRefreshData: [],
         // Immer doesn't freeze a class, so this stays mutable inside and outside a recipe.
         formulaCache: new FormulaCache(),
-        hooks: {},
 
         getRefs: () => refs,
     };

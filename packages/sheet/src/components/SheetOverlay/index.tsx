@@ -31,7 +31,6 @@ import {
     handleCellAreaMouseDown,
     handleOverlayMouseMove,
     handleOverlayMouseUp,
-    normalizeSelection,
     overlayRegionForCell,
     selectAll,
     showLinkCard,
@@ -237,13 +236,6 @@ export const SheetOverlay: React.FC = () => {
         };
         setContext((draftCtx) => tryInsertRowCol(draftCtx, insertRowColOp, false), { insertRowColOp });
     }, [getContext, setContext]);
-
-    useEffect(() => {
-        setContext((draftCtx) => {
-            if (!draftCtx.selections?.length)
-                draftCtx.selections = normalizeSelection(draftCtx, [{ row: [0, 0], column: [0, 0] }]);
-        });
-    }, [setContext]);
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: fires once per new warnDialog message; showNotice + setContext are stable
     useEffect(() => {

@@ -227,8 +227,8 @@ function LinkItem() {
 }
 
 function ImageItem() {
-    const { settings } = useContext(WorkbookContext);
-    const { onInsertImage } = settings.hooks;
+    const { refs } = useContext(WorkbookContext);
+    const { onInsertImage } = refs.hooks.current;
     if (!onInsertImage) return null;
     return (
         <DropdownMenuItem onClick={() => onInsertImage()}>
@@ -258,8 +258,8 @@ function TickBoxItem() {
 }
 
 function CommentItems({ part }: { part: 'rows' | 'delete' }) {
-    const { context, settings } = useContext(WorkbookContext);
-    const { getCommentInfo, onAddComment, onDeleteComment, commentLifecycle } = settings.hooks;
+    const { context, refs } = useContext(WorkbookContext);
+    const { getCommentInfo, onAddComment, onDeleteComment, commentLifecycle } = refs.hooks.current;
     const last = context.selections?.[context.selections.length - 1];
     const row = last ? (last.row_focus ?? last.row[0]) : 0;
     const col = last ? (last.column_focus ?? last.column[0]) : 0;
@@ -273,7 +273,7 @@ function CommentItems({ part }: { part: 'rows' | 'delete' }) {
         <CommentLifecycleMenuItems
             lifecycle={commentLifecycle}
             item={info ? { card: info.card, entry: info.entry } : null}
-            canWrite={settings.allowEdit}
+            canWrite={context.allowEdit}
             onAddComment={onAddComment && (() => onAddComment(row, col))}
             onDelete={onDeleteComment && (() => onDeleteComment(row, col))}
             part={part}

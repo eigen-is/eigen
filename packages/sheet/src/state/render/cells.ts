@@ -2,7 +2,7 @@
 // checkbox, data bar, text and grid lines. Text layout itself lives in
 // getCellTextInfo.
 
-import { INDICATOR_RED } from '@workspace/lib/constants/comment-indicator';
+import { commentIndicatorColor, INDICATOR_RED } from '@workspace/lib/constants/comment-indicator';
 import { isForcedStringNumber, normalizedAttr } from '../modules/cell';
 import { cellIndicatorRect } from '../modules/cell-glyph';
 import { checkCF } from '../modules/condition-format';
@@ -52,10 +52,9 @@ export function drawCellIndicator(
 
 // Drawn identically by both render paths — most commented cells in a workbook
 // hold a value, plenty do not.
-function drawCommentIndicator(pass: RenderPass, r: number, c: number, startY: number, endX: number) {
+function drawCommentIndicator(pass: RenderPass, cardId: string, startY: number, endX: number) {
     const { renderCtx, sheetCtx, offsetLeft, offsetTop } = pass;
-    const commentInfo = sheetCtx.hooks.getCommentInfo?.(r, c);
-    const color = commentInfo?.indicatorColor ?? commentInfo?.card.color ?? INDICATOR_RED;
+    const color = commentIndicatorColor(sheetCtx.commentCards?.[cardId]?.color);
     drawCellIndicator(renderCtx, 'right', cellIndicatorRect('right', 0, startY + offsetTop, endX + offsetLeft), color);
 }
 
@@ -172,9 +171,8 @@ export function nullCellRender(
     renderCtx.fillRect(cellsize[0], cellsize[1], cellsize[2], cellsize[3]);
 
     // Comment indicator triangle
-    if (flowdata?.[r]?.[c]?.commentCardIds?.length) {
-        drawCommentIndicator(pass, r, c, startY, endX);
-    }
+    const cardId = flowdata?.[r]?.[c]?.commentCardIds?.[0];
+    if (cardId) drawCommentIndicator(pass, cardId, startY, endX);
 
     if (rule) {
         const box = cellTextBox(startX + offsetLeft, startY + offsetTop, endX + offsetLeft, endY + offsetTop);
@@ -277,9 +275,8 @@ export function cellRender(
     }
 
     // Comment indicator triangle
-    if (cell?.commentCardIds?.length) {
-        drawCommentIndicator(pass, r, c, startY, endX);
-    }
+    const cardId = cell?.commentCardIds?.[0];
+    if (cardId) drawCommentIndicator(pass, cardId, startY, endX);
 
     // Forced-string indicator (green triangle top-left)
     if (isForcedStringNumber(cell)) {
