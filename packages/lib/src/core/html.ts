@@ -46,8 +46,8 @@ export function stripTagsServer(html: string): string {
         // `[^<>]`, not `[^>]`: a `<` no `>` follows would rescan the rest of the input from every `<`.
         .replace(/<[^<>]+>/g, '');
     // `&nbsp;` is not one of escapeHtml's five, so it stays here; the rest decode through
-    // the shared inverse, which decodes `&amp;` LAST. Doing it first, as this used to,
-    // turned an escaped `&amp;lt;` into a `<` the source never contained.
+    // the shared inverse, which decodes `&amp;` LAST. Done first, it would turn an escaped
+    // `&amp;lt;` into a `<` the source never contained.
     return unescapeHtml(text.replace(/&nbsp;/gi, ' '))
         .replace(/[ \t]+/g, ' ')
         .replace(/\n{3,}/g, '\n\n')
