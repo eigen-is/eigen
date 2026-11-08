@@ -8,7 +8,7 @@ import { member as memberSchema } from '../../../auth-schema';
 import type { App } from '../../app';
 import { getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getBackupJob } from '../../lib/backup/jobs';
-import { buildArtifactName, buildServerArchiveName, getBackupsDir, serverSidecarPath } from '../../lib/backup/paths';
+import { buildServerArchiveName, freeArtifactName, getBackupsDir, serverSidecarPath } from '../../lib/backup/paths';
 import { getDataRoot, USER_HOMES_DIR } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home/get-home';
@@ -200,7 +200,7 @@ describe('Server backup routes', () => {
 
     test('delete refuses a name outside the grammar and one that is not there', async () => {
         const at = new Date('2026-09-05T02:00:00Z');
-        for (const name of [buildArtifactName(ctx.alice.user.id, at), 'server-manual-full-..tar', 'x']) {
+        for (const name of [freeArtifactName(ctx.alice.user.id, at), 'server-manual-full-..tar', 'x']) {
             const res = await ctx.alice.api.admin['server-backup'].archives({ name }).delete();
             expect(res.status).toBe(400);
         }

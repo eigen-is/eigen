@@ -5,6 +5,7 @@
 // public methods serve server code, such as chat, collab and the home relay.
 
 import { SWEEP_GRACE_MS } from '@workspace/lib/constants/sweep';
+import { commentAssignedTag } from '@workspace/lib/notification/tags';
 import { CHATS_FOLDER_NAME } from '@workspace/lib/types/chat';
 import type {
     DriveACL,
@@ -25,6 +26,7 @@ import {
     DRIVE_TYPE_FOLDER,
     isContainerType,
     isDocumentType,
+    stripEigenExtension,
     withEigenExtension,
 } from '@workspace/lib/types/drive';
 import type {
@@ -42,14 +44,15 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import { validateACLEntries, validateEmailAddress } from '@workspace/lib/validation';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
-import { assertCommentChatExists, ChatRoom, withCommentIndex } from '../chat';
+import { ChatRoom, withCommentIndex } from '../chat';
+import { broadcastCommentIndexUpdated } from '../chat/sse-events';
 import { CollabDocument } from '../collab/collab-document';
 import { enforceMaxUploadSize, enforceMountQuota } from '../config/enforcement';
 import { getServerSettings } from '../config/server-settings';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
 import { ApiError, computeEtag } from '../core';
 import type { Home } from '../home';
-import { broadcastToOwnerAndMembers } from '../home/home-relay';
+import { broadcastToOwnerAndMembers, sendToHome } from '../home/home-relay';
 import { composeCollaboratorsEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
 import type { DatabaseHold } from '../mount';
@@ -152,14 +155,12 @@ export class Drive {
     }
 
     public async destruct(): Promise<void> {
-        // A mount that is still starting is not in this.mounts yet. Its addMount sees the home closing
-        // and closes the mount itself. The home closes the mount's metadata.db after destruct returns,
-        // so destruct waits for that addMount first.
+        // A mount still starting is not in this.mounts yet, and the home closes its metadata.db after destruct returns.
+        // So destruct waits for that addMount, which sees the home closing and closes the mount itself.
         await Promise.allSettled(this.addingMounts);
 
-        // An open collab document may still write to its database while it closes, so the documents
-        // close before the mount databases do. A document that is still loading would keep
-        // destructAll waiting on its download, so every mount stops its downloads first.
+        // An open document may still write to its database while it closes, so documents close before the mount
+        // databases. A document still loading would keep destructAll waiting, so every mount stops its downloads first.
         for (const mount of this.mounts.values()) mount.downloads.abort();
         await this.documents.destructAll();
 
@@ -215,9 +216,8 @@ export class Drive {
         if (config.isDefault) this.defaultMountId = config.id;
     }
 
-    // Applies saved mount settings to the live mount, so a change takes effect without reloading the home.
-    // Two changes to one mount run one after the other. Otherwise both could build a new mount, and
-    // the one that lands last would leave the other open.
+    // Applies saved mount settings to the live mount. Two changes to one mount run in turn, or both could build a new
+    // mount and the one that lands last would leave the other open.
     public async updateMount(config: MountConfig, enabled: boolean): Promise<void> {
         return this.runInOrder(`mount:${config.id}`, async () => {
             const live = this.mounts.get(config.id);
@@ -229,9 +229,8 @@ export class Drive {
                 await this.addMount(config);
                 return;
             }
-            // A mount binds its storage backend when it is built, so new storage needs a new mount.
-            // Closing the old one syncs its open databases to the old storage. The new one replays any
-            // pending uploads to the new storage when it starts.
+            // A mount binds its storage backend when built, so new storage needs a new mount. Closing the old one syncs
+            // its databases to the old storage, and the new one replays pending uploads when it starts.
             if (mountStorageIdentity(live.config) !== mountStorageIdentity(config)) {
                 await this.removeMount(config.id);
                 await this.addMount(config);
@@ -247,9 +246,8 @@ export class Drive {
         }
         const mount = this.mounts.get(mountId);
         if (!mount) return;
-        // The same order as destruct, for one mount. A document that is still loading would keep
-        // destructMount waiting on its download, so the downloads stop first. The documents close
-        // before the databases do, so each one saves its last edits.
+        // The same order as destruct, for one mount: downloads stop, so no loading document keeps destructMount
+        // waiting, and documents close before the databases, so each saves its last edits.
         mount.downloads.abort();
         await this.documents.destructMount(mount);
         // The mount can't serve anything by now, so it goes even when its databases fail to close.
@@ -412,9 +410,8 @@ export class Drive {
         // bare `.eigendoc` file.
         const safeName = withEigenExtension(validateName(name), type);
         const pathId = await mount.createFolder(parentId, safeName, type);
-        // When the databases can't be set up, the new row is removed again. Left behind, it would take
-        // the name and fail every open. Nobody has seen the row yet, so mount.deletePath is enough. It
-        // skips the trash, sharing and SSE work that Drive.deletePath does.
+        // When the databases can't be set up, the row goes again, or it would take the name and fail every open. Nobody
+        // has seen it, so mount.deletePath is enough, without Drive.deletePath's trash, sharing and SSE work.
         try {
             if (type === DRIVE_TYPE_CHAT) {
                 await ChatRoom.create(this, mountId, pathId);
@@ -450,9 +447,7 @@ export class Drive {
         if (!container) return;
         const chatPath = await this.getPath(mountId, chatPathId);
         if (!chatPath) return;
-        await withCommentIndex(this, mountId, container.id, (index) =>
-            index.ensureComment(chatPath.name, { createdBy }),
-        );
+        await withCommentIndex(this, mountId, container.id, (index) => index.ensureComment(chatPath.name, createdBy));
     }
 
     public async uploadFiles(
@@ -602,9 +597,8 @@ export class Drive {
         return { path: committed, etag: computeEtag(committed) };
     }
 
-    // The folder that a create, copy or move puts something in. A folder on its way to the trash is a
-    // 404 already, the same as one in the trash. Its trash closes the databases under it, and a
-    // document put there meanwhile could take edits it can't save.
+    // The folder a create, copy or move puts something in. A folder on its way to the trash is a 404 already: its trash
+    // closes the databases under it, and a document put there meanwhile could take edits it can't save.
     private async getTargetFolder(mount: Mount, folderId: string): Promise<DrivePath> {
         if (this.documents.isTrashing(mount, folderId)) throw new ApiError(404, 'Folder not found');
         const folder = await mount.getActivePath(folderId);
@@ -612,10 +606,8 @@ export class Drive {
         return folder;
     }
 
-    // A document's databases and its versions take no bytes from a write: an overwritten database breaks the
-    // document, and a file put into versions/ would list and restore as a version. So a write refuses such a path,
-    // both as the file it overwrites and as the folder it writes into. The server's own writers, such as a snapshot,
-    // write through Mount and never meet this check.
+    // A document's databases and versions take no bytes from a person's write: an overwritten database breaks the
+    // document, and a file in versions/ would list as a version. So a write refuses such a path as target or folder.
     private async refuseDocumentPart(mount: Mount, path: DrivePath): Promise<void> {
         let parent: DrivePath | undefined;
         for (const crumb of await mount.getBreadcrumb(path.id)) {
@@ -628,8 +620,7 @@ export class Drive {
         }
     }
 
-    // A person never trashes, renames or moves a part of a document, such as a database, a version, a comment thread
-    // or a media file: a part changes only with its whole document. So no thread goes to the trash on its own. Server
+    // A person never trashes, renames or moves a part of a document, which changes only with its whole document. Server
     // code passes no user, such as a chat that trashes a deleted message's attachments.
     private async refuseInsideDocument(mount: Mount, pathId: string, user: User | undefined): Promise<void> {
         if (!user) return;
@@ -691,7 +682,7 @@ export class Drive {
         }
         // Moving a path out of a shared folder takes read access away from whoever had it through
         // that folder. Their open documents close now, the same as after an ACL change.
-        await this.documents.enforceReadAccessBelow(mount, pathId);
+        await this.documents.forEachOpenDocument((document) => document.enforceReadAccess());
         return movedPath;
     }
 
@@ -706,9 +697,8 @@ export class Drive {
         if (user) {
             await this.recordFileEvent(mountId, pathId, user, { eventType: 'renamed', details: { oldName, newName } });
         }
-        // The people the path is shared with keep a copy of it, and this gives them the new name. It
-        // reaches other homes, so it goes last: when it fails, this owner's tabs and history are up to
-        // date already. The actor stays null, because a rename must not email them.
+        // The people the path is shared with keep a copy of it, and this gives them the new name. It reaches other
+        // homes, so it goes last. The actor stays null, because a rename must not email them.
         await this.pushSharing(mountId, pathId, 'live', null);
     }
 
@@ -786,22 +776,15 @@ export class Drive {
         await this.getMount(mountId).flushContainerDb(containerId);
     }
 
-    // The folder new chats go in. It is looked up by name every time, so the user may rename, move or
-    // delete it. An old `Chats` folder gets the new name. When a file has that name, new chats go in
-    // the mount root.
-    // SharedDrive has no wrapper for it: the route checks that the caller owns the drive, or is in its team.
+    // The folder new chats go in, looked up by name every time, so the user may rename, move or delete it. A file of
+    // that name sends new chats to the mount root. The route checks ownership, so SharedDrive has no wrapper.
     public async ensureChatsFolder(mountId: string): Promise<string> {
         const mount = this.getMount(mountId);
         const root = await mount.getRootFolder();
         if (!root) throw new Error(`Mount '${mountId}' has no root folder`);
 
-        // getChildByName ignores case, so this one lookup also finds an old `Chats`.
         const existing = await mount.getChildByName(root.id, CHATS_FOLDER_NAME);
-        if (existing) {
-            if (existing.type !== DRIVE_TYPE_FOLDER) return root.id;
-            if (existing.name !== CHATS_FOLDER_NAME) await this.renamePath(mountId, existing.id, CHATS_FOLDER_NAME);
-            return existing.id;
-        }
+        if (existing) return existing.type === DRIVE_TYPE_FOLDER ? existing.id : root.id;
 
         // Drive.createFolder tells other tabs about the new folder. Two first chats at once both try to
         // create it, and the one that loses the race uses the folder of the winner.
@@ -851,9 +834,8 @@ export class Drive {
         });
     }
 
-    // A path that leaves its place, such as by a trash or a WebDAV MOVE, takes its WebDAV locks with it,
-    // and those of everything under it. The client can't refresh or unlock them at the old URL, so each
-    // would hold the home until it expires.
+    // A path that leaves its place, such as by a trash or a WebDAV MOVE, takes its WebDAV locks and those under it
+    // along. The client can't refresh or unlock them at the old URL, so each would hold the home until it expires.
     public async releaseLocksUnder(mountId: string, pathId: string): Promise<void> {
         const mount = this.getMount(mountId);
         this.lockManager.releaseAllForPaths([pathId, ...mount.collectDescendantIds(pathId)]);
@@ -878,9 +860,8 @@ export class Drive {
         }
     }
 
-    // The list can hold items that left the trash meanwhile. A folder's delete takes its separately
-    // trashed children with it, and a restore can win an item's lock. permanentlyDelete returns false
-    // for such an item, and the loop moves on.
+    // The list can hold items that left the trash meanwhile, through a folder's delete or a restore that won an item's
+    // lock. permanentlyDelete returns false for such an item, and the loop moves on.
     public async emptyTrash(mountId: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         for (const item of await mount.listTrash()) {
@@ -902,9 +883,8 @@ export class Drive {
         return canWriteFromAncestors(ancestors, user, memberships ?? (await getMemberships(user.id)));
     }
 
-    // Routes change an ACL only through here. The change is merged onto the ACL as it is now, on the
-    // server. Two changes to one path run one after the other. Otherwise both would merge onto the same
-    // old ACL, and the one that writes last would drop the entries of the other.
+    // Routes change an ACL only through here, merged onto the ACL as it is now. Two changes to one path run in turn, or
+    // the one that writes last would drop the entries of the other.
     public async updateACLDelta(
         mountId: string,
         pathId: string,
@@ -931,9 +911,8 @@ export class Drive {
         });
     }
 
-    // Replaces the whole ACL. Routes only send changes, through updateACLDelta, so no client can
-    // replace a whole ACL. A path in the trash keeps its ACL as it is, because the restore shares it
-    // again with the same people.
+    // Replaces the whole ACL, which no client can, as routes only send changes. A path in the trash keeps its ACL as it
+    // is, because the restore shares it again with the same people.
     public async updateACL(
         mountId: string,
         pathId: string,
@@ -979,17 +958,17 @@ export class Drive {
         }
         // Someone who lost read access loses their open documents now, not when they next reconnect.
         // Every connection to this owner's documents lives in this Drive, shared users included.
-        await this.documents.enforceReadAccessBelow(mount, pathId);
+        await this.documents.forEachOpenDocument((document) => document.enforceReadAccess());
         // The copies in the homes of the people it is shared with go last, the same as in renamePath.
         await propagateSharedPathChange(updatedItem, oldACL, normalizedACL, actor ?? null, options);
     }
 
-    // Sends a path's sharing to the homes it is shared with, after a change that keeps its ACL, such as
-    // a rename, a restore or the trash of a folder above it. It runs in the path's ACL chain and reads
-    // the path there, so it can't overtake an ACL change that started first and bring back a removed
-    // sharee. A live path goes out with the same ACL again, which emails nobody. A trashed path goes out
-    // with none. A path that is no longer in the state the caller left it in is skipped, because the
-    // change that moved it sends its own push.
+    public forEachOpenDocument(visit: (document: CollabDocument) => Promise<void>): Promise<void> {
+        return this.documents.forEachOpenDocument(visit);
+    }
+
+    // Sends a path's sharing to its homes after a change that keeps its ACL, such as a rename. It runs in the path's
+    // ACL chain, so it can't overtake an ACL change and bring back a removed sharee.
     public async pushSharing(
         mountId: string,
         pathId: string,
@@ -1012,9 +991,8 @@ export class Drive {
         return this.membersFromCrumbs(await mount.getBreadcrumb(pathId));
     }
 
-    // The members to tell about a change to the path. The owner hears every event anyway. An unshared
-    // path in a user's home has nobody else, so the answer costs one breadcrumb read and no account
-    // lookup. Most paths are unshared, and that halves what such an event costs.
+    // The members to tell about a change to the path. An unshared path in a user's home has nobody but the owner, so
+    // the answer costs one breadcrumb read and no account lookup, which halves what such an event costs.
     private async membersToTell(mountId: string, pathId: string): Promise<EffectiveMember[]> {
         const crumbs = await this.getMount(mountId).getBreadcrumb(pathId);
         const shared =
@@ -1042,9 +1020,8 @@ export class Drive {
         return [...members.values()];
     }
 
-    // For the dialog that mails someone a link. For each address it tells whether that person can
-    // already read the path, and whether an admin must let them in as a guest first. The owner may
-    // always share. SharedDrive answers that question for everyone else.
+    // For the dialog that mails a link: for each address, whether that person can already read the path and whether an
+    // admin must let them in as a guest first. The owner may always share.
     public async checkAccessForEmails(
         mountId: string,
         pathId: string,
@@ -1108,9 +1085,8 @@ export class Drive {
         return findContainerFromAncestors(await this.getMount(mountId).getBreadcrumb(pathId));
     }
 
-    // Gives someone access to a chat. A chat inside a document shares the document, because its ACL is
-    // the one that counts. A chat on its own shares itself. SharedDrive passes the path it checked, so
-    // a move in between can't make the invite share a document nobody checked.
+    // Gives someone access to a chat: a chat inside a document shares the document, whose ACL is the one that counts.
+    // SharedDrive passes the path it checked, so a move in between can't share a document nobody checked.
     public async inviteToChat(
         mountId: string,
         chatId: string,
@@ -1184,8 +1160,6 @@ export class Drive {
 
     // ---- Chats and comments ----
 
-    // A trashed chat is refused. Opening it would create a new data.db inside it, and that one would
-    // take the trashed one's name and block the restore.
     public async getChat(mountId: string, chatId: string): Promise<ChatRoom> {
         const path = await this.getMount(mountId).getActivePath(chatId);
         if (path.type !== DRIVE_TYPE_CHAT) {
@@ -1194,33 +1168,37 @@ export class Drive {
         return ChatRoom.open(this, this.home, path);
     }
 
-    // The comment index on the server holds who is assigned, so the history row is written here and
-    // not from a client event. Assigning someone writes a row, and unassigning writes none. The
-    // assignee gets a direct notification, so the watchers' copy skips them. Returns whether the
-    // assignee changed, so the route only notifies on a real change.
+    // The server's comment index holds who is assigned, so the history row is written here and not from a client event,
+    // and only for an assignment. The assignee gets a direct notification, so the watchers' copy skips them.
     public async assignComment(
         mountId: string,
         pathId: string,
         chatName: string,
-        assignee: string | null,
+        assigneeEmail: string | null,
         user: User,
         title?: string,
-    ): Promise<boolean> {
-        await assertCommentChatExists(this, mountId, pathId, chatName);
+    ): Promise<void> {
+        const assignee = assigneeEmail ? assigneeEmail.toLowerCase() : null;
+        // Read once for the check and the broadcast, because it walks the whole ACL.
+        let members: EffectiveMember[] | undefined;
+        if (assignee) {
+            members = await this.getEffectiveMembers(mountId, pathId);
+            if (!members.some((member) => member.email === assignee)) {
+                throw new ApiError(400, 'Assignee is not a member of this document');
+            }
+        }
         const card = title?.slice(0, CARD_TITLE_MAX_LENGTH);
         const changed = await withCommentIndex(this, mountId, pathId, async (index) => {
-            // Cards from before the comment index have a chat but no row yet.
-            await index.ensureComment(chatName);
             const current = await index.get(chatName);
+            if (!current) throw new ApiError(404, 'Comment thread not found');
             // The client sends the card title, which may have changed in the same edit. So the title is
             // saved even when the assignee stays the same.
             if (card) await index.setTitle(chatName, card);
-            const assigneeChanged = (current?.assignee ?? null) !== assignee;
+            const assigneeChanged = current.assignee !== assignee;
             if (assigneeChanged) await index.assign(chatName, assignee);
             return assigneeChanged;
         });
-        if (!changed) return false;
-        if (assignee) {
+        if (changed && assignee) {
             await this.recordFileEvent(
                 mountId,
                 pathId,
@@ -1229,7 +1207,33 @@ export class Drive {
                 { excludeEmails: new Set([assignee]) },
             );
         }
-        return true;
+        broadcastCommentIndexUpdated(this, this.owner.id, mountId, pathId, members).catch(() => {});
+        if (changed && assignee && assignee !== user.email.toLowerCase()) {
+            // The assignment stands whatever happens to the notice, such as a home a restore holds.
+            await this.notifyAssignee(mountId, pathId, chatName, assignee, user).catch(() => {});
+        }
+    }
+
+    private async notifyAssignee(
+        mountId: string,
+        pathId: string,
+        chatName: string,
+        assignee: string,
+        actor: User,
+    ): Promise<void> {
+        const assigneeUser = await getUserByEmail(assignee);
+        const path = await this.getPath(mountId, pathId);
+        if (!assigneeUser || !path) return;
+        await sendToHome(assigneeUser.id, {
+            type: 'notification',
+            notification: {
+                type: 'assigned',
+                actorEmail: actor.email,
+                title: `${actor.name} assigned you a comment on "${stripEigenExtension(path.name)}"`,
+                tag: commentAssignedTag({ ownerId: this.owner.id, mountId, pathId, chatName }),
+                details: { pathType: path.type },
+            },
+        });
     }
 
     public async setCommentStatus(
@@ -1240,17 +1244,16 @@ export class Drive {
         user: User,
         title?: string,
     ): Promise<void> {
-        // An unknown chat is a 404, so no history row is written for a comment that doesn't exist.
-        await assertCommentChatExists(this, mountId, pathId, chatName);
         const card = title?.slice(0, CARD_TITLE_MAX_LENGTH);
         await withCommentIndex(this, mountId, pathId, async (index) => {
-            await index.ensureComment(chatName);
+            if (!(await index.get(chatName))) throw new ApiError(404, 'Comment thread not found');
             if (card) await index.setTitle(chatName, card);
             if (status === 'resolved') await index.resolve(chatName, user.email);
             else await index.reopen(chatName);
         });
         const eventType = status === 'resolved' ? 'resolved' : 'reopened';
         await this.recordFileEvent(mountId, pathId, user, { eventType, details: { card, chatName } });
+        broadcastCommentIndexUpdated(this, this.owner.id, mountId, pathId).catch(() => {});
     }
 
     // ---- Collab documents and versions ----
@@ -1314,9 +1317,8 @@ export class Drive {
         return this.getMount(mountId).history.list(pathId, opts);
     }
 
-    // Writes the history row of a change to a live path and tells its watchers. A few changes do this
-    // themselves. A move or a trash must also reach the folders the path left. A copy gets its row from
-    // the mount, which knows where it was copied from.
+    // Writes the history row of a change to a live path and tells its watchers. A move or a trash must also reach the
+    // folders the path left, and a copy gets its row from the mount.
     public async recordFileEvent(
         mountId: string,
         pathId: string,
@@ -1437,18 +1439,10 @@ export class Drive {
         }
     }
 
-    // A ChatRoom is built fresh for every request. This lock keeps two of them from both creating the
-    // chat's data.db.
-    public async withPathLock<T>(mountId: string, pathId: string, fn: () => Promise<T>): Promise<T> {
-        return this.getMount(mountId).withPathLock(pathId, fn);
-    }
-
     // ---- Open tabs ----
 
-    // Tells the open tabs of everyone who can read the path that it changed: the owner, a team's members
-    // and the people it is shared with. A change that takes the path away from some of them, such as a
-    // move or a trash, passes the members it read before, so they still hear that it left. Nobody waits
-    // for the members.
+    // Tells the open tabs of everyone who can read the path that it changed. A change that takes the path away from
+    // some, such as a trash, passes the members it read before, so they still hear that it left.
     public emit(
         type: SSEventDrive['type'],
         path: DrivePath,
@@ -1480,9 +1474,8 @@ export class Drive {
     }
 }
 
-// A document makes its versions/ folder at its first saved version, and Delete history removes it again. In between,
-// a folder or file a user gave that name would take its place, so no user write names a child of a document so. Its
-// databases need no such check: a whole document always has them, so their names are taken.
+// A document makes its versions/ folder at its first saved version, and Delete history removes it. In between, a user's
+// folder of that name would take its place, so no user write names a child of a document so.
 function refuseVersionsName(folder: DrivePath, name: string): void {
     if (isDocumentType(folder.type) && isVersionsName(name)) throw new ApiError(400, DOCUMENT_PART_ERROR);
 }

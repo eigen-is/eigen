@@ -1,13 +1,14 @@
-// getHome is the way in to every owner's data. It builds the owner's Home on first use, keeps it in a
-// cache, and hands every later caller that same Home until it closes. Every request passes through
-// here, so this is where a Home hears of its requests. It keeps a home shut while a restore replaces
-// its folder or a deletion removes it, and every home while the shutdown runs. It also hands a
-// server-wide event, such as a restart notice, to every loaded home.
+// getHome is the way in to every owner's data. It builds the owner's Home on first use, keeps it in a cache, and hands
+// every later caller that same Home until it closes. Every request passes through here, so this is where a Home hears
+// of its requests. It keeps a home shut while a restore replaces its folder or a deletion removes it, and every home
+// while the shutdown runs. It also walks the loaded homes, to hand them a server-wide event such as a restart notice,
+// or to reach the documents they have open.
 
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import type { AsyncSingleton } from '../../utils/singleton';
 import { createAsyncSingleton } from '../../utils/singleton';
+import type { CollabDocument } from '../collab/collab-document';
 import { ApiError } from '../core';
 import { getOrgExists } from '../org';
 import { getTeam } from '../team';
@@ -24,10 +25,8 @@ const homeFactories = new Map<string, AsyncSingleton<Home>>();
 // nothing opens the folder while it is being moved aside.
 const restoringHomes = new Set<string>();
 
-// Homes whose owner is being deleted, from the teardown until better-auth has deleted the owner's row.
-// The row and the members' sessions outlive the folder for that moment, and a request in it must not
-// build a new home over the deleted folder. A deletion that fails after the folder is gone keeps the
-// mark until a retry of the delete or a restart. Until then the home answers 404 and a restore of it is refused.
+// Homes whose owner is being deleted, from the teardown until better-auth has deleted the owner's row. The row
+// and the members' sessions outlive the folder, and a request in that window must not build a new home over it.
 const deletingHomes = new Set<string>();
 
 // While shutdownAllHomes runs, openHome refuses every home, so nothing, such as a tab that reconnects its event
@@ -46,8 +45,7 @@ export function loadedHome(ownerId: string): Home | undefined {
 }
 
 // The mark is the lock: a second restore of one home would move a folder aside that the first one is
-// still writing, and whichever finished first would unlock the home for both. A deletion holds no job slot, so its
-// mark is checked here too: a restore in its window would install a folder the deletion is removing.
+// still writing, and whichever finished first would unlock the home for both.
 export function markHomeRestoring(ownerId: string): void {
     if (restoringHomes.has(ownerId)) throw new ApiError(409, 'Restore already in progress');
     if (deletingHomes.has(ownerId)) throw new ApiError(409, 'A deletion of this home is running');
@@ -106,7 +104,7 @@ export async function openHome(ownerId: string): Promise<Home> {
     throw new Error(`openHome: could not obtain a stable home for ${ownerId}`);
 }
 
-function refuseShutHome(ownerId: string): void {
+export function refuseShutHome(ownerId: string): void {
     if (shuttingDown) throw new ApiError(503, 'Eigen is shutting down');
     if (restoringHomes.has(ownerId)) throw new ApiError(503, 'Restore in progress');
     if (deletingHomes.has(ownerId)) throw new ApiError(404, 'Home is being deleted');
@@ -190,6 +188,11 @@ export async function evictHome(ownerId: string): Promise<void> {
 // reads no home's data and opens none: a home that is not loaded has no stream to tell.
 export function broadcastToLoadedHomes(event: SSEvent): void {
     for (const factory of homeFactories.values()) factory.peek()?.broadcast(event);
+}
+
+// It opens no home and counts as no request: a home that is not loaded has no open document.
+export async function forEachOpenDocument(visit: (document: CollabDocument) => Promise<void>): Promise<void> {
+    for (const factory of homeFactories.values()) await factory.peek()?.forEachOpenDocument(visit);
 }
 
 // Closes every home that is open now. A test file's teardown calls it too, and the next file opens homes again.

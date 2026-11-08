@@ -7,7 +7,6 @@ import {
     heldAttendees,
     isSeriesOccurrence,
     isTransferableCalendarHome,
-    occurrenceDateToString,
     parseOccurrenceDate,
     truncateRRule,
     useCreateEvent,
@@ -62,6 +61,8 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const [showRsvpScopeDialog, setShowRsvpScopeDialog] = useState(false);
     const [pendingRsvpStatus, setPendingRsvpStatus] = useState<'accepted' | 'declined' | 'tentative' | null>(null);
     const [editOpen, setEditOpen] = useState(false);
+    // Each opening mounts Edit event anew, so nothing typed in the last one comes back.
+    const [editMount, setEditMount] = useState(0);
     const deleteEvent = useDeleteEvent(eventOwnerId);
     const createEvent = useCreateEvent(eventOwnerId);
     const updateEvent = useUpdateEvent(eventOwnerId);
@@ -94,58 +95,63 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
         if (isLinkedEvent && isPartOfSeries) {
             const eventId = event.parentEventId || event.id;
             if (action === 'all') {
-                await deleteEvent.mutateAsync({ id: eventId, calendarId: event.calendarId });
+                await deleteEvent.mutateAsync({ id: eventId, calendarId: event.calendarId, etag: event.etag });
             } else {
                 await rsvp.mutateAsync({
                     calendarId: event.calendarId,
                     eventId,
                     status: 'declined',
                     scope: action,
-                    recurrenceDate: occurrenceDateToString(event.occurrenceDate),
+                    recurrenceDate: event.occurrenceDate,
                     remove: true,
                 });
             }
-        } else {
-            if (action === 'this') {
-                if (isException) {
-                    await updateEvent.mutateAsync({
-                        id: event.id,
-                        calendarId: event.calendarId,
-                        status: 'cancelled',
-                    });
-                } else if (isRecurring) {
-                    await createEvent.mutateAsync({
-                        calendarId: event.calendarId,
-                        title: event.title,
-                        startTime: event.startTime,
-                        endTime: event.endTime,
-                        allDay: Boolean(event.allDay),
-                        parentEventId: event.id,
-                        recurrenceDate: occurrenceDateToString(event.occurrenceDate),
-                        status: 'cancelled',
-                    });
-                } else {
-                    await deleteEvent.mutateAsync({ id: event.id, calendarId: event.calendarId });
-                }
-            } else if (action === 'this-and-following') {
-                if (event.rrule) {
-                    const truncated = truncateRRule(event.rrule, parseOccurrenceDate(event.occurrenceDate));
-                    await updateEvent.mutateAsync({
-                        id: event.parentEventId || event.id,
-                        calendarId: event.calendarId,
-                        rrule: truncated,
-                    });
-                }
+        } else if (action === 'this') {
+            if (isException) {
+                await updateEvent.mutateAsync({
+                    id: event.id,
+                    calendarId: event.calendarId,
+                    etag: event.etag,
+                    status: 'cancelled',
+                });
+            } else if (isRecurring) {
+                await createEvent.mutateAsync({
+                    calendarId: event.calendarId,
+                    title: event.title,
+                    startTime: event.startTime,
+                    endTime: event.endTime,
+                    allDay: event.allDay,
+                    parentEventId: event.id,
+                    recurrenceDate: event.occurrenceDate,
+                    status: 'cancelled',
+                    etag: event.etag,
+                });
             } else {
-                await deleteEvent.mutateAsync({ id: event.parentEventId || event.id, calendarId: event.calendarId });
+                await deleteEvent.mutateAsync({ id: event.id, calendarId: event.calendarId, etag: event.etag });
             }
+        } else if (action === 'this-and-following') {
+            if (event.rrule) {
+                const truncated = truncateRRule(event.rrule, parseOccurrenceDate(event.occurrenceDate));
+                await updateEvent.mutateAsync({
+                    id: event.parentEventId || event.id,
+                    calendarId: event.calendarId,
+                    etag: event.etag,
+                    rrule: truncated,
+                });
+            }
+        } else {
+            await deleteEvent.mutateAsync({
+                id: event.parentEventId || event.id,
+                calendarId: event.calendarId,
+                etag: event.etag,
+            });
         }
         // The panel closes only after the delete is done. If it fails, the confirm dialog stays open for a retry.
         onOpenChange(false);
     };
 
     const handleNonRecurringDelete = async () => {
-        await deleteEvent.mutateAsync({ id: event.id, calendarId: event.calendarId });
+        await deleteEvent.mutateAsync({ id: event.id, calendarId: event.calendarId, etag: event.etag });
         onOpenChange(false);
     };
 
@@ -166,7 +172,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                 eventId,
                 status: pendingRsvpStatus,
                 scope: 'this',
-                recurrenceDate: occurrenceDateToString(event.occurrenceDate),
+                recurrenceDate: event.occurrenceDate,
             });
         } else {
             rsvp.mutate({ calendarId: event.calendarId, eventId, status: pendingRsvpStatus });
@@ -258,7 +264,10 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                                         <TooltipButton
                                             icon={Pencil}
                                             tooltipText="Edit event"
-                                            onClick={() => setEditOpen(true)}
+                                            onClick={() => {
+                                                setEditMount((mount) => mount + 1);
+                                                setEditOpen(true);
+                                            }}
                                         />
                                         <TooltipButton
                                             icon={Trash2}
@@ -314,6 +323,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
             />
 
             <EditEventDialog
+                key={editMount}
                 open={editOpen}
                 onOpenChange={(editing) => {
                     setEditOpen(editing);

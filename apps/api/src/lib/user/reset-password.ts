@@ -1,17 +1,17 @@
 // Sets a user's password without the old one. resetUserPassword is an admin's or the control socket's reset: it
-// signs the user out everywhere and revokes their app passwords, because those open mail and DAV without the
-// password. A guest has no password to reset.
+// signs the user out everywhere, closes their collab sockets, and revokes their app passwords, because those open
+// mail and DAV without the password. A guest has no password to reset.
 
 import { eq } from 'drizzle-orm';
 import { apikey } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../auth/auth';
 import { setCredentialPassword } from '../auth/credential-password';
 import { ApiError } from '../core/errors';
+import { closeUserSocketsOnLoadedHomes } from '../home/home-relay';
 import { isGuest } from './guest';
 import type { User } from './user';
 import { getUserByEmail } from './user';
 
-// What the control socket's POST /reset-password answers with.
 export type ResetPasswordResult = { email: string };
 
 export async function resetUserPassword(email: string, password: string): Promise<User> {
@@ -31,5 +31,6 @@ export async function resetUserPassword(email: string, password: string): Promis
     await setCredentialPassword(user.id, password);
     await context.internalAdapter.deleteUserSessions(user.id);
     getAuthDrizzleDb().delete(apikey).where(eq(apikey.referenceId, user.id)).run();
+    await closeUserSocketsOnLoadedHomes(user.id);
     return user;
 }

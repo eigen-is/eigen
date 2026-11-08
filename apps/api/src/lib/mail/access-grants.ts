@@ -1,3 +1,8 @@
+// Grants read access to the referenced documents a sender opted to share when sending mail, for the send path to
+// call. Every ref is fully validated before any ACL is written, so a single unshareable ref aborts the whole grant
+// and half-applied grants never need a rollback. Chat exclusion keys off the resolved path type, never the
+// client-authored `ref.driveType`.
+
 import { MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
 import { DRIVE_TYPE_CHAT } from '@workspace/lib/types/drive';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
@@ -6,10 +11,6 @@ import { getSharedDrive } from '../drive';
 import { addRegistryEntry } from '../share/registry';
 import type { User } from '../user';
 
-// Grants read access to the referenced documents a sender opted to share when sending mail. Every
-// ref is fully validated before any ACL is written (preflight-all): a single unshareable ref aborts
-// the whole grant, and half-applied grants are never rolled back. Chat exclusion keys off the
-// RESOLVED path type, never the client-authored `ref.driveType`.
 export async function grantAccessForReferences(
     user: User,
     refs: AttachmentReference[],
@@ -34,7 +35,6 @@ export async function grantAccessForReferences(
 
     if (grantRefs.length === 0 || grantEmails.length === 0) return;
 
-    // Preflight: resolve and gate every ref before mutating any of them.
     const preflighted = [];
     for (const ref of grantRefs) {
         const drive = await getSharedDrive(ref.ownerId, user);
@@ -56,19 +56,15 @@ export async function grantAccessForReferences(
             .map((r) => ({
                 id: r.email,
                 read: true,
-                // Case-insensitive match: r.email is lowercased, but a legacy ACL entry may be mixed-case,
-                // and mergeACLDelta's replace is case-insensitive — a case-sensitive miss here would
-                // silently drop that entry's write bit on upsert.
-                write: path.acl?.find((a) => a.id.toLowerCase() === r.email)?.write ?? false,
+                write: path.acl?.find((a) => a.id === r.email)?.write ?? false,
             }));
         if (needingAcl.length > 0) {
             await drive.updateACLDelta(ref.mountId, ref.id, { add: needingAcl }, undefined, undefined, user, {
                 suppressShareEmail: 'all',
             });
         }
-        // Already-readable recipients (e.g. via a public ancestor) get no ACL clutter — just a
-        // registry entry so a closed-signup guest can still be admitted. Sourced from the path owner
-        // like the ACL branch's (resolveACLUserIds), never from the sender.
+        // Recipients who can already read (say via a public ancestor) get no ACL clutter, only a registry entry so a
+        // closed-signup guest can be admitted. It is sourced from the path owner, never the sender.
         for (const r of recipients) {
             if (r.hasReadAccess && r.needsGuestAdmission) {
                 await addRegistryEntry(path.ownerId, r.email);

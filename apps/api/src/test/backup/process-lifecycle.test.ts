@@ -10,7 +10,7 @@ import { TEST_DATA_DIR } from '../setup';
 
 // The backup promises only a real process can keep. Every test here spawns `bun src/index.ts` as a
 // child on its own data root, backups folder and port, and drives it over HTTP: what is asserted is
-// the shipped boot sequence (recoverInterruptedRestores, then the staging wipe, then listen) and the
+// the shipped boot sequence (recoverBackupsAfterRestart, then listen) and the
 // shipped SIGTERM handler (drainBackupJobs before the homes close), not a re-implementation of them.
 // The rest of the suite covers the same code in-process; this file covers the process itself.
 
@@ -282,7 +282,7 @@ describe('Backup across signals', () => {
 
             live = await startApi(dataRoot, backupsDir, 'restore-drain-restart');
             // Nothing for the boot recovery to do — the restore was complete before the process left.
-            expect(live.log()).not.toContain('was interrupted');
+            expect(live.log()).not.toContain('did not finish');
             const homes = readdirSync(join(dataRoot, 'home'));
             expect(homes.filter((name) => name.startsWith(`${admin.id}${PRE_RESTORE_SUFFIX}`)).length).toBe(1);
             expect(homes.filter((name) => name.startsWith(`${admin.id}${FAILED_RESTORE_SUFFIX}`))).toEqual([]);
@@ -326,7 +326,7 @@ describe('Backup across signals', () => {
 });
 
 // Both shapes a dead restore leaves behind, judged by the boot of a real process rather than by
-// calling recoverInterruptedRestores: the API is answering requests only after the recovery and the
+// calling recoverBackupsAfterRestart: the API is answering requests only after the recovery and the
 // staging wipe have run, so what the tests below read is what a user's first request would meet.
 describe('Boot recovery in a real boot', () => {
     const dataRoot = join(RUN_DIR, 'recovery-data');
@@ -348,33 +348,29 @@ describe('Boot recovery in a real boot', () => {
         writeFileSync(join(homeRoot, name, 'marker'), content);
     }
 
-    // What replaceHomeFolder writes before it moves a home aside, in the folder its job staged beside the home, and
-    // the note it adds once the install is through.
-    function seedMarker(jobId: string, homeName: string, preRestoreName: string | null, complete: boolean): void {
+    // What replaceHomeFolder writes before it moves a home aside, in the folder its job staged beside the home.
+    function seedMarker(jobId: string, homeName: string, preRestoreName: string | null): void {
         const dir = buildRestoreStagingDir(join(homeRoot, homeName), jobId);
         mkdirSync(dir, { recursive: true });
         writeFileSync(
             join(dir, 'restoring.json'),
             JSON.stringify({
                 ownerId: homeName,
-                homeDir: join(homeRoot, homeName),
                 preRestoreName,
                 parkName: `${homeName}${FAILED_RESTORE_SUFFIX}20261231-235959`,
             }),
         );
-        if (complete) writeFileSync(join(dir, 'restore-complete.json'), JSON.stringify({ completedAt: 'seeded' }));
     }
 
     beforeAll(async () => {
         mkdirSync(homeRoot, { recursive: true });
         seedFolder(interrupted, 'half-written');
         seedFolder(interruptedAside, 'the home as it was');
-        seedMarker('job-interrupted', interrupted, interruptedAside, false);
+        seedMarker('job-interrupted', interrupted, interruptedAside);
         seedFolder(finished, 'the restored home');
         seedFolder(finishedAside, 'the home as it was');
-        seedMarker('job-finished', finished, finishedAside, true);
         seedFolder(deleted, 'half-written, no copy');
-        seedMarker('job-deleted', deleted, null, false);
+        seedMarker('job-deleted', deleted, null);
         mkdirSync(join(unpacking, `home-${finished}`, 'home'), { recursive: true });
         api = await startApi(dataRoot, backupsDir, 'boot-recovery');
     }, LISTEN_TIMEOUT_MS);
@@ -395,7 +391,7 @@ describe('Boot recovery in a real boot', () => {
         );
         expect(parked.length).toBe(1);
         expect(readFileSync(join(homeRoot, parked[0], 'marker'), 'utf8')).toBe('half-written');
-        expect(api.log()).toContain(`a restore of ${interrupted} was interrupted`);
+        expect(api.log()).toContain(`a restore of ${interrupted} did not finish`);
     });
 
     test('a restore of a deleted user that died mid-install leaves no half-written home', () => {
@@ -403,7 +399,7 @@ describe('Boot recovery in a real boot', () => {
         const parked = readdirSync(homeRoot).filter((name) => name.startsWith(`${deleted}${FAILED_RESTORE_SUFFIX}`));
         expect(parked.length).toBe(1);
         expect(readFileSync(join(homeRoot, parked[0], 'marker'), 'utf8')).toBe('half-written, no copy');
-        expect(api.log()).toContain(`a restore of ${deleted} was interrupted`);
+        expect(api.log()).toContain(`a restore of ${deleted} did not finish`);
     });
 
     test('a restore that finished is left alone', () => {
@@ -412,6 +408,6 @@ describe('Boot recovery in a real boot', () => {
         expect(readdirSync(homeRoot).filter((name) => name.startsWith(`${finished}${FAILED_RESTORE_SUFFIX}`))).toEqual(
             [],
         );
-        expect(api.log()).not.toContain(`a restore of ${finished} was interrupted`);
+        expect(api.log()).not.toContain(`a restore of ${finished} did not finish`);
     });
 });

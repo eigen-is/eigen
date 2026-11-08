@@ -68,7 +68,6 @@ Everything is in the install folder, like `/opt/eigen`:
 | `data/dkim/` | The key that signs outgoing mail |
 | `data/certs/` | The certificate of the mail server |
 | `backups/` | Whole-server backups, and backups of single users and teams made in Admin |
-| `snapshots/` | The snapshots Eigen 0.3.0 made, by `./eigen backup` and by the update from 0.3.0. Only Eigen 0.3.0 restores them. |
 | `caddy-data/` | The HTTPS certificates of Eigen's own web server |
 | `eigen.nginx.conf`, `eigen.apache.conf`, `eigen.Caddyfile` | Settings for your own web server, when it forwards to Eigen |
 | `docker/fail2ban/` | Rules for fail2ban, when you host mail |

@@ -13,7 +13,7 @@ import type {
     ServerArchiveManifest,
     ServerArchiveSidecar,
 } from '@workspace/lib/types/backup';
-import { orgOwnerId, parseOwnerId } from '@workspace/lib/types/owner';
+import { orgOwnerId } from '@workspace/lib/types/owner';
 import { BACKUP_FORMAT_VERSION, SERVER_ARCHIVE_EXTENSION } from '@workspace/lib/validation';
 import { getDataRoot, getServerDataPath, ORG_HOMES_DIR, SERVER_DATABASES, SERVER_FILES } from '../config/paths';
 import { PIN_KEYS } from '../config/release';
@@ -22,8 +22,7 @@ import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core';
 import { isHomeDeleting } from '../home/get-home';
 import { pullHomeBackupBytes, pullHomeSnapshot } from '../home/home-relay';
-import { getTeamExists } from '../team/team';
-import { getUserById } from '../user';
+import { getOwnerExists } from '../user';
 import { alertOwner } from '../user/alert-owner';
 import type { ServerArchiveWriter } from './archive';
 import { createServerArchiveWriter, packFolder } from './archive';
@@ -123,9 +122,8 @@ export function toControlJob({
     return { id, state, progress, artifact, error, uploadJobId, warnings, bytes };
 }
 
-// The job, from its record to its retention. `admit` is called once the room check passes, so the caller can
-// answer a refusal with its 507. A home that failed keeps the archive and fails the job. A home backed up with
-// warnings is in the archive, so the job ends done and ./eigen update goes on. The owner gets an alert of its own.
+// A home that failed keeps the archive and fails the job. One backed up with warnings is in the archive, so the job
+// ends done and ./eigen update goes on.
 async function runServerBackup(
     job: BackupJob,
     archivePath: string,
@@ -167,9 +165,8 @@ async function runServerBackup(
         await writeServerSidecar(archivePath, sidecar);
         // Retention that throws must not replace the job's own outcome.
         await pruneLocalArchives().catch(console.error);
-        // An archive that verified goes even when a home failed: the owner heard of the home, and the rest of the
-        // server is worth its copy off the box. A pre-update archive exists for ./eigen rollback on this box. The
-        // upload starts before this job ends, so ./eigen stop always finds one of the two running.
+        // A verified archive goes off the box even when a home failed; a pre-update one stays for ./eigen rollback.
+        // The upload starts before this job ends, so ./eigen stop always finds one of the two running.
         const { enabled } = getServerSettings().backups.upload;
         if (enabled && options.reason !== 'pre-update' && sidecar.verify?.status === 'verified') {
             job.uploadJobId = startUploadJob(archivePath, job.startedBy).id;
@@ -252,19 +249,13 @@ async function appendHome(
         // 409, as the server job waited out theirs.
         const release = await waitForHomeSlot(home.ownerId, 'server backup');
         const manifest = await pullHomeSnapshot(home.ownerId, staging, { level, onProgress }).finally(release);
-        const verify = await verifyFolder(folder, onProgress);
-        requireVerified(verify, member);
+        requireVerified(await verifyFolder(folder, onProgress), member);
         await packFolder(folder, packed);
         bytes = manifest.counts.bytes;
-        // The pane lists the row's warnings, and a server archive keeps no per-home sidecar for the verify's.
-        const all = [...(manifest.warnings ?? []), ...(verify.warnings ?? [])];
-        warnings = all.length > 0 ? all : undefined;
+        warnings = manifest.warnings;
     } catch (error) {
         // A delete mid-capture throws whatever the torn-down home throws: the mark or the row says whether it is gone.
-        const id = parseOwnerId(home.ownerId).id;
-        const gone =
-            isHomeDeleting(home.ownerId) ||
-            (home.kind === 'team' ? !(await getTeamExists(id)) : !(await getUserById(home.ownerId)));
+        const gone = isHomeDeleting(home.ownerId) || !(await getOwnerExists(home.ownerId));
         return gone ? { ...home, skipped: HOME_DELETED } : { ...home, failed: describeError(error) };
     } finally {
         await fsp.rm(folder, { recursive: true, force: true });

@@ -8,15 +8,14 @@ import {
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import type { Context } from '../../state';
-import { handleFreeze } from '../../state';
-import { showSheet } from '../../state/api/sheet';
+import { api, handleFreeze } from '../../state';
 
 export function ViewMenu() {
     const { context, setContext } = useContext(WorkbookContext);
 
     const dispatch = (fn: (ctx: Context) => void) => () => setContext((draftCtx) => fn(draftCtx));
 
-    const hidden = context.sheets.filter((s): s is typeof s & { id: string } => s.hide === 1 && s.id != null);
+    const hidden = context.sheets.filter((s) => s.hide === 1);
 
     return (
         <>
@@ -48,7 +47,7 @@ export function ViewMenu() {
                             {hidden.map((sheet) => (
                                 <DropdownMenuItem
                                     key={sheet.id}
-                                    onClick={() => setContext((draftCtx) => showSheet(draftCtx, sheet.id))}
+                                    onClick={() => setContext((draftCtx) => api.showSheet(draftCtx, sheet.id))}
                                 >
                                     {sheet.name}
                                 </DropdownMenuItem>

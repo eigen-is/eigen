@@ -125,7 +125,7 @@ export class Canvas {
                 rowStart,
                 rowEnd,
             ),
-            drawGridLines: !this.sheetCtx.currentSheetIsPivot && this.sheetCtx.showGridLines,
+            drawGridLines: this.sheetCtx.showGridLines,
             gridLines: new Path2D(),
         };
 

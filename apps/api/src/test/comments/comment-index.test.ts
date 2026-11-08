@@ -648,7 +648,7 @@ describe('CommentIndex.assign', () => {
 
     test('assign sets the assignee email', async () => {
         const index = makeIndex();
-        await index.ensureComment('a.eigenchat');
+        await index.ensureComment('a.eigenchat', 'alice@test.eigen.is');
 
         await index.assign('a.eigenchat', 'bob@test.eigen.is');
 
@@ -659,7 +659,7 @@ describe('CommentIndex.assign', () => {
 
     test('reassign overwrites the previous assignee', async () => {
         const index = makeIndex();
-        await index.ensureComment('a.eigenchat');
+        await index.ensureComment('a.eigenchat', 'alice@test.eigen.is');
         await index.assign('a.eigenchat', 'bob@test.eigen.is');
 
         await index.assign('a.eigenchat', 'charlie@test.eigen.is');
@@ -670,7 +670,7 @@ describe('CommentIndex.assign', () => {
 
     test('assign with null clears the assignee', async () => {
         const index = makeIndex();
-        await index.ensureComment('a.eigenchat');
+        await index.ensureComment('a.eigenchat', 'alice@test.eigen.is');
         await index.assign('a.eigenchat', 'bob@test.eigen.is');
 
         await index.assign('a.eigenchat', null);
@@ -681,7 +681,7 @@ describe('CommentIndex.assign', () => {
 
     test('assigning an unknown chatName is a no-op (UPDATE matches nothing, no throw)', async () => {
         const index = makeIndex();
-        await index.ensureComment('a.eigenchat');
+        await index.ensureComment('a.eigenchat', 'alice@test.eigen.is');
 
         await index.assign('ghost.eigenchat', 'bob@test.eigen.is');
 
@@ -692,7 +692,7 @@ describe('CommentIndex.assign', () => {
 
     test('list() rows expose assignee (null when unset)', async () => {
         const index = makeIndex();
-        await index.ensureComment('a.eigenchat');
+        await index.ensureComment('a.eigenchat', 'alice@test.eigen.is');
 
         const [entry] = await index.list();
         expect(Object.keys(entry)).toContain('assignee');
@@ -711,7 +711,7 @@ describe('CommentIndex.deleteRowsWithoutThread', () => {
     test('drops the row, the mentions and the search hit of every thread that is gone', async () => {
         const { index, raw } = makeIndex();
         for (const name of ['kept.eigenchat', 'gone.eigenchat']) {
-            await index.ensureComment(name);
+            await index.ensureComment(name, BOB_EMAIL);
             await index.setRecentText(name, `needle in ${name}`);
             await index.addMention(name, BOB_EMAIL);
         }
@@ -727,7 +727,7 @@ describe('CommentIndex.deleteRowsWithoutThread', () => {
 
     test('drops nothing while every thread is there, whatever the case of its name', async () => {
         const { index } = makeIndex();
-        await index.ensureComment('Kept.eigenchat');
+        await index.ensureComment('Kept.eigenchat', BOB_EMAIL);
         index.deleteRowsWithoutThread(new Set(['kept.eigenchat']));
         expect(await index.list()).toHaveLength(1);
     });

@@ -639,8 +639,7 @@ describe('Calendar Invites', () => {
             );
         });
 
-        // An older client names an occurrence by its full instant, and an unkeyable value is a bad request.
-        test('a this-and-following decline keys a full ISO instant and refuses what keys to nothing', async () => {
+        test('a this-and-following decline refuses a full ISO instant and what keys to nothing', async () => {
             await createRecurringInvite('Weekly Del Iso');
             const linked = await bobOccurrence((e) => e.title === 'Weekly Del Iso' && !e.parentEventId);
             const occurrences = (await getEventsInRange(ctx.bob.user.sessionToken, ctx.bob.user.id)).filter(
@@ -648,18 +647,20 @@ describe('Calendar Invites', () => {
             );
             expect(occurrences.length).toBe(5);
 
-            const bad = await rsvpAs(linked.id, {
-                status: 'declined',
-                scope: 'this-and-following',
-                recurrenceDate: 'the second one',
-                remove: true,
-            });
-            expect(bad.status).toBe(400);
+            for (const recurrenceDate of ['the second one', new Date(occurrences[1].startTime).toISOString()]) {
+                const bad = await rsvpAs(linked.id, {
+                    status: 'declined',
+                    scope: 'this-and-following',
+                    recurrenceDate,
+                    remove: true,
+                });
+                expect(bad.status).toBe(400);
+            }
 
             const res = await rsvpAs(linked.id, {
                 status: 'declined',
                 scope: 'this-and-following',
-                recurrenceDate: new Date(occurrences[1].startTime).toISOString(),
+                recurrenceDate: occurrences[1].occurrenceDate,
                 remove: true,
             });
             expect(res.status).toBe(200);
@@ -835,9 +836,8 @@ describe('Calendar Invites', () => {
         });
     });
 
-    // Every write path must hash the etag over the same basis. receiveRsvpForOccurrence used to
-    // omit `timezone`, so a byte-identical repeat RSVP flipped the exception's etag and triggered a
-    // spurious CalDAV re-download.
+    // Every write path must hash the etag over the same basis, or a byte-identical repeat RSVP
+    // flips the exception's etag and triggers a spurious CalDAV re-download.
     describe('#24 occurrence-RSVP etag consistency', () => {
         const from = Math.floor(Date.parse('2026-03-09T00:00:00Z') / 1000);
         const to = Math.floor(Date.parse('2026-03-16T00:00:00Z') / 1000);

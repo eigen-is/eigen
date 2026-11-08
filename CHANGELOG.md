@@ -10,17 +10,59 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Changed
 
+- **Moving a formula in Sheets** — a formula cut to another tab keeps reading the cells it read, as in Excel: `=A1*2` cut from One to Two becomes `=One!A1*2`, and a cell that moved along with it is still followed
+- **Uploading a backup** — only the owner can upload an archive in the **Backup** section of a user or team in Admin. Other admins still back up, download and restore
 - **GIFs stand still in lists** — in Drive's grid, on Stickies card covers and in the slide list of Slides, an animated GIF or WebP shows its first frame. It still plays in a file's details in Drive, in Quick preview, on the slide itself and in present mode. A deck full of GIFs opens faster, because the slide list loads small stills instead of every animation. Pictures uploaded before this keep playing in lists until the file changes
 - **Deleted comments** — a link, notification, activity entry or search result for a deleted comment opens it as "This comment was deleted" under its grayed title, with nothing to reply to, resolve or assign
 - **Copies in Drive** — a copy or Duplicate of a document leaves out the images and comments deleted from the original
+- **Folder depth in Drive** — folders nest at most 256 levels deep, in Drive and over WebDAV. A deeper tree you already have stays readable
 - **Comments in Sheets** — the comments pane lists the comments on every tab, with the tab's name, such as Sheet2 · B2. Deleting a comment removes it from every cell it sits on, and a duplicated tab starts without comments
+- **Undo in Sheets** — once someone else edits the spreadsheet, you can no longer undo or redo your last insert or delete of rows or columns, your last added, duplicated, deleted or renamed tab, or anything before it. What you did after it still undoes. When someone else renames a tab, you can no longer undo or redo anything before that. Pressing undo or redo with nothing left for this reason shows a notice that says so
+- **Renaming a tab in Sheets** — formulas, formula rules, dropdown lists and links that name the tab follow its new name, as in Excel, and undo renames it back
+- **Paste from a menu in Sheets** — **Edit › Paste** and the right-click **Paste** paste what is on the clipboard, from any app. Where the browser blocks that, a notice says to press ⌘V (Ctrl+V on Windows and Linux)
+- **Pasting edited cells in Sheets** — if you edit cells after copying them, a paste in the same tab brings them as they are now
+- **Validation limits in Sheets** — an edit that would push a validation rule past its limit goes through, and the cells past it get no rule
+- **Speed in Sheets** — editing a cell in a workbook of 100,000 formulas takes milliseconds, where it took over a tenth of a second, and a cell that 100,000 formulas read no longer stalls a sheet for a minute
 - **Default drive size reaches existing users** — raising **Default mount (MB)** in Admin's server settings now gives every user's drive the new size at once, not only users who sign in for the first time. Lowering it shrinks no one's drive
 
 ### Fixed
 
+- **Merged cells in Sheets** — pasting text over a merged cell replaces the merge, and wrapped text in a merged cell no longer makes its row very tall
 - **Restoring in Slides and Vector** — restoring an earlier version of a deck or drawing brings back the comments deleted since, as Docs and Sheets do. Their replies stay as they are now
 - **Version history in other tabs** — after a restore or a Delete history, another tab open on the same document shows the new list of versions at once
 - **Pictures cropped in Google Slides** — a picture that Google Slides cropped to fit its box, such as a logo, no longer comes in squashed when you convert or import the deck
+- **Validation rules and formats in Sheets** — a rule checks a cell's value, not its text: a date shown in another format, a number shown as 50% and an unchanged formula pass, and an imported "any date" rule no longer refuses every date
+- **Row and column changes while others edit in Sheets** — a rename, tab color or link someone sets while you insert or delete rows stays
+- **Filters while others edit in Sheets** — a filter someone else changes no longer leaves rows hidden for good after your next filter edit
+- **Refused edits in Sheets** — Delete on part of a merged cell shows a notice, a paste past the sheet's size limit says so, and a paste over part of a merge says it can't and changes nothing
+- **Long text in Sheets** — wrapped text grows its row to fit every line, however you confirm it, from the formula bar or by clicking elsewhere too
+- **Clicks and drags in Sheets** — the link card over a frozen pane shows the link you point at, dragging a formula's range picks the right rows, and a move near the bottom of the grid no longer snaps to the last row
+- **Selecting in Sheets** — dragging a selection beside a frozen pane keeps the view where it is, and a row or column header no longer stays highlighted after its right-click menu
+- **Tab menus in Sheets** — after a pick from a tab's menu your keys go to the grid, so a typed word no longer runs a menu row such as Hide, and Rename lets you type the name at once
+- **Cutting and moving formulas in Sheets** — a formula you cut or drag follows the cells that moved with it, so `=D5*2` moved together with D5 keeps its value
+- **Pasting tables in Sheets** — numbers from a table with no alignment of its own land on the right, and a cell spanning past the table's last row pastes instead of failing
+- **Several selected ranges in Sheets** — the cell editor and the formula bar show the cell you are editing, in the last range you selected
+- **Date shortcut in Sheets** — Ctrl+Shift+; on a filled cell no longer wipes it, so Escape brings back what was there
+- **Formulas in Sheets** — `A1 : B2` with spaces recalculates, a formula reading a tab nobody opened stays current, undoing a replace restores the formulas that read those cells, and deleting a formula that reads a cell twice leaves the others reading it current
+- **Formula results that change type in Sheets** — a formula that goes from a number to text, such as `005`, no longer reads as 5 in the formulas that use it, and a true or false result keeps the cell's number format
+- **Undo while others type formulas in Sheets** — two people typing formulas at once no longer lose their undo
+- **Undo after a paste or a new rule in Sheets** — undoing a paste that added rows or columns, or a conditional format rule you added, no longer deletes what someone else put there. Once someone else edits, you can't undo that step or anything before it
+- **Excel downloads from Sheets** — a tab named like a cell, such as Q1, gets the quotes Excel expects in formulas, a formula follows a tab the file has to rename, and a fill down from a linked cell no longer makes the download fail
+- **Tab names from a file in Sheets** — an import repairs a tab name Sheets would refuse, such as one past 31 characters, and the formulas naming it follow
+- **Paste past the last row in Sheets** — a paste that adds rows to a workbook full of formulas no longer pauses to read them all again
+- **A tab opened for the first time in Sheets** — arrow keys and typing work at once, on A1, without a click first
+- **Downloading an empty spreadsheet** — a spreadsheet nobody edited downloads with its blank sheet
+- **Downloads that fail** — downloading or printing a document from Docs, Sheets, Slides or Vector that is too big to export says "Export failed: the document is too big, or it used too much memory" instead of "Internal server error"
+- **Mail apps during a restore** — a mail app that signs in while an account is being restored or deleted is told to try again later, so it can no longer make the restore fail and keep the account offline
+- **Sending in Chat and comments** — a send that fails keeps its text and files, and a slash command such as /help leaves your attachments waiting. Send stays off until the room has loaded, so a message can't go out without its files
+- **Changing room in Chat** — what you were about to send is cleared when you change room, so it can't go to the wrong one
+- **Two people editing in Calendar** — editing, moving or deleting an event someone else just changed is refused instead of overwriting their change
+- **A refused Save** — in Calendar, Contacts and Personal info in Space, a Save refused because the item changed elsewhere keeps what you typed and takes the other fields from the server
+- **Removing someone with a document open** — removing someone from a team or an organization, or deleting their account, cuts them off at once from the documents they can no longer read. A password reset does too
+- **Losing access to an open document** — in Docs, Sheets, Slides, Vector and Stickies, the page switches to "You need access" at once, or to sign-in if your account was deleted, instead of leaving an editor where typing goes nowhere
+- **Shared with me** — items of a deleted person or team no longer show
+- **Restoring a deleted account or team** — a restore of a deleted team, or of a deleted user whose address another account now holds, is refused before it changes anything. A restore that fails no longer reloads open tabs, so they keep their unsaved edits
+- **Deleting during an upload** — on local storage, deleting a file while an upload of the same name runs no longer loses the new file
 
 ## [0.4.2] - 2026-11-03
 

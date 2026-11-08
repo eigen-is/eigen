@@ -4,7 +4,6 @@
 // or function name user input could influence.
 
 import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
-import { isRecord } from '@workspace/lib/guards';
 import type { DriveCollabType, ImageDimensions } from '@workspace/lib/types/drive';
 import type { TextPreviewResult } from '@workspace/lib/types/preview';
 import type { SlidePage } from '@workspace/lib/vector';
@@ -34,19 +33,16 @@ export function htmlExportMode(format: DocumentExportFormat): HtmlExportMode {
 // (Mount I/O and a re-encode from the source), extracted from the upload by an import.
 export type TransformMedia = { name: string; contentType: string; data: ArrayBuffer };
 
-// An export's media. A raster made from its source carries the width and height of the picture as sent, and the
-// cached preview an HTML download takes carries none. The docx, pptx and xlsx writers add an SVG's size inside the
-// transform process.
+// An export's media. A raster made from its source carries the size of the picture as sent, and the cached preview an
+// HTML download takes carries none, nor does an SVG, which the writers measure themselves.
 export type ExportMedia = TransformMedia & Partial<ImageDimensions>;
 
 // An export's renderer asks for the media its document names once it has read the document, so the main thread
 // prepares only those, while the job holds its slot.
 export type ExportMediaLoader = (names: Set<string>) => Promise<ExportMedia[]>;
 
-// A job is everything a caller decides; the shared main-thread orchestration
-// (runDocumentTransform) captures the Yjs source and completes it into a request.
-// Previews reference media by URL, so no bytes cross for a preview. (Vector renders to
-// an SVG served as-is; the URL map resolves its <image> hrefs.)
+// A job is what a caller decides, and the capture of its source completes it into a request. A preview references its
+// media by URL, so no media bytes cross for it.
 export type CollabPreviewJob = {
     kind: 'preview';
     documentType: 'eigensheets' | 'eigendoc' | 'eigenslides' | 'eigenvector';
@@ -97,9 +93,8 @@ export type ExtractTextJob = {
     documentType: 'eigensheets' | 'eigendoc' | 'eigenslides' | 'eigenvector';
 };
 
-// A pure conversion of uploaded bytes. The transform learns nothing about the destination, such as its owner,
-// mount, ACL or path. There is one arm per supported source format, so an impossible pairing, such as xlsx into
-// an eigendoc, does not compile.
+// A pure conversion of uploaded bytes, which learns nothing of its destination. There is one arm per source format, so
+// an impossible pairing, such as xlsx into an eigendoc, does not compile.
 export type SheetsImportJob = {
     kind: 'import';
     sourceFormat: 'xlsx';
@@ -222,8 +217,7 @@ export function lossCounter(): LossCounter {
     };
 }
 
-// Small stable codes; `status` carries an HTTP status for controlled document
-// errors. Never ApiError/Error instances across the boundary. `out-of-memory`: the
+// `status` carries the HTTP status of a controlled document error, as no Error instance crosses. `out-of-memory`: the
 // child caught one, or died of one after it took the job.
 export type TransformError = {
     code: 'transform-failed' | 'out-of-memory' | 'timeout' | 'crashed' | 'invalid-response' | 'canceled' | 'shutdown';
@@ -251,9 +245,8 @@ export type ExtractTextResult = { text: string };
 export type ExportTransformResult = { data: ArrayBuffer; zoom?: number };
 // A workbook's stored cells and the characters of their text, as sheetsWeight counts them.
 export type SheetsWeight = { cells: number; text: number };
-// The UTF-8 bytes of the lean Sheet[] JSON, which the main thread commits without parsing it, and its weight, which an
-// insert adds to the open workbook's. The pictures its images name come beside it, and the main thread writes them
-// through Mount.
+// The lean Sheet[] JSON as UTF-8 bytes, which the main thread commits without parsing it, and its weight, which an
+// insert adds to the open workbook's. The pictures it names come beside it.
 export type SheetsImportTransformResult = { snapshotJson: ArrayBuffer; weight: SheetsWeight; images: TransformMedia[] };
 // A ready Yjs update plus the images extracted from the docx, its page and its Normal: the main thread
 // only commits the update, the page and the Normal and writes the media through Mount.
@@ -282,9 +275,7 @@ export type TransformResult =
     | SheetsCompactionResult
     | ReferencesResult;
 
-// Which result a job kind produces. The runner proves the pairing at runtime with
-// resultMatchesRequest; runTransformRequest narrows to this once so no caller re-checks.
-// Keyed off the job discriminants, so a captured request (job + source) resolves the
+// Which result a job kind produces, keyed off the job discriminants, so a captured request (job + source) resolves the
 // same. A future arm resolves to `never` and fails to compile at its callsite.
 export type TransformResultFor<R extends CollabTransformJob | BytesTransformJob | SheetsCompactionJob | ReferencesJob> =
     R extends { kind: 'preview' }
@@ -331,100 +322,6 @@ export function inputBytesOf(request: DocumentTransformRequest): number {
     let bytes = request.source.snapshot?.data.byteLength ?? 0;
     for (const update of request.source.updates) bytes += update.data.byteLength;
     return bytes;
-}
-
-// Nested payloads count as shape: resultBytes() sums image byte lengths after the
-// runner has already released the job, so junk in here would throw with nobody left
-// to settle the request.
-function isTransformMedia(value: unknown): boolean {
-    return (
-        isRecord(value) &&
-        typeof value['name'] === 'string' &&
-        typeof value['contentType'] === 'string' &&
-        value['data'] instanceof ArrayBuffer
-    );
-}
-
-function isStringList(value: unknown): boolean {
-    return Array.isArray(value) && value.every((item) => typeof item === 'string');
-}
-
-function isDocumentReferences(value: unknown): boolean {
-    return isRecord(value) && isStringList(value['media']) && isStringList(value['chat']);
-}
-
-// A weight that is no count would slip past the caps it is compared against.
-function isSheetsWeight(value: unknown): boolean {
-    return (
-        typeof value === 'object' &&
-        value !== null &&
-        'cells' in value &&
-        'text' in value &&
-        Number.isFinite(value.cells) &&
-        Number.isFinite(value.text)
-    );
-}
-
-// Which result pairs with which request. The runner checks this at the trust boundary, so every seam past it
-// narrows without checking again. It is exhaustive over the kind, and for an import over the type it produces, so
-// a new arm of the union is a compile error instead of a silent fallthrough.
-export function resultMatchesRequest(request: DocumentTransformRequest, result: unknown): boolean {
-    const r = result as
-        | {
-              body?: unknown;
-              text?: unknown;
-              data?: unknown;
-              zoom?: unknown;
-              snapshotJson?: unknown;
-              weight?: unknown;
-              update?: unknown;
-              page?: unknown;
-              style?: unknown;
-              images?: unknown;
-              snapshot?: unknown;
-              dropped?: unknown;
-              references?: unknown;
-          }
-        | undefined;
-    switch (request.kind) {
-        case 'preview':
-            return typeof r?.body === 'string';
-        case 'extract-text':
-            return typeof r?.text === 'string';
-        case 'compact':
-            return r?.snapshot instanceof ArrayBuffer && typeof r.dropped === 'number';
-        case 'references':
-            return isDocumentReferences(r?.references);
-        case 'export':
-            return (
-                r?.data instanceof ArrayBuffer &&
-                (r.zoom === undefined || (typeof r.zoom === 'number' && Number.isFinite(r.zoom) && r.zoom > 0))
-            );
-        case 'import':
-            switch (request.targetType) {
-                case 'eigendoc':
-                    return (
-                        r?.update instanceof ArrayBuffer &&
-                        typeof r.page === 'object' &&
-                        r.page !== null &&
-                        typeof r.style === 'object' &&
-                        r.style !== null &&
-                        Array.isArray(r.images) &&
-                        r.images.every(isTransformMedia)
-                    );
-                case 'eigenslides':
-                    return (
-                        r?.update instanceof ArrayBuffer && Array.isArray(r.images) && r.images.every(isTransformMedia)
-                    );
-                case 'eigensheets':
-                    return (
-                        r?.snapshotJson instanceof ArrayBuffer &&
-                        isSheetsWeight(r.weight) &&
-                        Array.isArray(r.images) &&
-                        r.images.every(isTransformMedia)
-                    );
-            }
-    }
 }
 
 export function resultBytes(result: TransformResult): number {

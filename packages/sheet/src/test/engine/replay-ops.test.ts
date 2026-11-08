@@ -1,8 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import type { Op, Sheet } from '@workspace/lib/sheets';
-import { createDefaultSheets, DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../../engine/defaults';
+import {
+    createDefaultSheets,
+    DEFAULT_SHEET_COLUMN_COUNT,
+    DEFAULT_SHEET_ROW_COUNT,
+    MAX_SHEET_ROW_COUNT,
+} from '../../engine/defaults';
 import { replaySheetsOps } from '../../engine/replay-ops';
-import type { EditorSheetConfigExtras } from '../../engine/types';
 
 const baseSheet = (id: string, name: string): Sheet => ({ id, name, order: 0, data: [[null]], config: {} });
 
@@ -145,9 +149,7 @@ describe('replaySheetsOps', () => {
     });
 
     test('mixed batch: insertRowCol runs before companion patches (post-mutation positions)', () => {
-        // Mirrors how patchToOp emits real batches: the special row/col op is
-        // pushed first, and the cell patches that follow already reference
-        // post-insert row/col indices (additionalCellOps, mergeOps).
+        // As an undo's batch holds them: the row op first, and the cell patches after it at post-insert indices.
         const sheet: Sheet = {
             id: 's1',
             name: 'Sheet1',
@@ -324,15 +326,17 @@ describe('replaySheetsOps', () => {
         expect(result[0].celldata).toEqual([{ r: 1, c: 0, v: { v: 'a', m: 'a', ct: { fa: 'General', t: 'g' } } }]);
     });
 
-    test('an insert into a read-only row skips its whole batch on the replay path', () => {
+    test('an insert past the row limit skips its whole batch on the replay path', () => {
         // The engine refuses the insert with a RowColError. The replay must not crash on it, or every export and
         // preview would, and the batch's other ops were written for the rows the insert would have moved.
-        const sheet: Sheet & { config?: EditorSheetConfigExtras } = {
+        const sheet: Sheet = {
             id: 's1',
             name: 'Sheet1',
             order: 0,
-            data: [[{ v: 'a', m: 'a', ct: { fa: 'General', t: 'g' } }]],
-            config: { rowReadOnly: { 0: 1 } },
+            data: [
+                [{ v: 'a', m: 'a', ct: { fa: 'General', t: 'g' } }],
+                ...Array.from({ length: MAX_SHEET_ROW_COUNT - 1 }, () => [null]),
+            ],
         };
         const ops: Op[][] = [
             [
@@ -346,7 +350,7 @@ describe('replaySheetsOps', () => {
             ],
         ];
         const result = replaySheetsOps([sheet], ops);
-        expect(result[0].data!.length).toBe(1);
+        expect(result[0].data!.length).toBe(MAX_SHEET_ROW_COUNT);
         expect(result[0].data![0][0]?.v).toBe('a');
     });
 
@@ -423,13 +427,25 @@ describe('replaySheetsOps', () => {
     });
 });
 
-// A granular patch into a collection (`['config','rowlen','2']`, `['calcChain', 0]`) only
-// resolves if the collection already exists. Every document written before the editor started
-// materializing them — and every fresh doc before its first compaction — stores `config: {}`
-// and no `calcChain`, so the replay base must materialize them too. Without this,
+// A granular patch into a collection (`['config','rowlen','2']`) only resolves if the collection
+// already exists. Every document written before the editor started materializing them — and every
+// fresh doc before its first compaction — stores `config: {}`, so the replay base must materialize
+// them too. Without this,
 // replaySheetsOps throws "path doesn't resolve" and rolls back the WHOLE batch: the edit is
 // lost, not degraded, on every reader (a second client opening the doc, the preview renderer,
 // and every xlsx/HTML/PDF export).
+describe('a sheet added under a name the rule refuses', () => {
+    test.each([
+        ['past the length limit', 'x'.repeat(32)],
+        ['with a colon', 'a:b'],
+        ['with a quote at its end', "x'"],
+        ['empty', ''],
+    ])('a name %s is left out, as a live tab leaves it out', (_, name) => {
+        const added: Op = { op: 'addSheet', id: 's2', path: [], value: baseSheet('s2', name) };
+        expect(replaySheetsOps([baseSheet('s1', 'One')], [[added]]).map((sheet) => sheet.id)).toEqual(['s1']);
+    });
+});
+
 describe('ops from a normalizing editor apply to an un-normalized stored sheet', () => {
     const storedBeforeThisBranch = (): Sheet[] => [{ name: 'Sheet1', id: 'id_1', order: 0, celldata: [], config: {} }];
 
@@ -452,20 +468,6 @@ describe('ops from a normalizing editor apply to an un-normalized stored sheet',
             ],
         ]);
         expect(out[0].config?.borderInfo).toEqual({ '0_0': { l: { style: 1, color: '#000' } } });
-    });
-
-    test("the first formula's calcChain op resolves, so the cell's value is not rolled back", () => {
-        // seedCalcChain hands every mounted sheet a calcChain, so the first formula a user
-        // types emits `add ['calcChain', 0]` in the SAME batch as the computed cell. A fresh
-        // doc replays over createDefaultSheets — without a materialized chain that batch rolled
-        // back whole and the formula cell exported blank between its two text neighbours.
-        const out = replaySheetsOps(createDefaultSheets(), [
-            [
-                { op: 'replace', id: 'sheet-1', path: ['data', 0, 1], value: { v: 2, f: '=1+1', m: '2' } },
-                { op: 'add', id: 'sheet-1', path: ['calcChain', 0], value: { r: 0, c: 1, id: 'sheet-1' } },
-            ],
-        ]);
-        expect(out[0].data![0][1]).toEqual({ v: 2, f: '=1+1', m: '2' });
     });
 
     test('a sheet added mid-session takes ops on its config too', () => {

@@ -14,19 +14,21 @@ import {
     rangesOverlap,
     SHEET_DEFAULT_FONT_SIZE,
 } from '@workspace/lib/sheets';
-import { cloneDeep, isNil, isNumber, isPlainObject, isString } from 'es-toolkit/compat';
+import { cloneDeep, isNil, isPlainObject, isString } from 'es-toolkit/compat';
+import { sheetFinder, sheetRefName } from '../../engine/a1-notation';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
 import {
     booleanDisplay,
     cellWrapsText,
     dropRuns,
+    formulaResultType,
     generalAlign,
     numberDisplay,
     parseCellInput,
     richText,
 } from '../../engine/format';
-import { isFormula } from '../../engine/formula-engine';
-import { iscelldata } from '../../engine/formula-utils';
+import { moveFormulaRefs } from '../../engine/formula-shift';
+import { iscelldata, isFormula } from '../../engine/formula-utils';
 import type { Cell, CellMatrix, FormulaDependency } from '../../engine/types';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
@@ -35,10 +37,9 @@ import type { Range, RangeOrWholeAxis, Selection, SingleRange } from '../types';
 import { getSheetIndex, rgbToHex } from '../utils';
 import { carrySides, getBorderInfoCompute } from './border';
 import { checkCF, getComputeMap } from './condition-format';
-import { describeValidationRule, validateCellData } from './data-validation';
-import { setFormulaCellInfo } from './formula-cache';
+import { describeValidationRule, inputPassesRule } from './data-validation';
 import { functionHTMLGenerate } from './formula-editor';
-import { delFunctionGroup, execFunctionGroup, execfunction, getcellrange } from './formula-exec';
+import { computeFormula, getcellrange } from './formula-exec';
 import type { RunStyleKey } from './inline-string';
 import {
     committedRuns,
@@ -49,13 +50,13 @@ import {
     runsHtml,
     sameRunStyle,
 } from './inline-string';
-import { getCellTextInfo } from './text';
+import { recomputeCells } from './refresh';
+import { growRowToFit } from './text';
 import { ID_CARD_NUMBER, isPlainNumber, isRealNull, isRealNum, valueIsError } from './validation';
 import { addValidation, clearValidations, validationAt } from './validation-rules';
 
-// Returns the cell attribute value, normalized to a default when missing. Result is a
-// value-space union (string for color/format/alignment, number for fs, CellType for ct, …);
-// callers narrow at use, e.g. `Number(value)` or `String(value)` per attr.
+// Returns the cell attribute value, normalized to a default when missing. The result is a union of strings and numbers
+// that callers narrow per attr.
 // biome-ignore lint/suspicious/noExplicitAny: per-attr return shape varies (string default vs Cell[attr]); tightening forces casts at every call site
 export function normalizedCellAttr(cell: Cell, attr: keyof Cell): any {
     const tf = { bl: 1, it: 1, ff: 1, cl: 1, un: 1 };
@@ -99,8 +100,8 @@ export function normalizedAttr(data: CellMatrix, r: number, c: number, attr: key
     return normalizedCellAttr(cell, attr);
 }
 
-// Polymorphic accessor: returns Cell, row, column, full matrix, or a single attr value
-// depending on which of r/c are nil. Callers narrow at use.
+// Polymorphic accessor: returns Cell, row, column, full matrix, or a single attr value depending on which of r/c are
+// nil.
 // biome-ignore lint/suspicious/noExplicitAny: per-overload result varies (Cell | row | col | matrix | Cell[attr]); tightening forces casts at every call site
 export function getCellValue(r: number, c: number, data: CellMatrix, attr?: keyof Cell): any {
     if (!attr) {
@@ -145,9 +146,7 @@ export function getCellValue(r: number, c: number, data: CellMatrix, attr?: keyo
     return retv;
 }
 
-// `v` covers every shape callers feed in: scalar (string/number/boolean), Cell-like patch
-// ({v, f, ct, …}), or null/undefined. Re-used by formula-eval, search/replace, data validation,
-// the public API, etc. — keeping the parameter shape here is the project-wide escape hatch.
+// `v` is a scalar, a Cell-like patch ({v, f, ct, …}) or null.
 // biome-ignore lint/suspicious/noExplicitAny: cross-cutting setter, callers pass scalars and Cell-like patches indistinguishably
 export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix | null | undefined, v: any) {
     if (isNil(d)) {
@@ -155,11 +154,10 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
     }
     if (!d) return;
 
-    // A deep copy would lose the cell properties set at initialization.
     let cell = d[r][c];
 
     // biome-ignore lint/suspicious/noExplicitAny: tracks v's shape (scalar or cell.v from a patch)
-    let vupdate: any;
+    let value: any;
 
     if (isPlainObject(v)) {
         if (isNil(cell)) {
@@ -177,20 +175,20 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
         }
 
         if (isPlainObject(v.v)) {
-            vupdate = v.v.v;
+            value = v.v.v;
         } else {
-            vupdate = v.v;
+            value = v.v;
         }
     } else {
-        vupdate = v;
+        value = v;
     }
 
     // A rich write, runs with no value or formula, brings its runs; any other write drops the cell's.
-    if (cell != null && !(isPlainObject(v) && isNil(v.f) && isRealNull(vupdate) && richText(v) !== undefined)) {
+    if (cell != null && !(isPlainObject(v) && isNil(v.f) && isRealNull(value) && richText(v) !== undefined)) {
         dropRuns(cell);
     }
 
-    if (isRealNull(vupdate)) {
+    if (isRealNull(value)) {
         if (cell != null && isPlainObject(cell)) {
             delete cell.m;
             delete cell.v;
@@ -203,68 +201,56 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
         return;
     }
 
-    // 1. Is null
-    // 2. Data from pivot table, each data in flowdata might be a string, result is cell === v === a string or number data
-    if (isRealNull(cell) || ((isString(cell) || isNumber(cell)) && cell === v)) {
-        cell = {};
+    cell ??= {};
+
+    if (!isNil(cell.f)) {
+        writeFormulaResult(cell, value);
+        d[r][c] = cell;
+        return;
     }
 
-    if (!cell) return;
+    const text = value.toString();
 
-    const vupdateStr = vupdate.toString();
-
-    // A formula's text result stays text however it reads (=TEXT(5,"000") is "005"), as recalc stores it.
-    if (!isNil(cell.f) && isString(vupdate) && !valueIsError(vupdate)) {
-        cell.v = vupdate;
-        cell.m = vupdate;
-        cell.ct ??= { fa: 'General', t: 'g' };
-    } else if (vupdateStr.substr(0, 1) === "'") {
-        cell.m = vupdateStr.substr(1);
+    if (text.substr(0, 1) === "'") {
+        cell.m = text.substr(1);
         cell.ct = { fa: '@', t: 's' };
-        cell.v = vupdateStr.substr(1);
+        cell.v = text.substr(1);
         cell.qp = 1;
     } else if (cell.qp === 1) {
-        cell.m = vupdateStr;
+        cell.m = text;
         cell.ct = { fa: '@', t: 's' };
-        cell.v = vupdateStr;
-    } else if (vupdateStr.toUpperCase() === 'TRUE' && (isNil(cell.ct?.fa) || cell.ct?.fa !== '@')) {
+        cell.v = text;
+    } else if (text.toUpperCase() === 'TRUE' && (isNil(cell.ct?.fa) || cell.ct?.fa !== '@')) {
         cell.m = booleanDisplay(true);
         cell.ct = { fa: 'General', t: 'b' };
         cell.v = true;
-    } else if (vupdateStr.toUpperCase() === 'FALSE' && (isNil(cell.ct?.fa) || cell.ct?.fa !== '@')) {
+    } else if (text.toUpperCase() === 'FALSE' && (isNil(cell.ct?.fa) || cell.ct?.fa !== '@')) {
         cell.m = booleanDisplay(false);
         cell.ct = { fa: 'General', t: 'b' };
         cell.v = false;
     } else if (
-        vupdateStr.substr(-1) === '%' &&
-        isRealNum(vupdateStr.substring(0, vupdateStr.length - 1)) &&
+        text.substr(-1) === '%' &&
+        isRealNum(text.substring(0, text.length - 1)) &&
         (isNil(cell.ct?.fa) || cell.ct?.fa !== '@')
     ) {
         cell.ct = { fa: '0%', t: 'n' };
-        cell.v = vupdateStr.substring(0, vupdateStr.length - 1) / 100;
-        cell.m = vupdate;
-    } else if (valueIsError(vupdate) && (!isNil(cell.f) || cell.ct?.fa !== '@')) {
-        // Typed into a text-formatted cell, an error is text, as in Excel. A formula's error is an error in any format.
-        cell.m = vupdateStr;
+        cell.v = text.substring(0, text.length - 1) / 100;
+        cell.m = value;
+    } else if (valueIsError(value) && cell.ct?.fa !== '@') {
+        // Typed into a text-formatted cell, an error is text, as in Excel.
+        cell.m = text;
         if (!isNil(cell.ct)) {
             cell.ct.t = 'e';
         } else {
             cell.ct = { fa: 'General', t: 'e' };
         }
-        cell.v = vupdate;
+        cell.v = value;
     } else {
-        if (!isNil(cell.f) && isPlainNumber(vupdate) && !ID_CARD_NUMBER.test(vupdateStr)) {
-            cell.v = Number(vupdate);
-            if (isNil(cell.ct)) {
-                cell.ct = { fa: 'General', t: 'n' };
-            }
-
-            cell.m = numberDisplay(cell.v, cell.ct.fa);
-        } else if (!isNil(cell.ct) && cell.ct.fa === '@') {
-            cell.m = vupdateStr;
-            cell.v = vupdate;
-        } else if (cell.ct != null && cell.ct.t === 'd' && isString(vupdate)) {
-            const mask = parseCellInput(vupdate);
+        if (!isNil(cell.ct) && cell.ct.fa === '@') {
+            cell.m = text;
+            cell.v = value;
+        } else if (cell.ct != null && cell.ct.t === 'd' && isString(value)) {
+            const mask = parseCellInput(value);
             if (mask[1].t !== 'd' || mask[1].fa === cell.ct.fa) {
                 [cell.m, cell.ct, cell.v] = mask;
             } else {
@@ -272,26 +258,26 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
                 cell.m = numberDisplay(cell.v, cell.ct.fa);
             }
         } else if (!isNil(cell.ct) && !isNil(cell.ct.fa) && cell.ct.fa !== 'General') {
-            if (isPlainNumber(vupdate)) {
-                vupdate = Number(vupdate);
+            if (isPlainNumber(value)) {
+                value = Number(value);
             }
 
-            const mask = numberDisplay(vupdate, cell.ct.fa);
+            const mask = numberDisplay(value, cell.ct.fa);
 
-            if (mask === vupdate) {
-                // If the original cell format cannot be applied to the updated value, get the format of the updated value
-                [cell.m, cell.ct, cell.v] = parseCellInput(vupdate);
+            if (mask === value) {
+                // A format the updated value can't take is replaced by the value's own.
+                [cell.m, cell.ct, cell.v] = parseCellInput(value);
             } else {
                 cell.m = mask;
-                cell.v = vupdate;
+                cell.v = value;
             }
         } else {
-            if (isPlainNumber(vupdate) && !ID_CARD_NUMBER.test(vupdateStr)) {
-                cell.v = Number(vupdate);
+            if (isPlainNumber(value) && !ID_CARD_NUMBER.test(text)) {
+                cell.v = Number(value);
                 cell.ct = { fa: 'General', t: 'n' };
                 cell.m = numberDisplay(cell.v);
             } else {
-                [cell.m, cell.ct, cell.v] = parseCellInput(vupdate);
+                [cell.m, cell.ct, cell.v] = parseCellInput(value);
             }
         }
     }
@@ -299,14 +285,24 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
     d[r][c] = cell;
 }
 
+// A formula's result takes the value's type and shows in the cell's format, which outlives it. Text stays text however
+// it reads (=TEXT(5,"000") is "005"), as recalc stores it.
+function writeFormulaResult(cell: Cell, value: Cell['v']) {
+    const ct = (cell.ct ??= { fa: 'General' });
+    cell.v = value;
+    if (typeof value === 'number') cell.m = numberDisplay(value, ct.fa);
+    else if (typeof value === 'boolean') cell.m = booleanDisplay(value);
+    else cell.m = String(value);
+    ct.t = formulaResultType(ct.fa, value);
+}
+
 export function getRealCellValue(r: number, c: number, data: CellMatrix, attr?: keyof Cell) {
     const value = getCellValue(r, c, data, 'm');
     return isNil(value) ? getCellValue(r, c, data, attr) : value;
 }
 
-// A number stored as text (qp === 1) that still reads as a number. The painter marks it with a
-// green corner triangle; the glyph hit-test claims that same corner. One predicate so the two
-// never drift over what "forced string" means.
+// A number stored as text (qp === 1) that still reads as a number. One predicate for the painter's corner mark and the
+// glyph hit test, so the two never drift over what "forced string" means.
 export function isForcedStringNumber(cell: Cell | null | undefined): boolean {
     return cell?.qp === 1 && !Number.isNaN(Number(cell.v));
 }
@@ -548,16 +544,14 @@ export function updateCell(
     $input?: HTMLDivElement | null,
     // biome-ignore lint/suspicious/noExplicitAny: forwarded straight to setCellValue, same scalar/Cell-patch union
     value?: any,
-    canvas?: CanvasRenderingContext2D,
 ) {
     const inputText = $input?.innerText;
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
 
-    // Data validation: block input when the entered data is invalid
     const sheet = getSheet(ctx);
     const rule = validationAt(sheet.dataValidations, r, c);
-    if (rule?.prohibitInput && !validateCellData(ctx, rule, inputText)) {
+    if (rule?.prohibitInput && !inputPassesRule(ctx, rule, flowdata[r][c], inputText)) {
         cancelNormalSelected(ctx);
         ctx.warnDialog = describeValidationRule(rule, 'invalid');
         return;
@@ -588,7 +582,6 @@ export function updateCell(
         curv.fs ||= SHEET_DEFAULT_FONT_SIZE;
     }
 
-    // API, we get value from user
     value = value || (runs.length === 1 && !isCurInline ? runs[0].v : $input?.innerText);
 
     if (!isCurInline) {
@@ -599,10 +592,6 @@ export function updateCell(
             }
         } else if (curv && curv.qp !== 1) {
             if (isPlainObject(curv) && (value === curv.f || value === curv.v || value === curv.m)) {
-                cancelNormalSelected(ctx);
-                return;
-            }
-            if (value === curv) {
                 cancelNormalSelected(ctx);
                 return;
             }
@@ -622,31 +611,10 @@ export function updateCell(
     if (curv && isPlainObject(curv)) {
         if (!isCurInline) {
             if (isFormula(value)) {
-                const v = execfunction(ctx, value, r, c, undefined, undefined, true);
+                const computed = computeFormula(ctx, value);
                 curv = cloneDeep(d?.[r]?.[c] || {});
-                [, curv.v, curv.f] = v;
-            }
-            // A cell object, such as setCellValue(0, 0, { f: '=SUM(D1)', bg: '#0188fb' }), carries its formula in `f`.
-            else if (isPlainObject(value)) {
-                const valueFunction = value.f;
-
-                if (isFormula(valueFunction)) {
-                    const v = execfunction(ctx, valueFunction, r, c, undefined, undefined, true);
-                    // get v/m/ct
-
-                    curv = cloneDeep(d?.[r]?.[c] || {});
-                    [, curv.v, curv.f] = v;
-                }
-                // A cell object without a formula: its fields are copied onto the cell.
-                else {
-                    for (const attr of Object.keys(value)) {
-                        curv[attr as keyof Cell] = value[attr];
-                    }
-                }
+                [curv.v, curv.f] = computed;
             } else {
-                delFunctionGroup(ctx, r, c);
-                execFunctionGroup(ctx, r, c, value);
-
                 curv = cloneDeep(d?.[r]?.[c] || {});
                 curv.v = value;
 
@@ -661,37 +629,11 @@ export function updateCell(
                     }
                 }
             }
-        } else {
-            // A rich edit's dependents read its runs, as a plain edit's read its value.
-            delFunctionGroup(ctx, r, c);
-            execFunctionGroup(ctx, r, c, curv);
         }
         value = curv;
-    } else {
-        if (isFormula(value)) {
-            const v = execfunction(ctx, value, r, c, undefined, undefined, true);
-            value = {
-                v: v[1],
-                f: v[2],
-            };
-        }
-        // A cell object, such as setCellValue(0, 0, { f: '=SUM(D1)', bg: '#0188fb' }), carries its formula in `f`.
-        else if (isPlainObject(value)) {
-            const valueFunction = value.f;
-
-            if (isFormula(valueFunction)) {
-                const v = execfunction(ctx, valueFunction, r, c, undefined, undefined, true);
-                [, value.v, value.f] = v;
-            } else {
-                const v = curv;
-                if (isNil(value.v)) {
-                    value.v = v;
-                }
-            }
-        } else {
-            delFunctionGroup(ctx, r, c);
-            execFunctionGroup(ctx, r, c, value);
-        }
+    } else if (isFormula(value)) {
+        const [v, f] = computeFormula(ctx, value);
+        value = { v, f };
     }
 
     setCellValue(ctx, r, c, d, value);
@@ -699,34 +641,10 @@ export function updateCell(
 
     const written = d[r][c];
     if (written && ((cellWrapsText(written) && written.v) || isInlineStringCell(written))) {
-        const { defaultrowlen } = ctx;
-
-        const cfg = (sheet.config ??= {});
-        if (!(cfg.columnlen?.[c] && cfg.rowlen?.[r])) {
-            const cellWidth = cfg.columnlen?.[c] || ctx.defaultcollen;
-
-            const textInfo = canvas
-                ? getCellTextInfo(written, canvas, {
-                      r,
-                      c,
-                      cellWidth,
-                  })
-                : null;
-
-            let currentRowLen = defaultrowlen;
-            if (textInfo?.textHeightAll != null) {
-                currentRowLen = textInfo.textHeightAll + 2;
-            }
-
-            if (currentRowLen > defaultrowlen && !cfg.customHeight?.[r]) {
-                if (isNil(cfg.rowlen)) cfg.rowlen = {};
-                cfg.rowlen[r] = currentRowLen;
-            }
-        }
+        growRowToFit(ctx, (sheet.config ??= {}), written, r, c);
     }
 
-    setFormulaCellInfo(ctx, { r, c, id: ctx.currentSheetId });
-    ctx.formulaCache.execFunctionGlobalData = null;
+    recomputeCells(ctx, [{ r, c, id: ctx.currentSheetId }]);
 }
 
 export function getOrigincell(ctx: Context, r: number, c: number, i: string) {
@@ -743,9 +661,7 @@ export function getOrigincell(ctx: Context, r: number, c: number, i: string) {
 
 export function getcellFormula(ctx: Context, r: number, c: number, i: string, data?: CellMatrix) {
     let cell: Cell | null;
-    // `data` is a fast path for the current sheet. A calc-chain entry can belong
-    // to another sheet (getAllFunctionGroup spans the whole workbook), whose rows
-    // may be absent here — resolve those against their own sheet's data via `i`.
+    // `data` is a fast path for the current sheet. A cell of another sheet may name a row it lacks.
     if (isNil(data) || isNil(data[r])) {
         cell = getOrigincell(ctx, r, c, i);
     } else {
@@ -760,18 +676,7 @@ export function getcellFormula(ctx: Context, r: number, c: number, i: string, da
 }
 
 export function getRange(ctx: Context) {
-    const rangeArr = cloneDeep(ctx.selections);
-    const result: Range = [];
-    if (!rangeArr) return result;
-
-    for (let i = 0; i < rangeArr.length; i += 1) {
-        const rangeItem = rangeArr[i];
-        const temp = {
-            row: rangeItem.row,
-            column: rangeItem.column,
-        };
-        result.push(temp);
-    }
+    const result: Range = cloneDeep(ctx.selections ?? []).map(({ row, column }) => ({ row, column }));
     return result;
 }
 
@@ -781,12 +686,10 @@ export function getFlattenedRange(ctx: Context, range?: Range) {
     const result: { r: number; c: number }[] = [];
 
     for (const ele of range) {
-        // This data may be a range or a single cell
         const rs = ele.row;
         const cs = ele.column;
         for (let r = rs[0]; r <= rs[1]; r += 1) {
             for (let c = cs[0]; c <= cs[1]; c += 1) {
-                // r c: current row index and current column index
                 result.push({ r, c });
             }
         }
@@ -801,9 +704,8 @@ function isWholeRowRef(range: RangeOrWholeAxis): range is { row: number[]; colum
     return range.row[0] !== null && range.column[0] === null;
 }
 
-// Convert a selection range array to a string like A1:A2. `range.row = [null, null]`
-// produces a whole-column ref (`A:A`); `range.column = [null, null]` a whole-row
-// ref (`1:1`) — emitted by column-header / row-header clicks in formula-edit mode.
+// Convert a selection range array to a string like A1:A2. A range with null rows is a whole-column ref (`A:A`) and
+// one with null columns a whole-row ref (`1:1`).
 export function getRangetxt(ctx: Context, sheetId: string, range: RangeOrWholeAxis, currentId?: string) {
     let sheettxt = '';
 
@@ -812,21 +714,9 @@ export function getRangetxt(ctx: Context, sheetId: string, range: RangeOrWholeAx
     }
 
     if (sheetId !== currentId) {
-        // If the sheet name contains ', replace it with '' when referencing
         const index = getSheetIndex(ctx, sheetId);
         if (index == null) return '';
-        sheettxt = ctx.sheets[index].name.replace(/'/g, "''");
-        // If the name contains characters other than a-z, A-Z, 0-9, underscore, etc., wrap it in single quotes
-        if (
-            // biome-ignore lint/suspicious/noMisleadingCharacterClass: matches XML 1.0 NameStartChar/NameChar — combining marks are spec-required in the continuation class
-            /^[:A-Z_a-zÀ-ÖØ-öø-˿Ͱ-ͽͿ-῿‌-‍⁰-↏Ⰰ-⿯、-퟿\uF900-\uFDCF\uFDF0-\uFFFD][:A-Z_a-zÀ-ÖØ-öø-˿Ͱ-ͽͿ-῿‌-‍⁰-↏Ⰰ-⿯、-퟿\uF900-\uFDCF\uFDF0-\uFFFD\-.0-9·̀-ͯ‿-⁀]*$/.test(
-                sheettxt,
-            )
-        ) {
-            sheettxt += '!';
-        } else {
-            sheettxt = `'${sheettxt}'!`;
-        }
+        sheettxt = `${sheetRefName(ctx.sheets[index].name)}!`;
     }
 
     if (isWholeColumnRef(range)) {
@@ -901,7 +791,6 @@ export function getFontStyleByCell(cell: Cell | null | undefined, checksCF?: Cel
 export function getStyleByCell(ctx: Context, d: CellMatrix, r: number, c: number, cfCompute?: ComputeMap | null) {
     const style: Record<string, string> = {};
 
-    // Conditional format
     const cf_compute = cfCompute ?? getComputeMap(ctx);
     const checksCF = checkCF(r, c, cf_compute);
 
@@ -931,16 +820,8 @@ export function getStyleByCell(ctx: Context, d: CellMatrix, r: number, c: number
     return Object.assign(style, getFontStyleByCell(cell, checksCF));
 }
 
-// A formula is shown in the formula bar and the in-cell editor as colored spans, not as
-// text — the reference tokens have to be clickable and highlightable. Returns null when
-// the cell carries no formula, so the caller applies its own fallback: the two editors
-// disagree about rich text (the bar shows it plain, the cell shows it styled), so that
-// rule belongs to them, not here.
-//
-// This lives apart from getCellValue on purpose. Generating the markup inside the getter
-// meant `getCellValue(r, c, data, 'f')` returned HTML rather than the formula, which read
-// as a plain attribute read at every callsite and cost us a shipped regression: an
-// escaping pass wrapped it in escapeHtml and printed the markup at the user.
+// The formula as the colored spans the formula bar and the in-cell editor show. Null on a cell with no formula: the
+// two editors disagree about rich text, so the fallback belongs to them.
 export function getFormulaHtml(r: number, c: number, data: CellMatrix): string | null {
     const f = getCellValue(r, c, data, 'f');
     return isNil(f) ? null : functionHTMLGenerate(String(f));
@@ -1004,44 +885,6 @@ export function getQKBorder(width: string, type: string, color: string): BorderS
     }
 
     return { style, color };
-}
-
-export function getdatabyselection(ctx: Context, range: Selection | undefined, sheetId: string) {
-    if (range == null && ctx.selections) {
-        [range] = ctx.selections;
-    }
-
-    if (!range) return [];
-
-    if (range.row == null || range.row.length === 0) {
-        return [];
-    }
-
-    // Fetch data
-    const d = getFlowdata(ctx, sheetId);
-    const cfg = getSheetConfig(ctx, sheetId);
-
-    const data = [];
-    for (let r = range.row[0]; r <= range.row[1]; r += 1) {
-        if (d?.[r] == null) {
-            continue;
-        }
-        if (cfg?.rowhidden != null && cfg.rowhidden[r] != null) {
-            continue;
-        }
-
-        const row = [];
-
-        for (let c = range.column[0]; c <= range.column[1]; c += 1) {
-            if (cfg?.colhidden != null && cfg.colhidden[c] != null) {
-                continue;
-            }
-            row.push(d[r][c]);
-        }
-
-        data.push(row);
-    }
-    return data;
 }
 
 // The rows and columns a copy, cut, move or the format painter carries, in order. Every row and column of the
@@ -1119,10 +962,8 @@ export function carryCells(
     rules.sort(([a], [b]) => compareValidationIds(a, b));
     const linkMap = cloneDeep(from.hyperlink) ?? {};
 
-    // The rules move before any cell, so a carry that would make a rule too complex throws before land evaluates a
-    // formula. A source cell without a rule takes the destination's away, as Excel does. The tiles are joined first,
-    // so a block pasted down a column clears the rules once. On the same sheet the landed cells join the rule itself,
-    // and on another sheet they become a rule of their own.
+    // A source cell without a rule takes the destination's away, as Excel does.
+    // Tiles are joined first, so a block pasted down a column clears once.
     if (cut) clearValidations(from, block);
     const landing = tiles.map(({ row, column, height, width }) => ({
         row: [row, row + height - 1],
@@ -1193,6 +1034,27 @@ export function carryCells(
     }
 }
 
+// A cut or a drag: the block `range` lands once, its source clears, and each formula in it follows the move.
+export function moveCells(ctx: Context, lines: CarriedLines, range: SingleRange, tile: CarryTile) {
+    const from = getSheet(ctx, { id: lines.sheetId }).name;
+    const to = getSheet(ctx).name;
+    const findSheet = sheetFinder(ctx.sheets);
+    const rowOffset = tile.row - range.row[0];
+    const colOffset = tile.column - range.column[0];
+    carryCells(
+        ctx,
+        lines,
+        [tile],
+        ({ source }) => {
+            if (source?.f != null) {
+                source.f = `=${moveFormulaRefs(source.f, range, rowOffset, colOffset, from, to, findSheet)}`;
+            }
+            return source;
+        },
+        { cut: true },
+    );
+}
+
 // Where the cells of a range land in one tile: a range for each run of carried rows and columns it covers. A whole
 // block lands as one range. A filtered copy splits a range where the filter left rows out, and a tile the format
 // painter cut short takes only its first rows and columns.
@@ -1220,10 +1082,6 @@ export function carriedSpan(lines: readonly number[], i: number, limit: number, 
     let n = 0;
     while (n < limit && lines[i + n] >= start && lines[i + n] < start + span) n += 1;
     return n;
-}
-
-export function setEditingCell(ctx: Context, row_index: number, col_index: number) {
-    ctx.editingCellPosition = [row_index, col_index];
 }
 
 export function getDataBySelectionNoCopy(ctx: Context, range: Selection) {

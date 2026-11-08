@@ -5,9 +5,8 @@ import { getMailDomain } from '../../lib/config/server-config';
 import { domainsAligned, verifyImipSender } from '../../lib/mail/imip-auth';
 import { assertJson, authedRequest, getTestContext } from '../setup';
 
-// Audit #4: inbound iMIP used to trust the spoofable `From:` header, so a spoofed REQUEST injected an
-// event and a spoofed CANCEL with a known UID deleted a victim's meeting. It now acts only when our
-// verifying MTA stamped an aligned DKIM pass in an Authentication-Results header with our authserv-id.
+// `From:` is spoofable, so a spoofed REQUEST could inject an event and a spoofed CANCEL with a known UID
+// delete a victim's meeting. Inbound iMIP acts only when our verifying MTA stamped an aligned DKIM pass in an Authentication-Results header with our authserv-id.
 // Delivered on `charlie` in a dedicated 2026-11 window so the other suites' events never interfere.
 
 describe('iMIP sender authentication (unit)', () => {

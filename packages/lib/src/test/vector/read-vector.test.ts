@@ -12,7 +12,7 @@ import {
     MIN_SLIDE_WIDTH,
     SLIDE_SIZES,
     slideFontSize,
-    UNSTORED_SLIDE_WIDTH,
+    TEN_INCH_SLIDE_WIDTH,
 } from '../../vector/frames';
 import { ELEMENT_FIELDS } from '../../vector/kinds';
 import { MAX_ARROW_LABEL_BYTES, MAX_ARROW_LABEL_LINES, MAX_HTML_DEPTH } from '../../vector/kinds/read-fields';
@@ -57,7 +57,7 @@ describe('readVectorFromDoc', () => {
         });
         const scene = readVectorFromDoc(doc);
         expect(scene.elements.map((e) => e.id)).toEqual(['first', 'second']);
-        expect(scene.meta).toEqual({ background: '#ffffff', slideSize: '16:9', slideWidth: 720 });
+        expect(scene.meta).toEqual({ background: '#ffffff', slideSize: '16:9', slideWidth: 960 });
     });
 
     test('applies defaults for missing fields and ignores foreign keys', () => {
@@ -156,11 +156,10 @@ describe('readVectorFromDoc', () => {
         expect(el).toMatchObject({ x: -1_000_000, y: 1_000_000, width: 1_000_000, height: 0, opacity: 100 });
     });
 
-    // Every default but the width, which a new deck writes and a deck from before it had one lacks.
-    test('empty doc yields an empty scene with default meta, at the width of a deck that stores none', () => {
+    test('empty doc yields an empty scene with default meta', () => {
         const scene = readVectorFromDoc(new Y.Doc());
         expect(scene.elements).toEqual([]);
-        expect(scene.meta).toEqual({ ...DEFAULT_SCENE_META, slideWidth: UNSTORED_SLIDE_WIDTH });
+        expect(scene.meta).toEqual(DEFAULT_SCENE_META);
     });
 
     test('materializes a linear element with points and roundness', () => {
@@ -188,7 +187,7 @@ describe('readVectorFromDoc', () => {
                 pressures: '[0.25,0.75,0.5]',
                 simulatePressure: false,
             });
-            // A legacy freedraw (no pressure fields) reads back as simulate with no pressures.
+            // A freedraw with no pressure fields reads back as simulate with no pressures.
             writeElement(elements, 'old', { type: 'freedraw', index: 'a1', points: '[[0,0],[5,5]]' });
         });
         const [pen, old] = readVectorFromDoc(doc).elements;
@@ -522,7 +521,7 @@ describe('readVectorFromDoc', () => {
     // fonts.ts' 1 to 400 pt on every deck 10 in or wider, which every deck Eigen makes is; a drawing tops out near it.
     test('the fontSize range reaches 1 pt on the widest deck and 400 pt on a 10 in one, and no further', () => {
         expect(slideFontSize(MIN_FONT_SIZE_PX, MAX_SLIDE_WIDTH)).toBe(1);
-        expect(slideFontSize(MAX_FONT_SIZE_PX, UNSTORED_SLIDE_WIDTH)).toBe(400);
+        expect(slideFontSize(MAX_FONT_SIZE_PX, TEN_INCH_SLIDE_WIDTH)).toBe(400);
         expect(slideFontSize(MAX_FONT_SIZE_PX, DEFAULT_SCENE_META.slideWidth)).toBe(400);
         expect(MAX_FONT_SIZE_PX).toBeCloseTo(1066.67, 2);
     });
@@ -952,7 +951,7 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
 
 describe('readVectorFromDoc — rich text', () => {
     // There is no per-box marker color: it is redundant with the box `fill`, and a real highlight is a
-    // TipTap mark inside `html`. A value left in a document written by an older build is dropped.
+    // TipTap mark inside `html`. A value such as this in a document is dropped.
     test('a stored highlightColor is not read back onto the element', () => {
         const doc = docWith((elements) =>
             writeElement(elements, 'rich1', {
@@ -1197,17 +1196,17 @@ describe('readVectorFromDoc — the slide size', () => {
         }
     });
 
-    test("a deck without a width is the 10 in it printed at; a stored one reads as it is, in PowerPoint's range", () => {
+    test("a deck without a width is the default; a stored one reads as it is, in PowerPoint's range", () => {
         const widthOf = (width?: unknown) => {
             const doc = deckSized();
             if (width !== undefined) doc.getMap('meta').set('slideWidth', width);
             return readVectorFromDoc(doc).meta.slideWidth;
         };
-        expect(widthOf()).toBe(720);
-        expect(widthOf(960)).toBe(960);
+        expect(widthOf()).toBe(960);
+        expect(widthOf(720)).toBe(720);
         expect(widthOf(1e9)).toBe(MAX_SLIDE_WIDTH);
         expect(widthOf(-5)).toBe(MIN_SLIDE_WIDTH);
-        for (const forged of ['960', Number.NaN, null, {}]) expect(widthOf(forged)).toBe(720);
+        for (const forged of ['720', Number.NaN, null, {}]) expect(widthOf(forged)).toBe(960);
     });
 
     test("a peer's size change reaches every frame on the next read", () => {

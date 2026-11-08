@@ -68,7 +68,7 @@ The listing links (`?sharePathId=`, `?pid=`) open the item's parent folder, whic
 
 ## An old row degrades, never breaks
 
-A notification without `details` renders its action and body only. A file event without a `cardId` or `chatName` links to its document instead of the card. Clients must send `cardId` when they post a card event, but the read shape keeps it optional for the rows that predate it (`FileEventDetailsMap`).
+A notification without `details` renders its action and body only. A file event without a `cardId` or `chatName` links to its document instead of the card. Clients must send `cardId` when they post a card event (`FileEventDetailsMap`).
 
 ## Bell rows carry an app badge
 

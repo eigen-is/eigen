@@ -181,7 +181,7 @@ One builder in `constants/fonts.ts`, reached through `getFontFamily(name)`, give
 - The sheet: `getFontSet` puts the builder's stack in `ctx.font`, and `getFontStyleByCell`, `inline-string.ts` and the font menu call `getFontFamily`.
 - CSS, which can't import TypeScript: `globals.css` spells the `--font-*` tokens and `--font-math` as literals, and `shadow-content.tsx` and the `math` rule read them. A drift test, `packages/ui/src/test/styles/font-tokens.test.ts`, compares each literal with the builder's stack and prints the line to paste.
 
-`getFontName` and `normalizeFontFamilyMarks` match only a stack's first family, so a stack with the fallbacks collapses to its name as the old one does. A test pins both forms. A pre-canon doc that still stores a whole stack passes through `fontNameToCss` unchanged, so it draws the system fallbacks until an editable load collapses it ([TYPOGRAPHY.md § Docs and the canvas store a font name](../TYPOGRAPHY.md#docs-and-the-canvas-store-a-font-name-never-a-css-stack)).
+`getFontName` matches only a stack's first family, so a stack with the fallbacks collapses to its name as the old one does. A test pins both forms. A pre-canon doc that still stores a whole stack passes through `fontNameToCss` unchanged, so it draws the system fallbacks until an editable load collapses it ([TYPOGRAPHY.md § Docs and the canvas store a font name](../TYPOGRAPHY.md#docs-and-the-canvas-store-a-font-name-never-a-css-stack)).
 
 The sheet's system CJK list (PingFang SC, Hiragino Sans GB, Heiti SC, Microsoft YaHei, WenQuanYi Micro Hei) went with the CJK slices.
 

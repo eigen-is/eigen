@@ -22,7 +22,7 @@ import { sheetXml } from '../../../fixtures/xlsx';
 function roundTrip(sheet: Partial<Sheet>) {
     const lost: CountedWarningCode[] = [];
     const styles = styleRegistry((code) => lost.push(code));
-    const xml = rulesXml({ name: 'Sheet1', ...sheet }, styles, (code) => lost.push(code));
+    const xml = rulesXml({ id: 'fixture', name: 'Sheet1', ...sheet }, styles, (code) => lost.push(code));
     const looks = readDxfs(parseOoxml(styles.xml()) ?? undefined, []);
     const read = readRules(parseOoxml(sheetXml({ after: xml })) ?? undefined, {
         dxfs: looks,
@@ -182,7 +182,6 @@ describe('a conditional format', () => {
         const { xml, lost, conditionalFormatRules } = roundTrip({
             conditionalFormatRules: [
                 condition('greaterThan', ['1']),
-                { type: 'icons', cellrange: RANGE },
                 condition('occurrenceDate', ['2026/01/01 - 2026/01/31']),
                 condition('lessThan', ['0']),
                 condition('duplicateValue', ['2']),
@@ -202,7 +201,7 @@ describe('a conditional format', () => {
             'lessThan',
             'equal',
         ]);
-        expect(lost).toEqual(Array(10).fill('conditional-formats-dropped'));
+        expect(lost).toEqual(Array(9).fill('conditional-formats-dropped'));
     });
 
     test('a sheet without rules writes nothing', () => {

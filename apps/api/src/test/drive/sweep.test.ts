@@ -261,7 +261,7 @@ describe('the sweep', () => {
     test('a row without its thread goes', async () => {
         const { path } = await openDoc(mount, M, 'ThreadOrphan', [paragraph()]);
         await withCommentIndex(drive, M, path.id, async (index) => {
-            await index.ensureComment('ghost.eigenchat');
+            await index.ensureComment('ghost.eigenchat', home.user.email);
             await index.addMention('ghost.eigenchat', home.user.email);
         });
         await addThread(mount, M, path.id, { ageHours: 1 });

@@ -2,11 +2,13 @@ import { describe, expect, test } from 'bun:test';
 import { MAX_SLIDE_WIDTH, MIN_SLIDE_WIDTH, slideFontSize, slidePtToPx } from '@workspace/lib/vector';
 import { ApiError } from '../../../lib/core/errors';
 import { MAX_MEDIA_PARTS } from '../../../lib/import/image-types';
-import { MAX_PPTX_WORK, readPptx } from '../../../lib/import/slides/from-pptx';
-import { MAX_SLIDES } from '../../../lib/import/slides/package';
+import { readPptx } from '../../../lib/import/slides/from-pptx';
 import { MAX_ELEMENTS, MAX_PPTX_WEIGHT } from '../../../lib/import/slides/shapes';
 import { cpuClock } from '../../cpu-time';
 import { box, buildPptx, NS, PIXEL_PNG, para, pic, pptxParts, rel, solid, sp, zipParts } from '../../fixtures/pptx';
+
+const MAX_PPTX_WORK = 3_000_000;
+const MAX_SLIDES = 500;
 
 // The reader's output and the limits a hostile pptx meets before the work they bound.
 
@@ -154,13 +156,18 @@ describe('limits', () => {
         expect(refusal(buildPptx({ masters: [{ shapes: master }], slides: more }))).toEqual([413, TOO_LARGE]);
     });
 
-    test('every child the walk visits counts, undrawn, hidden and unknown ones too, as a master is walked again for every slide', () => {
-        // Each slide walks the master's, the layout's and its own tree, each with its two property children.
-        const children = [sp({ xfrm: box(0, 0, 1, 1) }), sp({ xfrm: box(0, 0, 1, 1), hidden: true }), '<p:x/>'];
-        const slides = Array.from({ length: 500 }, () => ({}));
-        for (const child of children) {
-            expect(refusal(buildPptx({ masters: [{ shapes: child.repeat(34) }], slides }))).toBe('read');
-            expect(refusal(buildPptx({ masters: [{ shapes: child.repeat(35) }], slides }))).toEqual([413, TOO_LARGE]);
+    test(`every child the walk visits, hidden and unknown ones too, is charged to ${MAX_PPTX_WORK} units of work`, () => {
+        // A master of a twentieth of the budget is walked again for each slide whose clrMapOvr maps a color anew.
+        const slots = ['dk1', 'lt1', 'dk2', 'lt2', 'accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6'];
+        const slides = (count: number) =>
+            Array.from({ length: count }, (_, i) => ({
+                after: `<p:clrMapOvr><a:overrideClrMapping bg1="${slots[i % 10]}" tx1="${slots[Math.floor(i / 10)]}" bg2="lt2"/></p:clrMapOvr>`,
+            }));
+        const hidden = '<p:sp><p:nvSpPr><p:cNvPr id="1" name="" hidden="1"/></p:nvSpPr></p:sp>';
+        for (const child of [hidden, '<p:x/>']) {
+            const master = child.repeat(MAX_PPTX_WORK / 20);
+            expect(refusal(buildPptx({ masters: [{ shapes: master }], slides: slides(19) }))).toBe('read');
+            expect(refusal(buildPptx({ masters: [{ shapes: master }], slides: slides(20) }))).toEqual([413, TOO_LARGE]);
         }
     });
 

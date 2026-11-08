@@ -1,18 +1,19 @@
-// Measures and lays out a cell's text for the canvas: the font set it draws in, where its lines wrap,
-// and where each piece of text sits, a rich cell's runs included. The painter and the row's auto height
-// both lay out here. Text measurements are cached until clearMeasureTextCache, which the font watcher
-// calls when a font slice loads before it tells the grids to redraw. The cell editors ask for the font
-// slices of the text being typed, so a commit measures the real face.
+// Measures and lays out a cell's text for the canvas: the font set it draws in, where its lines wrap, and where each
+// piece of text sits, a rich cell's runs included. The painter lays out here on its grid's canvas, and a commit fits
+// its row on measuringContext. Measurements are cached until a font slice loads, when the font watcher clears them
+// and tells the grids to redraw. The cell editors ask for the slices of the text being typed, so a commit measures
+// the real face.
 
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { cellFontName, cellFontSize, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
 import { isEmpty, isNil } from 'es-toolkit/compat';
 import { cellWrapsText } from '../../engine/format';
 import type { Cell, CellStyle } from '../../engine/types';
+import type { Context } from '../context';
+import type { SheetConfig } from '../types';
 import { normalizedCellAttr } from './cell';
 import { isInlineStringCell, runStyleOf } from './inline-string';
 
-// Geometry the canvas painter walks back to draw text-decoration overlays.
 type LineSegment = {
     startX: number;
     startY: number;
@@ -21,20 +22,9 @@ type LineSegment = {
     fs: number;
 };
 
-// Cached canvas text metrics. Matches the three fields we read from DOM
-// `TextMetrics`, but may carry computed fallback values when the platform
-// leaves `actualBoundingBoxAscent`/`Descent` unset — so we can't reuse the
-// DOM type directly.
-type MeasureTextMetrics = {
-    width: number;
-    actualBoundingBoxAscent: number;
-    actualBoundingBoxDescent: number;
-};
+type MeasureTextMetrics = Pick<TextMetrics, 'width' | 'actualBoundingBoxAscent' | 'actualBoundingBoxDescent'>;
 
-// Inline-string run produced from `Cell['ct'].s` by the inline-cell branch below.
-// Carries the resolved fontset string for the run, the color/decoration values
-// normalized to non-null defaults, and the lazily-computed measureText cache for
-// the run text (filled by the wrap pass).
+// One piece of a rich cell's text, with the font and decoration it draws in. The wrap pass fills `measureText`.
 type InlineRun = {
     fontset: string;
     fc: string;
@@ -51,9 +41,7 @@ type InlineRun = {
 const CJK = '\\u3000-\\u9fff\\uac00-\\ud7af\\uf900-\\ufaff\\uff00-\\uffef';
 const WRAP_WORDS = new RegExp(` |[${CJK}]|[^ ${CJK}]+`, 'g');
 
-// One styled run produced by the layout pass. `style` is either an InlineRun
-// (when wordGroup.inline === true) or the resolved fontset string for plain text;
-// `content` is the run's text or '' for wrap markers. cellTextRender narrows.
+// One piece of laid-out text. `style` is an InlineRun in a rich cell and the font string in a plain one.
 export type CellTextWordGroup = {
     content: string;
     style: InlineRun | string;
@@ -93,7 +81,6 @@ export type CellTextInfo = {
     desc?: number;
 };
 
-// Option payload for drawLineInfo — geometry of the run the decoration overlays.
 type DrawLineOption = {
     left: number;
     top: number;
@@ -112,17 +99,11 @@ function checkWordByteLength(value: string) {
     return Math.ceil(value.charCodeAt(0).toString(2).length / 8);
 }
 
-export function hasChinaword(s: string) {
-    return /[\u4E00-\u9FA5]|[\uFE30-\uFFA0]/.test(s);
-}
-
-let textHeightCache: Record<string, [number, number]> = {};
 let measureTextCache: Record<string, MeasureTextMetrics> = {};
 
-// A font slice that loads changes what the text measures, so the font watcher clears both caches when one arrives.
+// A font slice that loads changes what the text measures, so the font watcher clears the cache when one arrives.
 export function clearMeasureTextCache() {
     measureTextCache = {};
-    textHeightCache = {};
 }
 
 // WebKit fires no loadingdone for the slices a canvas draw fetches, but a face's loaded promise settles in every
@@ -157,30 +138,6 @@ function onFaceSettled() {
     });
 }
 
-function getTextSize(text: string, font: string) {
-    if (font in textHeightCache) {
-        return textHeightCache[font];
-    }
-
-    const ele = document.createElement('span');
-    ele.style.font = font;
-    ele.style.float = 'left';
-    ele.style.whiteSpace = 'nowrap';
-    ele.style.visibility = 'hidden';
-    ele.style.margin = '0';
-    ele.style.padding = '0';
-    ele.textContent = text;
-    document.body.append(ele);
-
-    const w = Math.max(ele.scrollWidth, ele.offsetWidth, ele.clientWidth);
-    const h = Math.max(ele.scrollHeight, ele.offsetHeight, ele.clientHeight);
-
-    textHeightCache[font] = [w, h];
-
-    ele.remove();
-    return [w, h];
-}
-
 export function defaultFont() {
     return getFontSet(null);
 }
@@ -197,6 +154,29 @@ export function getFontSet(format: CellStyle | null | undefined) {
 // face.
 export function loadCellFont(cell: CellStyle | null | undefined, text: string) {
     document.fonts.load(getFontSet(cell), text).catch(() => {});
+}
+
+let measuring: CanvasRenderingContext2D | null = null;
+
+// The context for a measure outside a draw, such as a commit fitting its row. Every measure sets the font it needs
+// first, and no draw uses this context, so a value it keeps can't disagree with what a grid shows.
+export function measuringContext() {
+    measuring ??= document.createElement('canvas').getContext('2d');
+    return measuring;
+}
+
+// Grows a row to show a cell's text whole. The painter lays the text out in a box 2 px smaller than the cell each way,
+// and 2 px in from its edge. A row sized by hand stays, and so does a row another cell made taller. A merged cell's text
+// fits the merge, which this column doesn't measure, so it grows nothing.
+export function growRowToFit(ctx: Context, config: SheetConfig, cell: Cell, r: number, c: number) {
+    if (cell.mc || config.customHeight?.[r]) return;
+    const measuring = measuringContext();
+    if (!measuring) return;
+    const cellWidth = (config.columnlen?.[c] ?? ctx.defaultcollen) - 2;
+    const textHeight = getCellTextInfo(cell, measuring, { r, c, cellWidth })?.textHeightAll;
+    if (textHeight == null) return;
+    const height = Math.ceil(textHeight) + 4;
+    if (height > (config.rowlen?.[r] ?? ctx.defaultrowlen)) (config.rowlen ??= {})[r] = height;
 }
 
 // Measures one piece of text in the canvas's current font, or in `fontset` when the caller passes it.
@@ -221,46 +201,22 @@ export function getMeasureText(
     }
 
     const measured = renderCtx.measureText(String(value));
-    const metrics: MeasureTextMetrics = {
+    const metrics = {
         width: measured.width,
         actualBoundingBoxAscent: measured.actualBoundingBoxAscent,
         actualBoundingBoxDescent: measured.actualBoundingBoxDescent,
     };
 
-    if (
-        metrics.actualBoundingBoxDescent == null ||
-        metrics.actualBoundingBoxAscent == null ||
-        Number.isNaN(metrics.actualBoundingBoxDescent) ||
-        Number.isNaN(metrics.actualBoundingBoxAscent)
-    ) {
-        const commonWord = hasChinaword(String(value)) ? '田' : 'M';
-        const oneLineTextHeight = getTextSize(commonWord, font)[1] * 0.8;
-        if (baseline === 'top') {
-            metrics.actualBoundingBoxDescent = oneLineTextHeight;
-            metrics.actualBoundingBoxAscent = 0;
-        } else if (baseline === 'middle') {
-            metrics.actualBoundingBoxDescent = oneLineTextHeight / 2;
-            metrics.actualBoundingBoxAscent = oneLineTextHeight / 2;
-        } else {
-            metrics.actualBoundingBoxDescent = 0;
-            metrics.actualBoundingBoxAscent = oneLineTextHeight;
-        }
-    }
-
     // Text without a descender gets the descent of letters like g and y, so every line of one font sits alike.
     if (baseline === 'alphabetic') {
         const noDescender = renderCtx.measureText('abcdABCD');
         if (metrics.actualBoundingBoxDescent <= noDescender.actualBoundingBoxDescent) {
-            metrics.actualBoundingBoxDescent = renderCtx.measureText('gjpqy').actualBoundingBoxDescent || 0;
+            metrics.actualBoundingBoxDescent = renderCtx.measureText('gjpqy').actualBoundingBoxDescent;
         }
     }
 
     measureTextCache[key] = metrics;
     return metrics;
-}
-
-function isSupportBoundingBox(ctx: CanvasRenderingContext2D) {
-    return !isNil(ctx.measureText('田').actualBoundingBoxAscent);
 }
 
 export function drawLineInfo(
@@ -335,12 +291,8 @@ export function drawLineInfo(
     }
 }
 
-// Layout the cell's text for the canvas painter. Returns null when the cell has no value.
-// `option.cellWidth` absent → "onlyWidth" mode (row-height auto-fit); only the geometry
-// totals are computed and the layout math returns early. `option.cellHeight` absent is
-// allowed for callers that only consume textHeightAll — the layout `values` produced
-// with the default 0 are unused. Such a caller fits the row to the text, so a plain cell's
-// wrapped lines are all laid out rather than only those that fit the row.
+// Lays out the cell's text for the painter, or returns null when the cell has no value. Without `option.cellWidth`
+// it computes only the totals. Without `option.cellHeight` all wrapped lines are laid out, to fit the row to them.
 export function getCellTextInfo(
     cell: Cell,
     renderCtx: CanvasRenderingContext2D,
@@ -353,16 +305,11 @@ export function getCellTextInfo(
     const space_height = option.space_height ?? 2;
     const isMode = option.cellWidth == null ? 'onlyWidth' : '';
 
-    // Horizontal alignment
     const horizonAlign = normalizedCellAttr(cell, 'ht');
-    // Vertical alignment
     const verticalAlign = normalizedCellAttr(cell, 'vt');
 
     const wrap = cellWrapsText(cell);
-    // rt: signed degrees in [-90, 90] (positive = CCW / "up", negative = CW / "down"),
-    // or 'vertical' for stacked text. The two branches that follow (vertical-stack vs.
-    // diagonal/horizontal) stay separate; only the diagonal branch needs the magnitude
-    // and direction split into Math.abs(rt) + isRotateUp.
+    // Signed degrees in [-90, 90], where positive turns the text up, or 'vertical' for stacked text.
     const rtRaw = normalizedCellAttr(cell, 'rt');
     const isVertical = rtRaw === 'vertical';
     let rt: number = typeof rtRaw === 'number' && rtRaw >= -90 && rtRaw <= 90 ? rtRaw : 0;
@@ -399,8 +346,8 @@ export function getCellTextInfo(
         fontset = getFontSet(cell);
         renderCtx.font = fontset;
 
-        cancelLine = normalizedCellAttr(cell, 'cl'); // cancelLine
-        underLine = normalizedCellAttr(cell, 'un'); // underLine
+        cancelLine = normalizedCellAttr(cell, 'cl');
+        underLine = normalizedCellAttr(cell, 'un');
         fontSize = cellFontSize(cell.fs);
 
         value = cell.m;
@@ -414,10 +361,9 @@ export function getCellTextInfo(
     }
 
     if (isVertical) {
-        // vertical text (stacked top-to-bottom characters)
         renderCtx.textBaseline = 'top';
 
-        let textW_all = 0; // Total width/height after splitting
+        let textW_all = 0;
         let textH_all = 0;
         let colIndex = 0;
         let textH_all_cache = 0;
@@ -488,7 +434,6 @@ export function getCellTextInfo(
                 preShareCell = shareCell;
             }
         } else {
-            // value is non-nil here — isEmpty(value) returned null earlier.
             const valueStr = String(value);
             const measureText = getMeasureText(valueStr, renderCtx, fontset);
             const textHeight = measureText.actualBoundingBoxDescent + measureText.actualBoundingBoxAscent;
@@ -599,15 +544,10 @@ export function getCellTextInfo(
             cumColumnWidth += columnWidth;
         }
     } else {
-        const supportBoundBox = isSupportBoundingBox(renderCtx);
-        if (supportBoundBox) {
-            renderCtx.textBaseline = 'alphabetic';
-        } else {
-            renderCtx.textBaseline = 'bottom';
-        }
+        renderCtx.textBaseline = 'alphabetic';
 
         if (wrap || isInline) {
-            let textW_all = 0; // Total width/height after splitting
+            let textW_all = 0;
             let textH_all = 0;
             let textW_all_inner = 0;
 
@@ -623,9 +563,7 @@ export function getCellTextInfo(
             let preTextWidth = 0;
             let preMeasureText: MeasureTextMetrics | undefined;
             let i = 1;
-            // Tracks the last index in `valueStr` where a wrap break is allowed (whitespace or
-            // multi-byte character); the rotated/plain branches below back-track to it on overflow.
-            // null when no break candidate has been seen since the last split.
+            // Where a line may break: after a space or a multi-byte character. An overflow goes back to it.
             let spaceOrTwoByte: {
                 index: number;
                 str: string;
@@ -634,7 +572,6 @@ export function getCellTextInfo(
                 asc: number;
                 desc: number;
             } | null = null;
-            // Inline-string variant of the wrap-break tracker — only the index is needed there.
             let spaceOrTwoByteIndex: number | null = null;
             // A rich cell's word is measured once, however often the wrap pass goes back over it.
             const measureRun = (sc: InlineRun): MeasureTextMetrics => {
@@ -745,7 +682,6 @@ export function getCellTextInfo(
                     }
                 }
             } else {
-                // value is non-nil here — isEmpty(value) returned null earlier.
                 const valueStr = String(value);
                 let parsedTextHeight = 0;
                 while (i <= valueStr.length) {
@@ -755,10 +691,10 @@ export function getCellTextInfo(
                     const textHeight = measureText.actualBoundingBoxAscent + measureText.actualBoundingBoxDescent;
 
                     const width =
-                        textWidth * Math.cos((rt * Math.PI) / 180) + textHeight * Math.sin((rt * Math.PI) / 180); // consider text box wdith and line height
+                        textWidth * Math.cos((rt * Math.PI) / 180) + textHeight * Math.sin((rt * Math.PI) / 180);
 
                     const height =
-                        textWidth * Math.sin((rt * Math.PI) / 180) + textHeight * Math.cos((rt * Math.PI) / 180); // consider text box wdith and line height
+                        textWidth * Math.sin((rt * Math.PI) / 180) + textHeight * Math.cos((rt * Math.PI) / 180);
                     const lastWord = str.substr(str.length - 1, 1);
                     if (lastWord === ' ' || checkWordByteLength(lastWord) === 2) {
                         spaceOrTwoByte = {
@@ -771,7 +707,6 @@ export function getCellTextInfo(
                         };
                     }
                     if (rt !== 0) {
-                        // rotate
                         if (height + space_height > cellHeight && !isNil(text_all_split[splitIndex])) {
                             if (!isNil(spaceOrTwoByte) && spaceOrTwoByte.index < i) {
                                 anchor = spaceOrTwoByte.index;
@@ -836,7 +771,6 @@ export function getCellTextInfo(
                             i += 1;
                         }
                     } else {
-                        // plain
                         if (width + space_width > cellWidth && !isNil(text_all_split[splitIndex])) {
                             if (!isNil(spaceOrTwoByte) && spaceOrTwoByte.index < i) {
                                 anchor = spaceOrTwoByte.index;
@@ -865,10 +799,6 @@ export function getCellTextInfo(
                                 spaceOrTwoByte = null;
                                 anchor = i - 1;
 
-                                // preMeasureText carries the previous iteration's metrics — set
-                                // at the bottom of every iteration. The overflow branch can't
-                                // fire on iteration 1 (the bucket is empty), so a missing value
-                                // would indicate an inconsistency; bail to avoid a NaN push.
                                 if (preMeasureText == null) break;
                                 text_all_split[splitIndex].push({
                                     content: preStr,
@@ -939,16 +869,9 @@ export function getCellTextInfo(
                     const sp = splitLists[s];
                     const spDesc = sp.desc ?? 0;
                     const spAsc = sp.asc ?? 0;
-                    if (rt !== 0) {
-                        // rotate
-                        sWidth += sp.width;
-                        sHeight = Math.max(sHeight, sp.height - (supportBoundBox ? spDesc : 0));
-                    } else {
-                        // plain
-                        sWidth += sp.width;
-                        sHeight = Math.max(sHeight, sp.height - (supportBoundBox ? spDesc : 0));
-                    }
-                    maxDesc = Math.max(maxDesc, supportBoundBox ? spDesc : 0);
+                    sWidth += sp.width;
+                    sHeight = Math.max(sHeight, sp.height - spDesc);
+                    maxDesc = Math.max(maxDesc, spDesc);
                     maxAsc = Math.max(maxAsc, spAsc);
                     maxWordCount += 1;
                 }
@@ -956,12 +879,10 @@ export function getCellTextInfo(
                 lineHeight = sHeight / 2;
                 oneLinemaxWordCount = Math.max(oneLinemaxWordCount, maxWordCount);
                 if (rt !== 0) {
-                    // rotate
                     sHeight += lineHeight;
                     textW_all_inner = Math.max(textW_all_inner, sWidth);
                     textH_all += sHeight;
                 } else {
-                    // plain
                     sHeight += lineHeight;
                     textW_all = Math.max(textW_all, sWidth);
                     textH_all += sHeight;
@@ -1020,14 +941,12 @@ export function getCellTextInfo(
                         let left = 0;
                         let top = 0;
                         if (rt !== 0) {
-                            // rotate
                             const y = cumWordHeight + size.asc;
                             const x = cumWordHeight / Math.tan(rtPI) - cumColumnWidth + textW_all_inner;
                             if (horizonAlign === '0') {
                                 // center
                                 if (verticalAlign === '0') {
                                     // mid
-
                                     left =
                                         x + cellWidth / 2 - textW_all / 2 + (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
                                     top =
@@ -1074,7 +993,7 @@ export function getCellTextInfo(
                                     top =
                                         y + cellHeight / 2 - textH_all / 2 - (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
                                 } else if (verticalAlign === '1') {
-                                    // top fixOneLineLeft
+                                    // top
                                     left = x + cellWidth - textW_all + fixOneLineLeft;
                                     top = y - textH_all;
                                 } else if (verticalAlign === '2') {
@@ -1120,7 +1039,6 @@ export function getCellTextInfo(
                         let left = 0;
                         let top = 0;
                         if (rt !== 0) {
-                            // rotate
                             const y = cumWordHeight + size.asc;
                             const x = (textH_all - cumWordHeight) / Math.tan(rtPI) + cumColumnWidth;
 
@@ -1128,7 +1046,6 @@ export function getCellTextInfo(
                                 // center
                                 if (verticalAlign === '0') {
                                     // mid
-
                                     left =
                                         x + cellWidth / 2 - textW_all / 2 - (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
                                     top =
@@ -1182,7 +1099,7 @@ export function getCellTextInfo(
                                     top =
                                         y + cellHeight / 2 - textH_all / 2 - (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
                                 } else if (verticalAlign === '1') {
-                                    // top fixOneLineLeft
+                                    // top
                                     left = x + cellWidth - rw * Math.cos(rtPI);
                                     top = y + rh * Math.cos(rtPI);
                                 } else if (verticalAlign === '2') {
@@ -1207,10 +1124,8 @@ export function getCellTextInfo(
                                 fs: wordGroup.fs ?? fontSize,
                             });
                         } else {
-                            // plain
                             left = space_width + cumColumnWidth;
                             if (horizonAlign === '0') {
-                                // + space_width*textH_all_ColumnHeight.length
                                 left = cellWidth / 2 + cumColumnWidth - size.width / 2;
                             } else if (horizonAlign === '2') {
                                 left = cellWidth + cumColumnWidth - size.width;
@@ -1295,7 +1210,6 @@ export function getCellTextInfo(
                 }
             }
         } else {
-            // value is non-nil here — isEmpty(value) returned null earlier.
             const valueStr = String(value);
             const measureText = getMeasureText(valueStr, renderCtx, fontset);
             const textWidth = measureText.width;
@@ -1306,9 +1220,9 @@ export function getCellTextInfo(
             rt = Math.abs(rt);
             const rtPI = (rt * Math.PI) / 180;
 
-            const textWidthAll = textWidth * Math.cos(rtPI) + textHeight * Math.sin(rtPI); // consider text box wdith and line height
+            const textWidthAll = textWidth * Math.cos(rtPI) + textHeight * Math.sin(rtPI);
 
-            const textHeightAll = textWidth * Math.sin(rtPI) + textHeight * Math.cos(rtPI); // consider text box wdith and line height
+            const textHeightAll = textWidth * Math.sin(rtPI) + textHeight * Math.cos(rtPI);
 
             if (rt !== 0) {
                 textContent.textHeightAll = textHeightAll;
@@ -1325,12 +1239,10 @@ export function getCellTextInfo(
             const width = textWidthAll;
             const height = textHeightAll;
 
-            let left = space_width + textHeight * Math.sin(rtPI) * isRotateUp; // Default: left-align (ht=1)
+            let left = space_width + textHeight * Math.sin(rtPI) * isRotateUp;
             if (horizonAlign === '0') {
-                // Center-align
                 left = cellWidth / 2 - width / 2 + textHeight * Math.sin(rtPI) * isRotateUp;
             } else if (horizonAlign === '2') {
-                // Right-align
                 left = cellWidth - space_width - width + textHeight * Math.sin(rtPI) * isRotateUp;
             }
 
@@ -1339,16 +1251,14 @@ export function getCellTextInfo(
                 space_height -
                 height +
                 measureText.actualBoundingBoxAscent * Math.cos(rtPI) +
-                textWidth * Math.sin(rtPI) * isRotateUp; // Default: bottom-align (vt=2)
+                textWidth * Math.sin(rtPI) * isRotateUp;
             if (verticalAlign === '0') {
-                // Center-align
                 top =
                     cellHeight / 2 -
                     height / 2 +
                     measureText.actualBoundingBoxAscent * Math.cos(rtPI) +
                     textWidth * Math.sin(rtPI) * isRotateUp;
             } else if (verticalAlign === '1') {
-                // Top-align
                 top =
                     space_height +
                     measureText.actualBoundingBoxAscent * Math.cos(rtPI) +

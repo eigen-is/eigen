@@ -12,7 +12,7 @@ import { useContext, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialogProps } from '../../hooks/useDialog';
 import type { FormulaFunctionEntry } from '../../state';
-import { FUNCTION_CATEGORIES, FUNCTION_LIST, placeEditorCaret } from '../../state';
+import { FUNCTION_CATEGORIES, FUNCTION_LIST, functionCallHtml, openCellEditor } from '../../state';
 
 // Each function with its name and description in lower case, so a search ignores case without lowering them per key.
 const SEARCHABLE_FUNCTIONS = FUNCTION_LIST.map((fn) => ({
@@ -22,10 +22,7 @@ const SEARCHABLE_FUNCTIONS = FUNCTION_LIST.map((fn) => ({
 }));
 
 export function InsertFunctionDialog() {
-    const {
-        setContext,
-        refs: { cellInput, globalCache },
-    } = useContext(WorkbookContext);
+    const { setContext } = useContext(WorkbookContext);
     const dialogProps = useDialogProps();
     const [category, setCategory] = useState(0);
     const [highlight, setHighlight] = useState(0);
@@ -52,16 +49,11 @@ export function InsertFunctionDialog() {
     const insert = () => {
         const name = functions[highlight].n;
         setContext((ctx) => {
-            const input = cellInput.current;
-            if (!input) return;
             const last = ctx.selections?.at(-1);
-            ctx.editingCellPosition = [
-                last?.row_focus ?? last?.row[0] ?? 0,
-                last?.column_focus ?? last?.column[0] ?? 0,
-            ];
-            globalCache.doNotUpdateCell = true;
-            input.innerHTML = `<span dir="auto" class="sheet-formula-text-color">=</span><span dir="auto" class="sheet-formula-text-color">${name}</span><span dir="auto" class="sheet-formula-text-color">(</span>`;
-            placeEditorCaret(input, name.length + 2);
+            const r = last?.row_focus ?? last?.row[0] ?? 0;
+            const c = last?.column_focus ?? last?.column[0] ?? 0;
+            const html = `${functionCallHtml(name)}`;
+            openCellEditor(ctx, r, c, { html, caret: name.length + 2 });
             ctx.functionHint = name;
             ctx.functionCandidates = [];
             if (Object.keys(ctx.formulaCache.functionlistMap).length === 0) {

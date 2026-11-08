@@ -3,8 +3,6 @@ import { newSheetChartSpecParts, sampleChartSpec } from '../../charts';
 import { decodeSheetsSnapshot, encodeSheetsSnapshot, isCurrentSheetsSnapshot } from '../../sheets/snapshot-codec';
 import type { Cell, CellWithRowAndCol, Sheet } from '../../sheets/types';
 
-type SheetWithCalcChain = Sheet & { calcChain?: { r: number; c: number; id: string }[] };
-
 type Envelope = {
     f: string;
     computed: boolean;
@@ -108,18 +106,11 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         expect((JSON.parse(encoded) as Envelope).computed).toBe(true);
     });
 
-    test('round-trips every cell, border and sheet branch (only calcChain and empty maps are added)', () => {
-        const decoded = decodeSheetsSnapshot(
-            encodeSheetsSnapshot(WORKBOOK, { computed: true }),
-        ) as SheetWithCalcChain[];
-        expect(decoded.map(({ calcChain: _chain, images: _images, charts: _charts, ...sheet }) => sheet)).toEqual(
+    test('round-trips every cell, border and sheet branch (only empty maps are added)', () => {
+        const decoded = decodeSheetsSnapshot(encodeSheetsSnapshot(WORKBOOK, { computed: true }));
+        expect(decoded.map(({ images: _images, charts: _charts, ...sheet }) => sheet)).toEqual(
             WORKBOOK.map((sheet) => ({ dataValidations: {}, ...sheet })),
         );
-        expect(decoded[0].calcChain).toEqual([
-            { r: 1, c: 0, id: 'sheet-1' },
-            { r: 7, c: 0, id: 'sheet-1' },
-        ]);
-        expect(decoded[1].calcChain).toEqual([]);
     });
 
     test('repeated style and border payloads are interned once', () => {
@@ -128,13 +119,6 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         // border by two borderInfo cells.
         expect(envelope.styles.filter((style) => style['bg'] === '#ff0000')).toHaveLength(1);
         expect(envelope.borders).toHaveLength(3);
-    });
-
-    test('computed: false → no calcChain on any sheet', () => {
-        const decoded = decodeSheetsSnapshot(
-            encodeSheetsSnapshot(WORKBOOK, { computed: false }),
-        ) as SheetWithCalcChain[];
-        for (const sheet of decoded) expect(sheet.calcChain).toBeUndefined();
     });
 
     test("a sheet's row and column are at least the dense grid's, so a stale smaller size truncates nothing", () => {
@@ -152,8 +136,8 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
     test('one shared style across 3000 cells is serialized once', () => {
         const encoded = encodeSheetsSnapshot(BULK, { computed: true });
         expect(encoded.split('#a1b2c3')).toHaveLength(2);
-        const decoded = decodeSheetsSnapshot(encoded) as SheetWithCalcChain[];
-        expect(decoded.map(({ calcChain: _chain, images: _images, charts: _charts, ...sheet }) => sheet)).toEqual(
+        const decoded = decodeSheetsSnapshot(encoded);
+        expect(decoded.map(({ images: _images, charts: _charts, ...sheet }) => sheet)).toEqual(
             BULK.map((sheet) => ({ dataValidations: {}, ...sheet })),
         );
     });
@@ -169,13 +153,12 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
             { id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [] },
             { id: 'sheet-2', name: 'Sheet2', order: 1 },
         ];
-        const decoded = decodeSheetsSnapshot(encodeSheetsSnapshot(sheets, { computed: true })) as SheetWithCalcChain[];
+        const decoded = decodeSheetsSnapshot(encodeSheetsSnapshot(sheets, { computed: true }));
         expect(decoded[0]).toEqual({
             id: 'sheet-1',
             name: 'Sheet1',
             order: 0,
             celldata: [],
-            calcChain: [],
             images: {},
             charts: {},
             dataValidations: {},
@@ -400,6 +383,23 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         expect(() => decodeSheetsSnapshot(JSON.stringify(envelope))).toThrow('Unknown sheets snapshot format');
     });
 
+    test('a sheet without an id throws the same error, as no reader could agree on one', () => {
+        const envelope = JSON.parse(encodeSheetsSnapshot(WORKBOOK, { computed: true })) as Envelope;
+        delete envelope.sheets[0]!['id'];
+        expect(() => decodeSheetsSnapshot(JSON.stringify(envelope))).toThrow('Unknown sheets snapshot format');
+    });
+
+    test('a second sheet of one id throws the same error', () => {
+        const encoded = encodeSheetsSnapshot(
+            [
+                { id: 'same', name: 'One' },
+                { id: 'same', name: 'Two' },
+            ],
+            { computed: true },
+        );
+        expect(() => decodeSheetsSnapshot(encoded)).toThrow('Unknown sheets snapshot format');
+    });
+
     test('a v1 snapshot (plain Sheet[] JSON) throws instead of decoding', () => {
         // No legacy reading anywhere: the editor opens such a doc read-only on defaults
         // (use-sheet.ts loadedRef) and never persists over it.
@@ -418,7 +418,7 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         expect(hex).toBe('0e352cbab7206951a95446a0374d3c34a169e0595ed19631b7b1d0773b66f2b7');
     });
 
-    test('data and selections never reach the snapshot', () => {
+    test('data never reaches the snapshot', () => {
         const sheets: Sheet[] = [
             {
                 id: 'sheet-1',
@@ -426,12 +426,10 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
                 order: 0,
                 celldata: [{ r: 0, c: 0, v: { v: 1, m: '1' } }],
                 data: [[{ v: 1, m: '1' }]],
-                selections: [{ row: [0, 0], column: [0, 0] }],
-            } as Sheet,
+            },
         ];
         const encoded = encodeSheetsSnapshot(sheets, { computed: true });
         expect(encoded).not.toContain('"data":');
-        expect(encoded).not.toContain('"selections":');
         const decoded = decodeSheetsSnapshot(encoded);
         expect(decoded[0].data).toBeUndefined();
     });

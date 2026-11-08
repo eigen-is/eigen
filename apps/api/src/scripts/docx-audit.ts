@@ -422,8 +422,6 @@ function multisetDiff<T>(source: T[], imported: T[]): { missing: T[]; extra: T[]
     return { missing, extra };
 }
 
-// ── Source: what Word shows ─────────────────────────────────────────────────────────────────────────────────────
-
 type Styles = {
     chain: (id: string | undefined) => XmlElement[];
     paragraph?: string;
@@ -474,12 +472,8 @@ function hyperlinkField(instr: string): Link | undefined {
 
 type Scope = { chain: Chain; float: boolean; cell: boolean; note: boolean; fields: Field[] };
 
-// styleRuns: the paragraph style's run formatting even where a structure takes runs' place, as no node draws a font or
-// capitals. weightRuns: what bold reads, as a heading draws its own and leaves its style's other formatting. sizeRuns:
-// the size a run's stands out from, a heading's or a title's style's, which draws its own, or else the body's, as in a
-// heading the reader reads as body text.
-// drawn: the color and italic the paragraph's node draws, a heading level's or a title's, which are no mark and from
-// which a run set apart is one: an upright run in a heading that draws italic is the italic mark it came from.
+// Where a structure draws its own look, styleRuns, weightRuns and sizeRuns say what a run stands out from.
+// `drawn` is the color and italic the node already draws, which are no mark.
 type Inline = {
     scope: Scope;
     paragraph: Paragraph;
@@ -667,10 +661,8 @@ function countElements(root: XmlElement, into: Map<string, number>): void {
     }
 }
 
-// Word's view: deleted and moved-away text, field instructions and hidden runs are no text, and a field's result is.
-// Formatting a structure draws (a heading's weight and size, a quote's, a note's, a task's paragraph style) is the
-// structure's, not a mark; a link's color and underline count only when set on the run itself. Table styles are not
-// resolved.
+// Word's view: deleted text, field instructions and hidden runs are no text, a field's result is. Formatting a structure
+// draws is no mark, and a link's color and underline count only when set on the run. Table styles are not resolved.
 export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements: Map<string, number> } {
     const zip = openZip(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes));
     const read = (part: string | undefined) => {
@@ -1305,8 +1297,6 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
     return { ...tally, elements };
 }
 
-// ── Imported: what the eigendoc JSON holds ──────────────────────────────────────────────────────────────────────
-
 const MARK_FEATURES = new Map<string | undefined, Feature>([
     ['bold', 'bold'],
     ['italic', 'italic'],
@@ -1487,16 +1477,12 @@ export function auditImported(json: JSONContent, normalFont = DOCUMENT_FONT): Ta
     return tally;
 }
 
-// ── Comparing the two sides ─────────────────────────────────────────────────────────────────────────────────────
-
 // The per-file JSON keeps only this many of the words that differ, so the out folder of a private corpus can stay
 // out of the repo.
 const SAMPLE = 20;
 
-// Text, marks and item numbers match as multisets of words and numbers, so a word moved, a mark on another word or
-// a list renumbered is a loss, and what has no match on the source side is invented. A numbered heading matches the
-// whole line Word shows. Every other feature keeps at most what the source holds, so an importer can't make up in one
-// feature what it loses in another, and invents what it holds beyond it.
+// Text, marks and item numbers match as multisets, so a moved word is a loss and an unmatched one is invented. Every
+// other feature keeps at most what the source holds, so one feature can't make up for another.
 export function compareTallies(source: Tally, imported: Tally): Pick<FileResult, 'text' | 'features'> {
     const words = multisetDiff(source.words, imported.words);
     const numbers = multisetDiff(source.numbers, imported.numbers);
@@ -1703,8 +1689,6 @@ export function compareRuns(outA: string, outB: string): string {
         '',
     ].join('\n');
 }
-
-// ── Running an importer ─────────────────────────────────────────────────────────────────────────────────────────
 
 const DEFAULT_IMPORTER = path.join(import.meta.dir, '../lib/import/doc/from-docx.ts');
 const DEFAULT_TIMEOUT_MS = 60_000;
@@ -1918,8 +1902,6 @@ export async function runAudit(options: {
     return meta;
 }
 
-// ── Round trip: the import, our export and its import again ─────────────────────────────────────────────────────
-
 type Imported = ReturnType<typeof docxToPmJson>;
 
 // A picture as the doc shows it: its type and its size in pixels, none for one sharp can't read.
@@ -1927,7 +1909,7 @@ type Picture = { contentType: string; width?: number; height?: number };
 
 // What the two imports hold, the first with its textblocks split as the writer splits them, each picture by its media
 // name, and the media the export was handed, by the first import's name.
-export type DocxRoundtripContext = {
+type DocxRoundtripContext = {
     a: Imported;
     b: Imported;
     pictures: { a: ReadonlyMap<string, Picture>; b: ReadonlyMap<string, Picture> };
@@ -2030,7 +2012,7 @@ function diffContent(a: JSONContent[], b: JSONContent[], at: string, pictures: P
 }
 
 // The doc's body and bands, its page and its Normal key by key.
-export function diffDocs(a: Imported, b: Imported, pictures: Pictures): RoundtripDifference[] {
+function diffDocs(a: Imported, b: Imported, pictures: Pictures): RoundtripDifference[] {
     const differences: RoundtripDifference[] = [];
     const keyed = (prefix: string, x: object, y: object) => {
         const [left, right] = [entries(x), entries(y)];
@@ -2071,14 +2053,9 @@ function joined(nodes: JSONContent[]): JSONContent[] {
     return out;
 }
 
-// The first import as the writer lays it out (blocksOf and figureOf in export/doc/docx/), each change a difference of its own:
-// a textblock's block figures each stand in a paragraph of their own and a display equation in a piece of its own, the
-// pieces sharing the textblock's margins, the first the one above, the last the one below, no space at a split; a wrapped
-// figure floats before the piece that holds it, which the reader reads back at its start; a figure in front of or behind
-// the text is anchored at the start of the textblock's first piece in the body and the lists and quotes in it, and is a
-// block figure in a table cell or a band; a figure the export has no picture for writes its caption alone, as a
-// paragraph, or nothing. `captions` holds those paragraphs' places.
-export function asWritten(
+// The first import as the writer lays it out, each change a difference of its own: figures in a textblock get
+// paragraphs of their own, a wrapped figure floats before its piece, a figure with no picture writes its caption alone.
+function asWritten(
     imported: Imported,
     prepared: ReadonlyMap<string, Picture>,
 ): { imported: Imported; changes: RoundtripDifference[]; captions: Set<string> } {
@@ -2134,9 +2111,8 @@ export function asWritten(
                     floating.push(child);
                 } else if (isFigureFrameNode(child.type)) {
                     if (inline.length > 0) flush();
-                    // The first piece takes the space above its textblock, which the reader keeps on a figure's paragraph
-                    // past the figure's own margin. A paragraph's own space is its spaceBefore, a heading's or a title's
-                    // its look's too. The reader keeps it only past the space the textblock above leaves below it.
+                    // The first piece takes the space above its textblock, which the reader keeps on a figure's
+                    // paragraph only past the space the textblock above leaves below it.
                     const own = node.attrs?.['spaceBefore'];
                     const look = ownTextLook(
                         node.type ?? '',
@@ -2218,7 +2194,7 @@ function spaceBelowAsWritten(node: JSONContent | undefined, style: Imported['sty
 
 // The differences the writer explains, each with why it is no loss or a loss the writer accepts. A difference none
 // matches is unlisted, and fails the gate.
-export const DOCX_LISTED: Listed<RoundtripDifference, DocxRoundtripContext>[] = [
+const DOCX_LISTED: Listed<RoundtripDifference, DocxRoundtripContext>[] = [
     {
         kind: 'figures and display equations split their textblock',
         why: 'Word holds a picture in a paragraph and a display equation in a paragraph of their own, so the writer splits the textblock around each block figure and display equation, the pieces sharing its margins',
@@ -2318,8 +2294,7 @@ const DOCX_GATE: RoundtripGate = {
     listed: DOCX_LISTED,
 };
 
-// The round trip's child: the file imported, written by our writer with its pictures prepared as an export prepares
-// them, pasted pictures drawn as the export draws them, imported again, and the two imports compared.
+// The round-trip gate's child process: import, write, import again, compare.
 async function docxRoundtripChild(
     file: string,
     options: { writer: string; reports: string; dump?: string },
@@ -2362,7 +2337,6 @@ export function runRoundtrip(options: RoundtripOptions): Promise<RoundtripMeta> 
 
 declare var self: Worker;
 
-// The worker side: reads a source, or loads the importer once and then imports one file per message.
 if (!Bun.isMainThread) {
     let importer: Importer | undefined;
     self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
@@ -2386,12 +2360,11 @@ if (!Bun.isMainThread) {
                 return;
             }
             if (!importer) throw new Error('no importer loaded');
-            // An importer from before the doc's Normal returns no style: its text draws in the document font.
             const { json, media, style } = await importer(Buffer.from(request.bytes));
             postMessage({
                 kind: 'imported',
                 json,
-                font: style?.font ?? DOCUMENT_FONT,
+                font: style.font,
                 images: media.length,
                 ms: performance.now() - started,
             } satisfies WorkerReply);

@@ -81,14 +81,10 @@ describe('readBlobTableSize', () => {
     const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-blob-size-${Date.now()}`);
     let counter = 0;
 
-    // A database stamped `version`, or none at all when it is null, holding one two-byte blob.
-    function makeDb(version: number | null): string {
+    // A database holding one two-byte blob.
+    function makeDb(): string {
         const dbPath = join(TEST_DIR, `blobs-${counter++}.db`);
         const db = new Database(dbPath, { create: true });
-        if (version !== null) {
-            db.run('CREATE TABLE __schema_version (id INTEGER PRIMARY KEY, version INTEGER NOT NULL)');
-            db.run('INSERT INTO __schema_version (id, version) VALUES (1, ?)', [version]);
-        }
         db.run('CREATE TABLE resources (ics BLOB NOT NULL)');
         db.run("INSERT INTO resources (ics) VALUES (x'0102')");
         db.close();
@@ -102,20 +98,16 @@ describe('readBlobTableSize', () => {
         } catch {}
     });
 
-    test('sums the blob column of a database this build recognises', () => {
-        expect(readBlobTableSize(makeDb(5), 'resources', 'ics', 5)).toBe(2);
+    test('sums the blob column', () => {
+        expect(readBlobTableSize(makeDb(), 'resources', 'ics')).toBe(2);
     });
 
     test('is 0 for a database nobody wrote', () => {
-        expect(readBlobTableSize(join(TEST_DIR, 'absent.db'), 'resources', 'ics', 5)).toBe(0);
+        expect(readBlobTableSize(join(TEST_DIR, 'absent.db'), 'resources', 'ics')).toBe(0);
     });
 
-    test('is 0 at any stamp but the current one: the column may mean other bytes, or none yet', () => {
-        expect(readBlobTableSize(makeDb(4), 'resources', 'ics', 5)).toBe(0);
-        expect(readBlobTableSize(makeDb(6), 'resources', 'ics', 5)).toBe(0);
-    });
-
-    test('is 0 when the stamp table is missing, rather than throwing on the read', () => {
-        expect(readBlobTableSize(makeDb(null), 'resources', 'ics', 5)).toBe(0);
+    test('is 0 when the table or the column does not exist yet, rather than throwing on the read', () => {
+        expect(readBlobTableSize(makeDb(), 'resources', 'vcard')).toBe(0);
+        expect(readBlobTableSize(makeDb(), 'contacts', 'ics')).toBe(0);
     });
 });

@@ -23,6 +23,7 @@ import type {
 import type { EigenClipboardChartItem } from '@workspace/lib/types/clipboard';
 import type { Box } from '@workspace/lib/vector';
 import { randomSeed } from '@workspace/lib/vector';
+import { createArrayResolver } from '../../engine/cell-resolver';
 import { inlineChartSpec, renderSheetChartSvg, writeSheetChartSpec } from '../../engine/chart-data';
 import type { ChartRangeRefusal } from '../../engine/chart-range';
 import { chartRangeChange, currentRegion, setUpChartRange, suggestChartSpec } from '../../engine/chart-range';
@@ -30,7 +31,6 @@ import type { CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
 import { clipToUsedExtent } from '../utils';
 import { editableCurrentSheet, selectFloatingObject } from './floating';
-import { createContextResolver } from './formula-cache';
 import { selectedCellOrigin } from './image';
 
 // Where a chart is inserted: upright, as nothing inserts one turned.
@@ -83,7 +83,7 @@ export function insertChartFromSelection(ctx: Context, id: string): ChartRangeRe
     const selection = ctx.selections?.at(-1);
     if (!selection || ctx.allowEdit === false) return;
     const [{ row, column }] = clipToUsedExtent(ctx, [selection]);
-    const resolver = createContextResolver(ctx);
+    const resolver = createArrayResolver(ctx.sheets);
     const ref = currentRegion(
         { sheetId: ctx.currentSheetId, row: [row[0], row[1]], column: [column[0], column[1]] },
         resolver,
@@ -102,7 +102,7 @@ export function setChartDataRange(ctx: Context, id: string, ref: CellRangeRef) {
     if (!chart) return;
     const { stored, spec } = readChartSpec(chart);
     if (!spec || holdsUnknownChartData(stored, spec)) return;
-    const setup = setUpChartRange(ref, createContextResolver(ctx), spec.data);
+    const setup = setUpChartRange(ref, createArrayResolver(ctx.sheets), spec.data);
     if (typeof setup !== 'string') setChartSpec(ctx, id, chartRangeChange(setup.data));
 }
 
@@ -118,7 +118,7 @@ export function sheetChartSvg(ctx: Context, chart: SheetChart): string {
     const data = readChartSpec(chart).spec?.data;
     const refs = data?.source === 'range' ? [data.categories, ...data.series.flatMap((s) => [s.name, s.values])] : [];
     const sheetIds = [...new Set(refs.flatMap((ref) => (ref && typeof ref !== 'string' ? [ref.sheetId] : [])))];
-    const svg = renderSheetChartSvg(chart, createContextResolver(ctx));
+    const svg = renderSheetChartSvg(chart, createArrayResolver(ctx.sheets));
     drawings.set(chart, { sheetIds, reads: sheetIds.map(cellsOf), svg });
     return svg;
 }
@@ -126,6 +126,6 @@ export function sheetChartSvg(ctx: Context, chart: SheetChart): string {
 // The chart as another app reads it, its ranges read into inline data and its look carried: what a copy writes and
 // Download image draws. Null for a chart inlineChartSpec can't inline.
 export function sheetChartClipboardItem(ctx: Context, chart: SheetChart): EigenClipboardChartItem | null {
-    const inline = inlineChartSpec(chart, createContextResolver(ctx));
+    const inline = inlineChartSpec(chart, createArrayResolver(ctx.sheets));
     return inline ? buildChartClipboardItem({ chart: inline, box: chart, look: readChartLook(chart) }) : null;
 }

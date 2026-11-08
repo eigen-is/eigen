@@ -1,4 +1,6 @@
+import { Database } from 'bun:sqlite';
 import { beforeAll, describe, expect, test } from 'bun:test';
+import * as fs from 'node:fs';
 import { encodeSheetsSnapshot } from '@workspace/lib/sheets';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { Snapshot } from '@workspace/lib/types/versioning';
@@ -13,7 +15,7 @@ import type { Drive } from '../../lib/drive/drive';
 import { getHome } from '../../lib/home/get-home';
 import type { Mount } from '../../lib/mount/mount';
 import type { TestUser } from '../setup';
-import { chatGet, chatPost, createTestUserOnStorage, driveGet, drivePost, findOrFail } from '../setup';
+import { authedRequest, chatGet, chatPost, createTestUserOnStorage, driveGet, drivePost, findOrFail } from '../setup';
 
 const M = 'default';
 
@@ -90,6 +92,61 @@ describe('a container restored after an unclean shutdown', () => {
     });
 });
 
+// On local-key the stored object is the live database, so a kill leaves it with its -wal beside it.
+describe('a local-key chat restored after an unclean shutdown', () => {
+    type Message = { content: string };
+
+    async function chatWithTailInWal() {
+        const owner = await createTestUserOnStorage('local-id', 'Stray wal');
+        const t = owner.sessionToken;
+        const home = (await getHome(owner.id)).drive;
+        const root = (await home.getRootFolder(M))!.id;
+        const chat = await drivePost(t, owner.id, M, `folder/${root}/create/chat`, { fileName: 'Talk' });
+        await chatPost(t, owner.id, M, `${chat.id}/messages`, { content: 'saved' });
+        const saved = await home.saveVersion(M, chat.id);
+        await chatPost(t, owner.id, M, `${chat.id}/messages`, { content: 'tail' });
+        const { mount } = await home.resolveFile(M, chat.id);
+        const dataDb = (await mount.getChildByName(chat.id, 'data.db'))!;
+        const file = mount.storage.getPath!(await mount.getStorageKey(dataDb.id));
+        const main = fs.readFileSync(file);
+        const wal = fs.readFileSync(`${file}-wal`);
+        await mount.closeDatabase(dataDb.id, { skipFinalSnapshot: true });
+        // The close's own search reindex would open the database again and fold the -wal in.
+        mount.clearContentDirty(chat.id);
+        fs.writeFileSync(file, main);
+        fs.writeFileSync(`${file}-wal`, wal);
+        const restore = (name: string) =>
+            authedRequest(t, `/drive/${owner.id}/${M}/file/${chat.id}/versions/${name}/restore`, { method: 'POST' });
+        const messages = async () =>
+            (await chatGet<Message[]>(t, owner.id, M, `${chat.id}/messages`)).map((m) => m.content);
+        return { owner, chat, saved, mount, file, restore, messages };
+    }
+
+    test('the pre-restore version keeps the -wal tail and the restored bytes stay intact', async () => {
+        const { owner, chat, saved, file, restore, messages } = await chatWithTailInWal();
+
+        expect((await restore(saved.name)).status).toBe(200);
+        expect(await messages()).toEqual(['saved']);
+        const db = new Database(file, { readwrite: true, create: false });
+        expect(db.query('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' });
+        db.close();
+
+        const versions = await driveGet<Snapshot[]>(owner.sessionToken, owner.id, M, `file/${chat.id}/versions`);
+        const preRestore = findOrFail(versions, (version) => version.name !== saved.name);
+        expect((await restore(preRestore.name)).status).toBe(200);
+        expect(await messages()).toEqual(['saved', 'tail']);
+    });
+
+    test('a restore over a lost main file does not replay the -wal left beside it', async () => {
+        const { saved, file, restore, messages } = await chatWithTailInWal();
+        fs.rmSync(file);
+
+        expect((await restore(saved.name)).status).toBe(200);
+        expect(fs.existsSync(`${file}-wal`)).toBe(false);
+        expect(await messages()).toEqual(['saved']);
+    });
+});
+
 describe('a sheet version in an encoding the editor cannot read', () => {
     test('is refused with 409, and the open sheet keeps its content', async () => {
         const sheets = await drive.create(M, rootId, 'Budget', 'sheets');
@@ -98,7 +155,7 @@ describe('a sheet version in an encoding the editor cannot read', () => {
         // The first encoding: the bare Sheet[] array, which decodeSheetsSnapshot refuses.
         state.set('snapshot', JSON.stringify([{ name: 'Sheet1', celldata: [] }]));
         const old = await drive.saveVersion(M, sheets.id);
-        const current = encodeSheetsSnapshot([{ name: 'Sheet1', celldata: [] }], { computed: true });
+        const current = encodeSheetsSnapshot([{ id: 'fixture-1', name: 'Sheet1', celldata: [] }], { computed: true });
         state.set('snapshot', current);
 
         await expect(drive.restoreContainer(M, sheets.id, old.name)).rejects.toMatchObject({ status: 409 });

@@ -22,7 +22,7 @@ When one user's action touches another Home, it goes through `home-relay.ts`, in
 - **Pulls**: one typed function per cross-home read, such as `pullSharedPaths`, `pullCalendars` and `pullDriveSearch`. `pullHomeSize` and `pullHomeBackupBytes` read a home's folder without booting it, and `pullHomeSnapshot` captures a home for a backup. A calendar pull never opens a home that has no folder yet ([CALENDAR.md](CALENDAR.md#asking-about-another-owners-calendar-never-opens-a-home-it-would-create)).
 - **Event writes**: `createEventAt`, `updateEventAt`, `deleteEventAt` and `moveEventAt`, which return a value and so are not pushes.
 
-Today each is a direct `getHome()` in the same process. Sharded, `sendToHome` routes or enqueues a message and a pull becomes a request to the owning process, and nothing outside the file changes. A `HomeMessage` is plain data for that reason.
+Today each is a direct `getHome()` in the same process. Sharded, `sendToHome` routes or enqueues a message and a pull becomes a request to the owning process, and nothing outside the file changes. A `HomeMessage` is plain data for that reason. Two walks live in the file too, though no target `ownerId` names them and neither is a `HomeMessage`: [the socket walks](#server-wide-state-is-what-a-second-process-cannot-share-yet) read ACLs across Homes.
 
 ## A receive method finishes the job on the target
 
@@ -41,6 +41,7 @@ The Calendar and Drive `receive*` methods write the database, broadcast the SSE 
 | Waitlist | `data/server/waitlist.db` | One row set, written from any process |
 | Yjs documents | In memory in the process that opened them | Editors connect to the owner's process |
 | SSE streams | In the process that serves the user | A user connects to their Home's process ([SSE.md](SSE.md)) |
+| Socket walks | `enforceReadAccessOnLoadedHomes` and `closeUserSocketsOnLoadedHomes` (`apps/api/src/lib/home/home-relay.ts`) check every open document of the Homes loaded in this process ([COLLAB.md](COLLAB.md#read-is-checked-at-open-write-on-every-message)) | The relay asks every process to walk its own Homes, because no `ownerId` routes a walk. Until it does, the sockets on another process keep reading |
 | Backup jobs and the restore mark | The in-memory job map and `markHomeRestoring` ([BACKUP.md § A restore deletes nothing and writes identity last](BACKUP.md#a-restore-deletes-nothing-and-writes-identity-last)), per process | Home jobs run where the Home lives. The whole-server job reaches every Home through `pullHomeSnapshot`, which becomes a pull, and its slot and schedule tick need one owner ([BACKUP.md](BACKUP.md)) |
 | The deletion mark | `markHomeDeleting` (`apps/api/src/lib/home/get-home.ts`), per process, from the teardown of a home until better-auth has deleted the owner's row | Set where the delete runs, and it must be seen by the process that serves the Home. A deletion that fails after the folder is gone keeps it until a restart ([ROADMAP.md](ROADMAP.md)) |
 | Data epochs | Read once per process (`apps/api/src/lib/home/data-epoch.ts`), so no other process sees a rotation | The Home's process owns its epoch, and a stream or collab open elsewhere reads it through a pull ([SSE.md](SSE.md#a-restore-reloads-every-tab-of-the-home)) |

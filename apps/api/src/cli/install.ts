@@ -1,6 +1,6 @@
 // The facts about an install folder that every CLI command shares: where the repo root is, the names of
-// .env.production, data/ and backups/, this build's version and channel, and the exit codes the launcher reads. It also
-// gives the files the CLI writes as root to the operator who owns the install.
+// .env.production and data/, this build's version and channel, and the exit codes the launcher reads. It also gives
+// the files the CLI writes as root to the operator who owns the install.
 
 import { chownSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -10,7 +10,6 @@ import pkg from '../../../../package.json' with { type: 'json' };
 export const ROOT = join(import.meta.dir, '../../../..');
 export const ENV_PATH = '.env.production';
 export const DATA = 'data';
-export const BACKUPS = 'backups';
 export const VERSION = pkg.version;
 // The exit code of a question the operator said no to, which the launcher ends as a plain exit; DECLINED in ./eigen.
 export const DECLINED = 3;

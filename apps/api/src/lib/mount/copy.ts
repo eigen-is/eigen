@@ -11,7 +11,6 @@ import { copyThumbnail } from '../shared/thumbnails';
 import { writeTempWithHash } from '../storage';
 import { isVersionsFolder } from '../versioning/versions-folder';
 import type { Mount } from './mount';
-import { markContentDirty } from './search-index';
 
 // A source path with the paths below it that a copy writes, as they were when the copy began.
 export type CopyTree = { readonly path: DrivePath; readonly children: readonly CopyTree[] };
@@ -72,9 +71,8 @@ export async function writeCopy(
     }
 }
 
-// The copy inside one mount. A file is saved again from a fresh temp copy, and gets its own search entry
-// and thumbnail. Each copied path records where it came from. The caller passes the cleanup of a copy that
-// fails, because whether it may delete for good or must trash is a drive's decision.
+// The copy inside one mount: each file is saved again from a fresh temp copy. The caller passes the cleanup
+// of a failed copy, because whether it may delete for good or must trash is a drive's decision.
 export async function copyPath(
     mount: Mount,
     tree: CopyTree,
@@ -114,9 +112,8 @@ export async function copyPath(
                     return writeTempWithHash(mount.getTempPath(tempId), srcFile);
                 });
                 const newId = await mount.createFileFromTemp(parentId, fileName, src.mimeType, size, hash, tempId);
-                // The media facts the upload path derives from the bytes travel with them, thumbnail or not.
-                // The rest of details stays behind: originalName names the source's own downloads and
-                // webdavProps are its client's dead properties.
+                // Only the media facts derived from the bytes travel with them. originalName and webdavProps
+                // describe the source's own downloads and client, so they stay behind.
                 const details = {
                     ...(src.details?.width !== undefined && { width: src.details.width }),
                     ...(src.details?.height !== undefined && { height: src.details.height }),
@@ -137,8 +134,7 @@ export async function copyPath(
         // marked for the reindexer here instead.
         folderCopied: (copy, src) => {
             if (src.type === DRIVE_TYPE_FOLDER) return;
-            markContentDirty(mount, copy.id);
-            mount.reindexQueue?.markDirty(copy.id);
+            mount.markContentDirty(copy.id);
         },
         discard,
     });

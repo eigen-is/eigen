@@ -1,6 +1,6 @@
 // The grid's right-click menu, with items for a cell, a row header or a column header, such as the clipboard, inserting
-// and deleting rows and columns, hiding, sorting and filters. useSheetContextMenu selects what was clicked and opens the
-// menu for one area, on a right click or a long press on touch.
+// and deleting rows and columns, hiding, sorting and filters. useSheetContextMenu selects what was clicked and opens
+// the menu for one area, on a right click or a long press on touch.
 
 import { CommentLifecycleMenuItems } from '@workspace/ui/components/comments';
 import {
@@ -40,10 +40,10 @@ import {
     handleCopy,
     handleCut,
     handleLink,
-    handlePasteByClick,
     hideSelectedRowCol,
     insertCheckbox,
-    readClipboardText,
+    ONE_AREA_ONLY,
+    pasteFromClipboard,
     showSelectedRowCol,
     sortSelection,
     tryDeleteRowCol,
@@ -51,13 +51,11 @@ import {
 } from '../../state';
 import { ResizeDialog } from '../ResizeDialog';
 
-const MSG_MULTI = 'Cannot perform this operation on multiple selection areas, please select a single area';
-
 type RowColType = 'row' | 'column';
 
 // The shared Cut, Copy, Paste rows on the grid's own clipboard handlers.
 function ClipboardItems() {
-    const { context, setContext } = useContext(WorkbookContext);
+    const { context, setContext, pasteClipboard } = useContext(WorkbookContext);
     const { showNotice } = useDialog();
     return (
         <ClipboardMenuItems
@@ -69,7 +67,7 @@ function ClipboardItems() {
             }
             onCopy={() => {
                 if ((context.selections?.length ?? 0) > 1) {
-                    showNotice(MSG_MULTI);
+                    showNotice(ONE_AREA_ONLY);
                     return;
                 }
                 setContext((d) => {
@@ -77,12 +75,7 @@ function ClipboardItems() {
                     flushPendingCopy();
                 });
             }}
-            onPaste={async () => {
-                const text = await readClipboardText();
-                setContext((d) => {
-                    handlePasteByClick(d, text);
-                });
-            }}
+            onPaste={() => pasteFromClipboard(pasteClipboard, showNotice)}
         />
     );
 }
@@ -97,7 +90,6 @@ function InsertItem({
     label: string;
 }) {
     const { getContext, setContext } = useContext(WorkbookContext);
-    const { showNotice } = useDialog();
     const insert = () => {
         const context = getContext();
         const sel = context.selections?.[0];
@@ -110,13 +102,7 @@ function InsertItem({
             direction,
             id: context.currentSheetId,
         };
-        setContext(
-            (d) => {
-                const error = tryInsertRowCol(d, op);
-                if (error) showNotice(error);
-            },
-            { insertRowColOp: op },
-        );
+        setContext((d) => tryInsertRowCol(d, op), { insertRowColOp: op });
     };
     return (
         <DropdownMenuItem onClick={insert}>
@@ -128,7 +114,6 @@ function InsertItem({
 
 function DeleteItem({ type, label }: { type: RowColType; label: string }) {
     const { getContext, setContext } = useContext(WorkbookContext);
-    const { showNotice } = useDialog();
     const remove = () => {
         const context = getContext();
         const sel = context.selections?.[0];
@@ -137,12 +122,8 @@ function DeleteItem({ type, label }: { type: RowColType; label: string }) {
         const op: SetContextOptions['deleteRowColOp'] = { type, start, end, id: context.currentSheetId };
         setContext(
             (d) => {
-                if ((d.selections?.length ?? 0) > 1) {
-                    showNotice(MSG_MULTI);
-                    return;
-                }
-                const error = tryDeleteRowCol(d, op);
-                if (error) showNotice(error);
+                if ((d.selections?.length ?? 0) > 1) d.warnDialog = ONE_AREA_ONLY;
+                else tryDeleteRowCol(d, op);
             },
             { deleteRowColOp: op },
         );
@@ -157,16 +138,8 @@ function DeleteItem({ type, label }: { type: RowColType; label: string }) {
 
 function ClearItem({ label }: { label: string }) {
     const { setContext } = useContext(WorkbookContext);
-    const { showNotice } = useDialog();
     return (
-        <DropdownMenuItem
-            onClick={() =>
-                setContext((d) => {
-                    const error = clearSelectedContents(d);
-                    if (error) showNotice(error);
-                })
-            }
-        >
+        <DropdownMenuItem onClick={() => setContext(clearSelectedContents)}>
             <X className="size-4" />
             {label}
         </DropdownMenuItem>
@@ -175,15 +148,8 @@ function ClearItem({ label }: { label: string }) {
 
 function HideItem({ type, label }: { type: RowColType; label: string }) {
     const { setContext } = useContext(WorkbookContext);
-    const { showNotice } = useDialog();
     return (
-        <DropdownMenuItem
-            onClick={() =>
-                setContext((d) => {
-                    if (hideSelectedRowCol(d, type) === 'noMulti') showNotice(MSG_MULTI);
-                })
-            }
-        >
+        <DropdownMenuItem onClick={() => setContext((d) => hideSelectedRowCol(d, type))}>
             <EyeOff className="size-4" />
             {label}
         </DropdownMenuItem>
@@ -192,15 +158,8 @@ function HideItem({ type, label }: { type: RowColType; label: string }) {
 
 function ShowHiddenItem({ type, label }: { type: RowColType; label: string }) {
     const { setContext } = useContext(WorkbookContext);
-    const { showNotice } = useDialog();
     return (
-        <DropdownMenuItem
-            onClick={() =>
-                setContext((d) => {
-                    if (showSelectedRowCol(d, type) === 'noMulti') showNotice(MSG_MULTI);
-                })
-            }
-        >
+        <DropdownMenuItem onClick={() => setContext((d) => showSelectedRowCol(d, type))}>
             <Eye className="size-4" />
             {label}
         </DropdownMenuItem>
@@ -268,8 +227,8 @@ function LinkItem() {
 }
 
 function ImageItem() {
-    const { settings } = useContext(WorkbookContext);
-    const { onInsertImage } = settings.hooks;
+    const { refs } = useContext(WorkbookContext);
+    const { onInsertImage } = refs.hooks.current;
     if (!onInsertImage) return null;
     return (
         <DropdownMenuItem onClick={() => onInsertImage()}>
@@ -299,8 +258,8 @@ function TickBoxItem() {
 }
 
 function CommentItems({ part }: { part: 'rows' | 'delete' }) {
-    const { context, settings } = useContext(WorkbookContext);
-    const { getCommentInfo, onAddComment, onDeleteComment, commentLifecycle } = settings.hooks;
+    const { context, refs } = useContext(WorkbookContext);
+    const { getCommentInfo, onAddComment, onDeleteComment, commentLifecycle } = refs.hooks.current;
     const last = context.selections?.[context.selections.length - 1];
     const row = last ? (last.row_focus ?? last.row[0]) : 0;
     const col = last ? (last.column_focus ?? last.column[0]) : 0;
@@ -314,7 +273,7 @@ function CommentItems({ part }: { part: 'rows' | 'delete' }) {
         <CommentLifecycleMenuItems
             lifecycle={commentLifecycle}
             item={info ? { card: info.card, entry: info.entry } : null}
-            canWrite={settings.allowEdit}
+            canWrite={context.allowEdit}
             onAddComment={onAddComment && (() => onAddComment(row, col))}
             onDelete={onDeleteComment && (() => onDeleteComment(row, col))}
             part={part}
@@ -427,25 +386,21 @@ export function useSheetContextMenu(area: SheetMenuArea) {
         (e: React.MouseEvent) => {
             if (!allowEdit) return;
             setContext((d) => {
-                handleContextMenu(d, e.nativeEvent, refs.cellArea.current!, STATE_AREA[area]);
+                const cellArea = refs.cellArea.current;
+                if (cellArea) handleContextMenu(d, e.nativeEvent, cellArea, STATE_AREA[area]);
             });
             openMenu(e, true);
         },
         [allowEdit, setContext, refs.cellArea, area, openMenu],
     );
 
-    // A long press on touch selects and opens the same way, at a point on screen. The state layer works in page
-    // coordinates, so the scroll offset is added back.
+    // A long press on touch selects and opens the same way, at a point on screen.
     const openAtPoint = useCallback(
         (x: number, y: number) => {
             if (!allowEdit) return;
             setContext((d) => {
-                handleContextMenu(
-                    d,
-                    { pageX: x + window.scrollX, pageY: y + window.scrollY },
-                    refs.cellArea.current!,
-                    STATE_AREA[area],
-                );
+                const cellArea = refs.cellArea.current;
+                if (cellArea) handleContextMenu(d, { clientX: x, clientY: y }, cellArea, STATE_AREA[area]);
             });
             openMenuAt(true, x, y);
         },

@@ -23,22 +23,22 @@ import {
 import { dirname, join, relative } from 'node:path';
 import { buildBackupStamp, isStringList, parseJson } from '@workspace/lib/validation';
 import { describeError } from '../lib/backup/errors';
-import { buildSafetyCopyName, nextFreeTime, STAGING_DIR } from '../lib/backup/paths';
+import { buildSafetyCopyName, nextFreeTime } from '../lib/backup/paths';
 import { RESTORING_DATA_DIR, RESTORING_DIR } from '../lib/backup/restore-server';
 import { DATA_LOCK_FILE, lockDataDir } from '../lib/config/data-lock';
 import { SERVER_DIR } from '../lib/config/paths';
 import { PIN_KEYS } from '../lib/config/release';
 import { readEnvFile } from './env-file';
-import { BACKUPS, DATA, ENV_PATH, installOwner, ownAs } from './install';
+import { DATA, ENV_PATH, installOwner, ownAs } from './install';
 import { copyInstallFolders, INSTALL_COPIES } from './restore-install-copy';
 import type { Ui } from './ui';
 import { createUi, glyphLine } from './ui';
 
 // Written by the swap before its first rename, read by the launcher's preflight: while it is there, a swap was cut
 // off, and --swap finishes it.
-export const SWAP_MARKER = '.eigen/restore-swap';
+const SWAP_MARKER = '.eigen/restore-swap';
 // Held by a swap from before it reads the marker until it exits. It lives in .eigen/, as the swap moves data/.
-export const SWAP_LOCK = '.eigen/restore.lock';
+const SWAP_LOCK = '.eigen/restore.lock';
 // Written last by the stage, so a stage cut off halfway is never swapped in.
 export const STAGE_RECORD = 'staged.json';
 export type StagedRestore = { archive: string; appVersion: string };
@@ -250,8 +250,6 @@ function runSwap(ui: Ui, swap: RestoreSwap): void {
         chmodSync(ENV_PATH, 0o600);
     }
     rmSync(swap.leftover, { recursive: true, force: true });
-    // A per-home restore's notes in there name homes of the data/ that went aside: the boot must not act on them.
-    rmSync(join(BACKUPS, STAGING_DIR), { recursive: true, force: true });
     rmSync(SWAP_MARKER);
     // The archive's own install folders went in there, and a rerun skips the renames that took them out only while
     // they are there. So the folder goes once the marker is gone, and the next swap clears what a cut left.

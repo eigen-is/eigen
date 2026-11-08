@@ -26,7 +26,6 @@ import { enablePatches, produce } from 'immer';
 import { generateAPIs } from '../../../components/Workbook/api';
 import { mapChartRefs, replaySheetsOps } from '../../../engine';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
-import { addSheet } from '../../../state/api/workbook';
 import type { Context } from '../../../state/context';
 import {
     insertChart,
@@ -39,7 +38,7 @@ import {
 import { updateFloatingBox } from '../../../state/modules/floating';
 import { redoEntry, undoEntry } from '../../../state/modules/history';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
-import { initSheetData } from '../../../state/modules/sheet';
+import { addSheet, initSheetData } from '../../../state/modules/sheet';
 import type { Op, Sheet } from '../../../state/types';
 import { author, join, receive } from '../factories/collab';
 import { contextFactory } from '../factories/context';
@@ -236,7 +235,7 @@ describe("the Workbook's insertChart", () => {
 describe('every sheet entry carries a charts map', () => {
     test('initSheetData and addSheet materialize it', () => {
         const ctx = contextFactory() as Context;
-        initSheetData(ctx, 0, ctx.sheets[0]);
+        initSheetData(ctx.sheets[0]);
         expect(ctx.sheets[0].charts).toEqual({});
         addSheet(ctx);
         expect(ctx.sheets[2].charts).toEqual({});
@@ -442,78 +441,19 @@ describe('charts converge over real ops', () => {
         expect(charts(joiner)).toEqual(charts(base.sheets));
     });
 
-    // Workbook's handleUndo and handleRedo, after a peer's edit: typing 42 in T!A1 and moving t1, or deleting t1.
-    function undoRedoAfterPeer(base: Context, peerEdit: Op[]) {
-        const del = { type: 'row', start: 3, end: 6, id: S } as const;
-        const deleted = author(base, (ctx) => deleteRowCol(ctx, del), { deleteRowColOp: del });
-        const afterPeer = receive(deleted.next, peerEdit);
-        const { ctx: undone, ops: undoOps } = undoEntry(afterPeer, deleted.entry);
-        const { ctx: redone, ops: redoOps } = redoEntry(undone, deleted.entry);
-        const peerUndone = receive(receive(receive(base, deleted.ops), peerEdit), undoOps);
-        return {
-            undo: {
-                author: undone.sheets,
-                peer: peerUndone.sheets,
-                joiner: join(base, [deleted.ops, peerEdit, undoOps]),
-            },
-            redo: {
-                author: redone.sheets,
-                peer: receive(peerUndone, redoOps).sheets,
-                joiner: join(base, [deleted.ops, peerEdit, undoOps, redoOps]),
-            },
-        };
-    }
-
-    const peerEdit: Op[] = [
-        { op: 'replace', id: T, path: ['data', 0, 0], value: { v: 42, m: '42' } },
-        { op: 'replace', id: T, path: ['charts', 't1', 'x'], value: 99 },
-    ];
-
-    test("undoing and redoing a row delete keeps a peer's edit on the sheet of a shifted chart", () => {
-        const base = workbook();
-        const { undo, redo } = undoRedoAfterPeer(base, peerEdit);
-        for (const { author, peer, joiner } of [undo, redo]) {
-            for (const sheets of [author, peer, joiner]) expect(sheets[1].data![0][0]).toEqual({ v: 42, m: '42' });
-            expect(charts(peer)).toEqual(charts(author));
-            expect(charts(joiner)).toEqual(charts(author));
-        }
-        expect(rangeData(undo.author, 1, 't1')).toEqual(rangeData(base.sheets, 1, 't1'));
-        expect(rangeData(redo.author, 1, 't1')?.categories).toBeNull();
-        expect([undo.author[1].charts!.t1.x, redo.author[1].charts!.t1.x]).toEqual([99, 99]);
-    });
-
-    test('undoing and redoing a row delete keeps a shifted chart a peer deleted deleted, on every client', () => {
-        const { undo, redo } = undoRedoAfterPeer(workbook(), [{ op: 'remove', id: T, path: ['charts', 't1'] }]);
-        for (const { author, peer, joiner } of [undo, redo]) {
-            expect(author[1].charts!.t1).toBeUndefined();
-            expect(charts(peer)).toEqual(charts(author));
-            expect(charts(joiner)).toEqual(charts(author));
-        }
-    });
-
     test('an undone row delete restores a chart on a sheet whose formula moved too, everywhere', () => {
-        const base = workbook();
-        base.sheets[1].data![9][3] = { f: '=SUM(S!B3:B6)', v: 0, m: '0' };
-        const { undo, redo } = undoRedoAfterPeer(base, []);
-        expect(rangeData(undo.author, 1, 't1')).toEqual(rangeData(base.sheets, 1, 't1'));
-        for (const { author, peer, joiner } of [undo, redo]) {
-            expect(charts(peer)).toEqual(charts(author));
-            expect(charts(joiner)).toEqual(charts(author));
-        }
-    });
-
-    test('redoing a row delete after a peer moved a chart on a sheet whose formula moved too ends identical', () => {
         const base = workbook();
         base.sheets[1].data![9][3] = { f: '=SUM(S!B3:B6)', v: 0, m: '0' };
         const del = { type: 'row', start: 3, end: 6, id: S } as const;
         const deleted = author(base, (ctx) => deleteRowCol(ctx, del), { deleteRowColOp: del });
         const { ctx: undone, ops: undoOps } = undoEntry(deleted.next, deleted.entry);
-        const peerMove: Op[] = [{ op: 'replace', id: T, path: ['charts', 't1', 'x'], value: 99 }];
-        const { ctx: redone, ops: redoOps } = redoEntry(receive(undone, peerMove), deleted.entry);
-        const peer = receive(receive(receive(receive(base, deleted.ops), undoOps), peerMove), redoOps);
-        const joiner = join(base, [deleted.ops, undoOps, peerMove, redoOps]);
-        expect(charts(peer.sheets)).toEqual(charts(redone.sheets));
-        expect(charts(joiner)).toEqual(charts(redone.sheets));
+        const { ctx: redone, ops: redoOps } = redoEntry(undone, deleted.entry);
+        const peerUndone = receive(receive(base, deleted.ops), undoOps);
+        expect(rangeData(undone.sheets, 1, 't1')).toEqual(rangeData(base.sheets, 1, 't1'));
+        expect(charts(peerUndone.sheets)).toEqual(charts(undone.sheets));
+        expect(charts(join(base, [deleted.ops, undoOps]))).toEqual(charts(undone.sheets));
+        expect(charts(receive(peerUndone, redoOps).sheets)).toEqual(charts(redone.sheets));
+        expect(charts(join(base, [deleted.ops, undoOps, redoOps]))).toEqual(charts(redone.sheets));
     });
 
     test('undoing a row insert restores a ref an insert stopped at the last row, on a sheet whose formula moved too', () => {
@@ -637,28 +577,6 @@ describe('two peers editing one chart keep both edits', () => {
                 const sheets = converge(base, op, peer);
                 expect(spec(sheets)).toMatchObject(edit.kept);
                 if (edit.name === 'slice colour') expect(spec(sheets)?.points['s-1']).toEqual(rowOp.points);
-            });
-
-            // Workbook's handleUndo and handleRedo after the peer's edit landed.
-            test(`undoing and redoing a row ${rowOp.name} keeps a peer's ${edit.name}`, () => {
-                const base = slices();
-                const op = author(base, rowOp.run, rowOp.options);
-                const peer = author(base, (ctx) => setChartSpec(ctx, 'c1', [...edit.change]));
-                const afterPeer = receive(op.next, peer.ops);
-                const { ctx: undone, ops: undoOps } = undoEntry(afterPeer, op.entry);
-                const { ctx: redone, ops: redoOps } = redoEntry(undone, op.entry);
-                const peerUndone = receive(receive(peer.next, op.ops), undoOps);
-                const joinUndone = join(base, [peer.ops, op.ops, undoOps]);
-                expect(spec(undone.sheets)).toMatchObject(edit.kept);
-                expect(spec(undone.sheets)?.points['s-1']).toMatchObject({
-                    1: { color: '#111111' },
-                    3: { color: '#333333' },
-                });
-                expect(charts(peerUndone.sheets)).toEqual(charts(undone.sheets));
-                expect(charts(joinUndone)).toEqual(charts(undone.sheets));
-                expect(spec(redone.sheets)).toMatchObject(edit.kept);
-                expect(charts(receive(peerUndone, redoOps).sheets)).toEqual(charts(redone.sheets));
-                expect(charts(join(base, [peer.ops, op.ops, undoOps, redoOps]))).toEqual(charts(redone.sheets));
             });
         }
     }

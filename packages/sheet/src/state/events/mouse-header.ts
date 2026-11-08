@@ -16,45 +16,29 @@ import {
     rangeSetValue,
 } from '../modules';
 import { cancelFunctionrangeSelected, mergeMoveMain, updateCell } from '../modules/cell';
-import { colLocation, colLocationByIndex, rowLocation, rowLocationByIndex } from '../modules/location';
-import { checkProtectionAllSelected } from '../modules/protection';
+import { colLocation, colLocationByIndex, rowLocation, rowLocationByIndex, sheetPoint } from '../modules/location';
 import type { GlobalCache } from '../types';
 import { swallowMenuPress } from './mouse-cell';
 import { extendSelectionGeometry } from './mouse-drag';
-import { fixPositionOnFrozenCells } from './mouse-resize';
 
 export function handleRowHeaderMouseDown(
     ctx: Context,
     globalCache: GlobalCache,
     e: MouseEvent,
-    container: HTMLDivElement,
+    cellArea: HTMLDivElement,
     cellInput: HTMLDivElement,
     fxInput: HTMLDivElement | null,
 ) {
     if (swallowMenuPress(ctx, globalCache, e)) return;
-    if (!checkProtectionAllSelected(ctx, ctx.currentSheetId)) {
-        return;
-    }
     deselectFloatingObject(ctx);
 
-    const rect = container.getBoundingClientRect();
-    const mouseY = e.pageY - rect.top - window.scrollY;
-    const _y = mouseY + ctx.scrollTop;
-
-    const freeze = globalCache.freezen?.[ctx.currentSheetId];
-    const { y } = fixPositionOnFrozenCells(freeze, 0, _y, 0, mouseY);
-
-    const row_location = rowLocation(y, ctx.visibledatarow);
-    const row = row_location[1];
-    const row_pre = row_location[0];
-    const row_index = row_location[2];
+    const [row_pre, row, row_index] = rowLocation(sheetPoint(ctx, e, cellArea).y, ctx.visibledatarow);
     const col_index = ctx.visibledatacolumn.length - 1;
     const col = ctx.visibledatacolumn[col_index];
     const col_pre = 0;
 
-    // Right-click: check if inside existing selection
     if (e.button === 2) {
-        // If right-click is inside selection, stop mousedown handling
+        // A right-click inside the selection keeps it, for the menu it opens.
         const flowdata = getFlowdata(ctx);
         const isInSelection = ctx.selections?.some(
             (obj_s) =>
@@ -73,7 +57,6 @@ export function handleRowHeaderMouseDown(
 
     ctx.scrolling = true;
 
-    // Formula-related
     if (!isEmpty(ctx.editingCellPosition)) {
         if (
             ctx.formulaCache.rangestart ||
@@ -81,7 +64,6 @@ export function handleRowHeaderMouseDown(
             ctx.formulaCache.rangedrag_row_start ||
             israngeseleciton(ctx)
         ) {
-            // Formula range selection
             let changeparam = mergeMoveMain(ctx, [0, col_index], rowseleted, top, height, col_pre, col);
             if (changeparam != null) {
                 [rowseleted, top, height] = [changeparam[1], changeparam[2], changeparam[3]];
@@ -153,7 +135,6 @@ export function handleRowHeaderMouseDown(
 
                 rangeHightlightselected(ctx, cellInput);
 
-                // Then proceed with new range selection
                 israngeseleciton(ctx);
                 ctx.formulaCache.func_selectedrange = {
                     left: colLocationByIndex(0, ctx.visibledatacolumn)[0],
@@ -237,9 +218,8 @@ export function handleRowHeaderMouseDown(
 
     if (ctx.rowsSelected) {
         if (e.shiftKey) {
-            // Shift+click on row header to select range
             const { selections } = ctx;
-            const last = cloneDeep(selections?.[selections.length - 1]); // Last selection
+            const last = cloneDeep(selections?.[selections.length - 1]);
             if (!selections || !last || isNil(last.top) || isNil(last.height) || isNil(last.row_focus)) {
                 return;
             }
@@ -315,33 +295,18 @@ export function handleColumnHeaderMouseDown(
     ctx: Context,
     globalCache: GlobalCache,
     e: MouseEvent,
-    container: HTMLElement,
+    cellArea: HTMLDivElement,
     cellInput: HTMLDivElement,
     fxInput: HTMLDivElement | null,
 ) {
     if (swallowMenuPress(ctx, globalCache, e)) return;
-    if (!checkProtectionAllSelected(ctx, ctx.currentSheetId)) {
-        return;
-    }
     deselectFloatingObject(ctx);
-
-    const rect = container.getBoundingClientRect();
-    const mouseX = e.pageX - rect.left - window.scrollX;
-    const _x = mouseX + ctx.scrollLeft;
-    const freeze = globalCache.freezen?.[ctx.currentSheetId];
-    const { x } = fixPositionOnFrozenCells(freeze, _x, 0, mouseX, 0);
 
     const row_index = ctx.visibledatarow.length - 1;
     const row = ctx.visibledatarow[row_index];
     const row_pre = 0;
-    const col_location = colLocation(x, ctx.visibledatacolumn);
-    const col = col_location[1];
-    const col_pre = col_location[0];
-    const col_index = col_location[2];
+    const [col_pre, col, col_index] = colLocation(sheetPoint(ctx, e, cellArea).x, ctx.visibledatacolumn);
 
-    ctx.orderbyindex = col_index; // Global sort index
-
-    // Right-click: check if inside existing selection
     if (e.button === 2) {
         const flowdata = getFlowdata(ctx);
         const isInSelection = ctx.selections?.some(
@@ -361,7 +326,6 @@ export function handleColumnHeaderMouseDown(
 
     ctx.scrolling = true;
 
-    // Formula-related
     if (!isEmpty(ctx.editingCellPosition)) {
         if (
             ctx.formulaCache.rangestart ||
@@ -369,7 +333,6 @@ export function handleColumnHeaderMouseDown(
             ctx.formulaCache.rangedrag_row_start ||
             israngeseleciton(ctx)
         ) {
-            // Formula range selection
             let changeparam = mergeMoveMain(ctx, columnseleted, [0, row_index], row_pre, row, left, width);
             if (changeparam != null) {
                 [columnseleted, left, width] = [changeparam[0], changeparam[4], changeparam[5]];
@@ -443,7 +406,6 @@ export function handleColumnHeaderMouseDown(
                 }
                 rangeHightlightselected(ctx, cellInput);
 
-                // Then proceed with new range selection
                 israngeseleciton(ctx);
                 ctx.formulaCache.func_selectedrange = {
                     left,
@@ -522,9 +484,8 @@ export function handleColumnHeaderMouseDown(
 
     if (ctx.colsSelected) {
         if (e.shiftKey) {
-            // Shift+click on column header to select range
             const { selections } = ctx;
-            const last = cloneDeep(selections?.[selections.length - 1]); // Last selection
+            const last = cloneDeep(selections?.[selections.length - 1]);
 
             let _left = 0;
             let _width = 0;
@@ -554,7 +515,6 @@ export function handleColumnHeaderMouseDown(
 
             selections[selections.length - 1] = last;
         } else if (e.ctrlKey || e.metaKey) {
-            // Add to selection
             ctx.selections?.push({
                 left,
                 width,

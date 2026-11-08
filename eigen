@@ -314,9 +314,7 @@ step() {
     step_running=$1 step_done=$2 step_failed=$3
     shift 3
     code=0
-    # A step may print a secret, so its log is made anew for the operator alone: a truncating write keeps the mode
-    # of a log an older launcher left readable by every user.
-    rm -f "$LOG"
+    # A step may print a secret, so its log is the operator's alone.
     (umask 077 && : >"$LOG")
     if [ -t 1 ]; then
         set -m
@@ -644,23 +642,10 @@ stop() {
 }
 
 # running_backup: what the running API says runs of a server backup, such as "the server backup <archive>", on one
-# line, or nothing. It fails when the API does not answer. The new launcher stops the old API in an update, and an API
-# of 0.4.1 or before refuses --running (exit 2). For it the records in backups/ are read, as its own launcher did: one
-# says running at the top, or for its upload a level deeper, and one that has said so for over a day lost its end.
-# Drop the fallback when update_apply's floor, a launcher older than 0.3.1, rises past 0.4.1: then no update stops such
-# an API.
+# line, or nothing. It fails when the API does not answer, and then prints nothing.
 running_backup() {
-    asked=0
-    running=$(api_cli status --running </dev/null 2>/dev/null) || asked=$?
-    case $asked in
-        0) printf '%s\n' "$running" ;;
-        2)
-            find backups -maxdepth 1 -name 'server-*.json' ! -mmin +1440 -exec grep -HE '^  (  )?"state": "running"' {} + \
-                2>/dev/null | sed -n -e '1s|^backups/\(.*\)\.json:    .*|the upload of \1|p' \
-                -e '1s|^backups/\(.*\)\.json:  .*|the server backup \1|p'
-            ;;
-        *) return 1 ;;
-    esac
+    running=$(api_cli status --running </dev/null 2>/dev/null) || return 1
+    printf '%s\n' "$running"
 }
 
 # ask_backup <tries>: running_backup, asked again 2 s later while the API does not answer, <tries> times in all. One
@@ -1068,14 +1053,10 @@ status() {
     if [ -n "$bundle" ]; then
         files=$(describe "$bundle")
         set -- "$@" --files="$files"
-    else
-        # Passed only when the runner is this build's CLI: after an update that stopped halfway it is the build
-        # .env.production pins, which may not know the flag and would refuse. Their size is left out: du would read
-        # all of a copy of data/, which is uid 1000's.
-        kept=$(kept_aside)
-        set -- "$@" ${kept:+"--kept-aside=$kept"}
     fi
-    "$runner" status "$@"
+    # Their size is left out: du would read all of a copy of data/, which is uid 1000's.
+    kept=$(kept_aside)
+    "$runner" status "$@" ${kept:+"--kept-aside=$kept"}
 }
 
 # The running API makes the backup: its job map keeps a backup off a home a restore writes and waits for it at shutdown.
@@ -1185,7 +1166,7 @@ announce() {
     RESTART_AT=$(answer at "$told" | sed 's/^.*T//; s/\.[0-9]*Z$/ UTC/')
 }
 
-# unannounce: takes the notice back. The API it asks may be an older version's, without the command, or down.
+# unannounce: takes the notice back. The API it asks may be down.
 unannounce() { api_cli restart-notice --clear </dev/null >/dev/null 2>&1 || :; }
 
 # countdown: waits out IN_SECONDS in this process, a second at a time, so a hangup's trap runs at once. A terminal
@@ -1288,7 +1269,7 @@ update() {
             --accept-breaking) accept=--accept-breaking ;;
             --no-backup) no_backup=--no-backup ;;
             # The handover from the launcher that got the new version to the one that came with it, with the backup
-            # it made, or --no-backup.
+            # it made.
             --pulled) pulled=1 ;;
             --saved) ;;
             -*) refuse update "$arg" ;;
@@ -1342,7 +1323,7 @@ release_name() {
 update_get() {
     # Any other tag, such as a candidate the publish workflow pushes, is no release.
     if [ -n "$target" ] && ! release_name "$target"; then
-        die "Eigen has no \"$target\"." "Name a version (./eigen update 0.3.1), latest, or the main channel (./eigen update main)."
+        die "Eigen has no \"$target\"." "Name a version (./eigen update 1.2.3), latest, or the main channel (./eigen update main)."
     fi
     follows=$(env_value EIGEN_VERSION)
     if [ -z "$follows" ]; then die ".env.production names no Eigen release." "Run ./eigen setup first."; fi
@@ -1406,7 +1387,6 @@ update_get() {
     pin_images "$tag"
     # The pulls and the questions are done, so the wait comes right before the backup, which then misses little.
     warn_restart update
-    handover=--no-backup
     if [ -z "$no_backup" ]; then
         # The operator may have edited the file during the wait.
         if [ "$IN_SECONDS" -gt 0 ]; then need_env_mounted; fi
@@ -1424,7 +1404,6 @@ update_get() {
         sed -n 's/^▲  //p' "$LOG" | while IFS= read -r line; do say "$YELLOW" '▲' "$line"; done
         # What changes from here to the stop is not in it: the operator is told until when it holds.
         say "$GRAY" '│' "backups/$saved, made until $(date -u +%H:%M:%S) UTC"
-        handover="--saved $saved"
         # The backup may have outlasted the notice's expiry, which starts over for the handover and the stop.
         announce 0 update
     fi
@@ -1432,18 +1411,13 @@ update_get() {
     # The notice holds on until the new launcher stops Eigen.
     AT_EXIT=''
     # The new launcher gets the tag and what it saves as arguments and parses them as this one did; no variable crosses.
-    exec ./eigen update --pulled "$tag" $handover
+    exec ./eigen update --pulled "$tag" ${saved:+--saved "$saved"}
 }
 
 # The part the launcher of the new version runs: stop, switch and start.
 update_apply() {
     # Up to the stop, which ends the old API and its notice, a failure or a hangup takes back the notice the old
-    # launcher gave (armed in update). The old API's CLI may have no restart-notice, which unannounce lets pass.
-    # 0.3.1's launcher hands over the backup it made, or --no-backup; one older than that made none and says neither.
-    if [ -z "$saved" ] && [ -z "$no_backup" ]; then
-        die "This update was started by a launcher older than 0.3.1." \
-            "Copy data/ and .env.production somewhere safe, then run ./eigen update 0.3.1 --no-backup, then ./eigen update."
-    fi
+    # launcher gave (armed in update).
     domain=$(env_value DOMAIN)
     if [ ! -d data ]; then die "There is no data/ in $PWD." "Run ./eigen update in the install folder."; fi
     pin_images "$target"
@@ -1545,17 +1519,12 @@ pre_update_archives() {
 # Eigen runs, checks it opens every database here and asks; then the rollback warns the open tabs as put_back does,
 # stops Eigen, checks again what Eigen wrote since (check_again) and switches back to the pins the update recorded.
 # The archive stays for ./eigen restore. Sets switched once Eigen runs on that build. Leaves it empty, and says why,
-# when that build cannot open the data, is too old to check it, or the launcher that made the update recorded no
-# pins: the rollback then puts the archive back. A check that stopped without a verdict on the data ends the
-# rollback, which keeps today's data.
+# when that build cannot open the data: the rollback then puts the archive back. A check that stopped without a verdict
+# on the data ends the rollback, which keeps today's data.
 switch_back() {
     switched=''
     PINS=$(sed -n '2,$p' .eigen/last-update)
     old_image=$(answer EIGEN_API_IMAGE "$PINS")
-    if [ -z "$old_image" ]; then
-        say "$YELLOW" '▲' "The launcher that made the last update kept no note of the build before it."
-        return
-    fi
     NEXT="Eigen $current runs on as it was. Check the network, then run ./eigen rollback again."
     step "Getting the build before the update" "The build before the update is here" \
         "Could not get the build before the update" \
@@ -1563,15 +1532,6 @@ switch_back() {
     NEXT=''
     old=$(describe "$old_image")
     say "$ACCENT" '◆' "Back from Eigen $current to Eigen $old, on the data as it is"
-    # A build older than restore --check-data would refuse it with its whole usage, which reads like a failure, so its
-    # usage is read first. The refusal itself cannot be hidden: on a terminal, Docker joins stderr to the output.
-    usage=$(with_image "$old_image" cli restore --help </dev/null) ||
-        die "Could not run Eigen $old; Eigen $current runs on as it was." "Fix what it says, then run ./eigen rollback again."
-    case $usage in *--check-data*) ;; *)
-        say "$YELLOW" '▲' "Eigen $old is too old to check the data here."
-        return
-        ;;
-    esac
     # In ms, as check_again passes it. The margin covers a clock that differs between this host and Docker's VM.
     since=$((($(date +%s) - 300) * 1000))
     checked=0
@@ -1598,7 +1558,7 @@ switch_back() {
     # From the stop on, whatever ends the rollback starts Eigen again, on the build .env.production pins by then.
     AT_EXIT=restart
     stop
-    if ! check_again "$1"; then return; fi
+    if ! check_again; then return; fi
     step "Switching to Eigen $old" "Switched to Eigen $old" "Could not write Eigen $old into .env.production" \
         with_image "$old_image" with_pins cli configure --backfill
     write_bundle "$old_image"
@@ -1611,7 +1571,7 @@ switch_back() {
     switched=1
 }
 
-# check_again <archive>: with Eigen stopped, the build before the update checks once more the databases written since
+# check_again: with Eigen stopped, the build before the update checks once more the databases written since
 # the first check began. The wait for the tabs and for a server backup ran on the new build, and a server backup opens
 # every home, so a database may have moved to a schema the build before cannot open. Returns 1 when one did: Eigen
 # stays stopped and the rollback puts the archive back. A check that stopped without a verdict ends the rollback, and
@@ -1625,12 +1585,6 @@ check_again() {
         "$CANNOT_OPEN")
             say "$YELLOW" '▲' "Eigen $old cannot open what Eigen $current wrote since the first check."
             return 1
-            ;;
-        # A build from before --since refuses it as an unknown argument. Taking the first verdict would leave the
-        # writes since unchecked, and putting the archive back would throw away what users did since the update.
-        2)
-            die "Eigen $old cannot check again what Eigen $current wrote since the first check; Eigen $current starts again." \
-                "./eigen restore backups/$1 puts back the backup the last update made."
             ;;
         *)
             die "The second check stopped (exit $rechecked); Eigen $current starts again." \

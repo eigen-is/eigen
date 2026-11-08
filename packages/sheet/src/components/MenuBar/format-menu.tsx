@@ -35,7 +35,7 @@ import {
     handleTextSize,
     handleUnderline,
     handleVerticalAlign,
-    numberMenuPresets,
+    NUMBER_MENU_PRESETS,
     SHEET_HOTKEYS,
     updateFormat,
 } from '../../state';
@@ -47,10 +47,8 @@ import { CustomBorder } from './CustomBorder';
 import { ConditionalFormattingSubmenu } from './conditional-formatting-menu';
 
 function NumberFormatSubmenu() {
-    const { setContext, refs, settings } = useContext(WorkbookContext);
+    const { setContext, refs } = useContext(WorkbookContext);
     const { showDialog } = useDialog();
-    const { currency } = settings;
-    const groups = numberMenuPresets(currency);
 
     const anchor = useAnchorCell();
     const activeFa = anchor?.ct?.fa ?? 'General';
@@ -65,7 +63,7 @@ function NumberFormatSubmenu() {
         <DropdownMenuSub>
             <DropdownMenuSubTrigger>Number</DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="sheet-mousedown-cancel">
-                {groups.map((group) => (
+                {NUMBER_MENU_PRESETS.map((group) => (
                     <Fragment key={group[0].value}>
                         <DropdownMenuSeparator />
                         <ChoiceMenuItems
@@ -328,8 +326,7 @@ function WrappingSubmenu() {
                             const d = getFlowdata(ctx);
                             const input = refs.cellInput.current;
                             if (d == null || !input) return;
-                            const canvas = refs.canvas.current?.getContext('2d') ?? undefined;
-                            updateFormat(ctx, input, d, 'tb', 'wrap', canvas);
+                            updateFormat(ctx, input, d, 'tb', 'wrap');
                         });
                     }}
                 >
@@ -365,8 +362,7 @@ function FontSizeSubmenu() {
                         onClick={() => {
                             setContext((ctx) => {
                                 const input = refs.cellInput.current;
-                                const canvas = refs.canvas.current?.getContext('2d') ?? undefined;
-                                if (input) handleTextSize(ctx, input, num, canvas);
+                                if (input) handleTextSize(ctx, input, num);
                             });
                         }}
                     >

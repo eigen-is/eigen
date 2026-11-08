@@ -11,7 +11,7 @@ import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core/errors';
 import { composeOtpEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
-import { getEntriesForTarget, reconcileSharesForNewUser } from '../share';
+import { getEntriesForTarget, reconcileShares } from '../share';
 import { GUEST_ROLE, isGuest } from '../user/guest';
 import { getUserByEmail } from '../user/user';
 import { auth, getAuthDrizzleDb } from './auth';
@@ -104,9 +104,8 @@ export async function verifyOtpAndSignIn(email: string, otp: string, ip: string)
 
     if (!guestUser) {
         const now = new Date();
-        // A direct insert skips better-auth's user hooks, so a guest joins no org. The id comes from generateId,
-        // which is plain letters and digits: parseOwnerId accepts nothing else, and generateRandomString can give
-        // '_' or '-'.
+        // A direct insert skips better-auth's user hooks, so a guest joins no org. generateId gives only letters and
+        // digits, which parseOwnerId requires.
         db.insert(userTable)
             .values({
                 id: generateId(),
@@ -123,14 +122,12 @@ export async function verifyOtpAndSignIn(email: string, otp: string, ip: string)
     }
 
     // Every sign-in reconciles, not only the first, so a first reconcile that failed heals at the next sign-in.
-    await reconcileSharesForNewUser(guestUser);
+    await reconcileShares(guestUser);
 
     return signInWithScopedPassword('guest', guestUser.id, email);
 }
 
-// Writes a password derived from the scope and the email onto the credential account, then signs in with it and
-// returns the response that carries the session cookie. The password is written on every call, so one that was
-// changed heals, and one visitor cannot lock out the next.
+// The password is written on every call, so one that was changed heals and one visitor cannot lock out the next.
 export async function signInWithScopedPassword(
     scope: 'guest' | 'demo',
     userId: string,

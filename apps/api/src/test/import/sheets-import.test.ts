@@ -164,6 +164,18 @@ function parseXlsx(xlsx: ArrayBuffer | Uint8Array): Sheet[] {
     return decodeSheetsSnapshot(new TextDecoder().decode(snapshotJson));
 }
 
+test('a tab named with a ! comes in under its name, and a formula naming it reads it', () => {
+    const [, uses] = parseXlsx(
+        xlsxFixture({
+            sheets: [
+                { name: 'Q1!', data: rowsXml([['A1', 5]]) },
+                { name: 'Uses', data: rowsXml([['A1', { formula: "'Q1!'!A1*2" }]]) },
+            ],
+        }),
+    );
+    expect(uses.celldata?.[0].v).toMatchObject({ f: "='Q1!'!A1*2", v: 10 });
+});
+
 describe('Sheets xlsx import/convert', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
     let mountId: string;
@@ -353,7 +365,9 @@ describe('Sheets xlsx import/convert', () => {
     async function pictureWorkbook(celldata: CellWithRowAndCol[] = []): Promise<ArrayBuffer> {
         const image = { id: 'photo', index: 'a0', x: 100, y: 20, width: 40, height: 30, mediaName: 'photo.png' };
         const media = [{ name: 'photo.png', contentType: 'image/png', data: toTransferableBuffer(PIXEL_PNG) }];
-        return toTransferableBuffer(exportXlsx([{ name: 'Pictures', celldata, images: { photo: image } }], { media }));
+        return toTransferableBuffer(
+            exportXlsx([{ id: 'fixture-2', name: 'Pictures', celldata, images: { photo: image } }], { media }),
+        );
     }
 
     async function mediaFiles(pathId: string): Promise<Map<string, Uint8Array>> {
@@ -1070,7 +1084,7 @@ describe('Sheets xlsx conversion fidelity', () => {
     test("a width counts the file's default font: Calibri's 7 px digit beside Calibri, Inter's digit beside Inter", async () => {
         // Excel's default column, 8.43 characters and the padding, stored as 9.140625.
         expect(parseXlsx(widthOf(9.140625))[0].config?.columnlen?.['0']).toBe(64);
-        const inter = exportXlsx([{ name: 'Sheet1', celldata: [], config: { columnlen: { 0: 67 } } }]);
+        const inter = exportXlsx([{ id: 'fixture-1', name: 'Sheet1', celldata: [], config: { columnlen: { 0: 67 } } }]);
         expect(xlsxToSheets(inter)[0].config?.columnlen).toEqual({ 0: 67 });
     });
 

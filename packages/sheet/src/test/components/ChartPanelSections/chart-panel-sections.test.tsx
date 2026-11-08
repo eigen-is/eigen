@@ -70,8 +70,6 @@ function Host({ data, workbook }: { data: Sheet[]; workbook: RefObject<WorkbookI
         createElement(Workbook, {
             ref: workbook,
             data,
-            showToolbar: false,
-            showFormulaBar: false,
             hooks: { onChartPanelChange: setPanel },
         }),
         panel &&
@@ -99,7 +97,6 @@ async function mount(chart: SheetChart) {
             id: 's1',
             name: 'One',
             order: 0,
-            status: 1,
             row: 20,
             column: 10,
             celldata: [...table, ...rows],

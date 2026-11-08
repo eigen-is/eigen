@@ -15,14 +15,12 @@ const VERSION: string = pkg.version;
 const COMMIT = getBuildCommit();
 const BUILT_AT: Date | undefined = process.env['EIGEN_BUILT_AT'] ? new Date(process.env['EIGEN_BUILT_AT']) : undefined;
 
-// Identity + secrets for the deployment. The secret is made at first boot, the rest set during setup; only
-// orgName changes after, from the owner's settings page. Runtime-tunable defaults — including the storage backend —
-// live in ServerSettings (settings.json), not here. The web address is DOMAIN, from ./eigen setup.
+// Identity and secrets for the deployment. The secret is made at first boot and the rest at setup; only orgName changes
+// after. Runtime-tunable defaults, the storage backend included, live in ServerSettings.
 export type ServerConfig = {
     orgName: string;
     orgId: string;
-    // The team setup made with the org, which every new user joins. An older install pins it at boot (pinDefaultTeam),
-    // or leaves it unset when it has none.
+    // The team setup made with the org, which every new user joins.
     defaultTeamId?: string;
     secret: string;
     setupCompleted: boolean;
@@ -90,29 +88,16 @@ export function getMailDomain(): string {
 }
 
 // Every account's address was made on the recorded mail domain and never changes; on another one nobody can sign in.
-export async function assertMailDomainUnchanged(): Promise<void> {
-    if (isSetupRequired()) return;
-    // Lazy import: user → auth → this module.
-    const { getOrgOwner } = await import('../user');
-    const ownerEmail = (await getOrgOwner())?.email;
-    // Installs set up before the domain was recorded record the one they run on, once the owner's address agrees.
-    if (!store.get().mailDomain && ownerEmail && isInternalAddress(ownerEmail)) {
-        await store.set({ mailDomain: getMailDomain() });
-    }
+export function assertMailDomainUnchanged(): void {
     const recorded = store.get().mailDomain;
-    if (recorded && recorded.toLowerCase() !== getMailDomain().toLowerCase()) {
-        const mismatch = `MAIL_DOMAIN is ${getMailDomain()}, but the accounts on this server use ${recorded}.`;
-        if (isProduction()) {
-            console.error(mismatch);
-            console.error(`Set MAIL_DOMAIN=${recorded} in .env.production and run ./eigen restart.`);
-            process.exit(1);
-        }
-        console.warn(mismatch);
+    if (!recorded || recorded.toLowerCase() === getMailDomain().toLowerCase()) return;
+    const mismatch = `MAIL_DOMAIN is ${getMailDomain()}, but the accounts on this server use ${recorded}.`;
+    if (isProduction()) {
+        console.error(mismatch);
+        console.error(`Set MAIL_DOMAIN=${recorded} in .env.production and run ./eigen restart.`);
+        process.exit(1);
     }
-    // Older setups took a free-form owner address.
-    if (ownerEmail && !isInternalAddress(ownerEmail)) {
-        console.warn(`The owner's address ${ownerEmail} is not on the mail domain ${getMailDomain()}.`);
-    }
+    console.warn(mismatch);
 }
 
 // True when the address belongs to this server's mail domain — i.e. an Eigen user here, not an

@@ -1,11 +1,11 @@
 // One open collab document, such as a doc, a sheet or a deck, held in memory as a Y.Doc. It loads the document from
 // its data.db, saves every edit back to it, and relays edits and cursors between the sockets that have it open.
 // Server-side writers, such as an import or a version restore, edit the same Y.Doc, so every editor sees them. Drive
-// opens each document once, however many sockets connect, and closes it a while after the last socket leaves or after
-// an open that no socket joins. It holds its Home while it waits. Before that close, a workbook saves a version and
-// folds its op log into its snapshot.
+// opens each document once and closes it a while after the last socket leaves or after an open that no socket joins,
+// holding its Home while it waits. Before that close, a workbook saves a version and folds its op log.
 
 import { restoreYjsDoc } from '@workspace/lib/collab/yjs-utils';
+import { COLLAB_ACCESS_LOST_CLOSE, COLLAB_ACCESS_LOST_REASON } from '@workspace/lib/constants/collab';
 import { isRecord } from '@workspace/lib/guards';
 import { readSheetsBase, writeSheetsSnapshot } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -28,6 +28,7 @@ import {
     CONTAINER_MEDIA_FOLDER,
 } from '../mount/container-dbs';
 import type { User } from '../user';
+import { getUserById } from '../user';
 import { COLLAB_DB_CONFIG } from './db-config';
 import { DbProvider } from './db-provider';
 
@@ -79,9 +80,8 @@ export class CollabDocument {
     // read keeps its Modified time, and the linger never shows as the time of the last edit.
     private untouchedUpdateAt: number | null = null;
     private readonly editRecordedAtByUser = new Map<string, number>();
-    // Moves with every update. A compaction swaps its result in only while it hasn't moved since the compaction read the
-    // document. A subscribe moves nothing. A socket that is still connected blocks the swap anyway, and one that left
-    // without an update changed nothing the compaction read.
+    // Moves with every update, not with a subscribe. A compaction swaps its result in only while it hasn't moved since
+    // the compaction read the document.
     private generation = 0;
     // The compaction in flight, which a destruct aborts.
     private compaction: AbortController | null = null;
@@ -115,9 +115,8 @@ export class CollabDocument {
         // between gets a 503 and tries again, so it never makes a data.db the copy then can't write.
         if (!dataDbPath) throw new ApiError(503, `${this.path.name} has no data.db yet`);
 
-        // The editor asks for its comments right after the open, so comments.db opens now. The empty call only
-        // opens it and holds nothing, so it closes after a few idle minutes like a reader's. Nothing waits for
-        // it, because that comments request reports any real problem itself.
+        // The editor asks for its comments right after the open, so comments.db opens now. Nothing waits for it and
+        // nothing holds it, because that comments request reports any real problem itself.
         if (commentsDbPath) {
             this.drive
                 .withDatabase(this.path.mountId, COMMENT_INDEX_DB_CONFIG, commentsDbPath.id, async () => {})
@@ -211,17 +210,28 @@ export class CollabDocument {
         if (this.connections.size === 0) this.scheduleClose();
     }
 
-    // Read is checked once, when a socket opens, while write is checked on every message. So when
-    // sharing changes, the Drive calls this to drop each user who may no longer read. Otherwise they
-    // would keep receiving edits until they disconnect.
+    // Read is checked when a socket opens and write on every message, so a user who lost read would keep
+    // receiving edits until they disconnect.
     public async enforceReadAccess(): Promise<void> {
-        if (this.closed) return;
         // A copy, because unsubscribe changes the map.
-        for (const [conn, user] of [...this.connections]) {
-            if (!(await this.drive.canRead(this.path.mountId, this.path.id, user))) {
-                conn.close(1008, 'Access revoked');
-                this.unsubscribe(conn);
-            }
+        for (const conn of [...this.connections.keys()]) await this.keepsReadAccess(conn);
+    }
+
+    // Closes the connection of a user who may no longer read, and answers whether the connection is still here.
+    public async keepsReadAccess(conn: ServerWebSocket<unknown>): Promise<boolean> {
+        const opened = this.connections.get(conn);
+        if (!opened) return false;
+        // The row, not the user the socket opened with: an ACL entry outlives its user, and matches on the email.
+        const user = await getUserById(opened.id);
+        if (user && (await this.drive.canRead(this.path.mountId, this.path.id, user))) return true;
+        this.closeForLostAccess(conn);
+        return false;
+    }
+
+    // For a user locked out whatever they may read, such as by a password reset.
+    public closeUserConnections(userId: string): void {
+        for (const [conn, { id }] of [...this.connections]) {
+            if (id === userId) this.closeForLostAccess(conn);
         }
     }
 
@@ -289,10 +299,8 @@ export class CollabDocument {
         }
     }
 
-    // Replaces the document's state with a version's, for a version restore. It runs as one Yjs
-    // transaction, so it makes one update, which is saved and sent to every editor like any edit. It is
-    // synchronous, so nothing can change the document halfway, and the caller needs no lock. A workbook
-    // gets a fresh base in the same transaction.
+    // One synchronous Yjs transaction, so it is saved and sent like any edit, nothing changes the document halfway,
+    // and the caller needs no lock.
     public applySnapshotState(state: Uint8Array): void {
         if (this.closed) throw new Error('applySnapshotState: CollabDocument is closed');
         if (!isCollabType(this.path.type)) {
@@ -304,6 +312,11 @@ export class CollabDocument {
             restoreYjsDoc(this.doc, state, roots);
             restampRestoredSheetsBase(this.path.type, this.doc);
         });
+    }
+
+    private closeForLostAccess(conn: ServerWebSocket<unknown>): void {
+        conn.close(COLLAB_ACCESS_LOST_CLOSE, COLLAB_ACCESS_LOST_REASON);
+        this.unsubscribe(conn);
     }
 
     private dropConnection(conn: ServerWebSocket<unknown>): void {
@@ -461,9 +474,8 @@ function isConnection(origin: unknown): origin is ServerWebSocket<unknown> {
     return origin !== null && typeof origin === 'object' && 'readyState' in origin;
 }
 
-// A client may publish presence for itself only, so the `user` in its awareness state must carry the
-// session user's id. The display name is the client's choice. A state without a `user`, such as the
-// empty one of the handshake, claims no identity.
+// A client may publish presence for itself only. A state without a `user`, such as the handshake's, claims no identity,
+// and the display name is the client's choice.
 function awarenessIdentityMatches(state: unknown, userId: string): boolean {
     if (!isRecord(state)) return true;
     const identity = state['user'];

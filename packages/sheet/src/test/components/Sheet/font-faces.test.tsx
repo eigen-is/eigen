@@ -88,8 +88,6 @@ async function mountGrid() {
         root.render(
             createElement(Workbook, {
                 data: [{ id: 's1', name: 'One', order: 0, row: 20, column: 5, celldata: [], config: {} }],
-                showToolbar: false,
-                showFormulaBar: false,
             }),
         );
     });

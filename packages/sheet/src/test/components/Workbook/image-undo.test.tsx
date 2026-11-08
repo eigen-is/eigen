@@ -24,8 +24,6 @@ async function mountWorkbook() {
             createElement(Workbook, {
                 ref,
                 data: [{ id: 's1', name: 'One', order: 0, row: 20, column: 5, celldata: [], config: {} }],
-                showToolbar: false,
-                showFormulaBar: false,
             }),
         );
     });

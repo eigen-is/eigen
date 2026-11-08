@@ -30,7 +30,7 @@ The byte delta is read inside the transaction and applied to the counter after i
 
 The store emits nothing. `putCard`, `deleteCard` and `deleteContact` announce once `writeLock.run` returns, naming the row id the store result carries. Reading the id back after the lock could race a delete and lose the event. `addContact` and `updateContact` announce inside the lock, with the id they already hold. The calendar announces from the same place.
 
-A whole-file import runs inside `withBatchedEvents`, which holds the per-card events and closes on one `contacts:changed`. That event carries no ids, because every contact event invalidates the owner's whole list anyway. It fires from a `finally`, so the cards committed before a failure still reach open tabs. A device sync is one request per card, so nothing server-side spans it. There the client collapses the burst: `handleContactsSSEvent` (`packages/lib/src/core/contacts/sse-handlers.ts`) debounces the list invalidation by 250 ms per owner.
+A whole-file import writes each card through the store, which announces nothing, and sends one `contacts:changed` when it ends, if it wrote a card. That event carries no ids, because every contact event invalidates the owner's whole list anyway. It fires from a `finally`, so the cards committed before a failure still reach open tabs. Another request's card events go out at once meanwhile. A device sync is one request per card, so nothing server-side spans it. There the client collapses the burst: `handleContactsSSEvent` (`packages/lib/src/core/contacts/sse-handlers.ts`) debounces the list invalidation by 250 ms per owner.
 
 ## Label membership lives in the card's CATEGORIES
 
@@ -66,9 +66,11 @@ Duplicates are skipped, never merged. A card is skipped when its `UID` is alread
 
 Export reads one row at a time, since the whole book's bytes in one query would not scale. It drops every `X-EIGEN-*` line, because the self-link carries the account's id. A whole-book export leaves out group cards, to match import.
 
-## The web app writes with the etag it loaded
+## The web app writes with the etag its form holds
 
-A REST update carries the `etag` its form loaded in the body, and a delete carries it as a query parameter. Both are required. A mismatch is a 412, which the hook answers by reloading the list and telling the user, so two tabs can't last-write-win. The etag is the same content hash CardDAV quotes. The edit form (`contact-edit.tsx`) re-seeds from a sync only while it is clean. With unsaved edits it keeps them and asks "changed elsewhere, reload?", as Drive's editor does. After a 412 it re-seeds anyway, because the toast has said the card was reloaded (`isStaleWrite`).
+A REST update carries the `etag` its form holds in the body, and a delete carries it as a query parameter. Both are required. A mismatch is a 412, which the hook answers by reloading the list and telling the user, so two tabs can't last-write-win. The etag is the same content hash CardDAV quotes.
+
+The edit form (`contact-edit.tsx`) keeps what was typed and follows the rest, the calendar's rule ([CALENDAR.md](CALENDAR.md#a-web-write-carries-the-etag-its-form-holds)). react-hook-form holds the values, so a field nobody touched follows the card through `resetField`, a whole email, phone or address list at a time, because rows have no identity to merge them by. A field typed back to its old value counts as untouched and follows too. It holds the etag from when typing began, so a Save over a sync it wasn't told about is refused. A refusal keeps the form and lets the etag move on once, to the card the toast says to check. The next Save sends that and overwrites a field typed here that also changed elsewhere. The Space profile form follows the same rule, through the same `useFollowedFields` and `useHeldEtag`. A refused delete has nothing typed, so its toast promises nothing about it.
 
 A REST field bound is never tighter than what a CardDAV PUT may store (`routes/contacts.ts`). A tighter bound would make a card a device stored uneditable in the web app.
 
@@ -78,7 +80,7 @@ A REST save is a full replacement, but `mergeVCard` (`vcard/serialize.ts`) diffs
 
 Init adds the user's own card and, once, the org owner's. The `ownerSeeded` latch stops a deleted owner card from coming back. The user's card carries `X-EIGEN-ID` with their user id, and the server-owned `eigenId` column holds the link. At most one row holds it.
 
-An update keeps the row's link and writes `X-EIGEN-ID` back when a client strips it. A create claims the link only when no row holds it yet, by carrying the user's `X-EIGEN-ID`, or their email on a card with no `X-EIGEN-ID` at all. A foreign id never claims (`selfClaimRank`, `dav-store.ts`). Editing their own card renames the user across the org and sets their avatar (`pushUserProfile`). Deleting it is refused: REST answers 400, CardDAV 403 ([CARDDAV.md](CARDDAV.md#a-refused-self-delete-lists-the-card-again)).
+An update keeps the row's link and writes `X-EIGEN-ID` back when a client strips it. A create claims the link only when no row holds it yet, by carrying the user's `X-EIGEN-ID`, or their email on a card with no `X-EIGEN-ID` at all. A foreign id never claims (`claimsSelf`, `dav-store.ts`). Editing their own card renames the user across the org and sets their avatar (`pushUserProfile`). Deleting it is refused: REST answers 400, CardDAV 403 ([CARDDAV.md](CARDDAV.md#a-refused-self-delete-lists-the-card-again)).
 
 ## See also
 

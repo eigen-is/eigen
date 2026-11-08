@@ -58,7 +58,7 @@ const homeManifest: BackupManifest = {
 };
 
 describe('parseBackupManifest', () => {
-    test('reads the warnings of a home backed up with them, and a manifest written before them', () => {
+    test('reads the warnings of a home backed up with them, and a manifest without them', () => {
         const warned = {
             ...homeManifest,
             warnings: ['mount drive: files with no object in storage, archived without their bytes: a.png'],
@@ -67,15 +67,16 @@ describe('parseBackupManifest', () => {
         expect(parseBackupManifest(JSON.stringify(homeManifest))).toEqual(homeManifest);
     });
 
-    test("reads a home's folder count, and a manifest written before it", () => {
-        const counted = { ...homeManifest, counts: { ...homeManifest.counts, dirs: 3 } };
-        expect(parseBackupManifest(JSON.stringify(counted))).toEqual(counted);
-        expect(parseBackupManifest(JSON.stringify(homeManifest))?.counts.dirs).toBeUndefined();
+    test('refuses a byte count that is not a number', () => {
+        const counts = { ...homeManifest.counts, bytes: '3' };
+        expect(parseBackupManifest(JSON.stringify({ ...homeManifest, counts }))).toBeNull();
     });
 
-    test('refuses a folder count that is not a number', () => {
-        const counts = { ...homeManifest.counts, dirs: '3' };
-        expect(parseBackupManifest(JSON.stringify({ ...homeManifest, counts }))).toBeNull();
+    test('refuses a home without a level, and takes a server member without one', () => {
+        const { level: _level, ...levelless } = homeManifest;
+        expect(parseBackupManifest(JSON.stringify(levelless))).toBeNull();
+        const serverMember = { ...levelless, kind: 'server' };
+        expect(parseBackupManifest(JSON.stringify(serverMember))).toEqual({ ...levelless, kind: 'server' });
     });
 
     test('refuses warnings that are not a list of strings', () => {
@@ -89,22 +90,11 @@ describe('parseBackupSidecar', () => {
     const checkedAt = new Date('2026-09-30T02:10:00.000Z');
     const verify: BackupVerifyRecord = { status: 'verified', checkedAt, failures: [] };
 
-    test("reads a verify record's warnings, and a record written before them", () => {
-        const warned = { ...verify, warnings: ['home/mounts/drive/data/a.png: 6 bytes, its row says 1'] };
-        expect(parseBackupSidecar(JSON.stringify({ manifest: homeManifest, verify: warned }))).toEqual({
+    test('reads the manifest and the verify record, its date revived', () => {
+        expect(parseBackupSidecar(JSON.stringify({ manifest: homeManifest, verify }))).toEqual({
             manifest: homeManifest,
-            verify: warned,
+            verify,
         });
-        expect(parseBackupSidecar(JSON.stringify({ manifest: homeManifest, verify }))?.verify).toEqual(verify);
-    });
-
-    test('drops warnings that are not a list of strings, and keeps the record', () => {
-        for (const warnings of ['a.png', [3], ['a.png', null], {}, []]) {
-            const read = parseBackupSidecar(
-                JSON.stringify({ manifest: homeManifest, verify: { ...verify, warnings } }),
-            );
-            expect(read?.verify).toEqual(verify);
-        }
     });
 });
 

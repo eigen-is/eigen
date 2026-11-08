@@ -28,6 +28,7 @@ export function drawFilterUI(pass: RenderPass) {
 
     const { appColor, mutedForeground, background, selectionHandle } = canvasColors(renderCtx.canvas);
     const glyphs = getFilterGlyphs();
+    const filter = sheetCtx.sheets.find(({ id }) => id === sheetCtx.currentSheetId)?.filter;
 
     renderCtx.save();
     renderCtx.beginPath();
@@ -55,7 +56,7 @@ export function drawFilterUI(pass: RenderPass) {
 
         const bx = sheetToCanvasX(item.left, scrollWidth, offsetLeft);
         const by = sheetToCanvasY(item.top, scrollHeight, offsetTop);
-        const active = sheetCtx.filter[item.col - options.startCol] != null;
+        const active = filter?.[item.col - options.startCol] != null;
         const hovered = sheetCtx.filterButtonHover === item.col;
 
         if (active) {

@@ -11,7 +11,7 @@ import {
 } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import * as engine from '@workspace/sheet/engine';
-import { normalizeSheetConfig, sheetsNeedRecalc } from '@workspace/sheet/engine';
+import { normalizeSheetConfig } from '@workspace/sheet/engine';
 import * as Y from 'yjs';
 import { appendSheetsToYjs, compactSheetsSnapshot, readLiveSheets, readSheetsFromDoc } from '../../lib/document/sheets';
 import { sheetsHtmlDocument } from '../../lib/export/sheets/render';
@@ -38,13 +38,13 @@ function withoutData(sheets: Sheet[]): Sheet[] {
     return sheets.map(({ data: _data, ...sheet }) => sheet);
 }
 
-// The replay materializes every config collection, the `images` and `charts` maps and `calcChain`, so the
-// editor's granular ops (`['config','rowlen','2']`, `['images', id, 'x']`, `['calcChain', 0]`)
+// The replay materializes every config collection and the `images` and `charts` maps, so the
+// editor's granular ops (`['config','rowlen','2']`, `['images', id, 'x']`)
 // resolve against a stored sheet that predates them. Every sheet it returns carries that shape — the snapshot's and an addSheet op's
 // alike — so expectations built from raw fixtures have to carry it too.
 function normalized(sheets: Sheet[]): Sheet[] {
     return sheets.map((sheet) => {
-        const next = { ...sheet, config: { ...sheet.config }, calcChain: [] };
+        const next = { ...sheet, config: { ...sheet.config } };
         normalizeSheetConfig(next);
         return next;
     });
@@ -77,7 +77,7 @@ describe('document/sheets', () => {
         await expect(readSheets(mount, path)).rejects.toThrow('data.db missing');
     });
 
-    test('reads doc with neither snapshot nor ops → returns empty Sheet[]', async () => {
+    test('a doc with neither snapshot nor ops reads as the sheet a tab opening it shows', async () => {
         const sheetsPath = await drivePost<DrivePath>(
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
@@ -87,13 +87,13 @@ describe('document/sheets', () => {
         );
 
         const home = await getHome(ctx.alice.user.id);
-        // Materialise the data.db without writing any snapshot or ops
-        await home.drive.getCollabDocument(mountId, sheetsPath.id);
+        const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
 
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
         const { sheets: result } = await readSheets(mount, path);
 
-        expect(result).toEqual([]);
+        expect(result.map((sheet) => sheet.id)).toEqual(['sheet-1']);
+        expect(readLiveSheets(collab.doc).map((sheet) => sheet.id)).toEqual(['sheet-1']);
     });
 
     test('reads snapshot-only doc → returns parsed Sheet[]', async () => {
@@ -301,11 +301,7 @@ describe('document/sheets — patch op replay', () => {
         expect(result[0].celldata).toEqual([{ r: 1, c: 1, v: { v: 'b2', m: 'b2' } }]);
     });
 
-    test("a first formula's batch carries a calcChain op — the computed value survives", async () => {
-        // The editor seeds calcChain on every sheet at mount, so the first formula a user
-        // types emits `add ['calcChain', 0]` in the same batch as the cell. A base without
-        // the key makes that patch throw and the rollback takes the cell's value with it —
-        // the formula cell then exported blank while its neighbours rendered.
+    test("an old batch's write to the recalc list fails nothing — the computed value survives", async () => {
         const sheetsPath = await drivePost<DrivePath>(
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
@@ -317,7 +313,7 @@ describe('document/sheets — patch op replay', () => {
         const home = await getHome(ctx.alice.user.id);
         const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
 
-        // Captured from updateCell + patchToOp: A1 = "asdf", B1 = "=1+1", C1 = "test".
+        // A log from before the list went: A1 = "asdf", B1 = "=1+1", C1 = "test".
         const batches: Op[][] = [
             [{ op: 'replace', id: 'sheet-1', path: ['data', 0, 0], value: { v: 'asdf', m: 'asdf' } }],
             [
@@ -574,9 +570,8 @@ describe('document/sheets — patch op replay', () => {
         expect(result[0].data![1][0]?.v).toBe('a');
     });
 
-    test('gate ON: formula cells without a calcChain get engine-computed v/m on read', async () => {
-        // Simulates an xlsx-imported-never-opened doc: celldata carries formula
-        // text with no cached value and no calcChain. The read must run
+    test('a snapshot stored as not computed gets engine-computed v/m on read', async () => {
+        // An import whose recalc failed: celldata carries formula text with no cached value. The read must run
         // server recalc and return computed v + m.
         const sheetsPath = await drivePost<DrivePath>(
             ctx.alice.user.sessionToken,
@@ -602,8 +597,6 @@ describe('document/sheets — patch op replay', () => {
                 ],
             },
         ];
-        // Uncomputed: no cached values, so the decoded doc carries no calcChain and
-        // the read gate must fire.
         writeSheetsToYjs(collab.doc, sheets, { computed: false });
 
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
@@ -616,10 +609,8 @@ describe('document/sheets — patch op replay', () => {
         expect(result[0].data![0][2]?.m).toBe('1.25');
     });
 
-    test('gate OFF: a doc carrying a calcChain keeps its stored values (no recompute)', async () => {
-        // Editor-edited / import-recalced docs carry calcChain. Even a
-        // deliberately-wrong cached value must survive untouched — the gate must
-        // not recompute.
+    test('a snapshot stored as computed keeps its stored values (no recompute)', async () => {
+        // Even a deliberately-wrong cached value must survive untouched.
         const sheetsPath = await drivePost<DrivePath>(
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
@@ -641,11 +632,8 @@ describe('document/sheets — patch op replay', () => {
                     { r: 0, c: 0, v: { v: 5, m: '5', ct: { fa: 'General', t: 'n' } } },
                     { r: 0, c: 1, v: { f: '=A1+1', v: 999, m: '999', ct: { fa: 'General', t: 'n' } } },
                 ],
-                calcChain: [{ r: 0, c: 1, id: 'sheet-1' }],
             },
         ] as unknown as Sheet[];
-        // Value-complete: the decoded calcChain is seeded from the `f` cells, which is
-        // what holds the gate off (the written calcChain itself never goes on the wire).
         writeSheetsToYjs(collab.doc, sheets, { computed: true });
 
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
@@ -729,12 +717,6 @@ describe('document/sheets — patch op replay', () => {
         expect(cellAt(1, 1)?.f).toBe('=SUM(A1:A2)*2');
         expect(cellAt(1, 1)?.v).toBe(84);
         expect(cellAt(1, 1)?.m).toBe('84');
-
-        // The import-time recalc stamped a calcChain, so the read gate sees the
-        // doc as computed and won't recompute on every read.
-        expect(sheetsNeedRecalc(result)).toBe(false);
-        const calcChain = (result[0] as Sheet & { calcChain?: { r: number; c: number; id: string }[] }).calcChain;
-        expect(calcChain?.length).toBe(3);
 
         // Volatile freeze, pinned: the xlsx carried no cached NOW() result, so
         // there is nothing to freeze — the cell keeps its formula but stays
@@ -838,6 +820,20 @@ describe('document/sheets — appendSheetsToYjs', () => {
         appendSheetsToYjs(doc, snapshotJson, readLiveSheets(doc));
     }
 
+    test('a taken name with a ! in it is renamed, and the formula naming it follows', () => {
+        const doc = new Y.Doc();
+        const own: Sheet[] = [{ id: 'own', name: 'Q1!', order: 0, celldata: [], config: {} }];
+        doc.getMap('state').set('snapshot', encodeSheetsSnapshot(own, { computed: true }));
+        const imported: Sheet[] = [
+            { id: 'a', name: 'Q1!', order: 0, celldata: [{ r: 0, c: 0, v: { v: 5, m: '5' } }], config: {} },
+            { id: 'b', name: 'Uses', order: 1, celldata: [{ r: 0, c: 0, v: { f: "='Q1!'!A1", v: 5 } }], config: {} },
+        ];
+        append(doc, encodeSheetsSnapshot(imported, { computed: true }));
+        const { sheets } = readSheetsFromDoc(doc, { recalc: false });
+        expect(sheets.map((sheet) => sheet.name)).toEqual(['Q1!', 'Q1!(Copy)', 'Uses']);
+        expect(sheets[2].celldata?.[0].v?.f).toBe("='Q1!(Copy)'!A1");
+    });
+
     test("the sheets arrive as one batch of addSheet ops under fresh ids, after the workbook's own", () => {
         const doc = workbook();
         const pending: Op[] = [{ op: 'replace', id: 'own', path: ['name'], value: 'Data' }];
@@ -881,13 +877,6 @@ describe('document/sheets — appendSheetsToYjs', () => {
         const chart = stored ? readChartSpec(stored).spec : null;
         expect(chart?.data.source === 'range' && chart.data.categories?.sheetId).toBe(data.id);
         expect(chart?.data.source === 'range' && chart.data.series[0]?.values?.sheetId).toBe(summary.id);
-    });
-
-    test('a computed file keeps its calc chain, under the new id', () => {
-        const doc = workbook();
-        append(doc, encodeSheetsSnapshot(file, { computed: true }));
-        const added = doc.getArray<Op[]>('ops').toArray()[0][1].value;
-        expect(added.calcChain).toEqual([{ r: 0, c: 0, id: added.id }]);
     });
 
     test('a name the workbook holds in another case is taken, as Excel compares names', () => {
@@ -950,12 +939,9 @@ describe('document/sheets — compactSheetsSnapshot', () => {
         ]);
     });
 
-    // A formula typed in the editor gives its sheet a calc chain, which alone would let the stale formulas pass as
-    // computed.
     test('an uncomputed workbook stays uncomputed, and the compaction runs no recalc', () => {
         const typed: Op[] = [
             { op: 'replace', id: 'sheet-1', path: ['data', 0, 1], value: { v: 4, f: '=2+2', m: '4' } },
-            { op: 'add', id: 'sheet-1', path: ['calcChain', 0], value: { r: 0, c: 1, id: 'sheet-1' } },
         ];
         const original = { ...engine };
         let recalcs = 0;
@@ -990,29 +976,29 @@ describe('document/sheets — compactSheetsSnapshot', () => {
         expect(result[0].celldata?.[0]?.v?.v).toBe(99);
     });
 
-    // Stored as computed, the decoder would give these formulas a calc chain, and no export would ever compute them.
-    test('a tab added without a calc chain stores the workbook uncomputed, so an export recalculates it', () => {
-        const batches: Op[][] = [[{ op: 'addSheet', id: 'sheet-2', path: [], value: formulaSheet('sheet-2', 1) }]];
+    test('a formula typed on an uncomputed workbook leaves its stale neighbours for the export read', () => {
+        const doc = new Y.Doc();
+        sheetsStateMap(doc).set('snapshot', encodeSheetsSnapshot([formulaSheet('sheet-1', 0)], { computed: false }));
+        const typed: Op[] = [
+            { op: 'replace', id: 'sheet-1', path: ['data', 0, 1], value: { v: 4, f: '=2+2', m: '4' } },
+            { op: 'add', id: 'sheet-1', path: ['calcChain', 0], value: { r: 0, c: 1, id: 'sheet-1' } },
+        ];
+        doc.getArray<Op[]>('ops').push([typed]);
+        expect(readSheetsFromDoc(doc).sheets[0].celldata?.[0]?.v?.v).toBe(2);
+        expect(readSheetsFromDoc(doc, { recalc: false }).sheets[0].celldata?.[0]?.v?.v).toBe(99);
+        doc.destroy();
+    });
+
+    test('a tab or a formula the log adds leaves the flag as the compaction read it', () => {
+        const batches: Op[][] = [
+            [{ op: 'addSheet', id: 'sheet-2', path: [], value: formulaSheet('sheet-2', 1) }],
+            [{ op: 'replace', id: 'sheet-1', path: ['data', 0, 0], value: { f: '=1+1', v: 99 } }],
+        ];
         const { snapshot } = compactSheetsSnapshot(
             encodeSheetsSnapshot(sheets, { computed: true }),
             JSON.stringify(batches),
         );
-        expect(decodeSheetsWorkbook(snapshot).computed).toBe(false);
-
-        const compacted = new Y.Doc();
-        sheetsStateMap(compacted).set('snapshot', snapshot);
-        const read = readSheetsFromDoc(compacted);
-        expect(read.sheets[1].celldata?.[0]?.v?.v).toBe(2);
-        compacted.destroy();
-    });
-
-    test('a formula written without its calc chain op stores the workbook uncomputed', () => {
-        const typed: Op[] = [{ op: 'replace', id: 'sheet-1', path: ['data', 0, 0], value: { f: '=1+1', v: 99 } }];
-        const { snapshot: compacted } = compactSheetsSnapshot(
-            encodeSheetsSnapshot(sheets, { computed: true }),
-            JSON.stringify([typed]),
-        );
-        expect(decodeSheetsWorkbook(compacted).computed).toBe(false);
+        expect(decodeSheetsWorkbook(snapshot).computed).toBe(true);
     });
 
     test('a workbook with no snapshot compacts over the default sheets, computed', () => {

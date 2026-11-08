@@ -50,8 +50,8 @@ export function ResizeDialog({ mode }: { mode: 'row' | 'column' }) {
                     setContext((draftCtx) => {
                         const sizeMap: Record<string, number> = {};
                         for (const i of selectedIndices) sizeMap[i] = size;
-                        if (isRow) api.setRowHeight(draftCtx, sizeMap, {}, true);
-                        else api.setColumnWidth(draftCtx, sizeMap, {}, true);
+                        if (isRow) api.setRowHeight(draftCtx, sizeMap, true);
+                        else api.setColumnWidth(draftCtx, sizeMap, true);
                     })
                 }
             >

@@ -7,6 +7,7 @@ import type { Home } from '../../lib/home';
 import { getHome } from '../../lib/home/get-home';
 import { buildResource, parseIcs, serializeEventForImip, serializeResource } from '../../lib/ical';
 import { verifyImipSender } from '../../lib/mail/imip-auth';
+import { storedEvents } from '../calendar-test-helpers';
 import { basicAuth } from '../dav-test-helpers';
 import { restoreEnvAfterEach } from '../env-test-helpers';
 import { app, assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
@@ -1006,7 +1007,7 @@ describe('Calendar timezone read-side degrade (audit P1-7b)', () => {
         );
         expect(res.status).toBe(200);
         const home = await getHome(ctx.charlie.user.id);
-        expect((await home.calendar.getRawEvents(calendarId)).some((e) => e.uid === uid)).toBe(false);
+        expect(storedEvents(home.calendar, calendarId).some((e) => e.uid === uid)).toBe(false);
     });
 });
 

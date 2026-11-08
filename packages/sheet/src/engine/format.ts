@@ -9,9 +9,7 @@ import { dateToSerial } from './parser/helper/number';
 import type { Cell, CellMatrix, CellType, FormulaArg } from './types';
 import { ID_CARD_NUMBER, isdatetime, isPlainNumber, isRealNum, valueIsError } from './validation';
 
-// Canonical display for a boolean cell — Excel's uppercase TRUE/FALSE. The xlsx
-// importer shares it so literal booleans read the same as the formula-produced
-// ones recalc pushes back through `update()`.
+// Excel's uppercase TRUE/FALSE, for a typed or imported boolean and a formula's alike.
 export function booleanDisplay(value: boolean): string {
     return value ? 'TRUE' : 'FALSE';
 }
@@ -42,6 +40,15 @@ export function valueText(value: FormulaArg | Date): string {
     if (value instanceof Date) return numberText(dateToSerial(value));
     if (typeof value === 'number') return numberText(value);
     return value?.toString() ?? '';
+}
+
+// The value type a formula's result gives its cell, in the format a person chose. A number in a date format is a date,
+// and a text format holds every result but an error as text.
+export function formulaResultType(fa: CellType['fa'], value: Cell['v']): CellType['t'] {
+    if (typeof value === 'string' && valueIsError(value)) return 'e';
+    if (fa === '@') return 's';
+    if (typeof value === 'number') return fa != null && is_date(fa) ? 'd' : 'n';
+    return typeof value === 'boolean' ? 'b' : 'g';
 }
 
 // Wrap breaks text only; the value decides too, since a formula typed into a text cell keeps its ct.t.

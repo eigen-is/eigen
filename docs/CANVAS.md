@@ -70,7 +70,7 @@ The flag also decides the rest. A text box's `render` always emits its HTML body
 
 The Text tool is a tool like Select and Eraser, not a kind: its entry sits in `VECTOR_TOOLS`. A click places a `NEW_TEXT_BOX_SIZE` box and opens its editor, and a drag previews a dashed outline, since an empty text box paints nothing. A double-click on empty canvas places one too (`openTextAtClient`).
 
-The reader drops an element whose type no kind has, `richtext` among them. Eigen is pre-1.0, so a text box stored by an older build under that type is not read.
+The reader drops an element whose type no kind has.
 
 A drawing's PDF, preview and SVG download are sized from the element boxes (`sceneBounds`), so text that spills past the outermost element of the drawing is cut off there ([CANVAS-TODO](CANVAS-TODO.md)).
 

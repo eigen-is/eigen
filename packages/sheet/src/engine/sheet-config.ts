@@ -20,8 +20,6 @@ export const SHEET_CONFIG_COLLECTIONS = [
     'colhidden',
     'customHeight',
     'customWidth',
-    'rowReadOnly',
-    'colReadOnly',
     'borderInfo',
 ] as const satisfies readonly (keyof ExtendedSheetConfig)[];
 

@@ -25,7 +25,6 @@ function frozenContext(frozen: Sheet['frozen']): { ctx: Context; cache: GlobalCa
         scrollLeft: 0,
         scrollTop: 0,
         scrollListeners: new Set(),
-        notifyScrollListeners: () => {},
     };
     const ref = <T>(): { current: T | null } => ({ current: null });
     const ctx: Context = {
@@ -36,6 +35,7 @@ function frozenContext(frozen: Sheet['frozen']): { ctx: Context; cache: GlobalCa
             canvas: ref(),
             cellArea: ref(),
             workbookContainer: ref(),
+            hooks: { current: {} },
         }),
         sheets: [{ id: 's1', name: 'One', order: 0, config: {}, frozen }],
         currentSheetId: 's1',

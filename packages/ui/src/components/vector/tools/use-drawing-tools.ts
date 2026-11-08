@@ -1,10 +1,7 @@
-// The drawing tools (freehand, line, eraser) + line point-handles, factored out of canvas-editor.tsx
-// so the canvas only DISPATCHES (the ground-rule that the canvas file must not grow).
-// This hook owns the local gesture state (never Yjs until finish), the live preview element rendered
-// through the SAME elementToSvg path as committed elements, the eraser's marked-set dimming, and the
-// single sealed write per gesture. Escape/Enter/double-click are claimed in the capture phase so the
-// innermost active gesture wins over the canvas' layered-Escape (CANVAS.md), exactly as ObjectTransform
-// claims Escape mid-resize.
+// The freehand, line, arrow and eraser tools of the vector canvas, and the point, pin and focus handles of a selected
+// line or arrow. A gesture previews in local state, drawn through the same path as committed elements, and writes one
+// sealed Yjs transaction when it ends. Escape, Enter, double-click and Delete are claimed in the capture phase, so the
+// innermost active gesture wins over the canvas's own Escape. CanvasEditor calls this hook and only dispatches to it.
 
 import type {
     Box,
@@ -62,11 +59,7 @@ import { distinctCount, previewPoints, snapSegment, startLineDraft } from './lin
 import { LinePointHandles } from './point-handles';
 import { isFreedrawSpike } from './touch-gestures';
 
-// Screen-px thresholds (÷ the LIVE zoom → constant on-screen distance): the eraser sample step
-// (Excalidraw's eraser trail), the freehand minimum sample spacing that thins sub-pixel points, the
-// multi-point line's confirm/close radius (LINE_CONFIRM_THRESHOLD), and the drag-vs-click threshold that
-// splits a 2-point line from a multi-point one. Hit tolerance is the shared hitThresholdScreen
-// (coarse-aware).
+// Screen px, divided by the live zoom so the distance stays constant on screen.
 const ERASER_STEP_SCREEN = 4;
 const FREEDRAW_MIN_STEP_SCREEN = 1;
 const LINE_CONFIRM_SCREEN = 8;
@@ -75,10 +68,8 @@ const LINE_DRAG_SCREEN = 4;
 const PREVIEW_ID = '__drawing__';
 const EMPTY_IDS: Set<string> = new Set();
 
-// The geometry + base props every live preview element (draw draft) shares. baseDefaultsFor is the same
-// helper addElement writes through, so a preview can never drift from the element that lands; only the
-// gesture's seed carries over. normalizeLinear runs here because the renderer scales roughness by the box,
-// so a 0×0 box would pop on release.
+// baseDefaultsFor is what addElement writes through, so a preview can't drift from the element that lands.
+// normalizeLinear runs here because the renderer scales roughness by the box, so a 0×0 box would pop on release.
 function previewBase(
     type: 'freedraw' | 'line' | 'arrow',
     origin: Point,
@@ -229,14 +220,11 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     // out while a stylus stroke is in flight (palm rejection wins over the handoff).
     const drawPointerTypeRef = useRef<string | null>(null);
     const seedRef = useRef(0);
-    // Ctrl/Cmd held while dragging an arrow endpoint suppresses binding. Tracked live off key
-    // events for the EVENT-LESS paths — the point-handle preview/commit callbacks and the pointer-less
-    // commitLine finish, which have no pointer event to read the modifier from. The creation drag reads
-    // it straight off its pointer event (a stuck ref after a missed keyup can't affect that path).
+    // Ctrl/Cmd held while dragging an arrow endpoint suppresses binding. Tracked off key events for the paths with no
+    // pointer event to read it from; the creation drag reads its own.
     const suppressRef = useRef(false);
-    // The vertex the user has CLICKED to select over a selected line/arrow's handles (null = none).
-    // Drives the filled `.eigen-vertex-handle-selected` dot, and is what Delete/Backspace removes — never
-    // the whole element while a point is selected. State, not a ref: the selected dot must re-render.
+    // The vertex the user clicked over a selected line or arrow's handles. State, not a ref, since the selected dot
+    // must re-render.
     const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
     // The pinned segment (polyline index) the user has clicked to select — Delete on it unpins.
     const [selectedPinIndex, setSelectedPinIndex] = useState<number | null>(null);
@@ -250,9 +238,6 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     const [pointDraft, setPointDraft] = useState<{ id: string; el: VectorLinearElement | VectorArrowElement } | null>(
         null,
     );
-    // The bindable shape a dragged/hovered arrow endpoint currently reaches, plus the pointer that reaches
-    // it and whether the arrow is elbow — the canvas rings the shape and draws the side-midpoint snap
-    // dots from this. null when nothing reaches.
     const [bindHint, setBindHint] = useState<{ shapeId: string; pointer: Point; elbow: boolean } | null>(null);
     // The last preview frame's elbow bind decision, consumed verbatim on commit so pointer-up is a visual
     // no-op — zero release-time recompute. Null between elbow-endpoint drags.
@@ -292,8 +277,6 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             document.removeEventListener('keyup', track);
         };
     }, []);
-
-    // --- Freehand -------------------------------------------------------------------------------
     const cancelFreedraw = () => {
         strokeRef.current = null;
         pointerIdRef.current = null;
@@ -306,11 +289,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         const stroke = strokeRef.current;
         cancelFreedraw();
         if (!stroke) return;
-        // Real pen pressure iff any sample left the 0.5 no-pressure sentinel (Excalidraw's test — a mouse
-        // reports a flat 0.5). normalizeLinear preserves point order and count, so stroke.pressures stays
-        // index-aligned with the written points. Simulate ⇒ pressures '' + true ⇒ byte-identical legacy ink.
+        // Real pen pressure iff any sample left the 0.5 no-pressure sentinel, which a mouse reports flat.
         const realPressure = stroke.pressures.some((p) => p !== 0.5);
-        // Tool stays freedraw (Excalidraw keeps the pencil active); one addElement per stroke.
         const id = sealed(undoManager, () =>
             addElement({
                 type: 'freedraw',
@@ -325,8 +305,6 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         );
         if (id) setSelectedIds([id]);
     };
-
-    // --- Line / arrow ---------------------------------------------------------------------------
     const linePreview = (draft: LineDraft) => {
         const pts = previewPoints(draft);
         setPreviewEl(
@@ -398,8 +376,6 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         draft.trailing = placed;
         linePreview(draft);
     };
-
-    // --- Eraser ---------------------------------------------------------------------------------
     const cancelEraser = () => {
         eraserRef.current = null;
         pointerIdRef.current = null;
@@ -413,15 +389,11 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         cancelEraser();
         if (!er?.marked.size) return;
         sealed(undoManager, () => deleteElements([...er.marked]));
-        // Tool stays eraser.
     };
-
-    // --- Pointer dispatch -----------------------------------------------------------------------
     const onPointerDown = (e: React.PointerEvent, scene: Point): boolean => {
         if (!canEdit) return false;
-        // Any pointerdown that reaches the surface clears the point selection (clicking the shaft, the
-        // canvas, or another element) — vertex/midpoint handles stopPropagation, so a handle click never
-        // gets here and keeps its own selection.
+        // Any pointerdown that reaches the surface clears the point selection. Handles stopPropagation, so a handle
+        // click keeps its own.
         setSelectedPointIndex(null);
         if (tool === 'freedraw') {
             containerRef.current?.setPointerCapture(e.pointerId);
@@ -483,9 +455,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             if (pointerIdRef.current !== e.pointerId) return true;
             const native = e.nativeEvent;
             const coalesced = native.getCoalescedEvents?.() ?? [];
-            // Each coalesced event carries its own clientX/Y AND pressure; fall back to the plain event when
-            // coalescing is unavailable (injected/synthetic events return []). Points and pressures are read
-            // from the same source so they stay index-aligned before extendFreedrawStroke's minDist thinning.
+            // Points and pressures come from the same source so they stay index-aligned before extendFreedrawStroke's
+            // minDist thinning. Coalescing can be unavailable: synthetic events return [].
             const src = coalesced.length ? coalesced : [native];
             const pts = src.map((ce) => clientToScene(ce.clientX, ce.clientY));
             const pressures = src.map((ce) => ce.pressure);
@@ -527,10 +498,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             draft.trailing = e.shiftKey ? snapSegment(last, rel) : rel;
             if (draft.mode === 'pending' && distance(scene, draft.origin) >= LINE_DRAG_SCREEN / liveZoom())
                 lineMovedRef.current = true;
-            // The moving endpoint (origin + trailing) drives the binding highlight for an arrow draft.
-            // Read Ctrl/Cmd off the live pointer event here — a keyup missed during a window blur can
-            // leave suppressRef stuck, and this path always has the event; the event-less commit paths
-            // still read suppressRef.
+            // Ctrl/Cmd is read off the live pointer event, since a keyup missed during a window blur can leave
+            // suppressRef stuck.
             if (draft.type === 'arrow') {
                 const tip = { x: draft.origin.x + draft.trailing.x, y: draft.origin.y + draft.trailing.y };
                 // A creation draft is always straight (the elbow flag is applied later via the panel), so the
@@ -586,10 +555,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         return false;
     };
 
-    // A second finger landed mid-draw: hand the surface to a two-finger gesture by ending whatever
-    // draw draft is live. A freehand stroke is discarded when it's still a short palm spike, else
-    // finalized (Excalidraw App.tsx:8398-8432); an eraser swipe commits what it marked; a press-drag
-    // line draft keeps its committed points (mirrors Escape). Returns whether a draft was ended.
+    // A second finger hands the surface to a two-finger gesture by ending the live draw draft. A freehand stroke that
+    // is still a short palm spike is discarded, else finalized.
     const abortForSecondTouch = (): boolean => {
         if (strokeRef.current) {
             if (isFreedrawSpike(strokeRef.current.points.length)) cancelFreedraw();
@@ -612,17 +579,14 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     const isPenDrawing = (): boolean =>
         drawPointerTypeRef.current === 'pen' &&
         (strokeRef.current !== null || eraserRef.current !== null || lineRef.current !== null);
-
-    // --- Point handles (a single selected line or arrow) ----------------------------------------
     const sole = selectedIds.length === 1 ? ordered.find((el) => el.id === selectedIds[0]) : undefined;
     // Lines and arrows get vertex handles; freedraw never does.
     const selectedLine =
         !busy && !activeKind && canEdit && (sole?.type === 'line' || sole?.type === 'arrow') ? sole : undefined;
     const isEndpoint = (index: number, count: number) => index === 0 || index === count - 1;
 
-    // If the selected line/arrow vanishes mid vertex-drag — a remote delete unmounts LinePointHandles
-    // before its pointerup — its preview element and binding highlight would otherwise linger. Drop them
-    // the moment the selection stops resolving to a line/arrow (also a plain deselect: harmless there).
+    // A remote delete unmounts LinePointHandles before its pointerup, so drop the preview and binding highlight the
+    // moment the selection stops resolving to a line or arrow.
     const selectedLineId = selectedLine?.id;
     const selectedPointCount = selectedLine ? parsePoints(selectedLine.points).length : 0;
     useEffect(() => {
@@ -634,9 +598,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             setFocusDragEnd(null);
             setSelectedPinIndex(null);
         }
-        // Drop any point selection that no longer resolves: the element deselected/changed, or a remote
-        // peer shrank its point count below the selected index — leaving the filled dot gone while Delete
-        // stayed a consumed no-op. Keep an in-range index untouched; the updater skips a no-op set.
+        // Drop a point selection that no longer resolves, such as after a peer shrank the point count below the
+        // selected index, or Delete would stay a consumed no-op.
         setSelectedPointIndex((i) => (i !== null && i < selectedPointCount ? i : null));
     }, [selectedLineId, selectedPointCount]);
 
@@ -654,10 +617,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             selectedLine.fixedSegments !== '' &&
             isEndpoint(index, points.length)
         ) {
-            // A PINNED elbow endpoint drag: keep the interior polyline + every pin verbatim, re-drop
-            // only this end's connector (moveEndpoints) — but thread the dock like the unpinned branch, so a
-            // bound end attaches at its outline dock at release instead of hanging on the raw cursor until the
-            // shape next moves. The decision is cached for the commit to replay verbatim.
+            // A pinned elbow endpoint drag keeps the interior polyline and every pin and re-drops only this end's
+            // connector, threading the dock like the unpinned branch. The decision is cached for the commit to replay.
             const arrow = selectedLine;
             const end = index === 0 ? 'start' : 'end';
             const endScene = linearLocalToScene(arrow, points[index]);
@@ -678,10 +639,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             setDragEnd(end);
             const endScene = linearLocalToScene(arrow, points[index]);
             if (arrow.elbow) {
-                // The endpoint glides on the outline dock: the preview element carries the DOCKED
-                // endpoint and the live candidate as its binding — post-commit form — so its derived route
-                // (elbowRoute off this element) is exactly what release stores. The
-                // decision is cached for the commit to replay verbatim (zero release-time recompute).
+                // The preview carries the docked endpoint and the live candidate as its binding, the post-commit form,
+                // so its derived route is exactly what release stores.
                 const { candidate, fixedPoint, shape } = elbowBindFor(endScene);
                 elbowDragRef.current = { end, candidate, fixedPoint };
                 const bound = bindElbowEnd(reshaped, end, candidate, fixedPoint, byId);
@@ -720,10 +679,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 selectedLine.fixedSegments !== '' &&
                 isEndpoint(index, points.length)
             ) {
-                // Pinned elbow endpoint commit: thread the dock (bindPinnedElbowEnd, replaying the cached
-                // preview frame so release === last frame) then the renormalization pass, one sealed write. When
-                // the endpoint collapses back to derived (fixedSegments ''), skip the renormalize wrap so the
-                // canonical origin survives; the binding fields ride through either way.
+                // Replays the cached preview frame so release === last frame, then renormalizes in one sealed write,
+                // unless the endpoint collapses to derived (fixedSegments ''), where the canonical origin must survive.
                 const arrow = selectedLine;
                 const end = index === 0 ? 'start' : 'end';
                 const endScene = linearLocalToScene(arrow, points[index]);
@@ -772,10 +729,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         setPointDraft(null);
     };
 
-    // Elbow segment-pin preview/commit. A pin drag returns a full geometry PATCH (points +
-    // fixedSegments + box); the preview mounts it on a draft element (arrowRoute reads its stored polyline
-    // verbatim), and the commit runs the renormalization pass so the sealed write === the last preview
-    // frame for a clean drag. Materialize/moveSegment/unpin all flow through here.
+    // A pin drag returns a full geometry patch (points, fixedSegments, box). The preview mounts it on a draft element
+    // and the commit renormalizes, so the sealed write === the last preview frame.
     const onElbowPinPreview = (patch: PinPatch | null) => {
         if (patch === null || selectedLine?.type !== 'arrow') {
             setPointDraft(null);
@@ -797,10 +752,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         setPointDraft(null);
     };
 
-    // Focus-point (aim dot) drag preview/commit. The preview re-binds the dragged end to the live aim
-    // and re-derives its chord endpoint on a draft element, so the drawn arrow + the dashed line + the dots
-    // all track; `focusDragEnd` hides the vertex handles for the drag. The commit stores the RAW dragged aim
-    // (no re-projection — Excalidraw's handleFocusPointDrag) as one sealed write.
+    // The preview re-binds the dragged end to the live aim on a draft element, and `focusDragEnd` hides the vertex
+    // handles for the drag. The commit stores the raw dragged aim, with no re-projection, as one sealed write.
     const onFocusPreview = (end: 'start' | 'end', fixedPoint: [number, number] | null, pointer?: Point) => {
         if (fixedPoint === null || selectedLine?.type !== 'arrow') {
             setPointDraft(null);
@@ -867,9 +820,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
               })
             : null;
 
-    // The draggable aim dots over a selected bound straight arrow's focus points — a DOM overlay, so its
-    // pointerdown claims the gesture before the canvas hit-test. Hidden during an endpoint/pin drag
-    // (`draggedEnd`) and while a non-select tool is active.
+    // A DOM overlay, so its pointerdown claims the gesture before the canvas hit-test.
     const focusPointHandles =
         focusArrow && !focusArrow.elbow && !activeKind && !draggedEnd
             ? createElement(FocusPointHandles, {
@@ -908,10 +859,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             ? createElement(Fragment, null, linePointHandles, elbowPinHandles, focusPointHandles)
             : null;
 
-    // The shape-following outline over the shape a dragged/hovered arrow endpoint reaches (creation, a
-    // point-handle drag, or the pre-click hover). An SVG `<g>` for the scene group: the kind's own outline
-    // stroked in the selection color (`currentColor`, tinted by the `text-selection-handle` group), so no
-    // shape math is duplicated here.
+    // An SVG `<g>` of the kind's own outline in the selection color, so no shape math is duplicated here.
     const candidate = bindHint ? ordered.find((el) => el.id === bindHint.shapeId) : undefined;
     const bindingOutline =
         candidate && isBindable(candidate)
@@ -928,15 +876,12 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             ? createElement(SnapDots, { shape: candidate, pointer: bindHint.pointer, zoom, elbow: bindHint.elbow })
             : null;
 
-    // The straight-arrow focus point: shown for a single selected bound arrow, and during its
-    // endpoint drag for the OTHER end (the dragged end is hidden). Reads the live preview element while
-    // dragging so the un-dragged end reflects its re-orbit / its aim.
+    // During an endpoint drag it shows the other end, since the dragged end is hidden. It reads the live preview
+    // element so the un-dragged end reflects its aim.
     const focusIndicators =
         focusArrow && !focusArrow.elbow && !activeKind
             ? createElement(FocusIndicators, { arrow: focusArrow, byId, zoom, hideEnd: draggedEnd })
             : null;
-
-    // --- Escape / Enter / double-click / blur (capture phase, latest closures via a ref) ----------
     const api = {
         escape: (): boolean => {
             if (strokeRef.current) {
@@ -948,15 +893,13 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 return true;
             }
             if (lineRef.current) {
-                // Escape CANCELS a mid-gesture create, here as everywhere else on the canvas (and as the
-                // draft's own hint says); Enter and a double-click are the finish triggers. The tool stays
-                // active, like a canceled freehand stroke.
+                // Escape cancels a mid-gesture create, as everywhere on the canvas; Enter and a double-click finish it.
+                // The tool stays active, like a canceled freehand stroke.
                 clearLine();
                 return true;
             }
-            // Layered Escape: a selected point releases BEFORE the element does. Clear it here (capture
-            // phase, so `stopPropagation` beats the canvas's bubble-phase element-deselect) and consume;
-            // with no point selected we fall through and the canvas deselects the element as usual.
+            // Layered Escape: a selected point releases before the element does. This is the capture phase, so
+            // stopPropagation beats the canvas's bubble-phase deselect.
             if (selectedPointIndex !== null) {
                 setSelectedPointIndex(null);
                 return true;
@@ -972,12 +915,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             finishLineWith(lineRef.current.committed);
             return true;
         },
-        // Delete/Backspace with a point SELECTED acts on THAT point, never the whole element. An
-        // interior point is removed (one sealed step, winning over the keyboard hook's delete-selection).
-        // A selected ENDPOINT (index 0/last, where an arrow's bindings ride) or any point of an elbow
-        // arrow (route derived, no editable interior) is a no-op — but we STILL consume the key so it
-        // cannot fall through and delete the element out from under a selected point. With no point
-        // selected we return false and selection-delete removes the whole element as usual.
+        // Delete with a point selected acts on that point and never the whole element. An endpoint (its bindings ride
+        // there) or any elbow point is a no-op that still consumes the key, so it can't fall through to a delete.
         deleteSelectedPoint: (): boolean => {
             // A selected PIN unpins — precedence over vertex/element delete, one sealed step.
             if (
@@ -1013,9 +952,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                     ),
                 ),
             );
-            // After removing an interior point, keep editing the previous point IF it is still interior
-            // (i.e. the removed one wasn't the first interior point); otherwise clear the point selection.
-            // Points before the removed index keep their index, so `index - 1` still addresses that point.
+            // Keep editing the previous point if it is still interior (the removed one wasn't the first interior
+            // point), else clear. Points before the removed index keep their index.
             setSelectedPointIndex(index >= 2 ? index - 1 : null);
             return true;
         },
@@ -1045,10 +983,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 e.stopPropagation();
                 return;
             }
-            // A SELECTED point claims Delete/Backspace before the keyboard hook's delete-selection (which
-            // binds on document in the bubble phase) — stopping propagation here keeps that from also
-            // firing, so the element is never deleted while a point is selected. Falls through only when no
-            // point is selected, and then selection-delete removes the whole element normally.
+            // A selected point claims Delete before the keyboard hook's delete-selection (bound on document, bubble
+            // phase). Stopping propagation keeps that from also firing.
             if ((e.key === 'Delete' || e.key === 'Backspace') && apiRef.current.deleteSelectedPoint()) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -1066,10 +1002,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         };
     }, []);
 
-    // Switching tools abandons an in-progress stroke/erase, but commits a polyline/arrow's placed points
-    // (Excalidraw finalizes rather than strands it). A draft is committed once the tool no longer matches
-    // its own type, so line↔arrow switches never leave a draft the other tool would keep appending to.
-    // Via a ref so the effect only depends on `tool`.
+    // Switching tools abandons a stroke or erase but commits a line or arrow's placed points, so a line↔arrow switch
+    // leaves no draft the other tool would keep appending to. A ref keeps the effect dependent on `tool` alone.
     const abandonRef = useRef<() => void>(() => {});
     abandonRef.current = () => {
         if (tool !== 'freedraw' && strokeRef.current) cancelFreedraw();

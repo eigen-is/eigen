@@ -18,7 +18,7 @@ import { pictureMediaPart } from '../image-types';
 import { IMPORT_MESSAGES, SAVE_AS_PPTX } from '../messages';
 import { cachedBy, charge, childOf, childrenOf, firstChildOf, prefixedAttrOf } from './lookup';
 
-export const MAX_SLIDES = 500;
+const MAX_SLIDES = 500;
 
 // What PowerPoint saves a macro-enabled deck, a template and a slideshow as: each a presentation too, refused by name.
 const NOT_A_PRESENTATION = new Set([
@@ -29,9 +29,8 @@ const NOT_A_PRESENTATION = new Set([
     'application/vnd.ms-powerpoint.slideshow.macroenabled.main+xml',
 ]);
 
-// The content parts the reader parses, by relationship type: a part is parsed only when its content type agrees, so
-// a relationship can't hand the reader notes, a SmartArt graphic's layout or a part of another kind. contentTypeOf
-// answers in lower case.
+// The content parts the reader parses, by relationship type: a part is parsed only when its content type agrees, so a
+// relationship can't hand the reader another kind of part. contentTypeOf answers in lower case.
 const PART_TYPES = {
     slide: SLIDE_TYPE.toLowerCase(),
     slideLayout: SLIDE_LAYOUT_TYPE.toLowerCase(),
@@ -59,7 +58,7 @@ export type PptxPackage = {
     readMedia: OoxmlPackage['readMedia'];
 };
 
-export type Diagram = { data: XmlElement | undefined; drawing: Part | undefined };
+type Diagram = { data: XmlElement | undefined; drawing: Part | undefined };
 
 export type Frame = { width: number; height: number };
 
@@ -72,14 +71,11 @@ export type DeckWalk = {
     slideWidth: number;
     offset: { x: number; y: number };
     slide: Frame;
-    // Children walked and elements written, each a budget: a master's shapes count again for every slide.
-    shapes: Budget;
+    // The elements written and the update's weight, charged as each frame and element is written.
     elements: Budget;
-    // The update's weight, charged as each frame and element is written.
     weight: Budget;
-    // A layout's or master's elements and the children walked for them, by part and color map: read once, copied onto
-    // every slide that shows them.
-    decorations: Map<string, { elements: NewVectorElement[]; shapes: number }>;
+    // A layout's or master's elements, by part and color map: read once, copied onto every slide that shows them.
+    decorations: Map<string, NewVectorElement[]>;
     // A picture part's media name, its bytes read the first time a slide shows it; none when they don't read.
     mediaName(part: MediaPart): string | undefined;
     // Counts what the import leaves out or draws simpler, once for the shape of the file it is in (or the background),

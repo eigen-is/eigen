@@ -3,20 +3,19 @@
 // open on text, a font format goes to the editor's selected characters rather than to the cells.
 
 import type { BorderType } from '@workspace/lib/sheets';
-import { forEach, isNil, isPlainObject, pick, round } from 'es-toolkit/compat';
-import { cellValue, is_date, numberDisplay, parseCellInput } from '../../engine/format';
+import { forEach, isNil, isPlainObject, pick } from 'es-toolkit/compat';
+import { cellValue, is_date, numberDisplay } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
-import type { GlobalCache } from '../types';
-import { clipToUsedExtent, getSheetIndex, isAllowEdit } from '../utils';
+import { clipToUsedExtent, getSheetIndex } from '../utils';
 import { applyBorder, clearSides } from './border';
-import { getRangetxt, isAllSelectedCellsInStatus, normalizedAttr, setCellValue } from './cell';
+import { getRangetxt, isAllSelectedCellsInStatus, setCellValue } from './cell';
+import { openCellEditor } from './cell-editor';
 import { rangeColor } from './color';
-import { setFormulaCellInfo } from './formula-cache';
-import { israngeseleciton } from './formula-editor';
-import { execFunctionGroup, execfunction } from './formula-exec';
-import { createFormulaRangeSelect, rangeSetValue, setCaretPosition } from './formula-range';
+import { functionCallHtml, israngeseleciton } from './formula-editor';
+import { computeFormula } from './formula-exec';
+import { createFormulaRangeSelect, rangeSetValue } from './formula-range';
 import { showLinkCard } from './hyperlink';
 import {
     editorSelectionStyle,
@@ -26,14 +25,10 @@ import {
 } from './inline-string';
 import { colLocationByIndex, rowLocationByIndex } from './location';
 import { mergeCells } from './merge';
+import { recomputeCells } from './refresh';
 import { selectIsOverlap } from './selection';
-import { sortSelection } from './sort';
-import { getCellTextInfo } from './text';
-import { hasPartMC, isdatatypemulti, isRealNull, isRealNum } from './validation';
-
-type ToolbarItemClickHandler = (ctx: Context, cellInput: HTMLDivElement, cache?: GlobalCache) => void;
-
-type ToolbarItemSelectedFunc = (cell: Cell | null | undefined) => boolean;
+import { growRowToFit } from './text';
+import { hasPartMC, isRealNull, isRealNum } from './validation';
 
 export function updateFormatCell(
     ctx: Context,
@@ -44,7 +39,6 @@ export function updateFormatCell(
     row_ed: number,
     col_st: number,
     col_ed: number,
-    canvas?: CanvasRenderingContext2D,
 ) {
     if (isNil(d) || isNil(attr)) {
         return;
@@ -147,22 +141,8 @@ export function updateFormatCell(
                 if (value && isPlainObject(value)) {
                     if (isRunStyleKey(attr)) updateInlineStringFormatOutside(value, attr, foucsStatus);
                     Object.assign(value, { [attr]: foucsStatus });
-                    const cellWidth = cfg.columnlen?.[c] || ctx.defaultcollen;
-                    // A larger size or wrapped lines need a taller row. The row grows to fit and never
-                    // shrinks here, as another cell in it may need the height.
-                    if ((attr === 'fs' || attr === 'tb') && canvas) {
-                        const textInfo = getCellTextInfo(value, canvas, {
-                            r,
-                            c,
-                            cellWidth,
-                        });
-                        if (textInfo?.textHeightAll == null) continue;
-                        const rowHeight = round(textInfo.textHeightAll);
-                        const currentRowHeight = cfg.rowlen?.[r] || ctx.defaultrowlen;
-                        if (rowHeight > currentRowHeight && cfg.customHeight?.[r] !== 1) {
-                            (cfg.rowlen ??= {})[r] = rowHeight;
-                        }
-                    }
+                    // A larger size or wrapped lines need a taller row.
+                    if (attr === 'fs' || (attr === 'tb' && foucsStatus === '2')) growRowToFit(ctx, cfg, value, r, c);
                 } else {
                     d[r][c] = { [attr]: foucsStatus };
                 }
@@ -177,9 +157,8 @@ export function updateFormat(
     d: CellMatrix,
     attr: keyof Cell,
     foucsStatus: string | number,
-    canvas?: CanvasRenderingContext2D,
 ) {
-    if (!isAllowEdit(ctx)) return;
+    if (ctx.allowEdit === false) return;
 
     if (isRunStyleKey(attr) && isEditingText(ctx, $input)) {
         const [r, c] = ctx.editingCellPosition;
@@ -191,7 +170,7 @@ export function updateFormat(
         const [row_st, row_ed] = selection.row;
         const [col_st, col_ed] = selection.column;
 
-        updateFormatCell(ctx, d, attr, foucsStatus, row_st, row_ed, col_st, col_ed, canvas);
+        updateFormatCell(ctx, d, attr, foucsStatus, row_st, row_ed, col_st, col_ed);
     });
 }
 
@@ -213,31 +192,15 @@ function toggleAttr(ctx: Context, cellInput: HTMLDivElement, attr: 'bl' | 'it' |
     updateFormat(ctx, cellInput, flowdata, attr, isOn ? 0 : 1);
 }
 
-function setAttr(
-    ctx: Context,
-    cellInput: HTMLDivElement,
-    attr: keyof Cell,
-    value: string | number,
-    canvas?: CanvasRenderingContext2D,
-) {
+function setAttr(ctx: Context, cellInput: HTMLDivElement, attr: keyof Cell, value: string | number) {
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
 
-    updateFormat(ctx, cellInput, flowdata, attr, value, canvas);
+    updateFormat(ctx, cellInput, flowdata, attr, value);
 }
 
 function checkNoNullValue(cell: Cell | null) {
-    const v = cellValue(cell);
-
-    if (
-        !isRealNull(v) &&
-        isdatatypemulti(v) &&
-        (cell?.ct == null || cell.ct.t == null || cell.ct.t === 'n' || cell.ct.t === 'g')
-    ) {
-        return true;
-    }
-
-    return false;
+    return isRealNum(cellValue(cell)) && (cell?.ct?.t == null || cell.ct.t === 'n' || cell.ct.t === 'g');
 }
 
 function checkNoNullValueAll(cell: Cell | null) {
@@ -292,34 +255,21 @@ function activeFormulaInput(
     rowh: number[] | null,
     columnh: number[] | null,
     formula: string,
-    cache: GlobalCache,
-    isnull?: boolean,
+    isnull = false,
 ) {
-    if (isnull == null) {
-        isnull = false;
-    }
-
-    ctx.editingCellPosition = [row_index, col_index];
-    cache.doNotUpdateCell = true;
     if (isnull) {
-        const formulaTxt = `<span dir="auto" class="sheet-formula-text-color">=</span><span dir="auto" class="sheet-formula-text-color">${formula.toUpperCase()}</span><span dir="auto" class="sheet-formula-text-color">(</span><span dir="auto" class="sheet-formula-text-color">)</span>`;
-
-        cellInput.innerHTML = formulaTxt;
-
-        const spanList = cellInput.querySelectorAll('span');
-        setCaretPosition(ctx, spanList[spanList.length - 2], 0, 1);
-
+        const html = `${functionCallHtml(formula.toUpperCase())}<span dir="auto" class="sheet-formula-text-color">)</span>`;
+        openCellEditor(ctx, row_index, col_index, { html, caret: formula.length + 2 });
         return;
     }
 
-    // Non-null past the `isnull` early-return: callers pass null only with isnull=true.
     if (rowh == null || columnh == null) return;
     const row_pre = rowLocationByIndex(rowh[0], ctx.visibledatarow)[0];
     const row = rowLocationByIndex(rowh[1], ctx.visibledatarow)[1];
     const col_pre = colLocationByIndex(columnh[0], ctx.visibledatacolumn)[0];
     const col = colLocationByIndex(columnh[1], ctx.visibledatacolumn)[1];
 
-    const formulaTxt = `<span dir="auto" class="sheet-formula-text-color">=</span><span dir="auto" class="sheet-formula-text-color">${formula.toUpperCase()}</span><span dir="auto" class="sheet-formula-text-color">(</span><span class="sheet-formula-functionrange-cell" rangeindex="0" dir="auto" style="color:${rangeColor(
+    const html = `${functionCallHtml(formula.toUpperCase())}<span class="sheet-formula-functionrange-cell" rangeindex="0" dir="auto" style="color:${rangeColor(
         0,
     )};">${getRangetxt(
         ctx,
@@ -327,7 +277,7 @@ function activeFormulaInput(
         { row: rowh, column: columnh },
         ctx.currentSheetId,
     )}</span><span dir="auto" class="sheet-formula-text-color">)</span>`;
-    cellInput.innerHTML = formulaTxt;
+    openCellEditor(ctx, row_index, col_index, { html });
 
     israngeseleciton(ctx);
     ctx.formulaCache.rangestart = true;
@@ -372,15 +322,9 @@ function backFormulaInput(
         { row: rowh, column: columnh },
         ctx.currentSheetId,
     )})`;
-    const v = execfunction(ctx, f, r, c);
-    const value = { v: v[1], f: v[2] };
-    setCellValue(ctx, r, c, d, value);
-    ctx.formulaCache.execFunctionExist ||= [];
-    ctx.formulaCache.execFunctionExist.push({
-        r,
-        c,
-        id: ctx.currentSheetId,
-    });
+    const [v, formulaText] = computeFormula(ctx, f);
+    setCellValue(ctx, r, c, d, { v, f: formulaText });
+    recomputeCells(ctx, [{ r, c, id: ctx.currentSheetId }]);
 }
 
 function singleFormulaInput(
@@ -394,22 +338,9 @@ function singleFormulaInput(
     ed_m: number,
     formula: string,
     type: string,
-    cache: GlobalCache,
-    noNum?: boolean,
-    noNull?: boolean,
+    noNum = true,
+    noNull = true,
 ) {
-    if (type == null) {
-        type = 'r';
-    }
-
-    if (noNum == null) {
-        noNum = true;
-    }
-
-    if (noNull == null) {
-        noNull = true;
-    }
-
     let isNull = true;
     let isNum = false;
 
@@ -435,9 +366,9 @@ function singleFormulaInput(
 
         if (st_r_r == null) {
             if (type === 'c') {
-                activeFormulaInput(cellInput, fxInput, ctx, _index, fix, null, null, formula, cache, true);
+                activeFormulaInput(cellInput, fxInput, ctx, _index, fix, null, null, formula, true);
             } else {
-                activeFormulaInput(cellInput, fxInput, ctx, fix, _index, null, null, formula, cache, true);
+                activeFormulaInput(cellInput, fxInput, ctx, fix, _index, null, null, formula, true);
             }
         } else {
             if (_index === st_m) {
@@ -470,7 +401,7 @@ function singleFormulaInput(
                 }
             }
         }
-        return false;
+        return;
     }
     if (isNum && noNum) {
         let cell = null;
@@ -501,9 +432,7 @@ function singleFormulaInput(
                     len = d[0].length;
                 }
 
-                if (c >= len) {
-                    return false;
-                }
+                if (c >= len) return;
 
                 if (type === 'c') {
                     cell = d[c][fix];
@@ -524,9 +453,7 @@ function singleFormulaInput(
                 backFormulaInput(d, fix, ed_m + 1, [fix, fix], [st_m, ed_m], formula, ctx);
             }
         }
-        return false;
     }
-    return true;
 }
 
 export function autoSelectionFormula(
@@ -534,13 +461,10 @@ export function autoSelectionFormula(
     cellInput: HTMLDivElement,
     fxInput: HTMLDivElement | null | undefined,
     formula: string,
-    cache: GlobalCache,
 ) {
-    if (!isAllowEdit(ctx)) return;
+    if (ctx.allowEdit === false) return;
     const flowdata = getFlowdata(ctx);
     if (flowdata == null) return;
-    let isfalse = true;
-    ctx.formulaCache.execFunctionExist = [];
 
     function execFormulaInput_c(
         d: CellMatrix,
@@ -553,9 +477,9 @@ export function autoSelectionFormula(
         const st_c_c = getNoNullValue(d, st_r, ed_c, 'c');
 
         if (st_c_c == null) {
-            activeFormulaInput(cellInput, fxInput, ctx, st_r, st_c, null, null, _formula, cache, true);
+            activeFormulaInput(cellInput, fxInput, ctx, st_r, st_c, null, null, _formula, true);
         } else {
-            activeFormulaInput(cellInput, fxInput, ctx, st_r, st_c, [st_r, ed_r], [st_c_c, ed_c - 1], _formula, cache);
+            activeFormulaInput(cellInput, fxInput, ctx, st_r, st_c, [st_r, ed_r], [st_c_c, ed_c - 1], _formula);
         }
     }
 
@@ -565,7 +489,7 @@ export function autoSelectionFormula(
         if (st_r_c == null) {
             execFormulaInput_c(d, st_r, ed_r, st_c, ed_c, _formula);
         } else {
-            activeFormulaInput(cellInput, fxInput, ctx, st_r, st_c, [st_r_c, ed_r - 1], [st_c, ed_c], _formula, cache);
+            activeFormulaInput(cellInput, fxInput, ctx, st_r, st_c, [st_r_c, ed_r - 1], [st_c, ed_c], _formula);
         }
     }
 
@@ -574,12 +498,12 @@ export function autoSelectionFormula(
     forEach(ctx.selections, (selection) => {
         const [st_r, ed_r] = selection.row;
         const [st_c, ed_c] = selection.column;
-        const row_index = selection.row_focus;
-        const col_index = selection.column_focus;
+        const row_index = selection.row_focus ?? st_r;
+        const col_index = selection.column_focus ?? st_c;
 
         if (st_r === ed_r && st_c === ed_c) {
             if (ed_r - 1 < 0 && ed_c - 1 < 0) {
-                activeFormulaInput(cellInput, fxInput, ctx, st_r, st_c, null, null, formula, cache, true);
+                activeFormulaInput(cellInput, fxInput, ctx, st_r, st_c, null, null, formula, true);
                 return;
             }
 
@@ -591,278 +515,55 @@ export function autoSelectionFormula(
                 execFormulaInput(flowdata, st_r, ed_r, st_c, ed_c, formula);
             }
         } else if (st_r === ed_r) {
-            isfalse = singleFormulaInput(
-                cellInput,
-                fxInput,
-                ctx,
-                flowdata,
-                col_index!,
-                st_r,
-                st_c,
-                ed_c,
-                formula,
-                'r',
-                cache,
-            );
+            singleFormulaInput(cellInput, fxInput, ctx, flowdata, col_index, st_r, st_c, ed_c, formula, 'r');
         } else if (st_c === ed_c) {
-            isfalse = singleFormulaInput(
-                cellInput,
-                fxInput,
-                ctx,
-                flowdata,
-                row_index!,
-                st_c,
-                st_r,
-                ed_r,
-                formula,
-                'c',
-                cache,
-            );
+            singleFormulaInput(cellInput, fxInput, ctx, flowdata, row_index, st_c, st_r, ed_r, formula, 'c');
         } else {
-            let r_false = true;
             for (let r = st_r; r <= ed_r; r += 1) {
-                r_false =
-                    singleFormulaInput(
-                        cellInput,
-                        fxInput,
-                        ctx,
-                        flowdata,
-                        col_index!,
-                        r,
-                        st_c,
-                        ed_c,
-                        formula,
-                        'r',
-                        cache,
-                        true,
-                        false,
-                    ) && r_false;
+                singleFormulaInput(
+                    cellInput,
+                    fxInput,
+                    ctx,
+                    flowdata,
+                    col_index,
+                    r,
+                    st_c,
+                    ed_c,
+                    formula,
+                    'r',
+                    true,
+                    false,
+                );
             }
-
-            let c_false = true;
             for (let c = st_c; c <= ed_c; c += 1) {
-                c_false =
-                    singleFormulaInput(
-                        cellInput,
-                        fxInput,
-                        ctx,
-                        flowdata,
-                        row_index!,
-                        c,
-                        st_r,
-                        ed_r,
-                        formula,
-                        'c',
-                        cache,
-                        true,
-                        false,
-                    ) && c_false;
+                singleFormulaInput(
+                    cellInput,
+                    fxInput,
+                    ctx,
+                    flowdata,
+                    row_index,
+                    c,
+                    st_r,
+                    ed_r,
+                    formula,
+                    'c',
+                    true,
+                    false,
+                );
             }
-
-            isfalse = !!r_false && !!c_false;
         }
-
-        isfalse = isfalse && isfalse;
     });
-
-    if (!isfalse) {
-        ctx.formulaCache.execFunctionExist.reverse();
-        for (const formulaCell of ctx.formulaCache.execFunctionExist) {
-            setFormulaCellInfo(ctx, { r: formulaCell.r, c: formulaCell.c, id: ctx.currentSheetId }, flowdata);
-        }
-
-        execFunctionGroup(ctx, null, null, null, null, flowdata);
-        ctx.formulaCache.execFunctionGlobalData = null;
-    }
 }
 
 export function cancelPaintModel(ctx: Context) {
-    if (ctx.copyState === null) return;
-    // The painter's marching ants are drawn from ctx.formulaRangeSelections, which only ever
-    // shows the current sheet. A copy sourced from another sheet has nothing on screen here.
-    if (ctx.copyState?.dataSheetId === ctx.currentSheetId) {
-        ctx.formulaRangeSelections = [];
-    }
-
-    ctx.copyState = {
-        dataSheetId: '',
-        copyRange: [{ row: [0], column: [0] }],
-    };
-
-    ctx.formatPainterOn = false;
+    // The marching ants are drawn from ctx.formulaRangeSelections, which only shows the current sheet, so a source on
+    // another sheet has nothing on screen here.
+    if (ctx.painterSource?.sheetId === ctx.currentSheetId) ctx.formulaRangeSelections = [];
+    ctx.painterSource = undefined;
 }
 
 export function handleNumberFormat(ctx: Context, cellInput: HTMLDivElement, pattern: string) {
     setAttr(ctx, cellInput, 'ct', pattern);
-}
-
-export function handleCurrencyFormat(ctx: Context, cellInput: HTMLDivElement) {
-    const currency = ctx.currency || '€';
-
-    handleNumberFormat(ctx, cellInput, `${currency} #.00`);
-}
-
-export function handlePercentageFormat(ctx: Context, cellInput: HTMLDivElement) {
-    handleNumberFormat(ctx, cellInput, '0.00%');
-}
-
-export function handleNumberDecrease(ctx: Context, cellInput: HTMLDivElement) {
-    const flowdata = getFlowdata(ctx);
-    if (!flowdata || !ctx.selections) return;
-
-    const row_index = ctx.selections[0].row_focus;
-    const col_index = ctx.selections[0].column_focus;
-    if (row_index === undefined || col_index === undefined) return;
-
-    let foucsStatus = normalizedAttr(flowdata, row_index, col_index, 'ct');
-    const cell = flowdata[row_index][col_index];
-
-    if (foucsStatus == null || foucsStatus.t !== 'n') {
-        return;
-    }
-
-    if (foucsStatus.fa === 'General') {
-        if (!cell?.v) return;
-
-        [, foucsStatus] = parseCellInput(cell.v);
-    }
-
-    // Wan/Yi (10,000/100,000,000) number format
-    const reg = /^(w|W)((0?)|(0\.0+))$/;
-    if (reg.test(foucsStatus.fa)) {
-        if (foucsStatus.fa.includes('.')) {
-            if (foucsStatus.fa.substr(-2) === '.0') {
-                updateFormat(ctx, cellInput, flowdata, 'ct', foucsStatus.fa.split('.')[0]);
-            } else {
-                updateFormat(ctx, cellInput, flowdata, 'ct', foucsStatus.fa.substr(0, foucsStatus.fa.length - 1));
-            }
-        } else {
-            updateFormat(ctx, cellInput, flowdata, 'ct', foucsStatus.fa);
-        }
-
-        return;
-    }
-    let prefix = '';
-    let main = '';
-    let fa = [];
-    if (foucsStatus.fa.includes('.')) {
-        fa = foucsStatus.fa.split('.');
-        [prefix, main] = fa;
-    } else {
-        return;
-    }
-
-    fa = main.split('');
-    let tail = '';
-    for (let i = fa.length - 1; i >= 0; i -= 1) {
-        const c = fa[i];
-        if (c !== '#' && c !== '0' && c !== ',' && Number.isNaN(parseInt(c, 10))) {
-            tail = c + tail;
-        } else {
-            break;
-        }
-    }
-
-    let fmt = '';
-    if (foucsStatus.fa.includes('.')) {
-        let suffix = main;
-        if (tail.length > 0) {
-            suffix = main.replace(tail, '');
-        }
-
-        let pos = suffix.replace(/#/g, '0');
-        pos = pos.substr(0, pos.length - 1);
-        if (pos === '') {
-            fmt = prefix + tail;
-        } else {
-            fmt = `${prefix}.${pos}${tail}`;
-        }
-    }
-
-    updateFormat(ctx, cellInput, flowdata, 'ct', fmt);
-}
-
-export function handleNumberIncrease(ctx: Context, cellInput: HTMLDivElement) {
-    const flowdata = getFlowdata(ctx);
-    if (!flowdata) return;
-    if (!ctx.selections) return;
-    const row_index = ctx.selections[0].row_focus;
-    const col_index = ctx.selections[0].column_focus;
-    if (row_index === undefined || col_index === undefined) return;
-    let foucsStatus = normalizedAttr(flowdata, row_index, col_index, 'ct');
-    const cell = flowdata[row_index][col_index];
-
-    if (foucsStatus == null || foucsStatus.t !== 'n') {
-        return;
-    }
-
-    if (foucsStatus.fa === 'General') {
-        if (!cell?.v) return;
-        [, foucsStatus] = parseCellInput(cell.v);
-    }
-
-    if (foucsStatus.fa === 'General') {
-        updateFormat(ctx, cellInput, flowdata, 'ct', '#.0');
-        return;
-    }
-
-    // Wan/Yi (10,000/100,000,000) number format
-    const reg = /^(w|W)((0?)|(0\.0+))$/;
-    if (reg.test(foucsStatus.fa)) {
-        if (foucsStatus.fa.includes('.')) {
-            updateFormat(ctx, cellInput, flowdata, 'ct', `${foucsStatus.fa}0`);
-        } else {
-            if (foucsStatus.fa.substr(-1) === '0') {
-                updateFormat(ctx, cellInput, flowdata, 'ct', `${foucsStatus.fa}.0`);
-            } else {
-                updateFormat(ctx, cellInput, flowdata, 'ct', `${foucsStatus.fa}0.0`);
-            }
-        }
-
-        return;
-    }
-
-    let prefix = '';
-    let main = '';
-    let fa = [];
-
-    if (foucsStatus.fa.includes('.')) {
-        fa = foucsStatus.fa.split('.');
-        [prefix, main] = fa;
-    } else {
-        main = foucsStatus.fa;
-    }
-
-    fa = main.split('');
-    let tail = '';
-    for (let i = fa.length - 1; i >= 0; i -= 1) {
-        const c = fa[i];
-        if (c !== '#' && c !== '0' && c !== ',' && Number.isNaN(parseInt(c, 10))) {
-            tail = c + tail;
-        } else {
-            break;
-        }
-    }
-
-    let fmt = '';
-    if (foucsStatus.fa.includes('.')) {
-        let suffix = main;
-        if (tail.length > 0) {
-            suffix = main.replace(tail, '');
-        }
-
-        let pos = suffix.replace(/#/g, '0');
-        pos += '0';
-        fmt = `${prefix}.${pos}${tail}`;
-    } else {
-        if (tail.length > 0) {
-            fmt = `${main.replace(tail, '')}.0${tail}`;
-        } else {
-            fmt = `${main}.0${tail}`;
-        }
-    }
-
-    updateFormat(ctx, cellInput, flowdata, 'ct', fmt);
 }
 
 export function handleBold(ctx: Context, cellInput: HTMLDivElement) {
@@ -894,23 +595,15 @@ export function handleVerticalAlign(ctx: Context, cellInput: HTMLDivElement, val
 }
 
 export function handleFormatPainter(ctx: Context) {
-    if (!isAllowEdit(ctx)) return;
+    if (ctx.allowEdit === false) return;
     // The painter takes one range, and never one that cuts through a merge.
     const selection = ctx.selections?.length === 1 ? ctx.selections[0] : undefined;
     if (!selection || hasPartMC(ctx, selection.row[0], selection.row[1], selection.column[0], selection.column[1])) {
         return;
     }
 
-    cancelPaintModel(ctx);
-
     ctx.formulaRangeSelections = [{ row: selection.row, column: selection.column }];
-    ctx.copyState = {
-        dataSheetId: ctx.currentSheetId,
-        copyRange: [{ row: selection.row, column: selection.column }],
-    };
-
-    ctx.formatPainterOn = true;
-    ctx.formatPainterOnce = true;
+    ctx.painterSource = { sheetId: ctx.currentSheetId, range: { row: selection.row, column: selection.column } };
 }
 
 export function handleClearFormat(ctx: Context) {
@@ -946,7 +639,7 @@ export function handleTextBackground(ctx: Context, cellInput: HTMLDivElement, co
 }
 
 export function handleBorder(ctx: Context, type: BorderType, borderColor?: string, borderStyle?: string) {
-    if (!isAllowEdit(ctx)) return;
+    if (ctx.allowEdit === false) return;
 
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
@@ -959,7 +652,7 @@ export function handleBorder(ctx: Context, type: BorderType, borderColor?: strin
 }
 
 export function handleMerge(ctx: Context, type: string) {
-    if (!isAllowEdit(ctx)) return;
+    if (ctx.allowEdit === false) return;
 
     if (selectIsOverlap(ctx)) {
         return;
@@ -995,12 +688,8 @@ export function handleMerge(ctx: Context, type: string) {
     mergeCells(ctx, ctx.currentSheetId, ctx.selections, type);
 }
 
-export function handleSort(ctx: Context, isAsc: boolean) {
-    sortSelection(ctx, isAsc);
-}
-
 export function handleFreeze(ctx: Context, type: string) {
-    if (!isAllowEdit(ctx)) return;
+    if (ctx.allowEdit === false) return;
 
     const file = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!];
     if (!file) return;
@@ -1030,52 +719,15 @@ export function handleFreeze(ctx: Context, type: string) {
     }
 }
 
-export function handleTextSize(
-    ctx: Context,
-    cellInput: HTMLDivElement,
-    size: number,
-    canvas?: CanvasRenderingContext2D,
-) {
-    setAttr(ctx, cellInput, 'fs', size, canvas);
+export function handleTextSize(ctx: Context, cellInput: HTMLDivElement, size: number) {
+    setAttr(ctx, cellInput, 'fs', size);
 }
 
 export function handleLink(ctx: Context) {
-    if (!isAllowEdit(ctx)) return;
+    if (ctx.allowEdit === false) return;
     const selection = ctx.selections?.[0];
     const flowdata = getFlowdata(ctx);
     if (flowdata != null && selection != null) {
         showLinkCard(ctx, selection.row[0], selection.column[0], true);
     }
-}
-
-const handlerMap: Record<string, ToolbarItemClickHandler> = {
-    'currency-format': handleCurrencyFormat,
-    'percentage-format': handlePercentageFormat,
-    'number-decrease': handleNumberDecrease,
-    'number-increase': handleNumberIncrease,
-    'sort-cell': (ctx: Context) => handleSort(ctx, true),
-    'merge-all': (ctx: Context) => handleMerge(ctx, 'mergeAll'),
-    'border-all': (ctx: Context) => handleBorder(ctx, 'border-all'),
-    bold: handleBold,
-    italic: handleItalic,
-    'strike-through': handleStrikeThrough,
-    underline: handleUnderline,
-    'clear-format': handleClearFormat,
-    'format-painter': handleFormatPainter,
-    link: handleLink,
-};
-
-const selectedMap: Record<string, ToolbarItemSelectedFunc> = {
-    bold: (cell) => cell?.bl === 1,
-    italic: (cell) => cell?.it === 1,
-    'strike-through': (cell) => cell?.cl === 1,
-    underline: (cell) => cell?.un === 1,
-};
-
-export function toolbarItemClickHandler(name: string) {
-    return handlerMap[name];
-}
-
-export function toolbarItemSelectedFunc(name: string) {
-    return selectedMap[name];
 }

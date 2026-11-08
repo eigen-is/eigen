@@ -8,9 +8,6 @@ import * as schema from './schema';
 
 // The schema every mount's metadata.db is migrated to.
 const CURRENT_VERSION = 8;
-// And the version that gave `pending_uploads` its `isDatabase` column. A restore writes those rows
-// itself, so it refuses an archived metadata.db older than this rather than take the DEFAULT.
-export const PENDING_UPLOAD_KIND_VERSION = 8;
 
 export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'mount-metadata',
@@ -138,11 +135,8 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
             `),
         },
         {
-            // The Drive-wide content index. It is additive and can be built again. A sibling paths_content_fts over a
-            // table of its own, path_content, keeps large body text off the busy `paths` row. The dirty bit and the
-            // reindex sweep fill it, and the AFTER DELETE trigger on paths clears a path's row. The five container
-            // types are EIGEN_DOC_TYPES as it was at v6. They stay literal, so this migration never shifts when that
-            // constant changes.
+            // The Drive-wide content index is additive and can be built again. The five container types are
+            // EIGEN_DOC_TYPES as at v6, kept literal so this migration never shifts when that constant changes.
             version: 6,
             up: (db) => {
                 db.exec(`
@@ -199,20 +193,15 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
             },
         },
         {
-            // assertUniqueName's SELECT and the INSERT after the storage write are not serialized, so two
-            // creates of one name can both pass; on a by-name mount they then share one disk path. The
-            // partial unique index makes the losing INSERT throw, which mount.ts answers with 409.
+            // Two creates of one name can both pass assertUniqueName and share a disk path on a by-name mount.
+            // The partial unique index makes the loser throw, which mount.ts answers with 409.
             version: 7,
             up: (db) => {
-                // The index cannot be created over an existing duplicate, so every one but the oldest is
-                // renamed first. Rows trashed with a folder count, since restoreDescendants restores them
-                // with no conflict check. Rows trashed on their own restore through restorePath's conflict
-                // rename. Only `name` changes: an id-keyed `file` does not depend on it, and on a by-name
-                // mount the duplicates already share one path. Roots never collide, as NULLs are distinct.
+                // The index cannot be created over a duplicate, so every one but the oldest is renamed first, rows
+                // trashed with a folder included (restoreDescendants checks no conflict). Only `name` changes.
 
-                // This folds case as SQLite's LOWER() does, ASCII letters only. The index and assertUniqueName fold
-                // the same way, so the dedup renames exactly the rows CREATE UNIQUE INDEX would reject, and no more.
-                // A JS toLowerCase would also fold the non-ASCII case variants that SQLite keeps apart.
+                // This folds case as SQLite's LOWER() does, ASCII letters only, like the index and assertUniqueName, so
+                // the dedup renames exactly the rows CREATE UNIQUE INDEX would reject.
                 const lower = (s: string): string => s.replace(/[A-Z]/g, (c) => c.toLowerCase());
                 // The suffix goes before the extension. A leading dot makes a dotfile, not an extension, as in
                 // buildStorageKey.
@@ -275,7 +264,7 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
             },
         },
         {
-            version: PENDING_UPLOAD_KIND_VERSION,
+            version: 8,
             up: (db) =>
                 // A restore stages plain files too, which the queue must not check for a SQLite header.
                 db.exec(`ALTER TABLE pending_uploads ADD COLUMN isDatabase INTEGER NOT NULL DEFAULT 1;`),

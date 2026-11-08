@@ -9,22 +9,17 @@ import { cellValue, dropRuns } from '../../engine/format';
 import { iscelldata } from '../../engine/formula-utils';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
-import { getSheetIndex, isAllowEdit } from '../utils';
+import { getSheetIndex } from '../utils';
 import { mergeBorder } from './cell';
 import { getcellrange } from './formula-exec';
-import { colLocation, rowLocation } from './location';
+import { colLocation, rowLocation, sheetPoint } from './location';
 import { normalizeSelection } from './selection';
 import { changeSheet } from './sheet';
 
-export function getCellRowColumn(ctx: Context, e: MouseEvent, container: HTMLDivElement, scrollEl: HTMLDivElement) {
+export function getCellRowColumn(ctx: Context, e: MouseEvent, cellArea: HTMLDivElement) {
     const flowdata = getFlowdata(ctx);
     if (flowdata == null) return undefined;
-    const { scrollLeft, scrollTop } = scrollEl;
-    const rect = container.getBoundingClientRect();
-    let x = e.pageX - rect.left - ctx.rowHeaderWidth;
-    let y = e.pageY - rect.top - ctx.columnHeaderHeight;
-    x += scrollLeft;
-    y += scrollTop;
+    const { x, y } = sheetPoint(ctx, e, cellArea);
     let r = rowLocation(y, ctx.visibledatarow)[2];
     let c = colLocation(x, ctx.visibledatacolumn)[2];
 
@@ -79,8 +74,7 @@ export function saveHyperlink(
 }
 
 export function removeHyperlink(ctx: Context, r: number, c: number) {
-    const allowEdit = isAllowEdit(ctx);
-    if (!allowEdit) return;
+    if (ctx.allowEdit === false) return;
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     const flowdata = getFlowdata(ctx);
     if (flowdata != null && sheetIndex != null) {
@@ -96,7 +90,6 @@ export function removeHyperlink(ctx: Context, r: number, c: number) {
 }
 
 export function showLinkCard(ctx: Context, r: number, c: number, isEditing = false, isMouseDown = false) {
-    if (ctx.rangePickerOpen) return;
     if (`${r}_${c}` === ctx.linkCard?.rc) return;
     const link = getCellHyperlink(ctx, r, c);
     const cell = getFlowdata(ctx)?.[r]?.[c];

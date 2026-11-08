@@ -22,43 +22,22 @@ import {
     rangeHightlightselected,
     rangeSetValue,
 } from '../modules';
-import { cancelFunctionrangeSelected, mergeBorder, mergeMoveMain, setEditingCell, updateCell } from '../modules/cell';
+import { cancelFunctionrangeSelected, mergeBorder, mergeMoveMain, updateCell } from '../modules/cell';
+import { openCellEditor } from '../modules/cell-editor';
 import type { CellGlyph } from '../modules/cell-glyph';
 import { cellGlyphAt } from '../modules/cell-glyph';
 import { getFilterButtonAtPosition } from '../modules/filter';
 import { showLinkCard } from '../modules/hyperlink';
-import { colLocation, colLocationByIndex, rowLocation, rowLocationByIndex } from '../modules/location';
-import { checkProtectionSelectLockedOrUnLockedCells } from '../modules/protection';
+import { colLocation, colLocationByIndex, rowLocation, rowLocationByIndex, sheetPoint } from '../modules/location';
 import { normalizeSelection } from '../modules/selection';
 import type { GlobalCache } from '../types';
-import { isAllowEdit } from '../utils';
 import { extendSelectionGeometry } from './mouse-drag';
-import { fixPositionOnFrozenCells } from './mouse-resize';
 
-// The painted cell glyph under the pointer, if any — read off the live scroll in
-// globalCache, the way the header hover does, so the selection's DOM drag
-// handles can ask before their mousedown starts a drag, outside a recipe. A
-// glyph outranks both handles: OverlayVisuals then leaves the press to bubble
-// to the cell area, whose handleCellAreaMouseDown below does the glyph's job.
-export function cellGlyphAtPointer(
-    ctx: Context,
-    globalCache: GlobalCache,
-    e: MouseEvent,
-    scrollEl: HTMLDivElement,
-): CellGlyph | undefined {
-    const rect = scrollEl.getBoundingClientRect();
-    const mouseX = e.pageX - rect.left - window.scrollX;
-    const mouseY = e.pageY - rect.top - window.scrollY;
-    if (mouseX < 0 || mouseY < 0 || mouseX >= rect.width || mouseY >= rect.height) return undefined;
-    const freeze = globalCache.freezen?.[ctx.currentSheetId];
-    const { x, y } = fixPositionOnFrozenCells(
-        freeze,
-        mouseX + globalCache.scrollLeft,
-        mouseY + globalCache.scrollTop,
-        mouseX,
-        mouseY,
-    );
-    return cellGlyphAt(ctx, x, y);
+// A glyph outranks the selection's drag handles, so a handle asks this before its mousedown starts a drag, outside a
+// recipe. The press then bubbles to the cell area, whose handleCellAreaMouseDown does the glyph's job.
+export function cellGlyphAtPointer(ctx: Context, e: MouseEvent, cellArea: HTMLDivElement): CellGlyph | undefined {
+    const { x, y, inside } = sheetPoint(ctx, e, cellArea);
+    return inside ? cellGlyphAt(ctx, x, y) : undefined;
 }
 
 // Whether a press on a cell puts its reference into the formula being composed, rather than committing the edit.
@@ -90,9 +69,8 @@ export function handleCellAreaMouseDown(
     globalCache: GlobalCache,
     e: MouseEvent,
     cellInput: HTMLDivElement,
-    container: HTMLDivElement,
+    cellArea: HTMLDivElement,
     fxInput?: HTMLDivElement | null,
-    canvas?: CanvasRenderingContext2D,
 ) {
     ctx.filterContextMenu = undefined;
     const flowdata = getFlowdata(ctx);
@@ -100,16 +78,8 @@ export function handleCellAreaMouseDown(
     if (swallowMenuPress(ctx, globalCache, e)) return;
 
     deselectFloatingObject(ctx);
-    const rect = container.getBoundingClientRect();
-    const mouseX = e.pageX - rect.left - window.scrollX;
-    const mouseY = e.pageY - rect.top - window.scrollY;
-    const _x = mouseX + ctx.scrollLeft;
-    const _y = mouseY + ctx.scrollTop;
-    if (_x >= rect.width + ctx.scrollLeft || _y >= rect.height + ctx.scrollTop) {
-        return;
-    }
-    const freeze = globalCache.freezen?.[ctx.currentSheetId];
-    const { x, y, inHorizontalFreeze, inVerticalFreeze } = fixPositionOnFrozenCells(freeze, _x, _y, mouseX, mouseY);
+    const { x, y, inside, pane } = sheetPoint(ctx, e, cellArea);
+    if (!inside) return;
 
     // Canvas-drawn autofilter button: a plain left click opens the filter menu
     // anchored under the button; right/middle clicks fall through to selection.
@@ -120,16 +90,13 @@ export function handleCellAreaMouseDown(
             ctx.filterContextMenu = {
                 // Viewport-space anchor from the click's offset inside the button —
                 // freeze-correct by construction (click and button share a region).
-                x: rect.left + mouseX - (x - filterButton.left),
-                y: rect.top + mouseY - (y - filterButton.top) + filterButton.height,
+                x: e.clientX - (x - filterButton.left),
+                y: e.clientY - (y - filterButton.top) + filterButton.height,
                 col: filterButton.col,
                 startRow,
                 endRow,
                 startCol,
                 endCol,
-                hiddenRows: Object.keys(ctx.filter[filterButton.col - startCol]?.rowhidden ?? {}).map((r) =>
-                    parseInt(r, 10),
-                ),
             };
             // Keep the browser from focusing the overlay on this mousedown — that
             // focus shift would dismiss the just-opened menu via onFocusOutside.
@@ -138,15 +105,8 @@ export function handleCellAreaMouseDown(
         }
     }
 
-    const row_location = rowLocation(y, ctx.visibledatarow);
-    let row = row_location[1];
-    let row_pre = row_location[0];
-    let row_index = row_location[2];
-
-    const col_location = colLocation(x, ctx.visibledatacolumn);
-    let col = col_location[1];
-    let col_pre = col_location[0];
-    let col_index = col_location[2];
+    let [row_pre, row, row_index] = rowLocation(y, ctx.visibledatarow);
+    let [col_pre, col, col_index] = colLocation(x, ctx.visibledatacolumn);
 
     let row_index_ed = row_index;
     let col_index_ed = col_index;
@@ -158,15 +118,10 @@ export function handleCellAreaMouseDown(
 
     showLinkCard(ctx, row_index, col_index, false, true);
 
-    // The cell's text area, the space both data-validation affordances are
-    // laid out in — the same box, from the same builder, the canvas painter
-    // hands their geometry.
+    // The box the painter lays both data-validation glyphs out in.
     const textBox = cellTextBox(col_pre, row_pre, col, row);
-    // While a cell edit is open the click belongs to the edit: it inserts the
-    // cell's reference into the formula being composed, or commits the value.
-    // Neither may also fire an affordance — a toggle mid-edit writes the cell
-    // and recalculates behind the formula the user is still typing. The
-    // keyboard path (events/keyboard.ts) bails on the same condition.
+    // While a cell edit is open the click belongs to the edit, so it fires no glyph. A toggle would write the cell and
+    // recalculate behind the formula the user is still typing.
     const editing = ctx.editingCellPosition.length > 0;
 
     if (e.button !== 2 && !editing && isCheckboxClick(ctx, row_index, col_index, textBox, x, y)) {
@@ -175,22 +130,19 @@ export function handleCellAreaMouseDown(
 
     cellFocus(ctx, row_index, col_index);
 
-    // A click on the painted list chevron opens the dropdown in one go, the way
-    // the canvas filter button opens its menu. cellFocus has just positioned the
-    // hidden Radix anchor on this cell — and skips that when editing is not
-    // allowed, so a read-only viewer sees the chevron but gets no list.
+    // cellFocus has just put the list's hidden anchor on this cell, and skips that when editing is not allowed, so a
+    // read-only viewer sees the chevron but gets no list.
     if (
         e.button !== 2 &&
         !editing &&
-        isAllowEdit(ctx) &&
+        ctx.allowEdit !== false &&
         isDropdownChevronClick(ctx, row_index, col_index, textBox, x, y)
     ) {
         ctx.validationListOpen = true;
     }
 
-    // If clicked cell is not in viewport, request a programmatic scroll to reveal
-    // it (one request for both axes); the read compares against the live mirror.
-    if (!inHorizontalFreeze && !inVerticalFreeze) {
+    // A cell scrolled partly out of view scrolls back in, with one request for both axes.
+    if (pane === 'main') {
         const request: { left?: number; top?: number } = {};
         if (col_pre < ctx.scrollLeft) {
             request.left = col_pre;
@@ -379,12 +331,13 @@ export function handleCellAreaMouseDown(
             ctx.formulaCache.rangedrag_column_start = false;
             ctx.formulaCache.rangedrag_row_start = false;
 
-            ctx.formulaCache.selectingRangeIndex = ctx.formulaCache.rangechangeindex!;
-            if (ctx.formulaCache.rangechangeindex! > ctx.formulaRangeHighlight.length) {
-                createRangeHightlight(ctx, cellInput.innerHTML, ctx.formulaCache.rangechangeindex!);
+            const rangeIndex = ctx.formulaCache.rangechangeindex ?? 0;
+            ctx.formulaCache.selectingRangeIndex = rangeIndex;
+            if (rangeIndex > ctx.formulaRangeHighlight.length) {
+                createRangeHightlight(ctx, cellInput.innerHTML, rangeIndex);
             }
             createFormulaRangeSelect(ctx, {
-                rangeIndex: ctx.formulaCache.rangechangeindex || 0,
+                rangeIndex,
                 left,
                 top,
                 width,
@@ -393,121 +346,109 @@ export function handleCellAreaMouseDown(
             e.preventDefault();
             return; // skip ctx.selections to prevent clearing cellInput
         }
-        updateCell(ctx, ctx.editingCellPosition[0], ctx.editingCellPosition[1], cellInput, undefined, canvas);
-        ctx.selectionActive = true;
+        updateCell(ctx, ctx.editingCellPosition[0], ctx.editingCellPosition[1], cellInput);
     }
-    if (checkProtectionSelectLockedOrUnLockedCells(ctx, row_index, col_index, ctx.currentSheetId)) {
-        ctx.selectionActive = true;
-    }
+    ctx.selectionActive = true;
 
-    if (ctx.selectionActive) {
-        if (e.shiftKey) {
-            // Shift+click: select range
-            const last = ctx.selections?.[ctx.selections.length - 1];
-            if (
-                last &&
-                last.top != null &&
-                last.left != null &&
-                last.height != null &&
-                last.width != null &&
-                last.row_focus != null &&
-                last.column_focus != null
-            ) {
-                const rowGeom = extendSelectionGeometry(
-                    last.top,
-                    last.height,
-                    last.row,
-                    last.row_focus,
-                    row_pre,
-                    row,
-                    row_index,
-                );
-                let top = rowGeom.start;
-                let height = rowGeom.span;
-                let rowSelected = rowGeom.selected;
-                const colGeom = extendSelectionGeometry(
-                    last.left,
-                    last.width,
-                    last.column,
-                    last.column_focus,
-                    col_pre,
-                    col,
-                    col_index,
-                );
-                let left = colGeom.start;
-                let width = colGeom.span;
-                let columnSelected = colGeom.selected;
-                const changeparam = mergeMoveMain(ctx, columnSelected, rowSelected, top, height, left, width);
-                if (changeparam != null) {
-                    [columnSelected, rowSelected, top, height, left, width] = changeparam;
-                }
-                last.row = rowSelected;
-                last.column = columnSelected;
-                last.left_move = left;
-                last.width_move = width;
-                last.top_move = top;
-                last.height_move = height;
-            }
-        } else if (e.ctrlKey || e.metaKey) {
-            // Cmd/Ctrl+click a cell that's already selected toggles it off (deselect),
-            // matching Excel/Sheets. Pushing a duplicate range instead would collide on
-            // the overlay's React key and orphan a stuck highlight div until reload.
-            const selections = ctx.selections;
-            const overlapIndex = selections?.findIndex(
-                (obj_s) =>
-                    row_index >= obj_s.row[0] &&
-                    row_index <= obj_s.row[1] &&
-                    col_index >= obj_s.column[0] &&
-                    col_index <= obj_s.column[1],
+    if (e.shiftKey) {
+        const last = ctx.selections?.[ctx.selections.length - 1];
+        if (
+            last &&
+            last.top != null &&
+            last.left != null &&
+            last.height != null &&
+            last.width != null &&
+            last.row_focus != null &&
+            last.column_focus != null
+        ) {
+            const rowGeom = extendSelectionGeometry(
+                last.top,
+                last.height,
+                last.row,
+                last.row_focus,
+                row_pre,
+                row,
+                row_index,
             );
-            if (selections && overlapIndex != null && overlapIndex > -1) {
-                // Keep at least one active selection; clicking inside the only one is a no-op
-                if (selections.length > 1) selections.splice(overlapIndex, 1);
-            } else {
-                selections?.push({
-                    left: col_pre,
-                    width: col - col_pre - 1,
-                    top: row_pre,
-                    height: row - row_pre - 1,
-                    left_move: col_pre,
-                    width_move: col - col_pre - 1,
-                    top_move: row_pre,
-                    height_move: row - row_pre - 1,
-                    row: [row_index, row_index_ed],
-                    column: [col_index, col_index_ed],
-                    row_focus: row_index,
-                    column_focus: col_index,
-                });
+            let top = rowGeom.start;
+            let height = rowGeom.span;
+            let rowSelected = rowGeom.selected;
+            const colGeom = extendSelectionGeometry(
+                last.left,
+                last.width,
+                last.column,
+                last.column_focus,
+                col_pre,
+                col,
+                col_index,
+            );
+            let left = colGeom.start;
+            let width = colGeom.span;
+            let columnSelected = colGeom.selected;
+            const changeparam = mergeMoveMain(ctx, columnSelected, rowSelected, top, height, left, width);
+            if (changeparam != null) {
+                [columnSelected, rowSelected, top, height, left, width] = changeparam;
             }
-        } else {
-            ctx.selections = [
-                {
-                    left: col_pre,
-                    width: col - col_pre - 1,
-                    top: row_pre,
-                    height: row - row_pre - 1,
-                    left_move: col_pre,
-                    width_move: col - col_pre - 1,
-                    top_move: row_pre,
-                    height_move: row - row_pre - 1,
-                    row: [row_index, row_index_ed],
-                    column: [col_index, col_index_ed],
-                    row_focus: row_index,
-                    column_focus: col_index,
-                },
-            ];
+            last.row = rowSelected;
+            last.column = columnSelected;
+            last.left_move = left;
+            last.width_move = width;
+            last.top_move = top;
+            last.height_move = height;
         }
+    } else if (e.ctrlKey || e.metaKey) {
+        // Cmd/Ctrl+click on a selected cell deselects it. A duplicate range would collide on the overlay's React key
+        // and leave a stuck highlight until reload.
+        const selections = ctx.selections;
+        const overlapIndex = selections?.findIndex(
+            (obj_s) =>
+                row_index >= obj_s.row[0] &&
+                row_index <= obj_s.row[1] &&
+                col_index >= obj_s.column[0] &&
+                col_index <= obj_s.column[1],
+        );
+        if (selections && overlapIndex != null && overlapIndex > -1) {
+            // Keep at least one active selection; clicking inside the only one is a no-op
+            if (selections.length > 1) selections.splice(overlapIndex, 1);
+        } else {
+            selections?.push({
+                left: col_pre,
+                width: col - col_pre - 1,
+                top: row_pre,
+                height: row - row_pre - 1,
+                left_move: col_pre,
+                width_move: col - col_pre - 1,
+                top_move: row_pre,
+                height_move: row - row_pre - 1,
+                row: [row_index, row_index_ed],
+                column: [col_index, col_index_ed],
+                row_focus: row_index,
+                column_focus: col_index,
+            });
+        }
+    } else {
+        ctx.selections = [
+            {
+                left: col_pre,
+                width: col - col_pre - 1,
+                top: row_pre,
+                height: row - row_pre - 1,
+                left_move: col_pre,
+                width_move: col - col_pre - 1,
+                top_move: row_pre,
+                height_move: row - row_pre - 1,
+                row: [row_index, row_index_ed],
+                column: [col_index, col_index_ed],
+                row_focus: row_index,
+                column_focus: col_index,
+            },
+        ];
     }
 
     ctx.selections = normalizeSelection(ctx, ctx.selections);
 }
 
-export function handleCellAreaDoubleClick(
-    ctx: Context,
-    globalCache: GlobalCache,
-    e: MouseEvent,
-    container: HTMLElement,
-) {
+export function handleCellAreaDoubleClick(ctx: Context, e: MouseEvent, cellArea: HTMLElement) {
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
 
@@ -519,25 +460,15 @@ export function handleCellAreaDoubleClick(
     ) {
         return;
     }
-    if (!isAllowEdit(ctx)) return;
+    if (ctx.allowEdit === false) return;
 
-    const rect = container.getBoundingClientRect();
-    const mouseX = e.pageX - rect.left;
-    const mouseY = e.pageY - rect.top;
-    const _x = mouseX + ctx.scrollLeft;
-    const _y = mouseY + ctx.scrollTop;
-
-    const freeze = globalCache.freezen?.[ctx.currentSheetId];
-    const { x, y } = fixPositionOnFrozenCells(freeze, _x, _y, mouseX, mouseY);
+    const { x, y } = sheetPoint(ctx, e, cellArea);
 
     // Double-clicking a filter button must not start editing the cell under it
     if (getFilterButtonAtPosition(ctx, x, y) != null) return;
 
-    const row_location = rowLocation(y, ctx.visibledatarow);
-    let row_index = row_location[2];
-
-    const col_location = colLocation(x, ctx.visibledatacolumn);
-    let col_index = col_location[2];
+    let row_index = rowLocation(y, ctx.visibledatarow)[2];
+    let col_index = colLocation(x, ctx.visibledatacolumn)[2];
 
     // A tick-box cell changes only through a click on its box, so a double click opens no cell editor.
     if (getCellDataValidation(ctx, row_index, col_index)?.type === 'checkbox') return;
@@ -548,7 +479,6 @@ export function handleCellAreaDoubleClick(
         [, , col_index] = margeset.column;
     }
 
-    // Check if current and focus coordinates match; correct if not
     const focus = ctx.selections?.[0];
     const column_focus = focus?.column_focus;
     const row_focus = focus?.row_focus;
@@ -557,7 +487,7 @@ export function handleCellAreaDoubleClick(
         col_index = column_focus;
     }
 
-    setEditingCell(ctx, row_index, col_index);
+    openCellEditor(ctx, row_index, col_index, { caret: 'end' });
 }
 
 // True when a selection holds the cell at (row, column). A null row asks about a whole column, and a null column about a
@@ -574,14 +504,13 @@ function inSelection(ctx: Context, row: number | null, column: number | null): b
     );
 }
 
-// Coords-plus-modifiers shape so both a real right-click (MouseEvent) and a long-press (touch,
-// synthetic point) can drive the same select-cell-then-open flow. The caller preventDefaults.
-type ContextMenuPoint = { pageX: number; pageY: number; metaKey?: boolean; ctrlKey?: boolean };
+// A real right click and a long press, which has no mouse event, select the same way.
+type ContextMenuPoint = { clientX: number; clientY: number; metaKey?: boolean; ctrlKey?: boolean };
 
 export function handleContextMenu(
     ctx: Context,
     point: ContextMenuPoint,
-    container: HTMLDivElement,
+    cellArea: HTMLDivElement,
     area: 'cell' | 'rowHeader' | 'columnHeader',
 ) {
     if (!ctx.allowEdit) {
@@ -590,28 +519,11 @@ export function handleContextMenu(
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
 
-    if (area === 'cell') {
-        const rect = container.getBoundingClientRect();
-        const mouseX = point.pageX - rect.left - window.scrollX;
-        const mouseY = point.pageY - rect.top - window.scrollY;
-        const _selected_x = mouseX + ctx.scrollLeft;
-        const _selected_y = mouseY + ctx.scrollTop;
-        const { x: selected_x, y: selected_y } = fixPositionOnFrozenCells(
-            ctx.getRefs().globalCache.freezen?.[ctx.currentSheetId],
-            _selected_x,
-            _selected_y,
-            mouseX,
-            mouseY,
-        );
-        const row_location = rowLocation(selected_y, ctx.visibledatarow);
-        const row = row_location[1];
-        const row_pre = row_location[0];
-        const row_index = row_location[2];
+    const { x, y } = sheetPoint(ctx, point, cellArea);
 
-        const col_location = colLocation(selected_x, ctx.visibledatacolumn);
-        const col = col_location[1];
-        const col_pre = col_location[0];
-        const col_index = col_location[2];
+    if (area === 'cell') {
+        const [row_pre, row, row_index] = rowLocation(y, ctx.visibledatarow);
+        const [col_pre, col, col_index] = colLocation(x, ctx.visibledatacolumn);
         // A right-click inside the selection keeps it for the menu.
         const isInSelection = inSelection(ctx, row_index, col_index);
         if (!isInSelection && (point.metaKey || point.ctrlKey)) {
@@ -711,20 +623,7 @@ export function handleContextMenu(
             },
         ];
     } else if (area === 'rowHeader') {
-        const rect = container.getBoundingClientRect();
-        const mouseY = point.pageY - rect.top - window.scrollY;
-        const _selected_y = mouseY + ctx.scrollTop;
-        const { y: selected_y } = fixPositionOnFrozenCells(
-            ctx.getRefs().globalCache.freezen?.[ctx.currentSheetId],
-            0,
-            _selected_y,
-            0,
-            mouseY,
-        );
-        const row_location = rowLocation(selected_y, ctx.visibledatarow);
-        const row = row_location[1];
-        const row_pre = row_location[0];
-        const row_index = row_location[2];
+        const [row_pre, row, row_index] = rowLocation(y, ctx.visibledatarow);
         if (inSelection(ctx, row_index, null)) return;
         const col_index = ctx.visibledatacolumn.length - 1;
         const col = ctx.visibledatacolumn[col_index];
@@ -750,23 +649,10 @@ export function handleContextMenu(
             row_select: true,
         });
     } else if (area === 'columnHeader') {
-        const rect = container.getBoundingClientRect();
-        const mouseX = point.pageX - rect.left - window.scrollX;
-        const _selected_x = mouseX + ctx.scrollLeft;
-        const { x: selected_x } = fixPositionOnFrozenCells(
-            ctx.getRefs().globalCache.freezen?.[ctx.currentSheetId],
-            _selected_x,
-            0,
-            mouseX,
-            0,
-        );
         const row_index = ctx.visibledatarow.length - 1;
         const row = ctx.visibledatarow[row_index];
         const row_pre = 0;
-        const col_location = colLocation(selected_x, ctx.visibledatacolumn);
-        const col = col_location[1];
-        const col_pre = col_location[0];
-        const col_index = col_location[2];
+        const [col_pre, col, col_index] = colLocation(x, ctx.visibledatacolumn);
         if (inSelection(ctx, null, col_index)) return;
         const left = col_pre;
         const width = col - col_pre - 1;

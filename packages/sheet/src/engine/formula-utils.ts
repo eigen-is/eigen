@@ -3,9 +3,19 @@
 // editor and the reference shifts build on them, for example. Nothing here reads the workbook context.
 
 import type { CellMatrix, Sheet } from '@workspace/lib/sheets';
-import { columnLabelToIndex } from '@workspace/lib/sheets';
+import { columnLabelToIndex, REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { SHEET_NAME_PREFIX, unquoteSheetName } from './parser/helper/cell';
 import type { FormulaDependency } from './types';
+
+// The one test of a formula, since a peer's op or a file can leave anything in a cell's `f`.
+export function isFormula(value: unknown): value is string {
+    return typeof value === 'string' && value.length > 1 && value[0] === '=';
+}
+
+// Where a whole column or row ends: Excel's last row and column, whatever a sheet holds today, so growing a grid moves
+// no reference. A reader of cells stops at its sheet's own end.
+export const LAST_ROW = REFERENCE_ROW_COUNT - 1;
+export const LAST_COLUMN = REFERENCE_COLUMN_COUNT - 1;
 
 // The operators a formula's text walkers stop at. A two-character one is matched before its first character.
 export const formulaOperators: ReadonlySet<string> = new Set([
@@ -36,41 +46,34 @@ const SHEET_REFERENCE = new RegExp(
 // True for a cell (A1, $A$1), a range (A1:B3) and a whole column or row (A:C, 1:2), on the formula's sheet or on
 // another (Sheet1!A1).
 export function iscelldata(txt: string): boolean {
-    const parts = txt.split('!');
-    const cells = parts.length > 1 ? parts[1] : parts[0];
+    // A quoted sheet name may hold a `!`, and the cells follow the last.
+    const cells = txt.slice(txt.lastIndexOf('!') + 1);
     if (!cells.includes(':')) return CELL.test(cells);
     // A reversed range (`A$3:A1`) is a ref too: Excel reads it as its sorted twin.
     const [start, end] = cells.split(':');
     return RANGE_END.test(start) && RANGE_END.test(end);
 }
 
-// What resolving a reference reads: the workbook's sheets, the sheet each name reads, and the references resolved so
-// far, as the editor's formulaCache keeps them. A walk over many formulas builds one, so the name lookup and the
-// cache serve every formula. The server's recalc and the editor's formula map each build theirs.
+// What resolving a reference reads: the sheet each name reads, and the references resolved so far.
+// A walk over many formulas builds one, so the name lookup and the cache serve every formula.
 export type WalkContext = {
-    sheets: readonly Pick<Sheet, 'id' | 'name' | 'data'>[];
-    findSheet: (name: string) => Pick<Sheet, 'id' | 'name' | 'data'> | undefined;
+    findSheet: (name: string) => Pick<Sheet, 'id'> | undefined;
     cellTextToIndexList: Record<string, FormulaDependency>;
 };
 
-// The cells a reference covers, or null when it is none or names a sheet that isn't there. `data` is the matrix of
-// sheet `formulaSheetId`. A whole column or row ends where its sheet's matrix ends. The answer is kept in
-// `cellTextToIndexList`: by the reference's text when it names a sheet, by `${reference}_${formulaSheetId}` when it
-// doesn't.
+// The cells a reference covers, or null when it is none or names a sheet that isn't there. An end with no row or
+// column spans them all. Kept in `cellTextToIndexList` by its text, or `${reference}_${formulaSheetId}` with no sheet.
 export function resolveCellRange(
-    { sheets, findSheet, cellTextToIndexList }: WalkContext,
+    { findSheet, cellTextToIndexList }: WalkContext,
     reference: string,
     formulaSheetId: string,
-    data: CellMatrix | null | undefined,
 ): FormulaDependency | null {
-    if (reference.length === 0) return null;
     const namesSheet = reference.includes('!');
     const key = namesSheet ? reference : `${reference}_${formulaSheetId}`;
     if (key in cellTextToIndexList) return cellTextToIndexList[key];
 
     let cells = reference;
     let sheetId: string | undefined = formulaSheetId;
-    let matrix = data;
     if (namesSheet) {
         const match = reference.match(SHEET_REFERENCE);
         if (match == null) return null;
@@ -78,15 +81,12 @@ export function resolveCellRange(
         // A1:Data!B2 names a sheet on its end only, which the engine can't read as a range.
         if (startSheet == null) return null;
         const sheet = findSheet(unquoteSheetName(startSheet));
+        if (sheet == null) return null;
         // The engine reads Data!A1:'Data'!B2 as one sheet's range, so only the sheets the names read count.
         if (endSheet != null && findSheet(unquoteSheetName(endSheet)) !== sheet) return null;
         cells = end ? `${start}:${end}` : start;
-        sheetId = sheet?.id;
-        matrix = sheet?.data;
-    } else if (!sheets.some((s) => s.id === formulaSheetId)) {
-        return null;
+        sheetId = sheet.id;
     }
-    if (matrix == null) return null;
 
     if (!cells.includes(':')) {
         const row = rowIndexOf(cells);
@@ -100,21 +100,15 @@ export function resolveCellRange(
     const [start, end] = cells.split(':');
     const row: [number, number] = [rowIndexOf(start), rowIndexOf(end)];
     const col: [number, number] = [columnIndexOf(start), columnIndexOf(end)];
-    if (Number.isNaN(row[0])) row[0] = 0;
-    if (Number.isNaN(col[0])) col[0] = 0;
-    // A whole column ends at the sheet's last row, and on a sheet with no rows it reads nothing.
-    if (Number.isNaN(row[1])) {
-        if (matrix.length === 0) return null;
-        row[1] = matrix.length - 1;
-    }
-    // A whole row ends at the sheet's last column, and on a sheet with no columns it reads nothing.
-    if (Number.isNaN(col[1])) {
-        const width = matrixWidth(matrix);
-        if (width === 0) return null;
-        col[1] = width - 1;
-    }
+    const everyRow = row.some(Number.isNaN);
+    const everyColumn = col.some(Number.isNaN);
+    if (everyRow && everyColumn) return null;
     // A reversed range (B3:A1) reads as its sorted twin.
-    const item: FormulaDependency = { row: sorted(row), column: sorted(col), sheetId };
+    const item: FormulaDependency = {
+        row: everyRow ? [0, LAST_ROW] : sorted(row),
+        column: everyColumn ? [0, LAST_COLUMN] : sorted(col),
+        sheetId,
+    };
     cellTextToIndexList[key] = item;
     return item;
 }

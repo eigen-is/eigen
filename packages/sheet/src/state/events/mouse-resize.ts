@@ -3,48 +3,16 @@
 // drag. A double-click on a column edge fits the column to its widest text (autoFitColumnWidth).
 
 import { cellDisplay } from '../../engine/format';
-import type { Freezen } from '..';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import { deselectFloatingObject, israngeseleciton } from '../modules';
-import { colLocation, rowLocation } from '../modules/location';
-import { getFontSet } from '../modules/text';
-import type { GlobalCache } from '../types';
+import { colLocation, rowLocation, sheetPoint } from '../modules/location';
+import { getFontSet, measuringContext } from '../modules/text';
 import { getSheetIndex } from '../utils';
-
-export function fixPositionOnFrozenCells(
-    freeze: Freezen | undefined,
-    x: number,
-    y: number,
-    mouseX: number,
-    mouseY: number,
-) {
-    let inHorizontalFreeze = false;
-    let inVerticalFreeze = false;
-
-    if (!freeze) return { x, y, inHorizontalFreeze, inVerticalFreeze };
-
-    const verticalData = freeze?.vertical?.freezenverticaldata;
-    const horizontalData = freeze?.horizontal?.freezenhorizontaldata;
-
-    if (verticalData != null && mouseX < verticalData.pos - verticalData.scroll) {
-        x = mouseX + verticalData.scroll;
-        inVerticalFreeze = true;
-    }
-
-    if (horizontalData != null && mouseY < horizontalData.pos - horizontalData.scroll) {
-        y = mouseY + horizontalData.scroll;
-        inHorizontalFreeze = true;
-    }
-
-    return { x, y, inHorizontalFreeze, inVerticalFreeze };
-}
 
 export function handleColSizeHandleMouseDown(
     ctx: Context,
-    globalCache: GlobalCache,
     e: MouseEvent,
-    headerContainer: HTMLDivElement,
     workbookContainer: HTMLDivElement,
     cellArea: HTMLDivElement,
 ) {
@@ -52,17 +20,8 @@ export function handleColSizeHandleMouseDown(
 
     ctx.editingCellPosition = [];
 
-    const { scrollLeft } = ctx;
     const { scrollTop } = ctx;
-
-    const mouseX = e.pageX - headerContainer.getBoundingClientRect().left - window.scrollX;
-    const _x = mouseX + scrollLeft;
-    const freeze = globalCache.freezen?.[ctx.currentSheetId];
-    const { x } = fixPositionOnFrozenCells(freeze, _x, 0, mouseX, 0);
-
-    const col_location = colLocation(x, ctx.visibledatacolumn);
-    const col = col_location[1];
-    const col_index = col_location[2];
+    const [, col, col_index] = colLocation(sheetPoint(ctx, e, cellArea).x, ctx.visibledatacolumn);
 
     ctx.colsResizing = true;
     ctx.scrolling = true;
@@ -74,15 +33,13 @@ export function handleColSizeHandleMouseDown(
         changeSizeLine.style.left = `${col}px`;
         changeSizeLine.style.width = '1px';
     }
-    ctx.colsResizeStart = [e.pageX, col_index];
+    ctx.colsResizeStart = [e.clientX, col_index];
     e.stopPropagation();
 }
 
 export function handleRowSizeHandleMouseDown(
     ctx: Context,
-    globalCache: GlobalCache,
     e: MouseEvent,
-    headerContainer: HTMLDivElement,
     workbookContainer: HTMLDivElement,
     cellArea: HTMLDivElement,
 ) {
@@ -98,16 +55,7 @@ export function handleRowSizeHandleMouseDown(
     ctx.editingCellPosition = [];
 
     const { scrollLeft } = ctx;
-    const { scrollTop } = ctx;
-
-    const mouseY = e.pageY - headerContainer.getBoundingClientRect().top - window.scrollY;
-    const _y = mouseY + scrollTop;
-    const freeze = globalCache.freezen?.[ctx.currentSheetId];
-    const { y } = fixPositionOnFrozenCells(freeze, 0, _y, 0, mouseY);
-
-    const row_location = rowLocation(y, ctx.visibledatarow);
-    const row = row_location[1];
-    const row_index = row_location[2];
+    const [, row, row_index] = rowLocation(sheetPoint(ctx, e, cellArea).y, ctx.visibledatarow);
 
     ctx.rowsResizing = true;
     ctx.scrolling = true;
@@ -119,14 +67,13 @@ export function handleRowSizeHandleMouseDown(
         changeSizeLine.style.left = '0';
         changeSizeLine.style.height = '1px';
     }
-    ctx.rowsResizeStart = [e.pageY, row_index];
+    ctx.rowsResizeStart = [e.clientY, row_index];
     e.stopPropagation();
 }
 
 export function handleColFreezeHandleMouseDown(
     ctx: Context,
     e: MouseEvent,
-    headerContainer: HTMLDivElement,
     workbookContainer: HTMLDivElement,
     cellArea: HTMLDivElement,
 ) {
@@ -134,13 +81,9 @@ export function handleColFreezeHandleMouseDown(
 
     ctx.editingCellPosition = [];
 
-    const { scrollLeft } = ctx;
-    const { scrollTop } = ctx;
-
-    const x = e.pageX - headerContainer.getBoundingClientRect().left + scrollLeft;
-
-    const col_location = colLocation(x, ctx.visibledatacolumn);
-    const col = col_location[1];
+    const { scrollLeft, scrollTop } = ctx;
+    // The drag lines live on the main pane's transform, so they take its position even over a frozen pane.
+    const col = colLocation(sheetPoint(ctx, e, cellArea).viewX + scrollLeft, ctx.visibledatacolumn)[1];
 
     ctx.colsFreezeDragging = true;
     ctx.scrolling = true;
@@ -152,7 +95,6 @@ export function handleColFreezeHandleMouseDown(
         freezeDragLine.style.left = `${col - 3}px`;
         freezeDragLine.style.width = '1px';
     }
-    // Reuse change-size-line to show a thin resize indicator alongside the freeze line
     const changeSizeLine = workbookContainer.querySelector('.sheet-change-size-line');
     if (changeSizeLine instanceof HTMLElement) {
         changeSizeLine.style.height = `${cellArea.getBoundingClientRect().height + scrollTop}px`;
@@ -167,7 +109,6 @@ export function handleColFreezeHandleMouseDown(
 export function handleRowFreezeHandleMouseDown(
     ctx: Context,
     e: MouseEvent,
-    headerContainer: HTMLDivElement,
     workbookContainer: HTMLDivElement,
     cellArea: HTMLDivElement,
 ) {
@@ -175,13 +116,9 @@ export function handleRowFreezeHandleMouseDown(
 
     ctx.editingCellPosition = [];
 
-    const { scrollLeft } = ctx;
-    const { scrollTop } = ctx;
-
-    const y = e.pageY - headerContainer.getBoundingClientRect().top + scrollTop;
-
-    const row_location = rowLocation(y, ctx.visibledatarow);
-    const row = row_location[1];
+    const { scrollLeft, scrollTop } = ctx;
+    // The drag lines live on the main pane's transform, so they take its position even over a frozen pane.
+    const row = rowLocation(sheetPoint(ctx, e, cellArea).viewY + scrollTop, ctx.visibledatarow)[1];
 
     ctx.rowsFreezeDragging = true;
     ctx.scrolling = true;
@@ -193,7 +130,6 @@ export function handleRowFreezeHandleMouseDown(
         freezeDragLine.style.left = '0';
         freezeDragLine.style.height = '1px';
     }
-    // Reuse change-size-line to show a thin resize indicator alongside the freeze line
     const changeSizeLine = workbookContainer.querySelector('.sheet-change-size-line');
     if (changeSizeLine instanceof HTMLElement) {
         changeSizeLine.style.width = `${cellArea.getBoundingClientRect().width + scrollLeft}px`;
@@ -205,12 +141,10 @@ export function handleRowFreezeHandleMouseDown(
     e.stopPropagation();
 }
 
-export function autoFitColumnWidth(ctx: Context, colIndex: number, canvas: HTMLCanvasElement) {
+export function autoFitColumnWidth(ctx: Context, colIndex: number) {
     const flowdata = getFlowdata(ctx);
-    if (!flowdata) return;
-
-    const renderCtx = canvas.getContext('2d');
-    if (!renderCtx) return;
+    const measuring = measuringContext();
+    if (!flowdata || !measuring) return;
 
     const padding = 14;
     let maxWidth = 10;
@@ -229,10 +163,8 @@ export function autoFitColumnWidth(ctx: Context, colIndex: number, canvas: HTMLC
         const text = String(display);
         if (!text) continue;
 
-        const fontset = getFontSet(cell);
-        renderCtx.font = fontset;
-        const measured = renderCtx.measureText(text);
-        const width = measured.width + padding;
+        measuring.font = getFontSet(cell);
+        const width = measuring.measureText(text).width + padding;
         if (width > maxWidth) maxWidth = width;
     }
 

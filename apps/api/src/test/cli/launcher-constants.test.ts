@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MAX_RESTART_MESSAGE_LENGTH, MAX_RESTART_WAIT_SECONDS } from '@workspace/lib/validation';
 import { CANNOT_OPEN, DECLINED, ROOT } from '../../cli/install';
-import { SWAP_MARKER } from '../../cli/restore-swap';
 import { RESTORING_DIR } from '../../lib/backup/restore-server';
 import { PIN_KEYS } from '../../lib/config/release';
 
@@ -48,7 +47,7 @@ describe('the constants the launcher shares with the CLI', () => {
     });
 
     test("SWAP_MARKER is the marker the restore's swap writes", () => {
-        expect(launcherValue('SWAP_MARKER')).toBe(SWAP_MARKER);
+        expect(launcherValue('SWAP_MARKER')).toBe('.eigen/restore-swap');
     });
 
     test('MAX_WAIT and MAX_MESSAGE are the longest --in and message the restart notice takes', () => {

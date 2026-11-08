@@ -4,7 +4,7 @@
 
 import { EML_MAX_BYTES, MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { EML_MIME, isEmlFile } from '@workspace/lib/types/drive';
+import { isEmlFile } from '@workspace/lib/types/drive';
 import type {
     DraftAttachmentUpload,
     Email,
@@ -20,7 +20,7 @@ import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@w
 import type { ElysiaCustomStatusResponse, Static } from 'elysia';
 import { Elysia, t } from 'elysia';
 import { requireLocalhost, requireMailEnabled, requireNonGuest, requireSelf } from '../lib/auth/access';
-import { ApiError, contentDisposition, NOT_AN_EMAIL_FILE, readBoundedBodyBytes, setCacheHeaders } from '../lib/core';
+import { ApiError, NOT_AN_EMAIL_FILE, readBoundedBodyBytes } from '../lib/core';
 import { readImportSourceBytes } from '../lib/drive';
 import {
     attachFromDrive,
@@ -31,7 +31,7 @@ import {
     saveAttachmentsToDrive,
     uploadDraftAttachment,
 } from '../lib/mail/mail';
-import { answerMailPart, serveMailPart } from '../lib/mail/serve-mail-part';
+import { answerMailMessage, answerMailPart, serveMailPart } from '../lib/mail/serve-mail-part';
 import {
     assertEmlPreviewable,
     assertIcsPreviewable,
@@ -102,12 +102,12 @@ export const mailRouter = new Elysia({ name: 'mail' })
         '/mail/deliver/:to',
         async ({ params, body, request, server }): Promise<string> => {
             requireLocalhost(request, server);
-            return await mailboxDeliver(params.to, body as ArrayBuffer);
+            return await mailboxDeliver(params.to, body);
         },
         {
             parse: 'arrayBuffer',
-            // The per-message size cap is Postfix's `message_size_limit` (docker/postfix/main.cf.template).
-            body: t.Any(),
+            // The per-message size cap is Postfix's `message_size_limit`.
+            body: t.ArrayBuffer(),
         },
     )
     // All authenticated mail routes require ownerId === user.id (mail is personal-only, no shared access)
@@ -147,14 +147,10 @@ export const mailRouter = new Elysia({ name: 'mail' })
     )
     .get(
         '/mail/:ownerId/message/:id/download',
-        async ({ params, user, set }): Promise<ArrayBuffer> => {
+        async ({ params, request, user, set }): Promise<ArrayBuffer | ElysiaCustomStatusResponse<304>> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            setCacheHeaders(set, 86400);
-            set.headers['Content-Type'] = EML_MIME;
-            set.headers['Content-Transfer-Encoding'] = 'binary';
-            set.headers['Content-Disposition'] = contentDisposition('attachment', `${params.id}.eml`);
-            return await (await getMailClient(user)).messageGetFile(params.id);
+            return await answerMailMessage(await getMailClient(user), params.id, request, set);
         },
         { auth: true },
     )
@@ -335,9 +331,8 @@ export const mailRouter = new Elysia({ name: 'mail' })
         },
         { auth: true, params: AttachmentParamsSchema },
     )
-    // A preview runs the same renderers as Drive's preview routes on the part's bytes, so it answers the same
-    // shapes. It takes two segments after the index, like /embed/:fileName, because the sender names the part,
-    // and a part named like a one-segment preview route would shadow it.
+    // A preview runs Drive's renderers on the part's bytes. It takes two segments after the index because the sender
+    // names the part, and a part named like a one-segment preview route would shadow it.
     .get(
         '/mail/:ownerId/message/:id/attachment/:index/preview/text',
         async ({ params, request, user, set }): Promise<TextPreviewResult | ElysiaCustomStatusResponse<304>> => {

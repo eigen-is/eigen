@@ -145,10 +145,10 @@ describe('edits while a PUT is stalled', () => {
     test('later syncs coalesce into one pending row behind the stalled PUT; no parallel PUT starts', async () => {
         const { mount, dataDbId, putsStarted, land } = await editBehindParkedPut('stalled-coalesce');
         expect(putsStarted()).toBe(1);
-        expect(mount.pendingUploadCount).toBe(1);
+        expect(mount.uploadQueue?.pendingCount).toBe(1);
 
         await land();
-        expect(mount.pendingUploadCount).toBe(0);
+        expect(mount.uploadQueue?.pendingCount).toBe(0);
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(4);
     });
 

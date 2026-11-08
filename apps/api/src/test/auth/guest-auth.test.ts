@@ -259,7 +259,7 @@ describe('Guest Auth', () => {
     describe('persistent share registry', () => {
         test('reconciliation does not consume registry entries', async () => {
             const { addRegistryEntry, getEntriesForTarget } = await import('../../lib/share/registry');
-            const { reconcileSharesForNewUser } = await import('../../lib/share');
+            const { reconcileShares } = await import('../../lib/share');
             const { getUserByEmail } = await import('../../lib/user/user');
 
             const guestEmail = `reg-keep-${crypto.randomUUID()}@example.com`;
@@ -277,7 +277,7 @@ describe('Guest Auth', () => {
             const guestUser = await getUserByEmail(guestEmail);
             if (!guestUser) throw new Error('test setup');
 
-            await reconcileSharesForNewUser(guestUser);
+            await reconcileShares(guestUser);
 
             expect(await getEntriesForTarget(guestEmail)).toContain(ctx.alice.user.id);
         });

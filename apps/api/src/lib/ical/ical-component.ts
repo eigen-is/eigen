@@ -1,4 +1,8 @@
-// `ICAL.Component.toString()` is the only serializer here, so folding, escaping and quoting stay ical.js's problem and an untouched property survives an edit as the client wrote it.
+// Writing iCalendar: building a resource from event rows, editing a stored one in place, such as a patch, an
+// override or an exclusion, re-stamping a CalDAV PUT with Eigen's own lines, and shaping an iMIP message. The
+// calendar store calls it for every write. `ICAL.Component.toString()` is the only serializer, so folding,
+// escaping and quoting stay ical.js's problem and an untouched property survives an edit as the client wrote it.
+
 import { heldAttendees, normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
 import { stripControlChars, stripLineBreaks } from '@workspace/lib/content-line';
 import type { Attendee, CalendarEvent, ImipMethod, Reminder, UpdateEventInput } from '@workspace/lib/types/calendar';
@@ -22,14 +26,15 @@ import {
     utcStampString,
 } from './ical-parse';
 import { buildVTimezone } from './vtimezone';
-import { computeOccurrenceTimes, localToUtc, storedRecurrenceKey, utcToLocal } from './wall-clock';
+import { computeOccurrenceTimes, localToUtc, utcToLocal } from './wall-clock';
 
 export const PRODID = '-//Eigen//CalDAV//EN';
 
 // `dtstamp` is the scheduling message's own stamp; a local edit states none and the clock stands in.
 export type WriteContext = { now: Date; actorIsOrganizer: boolean; dtstamp?: Date | null };
-// `sequence` is the one field no HTTP save submits: an invitation receiver mirrors the organizer's number, which beats the bump rule.
-export type EventPatch = Omit<UpdateEventInput, 'calendarId' | 'id'> & { sequence?: number };
+// `sequence` is the one field no HTTP save submits: an invitation receiver mirrors the organizer's number, which
+// beats the bump rule.
+export type EventPatch = Omit<UpdateEventInput, 'calendarId' | 'id' | 'etag'> & { sequence?: number };
 type TrustedStamps = {
     createByUserId?: string | null;
     organizerEventId?: string | null;
@@ -102,7 +107,8 @@ function timeProperty(name: string, instant: Date, tzid: string | null, allDay: 
     return prop;
 }
 
-// An end inside a repeated hour reads back as the first pass, so it rides as a UTC DTEND — legal beside a TZID DTSTART — and the duration survives.
+// An end inside a repeated hour reads back as the first pass, so it rides as a UTC DTEND, legal beside a TZID DTSTART,
+// and the duration survives.
 function endProperty(instant: Date, tzid: string | null, allDay: boolean): ICAL.Property {
     if (!tzid || allDay) return timeProperty('dtend', instant, tzid, allDay);
     const local = utcToLocal(instant, tzid);
@@ -117,7 +123,8 @@ function utcStamp(name: string, instant: Date): ICAL.Property {
     return prop;
 }
 
-// C0 control bytes are illegal XML character data: one echoed into a calendar-data REPORT wedges the whole collection client-side.
+// C0 control bytes are illegal XML character data: one echoed into a calendar-data REPORT wedges the whole collection
+// client-side.
 function textProperty(name: string, value: string): ICAL.Property {
     const prop = new ICAL.Property(name);
     prop.setValue(stripControlChars(value));
@@ -138,7 +145,7 @@ function addressProperty(name: string, email: string, cn?: string): ICAL.Propert
     return prop;
 }
 
-// CUTYPE and RSVP are deliberately absent: a stored CUTYPE=ROOM, and the RSVP a client asked for, outlive an Eigen edit.
+// CUTYPE and RSVP are absent on purpose: a stored CUTYPE=ROOM, and the RSVP a client asked for, outlive an Eigen edit.
 function attendeeParameters(attendee: Attendee): Array<[string, string]> {
     return [
         ['partstat', PARTSTAT[attendee.status]],
@@ -182,7 +189,8 @@ function exclusionStamp(key: string, id: string, sequence: number, dtstamp: Date
     return prop;
 }
 
-// RFC 5545 §3.6.6: an EMAIL alarm needs a SUMMARY, a DESCRIPTION and an ATTENDEE, so a mail reminder naming nobody degrades to DISPLAY.
+// RFC 5545 §3.6.6: an EMAIL alarm needs a SUMMARY, a DESCRIPTION and an ATTENDEE, so a mail reminder naming nobody
+// degrades to DISPLAY.
 function alarmComponent(reminder: Reminder, title: string, recipient: string): ICAL.Component {
     const alarm = new ICAL.Component('valarm');
     const mails = reminder.type === 'email' && recipient !== '';
@@ -234,7 +242,8 @@ function findVEvent(resource: ICAL.Component, recurrenceKey: string | null): ICA
     return vevents.find((v) => recurrenceKeyOf(v, zones.get(uidOf(v)) ?? null) === recurrenceKey) ?? null;
 }
 
-// ical.js keeps `EXDATE:a,b` as one two-valued property and clients rewrite the form freely, so only the recurrence key identifies an exclusion.
+// ical.js keeps `EXDATE:a,b` as one two-valued property and clients rewrite the form freely, so only the recurrence key
+// identifies an exclusion.
 function exdateKeys(vevent: ICAL.Component, seriesTz: string | null): Set<string> {
     const keys = new Set<string>();
     for (const prop of vevent.getAllProperties('exdate')) {
@@ -253,10 +262,12 @@ export function clampStamp(dtstamp: Date | null | undefined, now: Date): Date | 
     return dtstamp.getTime() > now.getTime() + STAMP_HORIZON_MS ? now : dtstamp;
 }
 
-// A submitted sequence is the organizer's own number, which an attendee copy mirrors rather than computes; without one the bump rule decides.
+// A submitted sequence is the organizer's own number, which an attendee copy mirrors rather than computes. Without one
+// the bump rule decides.
 function touch(vevent: ICAL.Component, ctx: WriteContext, scheduling: boolean, sequence?: number): void {
     setProperty(vevent, utcStamp('last-modified', ctx.now));
-    // DTSTAMP on a copy of somebody else's event orders the next message, so only a message moves it, never a local edit.
+    // DTSTAMP on a copy of somebody else's event orders the next message, so only a message moves it, never a local
+    // edit.
     if (ctx.dtstamp || readStamp(vevent, EIGEN.organizerEvent) === null) {
         setProperty(vevent, utcStamp('dtstamp', clampStamp(ctx.dtstamp, ctx.now) ?? ctx.now));
     }
@@ -268,38 +279,8 @@ function touch(vevent: ICAL.Component, ctx: WriteContext, scheduling: boolean, s
     vevent.updatePropertyWithValue('sequence', sequenceOf(vevent) + 1);
 }
 
-// Only irregular zones need the horizon — regular ones compress to open-ended RRULE observances — and the span cap keeps a far-future event from stalling the transition scan.
-function timezoneHorizon(years: number[], hasRrule: boolean): { minYear: number; maxYear: number } {
-    const minYear = Math.min(...years);
-    const stated = Math.max(...years);
-    const maxYear = hasRrule ? Math.max(stated, new Date().getUTCFullYear() + 5) : stated;
-    return { minYear, maxYear: Math.min(maxYear, minYear + 50) };
-}
-
-function vtimezoneComponent(tzid: string, minYear: number, maxYear: number): ICAL.Component {
-    return new ICAL.Component(ICAL.parse(buildVTimezone(tzid, minYear, maxYear).join('\r\n')));
-}
-
-// One VTIMEZONE per referenced IANA TZID (RFC 5545 §3.6.5): without it strict parsers, ical.js included, read the wall times as floating.
-function vtimezoneComponents(events: CalendarEvent[]): ICAL.Component[] {
-    const tzids = new Set<string>();
-    const years: number[] = [];
-    let hasRrule = false;
-    for (const event of events) {
-        if (event.allDay) continue;
-        const tzid = normalizeTimezone(event.timezone);
-        if (!tzid) continue;
-        tzids.add(tzid);
-        years.push(event.startTime.getUTCFullYear(), event.endTime.getUTCFullYear());
-        if (event.rrule) hasRrule = true;
-    }
-    if (!tzids.size) return [];
-
-    const { minYear, maxYear } = timezoneHorizon(years, hasRrule);
-    return [...tzids].map((tzid) => vtimezoneComponent(tzid, minYear, maxYear));
-}
-
-// A referenced VTIMEZONE is the client's own definition and is never rewritten; an unreferenced one goes, and a referenced zone the file leaves undefined gets Eigen's.
+// A referenced VTIMEZONE is the client's own and stays; an unreferenced one goes. A referenced IANA zone the file leaves
+// undefined gets Eigen's, or strict parsers, ical.js included, read the wall times as floating (RFC 5545 §3.6.5).
 function syncVTimezones(resource: ICAL.Component): void {
     const vevents = resource.getAllSubcomponents('vevent');
     const referenced = new Set<string>();
@@ -311,7 +292,7 @@ function syncVTimezones(resource: ICAL.Component): void {
             const tzid = Array.isArray(raw) ? raw[0] : raw;
             if (tzid) referenced.add(String(tzid));
         }
-        for (const name of ['dtstart', 'dtend']) {
+        for (const name of ['dtstart', 'dtend', 'recurrence-id']) {
             const instant = instantOf(vevent, name, null);
             if (instant) years.push(instant.getUTCFullYear());
         }
@@ -322,22 +303,30 @@ function syncVTimezones(resource: ICAL.Component): void {
         if (referenced.delete(String(vtimezone.getFirstPropertyValue('tzid') ?? ''))) continue;
         resource.removeSubcomponent(vtimezone);
     }
-    if (!years.length) return;
+    const added = [...referenced].filter((tzid) => normalizeTimezone(tzid) === tzid);
+    if (!years.length || !added.length) return;
 
-    const { minYear, maxYear } = timezoneHorizon(years, hasRrule);
-    const added = [...referenced].filter((tzid) => normalizeTimezone(tzid));
-    if (!added.length) return;
+    // Only irregular zones need the horizon, as regular ones compress to open-ended RRULE observances. The span cap keeps
+    // a far-future event from stalling the transition scan.
+    const minYear = Math.min(...years);
+    const stated = Math.max(...years);
+    const horizon = hasRrule ? Math.max(stated, new Date().getUTCFullYear() + 5) : stated;
+    const maxYear = Math.min(horizon, minYear + 50);
 
     // A client reads top to bottom, so a TZID met before its definition is floating to it: new blocks go in front and re-adding the VEVENTs moves them behind.
-    for (const tzid of added) resource.addSubcomponent(vtimezoneComponent(tzid, minYear, maxYear));
+    for (const tzid of added) {
+        resource.addSubcomponent(new ICAL.Component(ICAL.parse(buildVTimezone(tzid, minYear, maxYear).join('\r\n'))));
+    }
     for (const vevent of vevents) resource.addSubcomponent(vevent);
 }
 
-type BuildOptions = { master?: CalendarEvent; exclusions?: CalendarEvent[] };
+type Exclusion = { key: string; exclusion: CalendarEvent };
+type BuildOptions = { master?: CalendarEvent; exclusions?: Exclusion[] };
 
 function buildVEvent(event: CalendarEvent, options: BuildOptions = {}): ICAL.Component {
     const vevent = new ICAL.Component('vevent');
-    // A row holding a non-IANA zone serializes as absolute UTC, rather than letting Intl throw and 500 a whole CalDAV collection.
+    // A row holding a non-IANA zone serializes as absolute UTC, rather than letting Intl throw and 500 a whole CalDAV
+    // collection.
     const tzid = normalizeTimezone(event.timezone);
 
     vevent.addProperty(textProperty('uid', event.uid));
@@ -353,21 +342,16 @@ function buildVEvent(event: CalendarEvent, options: BuildOptions = {}): ICAL.Com
     vevent.addProperty(utcStamp('dtstamp', event.updatedAt));
     if (event.rrule) vevent.addProperty(rruleProperty(event.rrule));
 
-    // A cancelled exception rides as an EXDATE in the master's own DTSTART form, never as a STATUS:CANCELLED override, which Thunderbird omits from its next PUT.
-    const excluded: Array<{ key: string; exclusion: CalendarEvent }> = [];
-    for (const exclusion of options.exclusions ?? []) {
-        const key = exclusion.recurrenceDate ? storedRecurrenceKey(exclusion.recurrenceDate) : null;
-        if (!key) continue; // an unkeyable cancellation cancels nothing (matches expansion)
-        excluded.push({ key, exclusion });
-        vevent.addProperty(exdateProperty(event, key, tzid));
-    }
+    // A cancelled exception rides as an EXDATE in the master's own DTSTART form, never as a STATUS:CANCELLED override,
+    // which Thunderbird omits from its next PUT.
+    const exclusions = options.exclusions ?? [];
+    for (const { key } of exclusions) vevent.addProperty(exdateProperty(event, key, tzid));
 
-    // RECURRENCE-ID names the ORIGINAL occurrence in the master's DTSTART form, value type included (RFC 5545 §3.8.4.4): echoing a moved startTime or the override's own all-day toggle matches no occurrence.
+    // RECURRENCE-ID names the ORIGINAL occurrence in the master's DTSTART form, value type included (RFC 5545 §3.8.4.4).
+    // A moved startTime or the override's own all-day toggle would match no occurrence.
     if (event.recurrenceDate) {
-        const key = storedRecurrenceKey(event.recurrenceDate);
         const master = options.master ?? event;
-        // An unkeyable value falls back to the exception's own startTime: a possibly-orphaned override beats 500ing the whole resource.
-        const when = key ? occurrenceInstant(master, key) : event.startTime;
+        const when = occurrenceInstant(master, event.recurrenceDate);
         vevent.addProperty(timeProperty('recurrence-id', when, normalizeTimezone(master.timezone), master.allDay));
     }
 
@@ -378,13 +362,14 @@ function buildVEvent(event: CalendarEvent, options: BuildOptions = {}): ICAL.Com
 
     for (const attendee of event.data?.attendees ?? []) vevent.addProperty(attendeeProperty(attendee));
 
-    // Eigen's own lines come last, in restampResource's order, so re-stamping a freshly built resource produces the same bytes.
+    // Eigen's own lines come last, in restampResource's order, so re-stamping a freshly built resource produces the
+    // same bytes.
     addStamp(vevent, EIGEN.eventId, event.id);
     addStamp(vevent, EIGEN.createdBy, event.createByUserId);
     addStamp(vevent, EIGEN.organizerEvent, event.data?.organizerEventId);
     addStamp(vevent, EIGEN.organizerUser, organizer?.userId);
     addStamp(vevent, EIGEN.color, event.data?.color);
-    for (const { key, exclusion } of excluded) {
+    for (const { key, exclusion } of exclusions) {
         vevent.addProperty(exclusionStamp(key, exclusion.id, exclusion.sequence, null));
     }
 
@@ -405,7 +390,6 @@ export function newVCalendar(): ICAL.Component {
 
 export function buildResource(events: CalendarEvent[]): ICAL.Component {
     const vcalendar = newVCalendar();
-    for (const vtimezone of vtimezoneComponents(events)) vcalendar.addSubcomponent(vtimezone);
 
     // The master leads its group, because every override's RECURRENCE-ID is computed from it.
     const groups = new Map<string, CalendarEvent[]>();
@@ -418,14 +402,21 @@ export function buildResource(events: CalendarEvent[]): ICAL.Component {
 
     for (const group of groups.values()) {
         const master = group[0].recurrenceDate == null ? group[0] : undefined;
-        const exclusions = master ? group.filter((e) => e.recurrenceDate != null && e.status === 'cancelled') : [];
+        const exclusions: Exclusion[] = [];
+        const built: CalendarEvent[] = [];
         for (const event of group) {
-            if (master && event.recurrenceDate != null && event.status === 'cancelled') continue;
-            const options = event === master ? { master, exclusions } : { master };
-            vcalendar.addSubcomponent(buildVEvent(event, options));
+            if (master && event.recurrenceDate != null && event.status === 'cancelled') {
+                exclusions.push({ key: event.recurrenceDate, exclusion: event });
+            } else {
+                built.push(event);
+            }
+        }
+        for (const event of built) {
+            vcalendar.addSubcomponent(buildVEvent(event, event === master ? { master, exclusions } : { master }));
         }
     }
 
+    syncVTimezones(vcalendar);
     return vcalendar;
 }
 
@@ -433,7 +424,8 @@ export function serializeResource(resource: ICAL.Component): string {
     return `${resource.toString()}\r\n`;
 }
 
-// RFC 5546 shape: the organizer rides as an ACCEPTED attendee and a REQUEST asks for replies; no VALARM ever, or an `email` reminder would mail the organizer from every guest's client.
+// RFC 5546 shape: the organizer rides as an ACCEPTED attendee and a REQUEST asks for replies. No VALARM ever, or an
+// `email` reminder would mail the organizer from every guest's client.
 function shapeForImip(vevent: ICAL.Component, method: ImipMethod): void {
     vevent.removeAllSubcomponents('valarm');
     if (method !== 'REQUEST') return;
@@ -448,14 +440,16 @@ function shapeForImip(vevent: ICAL.Component, method: ImipMethod): void {
     );
 }
 
-// `series` is the master of the one occurrence `event` is: RECURRENCE-ID names the ORIGINAL instant, which only the series' recurrence knows once the override has moved. A master travels with its `exceptions` instead, in the one VCALENDAR RFC 5546 wants, or the guest renders a moved occurrence at its original slot and a deleted one at all.
+// `series` is the master of the one occurrence `event` is, because only it knows the ORIGINAL instant of a moved override.
+// A master travels with its `exceptions`, or the guest renders a moved occurrence at its old slot and a deleted one at all.
 export function serializeEventForImip(
     event: CalendarEvent,
     method: ImipMethod,
     series?: CalendarEvent,
     exceptions: CalendarEvent[] = [],
 ): string {
-    // An override that states no guests inherits the series' list; the stored bytes keep it as written, but a guest's client would read the bare override as an occurrence they are not invited to.
+    // An override that states no guests inherits the series' list. A guest's client would read the bare override as an
+    // occurrence they are not invited to.
     const withGuests = (override: CalendarEvent, master: CalendarEvent): CalendarEvent => ({
         ...override,
         data: { ...override.data, attendees: heldAttendees(override, master) },
@@ -465,8 +459,8 @@ export function serializeEventForImip(
         : buildResource([event, ...exceptions.map((exception) => withGuests(exception, event))]);
     if (series) {
         // A RECURRENCE-ID names its instant in the SERIES' zone, which the occurrence's own may not be.
-        for (const vtimezone of vtimezoneComponents([event, series])) vcalendar.addSubcomponent(vtimezone);
         vcalendar.addSubcomponent(buildVEvent(withGuests(event, series), { master: series }));
+        syncVTimezones(vcalendar);
     }
     vcalendar.addPropertyWithValue('method', method);
     for (const vevent of vcalendar.getAllSubcomponents('vevent')) shapeForImip(vevent, method);
@@ -475,10 +469,12 @@ export function serializeEventForImip(
     return serializeResource(vcalendar);
 }
 
-// Each property is touched in place rather than re-emitted, so CUTYPE, RSVP, SCHEDULE-STATUS and every X- parameter a client hung on it survive.
+// Each property is touched in place rather than re-emitted, so CUTYPE, RSVP, SCHEDULE-STATUS and every X- parameter a
+// client hung on it survive.
 function patchAttendees(vevent: ICAL.Component, attendees: Attendee[]): { changed: boolean; membersChanged: boolean } {
     const current = vevent.getAllProperties('attendee');
-    // An address a client listed twice has two properties, and a PARTSTAT left on either one is the answer some reader takes.
+    // An address a client listed twice has two properties, and a PARTSTAT left on either one is the answer some reader
+    // takes.
     const byEmail = new Map<string, ICAL.Property[]>();
     for (const prop of current) {
         const email = calAddress(prop.getFirstValue()).toLowerCase();
@@ -533,7 +529,8 @@ function patchReminders(vevent: ICAL.Component, reminders: Reminder[]): boolean 
     return true;
 }
 
-// A series-wide edit reaches the overrides that never claimed the field: one whose value equals the master's BEFORE the edit follows it, one that set its own keeps it. Times never follow. Caller runs this before the master is patched.
+// A series-wide edit reaches an override whose value equals the master's BEFORE the edit; one that set its own keeps it.
+// Times never follow. It has to run before the master is patched.
 function followMaster(resource: ICAL.Component, master: ICAL.Component, patch: EventPatch): boolean {
     const fields: Array<[string, string, string]> = [];
     for (const [name, value] of [
@@ -558,7 +555,8 @@ function followMaster(resource: ICAL.Component, master: ICAL.Component, patch: E
     return changed;
 }
 
-// Only changed values are written: the save form carries every field, so writing all of it would rebuild rich VALARMs from a {type, minutes} pair, drop unmodelled attendee parameters and rewrite the RRULE from a lossy projection.
+// Only changed values are written. The save form carries every field, and writing all of it would rebuild rich VALARMs
+// from a {type, minutes} pair, drop unmodelled attendee parameters and rewrite the RRULE from a lossy projection.
 export function patchEvent(
     resource: ICAL.Component,
     recurrenceKey: string | null,
@@ -609,7 +607,8 @@ export function patchEvent(
         syncVTimezones(resource);
     }
 
-    // A null incoming rrule never removes a stored one: the projection nulls the rules the index cannot expand (sub-daily, out-of-range dtstart).
+    // A null incoming rrule never removes a stored one: the projection nulls the rules the index cannot expand, such as
+    // sub-daily or an out-of-range dtstart.
     if (patch.rrule) {
         const moved = setProperty(vevent, rruleProperty(patch.rrule));
         scheduling = scheduling || moved;
@@ -639,9 +638,10 @@ export function patchEvent(
     return true;
 }
 
-// An EXDATE left beside a new override would keep the occurrence out of the expansion and project a second, cancelled row for the same key.
+// An EXDATE left beside a new override would keep the occurrence out of the expansion and project a second, cancelled
+// row for the same key.
 export function putOverride(resource: ICAL.Component, master: CalendarEvent, override: CalendarEvent): void {
-    const key = override.recurrenceDate ? storedRecurrenceKey(override.recurrenceDate) : null;
+    const key = override.recurrenceDate;
     if (!key) throw new Error('putOverride: the override names no occurrence');
     const existing = findVEvent(resource, key);
     if (existing) resource.removeSubcomponent(existing);
@@ -666,7 +666,7 @@ function dropExclusion(vevent: ICAL.Component, recurrenceKey: string): boolean {
         else vevent.removeProperty(prop);
     }
     for (const stamp of vevent.getAllProperties(EIGEN.exdate)) {
-        if (storedRecurrenceKey(String(stamp.getFirstValue() ?? '')) !== recurrenceKey) continue;
+        if (stamp.getFirstValue() !== recurrenceKey) continue;
         vevent.removeProperty(stamp);
         removed = true;
     }
@@ -680,7 +680,7 @@ export function addExclusion(
     exclusion: CalendarEvent,
     ctx: WriteContext,
 ): void {
-    const key = exclusion.recurrenceDate ? storedRecurrenceKey(exclusion.recurrenceDate) : null;
+    const key = exclusion.recurrenceDate;
     if (!key) throw new Error('addExclusion: the exclusion names no occurrence');
     const vevent = masterVEvent(resource);
     if (!vevent) throw new Error('addExclusion: the resource holds no master VEVENT');
@@ -694,7 +694,7 @@ export function addExclusion(
         vevent.addProperty(exdateProperty(master, key, normalizeTimezone(master.timezone)));
     }
     for (const stamp of vevent.getAllProperties(EIGEN.exdate)) {
-        if (storedRecurrenceKey(String(stamp.getFirstValue() ?? '')) === key) vevent.removeProperty(stamp);
+        if (stamp.getFirstValue() === key) vevent.removeProperty(stamp);
     }
     vevent.addProperty(exclusionStamp(key, exclusion.id, exclusion.sequence, clampStamp(ctx.dtstamp, ctx.now)));
     syncVTimezones(resource);
@@ -704,7 +704,8 @@ export function addExclusion(
 export function removeExclusion(resource: ICAL.Component, recurrenceKey: string, ctx: WriteContext): void {
     const vevent = masterVEvent(resource);
     if (!vevent) throw new Error('removeExclusion: the resource holds no master VEVENT');
-    // A client may cancel an occurrence as a STATUS:CANCELLED override rather than an EXDATE; both go back the same way.
+    // A client may cancel an occurrence as a STATUS:CANCELLED override rather than an EXDATE, and both go back the same
+    // way.
     const override = findVEvent(resource, recurrenceKey);
     if (override) {
         resource.removeSubcomponent(override);
@@ -716,7 +717,8 @@ export function removeExclusion(resource: ICAL.Component, recurrenceKey: string,
 // What one revision of an event is known by: the sender's SEQUENCE and the instant it stamped.
 export type Revision = { sequence: number; dtstamp?: Date | null };
 
-// RFC 5546 § 2.1.5 orders on SEQUENCE then DTSTAMP; DTSTAMP's one-second resolution cannot separate two revisions, so an equal stamp is applied as the redelivery it is and only a strictly lower SEQUENCE loses.
+// RFC 5546 § 2.1.5 orders on SEQUENCE then DTSTAMP. A one-second DTSTAMP cannot separate two revisions, so an equal stamp
+// is applied as the redelivery it is and only a strictly lower SEQUENCE loses.
 export function isNewerRevision(incoming: Revision, stored: Revision | null): boolean {
     if (!stored) return true;
     if (incoming.sequence !== stored.sequence) return incoming.sequence > stored.sequence;
@@ -724,7 +726,8 @@ export function isNewerRevision(incoming: Revision, stored: Revision | null): bo
     return incoming.dtstamp.getTime() >= stored.dtstamp.getTime();
 }
 
-// A cancelled occurrence keeps no VEVENT, so its revision is the stamp beside its EXDATE — or the series' own number when a client wrote that EXDATE itself.
+// A cancelled occurrence keeps no VEVENT, so its revision is the stamp beside its EXDATE, or the series' own number
+// when a client wrote that EXDATE itself.
 export function storedRevision(resource: ICAL.Component, recurrenceKey: string | null): Revision | null {
     const vevent = findVEvent(resource, recurrenceKey);
     if (vevent) return { sequence: sequenceOf(vevent), dtstamp: readTimestamp(vevent, 'dtstamp') };
@@ -735,7 +738,8 @@ export function storedRevision(resource: ICAL.Component, recurrenceKey: string |
     return { sequence: stamp?.sequence ?? sequenceOf(master), dtstamp: stamp?.dtstamp ?? null };
 }
 
-// The inbound-REQUEST rule matches a verified sender against this, so the imported address wins over the ORGANIZER the file carries.
+// The inbound-REQUEST rule matches a verified sender against this, so the imported address wins over the ORGANIZER the
+// file carries.
 export function storedOrganizerAddress(resource: ICAL.Component): string | null {
     const vevent = masterVEvent(resource);
     if (!vevent) return null;
@@ -746,7 +750,8 @@ export function storedOrganizerAddress(resource: ICAL.Component): string | null 
     return address || null;
 }
 
-// The link comes from trusted message fields only — the relay envelope, or `external_<address>` for a DKIM-aligned iMIP sender.
+// The link comes from trusted message fields only: the relay envelope, or `external_<address>` for a DKIM-aligned iMIP
+// sender.
 export function stampInvitationLink(
     resource: ICAL.Component,
     link: { organizerEventId: string; organizerUserId: string },
@@ -760,7 +765,8 @@ export function stampInvitationLink(
 }
 
 export function stripEigenStamps(comp: ICAL.Component): void {
-    // By name, once per name: ical.js scans the whole property array per removal, which 20 000 stamps turn into a quadratic stall.
+    // By name, once per name: ical.js scans the whole property array per removal, which 20 000 stamps turn into a
+    // quadratic stall.
     const names = new Set<string>();
     for (const prop of comp.getAllProperties()) {
         if (isEigenName(prop.name)) {
@@ -776,7 +782,8 @@ export function stripEigenStamps(comp: ICAL.Component): void {
     for (const sub of comp.getAllSubcomponents()) stripEigenStamps(sub);
 }
 
-// An incoming body is untrusted: Eigen's lines come back from the stored resource, matched by UID and recurrence key, because clients rewrite RECURRENCE-ID and EXDATE between TZID, UTC and comma-joined forms.
+// An incoming body is untrusted, so Eigen's lines come back from the stored resource, matched by UID and recurrence key:
+// clients rewrite RECURRENCE-ID and EXDATE between TZID, UTC and comma-joined forms.
 export function restampResource(
     incoming: ICAL.Component,
     stored: ICAL.Component | null,

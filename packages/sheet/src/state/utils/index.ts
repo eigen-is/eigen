@@ -1,36 +1,23 @@
-// Small helpers the sheet's state modules share, such as finding a sheet by id or name, a new sheet's name, a color
-// as hex and whether a selection may be edited. The op-to-patch translation and the check whether two sets of op
-// batches commute live beside them and are re-exported here.
+// Small helpers the sheet's state modules share, such as finding a sheet by id or name, a new sheet's name and a color
+// as hex. The op-to-patch translation and the check whether two sets of op batches commute live beside them and are
+// re-exported here.
 
 import { parseRgb } from '@workspace/lib/constants/colors';
 import { parseCellKey } from '@workspace/lib/sheets';
-import { every, isNumber, isUndefined, kebabCase, map } from 'es-toolkit/compat';
+import { isNumber, kebabCase, map } from 'es-toolkit/compat';
 import { findSheetByName } from '../../engine/a1-notation';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
-import { checkCellIsLocked } from '../modules';
 import type { Selection, Sheet } from '../types';
 
 export * from './commute';
 export * from './patch';
 
-export function generateRandomSheetName(file: Sheet[], isPivotTable: boolean) {
-    let index = file.length;
-
-    const title = 'Pivot Table';
-
-    for (let i = 0; i < file.length; i += 1) {
-        if (file[i].name.indexOf('Sheet') > -1 || file[i].name.indexOf(title) > -1) {
-            const suffix = parseFloat(file[i].name.replace('Sheet', '').replace(title, ''));
-
-            if (!Number.isNaN(suffix) && Math.ceil(suffix) > index) {
-                index = Math.ceil(suffix);
-            }
-        }
-    }
-
-    if (isPivotTable) {
-        return title + (index + 1);
+export function nextSheetName(sheets: Sheet[]) {
+    let index = sheets.length;
+    for (const { name } of sheets) {
+        const suffix = Math.ceil(parseFloat(name.replace('Sheet', '')));
+        if (name.includes('Sheet') && suffix > index) index = suffix;
     }
     return `Sheet${index + 1}`;
 }
@@ -64,50 +51,13 @@ export function findSheet(ctx: Context, id: string) {
     return ctx.sheets.find((sheet) => sheet.id === id);
 }
 
-// get the current date and time
-export function getNowDateTime(format: number) {
-    const now = new Date();
-    const year = now.getFullYear(); // year
-    let month: string | number = now.getMonth(); // month
-    let date: string | number = now.getDate(); // day
-    let hour: string | number = now.getHours(); // hour
-    let minu: string | number = now.getMinutes(); // minute
-    let sec: string | number = now.getSeconds(); // second
-
-    month += 1;
-    if (month < 10) month = `0${month}`;
-    if (date < 10) date = `0${date}`;
-    if (hour < 10) hour = `0${hour}`;
-    if (minu < 10) minu = `0${minu}`;
-    if (sec < 10) sec = `0${sec}`;
-
-    let time = '';
-
-    // date
-    if (format === 1) {
-        time = `${year}-${month}-${date}`;
-    }
-    // date and time
-    else if (format === 2) {
-        time = `${year}-${month}-${date} ${hour}:${minu}:${sec}`;
-    }
-
-    return time;
-}
-
-// A cell style object (getStyleByCell / getFontStyleByCell) as an inline CSS
-// declaration list. Both HTML producers in this package — the clipboard table in
-// modules/selection.ts and the rich-text runs in modules/cell.ts — wrote the same
-// three lines by hand, and only one of them was ever hardened. Callers escape the
-// result themselves: both halves come from the cell, and a color like
-// `red' onload='…` would otherwise close the style attribute and open an event
-// handler. Numeric values are the pixel ones (font size, indent).
+// A cell style object as an inline CSS declaration list, with numbers as pixels. A caller escapes the result, because
+// its values come from the cell, and a color can hold a quote that closes the style attribute.
 export function styleObjectToCss(style: Record<string, string>): string {
     return map(style, (v, key) => `${kebabCase(key)}:${isNumber(v) ? `${v}px` : v};`).join('');
 }
 
-// Replace ${xxx} placeholders in `temp` (an HTML/string template) with values
-// from `dataarry`. Keys not present in `dataarry` are left in place verbatim.
+// Fills ${name} slots in a template, and leaves a slot it has no value for as it is.
 export function replaceHtml(temp: string, dataarry: Record<string, string | number>): string {
     return temp.replace(/\$\{([\w]+)\}/g, (s1, s2) => {
         const s = dataarry[s2];
@@ -118,58 +68,15 @@ export function replaceHtml(temp: string, dataarry: Record<string, string | numb
     });
 }
 
-export function isAllowEdit(ctx: Context, range?: Sheet['selections']) {
-    const cfg = getSheetConfig(ctx);
-    const judgeRange = isUndefined(range) ? ctx.selections : range;
-    return (
-        every(judgeRange, (selection) => {
-            for (let r = selection.row[0]; r <= selection.row[1]; r += 1) {
-                if (cfg?.rowReadOnly?.[r]) {
-                    return false;
-                }
-            }
-            for (let c = selection.column[0]; c <= selection.column[1]; c += 1) {
-                if (cfg?.colReadOnly?.[c]) {
-                    return false;
-                }
-            }
-
-            for (let r = selection.row[0]; r <= selection.row[1]; r += 1) {
-                for (let c = selection.column[0]; c <= selection.column[1]; c += 1) {
-                    if (checkCellIsLocked(ctx, r, c, ctx.currentSheetId)) {
-                        return false;
-                    }
-                }
-            }
-
-            return true;
-        }) && (isUndefined(ctx.allowEdit) ? true : ctx.allowEdit)
-    );
-}
-
-// A click on a row or column header hands over every row or column the sheet has
-// (events/mouse-header.ts), and per-cell writes over 130k rows are a quarter of a million
-// immer patches for the collab layer to turn into Yjs ops. A whole-sheet axis is clipped
-// to the last cell holding something; a range the user dragged out is applied as selected.
-//
-// "Whole axis" is read from the header-select flags, never from the extent: a whole-column
-// header selection carries `column_select` (spans every row → clip its rows), a whole-row one
-// carries `row_select` (spans every column → clip its columns); `selectAll` sets both. These
-// flags are set ONLY by the header click/drag paths and selectAll, so a hand-dragged A1:Z100
-// range on a default 26-column sheet — which happens to span the visible column axis — is no
-// longer misread as whole-axis and silently clipped.
+// A whole row or column stops at its last used cell, or writing it would ship a patch per cell.
+// A dragged range stays as selected.
 export function clipToUsedExtent(ctx: Context, selections: Selection[]): Selection[] {
     const wholeRows = selections.map((s) => s.column_select === true);
     const wholeColumns = selections.map((s) => s.row_select === true);
     const d = getFlowdata(ctx);
     if (!d || (!wholeRows.includes(true) && !wholeColumns.includes(true))) return selections;
 
-    // The DATA extent is sheet-wide on purpose, NOT bounded to the selection's axis: a header
-    // click on an empty column still reaches the last row that holds data in any column, and a
-    // click on an empty row the last column with data in any row (pinned by border.test.ts
-    // "bounds a header-click selection to the used extent"). Both scans already early-exit from
-    // the far edge, so there is no cheap trim to make here without an index — and a cached extent
-    // is out of scope. Only the bordered-extent pass below is axis-aware.
+    // The extent of the data is sheet-wide, so a click on an empty column still reaches the last row with data.
     let lastRow = d.length - 1;
     while (lastRow > 0 && !d[lastRow]?.some((cell) => cell != null)) lastRow -= 1;
     let lastColumn = 0;
@@ -184,10 +91,8 @@ export function clipToUsedExtent(ctx: Context, selections: Selection[]): Selecti
             }
         }
     }
-    // A bordered blank cell is used content too, but only along the selection's fixed axis: a
-    // whole-column selection extends its rows for borders in its own columns, a whole-row
-    // selection its columns for borders in its own rows. A border elsewhere is not "its" content
-    // — counting it would seed insertCheckbox/border-all thousands of cells past the data.
+    // A border counts only along the selection's own axis. One elsewhere would seed a tick box or border thousands of
+    // cells past the data.
     const rowClipCols = selections.filter((_, i) => wholeRows[i]).map((s) => s.column);
     const colClipRows = selections.filter((_, i) => wholeColumns[i]).map((s) => s.row);
     const borderInfo = getSheetConfig(ctx)?.borderInfo;

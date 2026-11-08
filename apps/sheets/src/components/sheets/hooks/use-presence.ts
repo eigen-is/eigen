@@ -13,12 +13,8 @@ type Identity = { username: string; userId?: string };
 const identityOf = (peer: PeerPresence): Identity | null =>
     peer.user ? { username: peer.user.name, userId: peer.user.userId } : null;
 
-// Wires Yjs awareness into the workbook's presence API: publishes the local user identity + cursor,
-// and mirrors every peer's cursor into addPresences/removePresences. Sits on the shared
-// `useAwarenessPeers` hook for the subscription + clientId-keyed diff bookkeeping; the sheets-specific
-// invariants (identity-keyed multi-tab dedupe, removed-client re-feed, snapshotVersion remount
-// survival) live in the reconcile pass and `presencesFromPeers` below.
-// Returns a publishSelection callback the editor calls from the Workbook's afterSelectionChange hook.
+// Publishes the local identity and cursor over Yjs awareness, and mirrors every peer's cursor into the workbook.
+// Returns the callback the editor calls when the selection changes.
 export function usePresence(
     provider: WebsocketProvider | null,
     workbookRef: React.RefObject<WorkbookInstance | null>,
@@ -27,20 +23,13 @@ export function usePresence(
     snapshotVersion: number,
 ): PublishSelection {
     const lastSelectionRef = useRef<string>('');
-    // The peer map from the previous reconcile pass. A client present here but gone from the current
-    // map has departed; its remembered identity translates back into a removePresences() key even
-    // though its awareness state is already gone from getStates() — the job the old hand-rolled
-    // `identities` map did, now derived from the previous-map diff.
+    // A departed client's awareness state is already gone, so its identity comes from this previous map.
     const prevPeersRef = useRef<Map<number, PeerPresence>>(new Map());
 
-    // clientId-keyed remote awareness states; the local client (by clientId) is already omitted by
-    // the hook. A same-user entry is the user's other window and shows like any peer — unified with
-    // the other apps (you see yourself across windows).
+    // The hook omits this client, so a same-user entry is the user's other window and shows like any peer.
     const peers = useAwarenessPeers<PeerPresence>(provider);
 
-    // Publish the local identity. snapshotVersion is a dep because a new snapshot the tab doesn't hold remounts the
-    // Workbook (the editor keys it by snapshotVersion), wiping context.presences — re-publishing the
-    // local user field keeps this client visible to peers after the fresh mount.
+    // A new snapshot remounts the Workbook and wipes its presences, so the identity is published again.
     useEffect(() => {
         if (!provider || !user || !synced) return;
         provider.awareness.setLocalStateField('user', {
@@ -51,9 +40,7 @@ export function usePresence(
         lastSelectionRef.current = '';
     }, [provider, user, synced, snapshotVersion]);
 
-    // Mirror the peer map into the workbook's imperative presence API. Re-runs whenever the peer map
-    // changes (join / leave / cursor move) and on snapshotVersion — a remount wipes context.presences,
-    // so the full live set is re-added into the fresh workbook instance.
+    // A remount wipes the workbook's presences, so the whole live set is added again on snapshotVersion.
     useEffect(() => {
         if (!provider || !user || !synced) return;
         const workbook = workbookRef.current;
@@ -66,10 +53,7 @@ export function usePresence(
             const identity = identityOf(prevPeer);
             if (identity) removed.push(identity);
         }
-        // Remove first, THEN re-add the whole live set: a departed clientId can share a Presence key
-        // (userId ?? username) with a still-live client — the same user's other tab, or a crash/rejoin
-        // under a new clientId. removePresences() just deleted that shared row, so adding the live set
-        // back restores it. addPresences overwrites by key, so a peer's moved cursor updates in place.
+        // Remove first, then add the live set: a departed client can share its key with a live one (same user).
         if (removed.length > 0) workbook.removePresences(removed);
         const toAdd = presencesFromPeers([...peers.values()]);
         if (toAdd.length > 0) workbook.addPresences(toAdd);

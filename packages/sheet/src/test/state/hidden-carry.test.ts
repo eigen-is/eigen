@@ -8,26 +8,27 @@
 // lands at G7, and row 9 of the destination was hidden beforehand.
 
 import { describe, expect, test } from 'bun:test';
-import type { DataValidationRule } from '@workspace/lib/sheets';
+import type { DataValidationRule, SheetValidation } from '@workspace/lib/sheets';
+import { MAX_VALIDATION_RANGES } from '@workspace/lib/sheets';
 import { Window } from 'happy-dom';
 import type { Context } from '../../state/context';
 import { handleCopy, handleCut } from '../../state/events/copy';
-import { handlePaste, handlePasteByClick } from '../../state/events/paste';
+import { handlePaste } from '../../state/events/paste';
 import { carriedLines, carryCells } from '../../state/modules/cell';
 import { consumePendingCopy } from '../../state/modules/clipboard';
 import { onCellsMoveEnd } from '../../state/modules/move-cells';
-import { pasteHandlerOfPaintModel, rangeValueToClipboard, selectionCache } from '../../state/modules/selection';
+import { pasteHandlerOfPaintModel, rangeValueToClipboard } from '../../state/modules/selection';
 import { handleFormatPainter } from '../../state/modules/toolbar';
-import { ValidationLimitError, validationAt } from '../../state/modules/validation-rules';
+import { validationAt } from '../../state/modules/validation-rules';
 import type { Cell, GlobalCache, Op, Selection } from '../../state/types';
-import { author, join } from './factories/collab';
+import { clipboardWith, pasteCopy } from './factories/clipboard';
+import { author, join, receive } from './factories/collab';
 import { contextFactory, workbookContextFactory } from './factories/context';
 import { gridElements, withGridGeometry } from './factories/grid-dom';
 import { validationsByCell } from './factories/validations';
 
 // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
 const g = globalThis as any;
-g.sessionStorage = { setItem: () => {} };
 // A paste the copy state can't serve parses the clipboard's table, so it needs a DOM.
 g.DOMParser = new Window().DOMParser;
 
@@ -43,11 +44,8 @@ function rule(r: number, c: number): DataValidationRule {
     return {
         type: 'dropdown',
         type2: '',
-        rangeTxt: '',
         value1: `list ${r}${c}`,
         value2: '',
-        validity: '',
-        remote: false,
         prohibitInput: false,
         hintShow: false,
         hintValue: '',
@@ -125,22 +123,20 @@ function paste(ctx: Context, cut: boolean) {
     if (cut) handleCut(ctx);
     else handleCopy(ctx);
     ctx.selections = destination();
-    handlePasteByClick(ctx, 'internal');
+    pasteCopy(ctx);
 }
 
 // ⌘V: the browser hands over the table the copy put on the clipboard.
 function pasteFromClipboard(ctx: Context) {
     const html = consumePendingCopy()?.html ?? '';
     ctx.selections = destination();
-    selectionCache.isPasteAction = true;
-    const clipboardData = { getData: (type: string) => (type === 'text/html' ? html : ''), files: [] };
-    handlePaste(ctx, { clipboardData } as unknown as ClipboardEvent);
+    handlePaste(ctx, clipboardWith({ html }));
 }
 
 function paint(ctx: Context) {
     handleFormatPainter(ctx);
     ctx.selections = destination();
-    pasteHandlerOfPaintModel(ctx, ctx.copyState);
+    if (ctx.painterSource) pasteHandlerOfPaintModel(ctx, ctx.painterSource);
 }
 
 // Drags A1:D4 by its top-left cell onto G7.
@@ -148,7 +144,7 @@ function move(ctx: Context) {
     ctx.cellSelectMoving = true;
     ctx.cellSelectMoveIndex = [0, 0];
     const { container, scrollEl } = gridElements();
-    const event = { pageX: 46 + 6 * 74 + 30, pageY: 20 + 6 * 20 + 10 } as MouseEvent;
+    const event = { clientX: 46 + 6 * 74 + 30, clientY: 20 + 6 * 20 + 10 } as MouseEvent;
     onCellsMoveEnd(ctx, {} as GlobalCache, event, scrollEl, container);
 }
 
@@ -253,7 +249,7 @@ describe('a range with a hidden row and column inside it', () => {
         const { next, ops } = author(base, (ctx) => {
             ctx.currentSheetId = 'id_2';
             ctx.selections = destination();
-            pasteHandlerOfPaintModel(ctx, ctx.copyState);
+            if (ctx.painterSource) pasteHandlerOfPaintModel(ctx, ctx.painterSource);
         });
         expect(next.sheets[1].data?.[7][7]?.hl).toBeUndefined();
         const joined = join(base, [ops]).find((s) => s.id === 'id_2');
@@ -463,7 +459,7 @@ describe('a carried rule lands as ranges', () => {
         handleCopy(ctx);
         toOtherSheet(ctx);
         ctx.selections = destination();
-        handlePasteByClick(ctx, 'internal');
+        pasteCopy(ctx);
         expect(Object.values(ctx.sheets[1].dataValidations ?? {})).toEqual([
             { ranges: [{ row: [6, 9], column: [6, 6] }], rule: rule(9, 9) },
         ]);
@@ -475,7 +471,7 @@ describe('a carried rule lands as ranges', () => {
         handleCut(ctx);
         toOtherSheet(ctx);
         ctx.selections = destination();
-        handlePasteByClick(ctx, 'internal');
+        pasteCopy(ctx);
         expect(Object.values(ctx.sheets[1].dataValidations ?? {})).toEqual([
             { ranges: [{ row: [6, 9], column: [6, 6] }], rule: rule(9, 9) },
         ]);
@@ -567,29 +563,55 @@ describe('a carried rule lands as ranges', () => {
     });
 
     // A1 holds a rule and A2 none, so each tile lands the rule on every other row: more ranges than a rule may hold,
-    // which a peer, the server and a reload would drop. So the paste is refused whole.
-    test('a paste that would leave a rule more ranges than a rule may hold is refused', () => {
+    // which a peer, the server and a reload would drop. The cells land, the rule stops extending, and every reader
+    // ends up with the same sheet.
+    describe('a carry past the caps', () => {
         const rows = 20_000;
-        const ctx = workbookContextFactory({
-            currentSheetId: 'id_1',
-            sheets: [
-                {
-                    name: 'sheet',
-                    id: 'id_1',
-                    order: 0,
-                    data: Array.from({ length: rows }, () => [null, null, null, null]),
-                    dataValidations: { v: { ranges: [{ row: [0, 0], column: [0, 0] }], rule: rule(0, 0) } },
-                },
-            ],
-            selections: [{ row: [0, 1], column: [0, 0], row_focus: 0, column_focus: 0 }],
-        });
-        const refused = () =>
-            author(ctx, (draft) => {
-                handleCopy(draft);
-                draft.selections = [{ row: [0, rows - 1], column: [2, 2], row_focus: 0, column_focus: 2 }];
-                handlePasteByClick(draft, 'internal');
+        const area = (rowEnd: number, column: number) => ({ row: [0, rowEnd], column: [column, column] });
+        const atCap = Array.from({ length: MAX_VALIDATION_RANGES }, (_, i) => ({
+            row: [2 * i + 1, 2 * i + 1],
+            column: [1, 3],
+        }));
+        const capCtx = (dataValidations: Record<string, SheetValidation>) => {
+            const data = Array.from({ length: rows }, (): (Cell | null)[] => [null, null, null, null]);
+            data[0][0] = { v: 'a', m: 'a' };
+            return workbookContextFactory({
+                currentSheetId: 'id_1',
+                sheets: [{ name: 'sheet', id: 'id_1', order: 0, data, dataValidations }],
+                selections: [{ ...area(1, 0), row_focus: 0, column_focus: 0 }],
             });
-        expect(refused).toThrow(ValidationLimitError);
+        };
+        const paste = (base: Context, target: { row: number[]; column: number[] }) =>
+            author(base, (draft) => {
+                handleCopy(draft);
+                draft.selections = [{ ...target, row_focus: target.row[0], column_focus: target.column[0] }];
+                pasteCopy(draft);
+            });
+        const expectEveryReaderAgrees = (base: Context, next: Context, ops: Op[]) => {
+            const peer = receive(base, ops);
+            expect(peer.sheets[0].dataValidations).toEqual(next.sheets[0].dataValidations);
+            expect(peer.sheets[0].data?.[0]?.[2]?.v).toBe(next.sheets[0].data?.[0]?.[2]?.v);
+            const [joined] = join(base, [ops]);
+            expect(joined.dataValidations).toEqual(next.sheets[0].dataValidations);
+        };
+
+        test('a paste lands its cells, and the rule keeps the ranges it had', () => {
+            const v = { ranges: [{ row: [0, 0], column: [0, 0] }], rule: rule(0, 0) };
+            const base = capCtx({ v });
+            const { next, ops } = paste(base, area(rows - 1, 2));
+            expect(next.sheets[0].data?.[0]?.[2]?.v).toBe('a');
+            expect(next.warnDialog).toBeUndefined();
+            expect(next.sheets[0].dataValidations).toEqual({ v });
+            expectEveryReaderAgrees(base, next, ops);
+        });
+
+        test('a paste that would split a rule past the cap lands, and the rule goes', () => {
+            const base = capCtx({ wide: { ranges: atCap, rule: rule(1, 1) } });
+            const { next, ops } = paste(base, area(3, 2));
+            expect(next.sheets[0].data?.[0]?.[2]?.v).toBe('a');
+            expect(next.sheets[0].dataValidations).toEqual({});
+            expectEveryReaderAgrees(base, next, ops);
+        });
     });
 
     test('a move takes the rule along on its sheet', () => {

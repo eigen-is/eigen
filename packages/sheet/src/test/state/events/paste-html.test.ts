@@ -2,19 +2,18 @@ import { describe, expect, it, spyOn } from 'bun:test';
 import { SHEET_DEFAULT_FONT_SIZE, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import { pick } from 'es-toolkit/compat';
 import { Window } from 'happy-dom';
+import { produce, produceWithPatches } from 'immer';
+import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../../engine/defaults';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import { handleCopy } from '../../../state/events/copy';
 import { handlePaste } from '../../../state/events/paste';
-import * as cellModule from '../../../state/modules/cell';
+import { normalizedCellAttr } from '../../../state/modules/cell';
 import { consumePendingCopy } from '../../../state/modules/clipboard';
-import * as selectionModule from '../../../state/modules/selection';
-import {
-    COPY_ACTION_TABLE_MARKER,
-    copy,
-    rangeValueToClipboard,
-    selectionCache,
-} from '../../../state/modules/selection';
+import { COPY_ACTION_TABLE_MARKER, copy, rangeValueToClipboard } from '../../../state/modules/selection';
+import { filterPatch } from '../../../state/utils';
+import { clipboardWith } from '../factories/clipboard';
+import { syncablePaths } from '../factories/collab';
 import { contextFactory } from '../factories/context';
 import { pastedHtmlFactory } from '../factories/pasted-html';
 
@@ -30,7 +29,6 @@ const g = globalThis as any;
 const win = new Window();
 g.document = win.document;
 g.DOMParser = win.DOMParser;
-g.sessionStorage = { setItem: () => {} };
 
 function grid(rows: number, cols: number): (Cell | null)[][] {
     return Array.from({ length: rows }, () => Array.from({ length: cols }, () => null));
@@ -49,20 +47,8 @@ function makeCtx(rows = 8, cols = 8): Context {
     }) as Context;
 }
 
-// Structural ClipboardEvent stub: the branch only ever calls
-// clipboardData.getData('text/html') (falling back to 'text/plain') and, on other
-// arms, reads clipboardData.files — neither of which bun provides.
-function fakeClipboardEvent(html: string): ClipboardEvent {
-    return {
-        clipboardData: { getData: (type: string) => (type === 'text/html' ? html : ''), files: [] },
-    } as unknown as ClipboardEvent;
-}
-
-// handlePaste no-ops unless a paste action is in flight (selectionCache.isPasteAction),
-// mirroring the real keydown → paste sequence.
 function pasteHtml(ctx: Context, html: string) {
-    selectionCache.isPasteAction = true;
-    handlePaste(ctx, fakeClipboardEvent(html));
+    handlePaste(ctx, clipboardWith({ html }));
 }
 
 // Windows Excel indents each rule's declarations with a tab and Excel for Mac with spaces.
@@ -290,6 +276,17 @@ describe('HTML-table paste — style extraction', () => {
         expect(d[0][2]?.ht).toBe(1);
         expect(d[0][2]?.vt).toBe(2);
     });
+
+    it('leaves a cell with no text-align to its value, so a number lands on the right', () => {
+        const ctx = makeCtx();
+        pasteHtml(ctx, '<table><tr><td>12</td><td>word</td></tr></table>');
+
+        const d = ctx.sheets[0].data!;
+        expect(d[0][0]?.v).toBe(12);
+        expect(d[0][0]?.ht).toBeUndefined();
+        expect(normalizedCellAttr(d[0][0] ?? {}, 'ht')).toBe('2');
+        expect(normalizedCellAttr(d[0][1] ?? {}, 'ht')).toBe('1');
+    });
 });
 
 // The style fields a pasted cell can take from the <style> block, read from the top-left rows x cols.
@@ -309,7 +306,7 @@ function styleBlockHtml(css: string, cells: string): string {
 
 describe('HTML-table paste — the <style> block', () => {
     // A td the block styles only through its td rule: Excel's and WPS's both say vertical-align:middle.
-    const plain = { bl: 0, it: 0, fs: SHEET_DEFAULT_FONT_SIZE, ht: 1, vt: 0 };
+    const plain = { bl: 0, it: 0, fs: SHEET_DEFAULT_FONT_SIZE, vt: 0 };
     const wps = { ...plain, fs: 12, fc: '#000000' };
 
     it.each<['Excel' | 'WPS', Partial<Cell>[][]]>([
@@ -399,6 +396,40 @@ describe('HTML-table paste — the <style> block', () => {
         );
         const mono = { ...plain, vt: 1, bl: 1, ff: 'JetBrains Mono' };
         expect(styleGrid(ctx, 1, 2)).toEqual([[mono, mono]]);
+    });
+});
+
+// A cut's formula follows Excel's rule for a move: its refs into the moved block follow the cells.
+describe('a cut landing its own formulas', () => {
+    function cutAndPaste(ctx: Context, from: Context['selections'], at: number[]) {
+        ctx.selections = from;
+        handleCopy(ctx, { cut: true });
+        const pending = consumePendingCopy();
+        ctx.selections = single(at[0], at[1]);
+        handlePaste(ctx, clipboardWith({ html: pending?.html ?? '' }));
+    }
+
+    it('rewrites a ref into the block and computes it where it landed', () => {
+        const ctx = makeCtx(8, 10);
+        const d = ctx.sheets[0].data!;
+        d[4][3] = { v: 10, m: '10', ct: { fa: 'General', t: 'n' } };
+        d[4][4] = { f: '=D5*2', v: 20, m: '20', ct: { fa: 'General', t: 'n' } };
+        cutAndPaste(ctx, [{ row: [4, 4], column: [3, 4], row_focus: 4, column_focus: 3 }], [2, 6]);
+
+        expect(d[2][7]?.f).toBe('=G3*2');
+        expect(d[2][7]?.v).toBe(20);
+        expect(d[4][4]).toBeNull();
+    });
+
+    it('keeps a ref outside the block where it pointed', () => {
+        const ctx = makeCtx(8, 10);
+        const d = ctx.sheets[0].data!;
+        d[0][0] = { v: 3, m: '3', ct: { fa: 'General', t: 'n' } };
+        d[4][4] = { f: '=A1*2', v: 6, m: '6', ct: { fa: 'General', t: 'n' } };
+        cutAndPaste(ctx, single(4, 4), [2, 6]);
+
+        expect(d[2][6]?.f).toBe('=A1*2');
+        expect(d[2][6]?.v).toBe(6);
     });
 });
 
@@ -517,6 +548,94 @@ describe('HTML-table paste — merges, borders, row height', () => {
         expect(d[1][0]).toBeNull();
         expect(d[2][0]).toBeNull();
         expect(ctx.sheets[0].config!.merge).toEqual({ '0_0': { r: 0, c: 0, rs: 2, cs: 2 } });
+        expect(ctx.warnDialog).toBe('Cannot perform this operation on merged cells');
+    });
+
+    it('replaces a merge it covers whole, as a paste of this tab does', () => {
+        const ctx = makeCtx(6, 6);
+        ctx.sheets[0].config = { merge: { '0_0': { r: 0, c: 0, rs: 2, cs: 2 } } };
+        ctx.sheets[0].data![0][0] = { v: 'merged', mc: { r: 0, c: 0, rs: 2, cs: 2 } };
+        ctx.sheets[0].data![0][1] = { mc: { r: 0, c: 0 } };
+        ctx.sheets[0].data![1][0] = { mc: { r: 0, c: 0 } };
+        ctx.sheets[0].data![1][1] = { mc: { r: 0, c: 0 } };
+        pasteHtml(ctx, '<table><tr><td>a</td><td>b</td></tr><tr><td>c</td><td>d</td></tr></table>');
+
+        const d = ctx.sheets[0].data!;
+        expect(ctx.sheets[0].config!.merge).toEqual({});
+        expect([d[0][0]?.v, d[0][1]?.v, d[1][0]?.v, d[1][1]?.v]).toEqual(['a', 'b', 'c', 'd']);
+        expect(d[1][1]?.mc).toBeUndefined();
+        expect(ctx.warnDialog).toBeUndefined();
+    });
+
+    // HTML ends a span at the table's edge, so a merge does too.
+    it('ends a rowspan or a colspan that runs past the table at its edge', () => {
+        const ctx = makeCtx();
+        pasteHtml(ctx, '<table><tr><td rowspan="5">tall</td><td>b</td></tr><tr><td colspan="9">wide</td></tr></table>');
+
+        expect(ctx.sheets[0].config!.merge).toEqual({ '0_0': { r: 0, c: 0, rs: 2, cs: 1 } });
+        const d = ctx.sheets[0].data!;
+        expect(d[0][0]?.v).toBe('tall');
+        expect(d[1][1]?.v).toBe('wide');
+        expect(d[1][1]?.mc).toBeUndefined();
+        expect(d[2][0]).toBeNull();
+    });
+});
+
+// A refused paste ships no op and takes no undo step, whatever the table carries.
+describe('a refused paste writes nothing', () => {
+    const table = '<table><tr height="50"><td>9</td></tr><tr height="60"><td>8</td></tr></table>';
+
+    it('a table over part of a merge leaves the row heights alone', () => {
+        const ctx = makeCtx(6, 6);
+        ctx.sheets[0].config = { merge: { '0_0': { r: 0, c: 0, rs: 2, cs: 2 } } };
+        ctx.selections = single(1, 0);
+        expect(syncablePaths(ctx, (draft: Context) => pasteHtml(draft, table))).toEqual([]);
+    });
+
+    const limit = `This action would increase the number of rows in the workbook above the limit of ${MAX_SHEET_ROW_COUNT}.`;
+    const atLastRow = (draft: Context) => {
+        draft.selections = single(MAX_SHEET_ROW_COUNT - 1, 0);
+    };
+
+    it('a table past the row limit says so and writes nothing', () => {
+        const ctx = makeCtx(MAX_SHEET_ROW_COUNT, 1);
+        const [next, patches] = produceWithPatches(ctx, (draft: Context) => {
+            atLastRow(draft);
+            pasteHtml(draft, table);
+        });
+        expect(filterPatch(patches)).toEqual([]);
+        expect(next.warnDialog).toBe(limit);
+    });
+
+    it('text past the column limit says so and writes nothing', () => {
+        const ctx = makeCtx(1, MAX_SHEET_COLUMN_COUNT);
+        const [next, patches] = produceWithPatches(ctx, (draft: Context) => {
+            draft.selections = single(0, MAX_SHEET_COLUMN_COUNT - 1);
+            handlePaste(draft, clipboardWith({ text: '9\t8' }));
+        });
+        expect(filterPatch(patches)).toEqual([]);
+        expect(next.warnDialog).toBe(
+            `This action would increase the number of columns in the workbook above the limit of ${MAX_SHEET_COLUMN_COUNT}.`,
+        );
+    });
+
+    for (const cut of [false, true]) {
+        it(`a ${cut ? 'cut' : 'copy'} past the row limit says so and writes nothing`, () => {
+            const ctx = makeCtx(MAX_SHEET_ROW_COUNT, 1);
+            ctx.copyState = { id: 'own', cut, dataSheetId: 'id_1', copyRange: [{ row: [0, 1], column: [0, 0] }] };
+            const [next, patches] = produceWithPatches(ctx, (draft: Context) => {
+                atLastRow(draft);
+                pasteHtml(draft, '<table data-copy-id="own"></table>');
+            });
+            expect(filterPatch(patches)).toEqual([]);
+            expect(next.warnDialog).toBe(limit);
+        });
+    }
+
+    it('a table that fits still sets its row heights', () => {
+        const ctx = makeCtx(6, 6);
+        const next = produce(ctx, (draft: Context) => pasteHtml(draft, table));
+        expect(next.sheets[0].config?.rowlen).toEqual({ 0: 50, 1: 60 });
     });
 });
 
@@ -578,32 +697,26 @@ describe('Copy HTML — numeric cells carry their full value', () => {
         ctx.sheets[0].data![0][0] = { v: 123456789012, m: '1.23457E+11', f: '=A2', ct: { fa: 'General', t: 'n' } };
         ctx.selections = single(0, 0);
         copy(ctx);
-        const html = rangeValueToClipboard(ctx, 'id_1', ctx.selections)?.html ?? '';
+        const html = consumePendingCopy()?.html ?? '';
         ctx.selections = single(0, 1);
         pasteHtml(ctx, html);
         expect(ctx.sheets[0].data![0][1]?.f).toBe('=B2');
     });
 });
 
-// ⌘V of a marked table serves this tab's copy, formulas and all, only while the table is that copy. A table another
-// tab copied, or the copied cells edited since, pastes as a table.
+// A paste is this tab's copy exactly when the table carries the id of the copy. Another tab's table carries another id.
 describe('HTML-table paste — the copy of this tab', () => {
     function rangeSel(r1: number, r2: number, c1: number, c2: number) {
         return [{ row: [r1, r2], column: [c1, c2], row_focus: r1, column_focus: c1 }];
     }
 
-    function markedTable(rows: readonly string[][]): string {
-        const trs = rows.map((row) => `<tr>${row.map((text) => `<td style="">${text}</td>`).join('')}</tr>`);
-        return `<table data-type="${COPY_ACTION_TABLE_MARKER}">${trs.join('')}</table>`;
-    }
-
-    // Copies rows x cols cells from A1, the formulas =1, =2, … or blanks, and returns the table the copy wrote.
-    function copyCells(ctx: Context, rows: number, cols: number, { cut = false, blank = false } = {}): string {
+    // Copies rows x cols cells from A1, the formulas =1, =2, …, and returns the table the copy wrote.
+    function copyCells(ctx: Context, rows: number, cols: number, { cut = false } = {}): string {
         const d = ctx.sheets[0].data ?? [];
         for (let r = 0; r < rows; r += 1) {
             for (let c = 0; c < cols; c += 1) {
                 const n = r * cols + c + 1;
-                d[r][c] = blank ? null : { v: n, m: String(n), f: `=${n}` };
+                d[r][c] = { v: n, m: String(n), f: `=${n}` };
             }
         }
         ctx.selections = rangeSel(0, rows - 1, 0, cols - 1);
@@ -616,12 +729,11 @@ describe('HTML-table paste — the copy of this tab', () => {
         pasteHtml(ctx, html);
     }
 
-    it('takes the copy state for its own table, with markup, a line break and a merge in it', () => {
+    it('takes the copy state for its own table, with a merge in it', () => {
         const ctx = makeCtx(10, 10);
         const d = ctx.sheets[0].data ?? [];
-        d[0][0] = { v: 'a & <b>', m: 'a & <b>', mc: { r: 0, c: 0, rs: 1, cs: 2 } };
+        d[0][0] = { v: 'a', m: 'a', mc: { r: 0, c: 0, rs: 1, cs: 2 } };
         d[0][1] = { mc: { r: 0, c: 0 } };
-        d[1][0] = { v: 'x\ny', m: 'x\ny' };
         d[1][1] = { v: 1, m: '1', f: '=1' };
         ctx.sheets[0].config = { merge: { '0_0': { r: 0, c: 0, rs: 1, cs: 2 } } };
         ctx.selections = rangeSel(0, 1, 0, 1);
@@ -631,85 +743,83 @@ describe('HTML-table paste — the copy of this tab', () => {
         expect(ctx.sheets[0].config?.merge?.['4_4']).toEqual({ r: 4, c: 4, rs: 1, cs: 2 });
     });
 
-    // The same cell texts in another shape are another copy, and so is a table that holds ours and a row or a column
-    // more. Ours holds formulas or blanks, theirs constants or blanks.
-    it.each([
-        ['2x1 against 3x1', 2, 1, false, [['1'], ['2'], ['3']]],
-        ['1x2 against 1x3', 1, 2, false, [['1', '2', '3']]],
-        [
-            '2x3 against 3x2',
-            2,
-            3,
-            false,
-            [
-                ['1', '2'],
-                ['3', '4'],
-                ['5', '6'],
-            ],
-        ],
-        ['1x6 against 6x1', 1, 6, false, [['1'], ['2'], ['3'], ['4'], ['5'], ['6']]],
-        ['blanks, 1x6 against 6x1', 1, 6, true, [[''], [''], [''], [''], [''], ['']]],
-    ])('pastes a table of another shape as a table: %s', (_name, rows, cols, blank, theirs) => {
+    it('pastes a table with the same texts and another id as a table', () => {
         const ctx = makeCtx(10, 10);
-        copyCells(ctx, rows, cols, { blank });
-        pasteAt(ctx, markedTable(theirs), 2, 2);
-        expect(ctx.selections?.[0]).toMatchObject({
-            row: [2, 2 + theirs.length - 1],
-            column: [2, 2 + theirs[0].length - 1],
-        });
-        expect(ctx.sheets[0].data?.[2][2]?.f).toBeUndefined();
-    });
-
-    it('pastes a table of the same shape with other texts as a table', () => {
-        const ctx = makeCtx(10, 10);
-        copyCells(ctx, 1, 2);
-        pasteAt(ctx, markedTable([['7', '8']]), 2, 2);
-        expect(pick(ctx.sheets[0].data?.[2][3], ['v', 'f'])).toEqual({ v: 8 });
-    });
-
-    it('pastes its own table as a table once the copied cells changed', () => {
-        const ctx = makeCtx(10, 10);
-        const html = copyCells(ctx, 1, 2);
-        ctx.sheets[0].data?.[0].splice(1, 1, { v: 9, m: '9' });
+        const html = copyCells(ctx, 1, 2).replace(/data-copy-id="[^"]*"/, 'data-copy-id="another-tab"');
+        expect(html).toContain(COPY_ACTION_TABLE_MARKER);
         pasteAt(ctx, html, 2, 2);
         expect(pick(ctx.sheets[0].data?.[2][3], ['v', 'f'])).toEqual({ v: 2 });
     });
 
-    it('takes the cut state for a cut that grows the grid', () => {
+    it('lands the live cells of its own copy once they changed', () => {
+        const ctx = makeCtx(10, 10);
+        const html = copyCells(ctx, 1, 2);
+        ctx.sheets[0].data?.[0].splice(1, 1, { v: 9, m: '9' });
+        pasteAt(ctx, html, 2, 2);
+        expect(pick(ctx.sheets[0].data?.[2][3], ['v', 'f'])).toEqual({ v: 9 });
+        expect(ctx.sheets[0].data?.[2][2]?.f).toBe('=1');
+    });
+
+    it('pastes its own table as a table once the copied sheet is gone', () => {
+        const ctx = makeCtx(10, 10);
+        ctx.sheets.push({ name: 'other', id: 'id_2', order: 1, data: grid(10, 10) });
+        const html = copyCells(ctx, 1, 1);
+        ctx.sheets.shift();
+        ctx.currentSheetId = 'id_2';
+        pasteAt(ctx, html, 2, 2);
+        expect(pick(ctx.sheets[0].data?.[2][2], ['v', 'f'])).toEqual({ v: 1 });
+    });
+
+    it('takes the cut state for a cut that grows the grid, and the cut is over', () => {
         const ctx = makeCtx(8, 8);
         const html = copyCells(ctx, 2, 2, { cut: true });
         pasteAt(ctx, html, 7, 7);
         const d = ctx.sheets[0].data ?? [];
         expect([d.length, d[0].length]).toEqual([9, 9]);
-        expect([ctx.visibledatarow.length, ctx.visibledatacolumn.length]).toEqual([9, 9]);
         expect(d[8][8]?.f).toBe('=4');
         expect(d[0][0]).toBeNull();
+        expect(ctx.copyState).toBeUndefined();
+        expect(ctx.formulaRangeSelections).toEqual([]);
     });
 
-    // The check reads each copied cell's text once and styles none, which is why a paste of a large copy costs a
-    // fraction of what the copy took, and it turns a table of another shape away before it reads any text. The test
-    // counts the styles and the texts, not the time, which swings with the machine's load.
-    it('recognises its own copy without styling a cell, and turns another shape away before reading a text', () => {
-        const ctx = makeCtx(20, 20);
-        const styles = spyOn(cellModule, 'getStyleByCell');
-        const texts = spyOn(selectionModule, 'copiedCellText');
-        const html = copyCells(ctx, 10, 10);
-        const copied = { styles: styles.mock.calls.length, texts: texts.mock.calls.length };
+    it('keeps a cut a merge refused, so it can land elsewhere', () => {
+        const ctx = makeCtx(10, 10);
+        const html = copyCells(ctx, 1, 1, { cut: true });
+        ctx.sheets[0].config = { merge: { '5_5': { r: 5, c: 5, rs: 2, cs: 2 } } };
+        pasteAt(ctx, html, 6, 5);
+        expect(ctx.sheets[0].data?.[0][0]?.f).toBe('=1');
+        expect(ctx.copyState?.cut).toBe(true);
+        pasteAt(ctx, html, 2, 2);
+        expect(ctx.sheets[0].data?.[2][2]?.f).toBe('=1');
+        expect(ctx.sheets[0].data?.[0][0]).toBeNull();
+    });
+});
 
-        styles.mockClear();
-        texts.mockClear();
-        pasteAt(ctx, html, 10, 10);
-        const own = { styles: styles.mock.calls.length, texts: texts.mock.calls.length };
+// A plain paste reads what the clipboard holds as what it is: a word in the text is no table, and nothing is no value.
+describe('paste of no table', () => {
+    it('a paste into several ranges does nothing', () => {
+        const ctx = makeCtx();
+        ctx.selections = [...single(0, 0), ...single(2, 2)];
+        handlePaste(ctx, clipboardWith({ text: '=1+1' }));
+        expect(ctx.sheets[0].data?.[0][0]).toBeNull();
+    });
 
-        texts.mockClear();
-        pasteAt(ctx, markedTable([['1']]), 0, 0);
-        const other = texts.mock.calls.length;
-        styles.mockRestore();
-        texts.mockRestore();
+    it('pastes text that names a table as text', () => {
+        const ctx = makeCtx();
+        handlePaste(ctx, clipboardWith({ text: 'my table' }));
+        expect(ctx.sheets[0].data?.[0][0]?.v).toBe('my table');
+    });
 
-        expect(copied).toEqual({ styles: 100, texts: 100 });
-        expect(own).toEqual({ styles: 0, texts: 100 });
-        expect(ctx.sheets[0].data?.[19][19]?.f).toBe('=100');
-        expect(other).toBe(0);
+    it('takes the plain text of HTML that holds no table', () => {
+        const ctx = makeCtx();
+        handlePaste(ctx, clipboardWith({ html: '<p>a table of contents</p>', text: 'a table of contents' }));
+        expect(ctx.sheets[0].data?.[0][0]?.v).toBe('a table of contents');
+    });
+
+    it('an empty clipboard leaves the cell alone', () => {
+        const ctx = makeCtx();
+        ctx.sheets[0].data?.[0].splice(0, 1, { v: 'kept', m: 'kept' });
+        handlePaste(ctx, clipboardWith({}));
+        expect(ctx.sheets[0].data?.[0][0]?.v).toBe('kept');
     });
 });

@@ -1,8 +1,10 @@
 // The collab routes: a document's access info and comment index over HTTP, and the WebSocket each
-// editor opens to sync a document. The socket checks read once when it opens and write on every
-// message, and it hands the frames to the CollabDocument the Drive keeps open for that document.
+// editor opens to sync a document. The socket checks read when it opens and write on every message,
+// and it hands the frames to the CollabDocument the Drive keeps open for that document.
 
 import {
+    COLLAB_ACCESS_LOST_CLOSE,
+    COLLAB_ACCESS_LOST_REASON,
     COLLAB_HOME_REPLACED_CLOSE,
     COLLAB_HOME_REPLACED_REASON,
     COLLAB_STORAGE_GONE_CLOSE,
@@ -10,14 +12,10 @@ import {
     COLLAB_STORAGE_UNAVAILABLE_CLOSE,
     COLLAB_STORAGE_UNAVAILABLE_REASON,
 } from '@workspace/lib/constants/collab';
-import { commentAssignedTag } from '@workspace/lib/notification/tags';
 import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
-import type { EffectiveMember } from '@workspace/lib/types/drive';
-import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { Elysia, t } from 'elysia';
 import type { ServerWebSocket } from 'elysia/ws/bun';
 import { withCommentIndex } from '../lib/chat';
-import { broadcastCommentIndexUpdated } from '../lib/chat/sse-events';
 import type { CollabDocument } from '../lib/collab/collab-document';
 import { collabEpochMessage } from '../lib/collab/epoch';
 import { startLoadingHeartbeat } from '../lib/collab/loading-heartbeat';
@@ -25,8 +23,6 @@ import { ApiError } from '../lib/core/errors';
 import { getSharedDrive } from '../lib/drive';
 import type { DriveLike } from '../lib/drive/get-drive';
 import { getDataEpoch } from '../lib/home/data-epoch';
-import { sendToHome } from '../lib/home/home-relay';
-import { getUserByEmail } from '../lib/user';
 import { keepWebSocketAlive } from '../utils/websockets';
 import { betterAuth } from './auth';
 
@@ -42,9 +38,8 @@ type CollabSession = {
 // close, and it has no typed field for this route's state, so the state lives in this map.
 const sessions = new WeakMap<ServerWebSocket<unknown>, CollabSession>();
 
-// A user may open a document in another owner's drive, such as a shared or team drive. getSharedDrive and its ACL
-// checks decide what they may do there. The WebSocket server options, such as perMessageDeflate, are set on the root
-// app, because Elysia reads `websocket` config only there.
+// A user may open a document in another owner's drive, and getSharedDrive's checks decide what they may do there. The
+// WebSocket server options are set on the root app, because Elysia reads `websocket` config only there.
 export const collabRouter = new Elysia({
     name: 'collab',
 })
@@ -94,11 +89,7 @@ export const collabRouter = new Elysia({
         '/collab/:ownerId/:mountId/:pathId/comments/:chatName/status',
         async ({ params, body, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
-                throw new ApiError(403, 'No write permission');
-            }
             await drive.setCommentStatus(params.mountId, params.pathId, params.chatName, body.status, user, body.title);
-            broadcastCommentIndexUpdated(drive, params.ownerId, params.mountId, params.pathId).catch(() => {});
             return { success: true };
         },
         {
@@ -114,54 +105,7 @@ export const collabRouter = new Elysia({
         '/collab/:ownerId/:mountId/:pathId/comments/:chatName/assignee',
         async ({ params, body, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
-                throw new ApiError(403, 'No write permission');
-            }
-            const assignee = body.assignee ? body.assignee.toLowerCase() : null;
-            // Looked up once for the check and passed on to the broadcast, because it walks the whole ACL.
-            let members: EffectiveMember[] | undefined;
-            if (assignee) {
-                members = await drive.getEffectiveMembers(params.mountId, params.pathId);
-                if (!members.some((m) => m.email === assignee)) {
-                    throw new ApiError(400, 'Assignee is not a member of this document');
-                }
-            }
-            const changed = await drive.assignComment(
-                params.mountId,
-                params.pathId,
-                params.chatName,
-                assignee,
-                user,
-                body.title,
-            );
-
-            broadcastCommentIndexUpdated(drive, params.ownerId, params.mountId, params.pathId, members).catch(() => {});
-
-            if (changed && assignee && assignee !== user.email.toLowerCase()) {
-                try {
-                    const assigneeUser = await getUserByEmail(assignee);
-                    const path = assigneeUser ? await drive.getPath(params.mountId, params.pathId) : null;
-                    if (assigneeUser && path) {
-                        await sendToHome(assigneeUser.id, {
-                            type: 'notification',
-                            notification: {
-                                type: 'assigned',
-                                actorEmail: user.email,
-                                title: `${user.name} assigned you a comment on "${stripEigenExtension(path.name)}"`,
-                                tag: commentAssignedTag({
-                                    ownerId: params.ownerId,
-                                    mountId: params.mountId,
-                                    pathId: params.pathId,
-                                    chatName: params.chatName,
-                                }),
-                                details: { pathType: path.type },
-                            },
-                        });
-                    }
-                } catch {
-                    // The user or their home may not exist: an unregistered guest gets no notification.
-                }
-            }
+            await drive.assignComment(params.mountId, params.pathId, params.chatName, body.assignee, user, body.title);
             return { success: true };
         },
         {
@@ -190,31 +134,27 @@ export const collabRouter = new Elysia({
             try {
                 const user = ws.data.user;
 
-                // y-websocket closes a socket that stays silent for 30 seconds and retries, and every retry
-                // pays for a cold open again. Opening a cold Home in getSharedDrive is the slowest step, so the
-                // heartbeat starts before it. Its frame is a constant empty awareness update, so it reveals
-                // nothing before the access check.
+                // y-websocket gives up on a socket silent for 30 seconds, and a cold Home is the slowest step, so the
+                // heartbeat starts first. Its frame is a constant, so it reveals nothing before the access check.
                 const rawWs = ws.raw;
                 stopHeartbeat = startLoadingHeartbeat(rawWs);
                 const loadStart = performance.now();
 
                 const { ownerId, mountId, pathId } = ws.data.params;
-                // A stale epoch means the tab loaded its document before a restore or an update. Its sync would
-                // bring back what the restore undid, or write structures the new code no longer reads.
+                const drive = await getSharedDrive(ownerId, user);
+                // A stale epoch's sync would bring back what a restore undid. This comes after getSharedDrive's 503 for
+                // a running restore, so no tab reloads onto that 503.
                 const { epoch } = ws.data.query;
                 if (epoch !== undefined && epoch !== getDataEpoch(ownerId)) {
                     ws.close(COLLAB_HOME_REPLACED_CLOSE, COLLAB_HOME_REPLACED_REASON);
                     return;
                 }
-                const drive = await getSharedDrive(ownerId, user);
                 if (!(await drive.canRead(mountId, pathId, user))) {
-                    ws.close(1008, 'Access denied');
+                    ws.close(COLLAB_ACCESS_LOST_CLOSE, COLLAB_ACCESS_LOST_REASON);
                     return;
                 }
-                // Only a user who may read holds the Home. The hold keeps it open until cleanupSession lets go,
-                // whichever way this open ends. A Home that closes anyway, such as for a restore, runs the
-                // callback, which closes the socket with the retry close. A Home that began to close after
-                // getSharedDrive found it refuses with a 503.
+                // Only a user who may read holds the Home, until cleanupSession lets go. A Home that closes anyway,
+                // such as for a restore, closes the socket with the retry close.
                 session.releaseHome = drive.holdHome(() =>
                     rawWs.close(COLLAB_STORAGE_UNAVAILABLE_CLOSE, COLLAB_STORAGE_UNAVAILABLE_REASON),
                 );
@@ -230,6 +170,10 @@ export const collabRouter = new Elysia({
                 session.drive = drive;
                 session.collabDocument = document;
                 session.pingInterval = keepWebSocketAlive(user, rawWs, () => cleanupSession(session, rawWs));
+
+                // A removal or an ACL change during the load found no connection to close, and one after the subscribe
+                // finds this one. A frame that waits for `opened` finds no document once the session is cleaned up.
+                if (!(await document.keepsReadAccess(rawWs))) cleanupSession(session, rawWs);
             } catch (err) {
                 const status = err instanceof ApiError ? err.status : 500;
                 // A refusal, such as a document in the trash, is expected on every reconnect, so it gets one line.
@@ -238,9 +182,8 @@ export const collabRouter = new Elysia({
                 } else {
                     console.error('Error opening collab session:', err);
                 }
-                // A failure HTTP would answer with a 5xx makes the client retry. That includes a home a restore
-                // is replacing. If the restore finishes, the reconnect names a stale epoch and the tab reloads.
-                // If it fails, the epoch stays, and the tab syncs the edits it holds.
+                // A 5xx makes the client retry, a home a restore is replacing included: the reconnect then names a
+                // stale epoch and reloads, or, if the restore never rotated it, syncs the edits it holds.
                 if (status >= 500) {
                     ws.close(COLLAB_STORAGE_UNAVAILABLE_CLOSE, COLLAB_STORAGE_UNAVAILABLE_REASON);
                 } else if (status === 410) {

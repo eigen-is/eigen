@@ -3,13 +3,14 @@
 // clears the filter, and sorts its rows. It also gives the filter menu what it shows, such as a
 // column's values, dates and colors and the conditions it offers, and saves the rows a choice hides.
 
-import { cloneDeep, reduce, size } from 'es-toolkit/compat';
+import { cloneDeep } from 'es-toolkit/compat';
 import { cellDisplay, cellValue, parseCellInput, update } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
+import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
 import type { FilterCondition, FilterConditionName, FilterOptions, Selection } from '../types';
-import { getSheetIndex, isAllowEdit, rgbToHex } from '../utils';
+import { rgbToHex } from '../utils';
 import { normalizedAttr } from './cell';
 import { checkCF, getComputeMap } from './condition-format';
 import { normalizeSelection } from './selection';
@@ -52,7 +53,7 @@ export function sortFilterRange(
 const FILTER_BUTTON_WIDTH = 20;
 const FILTER_BUTTON_HEIGHT = 15;
 
-// x/y are freeze-corrected sheet coordinates, the space fixPositionOnFrozenCells produces in the
+// x/y are freeze-corrected sheet coordinates, the space sheetPoint produces in the
 // mouse handlers. The rect is the one the canvas paints the button in.
 export function getFilterButtonAtPosition(ctx: Context, x: number, y: number) {
     return ctx.filterOptions?.items.find(
@@ -60,50 +61,24 @@ export function getFilterButtonAtPosition(ctx: Context, x: number, y: number) {
     );
 }
 
-// The current sheet's filter, and the button geometry the canvas draws for it.
-export function applySheetFilter(ctx: Context) {
-    const index = getSheetIndex(ctx, ctx.currentSheetId);
-    if (index == null) return;
-    const sheet = ctx.sheets[index];
-    ctx.filterRange = sheet.filterRange;
-    ctx.filter = sheet.filter || {};
-    createFilterOptions(ctx, ctx.filterRange, undefined);
-}
-
-// The filter range's border and button rects, in sheet coordinates. Every canvas pass and every
+// The current sheet's filter range as border and button rects, in sheet coordinates. Every canvas pass and every
 // mouse move reads them, so they are built once, when the range or the grid geometry changes.
-export function createFilterOptions(
-    ctx: Context,
-    filterRange: Context['filterRange'],
-    sheetId: string | undefined,
-    saveData?: boolean,
-) {
-    if (sheetId != null && sheetId !== ctx.currentSheetId) return;
-    if (!isAllowEdit(ctx)) {
-        delete ctx.filterOptions;
-        return;
-    }
-    const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
-    if (sheetIndex == null) return;
-    if (filterRange == null || size(filterRange) === 0) {
-        delete ctx.filterOptions;
-        return;
-    }
+export function createFilterOptions(ctx: Context) {
+    delete ctx.filterOptions;
+    if (ctx.allowEdit === false) return;
+    const sheet = ctx.sheets.find(({ id }) => id === ctx.currentSheetId);
+    const filterRange = sheet?.filterRange;
+    if (!filterRange) return;
 
-    // An imported xlsx autofilter range can reach past the grid. The stored range stays as it is,
-    // so the export writes it back, and only the view is clamped. The rows must stay inside the
-    // data matrix, because the menu's scans, the sort and the condition apply read flowdata[r]
-    // for every one of them, and a missing row would crash.
-    const lastRow = (ctx.sheets[sheetIndex].data?.length ?? 0) - 1;
+    // An imported xlsx range can reach past the grid and is stored as it is, so the export writes it back. The view is
+    // clamped, because the menu's scans, the sort and the condition apply read flowdata[r] for every row.
+    const lastRow = (sheet.data?.length ?? 0) - 1;
     const lastCol = ctx.visibledatacolumn.length - 1;
     const r1 = filterRange.row[0];
     const r2 = Math.min(filterRange.row[1], lastRow);
     const c1 = filterRange.column[0];
     const c2 = Math.min(filterRange.column[1], lastCol);
-    if (r1 > r2 || c1 > c2) {
-        delete ctx.filterOptions;
-        return;
-    }
+    if (r1 > r2 || c1 > c2) return;
 
     const bottom = ctx.visibledatarow[r2] ?? 0;
     const top = r1 === 0 ? 0 : (ctx.visibledatarow[r1 - 1] ?? 0);
@@ -121,7 +96,7 @@ export function createFilterOptions(
         items: [],
     };
 
-    const colhidden = getSheetConfig(ctx)?.colhidden;
+    const colhidden = sheet.config?.colhidden;
     for (let c = c1; c <= c2; c += 1) {
         // A hidden column is zero-width, so it has no room for a button.
         if (colhidden?.[c] != null) continue;
@@ -132,44 +107,34 @@ export function createFilterOptions(
         options.items.push({ col: c, left: buttonLeft, top, width: colEnd - buttonLeft, height: FILTER_BUTTON_HEIGHT });
     }
 
-    if (saveData) {
-        ctx.sheets[sheetIndex].filterRange = filterRange;
-    }
     ctx.filterOptions = options;
 }
 
 export function clearFilter(ctx: Context) {
-    if (!isAllowEdit(ctx)) return;
-    const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
-    const hiddenRows = reduce(ctx.filter, (pre, curr) => Object.assign(pre, curr?.rowhidden || {}), {});
-    ctx.filterRange = undefined;
+    if (ctx.allowEdit === false) return;
+    const sheet = getSheet(ctx);
     ctx.filterOptions = undefined;
     ctx.filterContextMenu = undefined;
-    ctx.filter = {};
-    if (sheetIndex != null) {
-        // Delete in place. A fresh object would replace the whole rowhidden map on the wire,
-        // even when the filter had hidden nothing.
-        const rowhidden = ctx.sheets[sheetIndex].config?.rowhidden;
-        if (rowhidden) {
-            for (const r of Object.keys(hiddenRows)) delete rowhidden[r];
+    // Delete in place. A fresh object would replace the whole rowhidden map on the wire, even when the filter had
+    // hidden nothing.
+    const rowhidden = sheet.config?.rowhidden;
+    if (rowhidden) {
+        for (const entry of Object.values(sheet.filter ?? {})) {
+            for (const r of Object.keys(entry.rowhidden ?? {})) delete rowhidden[r];
         }
-        ctx.sheets[sheetIndex].filter = undefined;
-        ctx.sheets[sheetIndex].filterRange = undefined;
     }
+    sheet.filter = undefined;
+    sheet.filterRange = undefined;
 }
 
 // Toggles the filter: clears the one there is, else filters the selection. A single selected cell
 // widens to the first run of filled cells in its row.
 export function createFilter(ctx: Context) {
-    if (!isAllowEdit(ctx)) return;
-    if (size(ctx.selections) > 1) return;
-    if (size(ctx.filterRange) > 0) {
+    if (ctx.allowEdit === false) return;
+    if ((ctx.selections?.length ?? 0) > 1) return;
+    const sheet = getSheet(ctx);
+    if (sheet.filterRange) {
         clearFilter(ctx);
-        return;
-    }
-
-    const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
-    if (sheetIndex == null || ctx.sheets[sheetIndex].isPivotTable) {
         return;
     }
 
@@ -200,9 +165,8 @@ export function createFilter(ctx: Context) {
         ctx.shiftAnchor = cloneDeep(last);
     }
 
-    ctx.filterRange = cloneDeep(filterSave?.[0] || ctx.selections?.[0]);
-
-    createFilterOptions(ctx, ctx.filterRange, undefined, true);
+    sheet.filterRange = cloneDeep(filterSave?.[0] || ctx.selections?.[0]);
+    createFilterOptions(ctx);
 }
 
 export type FilterDate = {
@@ -224,13 +188,12 @@ export type FilterValue = {
 };
 
 function getFilterHiddenRows(ctx: Context, col: number, startCol: number) {
-    const otherHiddenRows = reduce(
-        ctx.filter,
-        (pre, curr) => Object.assign(pre, (curr?.cindex !== col && curr?.rowhidden) || {}),
-        {},
-    );
-    const hiddenRows = ctx.filter[col - startCol]?.rowhidden || {};
-    return { otherHiddenRows, hiddenRows };
+    const filter = getSheet(ctx).filter ?? {};
+    const otherHiddenRows: Record<string, number> = {};
+    for (const entry of Object.values(filter)) {
+        if (entry.cindex !== col) Object.assign(otherHiddenRows, entry.rowhidden);
+    }
+    return { otherHiddenRows, hiddenRows: filter[col - startCol]?.rowhidden ?? {} };
 }
 
 // Ordered condition list for the filter menu's Select; arity is the number of
@@ -285,12 +248,8 @@ function toIsoDay(input: string): string | null {
     return update('YYYY-MM-DD', v);
 }
 
-// Blank cells (no cell / null / empty / whitespace-only value) match only
-// isEmpty and the negative conditions — each negative is the exact complement
-// of its positive, so notEqual / textNotContains / notBetween keep blank rows
-// visible. Text conditions compare the display string (m) case-insensitively;
-// date conditions only match ct.t === 'd' cells at day granularity. An
-// incomplete condition (blank operand, unparseable date) filters nothing.
+// A blank cell matches only isEmpty and the negative conditions, as each negative is its positive's complement.
+// An incomplete condition, such as a blank operand or an unparseable date, filters nothing.
 export function buildFilterConditionMatcher(condition: FilterCondition): (cell: Cell | null | undefined) => boolean {
     const { conditionName, values } = condition;
     const arity = filterConditionArity(conditionName);
@@ -298,8 +257,6 @@ export function buildFilterConditionMatcher(condition: FilterCondition): (cell: 
         if (isRealNull(values[i])) return () => true;
     }
 
-    // Operand parsing is hoisted out of the per-row matcher: the needle and the
-    // condition date are constant for a whole Confirm pass over the column.
     const needle = arity > 0 ? values[0].toLowerCase() : '';
 
     if (conditionName === 'dateEqual' || conditionName === 'dateBefore' || conditionName === 'dateAfter') {
@@ -350,26 +307,21 @@ export function buildFilterConditionMatcher(condition: FilterCondition): (cell: 
             case 'between':
             case 'notBetween': {
                 if (blank) return conditionName === 'notBetween';
-                // Checking both bound orientations normalizes reversed bounds without
-                // needing a min/max on the mixed numeric/string ordering.
+                // Both orientations, so reversed bounds work without a min and max on mixed numbers and strings.
                 const lo = compareFilterValues(raw, values[0]);
                 const hi = compareFilterValues(raw, values[1]);
                 const within = (lo >= 0 && hi <= 0) || (hi >= 0 && lo <= 0);
                 return conditionName === 'between' ? within : !within;
             }
             default:
-                // Date conditions returned their own matcher above; a snapshot
-                // written by a newer client can carry a condition this version
-                // doesn't know — matching everything beats hiding every row.
+                // A stored condition this version doesn't know: matching everything beats hiding every row.
                 return true;
         }
     };
 }
 
-// Hidden-row set for a condition on one column: every visible row in the filter
-// range whose cell fails the condition. Rows hidden by other columns' filters
-// are skipped, mirroring the by-values flow (getFilterColumnValues only offers
-// visible rows). Evaluated on Confirm, not live.
+// The rows in the filter range a condition on one column hides. A row another column's filter hides already is skipped,
+// as the by-values list offers only visible rows.
 export function getFilterConditionHiddenRows(
     ctx: Context,
     col: number,
@@ -396,13 +348,11 @@ export function getFilterColumnValues(ctx: Context, col: number, startRow: numbe
     const { otherHiddenRows, hiddenRows } = getFilterHiddenRows(ctx, col, startCol);
     const visibleRows: number[] = [];
     const flattenValues: string[] = [];
-    // Date values
     const dates: FilterDate[] = [];
     const datesUncheck: string[] = [];
     const datesUncheckSet = new Set<string>();
     const dateRowMap: Record<string, number[]> = {};
 
-    // Non-date values
     const valuesMap: Map<string, FilterValue[]> = new Map();
     const valuesUncheck: string[] = [];
     const valuesUncheckSet = new Set<string>();
@@ -597,9 +547,8 @@ function toHexColor(color: string) {
     return hex.length === 4 ? hex[0] + hex[1].repeat(2) + hex[2].repeat(2) + hex[3].repeat(2) : hex;
 }
 
-// Applies the menu's choice for one column. The entry goes to both the client's ctx.filter and
-// the stored sheet. The rows this column's filter hid before show again, unless another column's
-// filter hides them too, and the rows every column's filter hides now are hidden.
+// Applies the menu's choice for one column. The rows this column's filter hid before show again, unless another
+// column's filter hides them too, and the rows it hides now are hidden.
 export function saveFilter(
     ctx: Context,
     optionState: boolean,
@@ -612,40 +561,28 @@ export function saveFilter(
     endCol: number,
 ) {
     const { otherHiddenRows, hiddenRows: hiddenBefore } = getFilterHiddenRows(ctx, col, startCol);
-    const rowHiddenAll = Object.assign(otherHiddenRows, hiddenRows);
-
-    const entry = {
-        byCondition,
-        rowhidden: hiddenRows,
-        optionstate: optionState,
-        str: startRow,
-        edr: endRow,
-        cindex: col,
-        stc: startCol,
-        edc: endCol,
-    };
-    if (optionState) {
-        ctx.filter[col - startCol] = entry;
-    } else {
-        delete ctx.filter[col - startCol];
-    }
-
-    const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
-    if (sheetIndex == null) return;
-    const sheet = ctx.sheets[sheetIndex];
+    const sheet = getSheet(ctx);
     sheet.filter ??= {};
     if (optionState) {
-        sheet.filter[col - startCol] = entry;
+        sheet.filter[col - startCol] = {
+            byCondition,
+            rowhidden: hiddenRows,
+            optionstate: optionState,
+            str: startRow,
+            edr: endRow,
+            cindex: col,
+            stc: startCol,
+            edc: endCol,
+        };
     } else {
         delete sheet.filter[col - startCol];
     }
 
-    // Reconcile in place. A fresh object would replace the whole rowhidden map on the wire, and
-    // applying a filter would undo a peer's manual row hide. Only a row the filter hid can show
-    // again, so a row hidden by hand stays hidden.
-    const rowhidden = ((ctx.sheets[sheetIndex].config ??= {}).rowhidden ??= {});
+    // Reconcile in place and write only this column's rows. A fresh object or another column's rows on the wire would
+    // undo a row a peer hid or showed by hand.
+    const rowhidden = ((sheet.config ??= {}).rowhidden ??= {});
     for (const r of Object.keys(hiddenBefore)) {
-        if (!(r in rowHiddenAll)) delete rowhidden[r];
+        if (!(r in otherHiddenRows) && !(r in hiddenRows)) delete rowhidden[r];
     }
-    Object.assign(rowhidden, rowHiddenAll);
+    Object.assign(rowhidden, hiddenRows);
 }

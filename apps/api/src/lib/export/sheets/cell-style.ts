@@ -10,11 +10,9 @@ import { createArrayResolver } from '@workspace/sheet/engine';
 export function sheetsResolver(sheets: Sheet[]): CellResolver {
     return createArrayResolver(
         sheets.map((sheet) => ({
-            id: sheet.id ?? sheet.name,
+            id: sheet.id,
             name: sheet.name,
-            data: sheet.data ?? null,
-            calculationChain: [],
-            dynamicArrayCompute: [],
+            data: sheet.data,
         })),
     );
 }

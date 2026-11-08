@@ -8,7 +8,6 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { size } from 'es-toolkit/compat';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
@@ -24,7 +23,7 @@ export function DataMenu() {
 
     const dispatch = (fn: (ctx: Context) => void) => () => setContext((draftCtx) => fn(draftCtx));
 
-    const filterActive = size(context.filterRange) > 0;
+    const filterActive = context.sheets.find(({ id }) => id === context.currentSheetId)?.filterRange != null;
     // A sort works on one selected range.
     const selection = context.selections?.length === 1 ? context.selections[0] : undefined;
 

@@ -1,110 +1,44 @@
 // A copy or a cut of the grid's selection, from ⌘C, ⌘X or a menu. handleCopy refuses a range that cuts through a
-// merged cell, or several ranges when conditional formats would not survive the paste, and hands the rest to copy.
+// merged cell, and several ranges that don't line up or whose conditional formats would not survive the paste. It
+// hands the rest to copy, and ends a format painter that was on.
 
-import { isEmpty, isNil } from 'es-toolkit/compat';
+import type { SingleRange } from '../../engine/types';
 import { cancelPaintModel, checkCF, getComputeMap } from '..';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
-import { getSheetConfig } from '../context';
 import { copy, selectIsOverlap } from '../modules/selection';
 import { hasPartMC } from '../modules/validation';
 
-export function handleCopy(ctx: Context, { cut = false }: { cut?: boolean } = {}): boolean {
-    // if format-painter is active during copy, cancel it
-    if (ctx.formatPainterOn) {
-        cancelPaintModel(ctx);
-    }
+export function handleCopy(ctx: Context, { cut = false }: { cut?: boolean } = {}) {
+    cancelPaintModel(ctx);
 
-    const selection = ctx.selections;
-    if (!selection || isEmpty(selection)) {
-        return false;
-    }
-
-    // warn if the copy range contains partially merged cells
-    if (getSheetConfig(ctx)?.merge != null) {
-        let has_PartMC = false;
-
-        for (let s = 0; s < selection.length; s += 1) {
-            const r1 = selection[s].row[0];
-            const r2 = selection[s].row[1];
-            const c1 = selection[s].column[0];
-            const c2 = selection[s].column[1];
-
-            has_PartMC = hasPartMC(ctx, r1, r2, c1, c2);
-
-            if (has_PartMC) {
-                break;
-            }
-        }
-
-        if (has_PartMC) {
-            return false;
-        }
-    }
-
-    // warn when multiple selections have conditional formatting
-    const cdformat = getSheet(ctx).conditionalFormatRules;
-    if (!isNil(ctx.selections) && ctx.selections.length > 1 && !isNil(cdformat) && cdformat.length > 0) {
-        let hasCF = false;
-
-        const cf_compute = getComputeMap(ctx);
-
-        for (let s = 0; s < ctx.selections.length; s += 1) {
-            if (hasCF) {
-                break;
-            }
-
-            const r1 = ctx.selections[s].row[0];
-            const r2 = ctx.selections[s].row[1];
-            const c1 = ctx.selections[s].column[0];
-            const c2 = ctx.selections[s].column[1];
-
-            for (let r = r1; r <= r2; r += 1) {
-                if (hasCF) {
-                    break;
-                }
-                for (let c = c1; c <= c2; c += 1) {
-                    if (!isNil(checkCF(r, c, cf_compute))) {
-                        hasCF = true;
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (hasCF) {
-            return false;
-        }
-    }
-
-    // warn when multiple selections span different rows and columns
-    if (selection.length > 1) {
-        let isSameRow = true;
-        const str_r = selection[0].row[0];
-        const end_r = selection[0].row[1];
-        let isSameCol = true;
-        const str_c = selection[0].column[0];
-        const end_c = selection[0].column[1];
-
-        for (let s = 1; s < selection.length; s += 1) {
-            if (selection[s].row[0] !== str_r || selection[s].row[1] !== end_r) {
-                isSameRow = false;
-            }
-            if (selection[s].column[0] !== str_c || selection[s].column[1] !== end_c) {
-                isSameCol = false;
-            }
-        }
-
-        if ((!isSameRow && !isSameCol) || selectIsOverlap(ctx)) {
-            return false;
-        }
-    }
+    const ranges = ctx.selections ?? [];
+    if (ranges.length === 0) return;
+    if (ranges.some(({ row, column }) => hasPartMC(ctx, row[0], row[1], column[0], column[1]))) return;
+    if (ranges.length > 1 && (holdsConditionalFormat(ctx, ranges) || !linedUp(ranges) || selectIsOverlap(ctx))) return;
 
     copy(ctx, { cut });
-    ctx.pasteIsCut = cut;
-    return true;
 }
 
 export function handleCut(ctx: Context) {
     handleCopy(ctx, { cut: true });
+}
+
+function holdsConditionalFormat(ctx: Context, ranges: readonly SingleRange[]): boolean {
+    if (!getSheet(ctx).conditionalFormatRules?.length) return false;
+    const computed = getComputeMap(ctx);
+    return ranges.some(({ row, column }) => {
+        for (let r = row[0]; r <= row[1]; r += 1) {
+            for (let c = column[0]; c <= column[1]; c += 1) {
+                if (checkCF(r, c, computed) != null) return true;
+            }
+        }
+        return false;
+    });
+}
+
+// Several ranges paste as one block only when they all span the same rows or the same columns.
+function linedUp([first, ...rest]: readonly SingleRange[]): boolean {
+    const same = (a: number[], b: number[]) => a[0] === b[0] && a[1] === b[1];
+    return rest.every(({ row }) => same(row, first.row)) || rest.every(({ column }) => same(column, first.column));
 }

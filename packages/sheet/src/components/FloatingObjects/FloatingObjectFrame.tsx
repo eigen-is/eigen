@@ -1,3 +1,6 @@
+// One image or chart on the grid: select, move, resize, rotate, Escape and the menu, the same for both kinds. The kind
+// draws only its content. Each gesture previews locally and writes once at its end, only the fields it changed.
+
 import type { SheetFloatingItem } from '@workspace/lib/sheets';
 import { sheetFloatingBox } from '@workspace/lib/sheets';
 import type { Box } from '@workspace/lib/vector';
@@ -26,8 +29,6 @@ type FloatingObjectFrameProps = {
     children: (box: Box) => ReactNode;
 };
 
-// One image or chart on the grid: select, move, resize, rotate, Escape and the menu, the same for both kinds. The
-// kind draws only its content. Each gesture previews locally and writes once at its end, only the fields it changed.
 export function FloatingObjectFrame({
     item,
     active,
@@ -36,7 +37,7 @@ export function FloatingObjectFrame({
     onContextMenu,
     children,
 }: FloatingObjectFrameProps) {
-    const { context, setContext, settings } = useContext(WorkbookContext);
+    const { context, setContext, aspectLocked } = useContext(WorkbookContext);
     const { kind, object } = item;
     const ref = { kind, id: object.id };
     const canEdit = context.allowEdit !== false;
@@ -146,7 +147,7 @@ export function FloatingObjectFrame({
                         boxToStyle={({ x, y, width, height }) => ({ left: x, top: y, width, height, zIndex: FRAME_Z })}
                         screenDeltaToScene={(dx, dy) => ({ dx, dy })}
                         showRotate
-                        resizeMode={settings.aspectLocked ? 'aspect-default' : 'free'}
+                        resizeMode={aspectLocked ? 'aspect-default' : 'free'}
                         minSize={MIN_SIZE[kind]}
                         onTransform={setPreview}
                         onGestureEnd={() => setPreview(null)}

@@ -15,8 +15,6 @@ import type {
 import type { ChartSpecTexts } from '@workspace/lib/types/chart';
 import type { Patch as ImmerPatch } from 'immer';
 import type {
-    AncestorFormulaCell,
-    CalcChainEntry,
     Cell,
     CellMatrix,
     CellWithRowAndCol,
@@ -28,14 +26,10 @@ import type {
     SingleRange,
 } from '../engine/types';
 import type { ConditionRuleType } from './modules/condition-format';
-import type { PatchOptions } from './utils';
+import type { EntryOptions } from './utils';
 
-// Re-exported so state code needn't know where each type lives. The cell and range shapes
-// are lib's and reach this file through the engine's types. Op and the conditional-format and
-// validation rules come from lib directly, because the server reads them without the engine.
+// Re-exported so state code needn't know where each type lives.
 export type {
-    AncestorFormulaCell,
-    CalcChainEntry,
     Cell,
     CellMatrix,
     CellWithRowAndCol,
@@ -76,12 +70,8 @@ export type Selection = {
     column_select?: boolean;
 };
 
-// Formula-edit selection input. The column-header and row-header click handlers
-// (`mouse-header.ts`, `formula-range.ts::rangeDragColumn`/`rangeDragRow`) pass
-// `[null, null]` as a whole-axis sentinel: `row: [null, null]` denotes a whole-
-// column reference, `column: [null, null]` a whole-row reference. `getRangetxt`
-// emits `A:A` / `1:1` from the sentinel; the data never escapes that formatter.
-// At most one axis is the sentinel (the producers never set both).
+// A range being picked into a formula. `[null, null]` on one axis means the whole axis: `row: [null, null]` is a
+// whole-column reference, and `column: [null, null]` a whole-row one.
 export type RangeOrWholeAxis =
     | SingleRange
     | { row: [null, null]; column: number[] }
@@ -98,58 +88,12 @@ export type Presence = {
     };
 };
 
-// Sheet-protection settings. Read-only in this fork: no UI or xlsx-import
-// path writes the field (the upstream protect-sheet dialog was never ported).
-// protection.ts reads only these five fields: `sheet !== 0` toggles
-// protection on; the `selectLockedCells` / `selectunLockedCells` flags allow
-// selection when set to `1` (any other value, including undefined, blocks);
-// `hintText` overrides `defaultSheetHintText` as the warn-dialog body.
-export type SheetAuthority = {
-    sheet?: number;
-    selectLockedCells?: number;
-    selectunLockedCells?: number;
-    hintText?: string;
-    defaultSheetHintText?: string;
-};
+export type SheetConfig = LibSheetConfig & EditorSheetConfigExtras;
 
-// Editor-runtime SheetConfig: lib's canonical fields plus editor-only extras
-// shared with the engine's row/col shifter (`EditorSheetConfigExtras`: custom
-// row/col size overrides, per-row/col read-only locks) and a state-only
-// `authority` (sheet-protection settings; the engine doesn't shift it). None
-// of these reach the wire shape.
-export type SheetConfig = LibSheetConfig &
-    EditorSheetConfigExtras & {
-        authority?: SheetAuthority;
-    };
-
-// Alternate-format placeholder entry. The feature never landed; rowcol shifts
-// the cellrange but nothing ever reads the entries.
-export type AlternateFormatEntry = {
-    cellrange: { row: [number, number]; column: [number, number] };
-};
-
-// The sheet as the editor holds it: lib's stored fields plus editor-only ones, such as the selections, the calc chain
-// and the filter criteria, which never reach the stored shape. `config` widens to the editor's SheetConfig. `id` is
-// required, because the editor names every sheet by it. A stored sheet may lack one: the Workbook takes lib's Sheet in
-// its `data` and gives such a sheet an id when it mounts. Fields that persist, such as the frozen panes, the hyperlinks
-// and the tab colour, live on lib's Sheet, since the server reads them too.
-export type Sheet = Omit<LibSheet, 'config' | 'id'> & {
-    id: string;
+// The sheet as the editor holds it: lib's stored fields plus editor-only ones that never reach the stored shape.
+export type Sheet = Omit<LibSheet, 'config'> & {
     config?: SheetConfig;
-    addRows?: number;
-    status?: number;
-    selections?: Selection[];
-    calcChain?: CalcChainEntry[];
-    // A pivot table's config, which workbooks from the upstream fork may carry. Nothing reads it.
-    pivotTable?: unknown;
-    isPivotTable?: boolean;
     filter?: Record<string, FilterEntry>;
-    alternateFormatRules?: AlternateFormatEntry[];
-    // Dynamic-array formula source list — entries describe spill ranges; engine
-    // pushes here when a `=A1:A3*2`-style formula is evaluated. Same r/c/id
-    // shape as calcChain; `id` is optional for legacy entries.
-    dynamicArray_compute?: CalcChainEntry[];
-    dynamicArray?: { r: number; c: number; id?: string }[];
 };
 
 export type SearchResult = {
@@ -179,20 +123,9 @@ export type LinkCardProps = {
     isEditing: boolean;
 };
 
-// The rule the data-validation dialog edits, every field set, with '' or false where the rule has none. OK spreads it
-// into the stored DataValidationRule. `rangeTxt` is the range the user typed or picked for the rule.
-export type DataValidationDraft = {
-    type: string;
-    type2: string;
-    rangeTxt: string;
-    value1: string;
-    value2: string;
-    validity: string;
-    remote: boolean;
-    prohibitInput: boolean;
-    hintShow: boolean;
-    hintValue: string;
-};
+// The rule the data-validation dialog edits, every field set, with '' or false where the rule has none, and the range
+// the user typed or picked for it, which OK leaves off the stored rule.
+export type DataValidationDraft = Required<DataValidationRule> & { rangeTxt: string };
 
 export type ConditionRulesProps = {
     rulesType: ConditionRuleType;
@@ -223,19 +156,14 @@ export type FilterOptions = {
 export type History = {
     patches: ImmerPatch[];
     inversePatches: ImmerPatch[];
-    options?: PatchOptions;
+    options: EntryOptions;
     gesture?: object;
 };
 
-// Pre-computed offsets the freeze line uses to redraw above/below the frozen
-// pane. Built by state/modules/freeze.ts; consumed by event handlers,
-// selection-overflow math, and the Sheet canvas-draw helpers.
 export type FreezenAxisData = {
     pos: number; // pixel position of the freeze boundary (visibledatarow/col at row_st/col_st)
     boundary: number; // first row/col index immediately past the freeze boundary
     scroll: number; // scroll offset captured at freeze init (currently always 0)
-    cumulative: number[]; // post-boundary cumulative pixel offsets, passed to sortedIndex to map scroll → row/col
-    edge: number; // viewport edge px: boundary pos − 2 + header dimension
 };
 
 export type Freezen = {
@@ -244,14 +172,13 @@ export type Freezen = {
 };
 
 export type GlobalCache = {
-    overwriteCell?: boolean;
-    ignoreWriteCell?: boolean;
-    doNotFocus?: boolean;
-    doNotUpdateCell?: boolean;
     recentTextColor?: string;
     recentBackgroundColor?: string;
     undoList: History[];
     redoList: History[];
+    // Which stacks a peer's batch took entries from since this tab's last own edit: an undo or redo that finds its
+    // stack empty says why.
+    cutByPeer?: { undo: boolean; redo: boolean };
     // An open panel edit (a typed title): its writes merge into one undo entry.
     undoGesture?: object;
     // The chart this workbook last copied: the inline parts it put on the clipboard and the chart itself, with its
@@ -259,13 +186,10 @@ export type GlobalCache = {
     copiedChart?: { inline: ChartSpecTexts; chart: SheetChart };
     freezen?: Record<string, Freezen>;
 
-    // Scroll state stored outside React/immer to avoid triggering full
-    // re-render cascades across all context consumers on every scroll tick.
-    // Components that need scroll position subscribe via scrollListeners.
+    // Kept outside React and immer, so a scroll tick doesn't render every reader of the context.
     scrollLeft: number;
     scrollTop: number;
     scrollListeners: Set<() => void>;
-    notifyScrollListeners: () => void;
     linkCard?: {
         mouseEnter?: boolean;
     };
@@ -282,9 +206,4 @@ export type FormulaCell = {
     r: number;
     c: number;
     id: string;
-    parent?: AncestorFormulaCell;
-    func?: [boolean, number, string];
-    color?: string;
-    children?: AncestorFormulaCell;
-    times?: number;
 };

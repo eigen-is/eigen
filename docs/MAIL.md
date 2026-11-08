@@ -10,7 +10,7 @@ The sections run from the store through reading, the mailbox names and the list,
 
 ## Mail is personal and sits behind a swappable store
 
-Every user route in `apps/api/src/routes/mail.ts` is `requireSelf`: a mailbox belongs to one user and has no ACL. The route hands off to the user's `Mail` (`mail-domain.ts`), which talks to a `MailStore`. `MaildirStore` is the only one. The interface is where a second backend plugs in ([JMAP](proposals/PROPOSAL_STALWART_MAIL.md), or [the user's own provider over IMAP](proposals/PROPOSAL_EXTERNAL_MAIL_PROVIDER.md)), so no file name crosses into the domain or the routes.
+Every user route in `apps/api/src/routes/mail.ts` is `requireSelf`: a mailbox belongs to one user and has no ACL. The route hands off to the user's `Mail` (`mail-domain.ts`), which talks to `MaildirStore`. No file name crosses into the domain or the routes, so a second backend ([JMAP](proposals/PROPOSAL_STALWART_MAIL.md), or [the user's own provider over IMAP](proposals/PROPOSAL_EXTERNAL_MAIL_PROVIDER.md)) extracts its interface from that class when it lands.
 
 The `emails` row is the `EmailSummary` the list and the search return, unmapped except that both cut `textShort` to its preview length (`MAIL_PREVIEW_CHARS`): a received message's row keeps the whole body for the full-text index. A draft's row keeps only the first `MAIL_PREVIEW_CHARS`, so a draft is searched at preview length. A full message is re-parsed from its `.eml`.
 
@@ -66,7 +66,7 @@ A full save rebuilds the `.eml` and bakes the Drive link pills into its HTML. A 
 
 `Attachment.index` is the part's raw position in the parsed message, so the keep list names raw parts and nothing renumbers. An `.ics` part is an ordinary attachment to the composer and the draft save, which never ask a part's type.
 
-The client chooses a draft's id, and that id names a file. So the domain answers 400 to an id `isSafePathSegment` refuses, under any `MailStore`. It never maps one onto a safe name, because two mapped ids would collide on one file.
+The client chooses a draft's id, and that id names a file. So the domain answers 400 to an id `isSafePathSegment` refuses. It never maps one onto a safe name, because two mapped ids would collide on one file.
 
 ## The composer is seeded in TipTap's own form
 
@@ -118,9 +118,11 @@ A send can grant its recipients read access to the documents it links, so the `?
 
 The send carries `grantAccessRefIds`, so one send can share some documents and not others. `grantAccessForReferences` runs after the demo check and before the first copy, so a rejected send touches no ACL and every grant exists before a recipient clicks. It checks every link before writing any, judging chats by the resolved path type, never the client's `driveType`. A recipient who can already read gets no ACL entry, and a share-registry entry, sourced from the path owner, only if closed signup would otherwise keep them out. Only To and Cc are granted, because an ACL entry would show a Bcc recipient to every reader. The grants pass `suppressShareEmail: 'all'`, since the user's own mail is the invite. They are never rolled back, and a retry is idempotent.
 
-## A mail part is revalidated on every request
+## A draft's message and parts are never stored, and any other revalidates by its id
 
-Every part route answers through `answerMailPart` (`serve-mail-part.ts`). A part URL carries no version stamp and a draft save rewrites a message under its id, so a part is `private, no-cache`. Its ETag is the message id, the part index, the row's size and the file's modification time in milliseconds, and a match is a 304 before the `.eml` is parsed. A preview route adds its renderer's format tag, so a fix to the renderer is never answered with a 304. The row's date would not do: it has second precision, and two saves of one draft within a second can keep its size. A file Dovecot just renamed for a flag change, before the index has its new name, answers with the current time in place of its modification time, so the request is served rather than failed. A small cache of parsed messages (`parsedMessages`) lets the range requests of a seeked video share one parse.
+Every part route answers through `answerMailPart`, and the `.eml` download through `answerMailMessage` (`serve-mail-part.ts`). Neither URL carries a version stamp, and a draft save rewrites a message under its id, so a draft's part and its `.eml` download answer `no-store` with no ETag. Only a draft save writes new bytes under an existing id: a flag change renames the file and a move keeps its name. So any other part is `private, no-cache` with the ETag `"id-index"`, and any other `.eml` download the same with `"id"`, and a match is a 304 before the `.eml` is read. Neither is kept with a `max-age`, so on a shared computer a browser never serves one after sign-out without the server's ownership check. A preview route adds its renderer's format tag, so a fix to the renderer is never answered with a 304. A message an IMAP client marks `\Draft`, which the user then edits and sends, keeps its old parts in that user's browser cache, accepted as rare.
+
+Nothing caches a parse. Every part request reads and parses the whole `.eml`, about 5 ms at 2.5 MiB and 30 ms at the 25 MiB size limit, so each range request of a seeked video pays one parse. Opening a message sends no part requests, because the reader's parse inlines its `cid:` images.
 
 The preview routes feed Drive's bytes-in renderers, so the quick look draws a mail part like a Drive file ([PREVIEWS.md](PREVIEWS.md)). They gate on `getBytesTextPreviewMode`, never `getTextPreviewMode`: the sender writes the mime, so a part can't pass as an Eigen document. The routes sit two segments past the index, so a part named `text` can't shadow one. `MessageView` draws the header and body for the reader and the `.eml` quick look alike, so a saved message reads as the message it was.
 

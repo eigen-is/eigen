@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, xit } from 'bun:test';
 import { Parser } from '../../../../../../engine/parser/parser';
+import type { RangeCell } from '../../../../../../engine/types';
 
 describe('.parse() statistical formulas', () => {
     let parser: Parser | null;
@@ -67,40 +68,33 @@ describe('.parse() statistical formulas', () => {
     });
 
     it('AVERAGEIF', () => {
-        parser!.on('callRangeValue', (a, b, done) => {
+        const readRange = (a: RangeCell, b: RangeCell) => {
             if (a.label === 'A1' && b.label === 'B3') {
-                done([
+                return [
                     [2, 4],
                     [8, 16],
-                ]);
+                ];
             } else if (a.label === 'A4' && b.label === 'B6') {
-                done([
+                return [
                     [1, 2],
                     [3, 4],
-                ]);
+                ];
             }
-        });
+            return [];
+        };
 
-        expect(parser!.parse('AVERAGEIF(A1:B3, ">5", A4:B6)')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
+        expect(parser!.parse('AVERAGEIF(A1:B3, ">5", A4:B6)', { readRange })).toMatchObject({
+            error: null,
+            result: 3.5,
         });
     });
 
     it('AVERAGEIFS', () => {
-        parser!.on('callRangeValue', (a, b, done) => {
-            if (a.label === 'A1' && b.label === 'D1') {
-                done([2, 4, 8, 16]);
-            } else if (a.label === 'A2' && b.label === 'D2') {
-                done([1, 2, 3, 4]);
-            } else if (a.label === 'A3' && b.label === 'D3') {
-                done([1, 2, 3, 4]);
-            }
-        });
+        const readRange = (a: RangeCell) => (a.label === 'A1' ? [[2], [4], [8], [16]] : [[1], [2], [3], [4]]);
 
-        expect(parser!.parse('AVERAGEIFS(A1:D1, A2:D2, ">2", A3:D3, ">2")')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
+        expect(parser!.parse('AVERAGEIFS(A1:A4, B1:B4, ">2", C1:C4, ">2")', { readRange })).toMatchObject({
+            error: null,
+            result: 12,
         });
     });
 
@@ -285,53 +279,49 @@ describe('.parse() statistical formulas', () => {
     });
 
     it('COLUMN', () => {
-        parser!.on('callRangeValue', (a, b, done) => {
+        const readRange = (a: RangeCell, b: RangeCell) => {
             if (a.label === 'A1' && b.label === 'C2') {
-                done([
+                return [
                     [1, 2],
                     [2, 3],
                     [2, 4],
-                ]);
+                ];
             }
-        });
+            return [];
+        };
 
-        expect(parser!.parse('COLUMN()')).toMatchObject({
+        expect(parser!.parse('COLUMN()', { readRange })).toMatchObject({
             error: '#N/A',
             result: null,
         });
-        expect(parser!.parse('COLUMN(A1:C2)')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
+        expect(parser!.parse('COLUMN(A1:C2)', { readRange })).toMatchObject({ error: '#N/A', result: null });
+        expect(parser!.parse('COLUMN(A1:C2, 0)', { readRange })).toMatchObject({
+            error: null,
+            result: [[1], [2], [2]],
         });
-        expect(parser!.parse('COLUMN(A1:C2, 0)')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
-        });
-        expect(parser!.parse('COLUMN(A1:C2, 1)')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
+        expect(parser!.parse('COLUMN(A1:C2, 1)', { readRange })).toMatchObject({
+            error: null,
+            result: [[2], [3], [4]],
         });
     });
 
     it('COLUMNS', () => {
-        parser!.on('callRangeValue', (a, b, done) => {
+        const readRange = (a: RangeCell, b: RangeCell) => {
             if (a.label === 'A1' && b.label === 'C2') {
-                done([
+                return [
                     [1, 2],
                     [2, 3],
                     [2, 4],
-                ]);
+                ];
             }
-        });
+            return [];
+        };
 
-        expect(parser!.parse('COLUMNS()')).toMatchObject({
+        expect(parser!.parse('COLUMNS()', { readRange })).toMatchObject({
             error: '#N/A',
             result: null,
         });
-        expect(parser!.parse('COLUMNS(A1:C2)')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
-        });
+        expect(parser!.parse('COLUMNS(A1:C2)', { readRange })).toMatchObject({ error: null, result: 2 });
     });
 
     it('CONFIDENCE', () => {
@@ -431,44 +421,40 @@ describe('.parse() statistical formulas', () => {
 
     it('COUNTIF', () => {
         parser!.setVariable('foo', [1, null, 3, 'a', '']);
-        parser!.on('callRangeValue', (a, b, done) => {
+        const readRange = (a: RangeCell, b: RangeCell) => {
             if (a.label === 'A1' && b.label === 'C2') {
-                done([
+                return [
                     [1, null, 3],
                     ['a', 4, 'c'],
-                ]);
+                ];
             }
-        });
+            return [];
+        };
 
-        expect(parser!.parse('COUNTIF(foo, ">1")')).toMatchObject({
+        expect(parser!.parse('COUNTIF(foo, ">1")', { readRange })).toMatchObject({
             error: null,
             result: 1,
         });
-        expect(parser!.parse('COUNTIF(A1:C2, ">1")')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
-        });
+        expect(parser!.parse('COUNTIF(A1:C2, ">1")', { readRange })).toMatchObject({ error: null, result: 2 });
     });
 
     it('COUNTIFS', () => {
         parser!.setVariable('foo', [1, null, 3, 'a', '']);
-        parser!.on('callRangeValue', (a, b, done) => {
+        const readRange = (a: RangeCell, b: RangeCell) => {
             if (a.label === 'A1' && b.label === 'C2') {
-                done([
+                return [
                     [1, null, 3],
                     ['a', 4, 'c'],
-                ]);
+                ];
             }
-        });
+            return [];
+        };
 
-        expect(parser!.parse('COUNTIFS(foo, ">1")')).toMatchObject({
+        expect(parser!.parse('COUNTIFS(foo, ">1")', { readRange })).toMatchObject({
             error: null,
             result: 1,
         });
-        expect(parser!.parse('COUNTIFS(A1:C2, ">1")')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
-        });
+        expect(parser!.parse('COUNTIFS(A1:C2, ">1")', { readRange })).toMatchObject({ error: null, result: 2 });
     });
 
     it('COUNTIN', () => {
@@ -1425,57 +1411,44 @@ describe('.parse() statistical formulas', () => {
     });
 
     it('ROW', () => {
-        parser!.on('callRangeValue', (a, b, done) => {
+        const readRange = (a: RangeCell, b: RangeCell) => {
             if (a.label === 'A1' && b.label === 'C2') {
-                done([
+                return [
                     [1, 2],
                     [2, 3],
                     [2, 4],
-                ]);
+                ];
             }
-        });
+            return [];
+        };
 
-        expect(parser!.parse('ROW()')).toMatchObject({
+        expect(parser!.parse('ROW()', { readRange })).toMatchObject({
             error: '#N/A',
             result: null,
         });
-        expect(parser!.parse('ROW(A1:C2)')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
-        });
-        expect(parser!.parse('ROW(A1:C2, -1)')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
-        });
-        expect(parser!.parse('ROW(A1:C2, 0)')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
-        });
-        expect(parser!.parse('ROW(A1:C2, 2)')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
-        });
+        expect(parser!.parse('ROW(A1:C2)', { readRange })).toMatchObject({ error: '#N/A', result: null });
+        expect(parser!.parse('ROW(A1:C2, -1)', { readRange })).toMatchObject({ error: '#NUM!', result: null });
+        expect(parser!.parse('ROW(A1:C2, 0)', { readRange })).toMatchObject({ error: null, result: [1, 2] });
+        expect(parser!.parse('ROW(A1:C2, 2)', { readRange })).toMatchObject({ error: null, result: [2, 4] });
     });
 
     it('ROWS', () => {
-        parser!.on('callRangeValue', (a, b, done) => {
+        const readRange = (a: RangeCell, b: RangeCell) => {
             if (a.label === 'A1' && b.label === 'C2') {
-                done([
+                return [
                     [1, 2],
                     [2, 3],
                     [2, 4],
-                ]);
+                ];
             }
-        });
+            return [];
+        };
 
-        expect(parser!.parse('ROWS()')).toMatchObject({
+        expect(parser!.parse('ROWS()', { readRange })).toMatchObject({
             error: '#N/A',
             result: null,
         });
-        expect(parser!.parse('ROWS(A1:C2)')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
-        });
+        expect(parser!.parse('ROWS(A1:C2)', { readRange })).toMatchObject({ error: null, result: 3 });
     });
 
     it('RSQ', () => {
@@ -1637,29 +1610,33 @@ describe('.parse() statistical formulas', () => {
     });
 
     it('TRANSPOSE', () => {
-        parser!.on('callRangeValue', (a, b, done) => {
+        const readRange = (a: RangeCell, b: RangeCell) => {
             if (a.label === 'A1' && b.label === 'C2') {
-                done([
+                return [
                     [1, 2],
                     [3, 4],
                     [5, 6],
-                ]);
+                ];
             } else if (a.label === 'A3' && b.label === 'C3') {
-                done([1, 2, 3]);
+                return [1, 2, 3];
             }
-        });
+            return [];
+        };
 
-        expect(parser!.parse('TRANSPOSE()')).toMatchObject({
+        expect(parser!.parse('TRANSPOSE()', { readRange })).toMatchObject({
             error: '#N/A',
             result: null,
         });
-        expect(parser!.parse('TRANSPOSE(A1:C2)')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
+        expect(parser!.parse('TRANSPOSE(A1:C2)', { readRange })).toMatchObject({
+            error: null,
+            result: [
+                [1, 3, 5],
+                [2, 4, 6],
+            ],
         });
-        expect(parser!.parse('TRANSPOSE(A3:C3)')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
+        expect(parser!.parse('TRANSPOSE(A3:C3)', { readRange })).toMatchObject({
+            error: null,
+            result: [[1], [2], [3]],
         });
     });
 

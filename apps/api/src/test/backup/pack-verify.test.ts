@@ -13,34 +13,36 @@ import {
 } from 'node:fs';
 import { basename, join } from 'node:path';
 import { teamOwnerId } from '@workspace/lib/types';
-import type { BackupManifest, ServerArchiveManifest } from '@workspace/lib/types/backup';
+import type { BackupJob, BackupManifest, ServerArchiveManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { parseBackupArtifactName, parseServerArchiveManifest, parseServerArchiveName } from '@workspace/lib/validation';
+import {
+    parseBackupArtifactName,
+    parseBackupSidecar,
+    parseServerArchiveManifest,
+    parseServerArchiveName,
+} from '@workspace/lib/validation';
 import * as encoding from 'lib0/encoding';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
 import {
     copyArchiveMember,
-    countPackedFolders,
     createServerArchiveWriter,
-    declaredUnpackBytes,
     extractArtifact,
     hashArchiveMembers,
     packFolder,
     readArchiveMember,
     readArtifactManifest,
     readUnpackedHome,
-    serializeManifest,
-    unpackBound,
 } from '../../lib/backup/archive';
-import { listArtifacts, readSidecar, writeSidecar } from '../../lib/backup/artifacts';
+import { listArtifacts, writeSidecar } from '../../lib/backup/artifacts';
+import { runArtifactVerify } from '../../lib/backup/jobs';
 import {
     ARCHIVE_MANIFEST_FILE,
-    buildArtifactName,
     buildHomeFolderName,
     buildHomeMemberName,
     buildServerArchiveName,
     buildServerFolderName,
+    freeArtifactName,
     getBackupsDir,
     SERVER_ARCHIVE_ENV_MEMBER,
     SERVER_ARCHIVE_SERVER_MEMBER,
@@ -48,6 +50,7 @@ import {
 import { restoreHome } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { appendInstallFiles, snapshotServer } from '../../lib/backup/snapshot-server';
+import { DIRECTORY_TYPEFLAG, FILE_TYPEFLAG, headerChunks } from '../../lib/backup/tar';
 import { verifyFolder } from '../../lib/backup/verify';
 import { readServerArchive } from '../../lib/backup/verify-server-archive';
 import { SERVER_DATABASES } from '../../lib/config/paths';
@@ -65,7 +68,6 @@ import {
     TEST_DATA_DIR,
     TEST_PNG_BYTES,
 } from '../setup';
-import { unpackWhole } from './backup-test-helpers';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
@@ -248,13 +250,13 @@ describe('Backup pack and verify', () => {
         // An empty directory (a Maildir folder nobody has delivered to) has to survive the round trip.
         mkdirSync(join(folder, EMPTY_DIR), { recursive: true });
 
-        artifact = join(mkdtempSync(join(TEST_DATA_DIR, 'artifacts-')), buildArtifactName(ownerId, new Date()));
+        artifact = join(mkdtempSync(join(TEST_DATA_DIR, 'artifacts-')), freeArtifactName(ownerId, new Date()));
         await packFolder(folder, artifact);
     }, PACK_TIMEOUT_MS);
 
     async function extractFresh(prefix: string): Promise<string> {
         const dir = mkdtempSync(join(TEST_DATA_DIR, prefix));
-        await unpackWhole(artifact, dir);
+        await extractArtifact(artifact, dir);
         return dir;
     }
 
@@ -280,7 +282,9 @@ describe('Backup pack and verify', () => {
             expect(headers.some((header) => header.typeflag === 'x')).toBe(true);
             expect(headers.some((header) => header.name === `${folderName}/${EMPTY_DIR}/`)).toBe(true);
             const privateMode = (typeflag: string) => (typeflag === '5' ? 0o700 : 0o600);
-            expect(headers.filter((header) => header.mode !== privateMode(header.typeflag))).toEqual([]);
+            // A pax header carries the mode of the entry that follows it, a long-named folder's as well as a file's.
+            const entryType = (at: number) => headers[headers[at].typeflag === 'x' ? at + 1 : at].typeflag;
+            expect(headers.filter((header, at) => header.mode !== privateMode(entryType(at)))).toEqual([]);
 
             const root = join(await extractFresh('extract-modes-'), folderName);
             const modes = ['', ...new Bun.Glob('**/*').scanSync({ cwd: root, onlyFiles: false, dot: true })].map(
@@ -402,8 +406,8 @@ describe('Backup pack and verify', () => {
 
             const record = await verifyFolder(folder);
             expect(record.status).toBe('failed');
-            expect(record.failures).toContain('../outside.txt: leaves the backup folder');
-            expect(record.failures).toContain('/etc/hosts: leaves the backup folder');
+            expect(record.failures).toContain('../outside.txt: missing from the folder');
+            expect(record.failures).toContain('/etc/hosts: missing from the folder');
             expect(record.failures.some((f) => f.includes('sha256'))).toBe(false);
         },
         PACK_TIMEOUT_MS,
@@ -425,8 +429,7 @@ describe('Backup pack and verify', () => {
 
             const record = await verifyFolder(folder);
             expect(record.status).toBe('failed');
-            expect(record.failures).toContain('home/escape: is a symbolic link');
-            expect(record.failures).toContain('home/escape/hosts: leaves the backup folder');
+            expect(record.failures).toContain('home/escape/hosts: missing from the folder');
             expect(record.failures.some((f) => f.includes('sha256'))).toBe(false);
         },
         PACK_TIMEOUT_MS,
@@ -448,7 +451,7 @@ describe('Backup pack and verify', () => {
                 writeFileSync(manifestPath, broken);
                 const record = await verifyFolder(folder);
                 expect(record.status).toBe('failed');
-                expect(record.failures).toEqual(['manifest.json is not a version 1 backup manifest']);
+                expect(record.failures).toEqual(['manifest.json is missing or not a version 1 backup manifest']);
             }
         },
         PACK_TIMEOUT_MS,
@@ -521,10 +524,7 @@ describe('Backup pack and verify', () => {
         writeFileSync(join(dir, 'home-x', mailbox, '1.eml'), 'mail');
         await packFolder(join(dir, 'home-x'), join(dir, 'x.tar.zst'));
         // A bare folder, with no manifest to bound its unpack by.
-        await extractArtifact(join(dir, 'x.tar.zst'), join(dir, 'out'), {
-            maxBytes: Number.POSITIVE_INFINITY,
-            chargeFolders: true,
-        });
+        await extractArtifact(join(dir, 'x.tar.zst'), join(dir, 'out'));
         expect(readFileSync(join(dir, 'out/home-x', mailbox, '1.eml'), 'utf8')).toBe('mail');
         rmSync(dir, { recursive: true, force: true });
     });
@@ -538,22 +538,21 @@ describe('Backup pack and verify', () => {
         PACK_TIMEOUT_MS,
     );
 
-    test('the sidecar round-trips and is null when missing', async () => {
-        expect(await readSidecar(artifact)).toBeNull();
+    test('the sidecar round-trips', async () => {
         // The record travels as a Date; the sidecar on disk is JSON, so it round-trips through ISO.
         const verify = { status: 'verified' as const, checkedAt: new Date(), failures: [] };
         await writeSidecar(artifact, manifest, verify);
         // It names every file of the home, so it is as private as the archive.
         expect(fs.statSync(`${artifact}.manifest.json`).mode & 0o777).toBe(0o600);
-        const read = await readSidecar(artifact);
+        const read = parseBackupSidecar(readFileSync(`${artifact}.manifest.json`, 'utf8'));
         expect(read?.verify).toEqual(verify);
         expect(read?.manifest).toEqual(JSON.parse(JSON.stringify(manifest)));
     });
 
     test(
-        'a file row whose size or sha256 differs from its bytes verifies, its warnings kept in the sidecar',
+        'a file row whose size or sha256 differs from its bytes fails verify, each named',
         async () => {
-            const dir = await extractFresh('extract-row-warnings-');
+            const dir = await extractFresh('extract-row-mismatch-');
             const folder = join(dir, folderName);
             const relMetadata = `home/mounts/${mountId}/metadata.db`;
             const db = new Database(join(folder, relMetadata));
@@ -567,32 +566,28 @@ describe('Backup pack and verify', () => {
             const cafe = manifest.entries.find((entry) => entry.path.includes('café ünïcode.png'))!;
 
             const record = await verifyFolder(folder);
-            expect(record.status).toBe('verified');
-            expect(record.warnings?.toSorted()).toEqual(
+            expect(record.status).toBe('failed');
+            expect(record.failures.toSorted()).toEqual(
                 [
                     `${cafe.path}: ${cafe.bytes} bytes, its row says 1`,
                     `${longPath}: sha256 does not match its row`,
                 ].toSorted(),
             );
-            const sidecarOf = join(dir, buildArtifactName(ownerId, new Date()));
-            await writeSidecar(sidecarOf, manifest, record);
-            expect((await readSidecar(sidecarOf))?.verify).toEqual(record);
         },
         PACK_TIMEOUT_MS,
     );
 
+    // A hostile table can be deep enough that building its paths holds the event loop, so the size check never runs.
     test(
         'a sidecar that is not one reads as none, and an artifact that is not one is an error',
         async () => {
             const dir = mkdtempSync(join(TEST_DATA_DIR, 'bad-sidecar-'));
-            const fake = join(dir, buildArtifactName(ownerId, new Date()));
-            writeFileSync(`${fake}.manifest.json`, '{"manifest": {"formatVersion": 2}, "verify": {}}');
-            expect(await readSidecar(fake)).toBeNull();
+            expect(parseBackupSidecar('{"manifest": {"formatVersion": 2}, "verify": {}}')).toBeNull();
 
             const folder = join(dir, buildHomeFolderName('bogus'));
             mkdirSync(folder, { recursive: true });
             writeFileSync(join(folder, 'manifest.json'), 'not json at all');
-            const bogus = join(dir, buildArtifactName('bogus', new Date()));
+            const bogus = join(dir, freeArtifactName('bogus', new Date()));
             await packFolder(folder, bogus);
             await expect(readArtifactManifest(bogus)).rejects.toThrow('is not an Eigen backup archive');
         },
@@ -716,10 +711,7 @@ describe('Whole-server archive', () => {
             for (const ownerId of [ctx.alice.user.id, teamOwnerId(teamId)]) {
                 const staging = mkdtempSync(join(TEST_DATA_DIR, 'home-member-'));
                 const home = await snapshotHome(await getHome(ownerId), staging);
-                const standalone = join(
-                    mkdtempSync(join(TEST_DATA_DIR, 'standalone-')),
-                    buildArtifactName(ownerId, at),
-                );
+                const standalone = join(mkdtempSync(join(TEST_DATA_DIR, 'standalone-')), freeArtifactName(ownerId, at));
                 await packFolder(join(staging, buildHomeFolderName(ownerId)), standalone);
                 const member = buildHomeMemberName(ownerId, at);
                 await writer.appendFile(member, standalone);
@@ -807,7 +799,7 @@ describe('Whole-server archive', () => {
                 const name = basename(member.name);
                 expect(parseBackupArtifactName(name)).toEqual({ ownerId: home.ownerId, at });
                 const unpackDir = mkdtempSync(join(TEST_DATA_DIR, 'member-extract-'));
-                await unpackWhole(member, unpackDir);
+                await extractArtifact(member, unpackDir);
                 const { folder, manifest: inner } = readUnpackedHome(unpackDir, home.ownerId, name);
                 expect(inner.ownerId).toBe(home.ownerId);
                 const record = await verifyFolder(folder);
@@ -822,7 +814,7 @@ describe('Whole-server archive', () => {
         async () => {
             const members = await hashArchiveMembers(archivePath);
             const unpackDir = mkdtempSync(join(TEST_DATA_DIR, 'server-extract-'));
-            await unpackWhole(members.find((m) => m.name === SERVER_ARCHIVE_SERVER_MEMBER)!, unpackDir);
+            await extractArtifact(members.find((m) => m.name === SERVER_ARCHIVE_SERVER_MEMBER)!, unpackDir);
             const folder = join(unpackDir, buildServerFolderName(at));
             expect(existsSync(join(folder, 'server', SERVER_DATABASES.users))).toBe(true);
             const record = await verifyFolder(folder);
@@ -1052,103 +1044,66 @@ describe('Archive writer and reader', () => {
     });
 });
 
-// What an unpack is allowed to write is what the manifest declares, counted the way the unpack counts it: the bytes of
-// every entry, the manifest's own, and an allowance for every file and every folder it counts, which take the disk's
-// blocks with no bytes of their own.
-describe('The unpack bound', () => {
-    const FILES = 2000;
+describe('The unpack', () => {
     let dir: string;
 
     beforeAll(() => {
-        dir = mkdtempSync(join(TEST_DATA_DIR, 'unpack-bound-'));
+        dir = mkdtempSync(join(TEST_DATA_DIR, 'unpack-'));
     });
 
-    // A home of many empty files, so its manifest outweighs them, and `emptyFolders` empty folders. `counted` is how
-    // many of those its manifest counts, and with null it counts no folders, as an older build's did.
-    async function packHome(
-        name: string,
-        { emptyFolders, counted = emptyFolders }: { emptyFolders: number; counted?: number | null },
-    ): Promise<{ artifact: string; manifest: BackupManifest }> {
-        const folder = join(dir, name, buildHomeFolderName('unpackbound'));
-        const entries = Array.from({ length: FILES }, (_, index) => ({
-            path: `home/notes/${index % 10}/note-${index}.txt`,
-            bytes: 0,
-            sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-        }));
-        for (const entry of entries) {
-            mkdirSync(join(folder, entry.path, '..'), { recursive: true });
-            writeFileSync(join(folder, entry.path), '');
-        }
-        const makeEmptyFolders = (from: number, to: number) => {
-            for (let index = from; index < to; index++)
-                mkdirSync(join(folder, 'home', 'empty', `${index}`), { recursive: true });
+    // The writer lists every folder before what sits in it, so a parent nothing listed is a damaged tar.
+    test('an entry whose folder has not come yet is refused', async () => {
+        const tarOf = (...chunks: Iterable<Uint8Array>[]) => Buffer.concat(chunks.flatMap((part) => [...part]));
+        const rootEntry = () => headerChunks('root/', 0, Date.now(), DIRECTORY_TYPEFLAG, 0o700);
+        const damaged = {
+            file: tarOf(rootEntry(), headerChunks('root/a/b/c.txt', 0, Date.now(), FILE_TYPEFLAG, 0o600)),
+            folder: tarOf(rootEntry(), headerChunks('root/a/b/', 0, Date.now(), DIRECTORY_TYPEFLAG, 0o700)),
         };
-        makeEmptyFolders(0, counted ?? 0);
-        const dirs = countPackedFolders(folder);
-        makeEmptyFolders(counted ?? 0, emptyFolders);
-        const manifest: BackupManifest = {
-            formatVersion: 1,
-            kind: 'user',
-            ownerId: 'unpackbound',
-            name: 'Unpack bound',
-            createdAt: new Date().toISOString(),
-            appVersion: 'test',
-            server: { domain: 'test.eigen.is', orgId: 'org' },
-            counts: { databases: 0, files: FILES, bytes: 0, ...(counted !== null && { dirs }) },
-            level: 'full-s3',
-            mounts: [],
-            entries,
-        };
-        writeFileSync(join(folder, ARCHIVE_MANIFEST_FILE), serializeManifest(manifest));
-        const artifact = join(dir, `${name}.tar.zst`);
-        await packFolder(folder, artifact);
-        return { artifact, manifest };
-    }
-
-    const exactly = (maxBytes: number) => ({ maxBytes, chargeFolders: true });
-
-    test(
-        'an archive that holds what its manifest lists unpacks within it, the manifest itself and every folder counted',
-        async () => {
-            const { artifact, manifest } = await packHome('exact', { emptyFolders: 50 });
-            // The manifest alone weighs more than the files it lists.
-            expect(Buffer.byteLength(serializeManifest(manifest))).toBeGreaterThan(100 * FILES);
-            await extractArtifact(artifact, join(dir, 'exact-out'), exactly(declaredUnpackBytes(manifest)));
-            await expect(
-                extractArtifact(artifact, join(dir, 'exact-short'), exactly(declaredUnpackBytes(manifest) - 1)),
-            ).rejects.toThrow(/more than its manifest declares/);
-            expect(existsSync(join(dir, 'exact-short'))).toBe(false);
-        },
-        PACK_TIMEOUT_MS,
-    );
-
-    test(
-        'an archive with more folders than its manifest counts is refused, though they hold no bytes',
-        async () => {
-            const { artifact, manifest } = await packHome('folders', { emptyFolders: 50, counted: 10 });
-            expect(unpackBound(manifest).chargeFolders).toBe(true);
-            await expect(
-                extractArtifact(artifact, join(dir, 'folders-out'), exactly(declaredUnpackBytes(manifest))),
-            ).rejects.toThrow(/more than its manifest declares/);
-            expect(existsSync(join(dir, 'folders-out'))).toBe(false);
-        },
-        PACK_TIMEOUT_MS,
-    );
-
-    // An older build counted no folders. Its archive's unpack charges none, as before folders counted at all.
-    test(
-        'an archive whose manifest counts no folders unpacks without charging them',
-        async () => {
-            const { artifact, manifest } = await packHome('uncounted', { emptyFolders: 50, counted: null });
-            const { chargeFolders } = unpackBound(manifest);
-            expect(chargeFolders).toBe(false);
-            await extractArtifact(artifact, join(dir, 'uncounted-out'), {
-                maxBytes: declaredUnpackBytes(manifest),
-                chargeFolders,
+        for (const [name, tar] of Object.entries(damaged)) {
+            const artifact = join(dir, `implicit-${name}.tar.zst`);
+            writeFileSync(artifact, Bun.zstdCompressSync(tar));
+            await expect(extractArtifact(artifact, join(dir, `implicit-${name}-out`))).rejects.toMatchObject({
+                code: 'ENOENT',
             });
-            expect(existsSync(join(dir, 'uncounted-out', buildHomeFolderName('unpackbound'), 'home/empty/49'))).toBe(
-                true,
-            );
+        }
+    });
+
+    // The room is checked on the disk the verify unpacks on, the backups folder's.
+    test(
+        'a verify of an archive that declares more than the disk holds is refused before it unpacks',
+        async () => {
+            const ownerId = 'unpackroom';
+            const folder = join(dir, 'declared', buildHomeFolderName(ownerId));
+            mkdirSync(folder, { recursive: true });
+            const manifest: BackupManifest = {
+                formatVersion: 1,
+                kind: 'user',
+                ownerId,
+                name: 'Unpack room',
+                createdAt: new Date().toISOString(),
+                appVersion: 'test',
+                server: { domain: 'test.eigen.is', orgId: 'org' },
+                counts: { databases: 0, files: 0, bytes: 1e15 },
+                level: 'full-s3',
+                mounts: [],
+                entries: [],
+            };
+            writeFileSync(join(folder, ARCHIVE_MANIFEST_FILE), JSON.stringify(manifest));
+            const name = freeArtifactName(ownerId, new Date());
+            await packFolder(folder, join(getBackupsDir(), name));
+            const job: BackupJob = {
+                id: crypto.randomUUID(),
+                kind: 'verify',
+                ownerId,
+                state: 'running',
+                progress: { step: 'starting', done: 0, total: 0 },
+                startedAt: new Date(),
+            };
+            try {
+                await expect(runArtifactVerify(name, job, () => {})).rejects.toMatchObject({ status: 507 });
+            } finally {
+                rmSync(join(getBackupsDir(), name), { force: true });
+            }
         },
         PACK_TIMEOUT_MS,
     );
@@ -1168,6 +1123,7 @@ describe('verifyFolder', () => {
             appVersion: 'test',
             server: { domain: 'test', orgId: 'test' },
             counts: { databases: 0, files: 0, bytes: 0 },
+            level: 'full',
             mounts: [],
             entries: [],
         };

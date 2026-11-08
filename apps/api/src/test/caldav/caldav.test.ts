@@ -5,8 +5,9 @@ import { EVENT_MAX_BYTES } from '../../lib/calendar/resource-store';
 import { ApiError } from '../../lib/core';
 import { REPORT_DATA_BUDGET_BYTES } from '../../lib/dav/report-row';
 import { getHome } from '../../lib/home/get-home';
+import { storedEvents } from '../calendar-test-helpers';
 import { davRequest } from '../dav-test-helpers';
-import { app, createTestUser, getTestContext } from '../setup';
+import { app, createTestUser, findOrFail, getTestContext } from '../setup';
 
 describe('CalDAV', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -190,6 +191,20 @@ describe('CalDAV', () => {
             body: ics,
         });
         expect(res.status).toBe(412); // Precondition Failed
+    });
+
+    test('a stale If-None-Match: * with the bytes already stored is 412, not an unchanged success', async () => {
+        const uri = `/dav/calendars/${userId}/${defaultCalendarId}/${crypto.randomUUID()}.ics`;
+        const uid = crypto.randomUUID();
+        const ics = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:${uid}\r\nSUMMARY:Same\r\nDTSTART:20260401T100000Z\r\nDTEND:20260401T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR`;
+        const put = () =>
+            davRequest('PUT', uri, {
+                email: ctx.alice.user.email,
+                headers: { 'Content-Type': 'text/calendar', 'If-None-Match': '*' },
+                body: ics,
+            });
+        expect((await put()).status).toBe(201);
+        expect((await put()).status).toBe(412);
     });
 
     test('DELETE removes event', async () => {
@@ -546,8 +561,7 @@ describe('CalDAV', () => {
         expect(res.status).toBe(400);
     });
 
-    test('sync-collection rejects a malformed or legacy-format token with 403 valid-sync-token', async () => {
-        // The legacy `urn:eigen:sync/N` slash form is no longer accepted — an unrecognised token is simply invalid.
+    test('sync-collection rejects a malformed token with 403 valid-sync-token', async () => {
         for (const token of ['urn:eigen:sync/5', 'urn:eigen:sync:abc', 'nonsense']) {
             const body = `<?xml version="1.0" encoding="utf-8"?>
 <D:sync-collection xmlns:D="DAV:">
@@ -804,8 +818,12 @@ describe('CalDAV', () => {
         expect(body).toContain('SubDaily PUT');
         // The stored resource is the client's, rule included — the index is what drops it.
         expect(body).toContain('RRULE:FREQ=SECONDLY');
-        const stored = await (await getHome(userId)).calendar.getEventByUri(defaultCalendarId, 'caldav-subdaily-1.ics');
-        expect(stored!.rrule).toBeNull();
+        const home = await getHome(userId);
+        const stored = findOrFail(
+            storedEvents(home.calendar, defaultCalendarId),
+            (e) => e.uri === 'caldav-subdaily-1.ics',
+        );
+        expect(stored.rrule).toBeNull();
     });
 
     test('a REPORT body over 1 MiB is 413 before parsing', async () => {

@@ -34,9 +34,9 @@ A PUT often stores other bytes than it received. The store re-stamps the Eigen l
 
 ## A PUT is judged inside the write lock
 
-`putResource` (`calendar/dav-store.ts`) evaluates every precondition inside the write lock, against the state it would overwrite. Two racing `If-Match` PUTs serialize there, and the loser gets a 412.
+`putResource` (`calendar/dav-store.ts`) evaluates every precondition inside the write lock, against the state it would overwrite. Two racing `If-Match` PUTs serialize there, and the loser gets a 412. The lock is one per Home, and the body is parsed inside it too, unlike a CardDAV PUT, because keying its RECURRENCE-IDs shares one refusal with the re-stamp against the stored resource.
 
-The body is bounded at `EVENT_MAX_BYTES` before it is buffered, so a hostile PUT can't park up to the server's 1 GB body cap on the heap. The collection advertises the same number as `C:max-resource-size`. A UID another resource of the calendar holds is a 409 naming that resource's href. A body that won't parse, holds two UIDs, or holds no VEVENT is a 403 with the RFC 4791 precondition that broke. `dav/write-result.ts` is the one table from store result to HTTP status, shared with CardDAV.
+The body is bounded at `EVENT_MAX_BYTES` before it is buffered, so a hostile PUT can't park up to the server's 1 GB body cap on the heap. The collection advertises the same number as `C:max-resource-size`. A UID another resource of the calendar holds is a 409 naming that resource's href. A body that won't parse, holds two UIDs, holds no VEVENT or names a date no key can spell is a 403 with the RFC 4791 precondition that broke. `dav/write-result.ts` is the one table from store result to HTTP status, shared with CardDAV.
 
 **A copy of somebody else's event takes only its alarms.** When the stored resource carries `X-EIGEN-ORGANIZER-EVENT`, the PUT keeps the stored component and adopts only the incoming `VALARM`s, matched on UID plus recurrence key. The rule reads the server's stamp, not the `ORGANIZER` address. Apple Calendar and Thunderbird write the account's own address as `ORGANIZER` on every event they create with guests, so the address alone proves nothing ([CALENDAR.md](CALENDAR.md#an-attendee-may-re-alarm-a-copy-and-nothing-more)).
 

@@ -5,25 +5,25 @@ description: Use when adding to, rewriting, polishing or reviewing Eigen's `CHAN
 
 # Changelog
 
-`CHANGELOG.md` is read by people who use eigen.is and by people who self-host Eigen, and `./eigen update` reads it too. Write every line for someone who has never seen the code. The `[0.4.0]` section is the model: match its shape and voice, and write a little tighter than it.
+`CHANGELOG.md` is read by people who use eigen.is or self-host Eigen, and by `./eigen update`. Write every line for someone who has never seen the code. The `[0.4.0]` section is the model: match its shape and voice, a little tighter.
 
 ## What goes in
 
 One bullet per thing a person notices since the last release tag (`git describe --tags --abbrev=0`), not since the last commit, so most commits get none. That leaves out:
 
-- a regression introduced and fixed between two tags, since nobody on a release had it
-- refactors, renames, lint rules, cast counts, tests, check timings and review fixes, since nobody outside the repo sees them
+- a regression introduced and fixed between two tags
+- refactors, renames, lint rules, cast counts, tests, check timings and review fixes
 - what only a developer's Mac shows, since Eigen runs on Linux in Docker ([SELF-HOSTING.md](../../../docs/SELF-HOSTING.md))
 
 A self-hoster's change goes in when they can see it on their server, in plain words and with the number they can check, as 0.4.0's **Server memory** bullet does.
 
 ## How a bullet reads
 
-A reader skims, so a bullet gives the effect and stops:
+A bullet gives the effect and stops:
 
 - **Shape**: Keep a Changelog headings (`### Added`, `### Changed`, `### Fixed`), each bullet `- **Label** — text`, one line, no hard wrap, no closing full stop. Bullets sit grouped by app within a section.
 - **Length**: one or two short sentences, three at most. 0.4.0 averages 29 words a bullet; stay under that, and split or cut one past 40.
-- **Label**: what the reader looks for, such as **Formulas in Sheets** or **Paths in Drive**. Never a bare app name repeated down the list, since four bullets labelled **Sheets** tell a skimmer nothing.
+- **Label**: what the reader looks for, such as **Formulas in Sheets** or **Paths in Drive**, never a bare app name repeated down the list.
 - **Words**: present tense, plain, about what a person sees or does. No "is now", no hedges, no em dash inside the text, no type, function, file, field or library names. "Saving a form someone else changed meanwhile is refused instead of overwriting their change", not "a stale form gets a 412".
 - **Apps**: name the ones a change touches ("Docs, Sheets, Slides and Vector"), never "every app" unless it is.
 
@@ -46,7 +46,7 @@ Merge bullets a reader would see as one change, such as two fixes to the same pa
 
 ## Every claim is checked
 
-Commit messages overclaim, and they speak from the code's side: "refreshes the owner's access list" is not the list the person you shared with sees. So back each bullet with the code that does it, check shortcuts, limits, counts and lists one by one, and make sure a claim holds for every case it names. Before a tag, check `[Unreleased]` against `git log` since the last tag, since it has missed whole rounds.
+Commit messages overclaim and speak from the code's side ("refreshes the owner's access list" is not the list the person you shared with sees), so back each bullet with the code that does it, check shortcuts, limits, counts and lists one by one, and make sure a claim holds for every case it names. Before a tag, check `[Unreleased]` against `git log` since the last tag.
 
 On a polish pass, `[Unreleased]` gets the real work and released sections get small consistency edits only.
 

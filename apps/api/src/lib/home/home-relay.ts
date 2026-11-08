@@ -1,7 +1,8 @@
 // Every time one owner's Home reaches into another, it goes through this file. sendToHome pushes a
 // message into another home, and each pull reads one answer from one, such as the paths shared
-// with a user. A few calls write server-wide data instead, such as a user's avatar. Today every
-// call runs in this process. When homes live in several processes, only this file has to change.
+// with a user. A few calls write server-wide data instead, such as a user's avatar, and a walk checks
+// the open documents of every loaded home. Today every call runs in this process. When homes live in
+// several processes, only this file has to change.
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -38,7 +39,7 @@ import type { EventPatch } from '../ical/ical-component';
 import { readMailTotalSize } from '../mail/maildir-store';
 import type { User } from '../user';
 import { getMemberships, getUserById, getUsersByEmails, isGuest, updateUser } from '../user';
-import { getHome, getTeamHome, loadedHome, openHome } from './get-home';
+import { forEachOpenDocument, getHome, getTeamHome, loadedHome, openHome } from './get-home';
 import { homeSize, userHomeSize } from './home';
 import { TeamHome } from './team-home';
 
@@ -167,10 +168,8 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
     }
 }
 
-// Opening a home costs about 25 to 30 file descriptors and a burst of database opens. So the
-// fan-outs through sendToUserHomes open at most eight homes at once, all of them together. An opened
-// home still stays open for its idle time afterwards. Only deliveries to user homes take a permit,
-// and a user home relays no further. So a delivery never waits for a permit that its own fan-out holds.
+// Opening a home costs about 25 to 30 file descriptors and a burst of database opens. Only deliveries to user homes
+// take a permit, and a user home relays no further, so a delivery never waits for a permit its own fan-out holds.
 const deliveryBudget = new Semaphore(8);
 
 // The fan-outs that are still delivering. Most of them run after their request answered, so nobody
@@ -196,9 +195,8 @@ export async function sendToUserHomes(userIds: Iterable<string>, message: HomeMe
     }
 }
 
-// Waits for every fan-out that is still delivering, and for the ones that start meanwhile, such as a
-// team notification that a delivery passes on to the members. Graceful shutdown calls it before it
-// closes the homes.
+// Waits for every fan-out still delivering and for those that start meanwhile, such as a team notification a delivery
+// passes on. Graceful shutdown calls it before it closes the homes.
 export async function drainHomeDeliveries(): Promise<void> {
     while (deliveries.size > 0) {
         await Promise.allSettled([...deliveries]);
@@ -209,12 +207,8 @@ export function countHomeDeliveries(): number {
     return deliveries.size;
 }
 
-// Tells the open tabs of the owner and of each member who can read the path about one event. A member
-// whose ACL entry grants only write, or nothing, cannot list the path, so the event would name a path
-// they may not see. The owner hears it at once, and only once: in a user's home the owner is one of the
-// members. The members may still be read, and a failed read costs only their copies. They are looked up
-// in one query, because a team can have many, and a member without an account is skipped. Only homes
-// that are open receive it, so a closed home costs nothing.
+// Tells the open tabs of the owner and of each member who can read the path: a member without read cannot list it, so
+// the event would name a path they may not see. Members come in one query; a failed read costs only their copies.
 export async function broadcastToOwnerAndMembers(
     ownerId: string,
     members: EffectiveMember[] | Promise<EffectiveMember[]>,
@@ -245,10 +239,21 @@ export async function pullDrivePath(ownerUserId: string, mountId: string, pathId
     return home.drive.getPath(mountId, pathId);
 }
 
+// --- Open documents ---
+
+// Closes the collab sockets of whoever lost read, after a change to a membership that any home's documents may rest on.
+export async function enforceReadAccessOnLoadedHomes(): Promise<void> {
+    await forEachOpenDocument((document) => document.enforceReadAccess());
+}
+
+// Closes the collab sockets of a user locked out whatever they may read, such as by a password reset.
+export async function closeUserSocketsOnLoadedHomes(userId: string): Promise<void> {
+    await forEachOpenDocument(async (document) => document.closeUserConnections(userId));
+}
+
 // --- Calendar ---
 
-// The calendar of a home that has one. A user who never signed in has no home folder yet, and a guest
-// or an org has no calendar. Each of them answers as if the caller may not see the calendar. So asking
+// The calendar of a home that has one. Every other owner answers as if the caller may not see the calendar, so asking
 // never creates a home, and the answer doesn't tell which owners exist.
 async function calendarOf(ownerId: string): Promise<Calendar | null> {
     if (!fs.existsSync(homeDirUnder(getDataRoot(), ownerId))) return null;
@@ -335,9 +340,10 @@ export async function deleteEventAt(
     calendarId: string,
     eventId: string,
     user: User,
+    expectedEtag?: string,
 ): Promise<void> {
     const home = await getHome(ownerUserId);
-    await home.calendar.deleteEvent(calendarId, eventId, user);
+    await home.calendar.deleteEvent(calendarId, eventId, user, expectedEtag);
 }
 
 export async function moveEventAt(
@@ -345,9 +351,10 @@ export async function moveEventAt(
     calendarId: string,
     eventId: string,
     targetCalendarId: string,
+    expectedEtag?: string,
 ): Promise<CalendarEvent> {
     const home = await getHome(ownerUserId);
-    return home.calendar.moveEvent(calendarId, eventId, targetCalendarId);
+    return home.calendar.moveEvent(calendarId, eventId, targetCalendarId, expectedEtag);
 }
 
 // --- Teams ---
@@ -413,10 +420,8 @@ export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeRespons
     return userHomeSize(homeDir, settings, contacts + mail + calendars, teamIds);
 }
 
-// A backup captures each home through here. It opens the home without counting as a request and holds
-// it while the capture runs, which can outlast the idle time, for example on one big file at night. So a
-// nightly backup leaves open only the homes somebody uses. A home is never closed by force, because a
-// user may have opened it during the capture.
+// A backup opens the home without counting as a request and holds it while the capture runs, so a nightly backup leaves
+// open only the homes somebody uses. A home is never closed by force: a user may have opened it during the capture.
 export async function pullHomeSnapshot(
     ownerId: string,
     targetDir: string,

@@ -23,7 +23,7 @@ Six things surprise people:
 
 ## A spec is eight parts, each a record
 
-A `ChartSpec` (`types/chart.ts`) is eight parts. Each is a record, so a later option nests inside one and an older build keeps it ([§ A stored spec grows](#a-stored-spec-grows-only-in-ways-an-older-build-keeps)).
+A `ChartSpec` (`types/chart.ts`) is eight parts. Each is a record, so a later option nests inside one and a tab that doesn't know it keeps it ([§ A stored spec grows](#a-stored-spec-grows-only-in-ways-a-tab-that-doesnt-know-them-keeps)).
 
 | Part | Holds |
 |---|---|
@@ -65,13 +65,13 @@ Structural writers walk `stored` too. A row op and a copied sheet (`mapChartRefs
 
 Each series in `data.series` has an `id`, unique in its chart, of 1 to 64 letters, digits, `-` or `_`, and never `__proto__`, `constructor` or `prototype`. A missing, malformed or repeated id resolves the spec as `null`. The id is what a change lays a series over by and what its style and points are keyed by, so a series keeps what is stored on it across a delete or a reorder of the ones before it. Eigen mints `s-` and ten characters of nanoid (`newChartSeriesId`) for a new column in Edit data and for a series a sheet's Setup or typed range adds past the previous ones. Setup keeps the id at each index, so switching rows and columns keeps the first series' id and its style. The sample numbers its series `s-1` to `s-3`. The OOXML reader takes Office's `c16:uniqueId` without its GUID's braces where it is a valid id no series before took, else `x-` and the `c:idx`, else that and the series' place. The writer writes no id, so a chart read back from Office has `x-` ids.
 
-## A stored spec grows only in ways an older build keeps
+## A stored spec grows only in ways a tab that doesn't know them keeps
 
-A build keeps what it doesn't know, so a newer field must be one an older build can carry without misreading:
+A tab keeps what it doesn't know, so a new field must be one a tab that doesn't know it can carry without misreading:
 
 - A record grows by a key. A scalar never becomes a record. A new collection is a record keyed by id or index, never an array that grows by position.
 - The positional arrays a build rebuilds are `data.categories` and each series' `values`. Per-point data that must run parallel to the values (a scatter's x, a bubble's sizes) is a sibling array in its `data.series` item. Edit data opens read-only when `data` or a series holds a key this build doesn't read (`holdsUnknownChartData`), so it never rebuilds the values without the array beside them. A sheet's Setup and typed range leave such data as it is: the panel shows their rows disabled, with Edit data's notice to reload.
-- An enum may gain members. An older build keeps the stored value and draws its key's default; an unknown chart type draws the placeholder, and an unknown series `plot` draws in the chart's type.
+- An enum may gain members. A tab that doesn't know it keeps the stored value and draws its key's default; an unknown chart type draws the placeholder, and an unknown series `plot` draws in the chart's type.
 - A value's type and unit never change. A changed meaning is a new sibling key with a precedence rule. A number's unit is in its name (`widthPx`, `holePercent`) unless it is an axis value, a count or a base.
 - Every cell ref lives in `data`, shaped as a `CellRangeRef`, which never grows a field, so a row op moves it by its shape.
 

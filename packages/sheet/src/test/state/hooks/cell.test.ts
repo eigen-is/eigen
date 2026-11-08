@@ -26,8 +26,6 @@ g.document = {
 g.MouseEvent = class MouseEvent {
     public type: string;
     public button: number = 0;
-    public pageX: number = 0;
-    public pageY: number = 0;
 
     public constructor(type: string, options: Record<string, unknown> = {}) {
         this.type = type;

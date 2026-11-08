@@ -3,7 +3,6 @@ import { teamOwnerId } from '@workspace/lib/types';
 import type { ChatMatch } from '@workspace/lib/types/chat';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Notification } from '@workspace/lib/types/notification';
-import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
@@ -14,7 +13,6 @@ import {
     addTeamMount,
     assertJson,
     authedRequest,
-    collectSSE,
     createTeam,
     driveDelete,
     driveGet,
@@ -58,16 +56,6 @@ async function byMembers(token: string, ownerId: string, emails: string): Promis
     return ((await res.json()) as { matches: ChatMatch[] }).matches;
 }
 
-// A throwaway user with a fresh default mount — isolates folder-migration tests from the shared trio.
-async function signUpFreshUser(label: string): Promise<{ id: string; token: string }> {
-    const email = `chats-${label}-${crypto.randomUUID()}@test.eigen.is`;
-    const password = 'testpassword123';
-    const signUp = await auth.api.signUpEmail({ body: { email, password, name: `Chats ${label}` } });
-    const signIn = await auth.api.signInEmail({ returnHeaders: true, body: { email, password } });
-    const token = (signIn.headers.get('set-cookie') ?? '').match(/better-auth\.session_token=([^;]+)/)?.[1] ?? '';
-    return { id: signUp.user.id, token };
-}
-
 describe('Chat wizard — chats folder', () => {
     let ctx: TestCtx;
 
@@ -88,33 +76,6 @@ describe('Chat wizard — chats folder', () => {
         const chats = children.find((c) => c.name === 'chats');
         expect(chats).toBeDefined();
         expect(chats!.type).toBe('folder');
-    });
-
-    test('migrates a legacy `Chats` folder to `chats` in place, reusing the same pathId', async () => {
-        const u = await signUpFreshUser('legacy');
-        const mountId = await firstMountId(u.token, u.id);
-        const root = await driveGet(u.token, u.id, mountId, 'root');
-        const before = await driveGetList(u.token, u.id, mountId, `folder/${root.id}`);
-
-        const seeded = before.find((c) => c.name === 'chats' && c.type === 'folder');
-        expect(seeded).toBeDefined();
-
-        // Reproduce the legacy uppercase name the folder shipped with before this rename.
-        const home = await getHome(u.id);
-        await home.drive.renamePath(mountId, seeded!.id, 'Chats');
-
-        // The rename reaches open drive lists like any other.
-        const sse = await collectSSE(u.id);
-        const migratedId = await home.drive.ensureChatsFolder(mountId);
-        sse.stop();
-        expect(migratedId).toBe(seeded!.id); // renamed in place, not recreated
-        expect(sse.events.some((e) => e.type === SSEventType.DRIVE_PATH_RENAMED && e.path.id === seeded!.id)).toBe(
-            true,
-        );
-
-        const after = await driveGetList(u.token, u.id, mountId, `folder/${root.id}`);
-        expect(after.find((c) => c.id === seeded!.id)?.name).toBe('chats');
-        expect(after.filter((c) => c.name === 'chats' && c.type === 'folder')).toHaveLength(1);
     });
 
     test('does not seed a chats folder in a team drive root', async () => {

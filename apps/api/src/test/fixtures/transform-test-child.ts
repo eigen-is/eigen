@@ -23,28 +23,21 @@ type TestDirective = {
         | 'allocate'
         | 'limits'
         | 'malformed'
-        | 'malformed-ok'
-        | 'malformed-warnings'
         | 'echo-buffers'
         | 'document-error'
-        | 'document-error-bad-status'
         | 'export-ok'
         | 'export-bytes'
         | 'export-echo-media'
         | 'export-ask-twice'
         | 'export-warn'
-        | 'export-malformed'
-        | 'import-ok'
-        | 'import-malformed'
-        | 'import-unweighed'
-        | 'import-doc-malformed-images';
+        | 'import-ok';
     ms?: number;
     // Dies before acknowledging the job, as a child that fails to load does.
     beforeAck?: boolean;
     signal?: NodeJS.Signals;
     heap?: 'objects' | 'strings' | 'buffers';
     bytes?: number;
-    mediaNames?: unknown[];
+    mediaNames?: string[];
 };
 
 // The three shapes an allocation failure takes under the limit: JSC aborts on objects, segfaults on strings, and throws
@@ -65,7 +58,7 @@ const send = (message: unknown) => process.send?.(message);
 let onMediaReply: ((media: ExportMedia[]) => void) | undefined;
 
 // Asks for media as an export's renderer does, and waits for the runner's reply.
-function askForMedia(jobId: number, mediaNames: unknown[]): Promise<ExportMedia[]> {
+function askForMedia(jobId: number, mediaNames: string[]): Promise<ExportMedia[]> {
     return new Promise((resolve) => {
         onMediaReply = resolve;
         send({ jobId, mediaNames });
@@ -121,14 +114,6 @@ process.on('message', async (message: ChildRequestEnvelope | ParentMediaReply) =
         case 'malformed':
             send({ nonsense: true });
             return;
-        case 'malformed-ok':
-            // Right discriminant, missing payload — must not hang the requester.
-            send({ jobId, response: { ok: true } });
-            return;
-        case 'malformed-warnings':
-            // Valid envelope and result, junk inside the warnings array.
-            send({ jobId, response: { ok: true, result: { body: '{}' }, warnings: [null] } });
-            return;
         case 'sleep':
             await Bun.sleep(directive.ms ?? 100);
             break;
@@ -174,10 +159,6 @@ process.on('message', async (message: ChildRequestEnvelope | ParentMediaReply) =
             send(response);
             return;
         }
-        case 'export-malformed':
-            // Right discriminant, result missing the export payload.
-            send({ jobId, response: { ok: true, result: {}, warnings: [] } });
-            return;
         case 'import-ok': {
             // Echo how many bytes arrived.
             const received = 'data' in request ? request.data.byteLength : -1;
@@ -193,23 +174,6 @@ process.on('message', async (message: ChildRequestEnvelope | ParentMediaReply) =
             send(response);
             return;
         }
-        case 'import-malformed':
-            // Right discriminant, result missing the snapshot payload.
-            send({ jobId, response: { ok: true, result: {}, warnings: [] } });
-            return;
-        case 'import-unweighed': {
-            // A sheets import's snapshot is there, but its weight is no count.
-            const snapshotJson = new ArrayBuffer(2);
-            const weight = { cells: Number.NaN, text: 0 };
-            send({ jobId, response: { ok: true, result: { snapshotJson, weight, images: [] }, warnings: [] } });
-            return;
-        }
-        case 'import-doc-malformed-images': {
-            // A docx import's update is there, but the images array holds junk.
-            const update = new Uint8Array([1, 2]).buffer as ArrayBuffer;
-            send({ jobId, response: { ok: true, result: { update, images: [{}] }, warnings: [] } });
-            return;
-        }
         case 'document-error': {
             const response: ChildResponseEnvelope = {
                 jobId,
@@ -218,14 +182,6 @@ process.on('message', async (message: ChildRequestEnvelope | ParentMediaReply) =
             send(response);
             return;
         }
-        case 'document-error-bad-status':
-            // status rides into `throw new ApiError(status, …)` on the main thread —
-            // a non-HTTP value must be refused at the boundary, not thrown as-is.
-            send({
-                jobId,
-                response: { ok: false, error: { code: 'transform-failed', status: '413', message: 'bad status' } },
-            });
-            return;
         default:
             break;
     }

@@ -46,17 +46,14 @@ export const freedrawKind = defineKind<VectorLinearElement>({
         pressures: '',
         simulatePressure: true,
     }),
-    // A stroke without points is meaningless — skipped like an unknown type. Coords are clamped per-axis
-    // (same bound as scalar spatial fields) so one corrupt peer write can't freeze others; re-serialized
-    // back to the stored string form.
+    // A stroke without points is skipped like an unknown type. Coords are clamped per axis, so one corrupt peer write
+    // can't freeze others.
     read: (src, base) => {
         const points = parsePoints(str(src.get('points'), ''));
         if (points.length === 0) return null;
         const clamped = points.map((p) => ({ x: clampCoord(p.x), y: clampCoord(p.y) }));
-        // Pen pressure rides a separate index-aligned array. A stored simulate flag, a missing/garbage
-        // array, or a length that drifts from the surviving points (a non-finite point was dropped) all
-        // collapse to '' + simulate — so the invariant "pressures[i] pairs points[i]" holds for every
-        // consumer, and legacy strokes render exactly as before.
+        // Pressures ride a separate index-aligned array. A bad array, or a length that drifts from the surviving
+        // points, collapses to '' + simulate, so pressures[i] always pairs points[i].
         const pressures = parsePressures(str(src.get('pressures'), ''));
         const simulate = bool(src.get('simulatePressure'), true);
         const useReal = !simulate && pressures.length > 0 && pressures.length === clamped.length;
@@ -97,9 +94,8 @@ export const freedrawKind = defineKind<VectorLinearElement>({
 // The stroke's ink: perfect-freehand's outline polygon in the local frame, which render fills with the stroke color.
 export function freedrawOutline(el: VectorLinearElement, points: Point[]): number[][] {
     const coords = points.map((p): [number, number] => [p.x, p.y]);
-    // Real per-point pressure iff the element opts out of simulation and carries an array — the reader
-    // is what guarantees it is index-aligned with `points` ('' + simulate otherwise), so this reads the
-    // pair as given. Absent/'' + simulate ⇒ the 2-tuple coords.
+    // The reader guarantees pressures are index-aligned with `points` ('' + simulate otherwise), so they are read as
+    // given.
     const pressures = !el.simulatePressure && el.pressures !== '' ? parsePressures(el.pressures) : [];
     const realPressure = pressures.length === coords.length && pressures.length > 0;
     return getStroke(realPressure ? coords.map(([x, y], i): number[] => [x, y, pressures[i]]) : coords, {

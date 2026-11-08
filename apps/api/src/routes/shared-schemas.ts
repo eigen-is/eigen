@@ -1,21 +1,17 @@
-// The request-body schemas and schema helpers that routes share, such as an S3 config, a drive import or a document
-// type, and the schema of one domain that another domain's route takes, such as the backup settings in a save of the
-// server settings. They stay in the API, not in the shared lib, so only the backend depends on Elysia's type system.
+// The request-body schemas and schema helpers that more than one route uses, such as an S3 config, a drive import or
+// a document type, and the schema of one domain that another domain's route takes, such as the backup bucket in a save
+// of the server settings. A schema one route uses lives beside that route. They stay in the API, not in the shared lib,
+// so only the backend depends on Elysia's type system.
 
-import { BACKUP_KEEP_MAX } from '@workspace/lib/constants/backup';
 import { S3_NONCURRENT_DAYS_MAX } from '@workspace/lib/constants/s3';
-import type { DocumentImportOptions, DriveImportSource, EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
+import type { DriveImportSource, EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
-import type { ClientFileEventInput } from '@workspace/lib/types/file-history';
-import { CARD_TITLE_MAX_LENGTH } from '@workspace/lib/types/file-history';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { MAX_EMAIL_LENGTH, NO_CONTROL_PATTERN } from '@workspace/lib/validation';
 import type { Static } from 'elysia';
 import { t } from 'elysia';
 
-// Explicit tuple — t.Union(arr.map(t.Literal)) loses the tuple and breaks
-// Elysia's EigenDocType param narrowing. Kept here (not in packages/lib) so
-// the Elysia dependency stays BE-only. Drift is caught by tsc.
+// An explicit tuple: t.Union(arr.map(t.Literal)) loses the tuple and breaks Elysia's EigenDocType param narrowing.
 export const eigenDocTypeSchema = t.Union([
     t.Literal('doc'),
     t.Literal('stickies'),
@@ -46,37 +42,17 @@ export const attachmentReferenceSchema = t.Object({
     mimeType: t.String(),
 });
 
-// Compile-time guard that the Elysia schema stays in sync with the shared TS type. Adding
-// a field to drive-reference.ts without mirroring it here (or vice-versa) fails the check.
-type TypesEqual<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false;
-// An intersection as the one object type a schema's Static is, which TypesEqual tells apart.
-type Flatten<T> = { [K in keyof T]: T[K] };
+// Whether two types are identical, for the compile-time guards that hold a schema against its shared TS type: a field
+// added on one side only fails the check.
+export type TypesEqual<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false;
 const _attachmentReferenceSchemaMatchesType: TypesEqual<
     Static<typeof attachmentReferenceSchema>,
     AttachmentReference
 > = true;
 void _attachmentReferenceSchemaMatchesType;
 
-// One object per event type, so the identity guard below can hold it against ClientFileEventInput.
-const CARD_TEXT = { maxLength: CARD_TITLE_MAX_LENGTH };
-const stickyCardDetails = t.Object({
-    card: t.String(CARD_TEXT),
-    toColumn: t.String(CARD_TEXT),
-    cardId: t.String(CARD_TEXT),
-});
-export const clientFileEventBody = t.Union([
-    t.Object({ eventType: t.Literal('sticky-added'), details: stickyCardDetails }),
-    t.Object({ eventType: t.Literal('sticky-moved'), details: stickyCardDetails }),
-    t.Object({
-        eventType: t.Literal('sticky-removed'),
-        details: t.Object({ card: t.String(CARD_TEXT), cardId: t.String(CARD_TEXT) }),
-    }),
-]);
-const _clientFileEventBodyMatchesType: TypesEqual<Static<typeof clientFileEventBody>, ClientFileEventInput> = true;
-void _clientFileEventBodyMatchesType;
-
 // The Drive file an import-from-drive route reads its bytes from: the picked file's owner, mount and path.
-// One definition, so the contacts, mail and calendar routes cannot drift apart on the body their hooks post.
+// One definition, so the routes that import from Drive cannot drift apart on the body their hooks post.
 export const importFromDriveSchema = t.Object({
     sourceOwnerId: t.String(),
     sourceMountId: t.String(),
@@ -88,25 +64,6 @@ type _ImportFromDriveSchemaCoversSource =
     Exclude<keyof DriveImportSource, keyof Static<typeof importFromDriveSchema>> extends never ? true : never;
 const _importFromDriveSchemaCheck: _ImportFromDriveSchemaCoversSource = true;
 void _importFromDriveSchemaCheck;
-
-// How File › Import… writes into the open document: the upload's query, the Drive pick's body beside its source.
-export const documentImportSchema = t.Object({
-    mode: t.Union([t.Literal('insert'), t.Literal('replace')]),
-    afterFrameId: t.Optional(t.String({ maxLength: 64 })),
-});
-const _documentImportSchemaMatchesType: TypesEqual<Static<typeof documentImportSchema>, DocumentImportOptions> = true;
-void _documentImportSchemaMatchesType;
-
-// The Drive pick's body: the file it reads, and how it comes in.
-export const documentImportFromDriveSchema = t.Object({
-    ...importFromDriveSchema.properties,
-    ...documentImportSchema.properties,
-});
-const _documentImportFromDriveSchemaMatchesType: TypesEqual<
-    Static<typeof documentImportFromDriveSchema>,
-    Flatten<DriveImportSource & DocumentImportOptions>
-> = true;
-void _documentImportFromDriveSchemaMatchesType;
 
 // Refused as input hygiene, and because a lifecycle rule's <Prefix> can't carry most of them: stripped, the rule
 // would cover another prefix.
@@ -132,38 +89,6 @@ export const s3DestinationBody = t.Object({
     accessKeyId: t.Optional(t.String()),
     secretAccessKey: t.Optional(t.String()),
     region: t.Optional(t.String()),
-});
-
-// t.Integer is a union with a numeric string, whose default 422 dumps both branches; `error` replaces it.
-const backupKeepSchema = t.Integer({
-    minimum: 1,
-    maximum: BACKUP_KEEP_MAX,
-    error: `Backups to keep must be a whole number from 1 to ${BACKUP_KEEP_MAX}`,
-});
-
-// The owner's backup settings in a save of the server settings: the schedule and the bucket.
-export const backupSettingsBody = t.Object({
-    schedule: t.Optional(
-        t.Object({
-            enabled: t.Optional(t.Boolean()),
-            hourUtc: t.Optional(
-                t.Integer({
-                    minimum: 0,
-                    maximum: 23,
-                    error: 'The backup hour must be a whole number from 0 to 23',
-                }),
-            ),
-            withS3: t.Optional(t.Boolean()),
-            keep: t.Optional(backupKeepSchema),
-        }),
-    ),
-    upload: t.Optional(
-        t.Object({
-            enabled: t.Optional(t.Boolean()),
-            s3: t.Optional(s3DestinationBody),
-            keep: t.Optional(backupKeepSchema),
-        }),
-    ),
 });
 
 export const s3HardenBody = t.Object({

@@ -1,15 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import {
-    existsSync,
-    mkdirSync,
-    readdirSync,
-    readFileSync,
-    rmSync,
-    statSync,
-    truncateSync,
-    writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, statSync, truncateSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { BackupJob, BackupLevel, BackupReason } from '@workspace/lib/types/backup';
@@ -44,7 +35,7 @@ import { clearHomeDeleting, getHome, markHomeDeleting } from '../../lib/home/get
 import * as homeRelay from '../../lib/home/home-relay';
 import { deleteUserCompletely } from '../../lib/user/delete-user';
 import type { TestContext } from '../setup';
-import { countLoopTurns, createTeam, createTestUser, findOrFail, getTestContext } from '../setup';
+import { countLoopTurns, createTeam, createTestUser, getTestContext } from '../setup';
 import type { RealShapeHome } from './backup-test-helpers';
 import {
     alertTitlesTo,
@@ -267,7 +258,7 @@ describe('Server backup job', () => {
             const rootId = (await mount.getRootFolder())!.id;
             const folderId = await mount.createFolder(rootId, 'Salvaged');
             await mount.createFile(folderId, 'left.txt', 'text/plain', 4, new TextEncoder().encode('left'));
-            // What a salvaged database leaves: the folder row gone, its child still naming it.
+            // What a hand edit leaves: the folder row gone, its child still naming it.
             const db = new Database(join(home.homeDir, PATHS.DRIVE.ROOT, mount.id, PATHS.DRIVE.METADATA_DB));
             db.run('PRAGMA foreign_keys = OFF');
             db.run('DELETE FROM paths WHERE id = ?', [folderId]);
@@ -297,47 +288,6 @@ describe('Server backup job', () => {
                 expect(status.newestGoodAt).toBe(goodBefore);
             } finally {
                 await deleteUserCompletely(damaged.id, null);
-            }
-        },
-        JOB_TIMEOUT_MS,
-    );
-
-    test(
-        "a home's verify warnings are in its row, beside its capture's",
-        async () => {
-            quietRelay();
-            const user = await createTestUser(`verify-warned-${Date.now()}@test.eigen.is`, 'testpassword123', 'VW');
-            const home = await getHome(user.id);
-            const [mount] = home.drive.getMounts();
-            const rootId = (await mount.getRootFolder())!.id;
-            const bytes = new TextEncoder().encode('sixsix');
-            const fileId = await mount.createFile(rootId, 'six.txt', 'text/plain', bytes.byteLength, bytes);
-            spies.push(
-                spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (ownerId, dir, options) => {
-                    const manifest = await pullHomeSnapshot(ownerId, dir, options);
-                    if (ownerId !== user.id) return manifest;
-                    // A row that no longer describes its bytes, restated so only the row is left to judge.
-                    const folder = join(dir, buildHomeFolderName(ownerId));
-                    const relMetadata = `home/mounts/${mount.id}/${PATHS.DRIVE.METADATA_DB}`;
-                    const db = new Database(join(folder, relMetadata));
-                    db.run('UPDATE paths SET size = 1 WHERE id = ?', [fileId]);
-                    db.close();
-                    const metadata = readFileSync(join(folder, relMetadata));
-                    const entry = findOrFail(manifest.entries, (candidate) => candidate.path === relMetadata);
-                    entry.bytes = metadata.byteLength;
-                    entry.sha256 = new Bun.CryptoHasher('sha256').update(metadata).digest('hex');
-                    writeFileSync(join(folder, 'manifest.json'), JSON.stringify(manifest, null, 2));
-                    return manifest;
-                }),
-            );
-            try {
-                const { job, archivePath } = await runJob();
-                expect(job.state).toBe('done');
-                const row = (await readServerManifest(archivePath)).manifest.homes.find((h) => h.ownerId === user.id);
-                expect(row?.member).toBeDefined();
-                expect(row?.warnings).toEqual([`home/mounts/${mount.id}/data/six.txt: 6 bytes, its row says 1`]);
-            } finally {
-                await deleteUserCompletely(user.id, null);
             }
         },
         JOB_TIMEOUT_MS,

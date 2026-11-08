@@ -14,17 +14,16 @@
 
 import { describe, expect, test } from 'bun:test';
 import { setCellFormat } from '../../state/api/cell';
-import { setColumnWidth, setRowHeight, showRowOrColumn } from '../../state/api/rowcol';
+import { setColumnWidth, setRowHeight } from '../../state/api/rowcol';
 import type { Context } from '../../state/context';
-import { handlePasteByClick } from '../../state/events/paste';
 import { setChartLook, setChartSpec } from '../../state/modules/chart';
 import { clearFilter } from '../../state/modules/filter';
 import { deleteFloatingObject, reorderFloatingObject, updateFloatingBox } from '../../state/modules/floating';
 import { removeImageByMediaName, replaceImageMediaName } from '../../state/modules/image';
 import { showSelectedRowCol } from '../../state/modules/rowcol';
-import { pasteHandlerOfPaintModel } from '../../state/modules/selection';
 import { initSheetData } from '../../state/modules/sheet';
 import { handleBorder, handleClearFormat, handleMerge, updateFormatCell } from '../../state/modules/toolbar';
+import { pasteCopy } from './factories/clipboard';
 import { syncablePaths } from './factories/collab';
 import { contextFactory } from './factories/context';
 import { mouseUpAt, withGridGeometry } from './factories/grid-dom';
@@ -43,7 +42,7 @@ function bareSheet(): Context {
 function freshSheet(): Context {
     const ctx = withGridGeometry(contextFactory() as Context);
     ctx.sheets[0].config = undefined;
-    initSheetData(ctx, 0, ctx.sheets[0]);
+    initSheetData(ctx.sheets[0]);
     return ctx;
 }
 
@@ -78,7 +77,6 @@ const REJECTED: [name: string, recipe: (ctx: Context) => void][] = [
             mouseUpAt(296, 100)(ctx);
         },
     ],
-    ['the format painter with no copy state', (ctx) => pasteHandlerOfPaintModel(ctx, undefined)],
     [
         'a border on a read-only sheet',
         (ctx) => {
@@ -101,19 +99,19 @@ const REJECTED: [name: string, recipe: (ctx: Context) => void][] = [
     ['setting the look of a chart that is not there', (ctx) => setChartLook(ctx, 'gone', { roughness: 1 })],
     ['renaming the media of no image', (ctx) => replaceImageMediaName(ctx, 'pending:gone', 'photo.png')],
     ['removing the media of no image', (ctx) => removeImageByMediaName(ctx, 'pending:gone')],
-    ['unhiding a row via the api when nothing is hidden', (ctx) => showRowOrColumn(ctx, ['1'], 'row')],
-    ['unhiding a column via the api when nothing is hidden', (ctx) => showRowOrColumn(ctx, ['1'], 'column')],
     ['unhiding a selected row when nothing is hidden', (ctx) => showSelectedRowCol(ctx, 'row')],
     ['unhiding a selected column when nothing is hidden', (ctx) => showSelectedRowCol(ctx, 'column')],
     [
         'an internal copy-paste released with no destination selection',
         (ctx) => {
             ctx.copyState = {
+                id: 'copy',
+                cut: false,
                 dataSheetId: ctx.currentSheetId,
                 copyRange: [{ row: [0, 0], column: [0, 0] }],
             };
             ctx.selections = undefined;
-            handlePasteByClick(ctx, 'internal');
+            pasteCopy(ctx);
         },
     ],
 ];

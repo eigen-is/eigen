@@ -1,11 +1,13 @@
 // The User type and the lookups in the server-wide users database, such as a user by email or id, their org and
 // team memberships and their org role. Routes, homes and the auth hooks read users through here.
 
+import { parseOwnerId } from '@workspace/lib/types/owner';
 import { and, eq, inArray } from 'drizzle-orm';
 import { member, teamMember, user } from '../../../auth-schema';
 import type { auth } from '../auth/auth';
 import { getAuthDrizzleDb } from '../auth/auth';
 import { getServerConfig } from '../config/server-config';
+import { getTeamExists } from '../team/team';
 
 // The better-auth session user with its plugin columns, such as role and twoFactorEnabled. It is inferred from the
 // configured `auth`, so it follows the plugins and matches what getSession hands the route handlers.
@@ -33,6 +35,14 @@ export async function getUsersByEmails(emails: string[]): Promise<User[]> {
 export async function getUserById(id: string): Promise<User | null> {
     const db = getAuthDrizzleDb();
     return (await db.select().from(user).where(eq(user.id, id)).get()) ?? null;
+}
+
+// Whether the user or team an owner id names still has its row. No other kind of owner is ever deleted.
+export async function getOwnerExists(ownerId: string): Promise<boolean> {
+    const owner = parseOwnerId(ownerId);
+    if (owner.type === 'user') return (await getUserById(owner.id)) !== null;
+    if (owner.type === 'team') return getTeamExists(owner.id);
+    return true;
 }
 
 export async function updateUser(userId: string, name: string, image: string): Promise<void> {

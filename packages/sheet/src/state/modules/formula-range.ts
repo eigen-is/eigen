@@ -13,7 +13,7 @@ import { moveToEnd } from './cursor';
 import { formulaUIState, setFunctionHTMLIndex } from './formula-cache';
 import { israngeseleciton } from './formula-editor';
 import { getcellrange } from './formula-exec';
-import { colLocation, mousePosition, rowLocation } from './location';
+import { colLocation, rowLocation, sheetPoint } from './location';
 
 function parseElement(eleString: string) {
     return new DOMParser().parseFromString(eleString, 'text/html').body.childNodes[0];
@@ -193,8 +193,7 @@ export function rangeDrag(
     ctx: Context,
     e: MouseEvent,
     cellInput: HTMLDivElement,
-    scrollLeft: number,
-    scrollTop: number,
+    cellArea: HTMLDivElement,
     container: HTMLDivElement,
     fxInput?: HTMLDivElement | null,
 ) {
@@ -207,10 +206,7 @@ export function rangeDrag(
         func_selectedrange.width == null
     )
         return;
-    const rect = container.getBoundingClientRect();
-    const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollLeft;
-    const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollTop;
-
+    const { x, y } = sheetPoint(ctx, e, cellArea);
     const [row_pre, row, row_index] = rowLocation(y, ctx.visibledatarow);
 
     const [col_pre, col, col_index] = colLocation(x, ctx.visibledatacolumn);
@@ -282,8 +278,7 @@ export function rangeDragColumn(
     ctx: Context,
     e: MouseEvent,
     cellInput: HTMLDivElement,
-    scrollLeft: number,
-    _scrollTop: number,
+    cellArea: HTMLDivElement,
     container: HTMLDivElement,
     fxInput?: HTMLDivElement | null,
 ) {
@@ -296,8 +291,7 @@ export function rangeDragColumn(
         func_selectedrange.width == null
     )
         return;
-    const mouse = mousePosition(e.pageX, e.pageY, ctx);
-    const x = mouse[0] + scrollLeft;
+    const { x } = sheetPoint(ctx, e, cellArea);
 
     const { visibledatarow } = ctx;
     const row_index = visibledatarow.length - 1;
@@ -350,8 +344,7 @@ export function rangeDragRow(
     ctx: Context,
     e: MouseEvent,
     cellInput: HTMLDivElement,
-    _scrollLeft: number,
-    scrollTop: number,
+    cellArea: HTMLDivElement,
     container: HTMLDivElement,
     fxInput?: HTMLDivElement | null,
 ) {
@@ -365,8 +358,7 @@ export function rangeDragRow(
     )
         return;
 
-    const mouse = mousePosition(e.pageX, e.pageY, ctx);
-    const y = mouse[1] + scrollTop;
+    const { y } = sheetPoint(ctx, e, cellArea);
 
     const [row_pre, row, row_index] = rowLocation(y, ctx.visibledatarow);
 

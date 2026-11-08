@@ -1,6 +1,8 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { getHome } from '../../lib/home';
+import { parseIcs } from '../../lib/ical';
+import { storedEvents } from '../calendar-test-helpers';
 import { davRequest } from '../dav-test-helpers';
 import { assertJson, authedRequest, eventually, findOrFail, getTestContext } from '../setup';
 
@@ -607,8 +609,7 @@ describe('Calendar Timezone', () => {
             expect(occurrences.length).toBe(5);
         });
 
-        test('old events without timezone still work (backward compat)', async () => {
-            // Event without timezone — should behave exactly like before
+        test('an event without a timezone still works', async () => {
             const startTime = new Date('2026-03-16T22:30:00Z');
 
             await createEvent(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceCalendarId, {
@@ -735,9 +736,7 @@ describe('Calendar Timezone', () => {
 
             // The exceptions are stored under the wall-clock date, not the UTC date of the instant.
             const home = await getHome(ctx.alice.user.id);
-            const stored = (await home.calendar.getRawEvents(aliceCalendarId)).filter(
-                (e) => e.uid === UID && e.parentEventId,
-            );
+            const stored = storedEvents(home.calendar, aliceCalendarId).filter((e) => e.uid === UID && e.parentEventId);
             const modified = findOrFail(stored, (e) => e.title === 'Moved occurrence');
             const cancelledDates = stored.filter((e) => e.status === 'cancelled').map((e) => e.recurrenceDate);
             expect(modified.recurrenceDate).toBe('2026-01-15'); // pre-fix: '2026-01-16' (UTC date)
@@ -799,7 +798,7 @@ describe('Calendar Timezone', () => {
 
             const home = await getHome(ctx.alice.user.id);
             const exc = findOrFail(
-                (await home.calendar.getRawEvents(aliceCalendarId)).filter((e) => e.uid === UID && e.parentEventId),
+                storedEvents(home.calendar, aliceCalendarId).filter((e) => e.uid === UID && e.parentEventId),
                 (e) => e.title === 'DST Moved',
             );
             expect(exc.recurrenceDate).toBe('2026-11-02'); // pre-fix: '2026-11-03' (UTC date, offset had shifted)
@@ -860,9 +859,7 @@ describe('Calendar Timezone', () => {
             expect(put2.status).toBe(204);
 
             const home = await getHome(ctx.alice.user.id);
-            const stored = (await home.calendar.getRawEvents(aliceCalendarId)).filter(
-                (e) => e.uid === UID && e.parentEventId,
-            );
+            const stored = storedEvents(home.calendar, aliceCalendarId).filter((e) => e.uid === UID && e.parentEventId);
             const moved = findOrFail(stored, (e) => e.title === 'Moved via Z-form');
             // Keyed on the SERIES (master TZID) wall-clock date, not the UTC date of the Z-form instant.
             expect(moved.recurrenceDate).toBe('2026-01-22'); // pre-fix: '2026-01-23' (UTC date)
@@ -874,6 +871,97 @@ describe('Calendar Timezone', () => {
             const atMoved = occ.filter((e) => new Date(e.startTime).toISOString() === '2026-01-23T04:00:00.000Z');
             expect(atMoved).toHaveLength(1);
             expect(atMoved[0].title).toBe('Moved via Z-form');
+        });
+
+        test('an exception and an exclusion in year 500 are stored, listed and lifted by their key', async () => {
+            const UID = 'year-500@test';
+            const master = [
+                'BEGIN:VEVENT',
+                `UID:${UID}`,
+                'SUMMARY:Daily',
+                'DTSTART;TZID=America/New_York:20260112T090000',
+                'DTEND;TZID=America/New_York:20260112T093000',
+                'RRULE:FREQ=DAILY;COUNT=10',
+                'EXDATE;TZID=America/New_York:05000105T090000',
+                'DTSTAMP:20260101T000000Z',
+                'END:VEVENT',
+            ].join('\r\n');
+            const ancient = [
+                'BEGIN:VEVENT',
+                `UID:${UID}`,
+                'RECURRENCE-ID:05000106T140000Z',
+                'DTSTART:05000106T140000Z',
+                'DTEND:05000106T143000Z',
+                'SUMMARY:Ancient',
+                'DTSTAMP:20260101T000000Z',
+                'END:VEVENT',
+            ].join('\r\n');
+
+            const put = await davPut(
+                ctx.alice.user.email,
+                ctx.alice.user.id,
+                aliceCalendarId,
+                `${UID}.ics`,
+                vcal(master, ancient),
+            );
+            expect([201, 204]).toContain(put.status);
+
+            const home = await getHome(ctx.alice.user.id);
+            const stored = storedEvents(home.calendar, aliceCalendarId).filter((e) => e.uid === UID && e.parentEventId);
+            const cancelled = findOrFail(stored, (e) => e.status === 'cancelled');
+            expect(cancelled.recurrenceDate).toBe('0500-01-05');
+            expect(findOrFail(stored, (e) => e.title === 'Ancient').recurrenceDate).toBe('0500-01-06');
+
+            const occ = await getEvents(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                sec('0500-01-01'),
+                sec('0500-02-01'),
+            );
+            expect(occ.find((e) => e.uid === UID)?.occurrenceDate).toBe('0500-01-06');
+
+            // Deleting the cancelled row puts the occurrence back: its EXDATE goes from the file.
+            const del = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${cancelled.id}`,
+                { method: 'DELETE' },
+            );
+            expect(del.ok).toBe(true);
+            const get = await davRequest('GET', `/dav/calendars/${ctx.alice.user.id}/${aliceCalendarId}/${UID}.ics`, {
+                email: ctx.alice.user.email,
+            });
+            const ics = await get.text();
+            expect(ics).toContain('SUMMARY:Daily');
+            expect(ics).not.toContain('EXDATE');
+        });
+
+        // 31 December 9999 23:00Z is already 1 January 10000 in Tokyo, a date no key can name.
+        test.each([
+            ['an exception', 'year-10000-override@test', [], ['RECURRENCE-ID:99991231T230000Z']],
+            ['an exclusion', 'year-10000-exdate@test', ['EXDATE:99991231T230000Z'], []],
+        ])('%s past year 9999 in the series zone is refused and stores nothing', async (_, uid, exdate, rid) => {
+            const vevent = (lines: string[]) =>
+                [
+                    'BEGIN:VEVENT',
+                    `UID:${uid}`,
+                    ...lines,
+                    'DTSTART;TZID=Asia/Tokyo:20260302T090000',
+                    'DTEND;TZID=Asia/Tokyo:20260302T100000',
+                    'DTSTAMP:20260101T000000Z',
+                    'END:VEVENT',
+                ].join('\r\n');
+            const master = vevent(['SUMMARY:Weekly', 'RRULE:FREQ=WEEKLY', ...exdate]);
+            const body = rid.length ? vcal(master, vevent(['SUMMARY:Moved', ...rid])) : vcal(master);
+
+            const put = await davPut(ctx.alice.user.email, ctx.alice.user.id, aliceCalendarId, `${uid}.ics`, body);
+            expect(put.status).toBe(403);
+
+            const home = await getHome(ctx.alice.user.id);
+            expect(storedEvents(home.calendar, aliceCalendarId).filter((e) => e.uid === uid)).toHaveLength(0);
+            const get = await davRequest('GET', `/dav/calendars/${ctx.alice.user.id}/${aliceCalendarId}/${uid}.ics`, {
+                email: ctx.alice.user.email,
+            });
+            expect(get.status).toBe(404);
         });
     });
 
@@ -919,9 +1007,7 @@ describe('Calendar Timezone', () => {
             // What the FE sends on the next RSVP for this same occurrence:
             await rsvp(rendered[0].occurrenceDate);
             const home = await getHome(ctx.bob.user.id);
-            const exceptions = (await home.calendar.getRawEvents(bobCalendarId)).filter(
-                (e) => e.parentEventId === linked.id,
-            );
+            const exceptions = storedEvents(home.calendar, bobCalendarId).filter((e) => e.parentEventId === linked.id);
             expect(exceptions).toHaveLength(1); // pre-fix: 2 rows for one occurrence
         });
     });
@@ -981,6 +1067,107 @@ describe('Calendar Timezone', () => {
 
             expect(occurrences).toHaveLength(8);
             expect(occurrences.map((e) => berlin.format(new Date(e.startTime)))).toEqual(Array(8).fill('10:00'));
+        });
+
+        test('an edit keeps a Windows TZID the file defines no VTIMEZONE for, and adds none for it', async () => {
+            const uid = 'outlook-windows-no-vtimezone@test';
+            const ics = [
+                'BEGIN:VCALENDAR',
+                'VERSION:2.0',
+                'PRODID:-//Microsoft Corporation//Outlook 16.0 MIMEDIR//EN',
+                'BEGIN:VEVENT',
+                `UID:${uid}`,
+                'SUMMARY:Berlin Sync',
+                'DTSTART;TZID="W. Europe Standard Time":20260302T100000',
+                'DTEND;TZID="W. Europe Standard Time":20260302T103000',
+                'RRULE:FREQ=WEEKLY;COUNT=8',
+                'EXDATE;TZID="W. Europe Standard Time":20260316T100000',
+                'DTSTAMP:20260101T000000Z',
+                'END:VEVENT',
+                'END:VCALENDAR',
+            ].join('\r\n');
+            const href = `/dav/calendars/${ctx.alice.user.id}/${aliceCalendarId}/${uid}.ics`;
+            const put = await davRequest('PUT', href, {
+                email: ctx.alice.user.email,
+                headers: { 'Content-Type': 'text/calendar' },
+                body: ics,
+            });
+            expect(put.status).toBe(201);
+
+            const home = await getHome(ctx.alice.user.id);
+            const master = findOrFail(
+                storedEvents(home.calendar, aliceCalendarId),
+                (e) => e.uid === uid && !e.parentEventId,
+            );
+            expect(master.timezone).toBe('Europe/Berlin');
+            const eventsUrl = `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`;
+            const send = (method: 'PUT' | 'POST', path: string, body: Record<string, unknown>) =>
+                authedRequest(ctx.alice.user.sessionToken, `${eventsUrl}${path}`, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+
+            // Moving the series to 11:00 Berlin rewrites DTSTART and DTEND; the EXDATE keeps the Windows name.
+            const patched = await send('PUT', `/${master.id}`, {
+                startTime: new Date('2026-03-02T10:00:00Z'),
+                endTime: new Date('2026-03-02T10:30:00Z'),
+                timezone: 'Europe/Berlin',
+            });
+            expect(patched.status).toBe(200);
+            const excluded = await send('POST', '', {
+                title: 'Berlin Sync',
+                startTime: new Date('2026-03-09T10:00:00Z'),
+                endTime: new Date('2026-03-09T10:30:00Z'),
+                allDay: false,
+                parentEventId: master.id,
+                recurrenceDate: '2026-03-09',
+                status: 'cancelled',
+            });
+            expect(excluded.status).toBe(200);
+            const overridden = await send('POST', '', {
+                title: 'Berlin Sync (moved)',
+                startTime: new Date('2026-04-06T12:00:00Z'),
+                endTime: new Date('2026-04-06T12:30:00Z'),
+                allDay: false,
+                timezone: 'Europe/Berlin',
+                parentEventId: master.id,
+                recurrenceDate: '2026-04-06',
+            });
+            expect(overridden.status).toBe(200);
+
+            const stored = await (await davRequest('GET', href, { email: ctx.alice.user.email })).text();
+            expect(stored).toContain('EXDATE;TZID=W. Europe Standard Time:20260316T100000');
+            expect(stored).not.toContain('TZID:W. Europe Standard Time');
+            const parsed = parseIcs(stored).events.map((e) => `${e.recurrenceDate ?? 'master'} ${e.status}`);
+            expect(parsed.sort()).toEqual([
+                '2026-03-09 cancelled',
+                '2026-03-16 cancelled',
+                '2026-04-06 confirmed',
+                'master confirmed',
+            ]);
+
+            const berlin = new Intl.DateTimeFormat('en-GB', {
+                timeZone: 'Europe/Berlin',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+            });
+            const from = Math.floor(new Date('2026-03-01T00:00:00Z').getTime() / 1000);
+            const to = Math.floor(new Date('2026-05-01T00:00:00Z').getTime() / 1000);
+            const occurrences = (await getEvents(ctx.alice.user.sessionToken, ctx.alice.user.id, from, to)).filter(
+                (e) => e.uid === uid,
+            );
+            expect(occurrences.map((e) => `${e.title} ${berlin.format(new Date(e.startTime))}`)).toEqual([
+                'Berlin Sync 02/03, 11:00',
+                'Berlin Sync 23/03, 11:00',
+                'Berlin Sync 30/03, 11:00',
+                'Berlin Sync (moved) 06/04, 14:00',
+                'Berlin Sync 13/04, 11:00',
+                'Berlin Sync 20/04, 11:00',
+            ]);
         });
     });
 });

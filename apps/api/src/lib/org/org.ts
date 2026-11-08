@@ -1,14 +1,13 @@
+// The deployment's one organization: whether it exists, the default team setup pins for it, and its rename, which two
+// stores hold. Setup and the owner's settings call it.
+
 import { and, eq } from 'drizzle-orm';
 import { organization, team } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../auth/auth';
 import { getOrgName, getServerConfig, updateServerConfig } from '../config/server-config';
 import { ApiError } from '../core/errors';
 
-// createOrganization writes the org, its owner's member row and the default team in one call, so their
-// timestamps are milliseconds apart, plus up to a second from the columns' second precision.
-const DEFAULT_TEAM_MAX_GAP_MS = 5_000;
-
-export async function getOrgExists(orgId: string) {
+export async function getOrgExists(orgId: string): Promise<boolean> {
     const db = getAuthDrizzleDb();
     return (
         (await db.select({ id: organization.id }).from(organization).where(eq(organization.id, orgId)).get()) !==
@@ -16,31 +15,9 @@ export async function getOrgExists(orgId: string) {
     );
 }
 
-// The team createOrganization made: named after the org and made with it. A team named like the org by hand
-// came later, and an org that predates teams has none.
+// The team createOrganization made with the org, the only one it has while setup runs.
 export function findDefaultTeamId(orgId: string): string | undefined {
-    const db = getAuthDrizzleDb();
-    const org = db
-        .select({ name: organization.name, createdAt: organization.createdAt })
-        .from(organization)
-        .where(eq(organization.id, orgId))
-        .get();
-    if (!org) return undefined;
-    const matches = db
-        .select({ id: team.id, createdAt: team.createdAt })
-        .from(team)
-        .where(and(eq(team.organizationId, orgId), eq(team.name, org.name)))
-        .all()
-        .filter((t) => Math.abs(t.createdAt.getTime() - org.createdAt.getTime()) <= DEFAULT_TEAM_MAX_GAP_MS);
-    return matches.length === 1 ? matches[0].id : undefined;
-}
-
-// For installs set up before setup pinned it. Existing members are not added: a removal and a never-added look alike.
-export async function pinDefaultTeam(): Promise<void> {
-    const config = getServerConfig();
-    if (!config || config.defaultTeamId) return;
-    const defaultTeamId = findDefaultTeamId(config.orgId);
-    if (defaultTeamId) await updateServerConfig({ defaultTeamId });
+    return getAuthDrizzleDb().select({ id: team.id }).from(team).where(eq(team.organizationId, orgId)).get()?.id;
 }
 
 // Two stores hold the name: better-auth's organization row, and config.json, which mail and branding read.

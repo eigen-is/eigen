@@ -1,6 +1,6 @@
-// The calendar part of a user's Home: calendars and their events in one SQLite database. Each event is stored as the
-// iCalendar file it came from, and every other column is read from that file. The class is the one door for the REST
-// routes, the CalDAV server and the invitation code. It also checks names and colors.
+// The calendar part of a Home: calendars and their events in one SQLite database. Each event is stored as the
+// iCalendar file it came from, and every other column is read from that file. The class is the one door to that data
+// for callers such as the REST routes, the CalDAV server and the invitation code. It also checks names and colors.
 
 import { CALENDAR_NAME_MAX_LENGTH, DEFAULT_CALENDAR_COLOR } from '@workspace/lib/constants/calendar';
 import { EIGEN_ACCENT_COLORS_SHUFFLED, isHexColor } from '@workspace/lib/constants/colors';
@@ -12,7 +12,6 @@ import type {
     CalendarShare,
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
-import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { and, eq, getTableColumns, isNull, sql } from 'drizzle-orm';
@@ -20,9 +19,8 @@ import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { Semaphore } from '../../utils/semaphore';
 import { enforceHomeDataQuota } from '../config/enforcement';
 import { PATHS } from '../config/paths';
-import type { PutResourceResult } from '../core';
-import { ApiError, BroadcastBatch, computeResourceEtag, newSyncGen, normalizeResourceUri } from '../core';
-import type { DeleteResourceResult, ManagedDatabase, ResourcePreconditions } from '../core/';
+import type { DeleteResourceResult, ManagedDatabase, PutResourceResult, ResourcePreconditions } from '../core';
+import { ApiError, computeResourceEtag, newSyncGen } from '../core';
 import type { Home } from '../home';
 import { atHome } from '../home';
 import { parseResource } from '../ical';
@@ -49,44 +47,24 @@ import {
 import * as schema from './schema';
 import { notifySharedCalendarUsers, propagateCalendarShare } from './share-propagation';
 import * as shares from './shares';
-import { buildCalendarEvent, buildEventsChangedEvent } from './sse-events';
+import { buildCalendarEvent } from './sse-events';
 import { exportEvents, importEvents } from './transfer';
-
 import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload } from './types';
-
-// The one rule for what a calendar may be called and colored: REST, MKCALENDAR and PROPPATCH all land here.
-function validateCalendarProps(props: { name?: string; color?: string }): void {
-    if (props.name !== undefined && props.name.trim().length > CALENDAR_NAME_MAX_LENGTH) {
-        throw new ApiError(400, `Calendar name is longer than ${CALENDAR_NAME_MAX_LENGTH} characters`);
-    }
-    // Apple writes the eight-digit form, so all three hex lengths are valid.
-    if (props.color !== undefined && !isHexColor(props.color, [3, 6, 8])) {
-        throw new ApiError(400, 'Calendar color must be a hex color');
-    }
-}
 
 export class Calendar {
     private managedDb!: ManagedDatabase<typeof schema>;
     public db!: BunSQLiteDatabase<typeof schema>;
     public home: Home;
 
-    // bun:sqlite makes a transaction atomic and serial by itself, but a write path holds async gaps between
-    // its check and its commit (the quota check, an invitation fan-out), and a racing If-Match PUT must lose
-    // inside the lock, not after it.
+    // For the async gaps between a write's check and its commit, such as the quota check, so a racing If-Match
+    // PUT loses inside the lock.
     public writeLock = new Semaphore(1);
 
-    // Running total so size() answers from memory: a SUM per metered write makes an N-event device sync O(N²).
-    // Each delta is read inside the transaction that moves it and applied after: a rollback would otherwise leave it applied.
+    // A running total, since a SUM per metered write makes an N-event device sync O(N²). Each delta is applied
+    // after its commit, so a rollback moves nothing.
     private eventsBytes = 0;
 
-    // Whether resource writes are quota-metered — see the assignment in init() for what turns it on.
     private meteredIngest = false;
-
-    // Bulk writes in flight; while any runs, per-resource events are held and the last one out closes them.
-    private readonly batch = new BroadcastBatch(() => this.flushHeldAnnouncements());
-
-    // Which calendars the held announcements were for, so the batched event reaches everybody they would.
-    private readonly heldCalendars = new Set<string>();
 
     public constructor(home: Home) {
         this.home = home;
@@ -100,7 +78,7 @@ export class Calendar {
         this.eventsBytes = this.db
             .select({ total: sql<number>`COALESCE(SUM(${resourceBytes}), 0)` })
             .from(schema.resources)
-            .get()!.total;
+            .all()[0].total;
 
         if (this.db.select({ id: schema.calendars.id }).from(schema.calendars).all().length === 0) {
             await this.createCalendar({
@@ -125,22 +103,19 @@ export class Calendar {
         }
     }
 
-    // --- Seams used by calendar/*.ts ---
+    // --- Seams for the calendar's own modules ---
 
     public calendarRow(id: string): typeof schema.calendars.$inferSelect | null {
         return this.db.select().from(schema.calendars).where(eq(schema.calendars.id, id)).get() ?? null;
     }
 
     public bumpCtag(tx: Tx, calendarId: string): number {
-        tx.update(schema.calendars)
+        return tx
+            .update(schema.calendars)
             .set({ ctag: sql`${schema.calendars.ctag} + 1`, updatedAt: sql`unixepoch()` })
             .where(eq(schema.calendars.id, calendarId))
-            .run();
-        return tx
-            .select({ ctag: schema.calendars.ctag })
-            .from(schema.calendars)
-            .where(eq(schema.calendars.id, calendarId))
-            .get()!.ctag;
+            .returning({ ctag: schema.calendars.ctag })
+            .get().ctag;
     }
 
     public tombstone(tx: Tx, calendarId: string, uri: string, ctag: number): void {
@@ -153,10 +128,8 @@ export class Calendar {
             .run();
     }
 
-    // Caller holds the write lock. The one write every resource path takes, and it owns the order: both
-    // ceilings judge the bytes right before the transaction that stores them, so a refusal leaves the
-    // calendar as it was. `creditBytes` is the stored resource this one replaces, or a rewrite that shrinks
-    // a resource would be refused on a quota its own bytes already hold.
+    // Caller holds the write lock. `creditBytes` is the stored resource this one replaces, or a shrinking rewrite
+    // would be refused on a quota its own bytes already hold.
     public async writeResource(opts: {
         calendarId: string;
         uri: string;
@@ -198,11 +171,11 @@ export class Calendar {
     // Callers hold the write lock and have already run their own guards (preconditions, the linked-copy rule).
     public async purgeResource(row: Pick<PurgedResource, 'id' | 'calendarId' | 'uri'>): Promise<void> {
         const removed = this.db.transaction((tx) => {
-            const size = tx
+            const { size } = tx
                 .select({ size: resourceBytes })
                 .from(schema.resources)
                 .where(eq(schema.resources.id, row.id))
-                .get()!.size;
+                .all()[0];
             const ctag = this.bumpCtag(tx, row.calendarId);
             tx.delete(schema.resources).where(eq(schema.resources.id, row.id)).run();
             this.tombstone(tx, row.calendarId, row.uri, ctag);
@@ -221,7 +194,7 @@ export class Calendar {
         return this.calendarById(id);
     }
 
-    // The sync read behind getCalendarById, for the paths that may not await — a transaction commits at the first one.
+    // Synchronous for the paths that may not await, because a transaction commits at its first await.
     private calendarById(id: string): CalendarItem | null {
         const row = this.calendarRow(id);
         return row ? dbCalendarToCalendarItem(row) : null;
@@ -255,7 +228,7 @@ export class Calendar {
         const created = await this.writeLock.run(async () => {
             if (this.calendarIdTaken(id)) throw new ApiError(409, 'Calendar already exists');
 
-            this.db
+            const row = this.db
                 .insert(schema.calendars)
                 .values({
                     id,
@@ -267,20 +240,13 @@ export class Calendar {
                     syncGen: newSyncGen(),
                     shares: null,
                 })
-                .run();
-            return this.calendarById(id)!;
+                .returning()
+                .get();
+            return dbCalendarToCalendarItem(row);
         });
 
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_CREATED, this.home.user.id));
         return created;
-    }
-
-    private calendarCtag(calendarId: string): number | undefined {
-        return this.db
-            .select({ ctag: schema.calendars.ctag })
-            .from(schema.calendars)
-            .where(eq(schema.calendars.id, calendarId))
-            .get()?.ctag;
     }
 
     private calendarIdTaken(id: string): boolean {
@@ -306,25 +272,25 @@ export class Calendar {
 
         const oldShares = existing.shares;
 
-        this.db
-            .update(schema.calendars)
-            .set({
-                name: input.name !== undefined ? input.name.trim() : existing.name,
-                color: input.color !== undefined ? input.color : existing.color,
-                visible: input.visible !== undefined ? input.visible : existing.visible,
-                shares: input.shares !== undefined ? input.shares : existing.shares,
-                updatedAt: sql`unixepoch()`,
-            })
-            .where(eq(schema.calendars.id, id))
-            .run();
+        const updated = dbCalendarToCalendarItem(
+            this.db
+                .update(schema.calendars)
+                .set({
+                    name: input.name !== undefined ? input.name.trim() : existing.name,
+                    color: input.color ?? existing.color,
+                    visible: input.visible ?? existing.visible,
+                    shares: input.shares !== undefined ? input.shares : existing.shares,
+                    updatedAt: sql`unixepoch()`,
+                })
+                .where(eq(schema.calendars.id, id))
+                .returning()
+                .get(),
+        );
 
-        if (input.shares !== undefined) {
-            const updated = this.calendarById(id)!;
-            await propagateCalendarShare(this.home, updated, oldShares);
-        }
+        if (input.shares !== undefined) await propagateCalendarShare(this.home, updated, oldShares);
 
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_UPDATED, this.home.user.id));
-        return this.calendarById(id)!;
+        return updated;
     }
 
     public async deleteCalendar(id: string): Promise<void> {
@@ -339,11 +305,11 @@ export class Calendar {
 
         await this.writeLock.run(async () => {
             const removed = this.db.transaction((tx) => {
-                const total = tx
+                const { total } = tx
                     .select({ total: sql<number>`COALESCE(SUM(${resourceBytes}), 0)` })
                     .from(schema.resources)
                     .where(eq(schema.resources.calendarId, id))
-                    .get()!.total;
+                    .all()[0];
                 // The resources and their event rows go with the row, by cascade.
                 tx.delete(schema.calendars).where(eq(schema.calendars.id, id)).run();
                 // No cascade reaches these: a calendar recreated at this id would inherit the 404s.
@@ -356,7 +322,7 @@ export class Calendar {
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_DELETED, this.home.user.id));
     }
 
-    // --- Resources (the DAV store facade — implementation in calendar/dav-store.ts) ---
+    // --- Resources ---
 
     public async listResources(calendarId: string): Promise<ResourceRow[]> {
         return davStore.listResources(this, calendarId);
@@ -388,10 +354,8 @@ export class Calendar {
         body: string,
         options: PutResourceOptions,
     ): Promise<PutResourceResult> {
-        const ctagBefore = this.calendarCtag(calendarId);
         const result = await davStore.putResource(this, calendarId, uri, body, options);
-        // A PUT of what is already stored commits nothing, so there is nothing to tell the clients about.
-        if (result.ok && this.calendarCtag(calendarId) !== ctagBefore) {
+        if (result.ok && !result.unchanged) {
             this.announce(
                 result.created ? SSEventType.CALENDAR_EVENT_CREATED : SSEventType.CALENDAR_EVENT_UPDATED,
                 calendarId,
@@ -439,20 +403,6 @@ export class Calendar {
         return this.joinedEvents().where(eq(schema.events.uid, uid)).all().map(toEvent);
     }
 
-    public async getEventByUri(calendarId: string, uri: string): Promise<CalendarEvent | null> {
-        const row = this.joinedEvents()
-            .where(
-                and(eq(schema.resources.calendarId, calendarId), eq(schema.resources.uri, normalizeResourceUri(uri))),
-            )
-            .all()
-            .find((joined) => joined.events.parentEventId === null);
-        return row ? toEvent(row) : null;
-    }
-
-    public async getRawEvents(calendarId: string): Promise<CalendarEvent[]> {
-        return this.joinedEvents().where(eq(schema.events.calendarId, calendarId)).all().map(toEvent);
-    }
-
     public async getEventsInRange(from: Date, to: Date, calendarId?: string): Promise<CalendarEventOccurrence[]> {
         return occurrences.getEventsInRange(this, from, to, calendarId);
     }
@@ -495,36 +445,15 @@ export class Calendar {
 
     // --- Announcements ---
 
+    // An announcement reaches the owner's own tabs and every Home the calendar is shared with.
     public announce(type: Parameters<typeof buildCalendarEvent>[0], calendarId: string): void {
-        if (this.batch.hold()) {
-            this.heldCalendars.add(calendarId);
-            return;
-        }
-        this.reachReaders([calendarId], buildCalendarEvent(type, this.home.user.id));
-    }
-
-    // The single event a bulk write sends stands for every one it held, so it goes everywhere they would.
-    private flushHeldAnnouncements(): void {
-        const held = [...this.heldCalendars];
-        this.heldCalendars.clear();
-        this.reachReaders(held, buildEventsChangedEvent(this.home.user.id));
-    }
-
-    // An announcement reaches the owner's own tabs and every Home the calendars are shared with.
-    private reachReaders(calendarIds: string[], sseEvent: SSEvent): void {
+        const sseEvent = buildCalendarEvent(type, this.home.user.id);
         this.home.broadcast(sseEvent);
-        for (const calendarId of calendarIds) {
-            const cal = this.calendarById(calendarId);
-            if (cal) notifySharedCalendarUsers(this.home, cal, sseEvent).catch(console.error);
-        }
+        const cal = this.calendarById(calendarId);
+        if (cal) notifySharedCalendarUsers(this.home, cal, sseEvent).catch(console.error);
     }
 
-    // A bulk write (a whole-file import) tells the tabs once instead of per resource.
-    public withBatchedEvents<T>(fn: () => Promise<T>): Promise<T> {
-        return this.batch.run(fn);
-    }
-
-    // --- Events (writes — implementation in calendar/events.ts) ---
+    // --- Events (writes) ---
 
     public async createEvent(calendarId: string, input: CreateEventArgs, user?: User): Promise<CalendarEvent> {
         return events.createEvent(this, calendarId, input, user);
@@ -540,15 +469,20 @@ export class Calendar {
         return events.updateEvent(this, calendarId, id, input, user, expectedEtag);
     }
 
-    public async deleteEvent(calendarId: string, id: string, user?: User): Promise<void> {
-        return events.deleteEvent(this, calendarId, id, user);
+    public async deleteEvent(calendarId: string, id: string, user?: User, expectedEtag?: string): Promise<void> {
+        return events.deleteEvent(this, calendarId, id, user, expectedEtag);
     }
 
-    public async moveEvent(calendarId: string, id: string, targetCalendarId: string): Promise<CalendarEvent> {
-        return events.moveEvent(this, calendarId, id, targetCalendarId);
+    public async moveEvent(
+        calendarId: string,
+        id: string,
+        targetCalendarId: string,
+        expectedEtag?: string,
+    ): Promise<CalendarEvent> {
+        return events.moveEvent(this, calendarId, id, targetCalendarId, expectedEtag);
     }
 
-    // A whole `.ics` into one calendar of this Home (docs/CALENDAR.md § Import replays each series through putResource, as a device sync does).
+    // A whole `.ics` into one calendar of this Home, each series written through the store a device sync takes.
     public async importEvents(calendarId: string, bytes: Uint8Array): Promise<ImportCountsResult> {
         return importEvents(this, calendarId, bytes);
     }
@@ -558,7 +492,7 @@ export class Calendar {
         return exportEvents(this, calendarId, ids);
     }
 
-    // --- Shared calendars (implementation in calendar/shares.ts) ---
+    // --- Shared calendars ---
 
     public async getSharedCalendars(): Promise<SharedCalendar[]> {
         return shares.getSharedCalendars(this);
@@ -623,7 +557,7 @@ export class Calendar {
         return shares.checkPermission(this, calendarId, userEmail, teamIds);
     }
 
-    // --- Invitations (implementation in calendar/invitations.ts) ---
+    // --- Invitations ---
 
     public async receiveInvitation(payload: ReceiveInvitationPayload): Promise<string | null> {
         return invitations.receiveInvitation(this, payload);
@@ -696,5 +630,16 @@ export class Calendar {
         },
     ): Promise<void> {
         return invitations.rsvp(this, eventId, user, input);
+    }
+}
+
+// The one rule for what a calendar may be called and colored: REST, MKCALENDAR and PROPPATCH all land here.
+function validateCalendarProps(props: { name?: string; color?: string }): void {
+    if (props.name !== undefined && props.name.trim().length > CALENDAR_NAME_MAX_LENGTH) {
+        throw new ApiError(400, `Calendar name is longer than ${CALENDAR_NAME_MAX_LENGTH} characters`);
+    }
+    // Apple writes the eight-digit form, so all three hex lengths are valid.
+    if (props.color !== undefined && !isHexColor(props.color, [3, 6, 8])) {
+        throw new ApiError(400, 'Calendar color must be a hex color');
     }
 }

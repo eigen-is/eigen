@@ -316,6 +316,13 @@ describe('CardDAV', () => {
         expect(etag).toBe(`"${computeResourceEtag(new TextEncoder().encode(body))}"`);
     });
 
+    test('a stale If-None-Match: * with the bytes already stored is 412, not an unchanged success', async () => {
+        const uid = crypto.randomUUID();
+        const uri = `${uid}.vcf`;
+        expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
+        expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(412);
+    });
+
     test('GET under an unknown book segment is 404 even for an existing card', async () => {
         const uid = crypto.randomUUID();
         const uri = `${uid}.vcf`;
@@ -791,6 +798,22 @@ describe('CardDAV', () => {
         const xml = await (await report(syncBody(token))).text();
         expect(xml).toContain(cardHref(uri));
         expect(xml).not.toContain('404 Not Found');
+    });
+
+    test('a byte-identical re-PUT moves no sync token and answers the same ETag', async () => {
+        const uid = crypto.randomUUID();
+        const uri = `${uid}.vcf`;
+        const created = await putCard(uri, vcard(uid), { 'If-None-Match': '*' });
+        expect(created.status).toBe(201);
+        const token = syncTokenOf(await (await report(syncBody())).text());
+
+        const again = await putCard(uri, vcard(uid), { 'If-Match': created.headers.get('ETag')! });
+
+        expect(again.status).toBe(204);
+        expect(again.headers.get('ETag')).toBe(created.headers.get('ETag'));
+        const xml = await (await report(syncBody(token))).text();
+        expect(syncTokenOf(xml)).toBe(token);
+        expect(xml).not.toContain(cardHref(uri));
     });
 
     test('sync-collection with a stale generation token is 403 valid-sync-token', async () => {

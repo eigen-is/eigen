@@ -7,6 +7,7 @@ import {
     putResource,
     resourceRowOf,
     resourceTextOf,
+    storedEvents,
     vevent,
 } from '../calendar-test-helpers';
 import { breakTransaction } from '../db-test-helpers';
@@ -33,7 +34,7 @@ describe('calendar blob store', () => {
         // The row id rides in the bytes, so the projection can be thrown away and rebuilt from them.
         expect(stored).toContain('X-EIGEN-EVENT-ID:');
 
-        const rows = await harness.instance.getRawEvents(calendarId);
+        const rows = storedEvents(harness.instance, calendarId);
         expect(rows.map((r) => r.title)).toEqual(['Kickoff']);
         expect(rows[0].uri).toBe('first.ics');
         expect(rows[0].etag).toBe((await harness.instance.getResource(calendarId, 'first.ics'))!.etag);
@@ -136,7 +137,7 @@ describe('deleting', () => {
         const calendar = harness.instance;
         const calendarId = await defaultCalendarId(harness);
         await putResource(calendar, calendarId, 'erased.ics', vcal(vevent('erased@eigen', 'Erased')));
-        const stored = (await calendar.getRawEvents(calendarId))[0];
+        const stored = storedEvents(calendar, calendarId)[0];
 
         await calendar.deleteEvent(calendarId, stored.id);
         const ctagAfterDelete = (await calendar.getCollection(calendarId))!.ctag;

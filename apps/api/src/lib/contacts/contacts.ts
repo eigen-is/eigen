@@ -15,7 +15,7 @@ import { enforceHomeDataQuota } from '../config/enforcement';
 import { PATHS } from '../config/paths';
 import { getServerSettings } from '../config/server-settings';
 import type { ManagedDatabase, PutResourceResult, ResourcePreconditions } from '../core';
-import { ApiError, BroadcastBatch, computeResourceEtag, LocalFilesystem, newSyncGen } from '../core';
+import { ApiError, computeResourceEtag, LocalFilesystem, newSyncGen } from '../core';
 import type { Home } from '../home';
 import { atHome } from '../home';
 import { pushUserProfile } from '../home/home-relay';
@@ -31,7 +31,6 @@ import {
     CONTACT_ROW,
     cardBytes,
     indexCard,
-    isCardPhotoCacheOf,
     normalizeLabelName,
     PURGED_CARD,
     prepareCard,
@@ -43,7 +42,7 @@ import { CONTACTS_DB_CONFIG } from './db-config';
 import * as labels from './labels';
 import { dbRowToContact, toData } from './mappers';
 import * as schema from './schema';
-import { buildContactEvent, buildContactsChangedEvent, buildLabelEvent } from './sse-events';
+import { buildContactEvent, buildLabelEvent } from './sse-events';
 import * as transfer from './transfer';
 
 const DEFAULT_LABELS = [
@@ -77,9 +76,8 @@ export class Contacts {
     public home: Home;
     public storage: LocalFilesystem;
 
-    // bun:sqlite makes a transaction atomic and serial by itself, but a write path holds async gaps between
-    // its check and its commit (the quota check, the avatar derivation), and a racing If-Match PUT must lose
-    // inside the lock, not after it.
+    // A transaction alone can't serialize a write that awaits between its check and its commit, such as the
+    // quota check, so a racing If-Match PUT loses inside this lock.
     public writeLock = new Semaphore(1);
 
     // Running totals so size() answers from memory: a SUM per metered write makes an N-card device sync O(N²).
@@ -87,14 +85,10 @@ export class Contacts {
     public cardsBytes = 0;
     public avatarsBytes = 0;
 
-    // Whether card writes are quota-metered — see the assignment in init() for what turns it on.
     private meteredIngest = false;
 
     // Aborted by destruct, so an avatar sweep queued or running then stops before it reads the closed database.
     private readonly teardown = new AbortController();
-
-    // Bulk writes in flight; while any runs, per-card events are held and the last one out closes them.
-    private readonly batch = new BroadcastBatch(() => this.home.broadcast(buildContactsChangedEvent()));
 
     public constructor(home: Home) {
         this.home = home;
@@ -178,7 +172,7 @@ export class Contacts {
         }
     }
 
-    // --- Seams used by contacts/*.ts ---
+    // --- Seams for the contacts' own modules ---
 
     // Init and every avatar upload start a sweep without waiting for it. A sweep that the close stopped is no
     // failure, so it logs nothing.
@@ -189,13 +183,7 @@ export class Contacts {
     }
 
     public announce(type: Parameters<typeof buildContactEvent>[0], contactId: string): void {
-        if (this.batch.hold()) return;
         this.home.broadcast(buildContactEvent(type, contactId));
-    }
-
-    // A card written by something else inside the window loses nothing: its invalidation is owner-wide too.
-    public async withBatchedEvents<T>(fn: () => Promise<T>): Promise<T> {
-        return this.batch.run(fn);
     }
 
     public emitLabel(type: Parameters<typeof buildLabelEvent>[0], labelId: string): void {
@@ -235,10 +223,8 @@ export class Contacts {
         for (const id of createdLabelIds) this.emitLabel(SSEventType.LABEL_CREATED, id);
     }
 
-    // The one write every card path takes, and it owns the order: both ceilings judge the bytes before `cache`
-    // derives the avatar and before the transaction that stores them, so a refusal leaves neither a row nor a
-    // webp behind. `creditBytes` is the stored card this one replaces, or a rewrite that shrinks a card would
-    // be refused on a quota its own bytes already hold. Returns the avatar URL the projection stored.
+    // Both ceilings judge the bytes before `cache` derives the avatar, so a refusal leaves no row and no webp.
+    // `creditBytes` is the card this one replaces, or a shrinking rewrite would be refused on its own bytes.
     public async writeCard(opts: {
         row: CardProjection & Pick<CardRowInput, 'id' | 'uri' | 'eigenId'>;
         categories: string[];
@@ -272,7 +258,7 @@ export class Contacts {
 
         this.cardsBytes -= removed;
         const avatarName = row.data?.avatar ? avatarNameOf(row.data.avatar) : undefined;
-        if (avatarName && isCardPhotoCacheOf(row.id, avatarName)) {
+        if (avatarName) {
             const avatarPath = `${PATHS.CONTACTS.AVATARS}/${avatarName}`;
             try {
                 const avatarSize = await this.storage.size(avatarPath);
@@ -508,7 +494,7 @@ export class Contacts {
         if (deleted) this.announce(SSEventType.CONTACT_DELETED, deleted);
     }
 
-    // --- Label facade — implementation in contacts/labels.ts ---
+    // --- Labels ---
 
     public async getLabels(): Promise<Label[]> {
         return labels.getLabels(this);
@@ -560,7 +546,7 @@ export class Contacts {
         return rows.map((row) => dbRowToContact(row, labelsByContact.get(row.id) ?? []));
     }
 
-    // --- Avatar facade — implementation in contacts/avatars.ts ---
+    // --- Avatars ---
 
     public async uploadAvatar(file: File): Promise<string> {
         return avatars.uploadAvatar(this, file);
@@ -615,15 +601,10 @@ export class Contacts {
     }
 
     public async getMe(): Promise<Contact | null> {
-        const found = this.selfRow();
-        if (found) {
-            return this.getContactById(found.id);
-        }
-        const addedId = await this.addYourself();
-        return this.getContactById(addedId);
+        return this.getContactById(this.selfRow()?.id ?? (await this.addYourself()));
     }
 
-    // --- CardDAV store facade — implementation in contacts/dav-store.ts ---
+    // --- CardDAV store ---
 
     public async getBook(): Promise<CardBook> {
         return davStore.getBook(this);
@@ -652,7 +633,7 @@ export class Contacts {
     public async putCard(uri: string, body: string, options: PutCardOptions): Promise<PutResourceResult> {
         const result = await davStore.putCard(this, uri, body, options);
         // Told once the write lock is released, from the id the write read inside it: a re-read could lose a racing delete.
-        if (result.ok) {
+        if (result.ok && !result.unchanged) {
             this.announce(result.created ? SSEventType.CONTACT_CREATED : SSEventType.CONTACT_UPDATED, result.id);
         }
         return result;
@@ -665,7 +646,7 @@ export class Contacts {
         return result;
     }
 
-    // --- vCard transfer facade — implementation in contacts/transfer.ts ---
+    // --- vCard transfer ---
 
     public async exportCards(ids?: string[]): Promise<string> {
         return transfer.exportCards(this, ids);

@@ -10,6 +10,7 @@ import type { HomeSizeResponse, UserSettings } from '@workspace/lib/types/settin
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { time } from '../../utils/timing';
 import type { Calendar } from '../calendar/calendar';
+import type { CollabDocument } from '../collab/collab-document';
 import { PATHS } from '../config/paths';
 import type { ResolvedQuotas } from '../config/quota';
 import { resolveUserQuotas } from '../config/quota';
@@ -183,10 +184,8 @@ export class Home {
         return this;
     }
 
-    // Keeps the home open, however long the work takes, until the returned release is called. A holder that
-    // must stop when the home closes anyway, such as for a restore, passes onClosing. The home runs it when the
-    // close starts, before the parts close, unlike the onClosed of the constructor, which runs when the close
-    // is done. A closing home refuses, because its holder would never hear the close.
+    // Keeps the home open until the returned release is called. A holder that must stop when the home closes, such as
+    // for a restore, passes onClosing, which runs before the parts close. A closing home refuses.
     public hold(onClosing?: () => void): () => void {
         this.refuseIfClosing();
         this.holds++;
@@ -216,10 +215,8 @@ export class Home {
         }
     }
 
-    // The one rule: a Home closes when nothing holds it and its last request is longer ago than its idle
-    // time. A release only checks the rule again, so a holder that comes and goes, such as an upload that
-    // retries on a failing bucket, never keeps the Home open past its idle time. openHome calls it too, so
-    // a Home nobody requested closes once its last holder lets go.
+    // A Home closes when nothing holds it and its last request is older than its idle time. A release only checks this
+    // again, so a holder that comes and goes, such as an upload that retries, never keeps the Home open past that.
     public closeWhenIdle(): void {
         if (this._closing || this.holds > 0) return;
         clearTimeout(this.idleTimer);
@@ -232,9 +229,8 @@ export class Home {
         );
     }
 
-    // One shared connection per database file under the home, closed when the home goes idle.
-    // A closing home refuses, because the close might miss a database opened now, and the next
-    // home would open the same file a second time.
+    // A closing home refuses, because the close might miss a database opened now, and the next home would open the same
+    // file a second time.
     public async getLocalDatabase<S extends SchemaType>(
         config: DatabaseConfig<S>,
         relativePath: string,
@@ -273,6 +269,11 @@ export class Home {
         for (const listener of this.sseListeners) {
             listener(event);
         }
+    }
+
+    // Uses the field, not the getter: a home without a drive, such as an org's, has no open document to check.
+    public async forEachOpenDocument(visit: (document: CollabDocument) => Promise<void>): Promise<void> {
+        await this._drive?.forEachOpenDocument(visit);
     }
 
     // A team home has no notification center, so a notice to it is dropped.

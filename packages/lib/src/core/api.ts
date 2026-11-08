@@ -17,18 +17,14 @@ import {
     isInlineEditable,
 } from '../types/drive';
 
-// Resolve API host to an absolute URL. A relative VITE_API_HOST (e.g. "/eigen") gets
-// prefixed with window.location.origin at module load — that lets the same bundle work
-// when accessed via the public domain, a LAN IP, a tunnel, etc. Absolute values
-// (e.g. "http://localhost:8000" in dev) are passed through unchanged. WebSocket and SSE
-// helpers below depend on this being absolute.
+// A relative VITE_API_HOST (e.g. "/eigen") gets prefixed with window.location.origin at module load, so the same bundle
+// works on the public domain, a LAN IP or a tunnel. The WebSocket and SSE helpers need it absolute.
 function resolveApiHost(): string {
     const raw = import.meta.env.VITE_API_HOST || '';
     if (/^https?:\/\//.test(raw)) return raw;
     if (typeof window === 'undefined') {
-        // SSR / unit-test evaluation: no window.origin to splice in. Synthesize a valid
-        // absolute URL with protocol so module-load-time consumers (treaty, better-auth's
-        // URL validator) don't reject it. The browser bundle re-resolves at runtime.
+        // There is no window.origin in SSR or unit tests, so synthesize an absolute URL that module-load-time consumers
+        // (treaty, better-auth's URL validator) accept.
         return `http://localhost${raw.startsWith('/') ? raw : raw ? `/${raw}` : ''}`;
     }
     return `${window.location.origin}${raw.startsWith('/') ? raw : raw ? `/${raw}` : ''}`;
@@ -36,9 +32,8 @@ function resolveApiHost(): string {
 
 export const API_HOST = resolveApiHost();
 
-// Protocol surfaces live on the API's public origin, not under the API path prefix: the bundled
-// Caddyfiles serve /dav/* at the origin root (where /.well-known/caldav redirects) and IMAP/SMTP
-// listen on the hostname, while a bare dev API serves /dav on its own origin directly.
+// Protocol surfaces live on the API's public origin, not under the API path prefix: Caddy serves /dav/* at the origin
+// root and IMAP/SMTP listen on the hostname.
 export const SERVER_HOSTNAME = new URL(API_HOST).hostname;
 export const DAV_HOST = `${new URL(API_HOST).origin}/dav`;
 
@@ -48,10 +43,8 @@ export const api = treaty<app>(API_HOST, {
     },
 });
 
-// The one treaty without date revival: Eden's reviver matches a bare "1990-01-01" too, and a date-only
-// string turned into a Date shifts the day by timezone. Every route serving one reads through here —
-// contact birthdays, and the same birthdays on the Drive vCard preview and the mail part's. Deliberate
-// break from the Date wire convention, pinned by api.test.ts.
+// The one treaty without date revival: Eden's reviver also matches a bare "1990-01-01", and a date-only string turned
+// into a Date shifts the day by timezone. Every route serving one reads through here.
 const plainApi = treaty<app>(API_HOST, {
     fetch: {
         credentials: 'include',
@@ -97,7 +90,7 @@ export const waitlistApi = api.waitlist;
 export const backupApi = api.admin.backup;
 export const serverBackupApi = api.admin['server-backup'];
 
-// An env file from before an app existed lacks its key: unset is a same-origin relative link, what production serves.
+// Unset is a same-origin relative link, what production serves.
 const SPACE_APP_URL = import.meta.env.VITE_APP_SPACE_URL ?? '';
 const MAIL_APP_URL = import.meta.env.VITE_APP_MAIL_URL ?? '';
 const CONTACTS_APP_URL = import.meta.env.VITE_APP_CONTACTS_URL ?? '';
@@ -157,10 +150,8 @@ const getVectorUrl = (ownerId: string, mountId: string, pathId: string) =>
 export const getMailComposeUrl = (address: string) =>
     getMailAppUrl(`box/inbox?mode=compose&to=${encodeURIComponent(address)}`);
 
-// Cross-app entry into the Mail composer. `to` prefills the recipient. `attachments`
-// passes the full `ownerId/mountId/pathId` tuple per item in the URL so the Mail
-// route can re-fetch each DrivePath, build an AttachmentReference, and seed the
-// composer with `driveReferences` — same flow Reply/Forward uses via history state.
+// Each attachment's `ownerId/mountId/pathId` rides the URL so the Mail route can re-fetch its DrivePath and seed the
+// composer's `driveReferences`.
 export function openMailComposeWith(opts: { to?: string; attachments?: readonly DrivePath[] }): void {
     const params = new URLSearchParams({ mode: 'compose' });
     if (opts.to) params.set('to', opts.to);
@@ -208,10 +199,8 @@ export const getDriveImportUrl = (
 };
 export const getDriveImportFromDriveUrl = (ownerId: string, mountId: string, pathId: string) =>
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/import-from-drive`;
-// Backup artifacts move as raw bodies, not JSON: the download is a browser navigation and the upload
-// streams the file with its name in the query string, neither of which fits an Eden call. The name
-// is not a custom header on purpose — that would make the upload a CORS-preflighted request, and a
-// split-origin deployment answers the preflight without it.
+// Artifacts move as raw bodies: a download is a browser navigation and an upload streams the file, which no Eden call
+// fits. The name rides the query, since a custom header would force a CORS preflight a split-origin setup can't answer.
 export const getBackupArtifactUrl = (name: string) => `${API_HOST}/admin/backup/artifacts/${encodeURIComponent(name)}`;
 export const getBackupUploadUrl = (name: string) =>
     `${API_HOST}/admin/backup/artifacts?name=${encodeURIComponent(name)}`;

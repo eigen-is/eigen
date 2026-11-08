@@ -14,6 +14,7 @@ import { rowIndexToLabel, rowLabelToIndex, SHEET_NAME_PREFIX, unquoteSheetName }
 export {
     extractLabel,
     findSheetByName,
+    misreadBare,
     quoteSheetName,
     rowIndexToLabel,
     rowLabelToIndex,
@@ -24,13 +25,22 @@ export {
     unquoteSheetName,
 } from './parser/helper/cell';
 
-// Excel's rule for a sheet name: a length limit, characters it refuses, and no quote at either end. A tab rename
-// refuses a name that breaks it and says so in SHEET_NAME_RULE, and the xlsx writer repairs one.
+// Excel's rule for a sheet name: a length limit, characters it refuses, and no quote at either end.
 export const MAX_SHEET_NAME_LENGTH = 31;
 const FORBIDDEN_CHARACTERS = ['\\', '/', '?', '*', '[', ']', ':'];
 export const SHEET_NAME_FORBIDDEN = new RegExp(`[${FORBIDDEN_CHARACTERS.map((c) => `\\${c}`).join('')}]`, 'g');
 export const SHEET_NAME_END_QUOTES = /^'+|'+$/g;
 export const SHEET_NAME_RULE = `A sheet name has at most ${MAX_SHEET_NAME_LENGTH} characters, none of ${FORBIDDEN_CHARACTERS.join(' ')}, and no ' at either end`;
+
+// `search` ignores the global pattern's lastIndex, which `test` would carry from one call into the next.
+export function isSheetName(name: string): boolean {
+    return (
+        name.length > 0 &&
+        name.length <= MAX_SHEET_NAME_LENGTH &&
+        name.search(SHEET_NAME_END_QUOTES) === -1 &&
+        name.search(SHEET_NAME_FORBIDDEN) === -1
+    );
+}
 
 export type CellRef = { col: number; row: number };
 

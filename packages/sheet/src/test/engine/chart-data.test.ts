@@ -68,9 +68,7 @@ const cells: (Cell | null)[][] = [
     ],
     [null, null, { v: 7, m: '7' }],
 ];
-const resolver = createArrayResolver([
-    { id: 's1', name: 'Sheet1', data: cells, calculationChain: [], dynamicArrayCompute: [] },
-]);
+const resolver = createArrayResolver([{ id: 's1', name: 'Sheet1', data: cells }]);
 
 describe('resolveRangeChartData', () => {
     test('reads numbers from v, anything else as a gap, labels and names from the display text', () => {
@@ -116,8 +114,6 @@ describe('resolveRangeChartData', () => {
                 id: 's1',
                 name: 'Sheet1',
                 data: [[rich('Team ', 'A'), rich('Points')]],
-                calculationChain: [],
-                dynamicArrayCompute: [],
             },
         ]);
         const resolved = resolveRangeChartData(
@@ -133,8 +129,6 @@ describe('resolveRangeChartData', () => {
                 id: 's1',
                 name: 'Sheet1',
                 data: [[{ v: 'x'.repeat(500) }]],
-                calculationChain: [],
-                dynamicArrayCompute: [],
             },
         ]);
         const resolved = resolveRangeChartData(data(ref([0, 0], [0, 0]), series(ref([0, 0], [0, 0]))), long);
@@ -187,8 +181,6 @@ describe('renderSheetChartSvg', () => {
                 [{ v: 'Ajax', m: 'Ajax' }, percent(0.25)],
                 [{ v: 'PSV', m: 'PSV' }, percent(0.5)],
             ],
-            calculationChain: [],
-            dynamicArrayCompute: [],
         },
     ]);
     const chart = (format: string | null): SheetChart => {
@@ -238,8 +230,6 @@ describe('renderSheetChartSvg', () => {
                     [{ v: 'Ajax', m: 'Ajax' }, { v: 0.25 }],
                     [{ v: 'PSV', m: 'PSV' }, { v: 0.5 }],
                 ],
-                calculationChain: [],
-                dynamicArrayCompute: [],
             },
         ]);
         const svg = renderSheetChartSvg(chart(null), plain);
@@ -350,8 +340,6 @@ describe('inlineChartSpec', () => {
                 id: 's1',
                 name: 'Sheet1',
                 data: [[{ v: 'Ajax', m: 'Ajax' }, percent]],
-                calculationChain: [],
-                dynamicArrayCompute: [],
             },
         ]);
         const spec = sampleChartSpec('column');
@@ -400,8 +388,6 @@ describe('inlineChartSpec', () => {
                     { v: 'x'.repeat(100) + r, m: 'x'.repeat(100) + r },
                     { v: r },
                 ]),
-                calculationChain: [],
-                dynamicArrayCompute: [],
             },
         ]);
         const chart = sheetChart({

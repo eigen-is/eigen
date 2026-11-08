@@ -635,28 +635,6 @@ describe('Mount (local path-based storage)', () => {
         expect(found).not.toBeNull();
         expect(found!.id).toBe(fileId);
     });
-
-    // A corrupt tree, built in the table: the move resolves the target's key before any other check.
-    test('a move, a breadcrumb and a copy check into a parent loop answer 500', async () => {
-        const looped = new Mount(
-            OWNER_ID,
-            TEST_DIR,
-            createTestMountConfig('test-local-loop', 'local'),
-            createGetLocalDatabase(TEST_DIR),
-        );
-        await looped.init();
-        const loopRootId = (await looped.getRootFolder())!.id;
-        const pId = await looped.createFolder(loopRootId, 'LoopP');
-        const qId = await looped.createFolder(loopRootId, 'LoopQ');
-        const fileId = await looped.createFile(loopRootId, 'outside.txt', 'text/plain', 1, Buffer.from('o'));
-        await looped.db.update(paths).set({ parentId: qId }).where(eq(paths.id, pId));
-        await looped.db.update(paths).set({ parentId: pId }).where(eq(paths.id, qId));
-
-        await expect(looped.updatePath(fileId, { parentId: pId })).rejects.toMatchObject({ status: 500 });
-        expect((await looped.getPath(fileId))!.parentId).toBe(loopRootId);
-        await expect(looped.getBreadcrumb(pId)).rejects.toMatchObject({ status: 500 });
-        await expect(looped.isSelfOrDescendant(fileId, pId)).rejects.toMatchObject({ status: 500 });
-    });
 });
 
 describe('Upload queue gating', () => {
@@ -756,20 +734,6 @@ describe('Name validation', () => {
     test('rejects .trash on rename', async () => {
         const id = await mount.createFolder(rootId, 'NotTrash');
         await expect(mount.updatePath(id, { name: '.trash' })).rejects.toThrow('reserved name');
-    });
-
-    // A legacy pre-guard row named .trash could otherwise be MOVED to the mount root,
-    // where storage.rename would land it on the real trash dir (the audit's move vector).
-    test('rejects moving a legacy .trash row to another parent', async () => {
-        const subId = await mount.createFolder(rootId, 'LegacyHome');
-        const folderId = await mount.createFolder(subId, 'PreGuard');
-        // Simulate a pre-guard row faithfully: name + file column + physical dir all `.trash`.
-        await mount.db.update(paths).set({ name: '.trash', file: '.trash' }).where(eq(paths.id, folderId));
-        renameSync(join(mount.dataDir, 'LegacyHome', 'PreGuard'), join(mount.dataDir, 'LegacyHome', '.trash'));
-
-        await expect(mount.updatePath(folderId, { parentId: rootId })).rejects.toThrow('reserved name');
-        // The real trash dir must still be the mount's own, not the user folder.
-        expect(existsSync(join(mount.dataDir, 'LegacyHome', '.trash'))).toBe(true);
     });
 
     test('rejects name longer than 255 bytes', async () => {
@@ -1463,7 +1427,7 @@ describe('restorePath (local-key storage)', () => {
         expect(restored.trashedAt).toBeNull();
     });
 
-    // A live folder inside a trashed one is legacy data, or a create that raced the trash off `local`.
+    // A live folder inside a trashed one is a create that raced the trash off `local`.
     test('restore when an ancestor of the original parent is trashed restores to root', async () => {
         const outerId = await mount.createFolder(rootId, 'RestoreTrashedAncestor');
         const innerId = await mount.createFolder(outerId, 'Inner');
@@ -1594,22 +1558,6 @@ describe('restorePath (local path-based storage)', () => {
         const restored = await mount.restorePath(fileId);
         expect(restored.parentId).toBe(rootId);
         expect(await (await mount.readFile(fileId))!.text()).toBe('d');
-    });
-
-    // Rows named .trash created before the reserved-name guard can exist on live installs;
-    // restoring one must conflict-rename, never land on the real trash dir.
-    test('restore of a legacy trashed row named .trash lands with a renamed name', async () => {
-        const folderId = await mount.createFolder(rootId, 'LegacyTrashName');
-        await mount.createFile(folderId, 'inside.txt', 'text/plain', 6, Buffer.from('legacy'));
-        await mount.trashPath(folderId);
-        // Simulate a pre-guard row: rename directly in the db, bypassing validateName.
-        await mount.db.update(paths).set({ name: '.trash' }).where(eq(paths.id, folderId));
-
-        const restored = await mount.restorePath(folderId);
-        expect(restored.name.toLowerCase()).not.toBe('.trash');
-        expect(existsSync(join(mount.dataDir, restored.name, 'inside.txt'))).toBe(true);
-        // The real trash dir is still a directory at data/.trash
-        expect(existsSync(join(mount.dataDir, '.trash'))).toBe(true);
     });
 
     test('a restore whose row write fails leaves the item in trash, bytes and all', async () => {
@@ -1753,6 +1701,35 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
         expect(await mount.getPath(childId)).toBeNull();
     });
 
+    test('a chain of separately trashed folders restores step by step and deletes as one', async () => {
+        const outerId = await mount.createFolder(rootId, 'ChainOuter');
+        const midId = await mount.createFolder(outerId, 'ChainMid');
+        const midSubId = await mount.createFolder(midId, 'ChainMidSub');
+        const fileId = await mount.createFile(midSubId, 'chain.txt', 'text/plain', 5, Buffer.from('chain'));
+        await mount.trashPath(fileId);
+        await mount.trashPath(midId);
+
+        // The move that once left a trash root's original folder inside the root itself.
+        await expect(mount.updatePath(outerId, { parentId: midSubId })).rejects.toThrow('Folder not found');
+
+        await mount.trashPath(outerId);
+        await mount.restorePath(outerId);
+        await mount.restorePath(midId);
+        await mount.restorePath(fileId);
+        expect((await mount.getActivePath(fileId)).parentId).toBe(midSubId);
+        expect((await mount.getActivePath(midId)).parentId).toBe(outerId);
+
+        await mount.trashPath(fileId);
+        await mount.trashPath(midId);
+        await mount.trashPath(outerId);
+        const inside = await mount.listTrashRootsInside(outerId);
+        expect(inside.map((p) => p.id).sort()).toEqual([midId, fileId].sort());
+        expect(await mount.permanentlyDeleteFromTrash(outerId)).toBe(true);
+        for (const id of [outerId, midId, midSubId, fileId]) {
+            expect(await mount.getPath(id)).toBeNull();
+        }
+    });
+
     test('purgeTrash(0) deletes every expired trashed item', async () => {
         const config2 = createTestMountConfig('test-purge-all', 'local-key');
         const mount2 = new Mount(OWNER_ID, TEST_DIR, config2, createGetLocalDatabase(TEST_DIR));
@@ -1811,61 +1788,6 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
         expect(await mount4.getPath(oldId)).toBeNull();
         // The new item (trashed just now) should still exist
         expect(await mount4.getPath(newId)).not.toBeNull();
-    });
-
-    // A mount can still hold a trash root whose original folder sits inside its own subtree, or two trash
-    // roots whose original folders sit inside each other. The delete must not wait on a lock it holds.
-    test('permanent delete ends when trashedFrom points back into the subtree', async () => {
-        const moveRow = (id: string, parentId: string) =>
-            mount.db.update(paths).set({ parentId }).where(eq(paths.id, id));
-        const outerId = await mount.createFolder(rootId, 'CycleOuter');
-        const innerId = await mount.createFolder(outerId, 'CycleInner');
-        await mount.trashPath(innerId);
-        await moveRow(outerId, innerId);
-
-        const pId = await mount.createFolder(rootId, 'CycleP');
-        const xId = await mount.createFolder(pId, 'CycleX');
-        const qId = await mount.createFolder(rootId, 'CycleQ');
-        const yId = await mount.createFolder(qId, 'CycleY');
-        await mount.trashPath(xId);
-        await mount.trashPath(yId);
-        await moveRow(pId, yId);
-        await moveRow(qId, xId);
-
-        const deleted = (id: string) =>
-            Promise.race([
-                mount.permanentlyDeleteFromTrash(id).then((deleted) => (deleted ? 'deleted' : 'kept')),
-                Bun.sleep(1000).then(() => 'timed out'),
-            ]);
-        expect(await deleted(innerId)).toBe('deleted');
-        expect(await deleted(xId)).toBe('deleted');
-        for (const id of [outerId, innerId, pId, xId, qId, yId]) {
-            expect(await mount.getPath(id)).toBeNull();
-        }
-    });
-
-    // Each delete would hold its own root and wait on the other's, as emptyTrash beside the purge at open can.
-    test('two permanent deletes of trash roots that point into each other both end', async () => {
-        const moveRow = (id: string, parentId: string) =>
-            mount.db.update(paths).set({ parentId }).where(eq(paths.id, id));
-        const pId = await mount.createFolder(rootId, 'MutualP');
-        const xId = await mount.createFolder(pId, 'MutualX');
-        const qId = await mount.createFolder(rootId, 'MutualQ');
-        const yId = await mount.createFolder(qId, 'MutualY');
-        await mount.trashPath(xId);
-        await mount.trashPath(yId);
-        await moveRow(pId, yId);
-        await moveRow(qId, xId);
-
-        const deleted = (id: string) =>
-            Promise.race([
-                mount.permanentlyDeleteFromTrash(id).then((deleted) => (deleted ? 'deleted' : 'kept')),
-                Bun.sleep(1000).then(() => 'timed out'),
-            ]);
-        expect(await Promise.all([deleted(xId), deleted(yId)])).toEqual(['deleted', 'kept']);
-        for (const id of [pId, xId, qId, yId]) {
-            expect(await mount.getPath(id)).toBeNull();
-        }
     });
 
     test('permanentlyDeleteFromTrash keeps an item that is not in trash', async () => {
@@ -2039,6 +1961,34 @@ describe('a write under a folder deleted meanwhile (local-key storage)', () => {
         }
         // This mount stores no other object.
         expect(existsSync(mount.dataDir) ? readdirSync(mount.dataDir) : []).toEqual([]);
+    });
+
+    // Off `local` a folder delete locks none of its files, and the object at the key is this file's alone.
+    test('an overwrite answers 404 and leaves no object behind', async () => {
+        const folderId = await mount.createFolder(rootId, 'GoneWhileOverwriting');
+        const fileId = await mount.createFile(folderId, 'late.bin', 'application/octet-stream', 3, Buffer.from('old'));
+        const key = await mount.getStorageKey(fileId);
+        const inWrite = Promise.withResolvers<void>();
+        const release = Promise.withResolvers<void>();
+        const write = mount.storage.write.bind(mount.storage);
+        const spy = spyOn(mount.storage, 'write').mockImplementationOnce(async (writeKey, data) => {
+            inWrite.resolve();
+            await release.promise;
+            return write(writeKey, data);
+        });
+        try {
+            const outcome = mount.writeFile(fileId, Buffer.from('new')).catch((e: unknown) => e);
+            await inWrite.promise;
+            await mount.deletePath(folderId);
+            release.resolve();
+
+            const err = await outcome;
+            expect(err).toBeInstanceOf(ApiError);
+            expect(err).toMatchObject({ status: 404 });
+        } finally {
+            spy.mockRestore();
+        }
+        expect(await mount.storage.exists(key)).toBe(false);
     });
 
     test('a folder answers 404', async () => {
@@ -2574,8 +2524,8 @@ describe('content index dirty marks', () => {
     test('overwriting a plaintext file re-marks it contentDirty; a binary overwrite does not', async () => {
         const txt = await mount.createFile(rootId, 'rewrite.txt', 'text/plain', 0, undefined);
         const png = await mount.createFile(rootId, 'rewrite.png', 'image/png', 0, undefined);
-        mount.markContentIndexed(txt);
-        mount.markContentIndexed(png);
+        mount.clearContentDirty(txt);
+        mount.clearContentDirty(png);
 
         await mount.writeFile(txt, Buffer.from('fresh text'));
         await mount.writeFile(png, Buffer.from([137, 80, 78, 71]));
@@ -2588,8 +2538,8 @@ describe('content index dirty marks', () => {
     test('overwriting from a temp file (streaming PUT) follows the same searchable gate', async () => {
         const txt = await mount.createFile(rootId, 'stream.txt', 'text/plain', 0, undefined);
         const png = await mount.createFile(rootId, 'stream.png', 'image/png', 0, undefined);
-        mount.markContentIndexed(txt);
-        mount.markContentIndexed(png);
+        mount.clearContentDirty(txt);
+        mount.clearContentDirty(png);
 
         await Bun.write(mount.getTempPath('overwrite-txt'), 'streamed text');
         await mount.writeFileFromTemp(txt, 'overwrite-txt', 13, 'hash-a');

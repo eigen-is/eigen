@@ -193,7 +193,7 @@ describe('the stored page', () => {
         expect(readPageSetup({ differentFirstPage: true }).differentFirstPage).toBe(true);
     });
 
-    // A doc without the key, every doc from before page-less mode, is paged.
+    // A doc without the key is paged.
     test('pageless reads as true only when it is stored as true', () => {
         for (const stored of [undefined, false, 'true', 1, null, {}]) {
             expect(readPageSetup({ pageless: stored }).pageless).toBe(false);

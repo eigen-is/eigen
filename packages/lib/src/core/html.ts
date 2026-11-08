@@ -12,10 +12,8 @@ export function escapeHtml(text: string): string {
         .replace(/>/g, '&gt;');
 }
 
-// Exact inverse of escapeHtml, for the one case that needs it: code that measures or
-// inspects escaped text and must see what the browser renders rather than the markup.
-// `&amp;` decodes last so an escaped `&amp;lt;` comes back as the literal `&lt;` it was,
-// instead of turning into a `<`.
+// Exact inverse of escapeHtml, for code that must see what the browser renders. `&amp;` decodes last so an escaped
+// `&amp;lt;` comes back as the literal `&lt;` and not as a `<`.
 export function unescapeHtml(html: string): string {
     return html
         .replace(/&quot;/g, '"')
@@ -34,10 +32,8 @@ export function textToParagraphHtml(text: string): string {
         .join('');
 }
 
-// Server-side HTML → plain-text. Browser code should use `htmlToPlainText` from
-// ./html-dom, which delegates to the DOM parser; this regex variant is intended for
-// Node/Bun where there's no `document`. Used by the email composers to populate the
-// plain-text fallback (`OutboundMail.text`) for spam filters.
+// Browser code uses `htmlToPlainText` from ./html-dom; this regex variant is for Node and Bun, where there is no
+// `document`.
 export function stripTagsServer(html: string): string {
     if (!html) return '';
     const text = dropRawTextElements(html)
@@ -45,9 +41,7 @@ export function stripTagsServer(html: string): string {
         .replace(/<br\s*\/?>/gi, '\n')
         // `[^<>]`, not `[^>]`: a `<` no `>` follows would rescan the rest of the input from every `<`.
         .replace(/<[^<>]+>/g, '');
-    // `&nbsp;` is not one of escapeHtml's five, so it stays here; the rest decode through
-    // the shared inverse, which decodes `&amp;` LAST. Doing it first, as this used to,
-    // turned an escaped `&amp;lt;` into a `<` the source never contained.
+    // `&nbsp;` is not one of escapeHtml's five, so it stays here; the rest decode through the shared inverse.
     return unescapeHtml(text.replace(/&nbsp;/gi, ' '))
         .replace(/[ \t]+/g, ' ')
         .replace(/\n{3,}/g, '\n\n')
@@ -79,21 +73,14 @@ function dropRawTextElements(html: string): string {
     return kept + html.slice(from);
 }
 
-// What the shared LightEditor's schema keeps: its block nodes, the inline marks it renders, `<a>`
-// (Link is enabled) and `<br>` — plus the only three attributes that survive, all of them the anchor's.
-// The canvas mounts a rich-text box's `html` through the LightEditor sanitizer in ./html-dom while the
-// API renders the same string into exports and previews, so both filter to this one list; two lists
-// would mean a `<table>` or an `<img src="data:…">` a peer wrote is invisible live and printed anyway.
-// The base set: a comment-card LightEditor also enables taskList, and ./html-dom's
-// sanitizeCommentCardHtml keeps that structure on top of these — nothing on the API renders one.
+// The canvas sanitizer in ./html-dom and the API's exports filter to this one list; two lists would print a `<table>`
+// or data: `<img>` a peer wrote that is invisible live. Comment cards add taskList on top (sanitizeCommentCardHtml).
 export const LIGHT_EDITOR_BLOCK_TAGS = ['p', 'blockquote', 'ul', 'ol', 'li'] as const;
 export const LIGHT_EDITOR_MARK_TAGS = ['strong', 'em', 'u', 's'] as const;
 export const LIGHT_EDITOR_TAGS: string[] = [...LIGHT_EDITOR_BLOCK_TAGS, ...LIGHT_EDITOR_MARK_TAGS, 'a', 'br'];
 export const LIGHT_EDITOR_ATTRS = ['href', 'target', 'rel'];
 
-// The only href schemes a LightEditor anchor keeps — a javascript:/data:/vbscript: href is an XSS
-// vector, and the sanitized HTML is rendered through dangerouslySetInnerHTML by the canvas' rich-text
-// layer and the comment-card notes, and injected as live DOM in the drive hero.
+// A javascript:, data: or vbscript: href is an XSS vector, and this HTML is rendered through dangerouslySetInnerHTML.
 export const LIGHT_EDITOR_HREF = /^(https?:|mailto:)/i;
 
 // TipTap's TaskItem writes `data-checked="true|false"` on every task-list <li>, nested lists included.

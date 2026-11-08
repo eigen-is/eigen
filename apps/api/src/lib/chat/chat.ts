@@ -45,22 +45,12 @@ export class ChatRoom {
         await drive.createFolder(mountId, roomId, CONTAINER_MEDIA_FOLDER);
     }
 
-    // Finds the room's data.db, and creates it when it is missing. It opens nothing: each method below
-    // opens data.db for its own queries.
+    // Finds the room's data.db. It opens nothing: each method below opens data.db for its own queries.
     public static async open(drive: Drive, home: Home, path: DrivePath): Promise<ChatRoom> {
-        let dataDb = await drive.getChildByName(path.mountId, path.id, CONTAINER_DATA_DB);
-        if (!dataDb) {
-            // Drive.getChat opens a new ChatRoom for every request. Two first requests at once would each
-            // create a data.db, so the create runs under the chat's lock and checks again there.
-            dataDb = await drive.withPathLock(path.mountId, path.id, async () => {
-                const existing = await drive.getChildByName(path.mountId, path.id, CONTAINER_DATA_DB);
-                if (existing) return existing;
-                await ChatRoom.create(drive, path.mountId, path.id);
-                const created = await drive.getChildByName(path.mountId, path.id, CONTAINER_DATA_DB);
-                if (!created) throw new ApiError(500, `Failed to create data.db in ${path.name}`);
-                return created;
-            });
-        }
+        const dataDb = await drive.getChildByName(path.mountId, path.id, CONTAINER_DATA_DB);
+        // A copy makes the room before it copies data.db into it. A request in between gets a 503 and
+        // tries again, the same as a collab document.
+        if (!dataDb) throw new ApiError(503, `${path.name} has no data.db yet`);
         const containerPath = await drive.findContainerPath(path.mountId, path.parentId ?? '');
         return new ChatRoom(drive, home, path, dataDb.id, containerPath);
     }
@@ -153,7 +143,7 @@ export class ChatRoom {
         // A comment thread inside a document keeps the document's comment index up to date.
         if (type !== 'whisper') {
             await this.updateCommentIndex(async (index) => {
-                await index.ensureComment(this.path.name, { createdBy: authorEmail });
+                await index.ensureComment(this.path.name, authorEmail);
                 await index.updateActivity(this.path.name, authorEmail);
                 for (const email of extractMentionedEmails(content)) {
                     await index.addMention(this.path.name, email);
@@ -278,9 +268,8 @@ export class ChatRoom {
                 );
             }
 
-            // The history gets a 'commented' row on the document, or on a chat on its own. A whisper is
-            // private to its recipient, so it never reaches the history. The watchers skip everyone the
-            // notifications above reached, so nobody hears about one message twice.
+            // A whisper is private to its recipient, so it never reaches the history. The watchers skip everyone the
+            // notifications above reached, so nobody hears of one message twice.
             if (type !== 'whisper') {
                 const coveredEmails = new Set<string>([
                     authorEmail.toLowerCase(),

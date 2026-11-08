@@ -1,7 +1,7 @@
 // How a failed request reaches the user: AppError reads a readable message and the status from what Eden or a fetch
 // hands back, getErrorMessage turns it into the toast's text, and onMutationError is the onError every mutation hook
-// passes to show it. wasToasted tells a caller that also sees the rejection that a toast already showed it, and
-// isRefusal tells a dialog whether another try could go through.
+// passes to show it. onEtagWriteError is that onError for a write that sends an etag. wasToasted tells a caller that
+// also sees the rejection that a toast already showed it, and isRefusal tells a dialog whether another try could help.
 
 import { toast } from 'sonner';
 import { isRecord } from './guards';
@@ -25,8 +25,8 @@ function readString(source: Record<string, unknown>, key: string): string | unde
     return typeof field === 'string' && field.trim() !== '' ? field.trim() : undefined;
 }
 
-// Elysia keeps a validation error's `message` and `summary` out of production bodies — a rejected schema
-// arrives as `{ type, on, found }`, with nothing to read — so the status has to carry the meaning there.
+// Elysia keeps a validation error's `message` and `summary` out of production bodies, and a rejected schema arrives
+// as `{ type, on, found }` with nothing to read, so the status has to carry the meaning there.
 function messageFromBody(value: unknown, status: number): string {
     const fallback = STATUS_MESSAGES[status] ?? 'Request failed';
     if (typeof value === 'string') return value.trim() || fallback;
@@ -43,8 +43,7 @@ function messageFromBody(value: unknown, status: number): string {
 export class AppError extends Error {
     public status: number;
 
-    // error.status is `unknown`, not `number`: the untyped-error GET routes (/p/config, /settings/server,
-    // /settings/s3config) declare no response schema, so Eden can't enumerate their codes. Coerced below.
+    // error.status is `unknown`: a route that declares no response schema leaves Eden no codes to enumerate.
     public constructor(response: { error: { status: unknown; value: unknown } | null; status: number }) {
         const errorStatus = response.error?.status;
         const status = typeof errorStatus === 'number' ? errorStatus : response.status;
@@ -77,8 +76,7 @@ export function getErrorMessage(error: unknown): string {
 // exactly those and let anything else surface.
 const toastedErrors = new WeakSet<object>();
 
-// For a hook that shows its own toast for an error instead of onMutationError's.
-export function markToasted(error: unknown): void {
+function markToasted(error: unknown): void {
     if (error !== null && typeof error === 'object') toastedErrors.add(error);
 }
 
@@ -87,6 +85,28 @@ export function onMutationError(error: unknown): void {
     toast.error(getErrorMessage(error));
 }
 
+// A 412: what the write loaded changed elsewhere first.
+export function isStaleWrite(error: unknown): boolean {
+    return error instanceof AppError && error.status === 412;
+}
+
+// A stale write reloads the data behind the form and says so in its own toast. The error counts as toasted either way,
+// so a dialog that awaits the write doesn't log it again.
+export function onEtagWriteError(error: unknown, staleMessage: string, reload: () => void): void {
+    if (!isStaleWrite(error)) {
+        onMutationError(error);
+        return;
+    }
+    reload();
+    markToasted(error);
+    toast.error(staleMessage);
+}
+
 export function wasToasted(error: unknown): boolean {
     return error !== null && typeof error === 'object' && toastedErrors.has(error);
+}
+
+// For a form with no dialog to take the rejection: a toast has told the user, and anything else must still surface.
+export function rethrowUntoasted(error: unknown): void {
+    if (!wasToasted(error)) throw error;
 }

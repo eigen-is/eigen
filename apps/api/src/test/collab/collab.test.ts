@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
+import { COLLAB_ACCESS_LOST_CLOSE } from '@workspace/lib/constants/collab';
 import type { ServerWebSocket } from 'elysia/ws/bun';
 import * as encoding from 'lib0/encoding';
 import * as awarenessProtocol from 'y-protocols/awareness';
@@ -610,7 +611,7 @@ describe('Collab', () => {
             // Owner revokes Bob's read (empty ACL). Bob must be disconnected; Alice must stay.
             await aliceHome.drive.updateACL(aliceMountId, docId, [], undefined, undefined, aliceUser);
 
-            expect(bobConn.closedWith?.code).toBe(1008);
+            expect(bobConn.closedWith?.code).toBe(COLLAB_ACCESS_LOST_CLOSE);
             expect(aliceConn.closedWith).toBeNull();
             expect(collab.connectionCount).toBe(baseline + 1);
 
@@ -623,6 +624,29 @@ describe('Collab', () => {
 
             // Don't leak the surviving spy into later same-docId tests (bob was already dropped).
             collab.unsubscribe(aliceConn);
+        });
+
+        test('an ACL change on one path leaves the readers of other open documents connected', async () => {
+            const aliceHome = await getHome(ctx.alice.user.id);
+            const bobUser = (await getHome(ctx.bob.user.id)).user;
+            const aliceUser = aliceHome.user;
+            const share = [{ id: 'bob@test.eigen.is', read: true, write: true }];
+            const untouched = await aliceHome.drive.create(aliceMountId, aliceRootId, 'Untouched', 'doc', aliceUser);
+            const revoked = await aliceHome.drive.create(aliceMountId, aliceRootId, 'Revoked', 'doc', aliceUser);
+            await aliceHome.drive.updateACL(aliceMountId, untouched.id, share, undefined, undefined, aliceUser);
+            await aliceHome.drive.updateACL(aliceMountId, revoked.id, share, undefined, undefined, aliceUser);
+            const untouchedDoc = await aliceHome.drive.getCollabDocument(aliceMountId, untouched.id);
+            const revokedDoc = await aliceHome.drive.getCollabDocument(aliceMountId, revoked.id);
+            const stays = makeSpyConn();
+            const closes = makeSpyConn();
+            untouchedDoc.subscribe(bobUser, stays);
+            revokedDoc.subscribe(bobUser, closes);
+
+            await aliceHome.drive.updateACL(aliceMountId, revoked.id, [], undefined, undefined, aliceUser);
+
+            expect(closes.closedWith?.code).toBe(COLLAB_ACCESS_LOST_CLOSE);
+            expect(stays.closedWith).toBeNull();
+            untouchedDoc.unsubscribe(stays);
         });
 
         test('revoking only write (read intact) does NOT close the connection', async () => {
@@ -768,7 +792,7 @@ describe('Collab', () => {
 
             // Read is now gone at the new location, and Bob's socket is closed for it.
             expect(await aliceHome.drive.canRead(aliceMountId, movingDoc.id, bobUser)).toBe(false);
-            expect(bobConn.closedWith?.code).toBe(1008);
+            expect(bobConn.closedWith?.code).toBe(COLLAB_ACCESS_LOST_CLOSE);
             expect(aliceConn.closedWith).toBeNull();
             expect(collab.connectionCount).toBe(baseline + 1);
 

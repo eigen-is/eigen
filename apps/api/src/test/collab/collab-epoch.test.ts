@@ -2,14 +2,19 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+    COLLAB_ACCESS_LOST_CLOSE,
+    COLLAB_ACCESS_LOST_REASON,
     COLLAB_EPOCH_MESSAGE,
     COLLAB_HOME_REPLACED_CLOSE,
     COLLAB_HOME_REPLACED_REASON,
+    COLLAB_STORAGE_UNAVAILABLE_CLOSE,
+    COLLAB_STORAGE_UNAVAILABLE_REASON,
 } from '@workspace/lib/constants/collab';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import * as decoding from 'lib0/decoding';
 import { SERVER_RUNTIME_FILES } from '../../lib/config/paths';
 import { getDataEpoch, rotateHomeDataEpoch } from '../../lib/home/data-epoch';
+import { clearHomeRestoring, evictHome, markHomeRestoring } from '../../lib/home/get-home';
 import { waitFor } from '../fault-storage-helpers';
 import { driveGet, drivePost, getTestContext, TEST_DATA_DIR } from '../setup';
 
@@ -117,10 +122,27 @@ describe('Collab data epoch', () => {
         expect(fresh.synced).toBe(true);
     });
 
-    test('a signed-in user who may not read the document is closed 1008 access denied, with no epoch', async () => {
+    test('a stale tab retries while the restore holds the home, and reloads only once it is done', async () => {
+        const before = getDataEpoch(ownerId);
+        markHomeRestoring(ownerId);
+        await evictHome(ownerId);
+        await rotateHomeDataEpoch(ownerId);
+        const during = await open(`?epoch=${before}`);
+        clearHomeRestoring(ownerId);
+        expect(during.synced).toBe(false);
+        expect(during.close).toEqual({
+            code: COLLAB_STORAGE_UNAVAILABLE_CLOSE,
+            reason: COLLAB_STORAGE_UNAVAILABLE_REASON,
+        });
+        const after = await open(`?epoch=${before}`);
+        expect(after.synced).toBe(false);
+        expect(after.close).toEqual({ code: COLLAB_HOME_REPLACED_CLOSE, reason: COLLAB_HOME_REPLACED_REASON });
+    });
+
+    test('a signed-in user who may not read the document is closed as access lost, with no epoch', async () => {
         const opened = await open(`?epoch=${getDataEpoch(ownerId)}`, ctx.bob.user.sessionToken);
         expect(opened.synced).toBe(false);
         expect(opened.epoch).toBeNull();
-        expect(opened.close).toEqual({ code: 1008, reason: 'Access denied' });
+        expect(opened.close).toEqual({ code: COLLAB_ACCESS_LOST_CLOSE, reason: COLLAB_ACCESS_LOST_REASON });
     });
 });

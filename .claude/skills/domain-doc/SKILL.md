@@ -5,13 +5,9 @@ description: Use when writing, rewriting, extending, shortening or reviewing a d
 
 # Domain doc
 
-A domain doc tells a developer how one part of Eigen works now and why it is built that way. They read it before they touch the code. The code answers "what does this function do". The doc answers what the code can't: the design decisions, the invariants, and the gotchas that already bit someone.
+A domain doc tells a developer, before they touch the code, how one part of Eigen works now and why: the design decisions, invariants and gotchas the code can't say. Model the opening on `docs/CALENDAR.md` and the reference sections on `docs/COLLAB.md`.
 
-**A doc covers a domain, an app or a core function**: SHEETS.md for the sheets app, COLLAB.md for the collab core, CALDAV.md for the CalDAV service beside CALENDAR.md for the calendar app. A service with its own protocol (CalDAV, CardDAV, WebDAV) may have its own doc next to its app's; that is a judgment call, not a rule. Never a doc per feature or per sub-mechanism. New material goes into the doc of the domain it belongs to, and a doc is not split to shorten it: every extra doc is one more place to look and one more to keep in sync.
-
-Read `docs/CALENDAR.md` for the opening and `docs/COLLAB.md` for the reference sections before you write. What to avoid: narration, catalogues and file tours.
-
-Not domain docs: the backlogs (`ROADMAP*.md`, `*-TODO.md`), the generated `SHARED-PRIMITIVES.md`, the standards and guides (`CODE-STANDARDS.md`, `CODE-EXAMPLES.md`, `REVIEW-STANDARD.md`, `SUPPORT-STYLE-GUIDE.md`, `CONTRIBUTING.md`) and the operator guide `SELF-HOSTING.md`. The voice rules still apply to them.
+**A doc covers a domain, an app or a core function** (SHEETS.md, COLLAB.md, CALDAV.md beside CALENDAR.md); a service with its own protocol (CalDAV, CardDAV, WebDAV) may get a doc next to its app's, as a judgment call. Never a doc per feature or sub-mechanism: new material goes into its domain's doc, and a doc is not split to shorten it. Not domain docs, though the voice rules apply: the backlogs (`ROADMAP*.md`, `*-TODO.md`), the generated `SHARED-PRIMITIVES.md`, the standards and guides (`CODE-STANDARDS.md`, `CODE-EXAMPLES.md`, `REVIEW-STANDARD.md`, `SUPPORT-STYLE-GUIDE.md`, `CONTRIBUTING.md`) and `SELF-HOSTING.md`.
 
 ## The shape
 
@@ -20,7 +16,7 @@ Not domain docs: the backlogs (`ROADMAP*.md`, `*-TODO.md`), the generated `SHARE
 
 > **TLDR:** The concept in plain words: what this is, who or what uses it, where its data lives, and the one idea the design rests on. Then the one or two directories.
 
-An introduction of a few short paragraphs, for a developer who has never seen this code. What the thing is and how it is used. Where the data lives and what is the truth. Why it is built this way. Each term the sections rely on, in a plain clause the first time it appears. Last, what the sections cover and the few things that surprise people, linked to their sections.
+An introduction of a few short paragraphs: what the thing is and how it is used, where the data lives and what is the truth, why it is built this way, each term the sections rely on in a plain clause. Last, the few things that surprise people, linked to their sections.
 
 ## A heading that states a fact
 
@@ -29,55 +25,45 @@ What, then why, then where. One idea per section.
 ## See also
 ```
 
-- The opening is for someone arriving cold. After the title, the TLDR and the introduction under it, a reader who has never opened this code gets the concept: what the domain is, where its data lives, what the truth is and why it is built that way. It reads like a person explaining the thing to a colleague.
-- None of this is a form to fill in. Each doc is different and picks its own order and length. A small domain may need a clause or two after the TLDR, a large one several paragraphs, and an opening that already gets the concept across stays as it is. What is fixed is the outcome: a newcomer gets the concept from the first few paragraphs.
-- Write for a competent developer who is new to this domain. Define Eigen's own terms and the domain's jargon (resource, projection, container, stamp, kind), not general ones (SQLite, REST, WebSocket). CALENDAR.md's introduction is the upper bound in length and hand-holding.
-- The TLDR stands alone and stays short. It is the concept and where the code lives, not a list of surprises and not a table of contents. A TLDR that opens with a class name or a storage detail is rewritten to open with the thing in plain words.
-- The TLDR and the introduction never say the same thing twice. The introduction carries the model; the things that are not obvious from the code come at its end, each linked to the section that carries it.
-- No term before its definition. A word the reader could not know gets one plain clause where it first appears, or waits until its section. The reference sections may assume the opening. They may not assume anything else.
-- Headings state facts: "A document lingers after the last unsubscribe", not "Lifecycle". A heading avoids "seam" and other coined words unless the doc defines them. ACL.md's label headings are its owner's call, not a pattern: a fact heading wins.
-- Every section carries a why. A section with no reason in it is a catalogue. Cut it or point at the directory.
-- Tables hold parallel facts (values and their effect, a crash point and its repair). Bullets for short lists. Prose for reasons. A code block only for a type or route shape that is the contract, ten lines at most.
-- Name a symbol when the reader will grep for it. Otherwise use plain words. Point at a directory, not at every file in it.
-- Never write a line number (`file.ts:123`, "line 40"). Lines move with every edit and the reference goes stale silently. Name the file and the function, constant or type instead.
-- A term the code doesn't use is defined in the sentence that introduces it, or replaced. A term another doc defines is linked at first use.
+- The outcome is fixed, the form is not: after the TLDR and introduction a newcomer knows what the domain is, where its data lives, what the truth is and why, told as to a colleague who is a competent developer new to this domain. A small domain may need a clause or two, a large one several paragraphs; an opening that already does this stays. CALENDAR.md's introduction is the upper bound in length and hand-holding.
+- The TLDR is one short paragraph that stands alone, never a list of surprises or a table of contents, and opens with the thing in plain words, not a class name or storage detail. The introduction never repeats it and is as long as the model needs, no longer.
+- Define Eigen's terms and the domain's jargon (resource, projection, container, stamp, kind), not general ones (SQLite, REST, WebSocket), with one plain clause at first use; no term before its definition. Sections may assume the opening and nothing else. A term the code doesn't use is defined where introduced, or replaced; one another doc defines is linked at first use.
+- Headings state facts: "A document lingers after the last unsubscribe", not "Lifecycle"; no "seam" or coined words the doc doesn't define. ACL.md's label headings are its owner's call, not a pattern.
+- Every section carries a why; one without is a catalogue: cut it or point at the directory.
+- Tables for parallel facts (a value and its effect, a crash point and its repair), bullets for short lists, prose for reasons, a code block only for a contract type or route shape of ten lines at most.
+- Name a symbol when the reader will grep for it, otherwise plain words. Point at a directory, not each file. No line numbers (AGENTS.md § Done means).
 
 ## Length follows the domain
 
-A doc is as long as its domain needs. It gets shorter only by cutting narration, repetition, edge cases and code tours, never by moving content to another file. A doc grows with the design, not with the fixes: a fix adds a sentence only when it changes a decision or an invariant, and how the code handles one more case belongs in its test. A section that explains special case after special case describes a patch; report it as one ([REVIEW-STANDARD.md](../../../docs/REVIEW-STANDARD.md), *A patch is a finding*). Most domains fit in a few thousand words; a longer doc is first searched for narration and edge cases. For readability:
-
-- The TLDR is one short paragraph. The introduction under it is as long as the model needs, and no longer.
-- Each section makes one point. A section that makes two becomes two sections of the same doc.
-- Paragraphs stay short enough to read in one go, about five sentences at most. A paragraph is one line: no hard wraps.
-- Sentences are plain and short. Split one that needs a second read.
+A doc gets shorter only by cutting narration, repetition, edge cases and code tours, never by moving content elsewhere. It grows with the design, not the fixes: a fix adds a sentence only when it changes a decision or invariant. A section of special case after special case describes a patch; report it ([REVIEW-STANDARD.md](../../../docs/REVIEW-STANDARD.md), *A patch is a finding*). Most domains fit in a few thousand words; search a longer doc for narration and edge cases first. One point per section (two make two sections of the same doc), about five sentences per paragraph, and split a sentence that needs a second read.
 
 ## What goes where
 
 | Detail | Belongs in |
 |---|---|
 | A design decision and its reason, an invariant, a cross-domain seam, a gotcha | The doc |
-| The data model in plain words: what is stored, where, and what is the truth | The introduction |
-| Props, columns, routes, config keys, every constant's value, file-by-file tours | Nowhere. Point at the directory or the file that defines them |
-| Function-by-function narration | Nowhere. The code says it |
-| An edge case | The test that pins it. The doc names the test file if the case matters |
-| A reason that only matters at one line of code | One terse comment there, if a maintainer could not derive it |
-| History: "used to", "previously", "no longer", dates, incidents | Nowhere. Git keeps it |
-| A measurement | The doc, once, when a decision rests on it ("a 48 MB snapshot is 1 MB at zstd" is why the codec exists). An example's numbers come from the test that pins it, never invented. Otherwise nowhere |
-| A stored format with live user data (stickies) | The doc, as a contract: every root, field and default the reader tolerates |
+| The data model: what is stored, where, what is the truth | The introduction |
+| Props, columns, routes, config keys, constant values, file tours | Nowhere: point at the defining directory or file |
+| Function-by-function narration | Nowhere: the code says it |
+| An edge case | Its test; the doc names the test file if the case matters |
+| A reason that matters at one line | One terse comment there, if a maintainer could not derive it |
+| History ("used to", "previously", "no longer", dates, incidents) | Nowhere: git keeps it |
+| A measurement | The doc, once, when a decision rests on it ("a 48 MB snapshot is 1 MB at zstd" is why the codec exists); an example's numbers come from its test, never invented. Otherwise nowhere |
+| A stored format a collaborator writes (stickies) | The doc, as a contract: every root, field and default the reader tolerates |
 | Open work and known bugs | `docs/ROADMAP.md` |
-| What a user sees and clicks | The help center, via the support-article skill |
+| What a user sees and clicks | The help center (support-article skill) |
 | Another domain's mechanics | That domain's doc, linked |
 
 ## Rewriting or merging a doc
 
-1. **List the claims first.** Walk the old doc (every doc, when merging) and write down every design decision, invariant and gotcha, one line each. This list is what you must not lose.
-2. **Check each claim against the code.** Find the line that makes it true. A claim with only, every, never or instead is checked against the code path that makes the quantifier true, not just the happy path. A what you can't confirm in a few greps stays out, and your report lists it as unverified: never cut a claim silently. A claim the code contradicts is never dropped silently: the doc states the corrected fact, or a ROADMAP row names the gap. A why stays unless the code contradicts it. When the check narrows an inherited quantifier ("every host" becomes "docs and sheets"), the doc says what the excluded path does now, or the gap gets a ROADMAP row. A wrong doc is worse than a short one. A limitation the old doc listed gets a ROADMAP row or a stated reason it is accepted.
-3. **Write the model in your own words** before the TLDR. If you cannot say it plainly, read more code. The TLDR and the introduction come from this, not from the list of claims.
-4. **Write the TLDR and the introduction**, then one section per claim that needs one. Merge claims that share a reason. When the introduction takes over a sentence from a section, cut it there: move facts, never repeat them.
-5. **Give every claim a home** from the table above, and verify the home of every reason. A reason survives even when its "what" goes. For every why you drop from the doc, grep the code for the reason (not the symbol). If it is absent, add a one-line comment in the same commit. Your report to the caller, not only the commit message, lists each dropped why with its home as `file:line`, doc §, or test name. The report also cites the doc § for every sentence the commit message says the doc now contains.
-6. **Check.** Run the checklist.
+1. **List the claims**: every design decision, invariant and gotcha of the old doc (every doc, when merging), one line each. This list must not lose anything.
+2. **Check each against the code**, and a claim with only, every, never or instead against the path that makes the quantifier true. Never drop a claim silently: a what you can't confirm in a few greps stays out and your report lists it as unverified; a contradicted claim becomes the corrected fact or a ROADMAP row. A why stays unless the code contradicts it. A narrowed quantifier ("every host" becomes "docs and sheets") says what the excluded path does now, or gets a ROADMAP row. A listed limitation gets a ROADMAP row or a stated reason it is accepted. A wrong doc is worse than a short one.
+3. **Write the model in your own words** first; if you can't say it plainly, read more code. The TLDR and introduction come from it, not from the claim list.
+4. **Write the TLDR and introduction**, then a section per claim that needs one, merging claims that share a reason. A sentence the introduction takes from a section is cut there.
+5. **Home every claim** per the table. A reason survives even when its what goes: grep the code for each dropped why (the reason, not the symbol) and, if absent, add a one-line comment in the same commit. Your report to the caller, not only the commit message, lists each dropped why with its home (`file:line`, doc § or test name), and cites the doc § for every sentence the commit message says the doc now contains.
+6. **Run the checklist.**
 
-Editing one section follows the same steps, and the TLDR and introduction change only when one of their claims does. A doc that receives moved material runs the whole checklist too. Renaming a heading breaks its anchor and its prose citations: grep `docs/`, `AGENTS.md` and `.claude/` for `NAME.md#old-anchor`, and `apps/ packages/ docker/ scripts/` for `NAME.md § Old heading`, skipping `.claude/worktrees/` and `docs/superpowers/`, and fix every hit. After rewording a claim, grep `docs/ROADMAP*.md` for prose that quotes the old one.
+Editing one section follows the same steps; the TLDR and introduction change only when one of their claims does. A doc receiving moved material runs the whole checklist. A renamed heading breaks its anchor and prose citations: grep `docs/`, `AGENTS.md` and `.claude/` for `NAME.md#old-anchor`, and `apps/ packages/ docker/ scripts/` for `NAME.md § Old heading`, skipping `.claude/worktrees/` and `docs/superpowers/`, and fix every hit. After rewording a claim, grep `docs/ROADMAP*.md` for prose quoting the old one.
 
 ## Checklist before you commit
 
@@ -91,7 +77,7 @@ grep -nE 'here|above|below|this doc' $f                                     # a 
 bun scripts/check-docs-links.ts                                             # files exist, not anchors
 ```
 
-The greps flag candidates, not errors. Read every hit: "later ones" or `will-change` is fine where "will be added later" is not.
+The greps flag candidates: read every hit ("later ones" or `will-change` is fine, "will be added later" is not).
 
 ```bash
 # every #anchor resolves: prints each link whose heading is gone (bash, since zsh rejects the patterns)
@@ -103,21 +89,12 @@ done
 EOF
 ```
 
-- Read only the title, the TLDR and the introduction, as a newcomer who has never seen this code. Can you say what the thing is, where its data lives and why it is built that way? Is any term used before its clause?
-- The TLDR is one short paragraph and makes sense alone. The introduction does not repeat it. Every claim in either has a section that carries it, or is fully said in the introduction. An opening that counts its claims ("four things") is recounted after every edit.
-- Every heading states a fact. Every section has a why.
-- The sections never talk about the doc: no "here", "above", "below" or "see this doc". They state facts and link to other docs, or to a section by heading. Only the introduction may say what the sections cover. A rewrite owns the whole file, so every hit in it is fixed.
-- Present tense. Short sentences in simple English. No slop em-dashes (dramatic pause, stacked asides, a dash doing a colon's or full stop's job), no "Note that", "robust", "seamlessly".
-- No hard line breaks inside a paragraph.
-- No line numbers anywhere in the doc. Every path you name exists, and both link checks print nothing. A symbol named with a path is grepped in that file. A symbol named without one must have its definition in exactly one file of a repo grep, or it gets its path.
+- Read only the title, TLDR and introduction as a newcomer: is the concept clear, is any term used before its clause? Every claim there has a section or is fully said there, and an opening that counts its claims ("four things") is recounted after every edit.
+- Sections never talk about the doc ("here", "above", "below", "see this doc"); they link to another doc or to a section by heading, and only the introduction says what the sections cover. A rewrite owns the whole file, so every hit is fixed.
+- Present tense, short simple English. No slop em-dashes (a dramatic pause, stacked asides, a dash doing a colon's or full stop's job), no "Note that", "robust", "seamlessly", no hard wraps or line numbers.
+- Every named path exists and both link checks print nothing. A symbol named with a path is grepped in that file; one without has its definition in exactly one file of a repo grep, or gets its path.
 - A new doc gets its line in the `docs/README.md` index and its row in `docs/ARCHITECTURE.md`.
 
 ## Common mistakes
 
-- Opening with the first surprise instead of the model. A surprise only lands when the reader knows what normal looks like.
-- Splitting a doc, or starting a new one for a feature, instead of cutting narration.
-- Compressing the catalogue instead of cutting it. Six files in six clauses is still a file tour.
-- Cutting the why and keeping the what. The what is in the code. The why is not.
-- Compressing a gotcha until it no longer says what breaks.
-- Keeping claims from the old doc unchecked because they were already there. An inherited only or every is the likeliest to be wrong.
-- Bold lead-ins on every bullet. Bold one key rule per section at most.
+Opening with the first surprise instead of the model (a surprise lands only once the reader knows normal). Compressing a catalogue instead of cutting it: six files in six clauses is still a file tour. Compressing a gotcha until it no longer says what breaks. Keeping inherited claims unchecked: an inherited only or every is the likeliest to be wrong. Bold lead-ins on every bullet: bold one key rule per section at most.

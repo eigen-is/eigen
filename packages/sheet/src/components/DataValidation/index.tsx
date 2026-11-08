@@ -88,7 +88,7 @@ type Problem = { field: 'range' | 'value'; message: string };
 export function DataValidation({ draft: reopenedDraft }: { draft?: DataValidationDraft }) {
     const { context, setContext } = useContext(WorkbookContext);
     const dialogProps = useDialogProps();
-    const { showDialog, showNonModalDialog, hideDialog } = useDialog();
+    const { showDialog, showNonModalDialog } = useDialog();
     const [draft, setDraft] = useState(() => reopenedDraft ?? draftAtSelection(context));
     const [problem, setProblem] = useState<Problem>();
     const problemId = useId();
@@ -113,25 +113,13 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataValidatio
             </FieldError>
         );
 
-    // The picker leaves the grid usable to pick on, so rangePickerOpen keeps the cell editor out of the way. However
-    // the picker leaves the slot, the flag clears: left set, it would park the cell editor off-screen for good. Its OK
-    // opens this dialog again with the pick, and Cancel or Escape with the draft as it was.
+    // The picker's OK opens this dialog again with the pick, and Cancel or Escape with the draft as it was.
     const pickRange = (field: 'rangeTxt' | 'value1') => {
-        const reopen = (picked?: string) =>
-            showDialog(<DataValidation draft={picked == null ? draft : { ...draft, [field]: picked }} />);
-        setContext((ctx) => {
-            ctx.rangePickerOpen = true;
-        });
+        const reopen = (picked: string) => showDialog(<DataValidation draft={{ ...draft, [field]: picked }} />);
+        const cancel = () => reopen(draft[field]);
         showNonModalDialog(
-            <CellRangeDialog value={draft[field]} variant="validation" onConfirm={reopen} onCancel={hideDialog} />,
-            {
-                onClose: (reason) => {
-                    setContext((ctx) => {
-                        ctx.rangePickerOpen = false;
-                    });
-                    if (reason === 'closed') reopen();
-                },
-            },
+            <CellRangeDialog value={draft[field]} variant="validation" onConfirm={reopen} onCancel={cancel} />,
+            { onEscape: cancel },
         );
     };
 
@@ -149,9 +137,10 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataValidatio
             setProblem({ field: 'value', message });
             return false;
         }
+        const { rangeTxt: _, ...rule } = draft;
         setContext((ctx) => {
-            const value1 = draft.type === 'dropdown' ? getDropdownList(ctx, draft.value1).join(',') : draft.value1;
-            applyDataValidation(ctx, target, { ...draft, value1 });
+            const value1 = rule.type === 'dropdown' ? getDropdownList(ctx, rule.value1).join(',') : rule.value1;
+            applyDataValidation(ctx, target, { ...rule, value1 });
         });
     };
 
@@ -416,8 +405,6 @@ function draftAtSelection(context: Context): DataValidationDraft {
         rangeTxt,
         value1: item?.value1 ?? '',
         value2: item?.value2 ?? '',
-        validity: item?.validity ?? '',
-        remote: item?.remote ?? false,
         prohibitInput: item?.prohibitInput ?? false,
         hintShow: item?.hintShow ?? false,
         hintValue: item?.hintValue ?? '',

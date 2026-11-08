@@ -20,7 +20,7 @@ import { PATHS } from '../config/paths';
 import { ApiError, isEnoent, isSafePathSegment, LocalFilesystem, STALE_TEMP_MAX_AGE_MS } from '../core';
 import type { Home } from '../home';
 import { parseEml, parseEmlBytes, parseEmlForReader } from './mail-parse';
-import type { DraftMeta, MailFlag, MailSearchOptions, MailStore, MailStoreEvents } from './mail-store';
+import type { DraftMeta, MailFlag, MailSearchOptions, MailStoreEvents } from './mail-store';
 import MailDB, { readMailIndexSize } from './maildb';
 import {
     applyFlagsFromFilename,
@@ -41,14 +41,9 @@ const BACKGROUND_RECONCILE_INTERVAL_MS = 60 * 1000;
 const DRAFT_ATTACHMENTS_DIR = 'draft-attachments';
 // A file uploaded for a draft is folded into the draft at its next save: one older than this was abandoned.
 const DRAFT_ATTACHMENT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
-// Keyed by id and trusted only while the row's size and date match; saveDraft drops the entry a rewrite outdates.
-const PARSED_MESSAGE_CACHE_ENTRIES = 8;
-const PARSED_MESSAGE_CACHE_BYTES = 32 * 1024 * 1024;
-
-type ParsedMessage = { size: number; date: number; attachments: Attachment[] };
 
 // Staged attachments are charged to the mail quota, and both surfaces that report it walk them here.
-export function readDraftStagingSize(homeFs: LocalFilesystem): Promise<number> {
+function readDraftStagingSize(homeFs: LocalFilesystem): Promise<number> {
     return homeFs.dirSize(path.join(PATHS.MAIL.ROOT, DRAFT_ATTACHMENTS_DIR));
 }
 
@@ -87,7 +82,7 @@ function safeFileId(id: string): string {
     return name;
 }
 
-export class MaildirStore implements MailStore {
+export class MaildirStore {
     private readonly basePath: string;
     public readonly storage: LocalFilesystem;
     private db!: MailDB;
@@ -105,7 +100,6 @@ export class MaildirStore implements MailStore {
     // size() answers from memory: the quota gate calls it on every metered write, and a walk per call makes an N-card sync O(N²).
     private indexBytes = 0;
     private stagedBytes = 0;
-    private parsedMessages = new Map<string, ParsedMessage>();
 
     public constructor(private home: Home) {
         this.basePath = PATHS.MAIL.MAILDIR;
@@ -114,6 +108,7 @@ export class MaildirStore implements MailStore {
 
     // -- Lifecycle --
 
+    // True when a fresh, empty store was created.
     public async init(events: MailStoreEvents): Promise<boolean> {
         this.events = events;
         // With mail off the store builds no Maildir and opens no index, yet the mail kept on disk still counts.
@@ -288,40 +283,12 @@ export class MaildirStore implements MailStore {
     public async getAttachments(messageId: string): Promise<Attachment[]> {
         const email = this.db.getEmail(messageId);
         if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
-        const date = email.date.getTime();
-        const cached = this.parsedMessages.get(messageId);
-        this.parsedMessages.delete(messageId);
-        if (cached?.size === email.size && cached.date === date) {
-            this.parsedMessages.set(messageId, cached);
-            return cached.attachments;
-        }
-
-        const parsed = await parseEml(messageId, email.mailbox, this.getMessageFile(email.mailbox, email.filename));
-        if (email.size > PARSED_MESSAGE_CACHE_BYTES) return parsed.attachments;
-        this.parsedMessages.set(messageId, { size: email.size, date, attachments: parsed.attachments });
-        let bytes = 0;
-        for (const entry of this.parsedMessages.values()) bytes += entry.size;
-        // Oldest first: a Map iterates in insertion order, and a hit is re-inserted at the end.
-        for (const [id, entry] of this.parsedMessages) {
-            if (this.parsedMessages.size <= PARSED_MESSAGE_CACHE_ENTRIES && bytes <= PARSED_MESSAGE_CACHE_BYTES) break;
-            this.parsedMessages.delete(id);
-            bytes -= entry.size;
-        }
-        return parsed.attachments;
+        return (await parseEml(messageId, email.mailbox, this.getMessageFile(email.mailbox, email.filename)))
+            .attachments;
     }
 
-    public async getModifiedAt(email: EmailSummary): Promise<number> {
-        const filePath = path.join(this.mailboxDir(email.mailbox), PATHS.MAIL.CUR, email.filename);
-        // A flag change from Dovecot renames the file before the index hears of it: answer "changed", never a 500.
-        return this.storage.stat(filePath).then(
-            (stats) => stats.mtimeMs,
-            (err) => {
-                if (!isEnoent(err)) throw err;
-                return Date.now();
-            },
-        );
-    }
-
+    // skipReconcile leaves discovery to the next pass. arrival: false is a message the user placed there, indexed and
+    // broadcast but not mail arriving, so it reaches `received` as not new.
     public async append(
         mailbox: string,
         message: Buffer,
@@ -362,8 +329,6 @@ export class MaildirStore implements MailStore {
             const replaced = this.db.getEmail(messageId)?.size ?? 0;
             this.db.addEmail(parsed);
             this.indexBytes += parsed.size - replaced;
-            // The row's date has second precision, so a same-size rewrite within the second keeps its stamp.
-            this.parsedMessages.delete(messageId);
             return parsed;
         });
     }
@@ -470,7 +435,7 @@ export class MaildirStore implements MailStore {
         // A mailbox with no rows yet is indexed for the first time: what it finds was discovered, not delivered.
         const indexed = dbRecords.length > 0;
 
-        // Batched inserts are the biggest cold-index win (addEmail was ~71% of a 92 s sync of 100k), and `received` waits on the commit.
+        // Inserts are batched because one insert per message dominates a cold index, and `received` waits on the commit.
         const NEW_CHUNK = 250;
         const newEntries = [...diskFiles].filter(([id]) => !dbById.has(id));
         for (let i = 0; i < newEntries.length; i += NEW_CHUNK) {
@@ -556,6 +521,7 @@ export class MaildirStore implements MailStore {
         await this.storage.writeAtomic(this.getDraftMetaPath(safeFileId(draftId)), JSON.stringify(meta));
     }
 
+    // Null when no sidecar can be read, torn or absent; the caller falls back to the .eml.
     public async readDraftMeta(draftId: string): Promise<DraftMeta | null> {
         // Another MDA's filename can hold characters no Eigen id has: no sidecar exists for it, and it must not fail the sync.
         const name = foldFileId(draftId);

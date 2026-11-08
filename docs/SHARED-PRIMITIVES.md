@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2134 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2137 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -244,7 +244,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (300)
+## Hooks (303)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -317,6 +317,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useImportToCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-transfer.ts |
 | `useIsInvitationFromOthers` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useMoveEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
+| `useRefuseStaleEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useRsvp` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useSharedCalendarLabel` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useSharedCalendars` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
@@ -495,6 +496,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useUpdateTeamSettings` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-settings.ts |
 | `useUploadTeamAvatar` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-avatar.ts |
 | `useDebouncedValue` | `@workspace/lib/use-debounced-value` | packages/lib/src/core/use-debounced-value.ts |
+| `useHeldEtag` | `@workspace/lib/use-held-etag` | packages/lib/src/core/use-held-etag.ts |
 | `useDeleteVersions` | `@workspace/lib/versioning` | packages/lib/src/core/versioning/hooks/use-versions.ts |
 | `useRestoreVersion` | `@workspace/lib/versioning` | packages/lib/src/core/versioning/hooks/use-versions.ts |
 | `useSaveVersion` | `@workspace/lib/versioning` | packages/lib/src/core/versioning/hooks/use-versions.ts |
@@ -539,6 +541,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useFilePasteTarget` | `@workspace/ui/hooks/use-file-paste-target` | packages/ui/src/hooks/use-file-paste-target.ts |
 | `useFocusReturn` | `@workspace/ui/hooks/use-focus-return` | packages/ui/src/hooks/use-focus-return.ts |
 | `useFocusTrap` | `@workspace/ui/hooks/use-focus-trap` | packages/ui/src/hooks/use-focus-trap.ts |
+| `useFollowedFields` | `@workspace/ui/hooks/use-followed-fields` | packages/ui/src/hooks/use-followed-fields.ts |
 | `useKeyboardListNavigation` | `@workspace/ui/hooks/use-keyboard-list-navigation` | packages/ui/src/hooks/use-keyboard-list-navigation.ts |
 | `useLatchedDocSearchTerm` | `@workspace/ui/hooks/use-latched-doc-search-term` | packages/ui/src/hooks/use-latched-doc-search-term.ts |
 | `useListDrag` | `@workspace/ui/hooks/use-list-drag` | packages/ui/src/hooks/use-list-drag.ts |
@@ -549,13 +552,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (450)
+## Types (447)
 
 | Name | Import from | File |
 |------|-------------|------|
 | `AuthUser` | `@workspace/lib/auth` | packages/lib/src/core/auth/auth-context.tsx |
 | `RouterAppContext` | `@workspace/lib/auth` | packages/lib/src/core/auth/auth-context.tsx |
-| `SeriesEdit` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `ViewMode` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `ClassifiedSvg` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/classify.ts |
 | `ClipboardBox` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
@@ -608,7 +610,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BorderSide` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `BorderStyleName` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `BorderType` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
-| `CalcChainEntry` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `Cell` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `CellBorderSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `CellMatrix` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
@@ -633,7 +634,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SheetFloatingObject` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SheetImage` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SheetValidation` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
-| `SheetWithCalcChain` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SingleRange` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SettingWithCopy` | `@workspace/lib/space` | packages/lib/src/core/space/hooks/use-setting-with-copy.ts |
 | `ActivityLines` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
@@ -1004,7 +1004,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1166)
+## Utilities & constants (1169)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1087,8 +1087,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `waitlistApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getErrorMessage` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `isRefusal` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
-| `markToasted` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
+| `isStaleWrite` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
+| `onEtagWriteError` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `onMutationError` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
+| `rethrowUntoasted` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `retryWhenTransformBusy` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `wasToasted` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `adminApp` | `@workspace/lib/apps` | packages/lib/src/core/apps.ts |
@@ -1256,6 +1258,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CANVAS_PREVIEW_HEIGHT` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `CANVAS_PREVIEW_WIDTH` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `CELL_INDICATOR_SIZE` | `@workspace/lib/constants` | packages/lib/src/constants/comment-indicator.ts |
+| `COLLAB_ACCESS_LOST_CLOSE` | `@workspace/lib/constants` | packages/lib/src/constants/collab.ts |
+| `COLLAB_ACCESS_LOST_REASON` | `@workspace/lib/constants` | packages/lib/src/constants/collab.ts |
 | `COLLAB_EPOCH_MESSAGE` | `@workspace/lib/constants` | packages/lib/src/constants/collab.ts |
 | `COLLAB_HOME_REPLACED_CLOSE` | `@workspace/lib/constants` | packages/lib/src/constants/collab.ts |
 | `COLLAB_HOME_REPLACED_REASON` | `@workspace/lib/constants` | packages/lib/src/constants/collab.ts |
@@ -1370,7 +1374,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `slicesFor` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
 | `sliceStyle` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
 | `handleContactsSSEvent` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/sse-handlers.ts |
-| `isStaleWrite` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `escapeContentText` | `@workspace/lib/content-line` | packages/lib/src/core/content-line.ts |
 | `foldLine` | `@workspace/lib/content-line` | packages/lib/src/core/content-line.ts |
 | `isIllegalC0` | `@workspace/lib/content-line` | packages/lib/src/core/content-line.ts |
@@ -2054,6 +2057,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `STROKE_STYLES` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `SVG_NS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/render-utils.ts |
 | `syncInvalidIndices` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
+| `TEN_INCH_SLIDE_WIDTH` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `TEXT_ALIGNS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `TEXT_DECORATIONS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `TEXT_WIDTH_RANGES` | `@workspace/lib/vector` | packages/lib/src/vector/text-width.ts |
@@ -2066,7 +2070,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `TRANSPARENT_FILL` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `unionBounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `unpinSegment` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
-| `UNSTORED_SLIDE_WIDTH` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `validateElbowPoints` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `validateOrderKey` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `VECTOR_STYLE_DEFAULTS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |

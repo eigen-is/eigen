@@ -24,8 +24,7 @@ describe('blob-codec', () => {
         expect(out.subarray(0, 4)).not.toEqual(ZSTD_MAGIC);
     });
 
-    test('decompressBlob passes legacy raw bytes through unchanged', () => {
-        // Legacy blobs are raw Yjs updates — they start with 0x01, never the zstd magic.
+    test('decompressBlob passes raw bytes through unchanged', () => {
         const raw = Buffer.from([1, 1, 200, 7, 0, 42, 99]);
         expect(Buffer.from(decompressBlob(raw))).toEqual(raw);
     });

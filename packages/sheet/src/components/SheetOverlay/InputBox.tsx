@@ -1,40 +1,32 @@
-// The in-cell editor: a contenteditable over the cell being edited. It opens with the cell's text, its
-// formula as colored references or its rich-text runs as spans, and the grid's keyboard handlers commit
-// it. While it is open on text, ⌘B, ⌘I and ⌘U format its selected characters, a format on a bare caret
-// styles the text typed there next, text typed over a selection takes the style of its first character,
-// and a paste inserts plain text.
+// The in-cell editor: a contenteditable over the cell being edited. openCellEditor fills it, the grid's
+// keyboard handlers commit it, and it empties itself as it closes. While it is open on text, ⌘B, ⌘I and ⌘U
+// format its selected characters, a format on a bare caret styles the text typed there next, text typed over a
+// selection takes the style of its first character, and a paste inserts plain text. It waits off-screen while the
+// range picker is open, so a press on the grid picks.
 
 import { matchesKeyboardEvent } from '@tanstack/react-hotkeys';
-import { escapeHtml } from '@workspace/lib/html';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
+import { useDialog } from '../../hooks/useDialog';
 import { useFormulaAutocomplete } from '../../hooks/useFormulaAutocomplete';
-import { usePrevious } from '../../hooks/usePrevious';
 import {
     cancelNormalSelected,
-    createRangeHightlight,
     forgetEditorSelection,
     getFlowdata,
-    getFormulaHtml,
-    getInlineStringHTML,
-    getSheetConfig,
     getStyleByCell,
     handleBold,
     handleFormulaInput,
     handleItalic,
     handleUnderline,
-    isAllowEdit,
-    isInlineStringCell,
     israngeseleciton,
     isSelectionOnHiddenRowCol,
     loadCellFont,
     moveHighlightCell,
-    moveToEnd,
     rememberEditorSelection,
     SHEET_HOTKEYS,
     typeStyledText,
-    valueShowEs,
+    typesIntoEditor,
 } from '../../state';
 import { ContentEditable } from './ContentEditable';
 import { FormulaHint } from './FormulaHint';
@@ -49,88 +41,29 @@ const FORMAT_SHORTCUTS = [
 
 export const InputBox: React.FC = () => {
     const { context, setContext, refs } = useContext(WorkbookContext);
+    const { pickerOpen } = useDialog();
     const inputRef = useRef<HTMLDivElement>(null);
     const lastKeyDownEventRef = useRef<KeyboardEvent>(null);
-    const prevEditingCellPosition = usePrevious(context.editingCellPosition);
-    const prevSheetId = usePrevious(context.currentSheetId);
     const [isOnHiddenRowCol, setIsOnHiddenRowCol] = useState<boolean>(false);
-    const firstSelection = context.selections?.[0];
-    const row_index = firstSelection?.row_focus;
-    const col_index = firstSelection?.column_focus;
+    // The editor opens on the last selected range, so its box and style follow that one.
+    const selection = context.selections?.at(-1);
+    const focusRow = selection?.row_focus;
+    const focusColumn = selection?.column_focus;
     const preText = useRef('');
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: cell-style memo keyed on sheet/file/cellUpdate; reads helpers off `context` directly
     const inputBoxStyle = useMemo(() => {
-        if (row_index != null && col_index != null && context.editingCellPosition.length > 0) {
+        if (focusRow != null && focusColumn != null && context.editingCellPosition.length > 0) {
             const flowdata = getFlowdata(context);
             if (!flowdata) return {};
-            return getStyleByCell(context, flowdata, row_index, col_index);
+            return getStyleByCell(context, flowdata, focusRow, focusColumn);
         }
         return {};
-    }, [context.sheets, context.currentSheetId, context.editingCellPosition, firstSelection]);
+    }, [context.sheets, context.currentSheetId, context.editingCellPosition, selection]);
 
-    // biome-ignore lint/correctness/useExhaustiveDependencies: cell-edit sync — collaborative-update guard relies on prev refs, not React deps; firing on every refs.* change would clobber the editor
+    // Here and not in cancelNormalSelected, because a peer's batch that fails rolls its close back, and the typed text
+    // must survive that. A layout effect, so it can't run after the write of the next opener.
     useLayoutEffect(() => {
-        if (!context.allowEdit) {
-            setContext((ctx) => {
-                const flowdata = getFlowdata(ctx);
-                if (flowdata != null && ctx.forceFormulaRef && row_index != null && col_index != null) {
-                    const formulaHtml = getFormulaHtml(row_index, col_index, flowdata);
-                    if (formulaHtml) createRangeHightlight(ctx, formulaHtml);
-                }
-            });
-        }
-        if (row_index != null && col_index != null && context.editingCellPosition.length > 0) {
-            if (refs.globalCache.doNotUpdateCell) {
-                delete refs.globalCache.doNotUpdateCell;
-                return;
-            }
-            // The editor loads its cell only when it opens or its sheet changes. While it stays open the text is the
-            // person's, so a collaborative update leaves it alone, and so does a peer's row op that moves the editor
-            // with its cell.
-            const wasOpen = (prevEditingCellPosition?.length ?? 0) > 0;
-            if (wasOpen && prevSheetId === context.currentSheetId) return;
-            const flowdata = getFlowdata(context);
-            const cell = flowdata?.[row_index]?.[col_index];
-            let value = '';
-            // Set when `value` is markup we generated rather than raw cell text.
-            let isGeneratedHtml = false;
-            if (cell && !refs.globalCache.overwriteCell) {
-                if (isInlineStringCell(cell)) {
-                    value = getInlineStringHTML(row_index, col_index, flowdata);
-                    isGeneratedHtml = true;
-                } else if (cell.f) {
-                    // Colored spans, escaped at their leaves — render, do not escape again.
-                    // createRangeHightlight parses those spans, so it wants the markup too.
-                    value = getFormulaHtml(row_index, col_index, flowdata) ?? '';
-                    isGeneratedHtml = true;
-                    const formulaHtml = value;
-                    setContext((ctx) => {
-                        createRangeHightlight(ctx, formulaHtml);
-                    });
-                } else {
-                    const shown = valueShowEs(row_index, col_index, flowdata);
-                    value = shown == null ? '' : String(shown);
-                }
-            }
-            refs.globalCache.overwriteCell = false;
-            const input = inputRef.current;
-            if (input && !refs.globalCache.ignoreWriteCell)
-                input.innerHTML = isGeneratedHtml ? value : escapeHtml(value);
-            refs.globalCache.ignoreWriteCell = false;
-            if (input && !refs.globalCache.doNotFocus) {
-                // Synchronously too: the innerHTML write leaves the caret at 0, and
-                // fast typing can land before the timeout below — the keystrokes
-                // would insert mid-value. The deferred pass still runs after the
-                // click handler's focus-follow timeout settles focus on the input.
-                moveToEnd(input);
-                setTimeout(() => moveToEnd(input));
-            }
-            delete refs.globalCache.doNotFocus;
-        }
-    }, [context.editingCellPosition, context.sheets, context.currentSheetId, firstSelection]);
-
-    useEffect(() => {
         const input = inputRef.current;
         if (context.editingCellPosition.length === 0 && input) {
             input.innerHTML = '';
@@ -178,7 +111,7 @@ export const InputBox: React.FC = () => {
             lastKeyDownEventRef.current = new KeyboardEvent(e.type, e.nativeEvent);
             preText.current = input.innerText;
 
-            // Alt/Meta+Enter inserts a newline regardless of suggest visibility (originally `enterKeyControll`).
+            // Alt or Meta with Enter inserts a newline, whether or not the suggestions show.
             if (e.key === 'Enter' && (e.altKey || e.metaKey) && context.editingCellPosition.length > 0) {
                 document.execCommand('insertHTML', false, '\n '); // Trailing space forces a line break; removed by the subsequent delete
                 document.execCommand('delete', false);
@@ -221,41 +154,23 @@ export const InputBox: React.FC = () => {
         (__: unknown, isBlur?: boolean) => {
             if (inputRef.current) loadCellFont(editingCell, inputRef.current.innerText);
             const e = lastKeyDownEventRef.current;
-            if (!e) return;
-            const kcode = e.keyCode;
-            if (!kcode) return;
+            if (!e?.keyCode || !typesIntoEditor(e)) return;
 
-            if (
-                !(
-                    (kcode >= 112 && kcode <= 123) ||
-                    kcode <= 46 ||
-                    kcode === 144 ||
-                    kcode === 108 ||
-                    e.ctrlKey ||
-                    e.altKey ||
-                    (e.shiftKey && (kcode === 37 || kcode === 38 || kcode === 39 || kcode === 40))
-                ) ||
-                kcode === 8 ||
-                kcode === 32 ||
-                kcode === 46 ||
-                (e.ctrlKey && kcode === 86)
-            ) {
-                setContext((draftCtx) => {
-                    if (
-                        (draftCtx.formulaCache.rangestart ||
-                            draftCtx.formulaCache.rangedrag_column_start ||
-                            draftCtx.formulaCache.rangedrag_row_start ||
-                            israngeseleciton(draftCtx)) &&
-                        isBlur
-                    )
-                        return;
-                    const input = refs.cellInput.current;
-                    if (!input || !isAllowEdit(draftCtx, draftCtx.selections)) {
-                        return;
-                    }
-                    handleFormulaInput(draftCtx, refs.fxInput.current, input, kcode, preText.current);
-                });
-            }
+            setContext((draftCtx) => {
+                if (
+                    (draftCtx.formulaCache.rangestart ||
+                        draftCtx.formulaCache.rangedrag_column_start ||
+                        draftCtx.formulaCache.rangedrag_row_start ||
+                        israngeseleciton(draftCtx)) &&
+                    isBlur
+                )
+                    return;
+                const input = refs.cellInput.current;
+                if (!input || draftCtx.allowEdit === false) {
+                    return;
+                }
+                handleFormulaInput(draftCtx, refs.fxInput.current, input, e.keyCode, preText.current);
+            });
         },
         [editingCell, refs.cellInput, refs.fxInput, setContext],
     );
@@ -274,33 +189,17 @@ export const InputBox: React.FC = () => {
         [context.editingCellPosition, editingCell],
     );
 
-    const cfg = getSheetConfig(context);
-    const rowReadOnly: Record<string, number> = cfg?.rowReadOnly || {};
-    const colReadOnly: Record<string, number> = cfg?.colReadOnly || {};
-
-    const isReadOnly = (col_index != null && colReadOnly[col_index]) || (row_index != null && rowReadOnly[row_index]);
-    const edit = !(isReadOnly && context.allowEdit === true);
-
     return (
         <div
             className="sheet-input-box"
             style={
-                firstSelection && !context.rangePickerOpen
+                selection && !pickerOpen
                     ? {
-                          left: firstSelection.left,
-                          top: firstSelection.top,
+                          left: selection.left,
+                          top: selection.top,
                           zIndex: context.editingCellPosition.length === 0 ? -1 : 19,
-                          // z:-1 no longer hides the box: inside the overlay layer's
-                          // transformed content div (a stacking context) it can't sink
-                          // below the canvas. opacity 0 hides it while keeping the cell
-                          // input focusable at the cell position (display/visibility
-                          // would break focus; off-screen focus auto-scrolls the grid),
-                          // and pointer-events none keeps it unhittable like the old
-                          // behind-the-canvas box (opacity 0 alone still hit-tests, and
-                          // the box's stopPropagation would swallow focus-cell clicks).
-                          // While editing it must be an explicit auto: the pane-region
-                          // wrapper is pointer-events none, and inheriting that would
-                          // kill caret clicks in the open editor.
+                          // A closed editor stays focusable at its cell, as focus off-screen scrolls the grid.
+                          // It takes no clicks, or its stopPropagation would swallow them. Open needs an explicit auto.
                           opacity: context.editingCellPosition.length === 0 ? 0 : 1,
                           pointerEvents: context.editingCellPosition.length === 0 ? 'none' : 'auto',
                           display: 'block',
@@ -313,10 +212,10 @@ export const InputBox: React.FC = () => {
             <div
                 className="sheet-input-box-inner"
                 style={
-                    firstSelection
+                    selection
                         ? {
-                              minWidth: firstSelection?.width || 0,
-                              minHeight: firstSelection?.height || 0,
+                              minWidth: selection.width || 0,
+                              minHeight: selection.height || 0,
                               ...inputBoxStyle,
                           }
                         : {}
@@ -334,7 +233,7 @@ export const InputBox: React.FC = () => {
                     onPaste={onPaste}
                     onFocus={() => setInputFocused(true)}
                     onBlur={() => setInputFocused(false)}
-                    allowEdit={edit ? !isOnHiddenRowCol : edit}
+                    allowEdit={!isOnHiddenRowCol}
                 />
             </div>
             <FormulaSearch

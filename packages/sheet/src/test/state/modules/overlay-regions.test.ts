@@ -18,11 +18,11 @@ const VIEW_W = 900;
 const VIEW_H = 500;
 
 function rowsFreeze(pos: number, boundary: number, scroll = 0): Freezen {
-    return { horizontal: { freezenhorizontaldata: { pos, boundary, scroll, cumulative: [], edge: 0 } } };
+    return { horizontal: { freezenhorizontaldata: { pos, boundary, scroll } } };
 }
 
 function colsFreeze(pos: number, boundary: number, scroll = 0): Freezen {
-    return { vertical: { freezenverticaldata: { pos, boundary, scroll, cumulative: [], edge: 0 } } };
+    return { vertical: { freezenverticaldata: { pos, boundary, scroll } } };
 }
 
 function bothFreeze(rowPos: number, rowBoundary: number, colPos: number, colBoundary: number): Freezen {

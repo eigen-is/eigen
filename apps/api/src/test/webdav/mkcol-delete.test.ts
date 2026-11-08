@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
+import { getHome } from '../../lib/home';
 import { driveGet, drivePost, getTestContext } from '../setup';
 import { getDefaultMountId, webdavRequest } from './setup';
 
@@ -58,6 +59,22 @@ describe('WebDAV MKCOL/DELETE', () => {
         const url = `/webdav/${ctx.alice.user.id}/${mountId}/Missing/Sub/`;
         const res = await webdavRequest(ctx.alice.user.email, 'MKCOL', url);
         expect(res.status).toBe(409);
+    });
+
+    test('MKCOL at depth 256 creates the folder, and at 257 → 400', async () => {
+        const drive = (await getHome(ctx.alice.user.id)).drive;
+        let parentId = (await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root')).id;
+        const names: string[] = [];
+        for (let depth = 1; depth <= 255; depth++) {
+            const name = depth === 1 ? 'Deep' : `d${depth}`;
+            names.push(name);
+            parentId = (await drive.createFolder(mountId, parentId, name)).id;
+        }
+        const base = `/webdav/${ctx.alice.user.id}/${mountId}/${names.join('/')}`;
+        expect((await webdavRequest(ctx.alice.user.email, 'MKCOL', `${base}/d256/`)).status).toBe(201);
+        const res = await webdavRequest(ctx.alice.user.email, 'MKCOL', `${base}/d256/d257/`);
+        expect(res.status).toBe(400);
+        expect(await res.text()).toBe('Folders can be nested at most 256 levels deep');
     });
 
     test('DELETE soft-deletes (subsequent GET → 404)', async () => {

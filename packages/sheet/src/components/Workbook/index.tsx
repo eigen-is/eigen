@@ -1,7 +1,8 @@
-// The Workbook: the sheet editor's root component and the context every part of the grid reads. Each edit runs as a
-// recipe through setContextWithProduce, which applies it at the call, records the tab's undo entry and sends the edit's
-// ops through onOp before it returns. React only renders the result. It also owns undo and redo, the clipboard
-// listeners and the imperative API a host reaches through its ref.
+// The Workbook: the sheet editor's root component and the context every part of the grid reads. It loads the host's
+// sheets once, as it mounts. Each edit runs as a recipe through setContextWithProduce, which applies it at the call,
+// records the tab's undo entry and sends the edit's ops through onOp before it returns. React only renders the result.
+// A host's hooks stay in a ref read at call time, so a host render writes nothing. It also owns undo and redo, the
+// clipboard listeners and the imperative API a host reaches through its ref.
 
 import { formatWithLabels, matchesKeyboardEvent } from '@tanstack/react-hotkeys';
 import { isSketchCapped, newSheetChartSpecParts, readChartSpec } from '@workspace/lib/charts';
@@ -14,6 +15,7 @@ import {
     svgToImageFile,
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
+import { useMediaResolver } from '@workspace/lib/drive';
 import type { SheetChart, SheetFloatingItem, SheetImage } from '@workspace/lib/sheets';
 import type {
     EigenClipboardChartItem,
@@ -22,34 +24,36 @@ import type {
     EigenClipboardTextItem,
 } from '@workspace/lib/types/clipboard';
 import { isTypingTarget } from '@workspace/ui/hooks/is-typing-target';
-import { cloneDeep, isEqual } from 'es-toolkit/compat';
-import type { Patch } from 'immer';
+import { isEqual } from 'es-toolkit/compat';
 import { enablePatches, produce, produceWithPatches } from 'immer';
 import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import type { RefValues, SetContextOptions } from '../../context';
+import type { SetContextOptions } from '../../context';
 import { WorkbookContext } from '../../context';
 import { ModalProvider } from '../../context/modal';
+import { createArrayResolver } from '../../engine/cell-resolver';
 import { copySheetChartSpec, resolveRangeChartData, seriesName } from '../../engine/chart-data';
-import { normalizeSheetConfig } from '../../engine/sheet-config';
-import type { ChartPanelState, Context, GlobalCache, Op, Settings, Sheet as SheetType } from '../../state';
+import type {
+    ChartPanelState,
+    Context,
+    GlobalCache,
+    Hooks,
+    Op,
+    RefValues,
+    Settings,
+    Sheet as SheetType,
+} from '../../state';
 import {
-    api,
     applySheetView,
     COPY_ACTION_TABLE_MARKER,
-    createContextResolver,
     defaultContext,
-    defaultSettings,
     deleteActiveObject,
-    endPointerDrag,
-    ensureSheetIndex,
     filterPatch,
+    firstVisibleSheetId,
     getFlowdata,
     getSheetIndex,
-    groupValuesRefresh,
     handleGlobalKeyDown,
     handlePaste,
     initSheetData,
-    initSheetIndex,
     pasteChart,
     patchToOp,
     pushEntry,
@@ -57,11 +61,9 @@ import {
     redoEntry,
     runStyleOf,
     SHEET_HOTKEYS,
-    selectionCache,
     sheetChartClipboardItem,
     stepNewestEntry,
     undoEntry,
-    ValidationLimitError,
     warmFormulaCellInfoMapOnIdle,
 } from '../../state';
 import { consumePendingCopy } from '../../state/modules/clipboard';
@@ -82,6 +84,11 @@ type AdditionalProps = {
     onOp?: (op: Op[]) => void;
     toolbarLeftItems?: React.ReactNode;
     toolbarRightItems?: React.ReactNode;
+};
+
+const CUT_BY_PEER_NOTICE = {
+    undo: "Someone else edited this spreadsheet, so this can't be undone anymore.",
+    redo: "Someone else edited this spreadsheet, so this can't be redone anymore.",
 };
 
 // The copied cell range as a text item. Every clipboard item carries its drawn box. A sheet has no zoom, so the row and
@@ -112,32 +119,30 @@ function activeFloating(ctx: Context): { image?: SheetImage; chart?: SheetChart 
     };
 }
 
-const triggerGroupValuesRefresh = (ctx: Context) => {
-    if (ctx.groupValuesRefreshData.length > 0) {
-        groupValuesRefresh(ctx);
-    }
-};
-
-const concatProducer = (...producers: ((ctx: Context) => void)[]) => {
-    return (ctx: Context) => {
-        for (const producer of producers) {
-            producer(ctx);
-        }
-    };
-};
-
 export const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
-    ({ onChange, onOp, toolbarLeftItems, toolbarRightItems, data: originalData, ...props }, ref) => {
-        const scrollListeners = useRef(new Set<() => void>());
+    (
+        {
+            onChange,
+            onOp,
+            toolbarLeftItems,
+            toolbarRightItems,
+            data,
+            allowEdit = true,
+            hooks,
+            commentCards,
+            aspectLocked = false,
+        },
+        ref,
+    ) => {
+        const hooksRef = useRef<Hooks>({});
+        hooksRef.current = hooks ?? {};
+        const { resolveMediaPath } = useMediaResolver();
         const globalCache = useRef<GlobalCache>({
             undoList: [],
             redoList: [],
             scrollLeft: 0,
             scrollTop: 0,
-            scrollListeners: scrollListeners.current,
-            notifyScrollListeners: () => {
-                for (const fn of scrollListeners.current) fn();
-            },
+            scrollListeners: new Set(),
         });
         const cellInput = useRef<HTMLDivElement>(null);
         const fxInput = useRef<HTMLDivElement>(null);
@@ -154,11 +159,23 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 canvas,
                 cellArea,
                 workbookContainer,
+                hooks: hooksRef,
             }),
             [],
         );
 
-        const [context, setContext] = useState(() => defaultContext(refs));
+        // Sheets are copied one level deep and their cells stay shared, as a deep copy of a large import is slow.
+        // The init writes only a sheet's own fields, so the cells, which immer freezes, are never written.
+        const [context, setContext] = useState(() => {
+            const ctx = defaultContext(refs);
+            ctx.allowEdit = allowEdit;
+            ctx.commentCards = commentCards;
+            ctx.sheets = data.map((sheet) => ({ ...sheet }));
+            for (const sheet of ctx.sheets) initSheetData(sheet);
+            ctx.currentSheetId = firstVisibleSheetId(ctx) ?? '';
+            applySheetView(ctx);
+            return ctx;
+        });
         // The workbook with every write so far. A write lands here at its call, and React renders it a moment later.
         // A read outside render, such as the host's getFlowdata or a paste, reads it here, so it sees an edit made just
         // before.
@@ -169,66 +186,30 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             setContext(next);
         }, []);
 
-        // biome-ignore lint/correctness/useExhaustiveDependencies: the deps are the props' values, spread, which biome can't read
-        const mergedSettings = useMemo(
-            () => Object.assign(cloneDeep(defaultSettings), props),
-            [...Object.values(props)],
-        );
-
-        // The formula map is built once the sheet has loaded, off the interaction path, so the first edit on a large
-        // workbook doesn't wait seconds for it.
-        const warmSheetIdx = getSheetIndex(context, context.currentSheetId);
-        const dataReady = warmSheetIdx != null && (context.sheets?.[warmSheetIdx]?.data?.length ?? 0) > 0;
-        useEffect(() => {
-            if (dataReady) return warmFormulaCellInfoMapOnIdle(getContext);
-        }, [dataReady, getContext]);
+        // The formula map is built off the interaction path, so the first edit on a large workbook doesn't wait seconds
+        // for it.
+        useEffect(() => warmFormulaCellInfoMapOnIdle(getContext), [getContext]);
 
         const setContextWithProduce = useCallback(
             (recipe: (ctx: Context) => void, options: SetContextOptions = {}) => {
                 const base = contextRef.current;
                 // The scroll position lives in globalCache, so a scroll tick doesn't render every reader of the
                 // context. A recipe that reads it, such as a click on a cell, gets it copied in here.
-                const syncScroll = (ctx: Context) => {
+                const withScroll = (ctx: Context) => {
                     ctx.scrollLeft = globalCache.current.scrollLeft;
                     ctx.scrollTop = globalCache.current.scrollTop;
-                };
-
-                // An edit that would make a validation rule too complex is refused whole: nothing of it applies, and
-                // the user sees why. A formula it evaluated may have reached the engine's map, which learns the sheets
-                // again. A mouse-up's edit still ends its drag.
-                const refuse = (e: unknown) => {
-                    if (!(e instanceof ValidationLimitError)) throw e;
-                    base.formulaCache.resetEngine();
-                    warmFormulaCellInfoMapOnIdle(getContext);
-                    commit(
-                        produce(base, (ctx: Context) => {
-                            endPointerDrag(ctx);
-                            ctx.warnDialog = e.message;
-                        }),
-                    );
+                    recipe(ctx);
                 };
 
                 // A write that records no history, such as a drag that moves the selection, skips the patches, which
                 // cost time on every change and which the selection would never ship anyway.
                 if (options.noHistory) {
-                    try {
-                        commit(produce(base, concatProducer(syncScroll, recipe, triggerGroupValuesRefresh)));
-                    } catch (e) {
-                        refuse(e);
-                    }
+                    commit(produce(base, withScroll));
                     return;
                 }
 
-                let edit: readonly [Context, Patch[], Patch[]];
-                try {
-                    edit = produceWithPatches(base, concatProducer(syncScroll, recipe, triggerGroupValuesRefresh));
-                } catch (e) {
-                    refuse(e);
-                    return;
-                }
-                const [result, patches, inversePatches] = edit;
+                const [result, patches, inversePatches] = produceWithPatches(base, withScroll);
                 commit(result);
-                if (patches.length === 0) return;
                 const filteredPatches = filterPatch(patches);
                 const filteredInversePatches = filterPatch(inversePatches);
                 if (filteredInversePatches.length === 0) return;
@@ -257,35 +238,58 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         pushEntry(undoList, { ...entry, gesture: undoGesture });
                     }
                     globalCache.current.redoList = [];
+                    globalCache.current.cutByPeer = undefined;
                 }
                 onOp?.(patchToOp(result, filteredPatches, entry.options));
             },
-            [commit, getContext, onOp],
+            [commit, onOp],
         );
 
-        const handleUndo = useCallback(() => {
-            if (contextRef.current.allowEdit === false) return;
-            const { undoList, redoList } = globalCache.current;
-            const step = stepNewestEntry(contextRef.current, undoList, redoList, undoEntry);
-            if (!step) return;
-            commit(step.ctx);
-            if (step.ops.length > 0) onOp?.(step.ops);
-        }, [commit, onOp]);
+        const stepHistory = useCallback(
+            (kind: 'undo' | 'redo') => {
+                const ctx = contextRef.current;
+                if (ctx.allowEdit === false) return;
+                const { undoList, redoList, cutByPeer } = globalCache.current;
+                const step =
+                    kind === 'undo'
+                        ? stepNewestEntry(ctx, undoList, redoList, undoEntry)
+                        : stepNewestEntry(ctx, redoList, undoList, redoEntry);
+                if (!step) {
+                    if (cutByPeer?.[kind]) {
+                        setContextWithProduce(
+                            (draft) => {
+                                draft.warnDialog = CUT_BY_PEER_NOTICE[kind];
+                            },
+                            { noHistory: true },
+                        );
+                    }
+                    return;
+                }
+                commit(step.ctx);
+                if (step.ops.length > 0) onOp?.(step.ops);
+            },
+            [commit, onOp, setContextWithProduce],
+        );
+        const handleUndo = useCallback(() => stepHistory('undo'), [stepHistory]);
+        const handleRedo = useCallback(() => stepHistory('redo'), [stepHistory]);
 
-        const handleRedo = useCallback(() => {
-            if (contextRef.current.allowEdit === false) return;
-            const { undoList, redoList } = globalCache.current;
-            const step = stepNewestEntry(contextRef.current, redoList, undoList, redoEntry);
-            if (!step) return;
-            commit(step.ctx);
-            if (step.ops.length > 0) onOp?.(step.ops);
-        }, [commit, onOp]);
+        // A changed right opens or closes the grid's controls, and a card's new colour repaints its corner mark.
+        // Both take a new context, which every reader and the painter follow.
+        useEffect(() => {
+            setContextWithProduce(
+                (ctx) => {
+                    ctx.allowEdit = allowEdit;
+                    ctx.commentCards = commentCards;
+                },
+                { noHistory: true },
+            );
+        }, [allowEdit, commentCards, setContextWithProduce]);
 
         useEffect(() => {
             if (context.selections != null) {
-                mergedSettings.hooks?.afterSelectionChange?.(context.currentSheetId, context.selections[0]);
+                hooksRef.current.afterSelectionChange?.(context.currentSheetId, context.selections[0]);
             }
-        }, [context.currentSheetId, context.selections, mergedSettings.hooks]);
+        }, [context.currentSheetId, context.selections]);
 
         // Tells the app about the selected image or chart, so it can mount its properties panel. It fires on select,
         // on deselect and after a write. Immer keeps the record's reference while it is unchanged, and the item is
@@ -297,17 +301,16 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             return null;
         }, [activeImage, activeChart]);
         useEffect(() => {
-            mergedSettings.hooks?.onActiveObjectChange?.(activeItem);
-        }, [activeItem, mergedSettings.hooks]);
+            hooksRef.current.onActiveObjectChange?.(activeItem);
+        }, [activeItem]);
 
         // Rebuilt on every sheet change while a chart is selected: a renamed sheet renames its data range,
         // and an edited cell its slices. Memoized, so the app's setState bails out when nothing changed.
-        // biome-ignore lint/correctness/useExhaustiveDependencies: the resolver reads context.sheets alone; depending on `context` would rebuild on every selection and scroll
         const chartPanel = useMemo((): ChartPanelState | null => {
             if (!activeChart) return null;
             const { spec } = readChartSpec(activeChart);
             const data = spec?.data;
-            const resolver = createContextResolver(context);
+            const resolver = createArrayResolver(context.sheets);
             const resolved = data?.source === 'range' ? resolveRangeChartData(data, resolver) : data;
             return {
                 chart: activeChart,
@@ -319,20 +322,98 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             };
         }, [activeChart, context.currentSheetId, context.sheets]);
         useEffect(() => {
-            mergedSettings.hooks?.onChartPanelChange?.(chartPanel);
-        }, [chartPanel, mergedSettings.hooks]);
+            hooksRef.current.onChartPanelChange?.(chartPanel);
+        }, [chartPanel]);
+
+        // One paste of what the clipboard holds, from a paste event or from a menu row that read the clipboard.
+        const pasteClipboard = useCallback(
+            (clipboardData: DataTransfer) => {
+                const hooks = hooksRef.current;
+                const pasteCells = (cells: DataTransfer) =>
+                    setContextWithProduce((draftCtx) => handlePaste(draftCtx, cells, hooks.onPasteImageFile));
+
+                // A copy of cells marks its HTML with COPY_ACTION_TABLE_MARKER, and the classifier then reports no
+                // Eigen or SVG content, so the paste goes to handlePaste, which knows its own copy.
+                const paste = classifyPaste(clipboardData, { internalMarkerText: COPY_ACTION_TABLE_MARKER });
+
+                // An SVG goes before the split into Eigen items, so a Vector selection lands as one image.
+                // One with images names them as eigen-media references, so onPasteSvgFile stores them first.
+                if (paste.svg) {
+                    const svgImageItems = paste.svg.items.filter(
+                        (item): item is EigenClipboardImageItem => item.type === 'image',
+                    );
+                    const { onPasteSvgFile, onPasteImageFile } = hooks;
+                    if (onPasteSvgFile) {
+                        // It goes there even without image items, so a forged or dangling eigen-media reference is
+                        // stripped before the SVG is stored, as in Docs and Slides.
+                        onPasteSvgFile(paste.svg.svg, svgImageItems);
+                        return;
+                    }
+                    if (onPasteImageFile) {
+                        onPasteImageFile(svgToImageFile(paste.svg.svg));
+                        return;
+                    }
+                }
+
+                if (paste.eigen) {
+                    // Image and chart items become floating objects and text items land in cells, in one paste.
+                    // The app inserts the images itself, so they paste only when its hook is set.
+                    const { onPasteEigenImage } = hooks;
+                    const imageItems = onPasteEigenImage
+                        ? paste.eigen.items.filter((item): item is EigenClipboardImageItem => item.type === 'image')
+                        : [];
+                    // Empty carriers must not paste as blank cells over existing content.
+                    const textParts = paste.eigen.items
+                        .filter(
+                            (item): item is EigenClipboardTextItem =>
+                                item.type === 'text' && clipboardTextItemHasContent(item),
+                        )
+                        .map((item) => item.text);
+                    const chartItems = paste.eigen.items.filter(
+                        (item): item is EigenClipboardChartItem => item.type === 'chart',
+                    );
+                    if (imageItems.length > 0 || chartItems.length > 0 || textParts.length > 0) {
+                        for (const item of imageItems) onPasteEigenImage?.(item);
+                        // This workbook's own copy keeps the ranges it was copied with.
+                        const copied = globalCache.current.copiedChart;
+                        if (chartItems.length > 0) {
+                            setContextWithProduce((draftCtx) => {
+                                for (const { parts, width, height, look } of chartItems) {
+                                    const own = copied && isEqual(copied.inline, parts);
+                                    const fields = own
+                                        ? copySheetChartSpec(copied.chart)
+                                        : pastedChartFields(parts, newSheetChartSpecParts);
+                                    if (!fields) continue;
+                                    pasteChart(draftCtx, crypto.randomUUID(), fields, { width, height }, look);
+                                }
+                            });
+                        }
+                        if (textParts.length > 0) {
+                            const text = new DataTransfer();
+                            text.setData('text/plain', textParts.join('\n'));
+                            pasteCells(text);
+                        }
+                        return;
+                    }
+                }
+
+                pasteCells(clipboardData);
+            },
+            [setContextWithProduce],
+        );
 
         const providerValue = useMemo(
             () => ({
                 context,
                 getContext,
                 setContext: setContextWithProduce,
-                settings: mergedSettings,
+                aspectLocked,
                 handleUndo,
                 handleRedo,
+                pasteClipboard,
                 refs,
             }),
-            [context, getContext, handleRedo, handleUndo, mergedSettings, refs, setContextWithProduce],
+            [context, getContext, handleRedo, handleUndo, aspectLocked, pasteClipboard, refs, setContextWithProduce],
         );
 
         useEffect(() => {
@@ -340,100 +421,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 onChange?.(context.sheets, context.currentSheetId);
             }
         }, [context.sheets, context.currentSheetId, onChange]);
-
-        // biome-ignore lint/correctness/useExhaustiveDependencies: the current sheet and the sheet count re-run the effect on a sheet switch, add or delete; the body reads them through draftCtx
-        useEffect(() => {
-            setContextWithProduce(
-                (draftCtx) => {
-                    draftCtx.defaultcolumnNum = mergedSettings.column;
-                    draftCtx.defaultrowNum = mergedSettings.row;
-                    // Only a load or newly created sheet data needs the view here; a switch derives its own.
-                    let viewStale = false;
-                    if (draftCtx.sheets.length === 0) {
-                        viewStale = true;
-                        // Each sheet is copied one level deep, and its cells stay shared: a deep copy of a large
-                        // import takes about a second. The init below writes only a sheet's own fields, so a remount
-                        // can run it again on the same data. It skips a sheet that already has a matrix, so the shared
-                        // cells, which immer freezes, are never written.
-                        draftCtx.sheets = originalData.map((sheet) => ({
-                            ...sheet,
-                            id: sheet.id ?? crypto.randomUUID(),
-                        }));
-                        ensureSheetIndex(draftCtx.sheets);
-                        for (const [index, sheet] of draftCtx.sheets.entries()) {
-                            if (!sheet.data || sheet.data.length === 0) {
-                                initSheetData(draftCtx, index, sheet);
-                            } else {
-                                // The replay gave this sheet its matrix. Its config collections must still exist, or
-                                // this tab's first config write would send a whole collection.
-                                normalizeSheetConfig(sheet);
-                            }
-                        }
-                        // The list of formula cells is seeded without computing them. An imported or stored sheet
-                        // carries its computed values, and an edit computes the formulas it affects.
-                        api.seedCalcChain(draftCtx);
-                    }
-                    if (mergedSettings.devicePixelRatio > 0) {
-                        draftCtx.devicePixelRatio = mergedSettings.devicePixelRatio;
-                    }
-                    draftCtx.allowEdit = mergedSettings.allowEdit;
-                    draftCtx.hooks = mergedSettings.hooks;
-                    if (!draftCtx.currentSheetId) {
-                        initSheetIndex(draftCtx);
-                    }
-                    const sheetIdx = getSheetIndex(draftCtx, draftCtx.currentSheetId);
-                    if (sheetIdx == null) return;
-                    const sheet = draftCtx.sheets[sheetIdx];
-
-                    if (!sheet.data || sheet.data.length === 0) {
-                        initSheetData(draftCtx, sheetIdx, sheet);
-                        viewStale = true;
-                    } else {
-                        normalizeSheetConfig(sheet);
-                    }
-
-                    // A switch already restored the sheet's stored selection. Once the view is live, an empty
-                    // selection may be one a peer's row op dropped, and the stored copy points at the wrong row.
-                    if (
-                        viewStale &&
-                        (!draftCtx.selections || draftCtx.selections.length === 0) &&
-                        sheet.selections &&
-                        sheet.selections.length > 0
-                    ) {
-                        draftCtx.selections = sheet.selections;
-                    }
-                    // A sheet with no stored selection gets its first one when the grid overlay mounts.
-
-                    draftCtx.currency = mergedSettings.currency || '€';
-
-                    draftCtx.rowHeaderWidth = mergedSettings.rowHeaderWidth;
-                    draftCtx.columnHeaderHeight = mergedSettings.columnHeaderHeight;
-
-                    if (sheet.addRows != null) {
-                        draftCtx.addDefaultRows = Number(sheet.addRows);
-                    } else {
-                        draftCtx.addDefaultRows = mergedSettings.addRows;
-                    }
-
-                    if (viewStale) applySheetView(draftCtx);
-                },
-                { noHistory: true },
-            );
-        }, [
-            context.currentSheetId,
-            context.sheets.length,
-            originalData,
-            mergedSettings.column,
-            mergedSettings.row,
-            mergedSettings.devicePixelRatio,
-            mergedSettings.allowEdit,
-            mergedSettings.hooks,
-            setContextWithProduce,
-            mergedSettings.rowHeaderWidth,
-            mergedSettings.columnHeaderHeight,
-            mergedSettings.addRows,
-            mergedSettings.currency,
-        ]);
 
         const onKeyDown = useCallback(
             (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -469,14 +456,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 setContextWithProduce((draftCtx) => {
                     const input = cellInput.current;
                     if (!input) return;
-                    handleGlobalKeyDown(
-                        draftCtx,
-                        input,
-                        fxInput.current,
-                        nativeEvent,
-                        globalCache.current,
-                        canvas.current?.getContext('2d') ?? undefined,
-                    );
+                    handleGlobalKeyDown(draftCtx, input, fxInput.current, nativeEvent);
                 });
             },
             [handleRedo, handleUndo, setContextWithProduce],
@@ -505,7 +485,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 // item, as Vector's is: no plain text and no PNG, because a native copy event can't wait for the
                 // image's file to load. A cut deletes the image.
                 if (image && floating) {
-                    const source = mergedSettings.hooks?.resolveImagePath?.(image.mediaName);
+                    const source = resolveMediaPath(image.mediaName);
                     if (source) {
                         e.preventDefault();
                         // Drop any cell table the keyboard copy staged, so a later native-menu copy
@@ -536,130 +516,27 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 };
                 writeEigenClipboard(e, eigenData, pending.plainText, pending.html);
             },
-            [mergedSettings.hooks, setContextWithProduce],
+            [resolveMediaPath, setContextWithProduce],
         );
 
         const onPaste = useCallback(
             (e: ClipboardEvent) => {
                 // With more than one workbook on a page, only the focused one takes the paste. A selected image or
-                // chart holds the focus too.
+                // chart holds the focus too. The open cell editor pastes into itself, as text.
                 const { activeElement } = document;
-                const ctx = contextRef.current;
                 if (
-                    cellInput.current === activeElement ||
-                    activeElement?.className === 'sheet-overlay' ||
-                    (activeElement?.matches('[data-floating-id]') && workbookContainer.current?.contains(activeElement))
+                    (cellInput.current === activeElement ||
+                        activeElement?.className === 'sheet-overlay' ||
+                        (activeElement?.matches('[data-floating-id]') &&
+                            workbookContainer.current?.contains(activeElement))) &&
+                    e.clipboardData &&
+                    contextRef.current.editingCellPosition.length === 0
                 ) {
-                    // The open cell editor pastes into itself, as text. A ⌘V on the grid waits for its paste in
-                    // selectionCache, and a paste the grid passes on or takes without handlePaste ends that wait,
-                    // so a later paste into the editor can't become a grid paste that closes it.
-                    const { clipboardData } = e;
-                    if (!clipboardData || ctx.editingCellPosition.length > 0) {
-                        selectionCache.isPasteAction = false;
-                        return;
-                    }
-
-                    // A copy between sheets of this tab marks its HTML with COPY_ACTION_TABLE_MARKER and pastes
-                    // from ctx.copyState, which keeps the formulas and formats. The classifier then reports no
-                    // Eigen or SVG content, so the paste falls through to the table paste below.
-                    const paste = classifyPaste(clipboardData, { internalMarkerText: COPY_ACTION_TABLE_MARKER });
-
-                    // A Vector selection or a pasted SVG document becomes one floating image, through the app's
-                    // image file path. It goes before the split into Eigen items, so a Vector selection lands as
-                    // one image and not as its separate items. An SVG with images names them as eigen-media
-                    // references, so it goes to onPasteSvgFile, which stores each image before the SVG. An SVG
-                    // without images goes to onPasteImageFile.
-                    if (paste.svg) {
-                        const svgImageItems = paste.svg.items.filter(
-                            (item): item is EigenClipboardImageItem => item.type === 'image',
-                        );
-                        const onPasteSvgFile = mergedSettings.hooks?.onPasteSvgFile;
-                        const onPasteImageFile = mergedSettings.hooks?.onPasteImageFile;
-                        if (onPasteSvgFile) {
-                            // It goes there even without image items, so a forged or dangling eigen-media
-                            // reference is stripped before the SVG is stored, as in Docs and Slides.
-                            e.preventDefault();
-                            selectionCache.isPasteAction = false;
-                            onPasteSvgFile(paste.svg.svg, svgImageItems);
-                            return;
-                        }
-                        if (onPasteImageFile) {
-                            e.preventDefault();
-                            selectionCache.isPasteAction = false;
-                            onPasteImageFile(svgToImageFile(paste.svg.svg));
-                            return;
-                        }
-                    }
-
-                    if (paste.eigen) {
-                        // A mixed Eigen payload splits by kind. Image and chart items become floating
-                        // objects, and text items land in cells, all in one paste. The app inserts the
-                        // images itself, at their copied size and re-uploaded from another mount, so
-                        // they paste only when its hook is set.
-                        const onPasteEigenImage = mergedSettings.hooks?.onPasteEigenImage;
-                        const imageItems = onPasteEigenImage
-                            ? paste.eigen.items.filter((item): item is EigenClipboardImageItem => item.type === 'image')
-                            : [];
-                        // Empty carriers must not paste as blank cells over existing content.
-                        const textParts = paste.eigen.items
-                            .filter(
-                                (item): item is EigenClipboardTextItem =>
-                                    item.type === 'text' && clipboardTextItemHasContent(item),
-                            )
-                            .map((item) => item.text);
-                        const chartItems = paste.eigen.items.filter(
-                            (item): item is EigenClipboardChartItem => item.type === 'chart',
-                        );
-                        if (imageItems.length > 0 || chartItems.length > 0 || textParts.length > 0) {
-                            e.preventDefault();
-                            if (textParts.length === 0) selectionCache.isPasteAction = false;
-                            for (const item of imageItems) onPasteEigenImage?.(item);
-                            // This workbook's own copy keeps the ranges it was copied with.
-                            const copied = globalCache.current.copiedChart;
-                            if (chartItems.length > 0) {
-                                setContextWithProduce((draftCtx) => {
-                                    for (const { parts, width, height, look } of chartItems) {
-                                        const own = copied && isEqual(copied.inline, parts);
-                                        const fields = own
-                                            ? copySheetChartSpec(copied.chart)
-                                            : pastedChartFields(parts, newSheetChartSpecParts);
-                                        if (!fields) continue;
-                                        pasteChart(draftCtx, crypto.randomUUID(), fields, { width, height }, look);
-                                    }
-                                });
-                            }
-                            if (textParts.length > 0) {
-                                const syntheticTransfer = new DataTransfer();
-                                syntheticTransfer.setData('text/plain', textParts.join('\n'));
-                                const syntheticEvent = new ClipboardEvent('paste', {
-                                    clipboardData: syntheticTransfer,
-                                });
-                                setContextWithProduce((draftCtx) => {
-                                    try {
-                                        handlePaste(draftCtx, syntheticEvent);
-                                    } catch (err) {
-                                        if (err instanceof ValidationLimitError) throw err;
-                                        console.error(err);
-                                    }
-                                });
-                            }
-                            return;
-                        }
-                    }
-
-                    // A paste past the grid's last row adds the rows it needs in its own edit, so a refused paste
-                    // adds none.
-                    setContextWithProduce((draftCtx) => {
-                        try {
-                            handlePaste(draftCtx, e);
-                        } catch (err) {
-                            if (err instanceof ValidationLimitError) throw err;
-                            console.error(err);
-                        }
-                    });
+                    e.preventDefault();
+                    pasteClipboard(e.clipboardData);
                 }
             },
-            [setContextWithProduce, mergedSettings.hooks],
+            [pasteClipboard],
         );
 
         useEffect(() => {
@@ -680,13 +557,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         );
 
         const i = getSheetIndex(context, context.currentSheetId);
-        if (i == null) {
-            return null;
-        }
-        const sheet = context.sheets?.[i];
-        if (!sheet) {
-            return null;
-        }
+        if (i == null) return null;
 
         return (
             <WorkbookContext.Provider value={providerValue}>
@@ -724,17 +595,15 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             </ul>
                         </section>
                         <div className="w-full">
-                            {mergedSettings.showToolbar && (
-                                <WorkbookMenuBar
-                                    ref={menuBar}
-                                    leftItems={toolbarLeftItems}
-                                    rightItems={toolbarRightItems}
-                                />
-                            )}
-                            {mergedSettings.showFormulaBar && <FxEditor />}
+                            <WorkbookMenuBar
+                                ref={menuBar}
+                                leftItems={toolbarLeftItems}
+                                rightItems={toolbarRightItems}
+                            />
+                            <FxEditor />
                         </div>
-                        <Sheet sheet={sheet} />
-                        {mergedSettings.showSheetTabs && <SheetTab />}
+                        <Sheet sheet={context.sheets[i]} />
+                        <SheetTab />
                         <FilterMenu />
                     </div>
                 </ModalProvider>

@@ -24,10 +24,13 @@ export function opToPatchOnSheets(sheets: Sheet[], ops: Op[]): [Patch[], Op[]] {
         // An op without a sheet id names no sheet, such as the whole `sheets` replace immer emits beside a row op.
         // The row op's own marker carries what changed.
         if (!op.id) continue;
+        // A log written before a cell's `f` became the one record of its formula holds writes to a list no sheet has.
+        if (op.path[0] === 'calcChain') continue;
         // Every reader walks a sheet's matrix and its rows, so a write that would leave either no array is dropped.
         const writesMatrixOrRow = op.path.length === 1 || (op.path.length === 2 && typeof op.path[1] === 'number');
         if (op.path[0] === 'data' && kind !== 'remove' && writesMatrixOrRow && !Array.isArray(op.value)) continue;
         if (op.path[0] === 'dataValidations' && !isValidationWrite(op)) continue;
+        if (op.path[0] === 'hyperlink' && !isLinkWrite(op)) continue;
         const i = sheets.findIndex((s) => s.id === op.id);
         if (i === -1) continue;
         if (op.path[0] === 'dataValidations' && !ruleIds(i, op)) continue;
@@ -44,10 +47,22 @@ function isValidationWrite(op: Op): boolean {
     return op.path.length === 2 && (op.op === 'remove' || isSheetValidation(op.value));
 }
 
-// Follows the rule ids each sheet holds through a batch, and says whether a validation write applies. A `replace` of
-// one rule means its writer saw the rule, because immer writes `add` for an id its base lacked. So where a peer
-// deleted the rule first, the replace is dropped and the delete wins, on every tab and in the replay alike. A new rule
-// on a sheet that holds MAX_VALIDATIONS is dropped too.
+// A rename and the export read every link's type and address, so a write that would leave a link without them is
+// dropped. The editor writes a sheet's links whole or one at a time.
+function isLinkWrite({ op, path, value }: Op): boolean {
+    if (op === 'remove') return path.length <= 2;
+    if (path.length === 1) return isRecord(value) && Object.values(value).every(isLink);
+    return path.length === 2 && isLink(value);
+}
+
+function isLink(value: unknown): boolean {
+    if (!isRecord(value)) return false;
+    const { linkType, linkAddress } = value;
+    return typeof linkType === 'string' && typeof linkAddress === 'string';
+}
+
+// Says whether a validation write applies. A `replace` means its writer saw the rule, because immer writes `add` for an
+// id its base lacked, so where a peer deleted the rule first the delete wins on every tab and in the replay.
 function validationIds(sheets: readonly Sheet[]): (sheet: number, op: Op) => boolean {
     const held = new Map<number, Set<string>>();
     return (sheet, { op, path, value }) => {

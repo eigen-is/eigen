@@ -31,11 +31,13 @@ export function readCards(map: Y.Map<unknown>): Record<string, CommentCard> {
             chatName: typeof chatName === 'string' ? chatName : undefined,
             creator: typeof creator === 'string' ? creator : undefined,
             createdAt: typeof createdAt === 'number' ? createdAt : undefined,
-            // A buggy peer can write a null or a number into the list, which would crash sameAttachments and the
-            // chip renderers.
+            // A peer can write anything into the list, and sameAttachments and the chips read each entry as a file name
+            // or a reference, so anything else would crash the render.
             attachments: Array.isArray(attachments)
                 ? attachments.filter(
-                      (a): a is ChatAttachment => typeof a === 'string' || (typeof a === 'object' && a !== null),
+                      (a): a is ChatAttachment =>
+                          typeof a === 'string' ||
+                          (a?.type === 'reference' && typeof a.name === 'string' && typeof a.mimeType === 'string'),
                   )
                 : undefined,
             deletedAt: typeof deletedAt === 'number' ? deletedAt : undefined,

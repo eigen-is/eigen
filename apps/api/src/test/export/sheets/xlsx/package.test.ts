@@ -64,9 +64,9 @@ describe("a sheet's name in the workbook", () => {
 
 describe('the workbook part', () => {
     const sheets: Sheet[] = [
-        { name: 'Hidden', hide: 1, celldata: [] },
-        { name: 'Shown', celldata: [], filterRange: { row: [1, 9], column: [1, 3] } },
-        { name: 'Later', hide: 1, celldata: [] },
+        { id: 'fixture-3', name: 'Hidden', hide: 1, celldata: [] },
+        { id: 'fixture-2', name: 'Shown', celldata: [], filterRange: { row: [1, 9], column: [1, 3] } },
+        { id: 'fixture-1', name: 'Later', hide: 1, celldata: [] },
     ];
 
     test('opens on the first sheet shown; with every sheet hidden, on the first, shown', () => {

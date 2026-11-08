@@ -1,47 +1,36 @@
+// A row or column insert or delete from a menu, such as the context menu or the add-rows button. Each runs the op, or
+// leaves the notice that says why it is refused, so every surface words a refusal alike.
+
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { RowColError } from '../../engine/rowcol';
 import type { Context } from '../context';
 import { deleteRowCol, insertRowCol } from '../modules/rowcol';
 import { getSheetIndex } from '../utils';
 
-// Run an insert/delete and map the engine's guard failures to a user-facing
-// message — shared by the context menus, the menu bar menus and the bottom
-// add-rows button, so the guards and wording can't drift between surfaces.
-// Returns the message to alert, or null when the operation succeeded.
-
 export function tryInsertRowCol(
     ctx: Context,
     op: { type: 'row' | 'column'; index: number; count: number; direction: 'lefttop' | 'rightbottom'; id: string },
     changeSelection: boolean = true,
-): string | null {
+) {
     try {
         insertRowCol(ctx, op, changeSelection);
     } catch (e) {
         if (!(e instanceof RowColError)) throw e;
-        if (e.code === 'maxExceeded')
-            return op.type === 'row'
+        ctx.warnDialog =
+            op.type === 'row'
                 ? `${MAX_SHEET_ROW_COUNT} row limit exceeded`
                 : `${MAX_SHEET_COLUMN_COUNT} column limit exceeded`;
-        return op.type === 'row' ? 'Cannot insert on a read-only row' : 'Cannot insert into a read-only column';
     }
-    return null;
 }
 
-export function tryDeleteRowCol(
-    ctx: Context,
-    op: { type: 'row' | 'column'; start: number; end: number; id: string },
-): string | null {
+export function tryDeleteRowCol(ctx: Context, op: { type: 'row' | 'column'; start: number; end: number; id: string }) {
     const index = getSheetIndex(ctx, op.id);
-    if (typeof index !== 'number') return null;
+    if (typeof index !== 'number') return;
     const data = ctx.sheets[index].data;
     const total = op.type === 'row' ? (data?.length ?? 0) : (data?.[0]?.length ?? 0);
-    if (total <= op.end - op.start + 1)
-        return op.type === 'row' ? 'Cannot delete all rows' : 'Cannot delete all columns';
-    try {
-        deleteRowCol(ctx, op);
-    } catch (e) {
-        if (!(e instanceof RowColError)) throw e;
-        return op.type === 'row' ? 'Cannot delete a read-only row' : 'Cannot delete a read-only column';
+    if (total <= op.end - op.start + 1) {
+        ctx.warnDialog = op.type === 'row' ? 'Cannot delete all rows' : 'Cannot delete all columns';
+        return;
     }
-    return null;
+    deleteRowCol(ctx, op);
 }

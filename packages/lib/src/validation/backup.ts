@@ -45,7 +45,7 @@ function isKind(value: unknown): value is BackupManifest['kind'] {
     return BACKUP_KINDS.some((kind) => kind === value);
 }
 
-// An unknown level is refused rather than read as complete: a restore trusts this field to say so.
+// An unknown level is refused: the stage of ./eigen restore compares a home's level with its archive's.
 function isLevel(value: unknown): value is BackupLevel {
     return BACKUP_LEVELS.some((level) => level === value);
 }
@@ -104,8 +104,7 @@ function isCounts(value: unknown): value is BackupManifest['counts'] {
         'files' in value &&
         typeof value.files === 'number' &&
         'bytes' in value &&
-        typeof value.bytes === 'number' &&
-        (!('dirs' in value) || typeof value.dirs === 'number')
+        typeof value.bytes === 'number'
     );
 }
 
@@ -136,7 +135,7 @@ function isManifest(value: unknown): value is BackupManifest {
         Array.isArray(value.entries) &&
         value.entries.every(isEntry) &&
         (!('email' in value) || value.email === undefined || typeof value.email === 'string') &&
-        (!('level' in value) || isLevel(value.level)) &&
+        ('level' in value ? isLevel(value.level) : value.kind === 'server') &&
         (!('warnings' in value) || isStringList(value.warnings))
     );
 }
@@ -195,9 +194,8 @@ function isServerArchiveManifest(value: unknown): value is ServerArchiveManifest
     );
 }
 
-// Whether an archive restores every home it lists whole: none failed and none was backed up with warnings. Only such
-// an archive counts as good for local retention, the bucket's and ./eigen status, so warned nights never push out the
-// last complete one. A record without a manifest has none.
+// Only a complete archive counts as good for local retention, the bucket's and ./eigen status, so warned nights never
+// push out the last complete one.
 export function isCompleteArchive(manifest: Pick<ServerArchiveManifest, 'homes'> | undefined): boolean {
     return manifest?.homes.every((home) => !home.failed && !home.warnings?.length) ?? false;
 }
@@ -243,12 +241,7 @@ function parseVerifyRecord(verify: unknown): BackupVerifyRecord | null {
     if (!status || !('failures' in verify) || !Array.isArray(verify.failures)) return null;
     if (verify.failures.some((failure) => typeof failure !== 'string')) return null;
     const checkedAt = 'checkedAt' in verify ? reviveDate(verify.checkedAt) : undefined;
-    const record: BackupVerifyRecord = { status, checkedAt, failures: verify.failures };
-    // Advisory, so a list this build cannot read costs the record nothing.
-    if ('warnings' in verify && isStringList(verify.warnings) && verify.warnings.length > 0) {
-        record.warnings = verify.warnings;
-    }
-    return record;
+    return { status, checkedAt, failures: verify.failures };
 }
 
 // The sidecar written next to an artifact: the same manifest plus the verify record.
@@ -307,9 +300,8 @@ function parseUploadRecord(value: unknown): ServerArchiveUpload | null {
     return upload;
 }
 
-// Whether the owner can upload an archive, for the Upload route, its button and ./eigen status: a verified archive,
-// not a pre-update one (that stays on this server for ./eigen rollback), with no job still writing or uploading it,
-// while a backup bucket is set. One the bucket holds already goes again.
+// A pre-update archive stays on this server for ./eigen rollback, so it is not uploaded. One the bucket holds already
+// can go again.
 export function canUploadServerArchive(
     { name, reason, record }: Pick<ServerArchive, 'name' | 'reason' | 'record'>,
     { uploadEnabled, jobs }: { uploadEnabled: boolean; jobs: readonly Pick<BackupJob, 'state' | 'artifact'>[] },

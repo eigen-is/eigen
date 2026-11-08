@@ -11,7 +11,7 @@ describe('parseFlags', () => {
         ['reset-password', 'Usage: ./eigen reset-password <email> [--generate]'],
         ['restore', 'Usage: restore <archive> --stage [--yes] [--s3-from-archive]'],
         ['bootstrap', 'Usage: bootstrap [--out <dir>] [--force]'],
-        ['update-check', 'Usage: update-check --from <version> [--accept-breaking | --level]'],
+        ['update-check', 'Usage: update-check --from <version> [--accept-breaking]'],
     ])('%s --help prints its usage and exits 0', async (command, usage) => {
         for (const flag of ['--help', '-h']) {
             const { stdout, stderr, code } = await eigen(command, flag);

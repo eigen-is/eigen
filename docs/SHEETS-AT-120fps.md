@@ -10,7 +10,7 @@ Measured on 2026-11-01 in a real Chrome on Reinder's dev drive (`test.eigensheet
 - One draw of the whole grid took 8.8 ms at the median and 28 ms at worst. While scrolling, 44 % of frames missed, for about 82 fps.
 - A draw made about 4,900 `stroke()` calls, 2,300 `fillRect`, 430 `fillText` and 610 save and restore pairs. The canvas calls were about a quarter of the draw time. The rest is our own JS in the passes.
 
-Everything that moves with the grid moves at the main thread's rate. The canvas sits outside the scroller and redraws from the scroll bus (`globalCache.notifyScrollListeners`). The overlays and headers translate from the same bus. Only the scrollbar and the invisible spacer scroll on the compositor.
+Everything that moves with the grid moves at the main thread's rate. The canvas sits outside the scroller and redraws from the scroll bus (`globalCache.scrollListeners`). The overlays and headers translate from the same bus. Only the scrollbar and the invisible spacer scroll on the compositor.
 
 ## Fix 1: a faster draw
 

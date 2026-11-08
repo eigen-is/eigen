@@ -32,7 +32,6 @@ import { NoteCard } from '@workspace/ui/components/notes';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { useDialogOpen } from '@workspace/ui/hooks/use-dialog-open';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import * as Y from 'yjs';
 import { AddColumnDialog } from './add-column-dialog';
 import { Column } from './column';
 import { ColumnSettingsDialog } from './column-settings-dialog';
@@ -213,14 +212,7 @@ export function StickiesBoard({
             if (!yjsDoc || !addTargetColumn) return;
             const targetColumnId = addTargetColumn;
             const card = await createCard({ ...patch, attachments }, (card) => {
-                const col = getItemMapRoot(yjsDoc, 'columns').get(targetColumnId);
-                if (!(col instanceof Y.Map)) return;
-                let taskIds = getIdArray(col, 'taskIds');
-                if (!taskIds) {
-                    taskIds = new Y.Array<string>();
-                    col.set('taskIds', taskIds);
-                }
-                taskIds.insert(0, [card.id]);
+                getIdArray(getItemMapRoot(yjsDoc, 'columns').get(targetColumnId), 'taskIds')?.insert(0, [card.id]);
             });
             if (assignee !== undefined && card?.chatName) {
                 assignComment.mutate({ chatName: card.chatName, assignee, title: card.title });

@@ -1,14 +1,31 @@
-import type { Attachment } from '@workspace/lib/types/mail';
+// How a mail route answers with a whole message or one part of it: the .eml download, a part's bytes for
+// the download and embed routes, or the preview a route renders from them. It decides whether the browser
+// may keep the answer. The mail routes that serve messages, parts and their previews call it on every request.
+
+import { EML_MIME } from '@workspace/lib/types/drive';
+import type { Attachment, EmailSummary } from '@workspace/lib/types/mail';
 import { mailAttachmentName } from '@workspace/lib/types/mail';
 import type { ElysiaCustomStatusResponse } from 'elysia';
 import { ApiError, answerRevalidated, contentDisposition, rangeResponse, scriptableInlineHeaders } from '../core';
 import type { Mail } from './mail-domain';
 
-// What a mail route answers for one part, or a 304 answered off the summary row before the .eml is parsed.
-// no-cache: the URL has no version stamp, and a draft save rewrites the message under its id. The row's date has
-// second precision, so the file's mtime is what tells two same-size saves within one second apart.
-// A preview route passes its renderer's format tag, so a payload or sanitizer fix is not answered with a 304
-// on a message that has not changed; the two byte routes serve the part itself and have none.
+// A message other than a draft never changes under its id, so a 304 is answered before the .eml is read.
+export async function answerMailMessage(
+    mail: Mail,
+    messageId: string,
+    request: Request,
+    set: { headers: Record<string, string | number> },
+): Promise<ArrayBuffer | ElysiaCustomStatusResponse<304>> {
+    const summary = servedSummary(mail, messageId, set);
+    set.headers['Content-Type'] = EML_MIME;
+    set.headers['Content-Transfer-Encoding'] = 'binary';
+    set.headers['Content-Disposition'] = contentDisposition('attachment', `${messageId}.eml`);
+    const produce = () => mail.messageGetFile(messageId);
+    if (summary.isDraft) return produce();
+    return answerRevalidated(request, set, `"${summary.id}"`, produce);
+}
+
+// A preview passes its renderer's format tag, so a renderer fix is not answered with a 304.
 export async function answerMailPart<T>(
     mail: Mail,
     messageId: string,
@@ -18,12 +35,18 @@ export async function answerMailPart<T>(
     serve: (att: Attachment) => T | Promise<T>,
     format?: string,
 ): Promise<T | ElysiaCustomStatusResponse<304>> {
+    const summary = servedSummary(mail, messageId, set);
+    const produce = async () => serve(await mail.messageGetAttachment(messageId, index));
+    if (summary.isDraft) return produce();
+    return answerRevalidated(request, set, `"${summary.id}-${index}${format ? `-${format}` : ''}"`, produce);
+}
+
+// A draft save rewrites the message under its id, so nothing served from a draft is stored.
+function servedSummary(mail: Mail, messageId: string, set: { headers: Record<string, string | number> }): EmailSummary {
     const summary = mail.messageGetSummary(messageId);
     if (!summary) throw new ApiError(404, `Message '${messageId}' not found`);
-
-    const modifiedAt = await mail.messageGetModifiedAt(summary);
-    const etag = `"${summary.id}-${index}-${modifiedAt}-${summary.size}${format ? `-${format}` : ''}"`;
-    return answerRevalidated(request, set, etag, async () => serve(await mail.messageGetAttachment(messageId, index)));
+    if (summary.isDraft) set.headers['Cache-Control'] = 'no-store';
+    return summary;
 }
 
 // One response shape for the download and the embed route: the part's own type and name, ranges because

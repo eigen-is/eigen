@@ -5,17 +5,12 @@ export function isProduction(): boolean {
     return process.env['PRODUCTION'] === '1' || process.env['NODE_ENV'] === 'production';
 }
 
-export function isTest(): boolean {
-    return process.env['NODE_ENV'] === 'test';
-}
-
 export function isDemo(): boolean {
     return process.env['EIGEN_DEMO'] === '1';
 }
 
-// Hosted mailboxes come with the `mail` docker profile (postfix + dovecot). A deployment that runs without it sets
-// MAIL_ENABLED=0, and the apps then hide every Mail entry point. A restore asks it of the .env.production it restores
-// with.
+// Hosted mailboxes come with the `mail` docker profile; a deployment without it sets MAIL_ENABLED=0 and the apps hide
+// Mail. A restore asks it of the .env.production it restores with.
 export function isMailEnabled(env: Readonly<Record<string, string | undefined>> = process.env): boolean {
     return env['MAIL_ENABLED'] !== '0';
 }
@@ -31,9 +26,8 @@ export function isBundledCaddy(): boolean {
     return (process.env['COMPOSE_PROFILES'] ?? '').split(',').includes('edge');
 }
 
-// The path the public proxy serves the API under, such as `/eigen` in a standard install, with no trailing slash. Setup
-// writes it as VITE_API_HOST, and a dev API's absolute VITE_API_HOST has none. The proxy strips it before the API sees
-// a request, so only URLs inside a request, such as a WebDAV Destination, still carry it.
+// The path the public proxy serves the API under, such as `/eigen`, with no trailing slash. The proxy strips it, so
+// only URLs inside a request, such as a WebDAV Destination, still carry it.
 export function getApiBasePath(): string {
     const apiHost = process.env['VITE_API_HOST'] ?? '';
     const path = /^https?:\/\//.test(apiHost) ? new URL(apiHost).pathname : apiHost;

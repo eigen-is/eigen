@@ -17,7 +17,6 @@ function sheets(): Sheet[] {
             id: 's1',
             name: 'One',
             order: 0,
-            status: 1,
             row: 5,
             column: 5,
             celldata: [{ r: 1, c: 1, v: { v: 'a', commentCardIds: ['c1', 'c2'] } }],
@@ -50,7 +49,7 @@ async function mountWorkbook(): Promise<WorkbookInstance> {
     const root = createRoot(container);
     const ref = createRef<WorkbookInstance>();
     await act(async () => {
-        root.render(createElement(Workbook, { ref, data: sheets(), showToolbar: false, showFormulaBar: false }));
+        root.render(createElement(Workbook, { ref, data: sheets() }));
     });
     cleanup = async () => {
         await act(async () => root.unmount());

@@ -1,12 +1,16 @@
-// `parseIcs` reads untrusted bytes and its result type cannot name a single `X-EIGEN-*` fact, so a forged organizer link, color or row id has nowhere to land; only `projectResource` reads Eigen's own lines.
+// Reading iCalendar into event rows, each occurrence keyed by its wall-clock date. parseIcs reads bytes a
+// stranger wrote, such as an iMIP mail or a previewed file, and its result type cannot name an `X-EIGEN-*`
+// fact, so a forged organizer link, color or row id has nowhere to land. Only projectResource, which the
+// calendar store runs on a resource it wrote, reads Eigen's own lines.
+
 import { normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
 import type { Attendee, EventData, ImipMethod, Reminder } from '@workspace/lib/types/calendar';
 import { IMIP_METHODS } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
 import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from './recurrence-limits';
-import { localToUtc, storedRecurrenceKey, utcToLocal } from './wall-clock';
+import { localToUtc, recurrenceKey, utcToLocal } from './wall-clock';
 
-// One source of truth, because the readers, the builder, the re-stamp and the strip must spell these alike; lowercase because ical.js lowercases names.
+// Lowercase, because ical.js lowercases every name it reads.
 export const EIGEN = {
     eventId: 'x-eigen-event-id',
     createdBy: 'x-eigen-created-by',
@@ -80,19 +84,15 @@ export function icalTimeToInstant(t: ICAL.Time, tzid: string | null, fallbackTz:
 
 // Expansion keys in wall-clock space, so an exception must key to the same wall-clock date to attach to its instance; `tz` is the series' own zone and matters only for the UTC-Z form.
 export function icalTimeToRecurrenceKey(t: ICAL.Time, tz: string | null): string {
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const raw = () => `${t.year}-${pad(t.month)}-${pad(t.day)}`;
-    // A floating or DATE-only value: toJSDate() would reinterpret it through the server's local zone.
-    if (t.isDate || t.zone === ICAL.Timezone.localTimezone) return raw();
-    // RFC 5545 puts a RECURRENCE-ID in the master DTSTART's tz, so a non-UTC value's own wall components ARE the key and converting mis-keys a cross-tz move.
-    if (t.zone !== ICAL.Timezone.utcTimezone) return raw();
+    // RFC 5545 puts a RECURRENCE-ID in the master DTSTART's tz, so converting a TZID value mis-keys a cross-tz move; toJSDate() would read a floating or DATE value in the server's zone.
+    if (t.isDate || t.zone !== ICAL.Timezone.utcTimezone) return recurrenceKey(t.year, t.month, t.day);
     // A timed series crossing midnight UTC has a UTC day one off, so this form keys through the SERIES zone; Exchange-lineage clients and Eigen's tz-null exceptions emit it.
     const instant = t.toJSDate();
     if (tz) {
         const { year, month, day } = utcToLocal(instant, tz);
-        return `${year}-${pad(month)}-${pad(day)}`;
+        return recurrenceKey(year, month, day);
     }
-    return `${instant.getUTCFullYear()}-${pad(instant.getUTCMonth() + 1)}-${pad(instant.getUTCDate())}`;
+    return recurrenceKey(instant.getUTCFullYear(), instant.getUTCMonth() + 1, instant.getUTCDate());
 }
 
 // Keyed by UID because a previewed or imported file holds every series a calendar has, each in its author's own zone.
@@ -181,11 +181,12 @@ function parseUtcStamp(raw: unknown): Date | null {
     return new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}Z`);
 }
 
-// A stamp whose key, id or sequence will not parse is absent rather than fatal: the body it came from is untrusted.
+// A stranger's file can carry these lines too, so a stamp with no id or sequence is absent rather than fatal;
+// only the stored resource's own stamps, all keyed by Eigen, ever reach a row.
 export function readExclusionStamps(vevent: ICAL.Component): Map<string, ExclusionStamp> {
     const stamps = new Map<string, ExclusionStamp>();
     for (const prop of vevent.getAllProperties(EIGEN.exdate)) {
-        const key = storedRecurrenceKey(String(prop.getFirstValue() ?? ''));
+        const key = String(prop.getFirstValue() ?? '');
         const id = prop.getFirstParameter(EIGEN.eventId);
         const sequence = Number(prop.getFirstParameter(EIGEN.sequence));
         if (!key || !id || !Number.isFinite(sequence)) continue;
@@ -226,7 +227,7 @@ type StoredEvent = ParsedEvent & {
 export type IcsParseResult = {
     method?: ImipMethod;
     events: ParsedEvent[];
-    // One malformed VEVENT does not cost the file the rest of it, so each caller answers for itself: a PUT refuses the payload, a preview drops them, an import fails them.
+    // One malformed VEVENT does not cost the file the rest of it, so each caller decides what a skipped one means.
     skipped: number;
 };
 
@@ -275,7 +276,7 @@ type ReadResult = {
 function parseImipMethod(raw: unknown): ImipMethod | undefined {
     if (typeof raw !== 'string') return undefined;
     const upper = raw.toUpperCase();
-    return IMIP_METHODS.includes(upper as ImipMethod) ? (upper as ImipMethod) : undefined;
+    return IMIP_METHODS.find((method) => method === upper);
 }
 
 function stamped({ event, stamps }: ReadEvent): StoredEvent {
@@ -357,9 +358,8 @@ function readResource(comp: ICAL.Component): ReadResult {
             if (stripped || vevent.hasProperty('rdate')) hasUnindexedRecurrence = true;
 
             const rawStatus = (vevent.getFirstPropertyValue('status') || 'CONFIRMED').toString().toLowerCase();
-            const status = (
-                ['confirmed', 'tentative', 'cancelled'].includes(rawStatus) ? rawStatus : 'confirmed'
-            ) as ParsedEvent['status'];
+            const status =
+                (['confirmed', 'tentative', 'cancelled'] as const).find((known) => known === rawStatus) ?? 'confirmed';
 
             const sequence = sequenceOf(vevent);
             const dtstamp = readTimestamp(vevent, 'dtstamp');

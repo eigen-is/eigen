@@ -2,15 +2,16 @@ import { describe, expect, test } from 'bun:test';
 import { newSheetChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet as LibSheet } from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartSpec } from '@workspace/lib/types/chart';
-import { produce } from 'immer';
+import { produce, produceWithPatches } from 'immer';
 import { celldataToData, dataToCelldata } from '../../../engine/celldata';
-import { getCellValue, setCellValue } from '../../../state/api/cell';
-import { calculateFormula, copySheet, getAllSheets, seedCalcChain } from '../../../state/api/sheet';
-import { addSheet } from '../../../state/api/workbook';
+import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../../../engine/defaults';
+import { copySheet, getAllSheets, setSheetOrder } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
-import { execFunctionGroup, groupValuesRefresh, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
-import { deleteSheet } from '../../../state/modules/sheet';
+import { setCellValue } from '../../../state/modules/cell';
+import { execFunctionGroup, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
+import { addSheet, deleteSheet } from '../../../state/modules/sheet';
 import type { Sheet } from '../../../state/types';
+import { filterPatch, patchToOp } from '../../../state/utils/patch';
 import { author, join, receive } from '../factories/collab';
 import { contextFactory, selectionFactory, workbookContextFactory } from '../factories/context';
 
@@ -25,64 +26,14 @@ describe('sheet/core/api/sheet', () => {
         expect(getAllSheets(ctx)).toMatchObject([{ id: 'id_1' }, { id: 'id_2' }]);
     });
 
-    test('calculateFormula works before currentSheetId is initialized', () => {
-        const ctx = contextFactory({
-            currentSheetId: '',
-            sheets: [
-                {
-                    name: 'Sheet1',
-                    id: 'id_1',
-                    order: 0,
-                    data: [
-                        [
-                            { v: 10, ct: { t: 'n', fa: 'General' } },
-                            { f: '=A1+A2', ct: { t: 'n', fa: 'General' } },
-                        ],
-                        [{ v: 5, ct: { t: 'n', fa: 'General' } }, null],
-                    ],
-                },
-            ],
-        }) as Context;
-
-        expect(() => calculateFormula(ctx)).not.toThrow();
-        expect(getCellValue(ctx, 0, 1, { id: 'id_1', type: 'v' })).toBe(15);
-    });
-
-    test("calculateFormula without id writes each sheet's result to its own sheet", () => {
-        const ctx = contextFactory({
-            currentSheetId: 'id_1',
-            sheets: [
-                {
-                    name: 'Sheet1',
-                    id: 'id_1',
-                    order: 0,
-                    data: [
-                        [
-                            { v: 10, ct: { t: 'n', fa: 'General' } },
-                            { f: '=A1+A2', ct: { t: 'n', fa: 'General' } },
-                        ],
-                        [{ v: 5, ct: { t: 'n', fa: 'General' } }, null],
-                    ],
-                },
-                {
-                    name: 'Sheet2',
-                    id: 'id_2',
-                    order: 1,
-                    data: [
-                        [
-                            { v: 20, ct: { t: 'n', fa: 'General' } },
-                            { f: '=A1+A2', ct: { t: 'n', fa: 'General' } },
-                        ],
-                        [{ v: 7, ct: { t: 'n', fa: 'General' } }, null],
-                    ],
-                },
-            ],
-        }) as Context;
-
-        calculateFormula(ctx);
-
-        expect(getCellValue(ctx, 0, 1, { id: 'id_1', type: 'v' })).toBe(15);
-        expect(getCellValue(ctx, 0, 1, { id: 'id_2', type: 'v' })).toBe(27);
+    test('setSheetOrder renumbers every sheet from 0', () => {
+        const ctx = getContext();
+        setSheetOrder(ctx, { id_1: 2, id_2: 1 });
+        expect(ctx.sheets[0].order).toBe(1);
+        expect(ctx.sheets[1].order).toBe(0);
+        setSheetOrder(ctx, { id_1: 1, id_2: 2 });
+        expect(ctx.sheets[0].order).toBe(0);
+        expect(ctx.sheets[1].order).toBe(1);
     });
 
     test("a copied sheet's charts read the copy, under fresh ids", () => {
@@ -187,8 +138,8 @@ describe('sheet/core/api/sheet', () => {
         expect(receive(base, ops).sheets[1].data?.[0]?.[0]).toEqual({ v: 'a', m: 'a' });
     });
 
-    // The formula map is built from every sheet's recalc list, so a copy's list names the copy. The map may be built
-    // before the copy, such as while the browser is idle after a load, and the add must not leave the copy out of it.
+    // The map may be built before the copy, such as while the browser is idle after a load, and the add must not leave
+    // the copy out of it.
     test("a copy's formula follows an edit of the copy's cells once the formula map is built", () => {
         const base = workbookContextFactory({
             currentSheetId: 'id_1',
@@ -209,18 +160,16 @@ describe('sheet/core/api/sheet', () => {
             ],
         });
         const copied = produce(base, (draft: Context) => {
-            seedCalcChain(draft);
             warmFormulaCellInfoMap(draft);
             copySheet(draft, 'id_1');
         });
         const copyId = copied.sheets[1].id ?? '';
         const edited = produce(copied, (draft: Context) => {
-            setCellValue(draft, 0, 0, 5, null, { id: copyId });
-            execFunctionGroup(draft, 0, 0, null, copyId, draft.sheets[1].data);
-            groupValuesRefresh(draft);
+            setCellValue(draft, 0, 0, draft.sheets[1].data, 5);
+            execFunctionGroup(draft, [{ r: 0, c: 0, id: copyId }]);
         });
-        expect(getCellValue(edited, 0, 1, { id: copyId })).toBe(5);
-        expect(getCellValue(edited, 0, 1, { id: 'id_1' })).toBe(1);
+        expect(edited.sheets[1].data?.[0]?.[1]?.v).toBe(5);
+        expect(edited.sheets[0].data?.[0]?.[1]?.v).toBe(1);
     });
 
     // A copy is a sheet like any other on the tab that made it, as on a peer's, so a read of every sheet's cells, such
@@ -280,7 +229,7 @@ describe('sheet order on a copy, an add and a delete', () => {
 
     test('an add counts a sheet without an order as 0', () => {
         const next = produce(threeSheets(unordered), (draft: Context) =>
-            addSheet(draft, 'id_d', false, 'D', { name: 'D', id: 'id_d', order: 1 }),
+            addSheet(draft, 'id_d', 'D', { name: 'D', id: 'id_d', order: 1 }),
         );
         expect(orders(next)).toEqual([
             ['A', undefined],
@@ -298,9 +247,20 @@ describe('sheet order on a copy, an add and a delete', () => {
         ]);
     });
 
+    test("a blank sheet has its cell matrix inside the add's own recipe, and its add sends none", () => {
+        const [next, patches] = produceWithPatches(threeSheets(), (draft: Context) => addSheet(draft));
+        const added = next.sheets[3];
+        expect(next.currentSheetId).toBe(added.id);
+        expect(added.data).toHaveLength(DEFAULT_SHEET_ROW_COUNT);
+        expect(added.data?.[0]).toHaveLength(DEFAULT_SHEET_COLUMN_COUNT);
+        const [{ value }] = patchToOp(next, filterPatch(patches), { addedSheet: added });
+        expect(value.data).toBeUndefined();
+        expect(value.celldata).toEqual([]);
+    });
+
     test('an added sheet keeps its id, and the add switches to it', () => {
         const next = produce(threeSheets(), (draft: Context) =>
-            addSheet(draft, undefined, false, 'D', { name: 'D', id: 'id_d', order: 3 }),
+            addSheet(draft, undefined, 'D', { name: 'D', id: 'id_d', order: 3 }),
         );
         expect(next.sheets[3].id).toBe('id_d');
         expect(next.currentSheetId).toBe('id_d');

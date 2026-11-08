@@ -1,14 +1,14 @@
 // The admin routes for the backups of single homes: list the backup files and the safety copies that restores leave,
 // start a backup or a restore as a background job, and follow its progress. Every route is for admins only, and
-// every route on the owner's home is for the owner alone. The jobs are kept in memory, and the backups folder on
-// disk is the lasting record.
+// every route on the owner's home is for the owner alone, as is any upload: an uploaded archive is trusted as data/ is.
+// The jobs are kept in memory, and the backups folder on disk is the lasting record.
 
 import * as fs from 'node:fs';
 import { BACKUP_UPLOAD_MAX_BYTES, BACKUP_UPLOAD_MAX_LABEL } from '@workspace/lib/constants/backup';
 import type { BackupArtifact, BackupJob, BackupProgress, BackupSafetyCopy } from '@workspace/lib/types/backup';
 import { BACKUP_OWNER_ID, parseBackupArtifactName } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
-import { requireAdmin } from '../lib/auth/access';
+import { requireAdmin, requireOwner } from '../lib/auth/access';
 import { deleteArtifact, landUpload, listArtifacts, requireArtifact, resolveArtifact } from '../lib/backup/artifacts';
 import { requireBackableHome } from '../lib/backup/home-dir';
 import {
@@ -31,9 +31,7 @@ import { getTeam } from '../lib/team/team';
 import { getOrgOwner, getOrgRole, getUserById } from '../lib/user';
 import { betterAuth } from './auth';
 
-// The ownerId ends up naming a home folder, so its shape is checked before anything is resolved. The
-// shape is the one the shared artifact-name grammar allows. Which kinds of home a backup can be of is
-// requireBackableHome's answer.
+// The ownerId ends up naming a home folder, so its shape is checked before anything is resolved.
 async function requireRestorableHome(ownerId: string): Promise<BackableOwner> {
     if (!BACKUP_OWNER_ID.test(ownerId)) throw new ApiError(400, 'Invalid ownerId');
     return requireBackableHome(ownerId);
@@ -144,13 +142,12 @@ export const backupRouter = new Elysia({ name: 'backup' })
     .post(
         '/admin/backup/artifacts',
         async ({ query, request, user }): Promise<{ name: string }> => {
-            await requireAdmin(user.id);
-            // The name travels in the query, not a header, as getBackupUploadUrl builds it. It has to be a
-            // name this server writes: the artifact list groups by the ownerId in it, and the bytes land
-            // under it.
-            const parsed = parseBackupArtifactName(query.name);
-            if (!parsed) throw new ApiError(400, 'The name parameter must be a backup artifact name');
-            await requireOwnerForOwnersHome(user.id, parsed.ownerId);
+            await requireOwner(user.id);
+            // The name travels in the query, not a header. It has to be a name this server writes: the artifact list
+            // groups by the ownerId in it, and the bytes land under it.
+            if (!parseBackupArtifactName(query.name)) {
+                throw new ApiError(400, 'The name parameter must be a backup artifact name');
+            }
             const declared = Number(request.headers.get('content-length'));
             if (!Number.isSafeInteger(declared) || declared <= 0 || declared > BACKUP_UPLOAD_MAX_BYTES) {
                 throw new ApiError(

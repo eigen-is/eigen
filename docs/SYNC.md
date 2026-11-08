@@ -28,7 +28,7 @@ Only container databases and the plain files a per-home restore stages go throug
 
 ## Only `s3` mounts queue
 
-A queue exists only when `buildUploadDestinationKey` (`apps/api/src/lib/mount/helpers.ts`) returns a key, which it does for storage type `s3`. `local` and `local-key` keep synchronous writes: a local write never 503s, and queuing it would only weaken its on-completion durability. The crash-temp recovery ([A crash temp is adopted and re-synced](#a-crash-temp-is-adopted-and-re-synced)) applies to both temp-copy backends, `s3` and `local`.
+A queue exists only when `buildUploadDestinationKey` (`apps/api/src/lib/mount/helpers.ts`) returns a key, which it does for storage type `s3`. `local` and `local-key` keep synchronous writes: a local write never 503s, and queuing it would only weaken its on-completion durability. The crash-temp recovery ([A crash temp is adopted and re-synced](#a-crash-temp-is-adopted-and-re-synced)) applies to both temp-copy backends, `s3` and `local`. A `local-key` document opens its stored file in place, so what a crash leaves is that file and its `-wal`, which the next open replays and a read of a closed document folds in first (`stageManagedDbCopy`).
 
 ## Code comments cite seven numbered invariants
 
@@ -46,7 +46,7 @@ Comments and tests name these by number ("invariant 7").
 
 `pending_uploads` lives in `metadata.db`, so a restart or a Home reopen resumes every un-acked upload. `reconcile` re-enqueues each row whose staged copy exists and drops, with a log line, each row whose copy is gone. It deletes staged files no row names, which a crash between staging and the row insert leaves behind.
 
-A row stores the staged copy's basename, resolved against the mount's current `staging/` folder, and passes an absolute legacy value through. So moving the data folder to another host, a per-home restore or a changed bind mount keeps every pending row. A whole-server restore (`./eigen restore`) replays the archive's pending uploads, except those the live mount uploaded since ([BACKUP.md](BACKUP.md#an-s3-mount-keeps-its-bucket-as-it-is)).
+A row stores the staged copy's file name, joined onto the mount's current `staging/` folder. So moving the data folder to another host, a per-home restore or a changed bind mount keeps every pending row. A whole-server restore (`./eigen restore`) replays the archive's pending uploads, except those the live mount uploaded since ([BACKUP.md](BACKUP.md#an-s3-mount-keeps-its-bucket-as-it-is)).
 
 A Home that idles out keeps the rows its close staged on local disk until it is next opened, and during an outage every queued row. That is the same durability as the temp files: losing the host disk in that window loses them.
 
@@ -58,9 +58,10 @@ The mount's startup sweep removes `tmp/` files older than an hour, but never one
 
 ## An empty or collapsed working copy never overwrites a good object
 
-**Invariant: an empty or invalid working copy never overwrites a non-trivial stored object. The worst case is a transient 503, never a wipe.** Adopting a crash temp is only safe if it holds real data. A failed or empty GET leaves a 0-byte temp, which is itself a valid empty SQLite file, and `markDirty` would then upload that emptiness over the good object.
+**Invariant: an empty or invalid working copy never overwrites a non-trivial stored object. The worst case is a document that answers errors, never a wipe.** Adopting a crash temp is only safe if it holds real data. A failed or empty GET leaves a 0-byte temp, which is itself a valid empty SQLite file, and `markDirty` would then upload that emptiness over the good object.
 
 - `buildDocumentDb` adopts a temp only if `isViableRecoveryTemp` passes: it has the SQLite header and is not collapsed against the size the row knows, with its `-wal` counted. Otherwise it discards the temp through `Mount.cleanupTemp`, journals included, and re-fetches. A `-wal` left beside the re-fetched file would be replayed into it.
+- A temp with a valid header and a corrupt body passes that check and is adopted: the open throws, the stored object stays good, and the temp stays, so that document keeps answering errors until someone removes the temp. Only a disk fault or a power loss writes one.
 - An open (`Mount.holdDatabase`, `withDatabase`) and `createDatabase` pass their intent down as the mount's `mode`, which becomes `ManagedDatabase`'s `mustExist`. A `mustExist` open uses `{ create: false }` and refuses a missing or 0-byte working copy with a 503.
 - A download or a staged-copy recovery writes a `tmp/<uuid>` side file and renames it onto the working-copy path (`replaceTempFrom`). A process killed mid-GET leaves no partial temp for the next open to adopt.
 
@@ -72,7 +73,7 @@ A pending staged copy holds bytes newer than the stored object, so every read on
 
 ## Version snapshots are queued too
 
-On an `s3` mount a version snapshot takes its bytes from the freshest local copy and enqueues its own upload on the mount's upload queue (`apps/api/src/lib/versioning/snapshot.ts`). So a close-time snapshot never blocks on the bucket. It copies a pending staged copy with no await between the existence check and the copy, so a concurrent enqueue cannot unlink it mid-read. How versions are kept is in [STORAGE.md](STORAGE.md#version-snapshots-live-inside-the-container).
+On an `s3` mount a version snapshot takes its bytes from the freshest copy and enqueues its own upload on the mount's upload queue (`apps/api/src/lib/versioning/snapshot.ts`). So a close-time snapshot's upload never blocks on the bucket. Two other steps can wait for it. With no upload pending, the copy is a GET of the stored object, because the slot no longer shows the closing database, and that GET gives up after 30 s of silence. The prune waits for each DELETE, capped at 30 s. The snapshot copies a pending staged copy with no await between the existence check and the copy, so a concurrent enqueue cannot unlink it mid-read. How versions are kept is in [STORAGE.md](STORAGE.md#version-snapshots-live-inside-the-container).
 
 ## A cancel beats a PUT in flight
 

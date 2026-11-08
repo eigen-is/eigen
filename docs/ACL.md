@@ -96,7 +96,7 @@ Push-based sharing for Drive and Calendar. On share: resolve targets, write to r
 
 `Drive.updateACL` awaits the target resolution and its registry writes, because they are the durable record for targets without an account. The pushes to recipient homes are queued (`acl-propagation.ts`), in order per path, since an out-of-order add and revoke would resurrect a stale mirror row. A change that keeps the ACL but still pushes it, such as a rename, a restore or the trash of a folder above the path, goes through `Drive.pushSharing`. It runs in the same per-path chain as `Drive.updateACLDelta` and reads the path there, so it never pushes an ACL that a revoke has replaced meanwhile. The chain comes before every mount lock ([STORAGE.md](STORAGE.md#on-local-a-key-is-a-name-path-so-renames-lock-the-whole-tree)). A trash runs in its item's chain, and it takes the chain of each path below the item, ancestor first, only after its mount locks are released. A rename and a restore take their chain after their locks too. So a chain holder never waits on a lock whose holder waits on that chain. They go out through `sendToUserHomes` in `home-relay.ts`, eight at a time. Every fan-out that opens many homes shares that budget of eight: the ACL fan-out, a team notification's per-member fan-out, a file's watchers and a chat message's recipients. So a large one queues the others. A crash loses deliveries still in flight: the "Durable home-relay outbox" row of [ROADMAP.md](ROADMAP.md) closes that, and [SCALABILITY.md](SCALABILITY.md#a-relay-message-in-flight-is-lost-on-a-crash) has the relay side.
 
-A saved ACL change also closes the live collab sockets of anyone who lost read below that path (`enforceReadAccessBelow`), so a revoke takes effect now, not at the next reconnect. How it walks the open documents: [COLLAB.md](COLLAB.md#read-is-checked-at-open-write-on-every-message).
+A saved ACL change also closes the live collab sockets of anyone who lost read, by re-checking every open document of the Home, so a revoke takes effect now, not at the next reconnect. How it walks the open documents: [COLLAB.md](COLLAB.md#read-is-checked-at-open-write-on-every-message).
 
 A change that keeps read but moves write, a writer made a viewer or the reverse, reaches an open document through its info query: every ACL event, `DRIVE_ACL_UPDATED` included, refreshes the `collabKeys` info of every open document in the path's mount (`invalidateAclUpdated`), as a folder's change reaches the documents below it. The editor then follows its new `canWrite` without a reload; Docs' editors in [DOCS.md](DOCS.md#one-factory-builds-the-bodys-editor-every-bands-and-each-storys). A tab that got in through the path's visibility is not an ACL recipient and hears no event, so it learns at its next refetch ([ROADMAP.md](ROADMAP.md)).
 
@@ -141,17 +141,31 @@ PK: `(fromUserId, targetIdentifier)`. No share data, just the pair. Reconciliati
 - **Guest signs in**: every successful OTP verification ([GUEST-ACCESS.md](GUEST-ACCESS.md))
 - **Team member added**: `organizationHooks.afterAddTeamMember` on the `organization()` plugin in `apps/api/src/lib/auth/auth.ts`, and the org join itself for the default team, since `addMember` skips that hook ([ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md#every-new-user-joins-the-default-team))
 
-On new user, `reconcileSharesForNewUser()` (`apps/api/src/lib/share/reconciliation.ts`) runs, per source:
+Each trigger calls `reconcileShares(user, teamId?)` (`apps/api/src/lib/share/reconciliation.ts`), which reads the registry for the user's own address, or for the `team_<id>` they joined when it gets a `teamId`. Per source it runs:
 
-1. `pullCalendarShares()`: shared calendar entries
-2. `pullSharedPaths()`: shared drive paths
-3. `pullPendingInvitations()`: calendar invites (creates linked event copies)
+1. `pullSharedPaths()`: shared drive paths
+2. `pullCalendarShares()`: shared calendar entries, with the strongest permission the user holds by address or through any of their teams. The newcomer has already joined the default team when their address reconciles, so asking by address alone would store a weaker permission than the team gives.
+3. `pullPendingInvitations()`: calendar invites (creates linked event copies), without a `teamId` only. An invitation names an address, never a team, and an existing user got theirs when it was sent, so a team join pulls none: a pull would bring back an invitation the member had removed.
 
-A home without a calendar (a guest's) skips steps 1 and 3. On new team member, `reconcileSharesForNewTeamMember()` runs steps 1 and 2 only (no pending invitations) and delivers through `sendToHome`, since it writes another user's home.
+Every delivery goes through `sendToHome`, which opens the user's home for that one message. So a home that goes idle and closes during a slow pull reopens for the next delivery, and the run holds no Home of its own. A guest's home has no calendar, so a guest runs neither calendar pull: each scans the owner's calendar, and the relay would drop the result.
 
 A source can be a team: a share on a team drive path records `team_<id>` as `fromUserId`. Reconciliation resolves it through the team (`getTeam`), not as a user id, and delivers drive paths only, attributed to the team name, since a team has no calendars or invitations to pull. Without this, a guest granted a team-owned document gets in but never sees it in **Shared with me**, and neither does a user who joins a granted team later.
 
 User deletion cleans the registry: see [ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md#deleting-a-user-runs-one-teardown-from-every-entry-point).
+
+### A deleted owner's rows leave at the recipient's next listing
+
+Deleting a user or a team reaches into no other home, so the `shared_paths` rows in recipients' homes outlive the owner and could only answer 404 when opened. So `listSharedWithMe` and `listSharedWithMeByMimeType` (`apps/api/src/lib/drive/shared-with-me.ts`) look up each distinct owner of the rows they read, delete the rows of an owner that no longer exists, and return the rest. There is no relay message, no notification and no background job, and the same step heals an earlier deletion and a lost push. It costs one `users3.db` lookup per distinct owner per listing, about 85 µs each, on the event loop.
+
+Only a clean "not found" deletes. A lookup that throws fails the listing with every row in place, and an owner id that is neither a user nor a team is never judged.
+
+The Watched view doesn't take this step. `aggregateWatches` asks each owner in `listSharedOwnerIds` and treats a failure as an empty list, which it needs anyway for an owner whose home is mid-restore, so a deleted owner adds nothing to the view.
+
+A restore of a deleted owner pushes nothing. A recipient who listed at any time between the deletion and the end of the restore has lost the row, though the owner's ACL still lets them in. The row returns at the next change that pushes that path, such as an ACL change or a rename, as a new share with a bell row. This is the accepted cost of cleaning up on read.
+
+### An ACL entry naming a deleted person stays
+
+A deletion leaves the entries naming that person on other owners' paths on purpose, so a restored user gets their shares back. The cost is that a new account taking that address inherits those entries for now. It is a known open gap, tracked in the "A new account can take a deleted user's email address" row of [ROADMAP.md](ROADMAP.md).
 
 ### Share Emails
 

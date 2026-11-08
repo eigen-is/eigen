@@ -9,7 +9,6 @@ import { generateAPIs } from '../../../components/Workbook/api';
 import { replaySheetsOps } from '../../../engine';
 import type { Context } from '../../../state/context';
 import { FormulaCache } from '../../../state/modules/formula-cache';
-import { groupValuesRefresh } from '../../../state/modules/formula-exec';
 import { pushEntry, recordEntry, redoEntry, stepNewestEntry, undoEntry } from '../../../state/modules/history';
 import type { History, Op } from '../../../state/types';
 import type { PatchOptions } from '../../../state/utils/patch';
@@ -83,11 +82,7 @@ export const tab = (ctx: Context): Tab => ({
 
 // The tab's own edit, recorded as Workbook records it, recalculated dependents included; returns the batch it sends.
 export function tabEdit(t: Tab, recipe: (ctx: Context) => void, options?: PatchOptions): Op[] {
-    const recalculated = (ctx: Context) => {
-        recipe(ctx);
-        if (ctx.groupValuesRefreshData.length > 0) groupValuesRefresh(ctx);
-    };
-    const { next, ops, entry } = author(t.ctx, recalculated, options);
+    const { next, ops, entry } = author(t.ctx, recipe, options);
     t.ctx = next;
     pushEntry(t.history.undoList, entry);
     t.history.redoList = [];

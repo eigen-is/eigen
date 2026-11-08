@@ -30,7 +30,6 @@ async function mount() {
             id: 's1',
             name: 'One',
             order: 0,
-            status: 1,
             row: 10,
             column: 5,
             celldata: [{ r: 0, c: 0, v: { v: 'Name', m: 'Name', ct: { fa: 'General', t: 'g' } } }],
@@ -42,7 +41,7 @@ async function mount() {
         root.render(
             createElement(DocSearchProvider, {
                 controller,
-                children: createElement(Workbook, { ref: workbook, data, showFormulaBar: false, hooks: {} }),
+                children: createElement(Workbook, { ref: workbook, data, hooks: {} }),
             }),
         );
     });
@@ -52,9 +51,6 @@ async function mount() {
     };
     const input = container.querySelector<HTMLDivElement>('#sheet-rich-text-editor');
     if (!input) throw new Error('no cell editor');
-    await act(async () => {
-        workbook.current?.setSelection([{ row: [0, 0], column: [0, 0] }]);
-    });
     await act(async () => input.focus());
     return { container, input, a1: () => workbook.current?.getAllSheets()[0]?.data?.[0]?.[0] };
 }
