@@ -1,8 +1,8 @@
 // Edit event is a form: Save or Enter in the title saves a one-off event and closes it once. While the save runs,
 // Cancel and Escape wait, and a save the server refuses keeps the dialog open beside the hook's toast, with no
 // unhandled rejection. A series occurrence asks which events the change applies to, and a move to another owner asks
-// first, and each closes Edit event once its save is done. A move retried after a failed delete creates its copy once,
-// and again only in a newly picked calendar. Copying an invitation's guests saves nothing.
+// first, and each closes Edit event once its save is done. A move retried after a failed delete copies again.
+// Copying an invitation's guests saves nothing.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { CalendarEventOccurrence, CalendarItem, UpdateEventInput } from '@workspace/lib/types/calendar';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -77,7 +77,7 @@ const idle = { mutateAsync: mock(async (_input: unknown) => {}), isPending: fals
 const notFromOthers = () => false;
 const fromOthers = () => true;
 let isFromOthers = notFromOthers;
-const updateEvent = { mutateAsync: mock(async (_input: UpdateEventInput) => {}), isPending: false };
+const updateEvent = { mutateAsync: mock(async (_input: UpdateEventInput) => ({ etag: '2' })), isPending: false };
 const deleteEvent = { mutateAsync: mock(async (_input: unknown) => {}), isPending: false };
 // Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts the originals back.
 const realAuth = { ...(await import('@workspace/lib/auth')) };
@@ -122,7 +122,7 @@ let unmount = async () => {};
 afterEach(() => unmount());
 beforeEach(() => {
     updateEvent.mutateAsync.mockReset();
-    updateEvent.mutateAsync.mockImplementation(async () => {});
+    updateEvent.mutateAsync.mockImplementation(async () => ({ etag: '2' }));
     idle.mutateAsync.mockReset();
     idle.mutateAsync.mockImplementation(async () => {});
     deleteEvent.mutateAsync.mockReset();
@@ -213,7 +213,7 @@ test('Enter in the title saves the event and closes the dialog', async () => {
 
 test('while a save runs, its buttons are disabled and Cancel and Escape wait for it', async () => {
     let finish = () => {};
-    updateEvent.mutateAsync.mockImplementation(() => new Promise<void>((resolve) => (finish = resolve)));
+    updateEvent.mutateAsync.mockImplementation(() => new Promise((resolve) => (finish = () => resolve({ etag: '2' }))));
     await open();
     await save();
     expect([button('Cancel').disabled, button('Save').disabled]).toEqual([true, true]);
@@ -254,7 +254,7 @@ test("a move to another owner's calendar asks first, and Move saves and closes i
     expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
 
-test('a move retried after the original failed to delete creates the copy only once', async () => {
+test('a move retried after the original failed to delete copies the form again', async () => {
     deleteEvent.mutateAsync.mockImplementationOnce(async () => {
         const failure = new Error('Network error');
         onMutationError(failure);
@@ -266,7 +266,7 @@ test('a move retried after the original failed to delete creates the copy only o
     await settle();
     await click('Move');
     await settle();
-    expect(idle.mutateAsync).toHaveBeenCalledTimes(1);
+    expect(idle.mutateAsync).toHaveBeenCalledTimes(2);
     expect(deleteEvent.mutateAsync).toHaveBeenCalledTimes(2);
     expect(onOpenChange.mock.calls).toEqual([[false]]);
 });

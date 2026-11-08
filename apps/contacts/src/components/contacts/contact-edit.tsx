@@ -1,11 +1,12 @@
 // The form that creates or edits a contact: names, emails, phone numbers, addresses, labels, birthday and notes.
-// Routes such as the new-contact route show it and save what it returns.
+// Routes such as the new-contact route show it and save what it returns. A field the user changed stays, and every
+// other field follows the contact it is given, so a sync or a refused Save moves only what nobody touched.
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import { isStaleWrite, wasToasted } from '@workspace/lib/api-error';
 import { useLabels } from '@workspace/lib/contacts';
 import type { Contact } from '@workspace/lib/types/contact';
 import { AvatarEditor, Toolbar, ToolbarTitle, useContactAvatarUpload } from '@workspace/ui';
-import { Alert, AlertDescription } from '@workspace/ui/components/alert';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
@@ -13,7 +14,7 @@ import { Input } from '@workspace/ui/components/input';
 import { Textarea } from '@workspace/ui/components/textarea';
 import { Plus, Trash2 } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -49,12 +50,24 @@ const formSchema = z
         },
     );
 
-// The form models email/phone as `{ value }[]` rather than the wire `string[]`: react-hook-form's
-// useFieldArray reads the array through compact() (filter(Boolean)), so a blank primitive '' is stripped —
-// the create form would open with zero rows and "Add" would collapse an all-blank list back to one row.
-// Object entries are always truthy, so every row survives; onSave flattens back to string[], blanks filtered.
+// A row is `{ value }`, not the wire's string: useFieldArray reads a list through compact(), which strips a blank ''.
+// onSave flattens the rows back, without the blanks.
 type FormValues = z.infer<typeof formSchema>;
 export type ContactFormValues = Omit<FormValues, 'email' | 'phone'> & { email: string[]; phone: string[] };
+
+const FORM_FIELDS = [
+    'firstName',
+    'lastName',
+    'company',
+    'jobTitle',
+    'email',
+    'phone',
+    'address',
+    'birthday',
+    'notes',
+    'labels',
+    'avatar',
+] as const;
 
 type ContactEditToolbarProps = {
     isNew: boolean;
@@ -91,37 +104,40 @@ function RepeatableField({ label, onAdd, children }: RepeatableFieldProps) {
 
 type ContactEditProps = {
     contact: Contact;
-    onSave: (data: ContactFormValues, etag: string) => void;
+    onSave: (data: ContactFormValues, etag: string) => Promise<void>;
     onCancel: () => void;
-    // Remounts the form on the live contact. After a 412 the toast says it reloaded, so even a dirty form follows.
-    onReload?: () => void;
-    staleWrite?: boolean;
 };
 
-export function ContactEdit({ contact, onSave, onCancel, onReload, staleWrite }: ContactEditProps) {
+export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
     const { data: labels = [], error: labelsError } = useLabels();
-    const [avatar, setAvatar] = useState<string | null>(contact?.avatar ?? null);
-    // Snapshot the first-render contact that seeds the form fields below. The route's live useContacts() copy
-    // is refetched by SSE, so reading its etag at submit would pair fresh-server etag with stale field values
-    // and silently clobber a concurrent edit; this ref stays paired with the loaded fields.
-    const loadedRef = useRef(contact);
+    const form = useForm<FormValues>({ resolver: zodResolver(formSchema), defaultValues: formValues(contact) });
 
+    const dirtyNames = Object.keys(form.formState.dirtyFields).join();
+    const typing = dirtyNames !== '';
+
+    // A whole list or address field stays or follows as one: its rows have no identity to merge them by. A field goes
+    // clean when typed back to its old value, and follows then. Resetting an unchanged list would remount its rows.
+    useEffect(() => {
+        const current = formValues(contact);
+        for (const name of FORM_FIELDS) {
+            const followed = JSON.stringify(form.getValues(name)) === JSON.stringify(current[name]);
+            if (!followed && !form.getFieldState(name).isDirty) form.resetField(name, { defaultValue: current[name] });
+        }
+    }, [contact, form, dirtyNames]);
+
+    // The etag typed edits answer to: the contact's when typing began, so a save can't overwrite a change it never
+    // showed. A refusal lets it move on once, to the contact the toast says to check.
+    const [heldEtag, setHeldEtag] = useState(contact.etag);
+    const [refused, setRefused] = useState(false);
+    if (contact.etag !== heldEtag && (!typing || refused)) {
+        setHeldEtag(contact.etag);
+        setRefused(false);
+    }
+
+    form.register('avatar');
+    const avatar = form.watch('avatar') ?? null;
+    const setAvatar = (url: string | null) => form.setValue('avatar', url, { shouldDirty: true });
     const uploadAvatar = useContactAvatarUpload(setAvatar);
-    const form = useForm<FormValues>({
-        resolver: zodResolver(formSchema),
-        defaultValues: {
-            firstName: contact?.firstName || '',
-            lastName: contact?.lastName || '',
-            company: contact?.company || '',
-            jobTitle: contact?.jobTitle || '',
-            email: contact?.email?.length ? contact.email.map((value) => ({ value })) : [{ value: '' }],
-            phone: contact?.phone?.length ? contact.phone.map((value) => ({ value })) : [{ value: '' }],
-            address: contact?.address?.length ? contact.address : [{}],
-            birthday: contact?.birthday || '',
-            notes: contact?.notes || '',
-            labels: contact?.labels || [],
-        },
-    });
 
     const {
         fields: emailFields,
@@ -149,41 +165,26 @@ export function ContactEdit({ contact, onSave, onCancel, onReload, staleWrite }:
     });
 
     const handleSubmit = form.handleSubmit(async (data) => {
-        await onSave(
-            {
-                ...data,
-                email: data.email.map((row) => row.value).filter(Boolean),
-                phone: data.phone.map((row) => row.value).filter(Boolean),
-                avatar,
-            },
-            loadedRef.current.etag,
-        );
+        try {
+            await onSave(
+                {
+                    ...data,
+                    email: data.email.map((row) => row.value).filter(Boolean),
+                    phone: data.phone.map((row) => row.value).filter(Boolean),
+                },
+                heldEtag,
+            );
+        } catch (error) {
+            if (isStaleWrite(error)) setRefused(true);
+            if (!wasToasted(error)) throw error;
+        }
     });
 
     const isLoading = form.formState.isSubmitting;
 
-    // A sync re-seeds a clean form; a dirty one keeps its edits and asks first, as Drive's editor does.
-    const changedElsewhere = contact.etag !== loadedRef.current.etag;
-    const isDirty = form.formState.isDirty || avatar !== (loadedRef.current.avatar ?? null);
-    const followSync = changedElsewhere && (!isDirty || !!staleWrite);
-    useEffect(() => {
-        if (followSync) onReload?.();
-    }, [followSync, onReload]);
-
     return (
         <div className="h-full flex flex-col overflow-hidden">
             <div className="flex-1 overflow-y-auto app-gutter">
-                {changedElsewhere && !followSync && (
-                    <Alert variant="warning" className="flex items-center justify-between gap-4 mb-4">
-                        <AlertDescription>
-                            This contact changed elsewhere. Reload it and lose your edits?
-                        </AlertDescription>
-                        <Button type="button" variant="outline" size="sm" onClick={onReload}>
-                            Reload
-                        </Button>
-                    </Alert>
-                )}
-
                 {labelsError && (
                     <div className="bg-destructive/15 text-destructive px-4 py-2 rounded-md mb-4">
                         An error occurred while loading labels.
@@ -591,4 +592,20 @@ export function ContactEdit({ contact, onSave, onCancel, onReload, staleWrite }:
             </div>
         </div>
     );
+}
+
+function formValues(contact: Contact): FormValues {
+    return {
+        firstName: contact.firstName,
+        lastName: contact.lastName,
+        company: contact.company || '',
+        jobTitle: contact.jobTitle || '',
+        email: contact.email.length ? contact.email.map((value) => ({ value })) : [{ value: '' }],
+        phone: contact.phone.length ? contact.phone.map((value) => ({ value })) : [{ value: '' }],
+        address: contact.address?.length ? contact.address : [{}],
+        birthday: contact.birthday || '',
+        notes: contact.notes || '',
+        labels: contact.labels || [],
+        avatar: contact.avatar ?? null,
+    };
 }

@@ -482,12 +482,17 @@ export class Calendar {
         return events.updateEvent(this, calendarId, id, input, user, expectedEtag);
     }
 
-    public async deleteEvent(calendarId: string, id: string, user?: User): Promise<void> {
-        return events.deleteEvent(this, calendarId, id, user);
+    public async deleteEvent(calendarId: string, id: string, user?: User, expectedEtag?: string): Promise<void> {
+        return events.deleteEvent(this, calendarId, id, user, expectedEtag);
     }
 
-    public async moveEvent(calendarId: string, id: string, targetCalendarId: string): Promise<CalendarEvent> {
-        return events.moveEvent(this, calendarId, id, targetCalendarId);
+    public async moveEvent(
+        calendarId: string,
+        id: string,
+        targetCalendarId: string,
+        expectedEtag?: string,
+    ): Promise<CalendarEvent> {
+        return events.moveEvent(this, calendarId, id, targetCalendarId, expectedEtag);
     }
 
     // A whole `.ics` into one calendar of this Home, each series written through the store a device sync takes.

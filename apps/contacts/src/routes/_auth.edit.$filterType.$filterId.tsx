@@ -1,9 +1,12 @@
+// The page that adds or edits one contact: ContactEdit's form over the live address book. It leaves for the list when
+// the contact is gone.
+
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
 import { emptyContact } from '@workspace/lib/constants/contact';
-import { isStaleWrite, useContacts, useUpdateContact } from '@workspace/lib/contacts';
-import type { Contact, CreateContactInput } from '@workspace/lib/types/contact';
+import { useContacts, useUpdateContact } from '@workspace/lib/contacts';
+import type { CreateContactInput } from '@workspace/lib/types/contact';
 import { Column, ColumnLayout, LoadingState } from '@workspace/ui';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { z } from 'zod';
 import type { ContactFormValues } from '../components/contacts/contact-edit';
 import { ContactEdit, ContactEditToolbar } from '../components/contacts/contact-edit';
@@ -37,17 +40,11 @@ function EditContactRoute() {
     const navigate = useNavigate();
 
     const { data: contacts = [], isLoading: contactsLoading } = useContacts();
-    const contact = contactId ? contacts.find((c): c is Contact => c.id === contactId) : undefined;
+    const contact = contactId ? contacts.find((c) => c.id === contactId) : undefined;
     const updateContactMutation = useUpdateContact();
-    // Bumped to remount the form on the live contact, so its fields and snapshotted etag re-seed together.
-    const [seed, setSeed] = useState(0);
-    const handleReload = () => {
-        updateContactMutation.reset();
-        setSeed((n) => n + 1);
-    };
 
-    // Redirect away from a contactId that no longer exists (e.g. deleted elsewhere) from an effect, not the
-    // render body — matching the sibling list route's idiom rather than calling navigate() while rendering.
+    // A contactId that no longer exists, such as one deleted elsewhere, redirects from an effect, because navigate()
+    // can't run while rendering.
     useEffect(() => {
         if (!contactsLoading && contactId && !contact) {
             navigate({ to: '/$filterType/$filterId', params: { filterType, filterId }, search: {} });
@@ -67,8 +64,6 @@ function EditContactRoute() {
             await updateContactMutation.mutateAsync({
                 id: contactId,
                 ...contactData,
-                // The etag ContactEdit snapshotted when it loaded these fields — not the live query's, which SSE
-                // can advance mid-edit. A drifted card then 412s instead of silently clobbering the newer write.
                 etag,
             });
         }
@@ -103,12 +98,10 @@ function EditContactRoute() {
         <ColumnLayout mobileColumn="editor">
             <Column id="editor" width="flex" onBack={handleCancel} toolbar={<ContactEditToolbar isNew={isNew} />}>
                 <ContactEdit
-                    key={`${contactId}:${seed}`}
+                    key={contactId}
                     contact={contact || emptyContact}
                     onSave={handleSave}
                     onCancel={handleCancel}
-                    onReload={handleReload}
-                    staleWrite={isStaleWrite(updateContactMutation.error)}
                 />
             </Column>
         </ColumnLayout>

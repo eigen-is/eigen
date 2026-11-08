@@ -33,7 +33,7 @@ export const PRODID = '-//Eigen//CalDAV//EN';
 // `dtstamp` is the scheduling message's own stamp; a local edit states none and the clock stands in.
 export type WriteContext = { now: Date; actorIsOrganizer: boolean; dtstamp?: Date | null };
 // `sequence` is the one field no HTTP save submits: an invitation receiver mirrors the organizer's number, which beats the bump rule.
-export type EventPatch = Omit<UpdateEventInput, 'calendarId' | 'id'> & { sequence?: number };
+export type EventPatch = Omit<UpdateEventInput, 'calendarId' | 'id' | 'etag'> & { sequence?: number };
 type TrustedStamps = {
     createByUserId?: string | null;
     organizerEventId?: string | null;

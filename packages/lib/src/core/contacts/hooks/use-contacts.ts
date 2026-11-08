@@ -2,34 +2,17 @@
 // meets a 412 because the card changed elsewhere reloads the list and says so in its own toast. The Contacts app calls
 // them, and so do other readers of the address book, such as the contact suggestions and the profile editor.
 
-import type { QueryClient } from '@tanstack/react-query';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { contactsApi, getContactsAvatarUploadUrl } from '@workspace/lib/api';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { CreateContactInput, UpdateContactInput } from '@workspace/lib/types/contact';
-import { toast } from 'sonner';
-import { AppError, markToasted, onMutationError } from '../../api-error';
+import { AppError, onEtagWriteError, onMutationError } from '../../api-error';
 import { contactKeys, invalidateContactList } from './keys';
 
-// A write echoes the etag its form loaded, and a 412 means the card changed elsewhere first. The hook reloads the list
-// so the form shows the current card, and tells the user.
-const STALE_WRITE_TOAST = 'This contact changed elsewhere. It has been reloaded — please redo your edit.';
-
-// The edit form re-seeds after one, since the toast tells the user the card was reloaded.
-export function isStaleWrite(error: unknown): boolean {
-    return error instanceof AppError && error.status === 412;
-}
-
-// The update and the delete recover a 412 the same way. It returns true when it handled one, so the caller skips
-// onMutationError. The error counts as toasted, so a dialog that awaits the write doesn't log it again.
-function handleStaleWrite(queryClient: QueryClient, ownerId: string, error: unknown): boolean {
-    if (!isStaleWrite(error)) return false;
-    invalidateContactList(queryClient, ownerId);
-    markToasted(error);
-    toast.error(STALE_WRITE_TOAST);
-    return true;
-}
+// A write echoes the etag its form holds, and a 412 means the card changed elsewhere first. The hook reloads the list
+// and tells the user. It says nothing about what was typed, because the profile form re-seeds on a reload.
+const STALE_WRITE_TOAST = 'This contact changed elsewhere. Check it and try again.';
 
 export function useContacts() {
     const { user } = useAuth();
@@ -76,10 +59,8 @@ export function useUpdateContact() {
             return response.data;
         },
         onSuccess: () => invalidateContactList(queryClient, ownerId),
-        onError: (error) => {
-            if (handleStaleWrite(queryClient, ownerId, error)) return;
-            onMutationError(error);
-        },
+        onError: (error) =>
+            onEtagWriteError(error, STALE_WRITE_TOAST, () => invalidateContactList(queryClient, ownerId)),
     });
 }
 
@@ -95,10 +76,8 @@ export function useDeleteContact() {
             return response.data;
         },
         onSuccess: () => invalidateContactList(queryClient, ownerId),
-        onError: (error) => {
-            if (handleStaleWrite(queryClient, ownerId, error)) return;
-            onMutationError(error);
-        },
+        onError: (error) =>
+            onEtagWriteError(error, STALE_WRITE_TOAST, () => invalidateContactList(queryClient, ownerId)),
     });
 }
 
@@ -119,8 +98,7 @@ export function useMeContact() {
     });
 }
 
-// Multipart avatar upload bypasses Eden Treaty (which serializes bodies as JSON) and goes through
-// raw fetch, mirroring useUploadDraftAttachment. Returns the stored avatar path.
+// Eden Treaty serializes bodies as JSON, so this multipart upload is a raw fetch. It returns the stored avatar path.
 async function uploadContactAvatarRequest(ownerId: string, file: File): Promise<string> {
     const formData = new FormData();
     formData.append('file', file);
