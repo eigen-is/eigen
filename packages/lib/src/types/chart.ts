@@ -42,10 +42,8 @@ export const CHART_AXIS_KINDS = ['category', 'value'] as const;
 export type ChartAxisId = (typeof CHART_AXIS_IDS)[number];
 type ChartAxisKind = (typeof CHART_AXIS_KINDS)[number];
 
-// visible false draws no labels and no axis line, as Excel's c:delete or a c:tickLblPos of none; the title and
-// gridlines are their own. format is an Excel number format, null General or linked to the source cells. min and max
-// bound a value axis. reversed runs a category axis the other way from Google's, as Excel's minMax bar chart does from
-// the bottom up: the whole axis turns, so the series in a category's band turn with it.
+// `visible` false draws no labels and no axis line, as Excel's c:delete; the title and gridlines are their own.
+// `reversed` turns the whole axis, so the series in a category's band turn with it.
 export type ChartAxis = {
     kind: ChartAxisKind;
     title: { text: string };
@@ -58,10 +56,8 @@ export type ChartAxis = {
 // A plot type's own options, which every series drawn in that type shares. stacking: column and bar only.
 type ChartPlot = { stacking: ChartStacking };
 
-// A series' style, by its id. plot null draws in the chart's type, and yAxis names the axis it plots against; this build
-// draws every series in the chart's type on y. A null color is the palette's at the series' index (chartColor), so a
-// palette change reaches it and deleting a series shifts the ones after it. line and marker apply to line charts only.
-// labels shows the value on each bar or point of a column, bar or line chart. A pie keeps its own labels.
+// A null color is the palette's at the series' index (chartColor), so a palette change reaches it and deleting a series
+// shifts the ones after it. This build draws every series in the chart's type on y.
 export type ChartSeriesStyle = {
     plot: ChartType | null;
     yAxis: string;
@@ -82,9 +78,7 @@ export type RangeChartSeries = { id: string; name: string | CellRangeRef; values
 export type InlineChartData = { source: 'inline'; categories: string[]; series: InlineChartSeries[] };
 export type RangeChartData = { source: 'range'; categories: CellRangeRef | null; series: RangeChartSeries[] };
 
-// The spec's eight parts, each a record, so a new option nests in one and a tab that does not know it keeps it.
-// fontFamily is an EIGEN_FONTS name every label draws in. axes holds the axes this build draws, the ids' first pair,
-// series a style per series id in data, points the styled points by series id and index.
+// Each of the eight parts is a record, so a new option nests in one and a tab that does not know it keeps it.
 export type ChartSpec = {
     chart: { type: ChartType; blanks: ChartBlanks; fontFamily: string };
     title: { text: string };
@@ -180,8 +174,6 @@ export const CHART_LOOK_FIELDS = [
 export type ChartLook = Pick<VectorChartElement, (typeof CHART_LOOK_FIELDS)[number]>;
 
 // What a chart paints with besides its spec's font, from its look (chartPaintOf).
-// background is a serialized Fill, and a transparent one draws none. strokeColor and strokeStyle draw the axes and
-// gridlines. seriesStrokeWidth is the width of a line series.
 export type ChartPaint = {
     color: string;
     background: string;
@@ -197,10 +189,8 @@ export type ChartPaint = {
 // One line of chart text, turned 0, -45 or -90 degrees; Convert to shapes takes its y as a rich-text box's top.
 export type ChartLabel = TextLine;
 
-// The chart's box is width × height from (0, 0); every shape and label is in those local coordinates. A tick and a
-// data label read in the value axis's own format, else in sourceFormat, the values' own format, which a sheet reads
-// from its cells. Without either a tick takes as many decimals as the step, and a data label reads as General. A 100%
-// stack's ticks read as percents, and its data labels skip the axis format, which reads shares.
+// A tick and a data label read in the value axis's own format, else in sourceFormat, which a sheet reads from its
+// cells. A 100% stack's data labels skip the axis format, which reads shares.
 export type ChartLayoutInput = {
     id: string;
     spec: ChartSpec;

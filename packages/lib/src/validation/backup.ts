@@ -194,9 +194,8 @@ function isServerArchiveManifest(value: unknown): value is ServerArchiveManifest
     );
 }
 
-// Whether an archive restores every home it lists whole: none failed and none was backed up with warnings. Only such
-// an archive counts as good for local retention, the bucket's and ./eigen status, so warned nights never push out the
-// last complete one. A record without a manifest has none.
+// Only a complete archive counts as good for local retention, the bucket's and ./eigen status, so warned nights never
+// push out the last complete one.
 export function isCompleteArchive(manifest: Pick<ServerArchiveManifest, 'homes'> | undefined): boolean {
     return manifest?.homes.every((home) => !home.failed && !home.warnings?.length) ?? false;
 }
@@ -301,9 +300,8 @@ function parseUploadRecord(value: unknown): ServerArchiveUpload | null {
     return upload;
 }
 
-// Whether the owner can upload an archive, for the Upload route, its button and ./eigen status: a verified archive,
-// not a pre-update one (that stays on this server for ./eigen rollback), with no job still writing or uploading it,
-// while a backup bucket is set. One the bucket holds already goes again.
+// A pre-update archive stays on this server for ./eigen rollback, so it is not uploaded. One the bucket holds already
+// can go again.
 export function canUploadServerArchive(
     { name, reason, record }: Pick<ServerArchive, 'name' | 'reason' | 'record'>,
     { uploadEnabled, jobs }: { uploadEnabled: boolean; jobs: readonly Pick<BackupJob, 'state' | 'artifact'>[] },

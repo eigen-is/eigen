@@ -35,8 +35,7 @@ export type FileEventType =
     | 'versions-deleted'
     | keyof FileEventDetailsMap;
 
-// The events a client may post. The server records every other one itself, and the route refuses the rest. Only a
-// card event names something a person can read, so a structural change, such as a slide added or a sheet row
+// Only a card event names something a person can read, so a structural change, such as a slide added or a sheet row
 // inserted, shows as the plain 'edited'.
 const CLIENT_FILE_EVENT_TYPES = [
     'sticky-added',
@@ -91,9 +90,8 @@ export type PathWatchStatus = {
     viaAncestor?: { pathId: string; name: string };
 };
 
-// The verb of each event type, as a row says it after the actor. describeFileEvent says the plain ones, such as
-// edited or trashed, straight from this table, and phrases the richer ones itself. The table is also the list
-// toFileEventType checks a stored type against. The server writes notification titles with it, so it lives here.
+// describeFileEvent says the plain verbs straight from this table and phrases the richer ones itself. The table also
+// checks a stored type (toFileEventType), and the server writes notification titles with it, so it lives here.
 const FILE_EVENT_PHRASES: Record<FileEventType, string> = {
     created: 'created',
     uploaded: 'uploaded',
@@ -133,9 +131,8 @@ export function aclPrincipalsToResolve(details: FileEvent['details'] | undefined
     return [...new Set([...details.added, ...details.removed])].filter(isTeamPrincipal);
 }
 
-// The words of one event, for the activity lists and the file-event notifications. The caller puts the actor in front,
-// such as "You" or a name. In 'own' the item's name is left out, because the list's title shows it, and in
-// 'container' it is named. The details are narrowed with `in`, because the Pick loses the union.
+// The caller puts the actor in front. In 'own' the item's name is left out, because the list's title shows it. The
+// details are narrowed with `in`, because the Pick loses the union.
 export function describeFileEvent(
     event: Pick<FileEvent, 'eventType' | 'details' | 'pathName' | 'pathType'>,
     ctx: 'own' | 'container',

@@ -133,9 +133,8 @@ export type SSEventBackup = {
     ownerId: string;
 };
 
-// Sent when a stream opens and with every keepalive: the data epoch of the user's own home and of each of
-// their teams, keyed by owner id. Only a restore or an update changes one, so a tab reloads when an epoch it holds
-// changes.
+// The data epoch of the user's own home and of each of their teams, keyed by owner id. Only a restore or an update
+// changes one, so a tab reloads when an epoch it holds changes.
 export type SSEventHomeDataEpochs = {
     type: typeof SSEventType.HOME_DATA_EPOCHS;
     epochs: Record<string, string>;
@@ -146,10 +145,8 @@ export type SSEventHomeDataEpochs = {
 export const RESTART_REASONS = ['update', 'rollback', 'demo-reset'] as const;
 export type RestartReason = (typeof RESTART_REASONS)[number];
 
-// Sent when a stream opens and whenever ./eigen announces or takes back a restart, such as the one an update makes,
-// to every open stream on the server. A null notice means none. msLeft and msSinceAnnounced count from the moment the
-// event is sent, so a browser whose clock is off still shows the right times. The message is the operator's own
-// line, or null.
+// msLeft and msSinceAnnounced count from the moment the event is sent, so a browser whose clock is off still shows the
+// right times. A null notice means none.
 export type SSEventRestartNotice = {
     type: typeof SSEventType.SERVER_RESTART_NOTICE;
     notice: { reason: RestartReason; msLeft: number; msSinceAnnounced: number; message: string | null } | null;
