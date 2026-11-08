@@ -103,17 +103,11 @@ export function archivePaths(rows: readonly MountPathRow[]): (row: MountPathRow)
     };
 }
 
-// What a flat-key backend (`local-key`, `s3`) stores a row's object under: `file`, falling back to
-// the id for a row written before that column carried a value, as Mount.getStorageKey does.
-// A path-based mount needs the whole ancestor chain instead (storageKeyOf).
-export function flatStorageKey(row: Pick<MountPathRow, 'id' | 'file'>): string {
-    return row.file || row.id;
-}
-
 // Mirrors Mount.findStorageKey, resolved from the tree already held rather than one recursive-CTE
 // query per file. Restore puts every file back at the key the restored mount looks for it under.
+// A flat-key backend (`local-key`, `s3`) stores a file's object under its `file`.
 export function storageKeyOf(row: MountPathRow, byId: ReadonlyMap<string, MountPathRow>, isPathBased: boolean): string {
-    if (!isPathBased) return flatStorageKey(row);
+    if (!isPathBased) return row.file;
     const segments = row.file ? [row.file] : [];
     // A walk that meets a row twice stops, as a parent cycle would otherwise spin forever on an untrusted table.
     const seen = new Set<string>([row.id]);
@@ -256,9 +250,10 @@ function unusableParts(row: MountPathRow): string[] {
     if (!isUsableName(row.name)) failures.push(`path row ${row.id} has an unusable name "${row.name}"`);
     if (isReservedName(row.name)) failures.push(`path row ${row.id} has a reserved name "${row.name}"`);
     if (isReservedName(row.file)) failures.push(`path row ${row.id} has a reserved file "${row.file}"`);
-    // Empty is how a flat-key mount spells a folder row (Mount.createFolder).
+    // Empty is how a flat-key mount spells a folder row (Mount.createFolder). A file always has one, its object's key.
+    const flatFolder = row.type !== 'file' && row.file === '';
     const trashKey = row.trashedFrom !== null && row.file === trashStorageKey(row.id, row.name);
-    if (row.file !== '' && !trashKey && !isUsableName(row.file)) {
+    if (!flatFolder && !trashKey && !isUsableName(row.file)) {
         failures.push(`path row ${row.id} has an unusable file "${row.file}"`);
     }
     return failures;

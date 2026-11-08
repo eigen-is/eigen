@@ -39,25 +39,25 @@ FIX=$(cd "$FIX" && pwd -P)
 trap 'rm -rf "$FIX"' EXIT
 
 # The stub logs every call to $STUB_LOG. STUB_INFO (version, architecture, operating system) and STUB_COMPOSE answer
-# info and compose version, empty for a failure; STUB_FAIL names the compose subcommands and docker commands that
-# fail, and the images whose pull fails; STUB_IMAGE=1 makes image inspect fail on an image the launch has not
-# pulled; STUB_LATEST and STUB_REVISION are the version and commit the registry's manifest of any image names;
-# STUB_LABEL_VERSION and STUB_LABEL_REVISION the labels of any local image, STUB_LABEL_REVISION_DOVECOT that of a dovecot
-# image, and STUB_MOVED that of any image once api was pulled twice, as a tag that moves; STUB_DIGEST the registry
-# digest of every local image; a docker run with STUB_RUN_FAIL among its arguments fails, with STUB_RUN_CODE or 1, one
-# of restore --help prints a usage with --check-data, or with STUB_OLD_RESTORE=1 that of a build without it, one with
-# --staged also prints STUB_CHECKED, one of restore --env writes a
-# .env.production that pins sha256:eee, and one of restore --swap removes .eigen/restore-swap, or with STUB_SWAP_CUT=1
-# leaves one and fails, after 3 s with STUB_SWAP_SLOW=1; with STUB_SWAP_KEPT=<folder> it keeps that folder aside and
-# says so, as the CLI does. A run of bootstrap writes a Compose file into this folder, the starter keys into
-# .env.production when it names no release, keeping the registry it names, and a launcher that prints STUB_LAUNCHER on
-# stderr. Compose ps names eigen-api as running unless STUB_RUNNING=0, compose run (the stage) exits STUB_STAGE,
-# compose exec of backup prints archive=STUB_ARCHIVE and exits STUB_EXEC, one of restart-notice --in prints an at= and
-# exits STUB_NOTICE, one of status --running prints the file STUB_JOBS names while it is there, or with STUB_ASK=fail
-# fails as one that is not answering. With
-# STUB_ASKS=<file> each ask takes that file's first line instead: fail fails, - names nothing and any other is printed,
-# and once the file is empty it names nothing. An exec that checksums $EIGEN_ENV_FILE checksums STUB_MOUNTED, the file
-# eigen-api mounts, or else .env.production. A run of restore --env refuses a folder with a .env.production.
+# info and compose version, empty for a failure; STUB_FAIL names the compose subcommands and docker commands that fail,
+# and the images whose pull fails; STUB_IMAGE=1 makes image inspect fail on an image the launch has not pulled;
+# STUB_LATEST and STUB_REVISION are the version and commit the registry's manifest of any image names;
+# STUB_LABEL_VERSION and STUB_LABEL_REVISION the labels of any local image, STUB_LABEL_REVISION_DOVECOT that of a
+# dovecot image, and STUB_MOVED that of any image once api was pulled twice, as a tag that moves; STUB_DIGEST the
+# registry digest of every local image; a docker run with STUB_RUN_FAIL among its arguments fails, with STUB_RUN_CODE or
+# 1, one of restore --help prints a usage with --check-data, or with STUB_OLD_RESTORE=1 that of a build without it, one
+# with --staged also prints STUB_CHECKED, one of restore --env writes a .env.production that pins sha256:eee, and one of
+# restore --swap removes .eigen/restore-swap, or with STUB_SWAP_CUT=1 leaves one and fails, after 3 s with
+# STUB_SWAP_SLOW=1; with STUB_SWAP_KEPT=<folder> it keeps that folder aside and says so, as the CLI does. A run of
+# bootstrap writes a Compose file into this folder, the starter keys into .env.production when it names no release,
+# keeping the registry it names, and a launcher that prints STUB_LAUNCHER on stderr. Compose ps names eigen-api as
+# running unless STUB_RUNNING=0, compose run (the stage) exits STUB_STAGE, compose exec of backup prints
+# archive=STUB_ARCHIVE and exits STUB_EXEC, one of restart-notice --in prints an at= and exits STUB_NOTICE, one of
+# status --running prints the file STUB_JOBS names while it is there, or with STUB_ASK=fail fails as one that is not
+# answering. With STUB_ASKS=<file> each ask takes that file's first line instead: fail fails, - names nothing and any
+# other is printed, and once the file is empty it names nothing. An exec that checksums $EIGEN_ENV_FILE checksums
+# STUB_MOUNTED, the file eigen-api mounts, or else .env.production. A run of restore --env refuses a folder with a
+# .env.production.
 mkdir "$FIX/bin"
 cat >"$FIX/bin/docker" <<'EOF'
 #!/bin/sh

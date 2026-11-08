@@ -22,7 +22,7 @@ import {
     unpackBound,
     withUnpackSlack,
 } from './archive';
-import { archivePaths, flatStorageKey, readMountPathRows } from './archive-layout';
+import { archivePaths, readMountPathRows } from './archive-layout';
 import { describeError } from './errors';
 import type { VersionedDatabase } from './materialize-mount';
 import { checkRestoredDatabases, materializeMount, movePath, openToCheck, redateTrash } from './materialize-mount';
@@ -229,7 +229,7 @@ function replayPendingUploads(mountDir: string, liveMountDir: string, fromFiles:
     try {
         const rows = fromFiles ? readMountPathRows(db) : [];
         const archivePath = archivePaths(rows);
-        const byKey = new Map(rows.filter((row) => row.type === 'file').map((row) => [flatStorageKey(row), row]));
+        const byKey = new Map(rows.filter((row) => row.type === 'file').map((row) => [row.file, row]));
         const pending = db
             .query<{ storageKey: string; stagingPath: string }, []>(
                 'SELECT storageKey, stagingPath FROM pending_uploads',
@@ -266,10 +266,8 @@ function liveUploadedKeys(liveMountDir: string): Set<string> | null {
     let db: Database | undefined;
     try {
         db = openToCheck(metadata);
-        const files = db
-            .query<{ id: string; file: string }, []>("SELECT id, file FROM paths WHERE type = 'file'")
-            .all();
-        const uploaded = new Set(files.map(flatStorageKey));
+        const files = db.query<{ file: string }, []>("SELECT file FROM paths WHERE type = 'file'").all();
+        const uploaded = new Set(files.map((row) => row.file));
         for (const { storageKey } of db
             .query<{ storageKey: string }, []>('SELECT storageKey FROM pending_uploads')
             .all()) {

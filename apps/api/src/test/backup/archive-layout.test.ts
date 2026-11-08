@@ -85,3 +85,11 @@ test('verify refuses a row 257 levels deep and passes a chain 256 deep', () => {
     expect(checkArchivedPathRows(chain)).toEqual(refusal);
     expect(checkArchivedPathRows(chain.toReversed())).toEqual(refusal);
 });
+
+test('verify takes an empty file on a folder of a flat-key mount, and refuses one on a file', () => {
+    const root = { ...row('root', 'Drive', 'folder', null), file: '' };
+    const folder = { ...row('folder', 'Folder', 'folder', root.id), file: '' };
+    expect(checkArchivedPathRows([root, folder])).toEqual([]);
+    const file = { ...row('file', 'a.txt', 'file', folder.id), file: '' };
+    expect(checkArchivedPathRows([root, folder, file])).toEqual(['path row file has an unusable file ""']);
+});
