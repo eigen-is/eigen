@@ -11,7 +11,7 @@ import {
 } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
-import { buildArtifactName, buildHomeFolderName, getBackupsDir } from '../../lib/backup/paths';
+import { buildHomeFolderName, freeArtifactName, getBackupsDir } from '../../lib/backup/paths';
 import { restoreHome } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { getServerConfig } from '../../lib/config/server-config';
@@ -51,7 +51,7 @@ async function backupWithAuthRows(
         entry.sha256 = hasher.digest('hex');
         writeFileSync(join(folder, 'manifest.json'), JSON.stringify(manifest, null, 2));
     }
-    const name = buildArtifactName(userId, at);
+    const name = freeArtifactName(userId, at);
     await packFolder(folder, join(getBackupsDir(), name));
     rmSync(staging, { recursive: true, force: true });
     return name;

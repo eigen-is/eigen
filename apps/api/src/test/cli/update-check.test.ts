@@ -1,6 +1,7 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
+import * as nodeFs from 'node:fs';
 import pkg from '../../../../../package.json' with { type: 'json' };
-import { releaseNotes } from '../../cli/update-check';
+import { updateCheck } from '../../cli/update-check';
 import { runCli } from '../cli-test-helpers';
 
 const { version } = pkg;
@@ -44,67 +45,66 @@ The base.
 
 const eigen = (...args: string[]) => runCli(args);
 
-describe('releaseNotes', () => {
-    test('lists every version newer than from and not newer than to, oldest first, compared as versions', () => {
-        expect(releaseNotes(CHANGELOG, '0.2.0', '0.3.0').map((note) => note.version)).toEqual([
-            '0.2.9',
-            '0.2.10',
-            '0.3.0',
-        ]);
-        expect(releaseNotes(CHANGELOG, '0.2.9', '0.2.10').map((note) => note.version)).toEqual(['0.2.10']);
+// The lines one run prints for a changelog of the test's.
+async function notesOf(changelog: string, from: string): Promise<string[]> {
+    const read = spyOn(nodeFs, 'readFileSync').mockReturnValue(changelog);
+    const log = spyOn(console, 'log').mockImplementation(() => {});
+    try {
+        await updateCheck({ from, 'accept-breaking': true });
+        return log.mock.calls.flat().map(String);
+    } finally {
+        read.mockRestore();
+        log.mockRestore();
+    }
+}
+
+const versionsIn = (lines: string[]) => lines.flatMap((line) => /◆ {2}Eigen (.+)$/.exec(line)?.[1] ?? []);
+
+describe('the notes of a run', () => {
+    test('list every version newer than from and not newer than this one, oldest first, compared as versions', async () => {
+        expect(versionsIn(await notesOf(CHANGELOG, '0.2.0'))).toEqual(['0.2.9', '0.2.10', '0.3.0']);
+        expect(versionsIn(await notesOf(CHANGELOG, '0.2.9'))).toEqual(['0.2.10', '0.3.0']);
     });
 
-    test('each version brings its intro paragraph and its lines marked (breaking)', () => {
-        const [nine, ten, three] = releaseNotes(CHANGELOG, '0.2.0', '0.3.0');
-        expect(nine).toEqual({
-            version: '0.2.9',
-            intro: 'Nine.',
-            breaking: ['Contacts (breaking) — a new vCard shape'],
-        });
-        expect(ten).toEqual({ version: '0.2.10', intro: 'Ten comes after nine.', breaking: [] });
-        expect(three?.intro).toBe('Big release. It spans two lines.');
-        expect(three?.breaking).toEqual(['Sheets border storage (breaking) — borders are stored per cell']);
+    test('each version brings its intro paragraph and its lines marked (breaking)', async () => {
+        const lines = (await notesOf(CHANGELOG, '0.2.0')).join('\n');
+        expect(lines).toContain('Nine.');
+        expect(lines).toContain('▲  Contacts (breaking) — a new vCard shape');
+        expect(lines).toContain('Ten comes after nine.');
+        expect(lines).toContain('Big release. It spans two lines.');
+        expect(lines).toContain('▲  Sheets border storage (breaking) — borders are stored per cell');
     });
 
-    test('a section that opens with a list has no intro', () => {
-        const [note] = releaseNotes(
-            '## [0.2.1] - 2026-09-01\n\n- **Mail (breaking)** — a new store\n',
-            '0.2.0',
-            '0.2.1',
-        );
-        expect(note).toEqual({
-            version: '0.2.1',
-            intro: '',
-            breaking: ['Mail (breaking) — a new store'],
-        });
+    test('a section that opens with a list has no intro', async () => {
+        const lines = await notesOf('## [0.2.1] - 2026-09-01\n\n- **Mail (breaking)** — a new store\n', '0.2.0');
+        expect(lines).toHaveLength(2);
+        expect(lines[1]).toContain('▲  Mail (breaking) — a new store');
     });
 
-    test('a link reads as its text and its URL, which a wrap never splits', () => {
-        const [note] = releaseNotes(
+    test('a link reads as its text and its URL, which a wrap never splits', async () => {
+        const lines = await notesOf(
             '## [0.2.1] - 2026-09-01\n\nThe steps are in the [Self-hosting\nsection](https://eigen.is/support/self-hosting/get-started).\n\n- **Backups (breaking)** — see [the guide](https://eigen.is/support)\n',
             '0.2.0',
-            '0.2.1',
         );
-        expect(note).toEqual({
-            version: '0.2.1',
-            intro: 'The steps are in the Self-hosting section (https://eigen.is/support/self-hosting/get-started).',
-            breaking: ['Backups (breaking) — see the guide (https://eigen.is/support)'],
-        });
+        const text = lines.join('\n');
+        expect(text).toContain('Self-hosting section');
+        expect(text).toContain('(https://eigen.is/support/self-hosting/get-started).');
+        expect(text).toContain('see the guide (https://eigen.is/support)');
     });
 
-    test('skips [Unreleased], even when this image is newer than every release', () => {
-        const notes = releaseNotes(CHANGELOG, '0.3.0', '9.0.0');
-        expect(notes).toEqual([]);
+    test('skip [Unreleased]', async () => {
+        expect(versionsIn(await notesOf(CHANGELOG, '0.3.0'))).toEqual([]);
     });
 
-    test('orders prereleases before their release, and their numbers as numbers', () => {
+    test('order prereleases before their release, and their numbers as numbers', async () => {
         const changelog = '## [0.3.0-rc.10] - 2026-10-02\n\nTen.\n\n## [0.3.0-rc.9] - 2026-10-01\n\nNine.\n';
-        expect(releaseNotes(changelog, '0.3.0-rc.9', '0.3.0').map((note) => note.version)).toEqual(['0.3.0-rc.10']);
+        expect(versionsIn(await notesOf(changelog, '0.3.0-rc.8'))).toEqual(['0.3.0-rc.9', '0.3.0-rc.10']);
     });
 
-    test('a downgrade or the same version has no notes', () => {
-        expect(releaseNotes(CHANGELOG, '0.3.0', '0.2.9')).toEqual([]);
-        expect(releaseNotes(CHANGELOG, '0.2.10', '0.2.10')).toEqual([]);
+    test('hold nothing past this version, or for this version itself', async () => {
+        const changelog = `## [99.0.0] - 2099-01-01\n\nLater.\n\n## [${version}] - 2026-01-01\n\nNow.\n`;
+        expect(versionsIn(await notesOf(changelog, '0.1.0'))).toEqual([version]);
+        expect(versionsIn(await notesOf(changelog, version))).toEqual([]);
     });
 });
 

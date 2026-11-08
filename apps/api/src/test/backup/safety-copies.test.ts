@@ -17,9 +17,9 @@ import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/valida
 import { auth } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
 import { withHomeSlot } from '../../lib/backup/jobs';
-import { buildArtifactName, buildHomeFolderName, getBackupsDir, isRestoreStagingName } from '../../lib/backup/paths';
+import { buildHomeFolderName, freeArtifactName, getBackupsDir, isRestoreStagingName } from '../../lib/backup/paths';
 import * as recoveryModule from '../../lib/backup/recovery';
-import { recoverBackupsAfterRestart, recoverInterruptedRestores } from '../../lib/backup/recovery';
+import { recoverBackupsAfterRestart } from '../../lib/backup/recovery';
 import { restoreHome, restoreSafetyCopy } from '../../lib/backup/restore';
 import { deleteSafetyCopy, listSafetyCopies } from '../../lib/backup/safety-copy';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
@@ -172,7 +172,7 @@ describe('Backup safety copies of an s3 home', () => {
 
         const staging = mkdtempSync(join(TEST_DATA_DIR, 'safety-s3-backup-'));
         await snapshotHome(home, staging);
-        artifact = buildArtifactName(userId, new Date());
+        artifact = freeArtifactName(userId, new Date());
         await packFolder(join(staging, buildHomeFolderName(userId)), join(getBackupsDir(), artifact));
         rmSync(staging, { recursive: true, force: true });
 
@@ -389,7 +389,7 @@ describe('Backup restore of a safety copy that does not survive its checks', () 
 
         const staging = mkdtempSync(join(TEST_DATA_DIR, 'safety-rollback-backup-'));
         await snapshotHome(await getHome(userId), staging);
-        artifact = buildArtifactName(userId, new Date());
+        artifact = freeArtifactName(userId, new Date());
         await packFolder(join(staging, buildHomeFolderName(userId)), join(getBackupsDir(), artifact));
         rmSync(staging, { recursive: true, force: true });
 
@@ -421,7 +421,7 @@ describe('Backup restore of a safety copy that does not survive its checks', () 
         } finally {
             for (const spy of spies) spy.mockRestore();
         }
-        recoverInterruptedRestores();
+        await recoverBackupsAfterRestart();
 
         expect(safetyCopies(userId)).toEqual([copy]);
         expect(safetyCopies(userId, FAILED_RESTORE_SUFFIX)).toEqual([]);

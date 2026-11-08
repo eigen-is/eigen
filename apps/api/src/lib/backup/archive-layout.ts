@@ -30,10 +30,6 @@ export const HOME_DATABASES: [DatabaseConfig<SchemaType>, string][] = [
     [NOTIFICATION_CENTER_DB_CONFIG, PATHS.NOTIFICATIONS.DB],
 ];
 
-// The home-relative paths of the databases above. Verify reads them back to know which archived .db
-// files are Eigen's own.
-export const HOME_DATABASE_PATHS = new Set(HOME_DATABASES.map(([, relPath]) => relPath));
-
 // The home's mail, by its path from the home root.
 export const MAILDIR_ROOT = `${PATHS.MAIL.ROOT}/${PATHS.MAIL.MAILDIR}`;
 

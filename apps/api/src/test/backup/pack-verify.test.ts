@@ -33,11 +33,11 @@ import { listArtifacts, readSidecar, writeSidecar } from '../../lib/backup/artif
 import { runArtifactVerify } from '../../lib/backup/jobs';
 import {
     ARCHIVE_MANIFEST_FILE,
-    buildArtifactName,
     buildHomeFolderName,
     buildHomeMemberName,
     buildServerArchiveName,
     buildServerFolderName,
+    freeArtifactName,
     getBackupsDir,
     SERVER_ARCHIVE_ENV_MEMBER,
     SERVER_ARCHIVE_SERVER_MEMBER,
@@ -245,7 +245,7 @@ describe('Backup pack and verify', () => {
         // An empty directory (a Maildir folder nobody has delivered to) has to survive the round trip.
         mkdirSync(join(folder, EMPTY_DIR), { recursive: true });
 
-        artifact = join(mkdtempSync(join(TEST_DATA_DIR, 'artifacts-')), buildArtifactName(ownerId, new Date()));
+        artifact = join(mkdtempSync(join(TEST_DATA_DIR, 'artifacts-')), freeArtifactName(ownerId, new Date()));
         await packFolder(folder, artifact);
     }, PACK_TIMEOUT_MS);
 
@@ -578,14 +578,14 @@ describe('Backup pack and verify', () => {
         'a sidecar that is not one reads as none, and an artifact that is not one is an error',
         async () => {
             const dir = mkdtempSync(join(TEST_DATA_DIR, 'bad-sidecar-'));
-            const fake = join(dir, buildArtifactName(ownerId, new Date()));
+            const fake = join(dir, freeArtifactName(ownerId, new Date()));
             writeFileSync(`${fake}.manifest.json`, '{"manifest": {"formatVersion": 2}, "verify": {}}');
             expect(await readSidecar(fake)).toBeNull();
 
             const folder = join(dir, buildHomeFolderName('bogus'));
             mkdirSync(folder, { recursive: true });
             writeFileSync(join(folder, 'manifest.json'), 'not json at all');
-            const bogus = join(dir, buildArtifactName('bogus', new Date()));
+            const bogus = join(dir, freeArtifactName('bogus', new Date()));
             await packFolder(folder, bogus);
             await expect(readArtifactManifest(bogus)).rejects.toThrow('is not an Eigen backup archive');
         },
@@ -709,10 +709,7 @@ describe('Whole-server archive', () => {
             for (const ownerId of [ctx.alice.user.id, teamOwnerId(teamId)]) {
                 const staging = mkdtempSync(join(TEST_DATA_DIR, 'home-member-'));
                 const home = await snapshotHome(await getHome(ownerId), staging);
-                const standalone = join(
-                    mkdtempSync(join(TEST_DATA_DIR, 'standalone-')),
-                    buildArtifactName(ownerId, at),
-                );
+                const standalone = join(mkdtempSync(join(TEST_DATA_DIR, 'standalone-')), freeArtifactName(ownerId, at));
                 await packFolder(join(staging, buildHomeFolderName(ownerId)), standalone);
                 const member = buildHomeMemberName(ownerId, at);
                 await writer.appendFile(member, standalone);
@@ -1090,7 +1087,7 @@ describe('The unpack', () => {
                 entries: [],
             };
             writeFileSync(join(folder, ARCHIVE_MANIFEST_FILE), JSON.stringify(manifest));
-            const name = buildArtifactName(ownerId, new Date());
+            const name = freeArtifactName(ownerId, new Date());
             await packFolder(folder, join(getBackupsDir(), name));
             const job: BackupJob = {
                 id: crypto.randomUUID(),

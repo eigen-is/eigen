@@ -20,7 +20,7 @@ import { MOUNT_DB_CONFIG } from '../mount/db-config';
 import { readMountTotalSize } from '../mount/helpers';
 import { getEigenDb } from '../share/db';
 import { shareRegistry } from '../share/schema';
-import { HOME_DATABASE_PATHS, HOME_DATABASES, MAILDIR_ROOT } from './archive-layout';
+import { HOME_DATABASES, MAILDIR_ROOT } from './archive-layout';
 import { readAuthRows } from './auth-rows';
 import { captureFile, captureUnlessGone, captureWrittenFile, countEntries } from './capture';
 import { readHomeMounts } from './enumerate-homes';
@@ -189,7 +189,7 @@ export async function snapshotHome(
     // The home outside its mounts and its databases.
     const tree = listFileTree(home.homeDir, isSkippedHomeDir);
     // A home database missing from HOME_DATABASES would be dropped from every archive in silence.
-    const unlisted = tree.databases.find((rel) => !HOME_DATABASE_PATHS.has(rel));
+    const unlisted = tree.databases.find((rel) => !HOME_DATABASES.some(([, relPath]) => relPath === rel));
     if (unlisted) throw new Error(`snapshotHome: unlisted home database ${unlisted} — add it to HOME_DATABASES`);
     for (const rel of tree.dirs) fs.mkdirSync(stagedPath(rel), { recursive: true });
     const taken = new Set(tree.files);

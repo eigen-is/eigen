@@ -10,7 +10,7 @@ import { TEST_DATA_DIR } from '../setup';
 
 // The backup promises only a real process can keep. Every test here spawns `bun src/index.ts` as a
 // child on its own data root, backups folder and port, and drives it over HTTP: what is asserted is
-// the shipped boot sequence (recoverInterruptedRestores, then the staging wipe, then listen) and the
+// the shipped boot sequence (recoverBackupsAfterRestart, then listen) and the
 // shipped SIGTERM handler (drainBackupJobs before the homes close), not a re-implementation of them.
 // The rest of the suite covers the same code in-process; this file covers the process itself.
 
@@ -326,7 +326,7 @@ describe('Backup across signals', () => {
 });
 
 // Both shapes a dead restore leaves behind, judged by the boot of a real process rather than by
-// calling recoverInterruptedRestores: the API is answering requests only after the recovery and the
+// calling recoverBackupsAfterRestart: the API is answering requests only after the recovery and the
 // staging wipe have run, so what the tests below read is what a user's first request would meet.
 describe('Boot recovery in a real boot', () => {
     const dataRoot = join(RUN_DIR, 'recovery-data');

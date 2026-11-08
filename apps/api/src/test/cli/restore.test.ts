@@ -22,7 +22,6 @@ import type { BackupLevel, ServerArchiveManifest } from '@workspace/lib/types/ba
 import type { DrivePath } from '@workspace/lib/types/drive';
 import pkg from '../../../../../package.json' with { type: 'json' };
 import { CANNOT_OPEN, DECLINED } from '../../cli/install';
-import { SWAP_LOCK, SWAP_MARKER } from '../../cli/restore-swap';
 import * as archiveModule from '../../lib/backup/archive';
 import {
     copyArchiveMember,
@@ -85,6 +84,8 @@ const TLS_KEY = '-----BEGIN PRIVATE KEY-----\narchived tls\n-----END PRIVATE KEY
 const S3_MOUNT_ID = 'restore-cli-s3';
 const ASIDE = /^data\.pre-restore-\d{8}-\d{6}$/;
 
+const SWAP_MARKER = '.eigen/restore-swap';
+const SWAP_LOCK = '.eigen/restore.lock';
 const dirs: string[] = [];
 // Every install holds a restored copy of the suite's data root, which a full run makes large: past the
 // default deadline the hook fails, and the afterAll below never runs.

@@ -122,7 +122,7 @@ export function buildHomeFolderName(ownerId: string): string {
     return `${BACKUP_HOME_PREFIX}${ownerId}`;
 }
 
-export function buildArtifactName(ownerId: string, at: Date): string {
+function buildArtifactName(ownerId: string, at: Date): string {
     return `${buildHomeFolderName(ownerId)}-${buildBackupStamp(at)}${BACKUP_ARTIFACT_EXTENSION}`;
 }
 

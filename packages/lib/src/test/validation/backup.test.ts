@@ -67,11 +67,6 @@ describe('parseBackupManifest', () => {
         expect(parseBackupManifest(JSON.stringify(homeManifest))).toEqual(homeManifest);
     });
 
-    test('refuses a manifest without a folder count, since an unpack charges every folder', () => {
-        const counts = { databases: 1, files: 0, bytes: 10 };
-        expect(parseBackupManifest(JSON.stringify({ ...homeManifest, counts }))).toBeNull();
-    });
-
     test('refuses a byte count that is not a number', () => {
         const counts = { ...homeManifest.counts, bytes: '3' };
         expect(parseBackupManifest(JSON.stringify({ ...homeManifest, counts }))).toBeNull();

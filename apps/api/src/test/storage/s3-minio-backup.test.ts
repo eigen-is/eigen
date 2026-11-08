@@ -5,7 +5,7 @@ import type { MountConfig, S3Config } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { auth } from '../../lib/auth/auth';
 import { extractArtifact, packFolder } from '../../lib/backup/archive';
-import { buildArtifactName, buildHomeFolderName, getBackupsDir } from '../../lib/backup/paths';
+import { buildHomeFolderName, freeArtifactName, getBackupsDir } from '../../lib/backup/paths';
 import { restoreHome } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { verifyFolder } from '../../lib/backup/verify';
@@ -178,7 +178,7 @@ describe.skipIf(!live)('Backup round trip on a real S3 mount (MinIO)', () => {
         );
         expect(new Uint8Array(await Bun.file(join(folder, prefix, 'notes.txt')).arrayBuffer())).toEqual(TEXT_BYTES);
 
-        artifact = buildArtifactName(userId, new Date());
+        artifact = freeArtifactName(userId, new Date());
         await packFolder(folder, join(getBackupsDir(), artifact));
         rmSync(staging, { recursive: true, force: true });
 

@@ -54,7 +54,7 @@ export async function wipeRestoreStagingDir(homeDir: string, jobId: string): Pro
 
 // Every folder a per-home restore staged beside the homes is one whose job never ended, since a job removes its own.
 // Its note is acted on first, and then it goes, because nothing resumes the job.
-export function recoverInterruptedRestores(): void {
+function recoverInterruptedRestores(): void {
     for (const kind of [USER_HOMES_DIR, TEAM_HOMES_DIR]) {
         const homesDir = path.join(getDataRoot(), kind);
         if (!fs.existsSync(homesDir)) continue;

@@ -27,9 +27,9 @@ import * as pathsModule from '../../lib/backup/paths';
 import {
     ARCHIVE_AVATAR_DIR,
     ARCHIVE_SHARES_FILE,
-    buildArtifactName,
     buildHomeFolderName,
     buildRestoreStagingDir,
+    freeArtifactName,
     getBackupsDir,
     isRestoreStagingName,
 } from '../../lib/backup/paths';
@@ -105,7 +105,7 @@ async function backup(
         await patch(manifest, folder);
         writeFileSync(join(folder, 'manifest.json'), JSON.stringify(manifest, null, 2));
     }
-    const name = buildArtifactName(userId, at);
+    const name = freeArtifactName(userId, at);
     await packFolder(folder, join(getBackupsDir(), name));
     rmSync(staging, { recursive: true, force: true });
     return name;
@@ -699,7 +699,7 @@ describe('Backup restoreHome', () => {
             status: 400,
             message: 'Not a backup artifact name',
         });
-        const missing = buildArtifactName(target.id, new Date(Date.UTC(2001, 0, 1)));
+        const missing = freeArtifactName(target.id, new Date(Date.UTC(2001, 0, 1)));
         await expect(restoreHome(missing, target.id, `restore-missing-${Date.now()}`)).rejects.toMatchObject({
             status: 404,
             message: 'Artifact not found',
@@ -1399,8 +1399,11 @@ describe('Backup restore of a flat-key mount', () => {
             driveUpload<DrivePath>(user.sessionToken, user.id, mountId, rootId, new File([bytes], name));
         const first = await upload('the first file', 'first.txt');
         const home = await getHome(user.id);
-        const mount = home.drive.getMounts().find((candidate) => candidate.id === mountId)!;
-        const firstKey = (await mount.db.select().from(paths).where(eq(paths.id, first.id)).get())!.file;
+        const firstKey = await home.drive
+            .getMounts()
+            .find((candidate) => candidate.id === mountId)
+            ?.findStorageKey(first.id);
+        if (!firstKey) throw new Error('the first file has no storage key');
         const second = await upload('the second file', firstKey);
         const content = async (id: string) => {
             const res = await authedRequest(user.sessionToken, `/drive/${user.id}/${mountId}/file/${id}/download`);

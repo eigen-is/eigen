@@ -132,13 +132,13 @@ export function forgetSafetyCopySize(dir: string): void {
     measuredBytes.delete(dir);
 }
 
-export async function measureFolder(dir: string, maxFiles = MAX_WALKED_FILES): Promise<FolderSize> {
+async function measureFolder(dir: string): Promise<FolderSize> {
     let bytes = 0;
     let walked = 0;
     const stack = [dir];
     for (let current = stack.pop(); current !== undefined; current = stack.pop()) {
         for (const entry of await fsp.readdir(current, { withFileTypes: true })) {
-            if (walked++ >= maxFiles) return { bytes, truncated: true };
+            if (walked++ >= MAX_WALKED_FILES) return { bytes, truncated: true };
             const abs = path.join(current, entry.name);
             if (entry.isDirectory()) stack.push(abs);
             else if (entry.isFile()) bytes += (await fsp.stat(abs)).size;

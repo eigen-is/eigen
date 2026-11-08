@@ -36,9 +36,9 @@ import { createUi, glyphLine } from './ui';
 
 // Written by the swap before its first rename, read by the launcher's preflight: while it is there, a swap was cut
 // off, and --swap finishes it.
-export const SWAP_MARKER = '.eigen/restore-swap';
+const SWAP_MARKER = '.eigen/restore-swap';
 // Held by a swap from before it reads the marker until it exits. It lives in .eigen/, as the swap moves data/.
-export const SWAP_LOCK = '.eigen/restore.lock';
+const SWAP_LOCK = '.eigen/restore.lock';
 // Written last by the stage, so a stage cut off halfway is never swapped in.
 export const STAGE_RECORD = 'staged.json';
 export type StagedRestore = { archive: string; appVersion: string };

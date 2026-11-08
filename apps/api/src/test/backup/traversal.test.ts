@@ -6,7 +6,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import { auth } from '../../lib/auth/auth';
 import { packFolder, readArtifactManifest } from '../../lib/backup/archive';
-import { buildArtifactName, buildHomeFolderName, getBackupsDir } from '../../lib/backup/paths';
+import { buildHomeFolderName, freeArtifactName, getBackupsDir } from '../../lib/backup/paths';
 import { restoreHome } from '../../lib/backup/restore';
 import { deleteSafetyCopy } from '../../lib/backup/safety-copy';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
@@ -87,7 +87,7 @@ describe('Backup refuses an archive that names another home', () => {
     });
 
     test('a restore of it throws and the other home is untouched', async () => {
-        const name = buildArtifactName(attacker.id, new Date());
+        const name = freeArtifactName(attacker.id, new Date());
         const artifactPath = join(getBackupsDir(), name);
         await packFolder(folder, artifactPath);
         try {
