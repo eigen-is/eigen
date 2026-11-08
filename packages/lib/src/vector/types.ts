@@ -316,8 +316,8 @@ export const DEFAULT_LINE_ROUNDNESS: Roundness = 'round';
 // A new arrow curves, as in Excalidraw. The reader's fallback stays sharp, so a stored arrow keeps its meaning.
 const DEFAULT_ARROW_ROUNDNESS: Roundness = 'round';
 
-// Canvas-level defaults (the `meta` root). A new deck is PowerPoint's widescreen, 16:9 and 13.33 in wide, so a pt is
-// 2 px of the frame; a deck that stores no width reads as UNSTORED_SLIDE_WIDTH instead (frames.ts).
+// Canvas-level defaults (the `meta` root). A deck is PowerPoint's widescreen, 16:9 and 13.33 in wide, so a pt is 2 px
+// of the frame.
 export const DEFAULT_SCENE_META: VectorMeta = { background: 'transparent', slideSize: '16:9', slideWidth: 960 };
 
 // Shared element defaults, adopted from Excalidraw's DEFAULT_ELEMENT_PROPS.

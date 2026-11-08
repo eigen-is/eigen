@@ -2053,6 +2053,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `STROKE_STYLES` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `SVG_NS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/render-utils.ts |
 | `syncInvalidIndices` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
+| `TEN_INCH_SLIDE_WIDTH` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `TEXT_ALIGNS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `TEXT_DECORATIONS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `TEXT_WIDTH_RANGES` | `@workspace/lib/vector` | packages/lib/src/vector/text-width.ts |
@@ -2065,7 +2066,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `TRANSPARENT_FILL` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `unionBounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `unpinSegment` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
-| `UNSTORED_SLIDE_WIDTH` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `validateElbowPoints` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `validateOrderKey` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `VECTOR_STYLE_DEFAULTS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
