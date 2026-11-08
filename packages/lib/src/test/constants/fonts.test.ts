@@ -107,8 +107,7 @@ describe('getFontFamily', () => {
         expect(MATH_FONT_STACK).toBe("'New Computer Modern Math', math");
     });
 
-    // A doc stored before marks held a name keeps its whole stack, the old short one or a longer one.
-    test('a stored stack, old or new, collapses to its name and draws as it is stored', () => {
+    test('a stored stack, short or long, reads as its name and draws as it is stored', () => {
         for (const name of EIGEN_FONT_NAMES) {
             expect(getFontName(getFontFamily(name))).toBe(name);
         }

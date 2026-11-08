@@ -23,7 +23,7 @@ import {
     reUploadImage,
 } from '@workspace/lib/clipboard';
 import { userColor } from '@workspace/lib/constants/colors';
-import { FOOTNOTE_FONT_SIZE, getFontName } from '@workspace/lib/constants/fonts';
+import { FOOTNOTE_FONT_SIZE } from '@workspace/lib/constants/fonts';
 import type { BandRoot, StoryNode } from '@workspace/lib/docs/eigendoc';
 import {
     BAND_EXCLUDED_NODES,
@@ -52,7 +52,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { renderPresenceCaret } from '@workspace/ui/components/collab';
 import { common, createLowlight } from 'lowlight';
 import type { DependencyList } from 'react';
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
 import { insertEigenItems, writeDocsClipboard } from './clipboard';
@@ -103,35 +103,6 @@ function swapFigureMediaName(editor: Editor, pendingName: string, newName: strin
         }
         // A story's image takes its name too, a change to a story the body otherwise never makes.
         if (dispatch) dispatch(tr.setMeta(STORY_EDIT, true));
-        return true;
-    });
-}
-
-// The textStyle `fontFamily` attr is an EIGEN_FONTS name, but a stored doc may hold a full CSS stack and
-// y-prosemirror hydrates without parseHTML, so this pass collapses a known stack to its name on editable
-// load. renderHTML maps the name back to the same stack. Kept out of the undo history.
-function normalizeFontFamilyMarks(editor: Editor) {
-    const markType = editor.schema.marks.textStyle;
-    if (!markType) return;
-    const targets: { from: number; to: number; attrs: Record<string, unknown> }[] = [];
-    editor.state.doc.descendants((node, pos) => {
-        if (!node.isText) return;
-        const mark = node.marks.find((m) => m.type === markType);
-        if (!mark) return;
-        const family = mark.attrs.fontFamily;
-        if (typeof family !== 'string' || !family) return;
-        const canon = getFontName(family);
-        if (canon === family) return;
-        targets.push({ from: pos, to: pos + node.nodeSize, attrs: { ...mark.attrs, fontFamily: canon } });
-    });
-    if (targets.length === 0) return;
-    editor.commands.command(({ tr, dispatch }) => {
-        for (const { from, to, attrs } of targets) {
-            tr.addMark(from, to, markType.create(attrs));
-        }
-        // A story's text takes its name too, a change to a story the body otherwise never makes.
-        tr.setMeta('addToHistory', false).setMeta(STORY_EDIT, true);
-        if (dispatch) dispatch(tr);
         return true;
     });
 }
@@ -540,7 +511,7 @@ export function useDocEditor(
             editor.view.dispatch(editor.state.tr.setSelection(Selection.near(selection.$from)));
         }
     }, [editor, editable]);
-    // A story's images and fonts are the body's, which sweeps and collapses them.
+    // A story's images are the body's, which sweeps them.
     const sweeps = options.editable && !('story' in options.target);
 
     // Sweep zombie placeholders left behind by a tab close or reload mid-upload. Snapshot the pending
@@ -566,14 +537,6 @@ export function useDocEditor(
             for (const name of names) swapFigureMediaName(editor, name, null);
         },
     });
-
-    // One-shot: collapse any legacy full-stack fontFamily marks to their EIGEN_FONTS name once the
-    // synced doc is open for editing. The parent gates this subtree on first sync, so the content is
-    // present at mount; idempotent, so a canWrite flip re-running it is a no-op.
-    useEffect(() => {
-        if (!sweeps) return;
-        normalizeFontFamilyMarks(editor);
-    }, [editor, sweeps]);
 
     return editor;
 }

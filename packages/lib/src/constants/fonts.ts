@@ -143,9 +143,8 @@ export function getFontFamily(fontName: string): string {
 }
 
 // A stored font as the CSS that draws it, such as the docs `textStyle` mark's `fontFamily`. A name expands to its
-// stack. Any other value passes through unchanged, because an older doc may store a whole stack, which draws as it
-// did until an editable load collapses it to its name. Unlike getFontFamily, this must not wrap an unknown value, or
-// a stored stack would be wrapped twice.
+// stack. Any other value, such as a whole stack a doc stores, passes through unchanged. Unlike getFontFamily, this must
+// not wrap an unknown value, or a stored stack would be wrapped twice.
 export function fontNameToCss(value: string): string {
     const bundled = EIGEN_FONTS.find((font) => font.name === value);
     return bundled ? fontStack(bundled) : value;
@@ -159,8 +158,8 @@ function fontStack(font: EigenFont): string {
     return [...families, SYSTEM_FALLBACKS[font.category]].join(', ');
 }
 
-// The reverse, for a paste, an import and the load that collapses old stacks: a bundled font given as its name or as
-// its stack, in any quotes, becomes its name. Any other value comes back unchanged, so fontNameToCss draws it as it
+// The reverse, for a paste, an import and a mark that stores a stack: a bundled font given as its name or as its
+// stack, in any quotes, becomes its name. Any other value comes back unchanged, so fontNameToCss draws it as it
 // was.
 export function getFontName(value: string): string {
     const first = value.match(/^\s*['"]?([^'",]+)['"]?/)?.[1]?.trim();

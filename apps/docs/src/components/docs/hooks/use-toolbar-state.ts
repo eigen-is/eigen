@@ -144,7 +144,7 @@ export function useToolbarState(editor: Editor): ToolbarState {
                 paragraphStyle: styles.size === 1 ? [...styles][0] : undefined,
                 mixedStyles: styles.size > 1,
                 inParagraph: selection.$from.parent.type.name === 'paragraph',
-                // getFontName also collapses the full stack a not-yet-normalized doc still carries.
+                // getFontName also reads a stored CSS stack as its font.
                 fontName: getFontName(getAttributes(state, 'textStyle')['fontFamily'] || '') || normal.font,
                 fontSize: fontSizes.size === 1 ? [...fontSizes][0] : undefined,
                 color: getAttributes(state, 'textStyle')['color'] || '',
