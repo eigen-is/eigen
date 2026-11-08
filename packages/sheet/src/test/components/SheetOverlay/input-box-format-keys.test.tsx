@@ -66,6 +66,7 @@ async function openEditor(text: string) {
                         refs,
                         handleUndo: () => {},
                         handleRedo: () => {},
+                        pasteClipboard: () => {},
                     },
                 },
                 createElement(InputBox),

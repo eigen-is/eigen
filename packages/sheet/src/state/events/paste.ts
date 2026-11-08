@@ -1,10 +1,10 @@
-// A paste into the grid: cells copied in this tab with their formulas and formats, a cut that moves them,
-// an HTML table from another program, plain text or a formula. handlePaste takes a ⌘V on the grid, and
-// handlePasteByClick a paste from a menu, such as the context menu. The open cell editor takes its own
-// paste, so none of it comes here.
+// A paste into the grid: cells copied in this tab with their formulas and formats, a cut that moves them, an HTML table
+// from another program, plain text or a formula. The Workbook hands handlePaste the clipboard of a paste event, and a
+// menu row reads the clipboard through pasteFromClipboard to do the same. The open cell editor takes its own paste, so
+// none of it comes here.
 
+import { formatForDisplay } from '@tanstack/react-hotkeys';
 import { bundledFontOfStack, readCssFontSize } from '@workspace/lib/constants/fonts';
-import { escapeHtml } from '@workspace/lib/html';
 import type { CellBorderSides, ConditionalFormatRule } from '@workspace/lib/sheets';
 import { BORDER_SIDE_CSS, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import { cloneDeep, forEach, has, includes, isEmpty, isNil, trim } from 'es-toolkit/compat';
@@ -22,15 +22,14 @@ import { carriedLines, carryCells, getQKBorder, landedRanges, setCellValue } fro
 import { createContextResolver, setFormulaCellInfo } from '../modules/formula-cache';
 import { delFunctionGroup, execFunctionGroup, execfunction } from '../modules/formula-exec';
 import { jfrefreshgrid } from '../modules/refresh';
-import { COPY_ACTION_TABLE_MARKER, copiedCellText, copiedTdColumns, selectionCache } from '../modules/selection';
 import { expandRowsAndColumns, storeSheetSelections } from '../modules/sheet';
 import { hasPartMC } from '../modules/validation';
+
 import { getSheetIndex } from '../utils';
+import { SHEET_HOTKEYS } from './keyboard';
 
 // The HTML paste path's per-cell borders, keyed `${row}_${col}` relative to the pasted block.
 function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Record<string, CellBorderSides>) {
-    if (ctx.allowEdit === false) return;
-
     if (ctx.selections?.length !== 1) {
         return;
     }
@@ -161,7 +160,7 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
         const rlen = dataChe.length;
         const clen = dataChe[0].length;
 
-        // return with a warning if the apply range contains partially merged cells
+        // A paste never lands over part of a merge.
         let has_PartMC = false;
         if (getSheetConfig(ctx)?.merge != null) {
             has_PartMC = hasPartMC(ctx, curR, curR + rlen - 1, curC, curC + clen - 1);
@@ -196,9 +195,7 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
     }
 }
 
-function pasteHandlerOfCutPaste(ctx: Context, copyState: Context['copyState']) {
-    if (ctx.allowEdit === false || !copyState) return;
-
+function pasteHandlerOfCutPaste(ctx: Context, copyState: NonNullable<Context['copyState']>) {
     const copySheetId = copyState.dataSheetId;
     const sourceRange = copyState.copyRange[0];
 
@@ -292,13 +289,12 @@ function pasteHandlerOfCutPaste(ctx: Context, copyState: Context['copyState']) {
     execFunctionGroup(ctx, null, null, null, null, d);
     ctx.formulaCache.execFunctionGlobalData = null;
     storeSheetSelections(ctx);
+    // A cut moves its cells once. The clipboard still holds them, and a next paste lands them as a table.
+    ctx.copyState = undefined;
+    ctx.formulaRangeSelections = [];
 }
 
-function pasteHandlerOfCopyPaste(ctx: Context, copyState: Context['copyState']) {
-    if (ctx.allowEdit === false) return;
-
-    if (!copyState) return;
-
+function pasteHandlerOfCopyPaste(ctx: Context, copyState: NonNullable<Context['copyState']>) {
     // One live resolver per paste, so each evaluation sees the cells pasted before it.
     const resolver = createContextResolver(ctx);
 
@@ -325,7 +321,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyState: Context['copyState']) 
         maxc = minc + copyc - 1;
     }
 
-    // warn if the apply range contains partially merged cells
+    // A paste never lands over part of a merge.
     if (hasPartMC(ctx, minh, maxh, minc, maxc)) {
         return;
     }
@@ -386,7 +382,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyState: Context['copyState']) 
 }
 
 function handleFormulaStringPaste(ctx: Context, formulaStr: string) {
-    // plaintext formula is applied only to one cell
+    // A plain-text formula lands on one cell.
     const selection = ctx.selections?.[0];
     if (!selection) return;
     const r = selection.row[0];
@@ -431,285 +427,251 @@ function readStyleRules(css: string): Map<string, Record<string, string>> {
     return rules;
 }
 
-// A marked table is this tab's own copy while it holds the cells the copy would write now. A copy in another tab, or
-// an edit of the copied cells since, is pasted as a table instead. The shape is compared first, so most other tables
-// are turned away before a cell's text is read. Only the texts are compared, because building the styles of a large
-// copy takes seconds.
-function isOwnCopyTable(ctx: Context, html: string, copyState: NonNullable<Context['copyState']>): boolean {
-    const index = getSheetIndex(ctx, copyState.dataSheetId);
-    const d = index == null ? undefined : ctx.sheets[index].data;
-    if (!d) return false;
+// What a paste reads of the clipboard: a paste event's DataTransfer, or one a menu row filled.
+type PastedData = { getData: (type: string) => string; files: ArrayLike<File> };
 
-    // The browser may wrap the copied HTML, but it keeps the cells as written. A tr starts a row.
-    const table: string[][] = [];
-    for (const [, td] of html.matchAll(/<tr\b|<td\b[^>]*>([\s\S]*?)<\/td>/g)) {
-        if (td === undefined) table.push([]);
-        else table.at(-1)?.push(td.trim());
+// The one paste of the grid, from a paste event or a menu row. A paste is the workbook's own copy exactly when the
+// clipboard's table carries its id, and then it lands the live cells with their formulas and formats. A copy whose sheet
+// is gone pastes as a table.
+export function handlePaste(ctx: Context, clipboardData: PastedData) {
+    // A paste into several ranges is not supported.
+    if (ctx.allowEdit === false || (ctx.selections?.length ?? 0) > 1) return;
+    ctx.editingCellPosition = [];
+
+    const html = clipboardData.getData('text/html');
+    const { copyState } = ctx;
+    if (
+        copyState &&
+        html.includes(`data-copy-id="${copyState.id}"`) &&
+        getSheetIndex(ctx, copyState.dataSheetId) != null
+    ) {
+        if (copyState.cut) pasteHandlerOfCutPaste(ctx, copyState);
+        else pasteHandlerOfCopyPaste(ctx, copyState);
+    } else if (/<table\b/i.test(html)) {
+        pasteTable(ctx, html);
+    } else if (clipboardData.files.length === 1 && clipboardData.files[0].type.startsWith('image')) {
+        // The app's fit-to-pane insert and upload, as the Insert menu and an OS drop run it.
+        ctx.hooks.onPasteImageFile?.(clipboardData.files[0]);
+    } else {
+        const text = clipboardData.getData('text/plain');
+        if (text.startsWith('=')) handleFormulaStringPaste(ctx, text);
+        else if (text) pasteHandler(ctx, text);
     }
-    const { rows, columns } = carriedLines(ctx, copyState.dataSheetId, copyState.copyRange, !ctx.pasteIsCut);
-    if (table.length !== rows.length) return false;
-
-    const written = copiedTdColumns(d, rows, columns);
-    if (written.some((tdColumns, i) => tdColumns.length !== table[i].length)) return false;
-
-    return rows.every((r, i) => written[i].every((c, j) => table[i][j] === escapeHtml(copiedCellText(d, r, c)).trim()));
 }
 
-export function handlePaste(ctx: Context, e: ClipboardEvent) {
-    if (ctx.allowEdit === false) return;
-
-    if (selectionCache.isPasteAction) {
-        ctx.editingCellPosition = [];
-        selectionCache.isPasteAction = false;
-
-        const { clipboardData } = e;
-        if (!clipboardData) return;
-
-        let txtdata = clipboardData.getData('text/html') || clipboardData.getData('text/plain');
-
-        const { copyState } = ctx;
-        if (
-            txtdata.indexOf(COPY_ACTION_TABLE_MARKER) > -1 &&
-            copyState != null &&
-            copyState.copyRange.length > 0 &&
-            isOwnCopyTable(ctx, txtdata, copyState)
-        ) {
-            if (ctx.pasteIsCut) {
-                ctx.pasteIsCut = false;
-                pasteHandlerOfCutPaste(ctx, copyState);
-                ctx.formulaRangeSelections = [];
-            } else {
-                pasteHandlerOfCopyPaste(ctx, copyState);
+// A menu row has no paste event, so it reads the clipboard itself and hands the paste what a ⌘V would have had. Where
+// the browser refuses the read, or has no such read, it says to press the key, as Google Sheets does.
+export async function pasteFromClipboard(
+    paste: (clipboardData: DataTransfer) => void,
+    showNotice: (text: string) => void,
+) {
+    const clipboardData = new DataTransfer();
+    try {
+        for (const item of await navigator.clipboard.read()) {
+            for (const type of item.types) {
+                const blob = await item.getType(type);
+                if (type === 'text/html' || type === 'text/plain') clipboardData.setData(type, await blob.text());
+                else if (type.startsWith('image/')) clipboardData.items.add(new File([blob], 'image', { type }));
             }
-        } else {
-            if (txtdata.indexOf('table') > -1) {
-                // Parse into an inert document, never a live <div>: txtdata is OS clipboard HTML and
-                // a live element's innerHTML loads <img> and fires its onerror even while detached.
-                const parsed = new DOMParser().parseFromString(txtdata, 'text/html');
+        }
+    } catch {
+        showNotice(`Your browser blocks Paste from a menu. Press ${formatForDisplay(SHEET_HOTKEYS.paste)} instead.`);
+        return;
+    }
+    paste(clipboardData);
+}
 
-                const trList = parsed.querySelectorAll('table tr');
-                if (trList.length === 0) {
-                    return;
+// An HTML table from another program, or from a copy of another tab, with the cells' styles as the HTML carries them.
+function pasteTable(ctx: Context, html: string) {
+    // Parse into an inert document, never a live <div>: a live element's innerHTML loads <img> and fires its onerror even
+    // while detached.
+    const parsed = new DOMParser().parseFromString(html, 'text/html');
+
+    const trList = parsed.querySelectorAll('table tr');
+    if (trList.length === 0) {
+        return;
+    }
+
+    const data = new Array(trList.length);
+    let colLen = 0;
+    forEach(trList[0].querySelectorAll('td'), (td) => {
+        let colspan = td.colSpan;
+        if (Number.isNaN(colspan)) {
+            colspan = 1;
+        }
+        colLen += colspan;
+    });
+
+    for (let i = 0; i < data.length; i += 1) {
+        data[i] = new Array(colLen);
+    }
+
+    let r = 0;
+    const borderInfo: Record<string, CellBorderSides> = {};
+    const styleRules = readStyleRules(parsed.querySelector('style')?.textContent ?? '');
+    const tdVerticalAlign = styleRules.get('td')?.['vertical-align'];
+
+    const index = getSheetIndex(ctx, ctx.currentSheetId);
+    const anchor = ctx.selections?.[0];
+    if (!isNil(index) && anchor) {
+        // Collect only the rows the paste changes and let setRowHeight write them: it
+        // owns the `>= 0` guard, and writing through the sheet's live rowlen bypassed it.
+        const currentRowlen = ctx.sheets[index].config?.rowlen ?? {};
+        const rowHeightList: Record<number, number> = {};
+        forEach(trList, (tr) => {
+            let c = 0;
+            const targetR = anchor.row[0] + r;
+
+            const heightAttr = tr.getAttribute('height');
+            if (!isNil(heightAttr)) {
+                const targetRowHeight = parseInt(heightAttr, 10);
+                const current = has(currentRowlen, targetR) ? currentRowlen[targetR] : ctx.defaultrowlen;
+                if (current !== targetRowHeight) {
+                    rowHeightList[targetR] = targetRowHeight;
+                }
+            }
+
+            forEach(tr.querySelectorAll('td'), (td) => {
+                const cell: Cell = {};
+                const txt = td.innerText || td.innerHTML;
+                if (trim(txt).length === 0) {
+                    cell.v = undefined;
+                    cell.m = '';
+                } else {
+                    const mask = parseCellInput(txt);
+                    [cell.m, cell.ct, cell.v] = mask;
+                }
+                const styles = styleRules.get(`.${td.className}`) ?? {};
+                if (!isNil(styles.border)) td.style.border = styles.border;
+                let bg: string | undefined = td.style.backgroundColor || styles.background;
+                if (bg === 'rgba(0, 0, 0, 0)' || isEmpty(bg)) {
+                    bg = undefined;
                 }
 
-                const data = new Array(trList.length);
-                let colLen = 0;
-                forEach(trList[0].querySelectorAll('td'), (td) => {
-                    let colspan = td.colSpan;
+                cell.bg = bg;
+
+                const fontWeight = td.style.fontWeight;
+                cell.bl =
+                    (fontWeight === '400' || fontWeight === 'normal' || isEmpty(fontWeight)) &&
+                    !includes(styles['font-style'], 'bold') &&
+                    (!styles['font-weight'] || styles['font-weight'] === '400')
+                        ? 0
+                        : 1;
+
+                cell.it =
+                    (td.style.fontStyle === 'normal' || isEmpty(td.style.fontStyle)) &&
+                    !includes(styles['font-style'], 'italic')
+                        ? 0
+                        : 1;
+
+                cell.un =
+                    includes(td.style.textDecoration, 'underline') || includes(styles['text-decoration'], 'underline')
+                        ? 1
+                        : undefined;
+
+                cell.cl =
+                    includes(td.innerHTML, '<s>') ||
+                    includes(td.style.textDecoration, 'line-through') ||
+                    includes(styles['text-decoration'], 'line-through')
+                        ? 1
+                        : undefined;
+
+                const ff = bundledFontOfStack(td.style.fontFamily || styles['font-family'] || '');
+                if (ff) cell.ff = ff;
+                cell.fs =
+                    readCssFontSize(td.style.fontSize) ??
+                    readCssFontSize(styles['font-size'] ?? '') ??
+                    SHEET_DEFAULT_FONT_SIZE;
+
+                cell.fc = td.style.color || styles.color;
+
+                const ht = td.style.textAlign || styles['text-align'] || 'left';
+                if (ht === 'center') {
+                    cell.ht = 0;
+                } else if (ht === 'right') {
+                    cell.ht = 2;
+                } else {
+                    cell.ht = 1;
+                }
+
+                const vt = td.style.verticalAlign || styles['vertical-align'] || tdVerticalAlign || 'top';
+                if (vt === 'middle') {
+                    cell.vt = 0;
+                } else if (vt === 'top' || vt === 'text-top') {
+                    cell.vt = 1;
+                } else {
+                    cell.vt = 2;
+                }
+
+                if ('mso-rotate' in styles) cell.rt = parseFloat(styles['mso-rotate']);
+
+                while (c < colLen && !isNil(data[r][c])) {
+                    c += 1;
+                }
+
+                if (c === colLen) {
+                    return true;
+                }
+
+                if (isNil(data[r][c])) {
+                    data[r][c] = cell;
+                    let rowspan = parseInt(td.getAttribute('rowspan') ?? '1', 10);
+                    let colspan = parseInt(td.getAttribute('colspan') ?? '1', 10);
+
+                    if (Number.isNaN(rowspan)) {
+                        rowspan = 1;
+                    }
+
                     if (Number.isNaN(colspan)) {
                         colspan = 1;
                     }
-                    colLen += colspan;
-                });
 
-                for (let i = 0; i < data.length; i += 1) {
-                    data[i] = new Array(colLen);
-                }
+                    const r_ab = anchor.row[0] + r;
+                    const c_ab = anchor.column[0] + c;
 
-                let r = 0;
-                const borderInfo: Record<string, CellBorderSides> = {};
-                const styleRules = readStyleRules(parsed.querySelector('style')?.textContent ?? '');
-                const tdVerticalAlign = styleRules.get('td')?.['vertical-align'];
-
-                const index = getSheetIndex(ctx, ctx.currentSheetId);
-                const anchor = ctx.selections?.[0];
-                if (!isNil(index) && anchor) {
-                    // Collect only the rows the paste changes and let setRowHeight write them: it
-                    // owns the `>= 0` guard, and writing through the sheet's live rowlen bypassed it.
-                    const currentRowlen = ctx.sheets[index].config?.rowlen ?? {};
-                    const rowHeightList: Record<number, number> = {};
-                    forEach(trList, (tr) => {
-                        let c = 0;
-                        const targetR = anchor.row[0] + r;
-
-                        const heightAttr = tr.getAttribute('height');
-                        if (!isNil(heightAttr)) {
-                            const targetRowHeight = parseInt(heightAttr, 10);
-                            const current = has(currentRowlen, targetR) ? currentRowlen[targetR] : ctx.defaultrowlen;
-                            if (current !== targetRowHeight) {
-                                rowHeightList[targetR] = targetRowHeight;
+                    for (let rp = 0; rp < rowspan; rp += 1) {
+                        for (let cp = 0; cp < colspan; cp += 1) {
+                            const onEdge = {
+                                t: rp === 0,
+                                b: rp === rowspan - 1,
+                                l: cp === 0,
+                                r: cp === colspan - 1,
+                            };
+                            for (const [side, css] of BORDER_SIDE_CSS) {
+                                const shorthand = onEdge[side] ? td.style.getPropertyValue(`border-${css}`) : '';
+                                if (isEmpty(shorthand) || shorthand.slice(0, 3).toLowerCase() === '0px') continue;
+                                (borderInfo[`${r + rp}_${c + cp}`] ??= {})[side] = getQKBorder(
+                                    td.style.getPropertyValue(`border-${css}-width`),
+                                    td.style.getPropertyValue(`border-${css}-style`),
+                                    td.style.getPropertyValue(`border-${css}-color`),
+                                );
                             }
+
+                            if (rp === 0 && cp === 0) {
+                                continue;
+                            }
+
+                            data[r + rp][c + cp] = { mc: { r: r_ab, c: c_ab } };
                         }
+                    }
 
-                        forEach(tr.querySelectorAll('td'), (td) => {
-                            const cell: Cell = {};
-                            const txt = td.innerText || td.innerHTML;
-                            if (trim(txt).length === 0) {
-                                cell.v = undefined;
-                                cell.m = '';
-                            } else {
-                                const mask = parseCellInput(txt);
-                                [cell.m, cell.ct, cell.v] = mask;
-                            }
-                            const styles = styleRules.get(`.${td.className}`) ?? {};
-                            if (!isNil(styles.border)) td.style.border = styles.border;
-                            let bg: string | undefined = td.style.backgroundColor || styles.background;
-                            if (bg === 'rgba(0, 0, 0, 0)' || isEmpty(bg)) {
-                                bg = undefined;
-                            }
-
-                            cell.bg = bg;
-
-                            const fontWeight = td.style.fontWeight;
-                            cell.bl =
-                                (fontWeight === '400' || fontWeight === 'normal' || isEmpty(fontWeight)) &&
-                                !includes(styles['font-style'], 'bold') &&
-                                (!styles['font-weight'] || styles['font-weight'] === '400')
-                                    ? 0
-                                    : 1;
-
-                            cell.it =
-                                (td.style.fontStyle === 'normal' || isEmpty(td.style.fontStyle)) &&
-                                !includes(styles['font-style'], 'italic')
-                                    ? 0
-                                    : 1;
-
-                            cell.un =
-                                includes(td.style.textDecoration, 'underline') ||
-                                includes(styles['text-decoration'], 'underline')
-                                    ? 1
-                                    : undefined;
-
-                            cell.cl =
-                                includes(td.innerHTML, '<s>') ||
-                                includes(td.style.textDecoration, 'line-through') ||
-                                includes(styles['text-decoration'], 'line-through')
-                                    ? 1
-                                    : undefined;
-
-                            const ff = bundledFontOfStack(td.style.fontFamily || styles['font-family'] || '');
-                            if (ff) cell.ff = ff;
-                            cell.fs =
-                                readCssFontSize(td.style.fontSize) ??
-                                readCssFontSize(styles['font-size'] ?? '') ??
-                                SHEET_DEFAULT_FONT_SIZE;
-
-                            cell.fc = td.style.color || styles.color;
-
-                            const ht = td.style.textAlign || styles['text-align'] || 'left';
-                            if (ht === 'center') {
-                                cell.ht = 0;
-                            } else if (ht === 'right') {
-                                cell.ht = 2;
-                            } else {
-                                cell.ht = 1;
-                            }
-
-                            const vt = td.style.verticalAlign || styles['vertical-align'] || tdVerticalAlign || 'top';
-                            if (vt === 'middle') {
-                                cell.vt = 0;
-                            } else if (vt === 'top' || vt === 'text-top') {
-                                cell.vt = 1;
-                            } else {
-                                cell.vt = 2;
-                            }
-
-                            if ('mso-rotate' in styles) cell.rt = parseFloat(styles['mso-rotate']);
-
-                            while (c < colLen && !isNil(data[r][c])) {
-                                c += 1;
-                            }
-
-                            if (c === colLen) {
-                                return true;
-                            }
-
-                            if (isNil(data[r][c])) {
-                                data[r][c] = cell;
-                                let rowspan = parseInt(td.getAttribute('rowspan') ?? '1', 10);
-                                let colspan = parseInt(td.getAttribute('colspan') ?? '1', 10);
-
-                                if (Number.isNaN(rowspan)) {
-                                    rowspan = 1;
-                                }
-
-                                if (Number.isNaN(colspan)) {
-                                    colspan = 1;
-                                }
-
-                                const r_ab = anchor.row[0] + r;
-                                const c_ab = anchor.column[0] + c;
-
-                                for (let rp = 0; rp < rowspan; rp += 1) {
-                                    for (let cp = 0; cp < colspan; cp += 1) {
-                                        const onEdge = {
-                                            t: rp === 0,
-                                            b: rp === rowspan - 1,
-                                            l: cp === 0,
-                                            r: cp === colspan - 1,
-                                        };
-                                        for (const [side, css] of BORDER_SIDE_CSS) {
-                                            const shorthand = onEdge[side]
-                                                ? td.style.getPropertyValue(`border-${css}`)
-                                                : '';
-                                            if (isEmpty(shorthand) || shorthand.slice(0, 3).toLowerCase() === '0px')
-                                                continue;
-                                            (borderInfo[`${r + rp}_${c + cp}`] ??= {})[side] = getQKBorder(
-                                                td.style.getPropertyValue(`border-${css}-width`),
-                                                td.style.getPropertyValue(`border-${css}-style`),
-                                                td.style.getPropertyValue(`border-${css}-color`),
-                                            );
-                                        }
-
-                                        if (rp === 0 && cp === 0) {
-                                            continue;
-                                        }
-
-                                        data[r + rp][c + cp] = { mc: { r: r_ab, c: c_ab } };
-                                    }
-                                }
-
-                                if (rowspan > 1 || colspan > 1) {
-                                    const first = { rs: rowspan, cs: colspan, r: r_ab, c: c_ab };
-                                    data[r][c].mc = first;
-                                }
-                            }
-                            c += 1;
-                            if (c === colLen) {
-                                return true;
-                            }
-                            return true;
-                        });
-
-                        r += 1;
-                    });
-                    setRowHeight(ctx, rowHeightList);
+                    if (rowspan > 1 || colspan > 1) {
+                        const first = { rs: rowspan, cs: colspan, r: r_ab, c: c_ab };
+                        data[r][c].mc = first;
+                    }
                 }
-
-                ctx.formulaRangeSelections = [];
-                pasteHandler(ctx, data, borderInfo);
-            } else if (clipboardData.files.length === 1 && clipboardData.files[0].type.indexOf('image') > -1) {
-                ctx.hooks.onPasteImageFile?.(clipboardData.files[0]);
-            } else {
-                txtdata = clipboardData.getData('text/plain');
-                const isExcelFormula = txtdata.startsWith('=');
-
-                if (isExcelFormula) {
-                    handleFormulaStringPaste(ctx, txtdata);
-                } else {
-                    pasteHandler(ctx, txtdata);
+                c += 1;
+                if (c === colLen) {
+                    return true;
                 }
-            }
-        }
-    }
-}
+                return true;
+            });
 
-export function handlePasteByClick(ctx: Context, clipboardData: string) {
-    if (ctx.allowEdit === false) return;
-
-    if (ctx.copyState?.copyRange != null && ctx.copyState.copyRange.length > 0) {
-        if (ctx.pasteIsCut) {
-            ctx.pasteIsCut = false;
-            pasteHandlerOfCutPaste(ctx, ctx.copyState);
-        } else {
-            pasteHandlerOfCopyPaste(ctx, ctx.copyState);
-        }
-    } else if (clipboardData) {
-        const isExcelFormula = clipboardData.startsWith('=');
-        if (isExcelFormula) {
-            handleFormulaStringPaste(ctx, clipboardData);
-        } else {
-            pasteHandler(ctx, clipboardData);
-        }
+            r += 1;
+        });
+        setRowHeight(ctx, rowHeightList);
     }
+
+    ctx.formulaRangeSelections = [];
+    pasteHandler(ctx, data, borderInfo);
 }

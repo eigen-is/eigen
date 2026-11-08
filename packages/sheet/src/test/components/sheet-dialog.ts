@@ -65,6 +65,7 @@ function Workbook({ harness }: { harness: Harness }) {
         refs: harness.refs,
         handleUndo: () => {},
         handleRedo: () => {},
+        pasteClipboard: () => {},
     };
     return createElement(
         WorkbookContext.Provider,

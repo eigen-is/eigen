@@ -67,6 +67,7 @@ test('losing edit rights while the same column stays hovered hides its menu arro
                             refs,
                             handleUndo: () => {},
                             handleRedo: () => {},
+                            pasteClipboard: () => {},
                         },
                     },
                     createElement(ColumnHeader),

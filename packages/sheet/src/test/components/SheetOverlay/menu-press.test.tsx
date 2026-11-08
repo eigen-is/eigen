@@ -59,6 +59,7 @@ async function renderOverlay() {
                         refs,
                         handleUndo: () => {},
                         handleRedo: () => {},
+                        pasteClipboard: () => {},
                     },
                 },
                 createElement(SheetOverlay),

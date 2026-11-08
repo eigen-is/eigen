@@ -4,12 +4,12 @@
 
 import { applyPatches, enablePatches, produceWithPatches } from 'immer';
 import type { Context } from '../../../state/context';
-import { handlePasteByClick } from '../../../state/events/paste';
 import { updateCell } from '../../../state/modules/cell';
 import { groupValuesRefresh } from '../../../state/modules/formula-exec';
 import { copy } from '../../../state/modules/selection';
 import type { History } from '../../../state/types';
 import { filterPatch } from '../../../state/utils/patch';
+import { pasteCopy } from './clipboard';
 
 enablePatches();
 
@@ -42,11 +42,9 @@ export const typed = (r: number, c: number, value: string) => (draft: Context) =
     updateCell(draft, r, c, null, value);
 };
 
-// copy() writes the plain-text clipboard, so a caller mocks document and sessionStorage.
 export const pasteInternal = (from: [number, number], to: [number, number]) => (draft: Context) => {
     draft.selections = sel(from[0], from[0], from[1], from[1]);
-    copy(draft);
-    draft.pasteIsCut = false;
+    copy(draft, { cut: false });
     draft.selections = sel(to[0], to[0], to[1], to[1]);
-    handlePasteByClick(draft, 'internal');
+    pasteCopy(draft);
 };

@@ -31,10 +31,6 @@ import { getComputeMap } from './condition-format';
 import { hexColor } from './inline-string';
 import { hasPartMC } from './validation';
 
-export const selectionCache = {
-    isPasteAction: false,
-};
-
 // A border's color comes from a collaborator or an xlsx, so only a plain color reaches the copied HTML.
 function cellBorderCss(border: CellBorderSides): string {
     let css = '';
@@ -249,16 +245,15 @@ export function selectTitlesRange(map: Record<string, number>) {
 // The cell fields the format painter replaces with the source's, as distinct from the value it leaves.
 const PAINTED_FORMATS = ['bg', 'fc', 'ct', 'ht', 'vt', 'bl', 'it', 'cl', 'un', 'fs', 'ff', 'tb'] as const;
 
-export function pasteHandlerOfPaintModel(ctx: Context, copyState: Context['copyState']) {
+export function pasteHandlerOfPaintModel(
+    ctx: Context,
+    { sheetId, range: sourceRange }: NonNullable<Context['painterSource']>,
+) {
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     if (sheetIndex == null) return;
 
-    if (!copyState) return;
-    const copySheetId = copyState.dataSheetId;
-    const sourceRange = copyState.copyRange[0];
-
     // The painter takes what a copy would, so a row an active filter hides stays out.
-    const lines = carriedLines(ctx, copySheetId, [sourceRange], true);
+    const lines = carriedLines(ctx, sheetId, [sourceRange], true);
     const height = lines.rows.length;
     const width = lines.columns.length;
     if (height === 0 || width === 0) return;
@@ -343,7 +338,7 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyState: Context['copyS
 
     const sheet = ctx.sheets[sheetIndex];
 
-    const copyIndex = getSheetIndex(ctx, copySheetId);
+    const copyIndex = getSheetIndex(ctx, sheetId);
     if (copyIndex == null) return;
     const sourceRules: ConditionalFormatRule[] | undefined = cloneDeep(ctx.sheets[copyIndex].conditionalFormatRules);
     if (isNil(sourceRules) || sourceRules.length === 0) return;
@@ -1085,8 +1080,8 @@ export function moveHighlightRange(
 export const COPY_ACTION_TABLE_MARKER = 'sheet-copy-action-table';
 
 // The text a copy writes for a cell, in its td and in the TSV. A width format such as w0 shows the raw value, and
-// every other cell its display text. A paste reads it to tell the tab's own copy from another table.
-export function copiedCellText(d: CellMatrix, r: number, c: number): string {
+// every other cell its display text.
+function copiedCellText(d: CellMatrix, r: number, c: number): string {
     const cell = d[r]?.[c];
     if (cell == null) return '';
     const value = /^(w|W)((0?)|(0\.0+))$/.test(cell.ct?.fa ?? '')
@@ -1095,35 +1090,20 @@ export function copiedCellText(d: CellMatrix, r: number, c: number): string {
     return String(value ?? getCellValue(r, c, d) ?? '');
 }
 
-// The columns of each copied row the copy's table writes a td for. A merge writes one td, so the other cells it covers
-// have none, and a merge whose first row a filter left out is written as plain cells. A paste reads the same list to
-// tell the tab's own copy from another table.
-export function copiedTdColumns(d: CellMatrix, rows: readonly number[], columns: readonly number[]): number[][] {
-    const anchors = new Set<string>();
-    return rows.map((r) =>
-        columns.filter((c) => {
-            const mc = d[r]?.[c]?.mc;
-            if (mc?.rs != null) anchors.add(`${r}_${c}`);
-            else if (mc && anchors.has(`${mc.r}_${mc.c}`)) return false;
-            return true;
-        }),
-    );
-}
-
 // General cuts a number to 11 characters; the clipboard carries Excel's 15 significant digits instead.
 function copiedNumberText(cell: Cell): string | undefined {
     if (typeof cell.v !== 'number' || (cell.ct?.fa ?? 'General') !== 'General') return undefined;
     return numberText(cell.v);
 }
 
-// The range as the clipboard carries it: an HTML table with the cells' styles, the display text as TSV, and
-// the same text unquoted for the Eigen text item, which a consumer reads as text rather than as TSV.
+// The range as the clipboard carries it: an HTML table with the cells' styles and a fresh id, the display text as TSV,
+// and the same text unquoted for the Eigen text item, which a consumer reads as text rather than as TSV.
 export function rangeValueToClipboard(
     ctx: Context,
     sheetId: string,
     ranges?: Range,
     { cut = false }: { cut?: boolean } = {},
-): { html: string; text: string; cellText: string } | null {
+): { id: string; html: string; text: string; cellText: string } | null {
     const index = getSheetIndex(ctx, sheetId);
     if (index == null) return null;
     const sheet = ctx.sheets[index];
@@ -1148,11 +1128,12 @@ export function rangeValueToClipboard(
     let colgroup = '';
     let body = '';
     const text: string[][] = [];
-    const tdColumns = copiedTdColumns(d, rows, columns);
+    // A merge writes one td, so the other cells it covers have none. A merge whose first row a filter left out has no
+    // anchor here, and is written as plain cells.
+    const anchors = new Set<string>();
 
     for (let i = 0; i < rows.length; i += 1) {
         const r = rows[i];
-        const tds = new Set(tdColumns[i]);
 
         body += '<tr>';
         const textRow: string[] = [];
@@ -1176,11 +1157,12 @@ export function rangeValueToClipboard(
                 style += styleObjectToCss(getStyleByCell(ctx, d, r, c, cfCompute));
 
                 if (cell.mc?.rs != null) {
+                    anchors.add(`${r}_${c}`);
                     // A merge closes up over the rows a filter left out, as a paste in this tab lands it.
                     const rs = carriedSpan(rows, i, rows.length - i, r, finiteOr(cell.mc.rs, 1));
                     const cs = carriedSpan(columns, j, columns.length - j, c, finiteOr(cell.mc.cs, 1));
                     span = `rowspan="${rs}" colspan="${cs}"`;
-                } else if (!tds.has(c)) {
+                } else if (cell.mc && anchors.has(`${cell.mc.r}_${cell.mc.c}`)) {
                     textRow.push('');
                     continue;
                 }
@@ -1209,8 +1191,10 @@ export function rangeValueToClipboard(
         body += '</tr>';
     }
 
+    const id = crypto.randomUUID();
     return {
-        html: `<table data-type="${COPY_ACTION_TABLE_MARKER}">${colgroup}${body}</table>`,
+        id,
+        html: `<table data-type="${COPY_ACTION_TABLE_MARKER}" data-copy-id="${id}">${colgroup}${body}</table>`,
         text: cellsToTsv(text),
         cellText: text.map((row) => row.join('\t')).join('\n'),
     };
@@ -1218,15 +1202,13 @@ export function rangeValueToClipboard(
 
 export function copy(ctx: Context, { cut = false }: { cut?: boolean } = {}) {
     const ranges = ctx.selections ?? [];
-    ctx.formulaRangeSelections = ranges.map(({ row, column }) => ({ row, column }));
-    // The engine's own clipboard: the copied ranges, which a paste in this tab reads back from the live cells.
-    ctx.copyState = {
-        dataSheetId: ctx.currentSheetId,
-        copyRange: ranges.map(({ row, column }) => ({ row, column })),
-    };
-
     const clipboard = rangeValueToClipboard(ctx, ctx.currentSheetId, ranges, { cut });
-    if (clipboard) setPendingCopy(clipboard.html, clipboard.text, clipboard.cellText);
+    if (!clipboard) return;
+    const copyRange = ranges.map(({ row, column }) => ({ row, column }));
+    ctx.formulaRangeSelections = copyRange;
+    // The engine's own clipboard: the copied ranges, which a paste in this tab reads back from the live cells.
+    ctx.copyState = { id: clipboard.id, cut, dataSheetId: ctx.currentSheetId, copyRange };
+    setPendingCopy(clipboard.html, clipboard.text, clipboard.cellText);
 }
 
 export function deleteSelectedCellText(ctx: Context): string {

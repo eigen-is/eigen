@@ -57,7 +57,6 @@ import {
     redoEntry,
     runStyleOf,
     SHEET_HOTKEYS,
-    selectionCache,
     sheetChartClipboardItem,
     stepNewestEntry,
     undoEntry,
@@ -319,6 +318,95 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             mergedSettings.hooks?.onChartPanelChange?.(chartPanel);
         }, [chartPanel, mergedSettings.hooks]);
 
+        // One paste of what the clipboard holds, from a paste event or from a menu row that read the clipboard.
+        const pasteClipboard = useCallback(
+            (clipboardData: DataTransfer) => {
+                // A paste past the grid's last row adds the rows it needs in its own edit, so a refused paste adds none.
+                const pasteCells = (cells: DataTransfer) =>
+                    setContextWithProduce((draftCtx) => {
+                        try {
+                            handlePaste(draftCtx, cells);
+                        } catch (err) {
+                            if (err instanceof ValidationLimitError) throw err;
+                            console.error(err);
+                        }
+                    });
+
+                // A copy of cells marks its HTML with COPY_ACTION_TABLE_MARKER, and the classifier then reports no
+                // Eigen or SVG content, so the paste goes to handlePaste, which knows its own copy.
+                const paste = classifyPaste(clipboardData, { internalMarkerText: COPY_ACTION_TABLE_MARKER });
+
+                // A Vector selection or a pasted SVG document becomes one floating image, through the app's image
+                // file path. It goes before the split into Eigen items, so a Vector selection lands as one image and
+                // not as its separate items. An SVG with images names them as eigen-media references, so it goes to
+                // onPasteSvgFile, which stores each image before the SVG. An SVG without images goes to
+                // onPasteImageFile.
+                if (paste.svg) {
+                    const svgImageItems = paste.svg.items.filter(
+                        (item): item is EigenClipboardImageItem => item.type === 'image',
+                    );
+                    const onPasteSvgFile = mergedSettings.hooks?.onPasteSvgFile;
+                    const onPasteImageFile = mergedSettings.hooks?.onPasteImageFile;
+                    if (onPasteSvgFile) {
+                        // It goes there even without image items, so a forged or dangling eigen-media reference is
+                        // stripped before the SVG is stored, as in Docs and Slides.
+                        onPasteSvgFile(paste.svg.svg, svgImageItems);
+                        return;
+                    }
+                    if (onPasteImageFile) {
+                        onPasteImageFile(svgToImageFile(paste.svg.svg));
+                        return;
+                    }
+                }
+
+                if (paste.eigen) {
+                    // A mixed Eigen payload splits by kind. Image and chart items become floating objects, and text
+                    // items land in cells, all in one paste. The app inserts the images itself, at their copied size
+                    // and re-uploaded from another mount, so they paste only when its hook is set.
+                    const onPasteEigenImage = mergedSettings.hooks?.onPasteEigenImage;
+                    const imageItems = onPasteEigenImage
+                        ? paste.eigen.items.filter((item): item is EigenClipboardImageItem => item.type === 'image')
+                        : [];
+                    // Empty carriers must not paste as blank cells over existing content.
+                    const textParts = paste.eigen.items
+                        .filter(
+                            (item): item is EigenClipboardTextItem =>
+                                item.type === 'text' && clipboardTextItemHasContent(item),
+                        )
+                        .map((item) => item.text);
+                    const chartItems = paste.eigen.items.filter(
+                        (item): item is EigenClipboardChartItem => item.type === 'chart',
+                    );
+                    if (imageItems.length > 0 || chartItems.length > 0 || textParts.length > 0) {
+                        for (const item of imageItems) onPasteEigenImage?.(item);
+                        // This workbook's own copy keeps the ranges it was copied with.
+                        const copied = globalCache.current.copiedChart;
+                        if (chartItems.length > 0) {
+                            setContextWithProduce((draftCtx) => {
+                                for (const { parts, width, height, look } of chartItems) {
+                                    const own = copied && isEqual(copied.inline, parts);
+                                    const fields = own
+                                        ? copySheetChartSpec(copied.chart)
+                                        : pastedChartFields(parts, newSheetChartSpecParts);
+                                    if (!fields) continue;
+                                    pasteChart(draftCtx, crypto.randomUUID(), fields, { width, height }, look);
+                                }
+                            });
+                        }
+                        if (textParts.length > 0) {
+                            const text = new DataTransfer();
+                            text.setData('text/plain', textParts.join('\n'));
+                            pasteCells(text);
+                        }
+                        return;
+                    }
+                }
+
+                pasteCells(clipboardData);
+            },
+            [mergedSettings.hooks, setContextWithProduce],
+        );
+
         const providerValue = useMemo(
             () => ({
                 context,
@@ -327,9 +415,10 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 settings: mergedSettings,
                 handleUndo,
                 handleRedo,
+                pasteClipboard,
                 refs,
             }),
-            [context, getContext, handleRedo, handleUndo, mergedSettings, refs, setContextWithProduce],
+            [context, getContext, handleRedo, handleUndo, mergedSettings, pasteClipboard, refs, setContextWithProduce],
         );
 
         useEffect(() => {
@@ -516,124 +605,21 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         const onPaste = useCallback(
             (e: ClipboardEvent) => {
                 // With more than one workbook on a page, only the focused one takes the paste. A selected image or
-                // chart holds the focus too.
+                // chart holds the focus too. The open cell editor pastes into itself, as text.
                 const { activeElement } = document;
-                const ctx = contextRef.current;
                 if (
-                    cellInput.current === activeElement ||
-                    activeElement?.className === 'sheet-overlay' ||
-                    (activeElement?.matches('[data-floating-id]') && workbookContainer.current?.contains(activeElement))
+                    (cellInput.current === activeElement ||
+                        activeElement?.className === 'sheet-overlay' ||
+                        (activeElement?.matches('[data-floating-id]') &&
+                            workbookContainer.current?.contains(activeElement))) &&
+                    e.clipboardData &&
+                    contextRef.current.editingCellPosition.length === 0
                 ) {
-                    // The open cell editor pastes into itself, as text. A ⌘V on the grid waits for its paste in
-                    // selectionCache, and a paste the grid passes on or takes without handlePaste ends that wait,
-                    // so a later paste into the editor can't become a grid paste that closes it.
-                    const { clipboardData } = e;
-                    if (!clipboardData || ctx.editingCellPosition.length > 0) {
-                        selectionCache.isPasteAction = false;
-                        return;
-                    }
-
-                    // A copy between sheets of this tab marks its HTML with COPY_ACTION_TABLE_MARKER and pastes
-                    // from ctx.copyState, which keeps the formulas and formats. The classifier then reports no
-                    // Eigen or SVG content, so the paste falls through to the table paste below.
-                    const paste = classifyPaste(clipboardData, { internalMarkerText: COPY_ACTION_TABLE_MARKER });
-
-                    // A Vector selection or a pasted SVG document becomes one floating image, through the app's
-                    // image file path. It goes before the split into Eigen items, so a Vector selection lands as
-                    // one image and not as its separate items. An SVG with images names them as eigen-media
-                    // references, so it goes to onPasteSvgFile, which stores each image before the SVG. An SVG
-                    // without images goes to onPasteImageFile.
-                    if (paste.svg) {
-                        const svgImageItems = paste.svg.items.filter(
-                            (item): item is EigenClipboardImageItem => item.type === 'image',
-                        );
-                        const onPasteSvgFile = mergedSettings.hooks?.onPasteSvgFile;
-                        const onPasteImageFile = mergedSettings.hooks?.onPasteImageFile;
-                        if (onPasteSvgFile) {
-                            // It goes there even without image items, so a forged or dangling eigen-media
-                            // reference is stripped before the SVG is stored, as in Docs and Slides.
-                            e.preventDefault();
-                            selectionCache.isPasteAction = false;
-                            onPasteSvgFile(paste.svg.svg, svgImageItems);
-                            return;
-                        }
-                        if (onPasteImageFile) {
-                            e.preventDefault();
-                            selectionCache.isPasteAction = false;
-                            onPasteImageFile(svgToImageFile(paste.svg.svg));
-                            return;
-                        }
-                    }
-
-                    if (paste.eigen) {
-                        // A mixed Eigen payload splits by kind. Image and chart items become floating
-                        // objects, and text items land in cells, all in one paste. The app inserts the
-                        // images itself, at their copied size and re-uploaded from another mount, so
-                        // they paste only when its hook is set.
-                        const onPasteEigenImage = mergedSettings.hooks?.onPasteEigenImage;
-                        const imageItems = onPasteEigenImage
-                            ? paste.eigen.items.filter((item): item is EigenClipboardImageItem => item.type === 'image')
-                            : [];
-                        // Empty carriers must not paste as blank cells over existing content.
-                        const textParts = paste.eigen.items
-                            .filter(
-                                (item): item is EigenClipboardTextItem =>
-                                    item.type === 'text' && clipboardTextItemHasContent(item),
-                            )
-                            .map((item) => item.text);
-                        const chartItems = paste.eigen.items.filter(
-                            (item): item is EigenClipboardChartItem => item.type === 'chart',
-                        );
-                        if (imageItems.length > 0 || chartItems.length > 0 || textParts.length > 0) {
-                            e.preventDefault();
-                            if (textParts.length === 0) selectionCache.isPasteAction = false;
-                            for (const item of imageItems) onPasteEigenImage?.(item);
-                            // This workbook's own copy keeps the ranges it was copied with.
-                            const copied = globalCache.current.copiedChart;
-                            if (chartItems.length > 0) {
-                                setContextWithProduce((draftCtx) => {
-                                    for (const { parts, width, height, look } of chartItems) {
-                                        const own = copied && isEqual(copied.inline, parts);
-                                        const fields = own
-                                            ? copySheetChartSpec(copied.chart)
-                                            : pastedChartFields(parts, newSheetChartSpecParts);
-                                        if (!fields) continue;
-                                        pasteChart(draftCtx, crypto.randomUUID(), fields, { width, height }, look);
-                                    }
-                                });
-                            }
-                            if (textParts.length > 0) {
-                                const syntheticTransfer = new DataTransfer();
-                                syntheticTransfer.setData('text/plain', textParts.join('\n'));
-                                const syntheticEvent = new ClipboardEvent('paste', {
-                                    clipboardData: syntheticTransfer,
-                                });
-                                setContextWithProduce((draftCtx) => {
-                                    try {
-                                        handlePaste(draftCtx, syntheticEvent);
-                                    } catch (err) {
-                                        if (err instanceof ValidationLimitError) throw err;
-                                        console.error(err);
-                                    }
-                                });
-                            }
-                            return;
-                        }
-                    }
-
-                    // A paste past the grid's last row adds the rows it needs in its own edit, so a refused paste
-                    // adds none.
-                    setContextWithProduce((draftCtx) => {
-                        try {
-                            handlePaste(draftCtx, e);
-                        } catch (err) {
-                            if (err instanceof ValidationLimitError) throw err;
-                            console.error(err);
-                        }
-                    });
+                    e.preventDefault();
+                    pasteClipboard(e.clipboardData);
                 }
             },
-            [setContextWithProduce, mergedSettings.hooks],
+            [pasteClipboard],
         );
 
         useEffect(() => {

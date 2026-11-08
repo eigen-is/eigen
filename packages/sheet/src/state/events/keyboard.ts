@@ -17,7 +17,7 @@ import { cancelNormalSelected, updateCell } from '../modules/cell';
 import { cellFocus, checkboxChange, getCellDataValidation } from '../modules/data-validation';
 import { fillFromEdge } from '../modules/drop-cell';
 import { handleFormulaInput } from '../modules/formula-editor';
-import { moveHighlightCell, moveHighlightRange, selectAll, selectionCache } from '../modules/selection';
+import { moveHighlightCell, moveHighlightRange, selectAll } from '../modules/selection';
 import { handleBold, handleItalic, handleUnderline } from '../modules/toolbar';
 import type { GlobalCache, Selection } from '../types';
 import { getSheetIndex } from '../utils';
@@ -225,12 +225,7 @@ export function handleWithCtrlOrMetaKey(
         e.stopPropagation();
         return;
     } else if (matchesKeyboardEvent(e, SHEET_HOTKEYS.paste)) {
-        // A paste into several ranges is not supported.
-        if ((ctx.selections?.length ?? 0) > 1) {
-            return;
-        }
-
-        selectionCache.isPasteAction = true;
+        // The browser fires its paste next, which the Workbook takes.
         e.stopPropagation();
         return;
     } else if (matchesKeyboardEvent(e, SHEET_HOTKEYS.cut)) {

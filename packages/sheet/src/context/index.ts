@@ -1,5 +1,5 @@
 // The React context the Workbook provides to every part of the grid: the workbook it renders, the way to write it, the
-// settings, the DOM refs and undo and redo. `context` is the workbook as it was last rendered. A read that must see a
+// settings, the DOM refs, undo and redo, and the paste a menu row runs. `context` is the workbook as it was last rendered. A read that must see a
 // write made since that render, such as one right after an edit, goes through `getContext()`.
 
 import React from 'react';
@@ -57,6 +57,7 @@ const WorkbookContext = React.createContext<{
     refs: RefValues;
     handleUndo: () => void;
     handleRedo: () => void;
+    pasteClipboard: (clipboardData: DataTransfer) => void;
 }>({
     context: defaultWorkbook,
     getContext: () => defaultWorkbook,
@@ -64,6 +65,7 @@ const WorkbookContext = React.createContext<{
     settings: defaultSettings,
     handleUndo: () => {},
     handleRedo: () => {},
+    pasteClipboard: () => {},
     refs: defaultRefs,
 });
 

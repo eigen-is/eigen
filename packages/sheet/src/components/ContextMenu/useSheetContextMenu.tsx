@@ -40,10 +40,9 @@ import {
     handleCopy,
     handleCut,
     handleLink,
-    handlePasteByClick,
     hideSelectedRowCol,
     insertCheckbox,
-    readClipboardText,
+    pasteFromClipboard,
     showSelectedRowCol,
     sortSelection,
     tryDeleteRowCol,
@@ -57,7 +56,7 @@ type RowColType = 'row' | 'column';
 
 // The shared Cut, Copy, Paste rows on the grid's own clipboard handlers.
 function ClipboardItems() {
-    const { context, setContext } = useContext(WorkbookContext);
+    const { context, setContext, pasteClipboard } = useContext(WorkbookContext);
     const { showNotice } = useDialog();
     return (
         <ClipboardMenuItems
@@ -77,12 +76,7 @@ function ClipboardItems() {
                     flushPendingCopy();
                 });
             }}
-            onPaste={async () => {
-                const text = await readClipboardText();
-                setContext((d) => {
-                    handlePasteByClick(d, text);
-                });
-            }}
+            onPaste={() => pasteFromClipboard(pasteClipboard, showNotice)}
         />
     );
 }
