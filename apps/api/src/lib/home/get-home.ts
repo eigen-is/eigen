@@ -9,6 +9,7 @@ import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import type { AsyncSingleton } from '../../utils/singleton';
 import { createAsyncSingleton } from '../../utils/singleton';
+import type { CollabDocument } from '../collab/collab-document';
 import { ApiError } from '../core';
 import { getOrgExists } from '../org';
 import { getTeam } from '../team';
@@ -190,10 +191,19 @@ export function broadcastToLoadedHomes(event: SSEvent): void {
     for (const factory of homeFactories.values()) factory.peek()?.broadcast(event);
 }
 
-// Closes the collab sockets of whoever lost read, after a change to a membership that any home's documents may rest
-// on. It opens no home and counts as no request: a home that is not loaded has no open document.
+// Closes the collab sockets of whoever lost read, after a change to a membership that any home's documents may rest on.
 export async function enforceReadAccessOnLoadedHomes(): Promise<void> {
-    for (const factory of homeFactories.values()) await factory.peek()?.enforceReadAccess();
+    await forEachOpenDocument((document) => document.enforceReadAccess());
+}
+
+// Closes the collab sockets of a user locked out whatever they may read, such as by a password reset.
+export async function closeUserSocketsOnLoadedHomes(userId: string): Promise<void> {
+    await forEachOpenDocument(async (document) => document.closeUserConnections(userId));
+}
+
+// It opens no home and counts as no request: a home that is not loaded has no open document.
+async function forEachOpenDocument(visit: (document: CollabDocument) => Promise<void>): Promise<void> {
+    for (const factory of homeFactories.values()) await factory.peek()?.forEachOpenDocument(visit);
 }
 
 // Closes every home that is open now. A test file's teardown calls it too, and the next file opens homes again.

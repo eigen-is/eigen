@@ -289,6 +289,29 @@ describe('a membership that goes closes the sockets that lost read', () => {
     });
 });
 
+describe("a password reset closes that user's sockets", () => {
+    test("on every loaded home, whether or not they may still read, and another user's socket stays", async () => {
+        const [locked, stays] = await Promise.all([newUser('locked'), newUser('stays')]);
+        const owner = ctx.alice.user;
+        const shared = await docNaming(owner, locked, stays);
+        const own = await newDoc(locked);
+        const sharedSocket = await openSocket(locked, owner.id, shared.mountId, shared.docId);
+        const ownSocket = await openSocket(locked, locked.id, own.mountId, own.docId);
+        const staysSocket = await openSocket(stays, owner.id, shared.mountId, shared.docId);
+
+        const res = await authedRequest(owner.sessionToken, `/settings/user/${locked.id}/password`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: 'a-new-password-1' }),
+        });
+
+        expect(res.status).toBe(200);
+        expect(await sharedSocket.closed).toEqual(REVOKED);
+        expect(await ownSocket.closed).toEqual(REVOKED);
+        await expectStillReceiving(staysSocket, owner.id, shared.mountId, shared.docId);
+    });
+});
+
 describe('an open that is still loading the document', () => {
     // A removal or an ACL change finds no connection on a document that still loads. The socket sends its frame, which
     // waits for the open, then `revoke` runs, then the load ends.

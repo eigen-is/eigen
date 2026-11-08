@@ -1,6 +1,6 @@
 // The collab documents that are open in one Drive, such as docs that someone edits right now. It opens
 // each document once, however many people connect, and closes it again. When sharing or a membership
-// changes, it closes the connections of people who may no longer read.
+// changes, it walks the open documents, which close the connections of people who may no longer read.
 
 import { isCollabType, isContainerType } from '@workspace/lib/types/drive';
 import type { AsyncSingleton } from '../../utils/singleton';
@@ -106,7 +106,7 @@ export class CollabRegistry {
         if (!path) return;
 
         if (isCollabType(path.type)) {
-            await this.enforceReadAccessOn(this.key(mount.id, pathId));
+            await this.visitIfOpen(this.key(mount.id, pathId), (document) => document.enforceReadAccess());
         } else if (isContainerType(path.type)) {
             const children = await mount.listFolderAll(pathId);
             for (const child of children) {
@@ -115,18 +115,19 @@ export class CollabRegistry {
         }
     }
 
-    // The same check for every open document, after a change no path hears of, such as a member leaving a team.
-    public async enforceReadAccess(): Promise<void> {
-        for (const key of this.documents.keys()) await this.enforceReadAccessOn(key);
+    public async forEachOpenDocument(visit: (document: CollabDocument) => Promise<void>): Promise<void> {
+        for (const key of this.documents.keys()) await this.visitIfOpen(key, visit);
     }
 
     // A document that is still loading has no connections yet, and its load can take as long as a download, so
-    // nothing waits for it. One document that fails must not stop the check of the others.
-    private async enforceReadAccessOn(key: string): Promise<void> {
+    // nothing waits for it. One document that fails must not stop the walk over the others.
+    private async visitIfOpen(key: string, visit: (document: CollabDocument) => Promise<void>): Promise<void> {
+        const document = this.documents.get(key)?.peek();
+        if (!document) return;
         try {
-            await this.documents.get(key)?.peek()?.enforceReadAccess();
+            await visit(document);
         } catch (error) {
-            console.error(`Failed to enforce read access on ${key}:`, error);
+            console.error(`Failed to check the connections of ${key}:`, error);
         }
     }
 

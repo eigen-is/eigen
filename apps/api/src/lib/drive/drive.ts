@@ -962,8 +962,8 @@ export class Drive {
         await propagateSharedPathChange(updatedItem, oldACL, normalizedACL, actor ?? null, options);
     }
 
-    public enforceReadAccess(): Promise<void> {
-        return this.documents.enforceReadAccess();
+    public forEachOpenDocument(visit: (document: CollabDocument) => Promise<void>): Promise<void> {
+        return this.documents.forEachOpenDocument(visit);
     }
 
     // Sends a path's sharing to its homes after a change that keeps its ACL, such as a rename. It runs in the path's

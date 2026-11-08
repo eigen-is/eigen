@@ -226,6 +226,16 @@ export class CollabDocument {
         }
     }
 
+    // For a user locked out whatever they may read, such as by a password reset.
+    public closeUserConnections(userId: string): void {
+        for (const [conn, { id }] of [...this.connections]) {
+            if (id === userId) {
+                conn.close(COLLAB_ACCESS_LOST_CLOSE, 'Access revoked');
+                this.unsubscribe(conn);
+            }
+        }
+    }
+
     public handleMessage(conn: ServerWebSocket<unknown>, message: Uint8Array, canWrite: boolean): void {
         if (this.closed) return;
         const decoder = decoding.createDecoder(message);
