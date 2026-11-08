@@ -23,8 +23,8 @@ const WS_PROVIDER_OPTIONS = { resyncInterval: 5000, disableBc: true } as const;
 // How long to stay disconnected after a storage-unavailable close before trying again.
 const STORAGE_RETRY_MS = 5_000;
 
-// A dropped socket normally reconnects within ~100ms, and the storage retry cycle reports
-// 'connected' for a tick every 5s. Hold the offline verdict this long so neither flashes the icon.
+// A dropped socket normally reconnects at once, and the storage retry cycle reports 'connected' for a tick. Hold the
+// offline verdict this long so neither flashes the icon.
 const OFFLINE_GRACE_MS = 1_500;
 
 export type CollabDocContext = {
@@ -82,8 +82,7 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
     const [storageUnavailable, setStorageUnavailable] = useState(false);
     const [storageGone, setStorageGone] = useState(false);
     const [unsyncedEdits, setUnsyncedEdits] = useState(false);
-    const [homeReplaced, setHomeReplaced] = useState(false);
-    const [accessLost, setAccessLost] = useState(false);
+    const [reloadNow, setReloadNow] = useState<(() => void) | null>(null);
 
     const docRef = useRef<Y.Doc | null>(null);
     // A local update went out after the last completed handshake, so the server may still lack it.
@@ -162,21 +161,16 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
         // its own. disconnect() re-enters with a null event, which the code checks ignore.
         let retryTimer: ReturnType<typeof setTimeout> | undefined;
         const handleConnectionClose = (event: CloseEvent | null) => {
-            if (event?.code === COLLAB_HOME_REPLACED_CLOSE) {
-                // A reconnect would sync this tab's copy back over the restore. Its unsynced edits go with it, because
-                // the armed guard would prompt in front of the reload.
+            if (event?.code === COLLAB_HOME_REPLACED_CLOSE || event?.code === COLLAB_ACCESS_LOST_CLOSE) {
+                // A reconnect would sync this tab's copy back over a restore, or be refused with these edits after a
+                // lost read. The unsynced edits go too, because the armed guard would prompt in front of the reload.
                 pendingUpdateRef.current = false;
                 setUnsyncedEdits(false);
                 nextProvider.disconnect();
-                setHomeReplaced(true);
-                return;
-            }
-            if (event?.code === COLLAB_ACCESS_LOST_CLOSE) {
-                // The server would refuse these edits and every reconnect. The guard must not prompt here either.
-                pendingUpdateRef.current = false;
-                setUnsyncedEdits(false);
-                nextProvider.disconnect();
-                setAccessLost(true);
+                // The session is read once per page load, so only a reload takes a deleted user to sign-in.
+                const reload =
+                    event.code === COLLAB_HOME_REPLACED_CLOSE ? reloadReplacedHome : () => window.location.reload();
+                setReloadNow(() => reload);
                 return;
             }
             if (event?.code === COLLAB_STORAGE_GONE_CLOSE) {
@@ -228,13 +222,8 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
 
     // After the commit that disarmed UnsyncedEditsGuard: a reload inside the close handler would still meet its prompt.
     useEffect(() => {
-        if (homeReplaced) reloadReplacedHome();
-    }, [homeReplaced]);
-
-    // The session is read once per page load, so only a reload takes a deleted user to sign-in.
-    useEffect(() => {
-        if (accessLost) window.location.reload();
-    }, [accessLost]);
+        reloadNow?.();
+    }, [reloadNow]);
 
     return {
         doc,
