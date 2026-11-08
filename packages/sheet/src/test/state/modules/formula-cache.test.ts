@@ -7,6 +7,8 @@ import type { Cell, FormulaDependency } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import { setFormulaCellInfo } from '../../../state/modules/formula-cache';
 import { getcellrange, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
+import type { Op } from '../../../state/types';
+import { join, receive } from '../factories/collab';
 import { contextFactory } from '../factories/context';
 import { edit, pasteInternal, redo, sel, typed, undo } from '../factories/edit-cycle';
 
@@ -27,6 +29,60 @@ const cell = (ctx: Context, r: number, c: number) => ctx.sheets[0].data![r][c];
 
 // A paste replaces whole cells, so the history of its undo and redo carries whole-cell patches, and the map has to
 // follow them either way.
+// A peer's op or a file can write anything into a cell, and the formula map reads every `f` it finds.
+describe('a formula that is no text', () => {
+    const forged = [5, 0, true, {}, ''];
+
+    it.each(forged)('a stored f of %p builds the map without it, and an edit still works', (f) => {
+        const ctx = makeCtx();
+        const data: unknown[][] = ctx.sheets[0].data ?? [];
+        data[1][0] = { f, v: 1 };
+        const map = warmFormulaCellInfoMap(ctx);
+        expect(Object.keys(map)).toEqual(['r0c1iid_1']);
+        const [next] = edit(ctx, typed(0, 0, '7'));
+        expect(cell(next, 0, 1)?.v).toBe(14);
+    });
+
+    it.each(forged)('a peer writing an f of %p leaves the map as it was', (f) => {
+        const ctx = makeCtx();
+        warmFormulaCellInfoMap(ctx);
+        const next = receive(ctx, [{ op: 'replace', id: 'id_1', path: ['data', 2, 0], value: { f, v: 1 } }]);
+        expect(Object.keys(next.formulaCache.formulaCellInfoMap ?? {})).toEqual(['r0c1iid_1']);
+        const stored: unknown = next.sheets[0].data?.[2][0];
+        expect(stored).toEqual({ f, v: 1 });
+    });
+
+    it.each(forged)('an f of %p fails no rename or row op, on a tab or in the replay', (f) => {
+        const ctx = makeCtx();
+        const log: Op[][] = [
+            [{ op: 'replace', id: 'id_1', path: ['data', 2, 0], value: { f, v: 1 } }],
+            [{ op: 'renameSheet', id: 'id_1', path: [], value: { name: 'Renamed' } }],
+            [
+                {
+                    op: 'insertRowCol',
+                    id: 'id_1',
+                    path: [],
+                    value: { type: 'row', index: 0, count: 1, direction: 'lefttop' },
+                },
+            ],
+        ];
+        const live = log.reduce((next, ops) => receive(next, ops), ctx);
+        expect(live.sheets[0].name).toBe('Renamed');
+        expect(live.sheets[0].data?.[1][1]?.f).toBe('=A2*2');
+        const [joined] = join(ctx, log);
+        expect(joined.name).toBe('Renamed');
+        expect(joined.celldata?.find(({ r, c }) => r === 1 && c === 1)?.v?.f).toBe('=A2*2');
+    });
+
+    it('a peer turning a formula into no text takes it out of the map', () => {
+        const ctx = makeCtx();
+        warmFormulaCellInfoMap(ctx);
+        const next = receive(ctx, [{ op: 'replace', id: 'id_1', path: ['data', 0, 1, 'f'], value: 5 }]);
+        expect(next.formulaCache.formulaCellInfoMap).toEqual({});
+        expect(next.formulaCache.dependencyIndex.dependentsOf('id_1', 0, 0)).toEqual([]);
+    });
+});
+
 describe('updateFormulaCache — whole-cell patches', () => {
     it('undoing a formula pasted over a value drops it from the map', () => {
         const base = makeCtx();

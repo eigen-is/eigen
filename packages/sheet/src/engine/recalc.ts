@@ -10,10 +10,10 @@ import { gridSize } from './defaults';
 import { getCalculationOrder } from './dependency-graph';
 import { cellsOf, DependencyIndex, dependencySlots } from './dependency-index';
 import { booleanDisplay, numberDisplay } from './format';
-import { FormulaEngine, isFormula } from './formula-engine';
+import { FormulaEngine } from './formula-engine';
 import { forEachRef, inlineNames } from './formula-shift';
 import type { WalkContext } from './formula-utils';
-import { matrixWidth, resolveCellRange } from './formula-utils';
+import { isFormula, matrixWidth, resolveCellRange } from './formula-utils';
 import { valueIsError } from './parser/error';
 import { sheetFinder } from './parser/helper/cell';
 import type { EvaluationResult, FormulaCellInfoMap, FormulaDependency } from './types';
@@ -63,7 +63,7 @@ export function recalcSheets(
             if (!rowArr) continue;
             for (let c = 0; c < rowArr.length; c += 1) {
                 const f = rowArr[c]?.f;
-                if (typeof f !== 'string' || !isFormula(f)) continue;
+                if (!isFormula(f)) continue;
                 const key = `r${r}c${c}i${w.id}`;
                 const deps = extractDependencies(walk, f, w.id);
                 infoMap[key] = {

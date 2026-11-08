@@ -7,6 +7,7 @@ import { current, isDraft } from 'immer';
 import { findSheetByName } from '../../engine/a1-notation';
 import type { DependencyIndex } from '../../engine/dependency-index';
 import { FormulaEngine } from '../../engine/formula-engine';
+import { isFormula } from '../../engine/formula-utils';
 import { extractDependencies } from '../../engine/recalc';
 import type { Cell, CellMatrix, FormulaCellInfoMap, FormulaDependency } from '../../engine/types';
 import type { Context } from '../context';
@@ -148,7 +149,7 @@ export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?
     const key = `r${formulaCell.r}c${formulaCell.c}i${formulaCell.id}`;
     const cellData = formulaCell.id === dataSheet ? data : undefined;
     const formula = getcellFormula(ctx, formulaCell.r, formulaCell.c, formulaCell.id, cellData);
-    if (formula == null) {
+    if (!isFormula(formula)) {
         delete formulaCellInfoMap[key];
         ctx.formulaCache.dependencyIndex.delete(key);
         return;
@@ -193,7 +194,7 @@ export function registerFormulas(ctx: Context, id: string, data: CellMatrix) {
         const row = data[r];
         if (!row) continue;
         for (let c = 0; c < row.length; c += 1) {
-            if (row[c]?.f != null) setFormulaCellInfo(ctx, { r, c, id }, data, id);
+            if (isFormula(row[c]?.f)) setFormulaCellInfo(ctx, { r, c, id }, data, id);
         }
     }
 }

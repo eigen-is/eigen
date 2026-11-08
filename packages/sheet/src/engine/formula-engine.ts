@@ -29,10 +29,6 @@ import type {
     RangeCell,
 } from './types';
 
-export function isFormula(value: unknown): boolean {
-    return typeof value === 'string' && value.length > 1 && value[0] === '=';
-}
-
 // A cell holds an error as its text, such as `#DIV/0!`. A formula reads it back as an error object, formulajs's where
 // it has one, because its functions recognize only those. A cell that holds such text as text stays text: a plain
 // (`ct.t === 's'`) or a rich one. A `#NAME?` doesn't say whether it comes from a typo or stands in for a function the

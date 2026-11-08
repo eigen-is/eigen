@@ -6,7 +6,7 @@
 
 import type { Sheet } from '@workspace/lib/sheets';
 import { a1RangeRef, extractLabel, parseA1Range, sheetRefName, toLabel, unquoteSheetName } from './a1-notation';
-import { formulaOperators, iscelldata } from './formula-utils';
+import { formulaOperators, iscelldata, isFormula } from './formula-utils';
 import { offsetCoordinate, offsetRange, sortLegs } from './parser/helper/cell';
 import { error } from './validation';
 
@@ -46,7 +46,7 @@ export function rewriteSheetFormulas<S extends Sheet>(sheet: S, rewrite: (txt: s
             if (!row) continue;
             for (let c = 0; c < row.length; c += 1) {
                 const cell = row[c];
-                if (!cell?.f) continue;
+                if (!isFormula(cell?.f)) continue;
                 const f = rewrite(cell.f);
                 if (f === cell.f) continue;
                 data ??= [...sheet.data];
@@ -59,7 +59,7 @@ export function rewriteSheetFormulas<S extends Sheet>(sheet: S, rewrite: (txt: s
         let celldata: typeof sheet.celldata | null = null;
         for (let i = 0; i < sheet.celldata.length; i += 1) {
             const entry = sheet.celldata[i];
-            if (!entry.v?.f) continue;
+            if (!isFormula(entry.v?.f)) continue;
             const f = rewrite(entry.v.f);
             if (f === entry.v.f) continue;
             celldata ??= [...sheet.celldata];

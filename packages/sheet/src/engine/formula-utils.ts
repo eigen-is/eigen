@@ -7,6 +7,11 @@ import { columnLabelToIndex, REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from 
 import { SHEET_NAME_PREFIX, unquoteSheetName } from './parser/helper/cell';
 import type { FormulaDependency } from './types';
 
+// The one test of a formula, since a peer's op or a file can leave anything in a cell's `f`.
+export function isFormula(value: unknown): value is string {
+    return typeof value === 'string' && value.length > 1 && value[0] === '=';
+}
+
 // Where a whole column or row ends: Excel's last row and column, whatever a sheet holds today, so growing a grid moves
 // no reference. A reader of cells stops at its sheet's own end.
 export const LAST_ROW = REFERENCE_ROW_COUNT - 1;
