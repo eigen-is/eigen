@@ -16,7 +16,7 @@ import type { Rect } from '../types';
 import { getSheetIndex } from '../utils';
 import { carrySides, getBorderInfoCompute } from './border';
 import { setCellValue } from './cell';
-import { execFunctionGroup, execfunction } from './formula-exec';
+import { execfunction } from './formula-exec';
 import { colLocation, rowLocation, sheetPoint } from './location';
 import { jfrefreshgrid } from './refresh';
 import { normalizeSelection } from './selection';
@@ -1942,7 +1942,6 @@ export function updateDropCell(ctx: Context) {
                 const offset = pos - srcAxis;
                 const f = `=${functionCopy(cell.f, axisIsRow ? offset : 0, axisIsRow ? 0 : offset)}`;
                 const [, value, filledF] = execfunction(ctx, f, row, col, { resolver });
-                execFunctionGroup(ctx, row, col, value);
                 setCellValue(ctx, row, col, d, { v: value, f: filledF });
             }
 

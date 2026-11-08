@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from 'bun:test';
 import type { Context } from '../../../state/context';
-import { jfrefreshgrid } from '../../../state/modules/refresh';
+import { recomputeCells } from '../../../state/modules/refresh';
 import { deleteSelectedCellText, selectAll } from '../../../state/modules/selection';
 import type { Cell } from '../../../state/types';
 import { contextFactory } from '../factories/context';
@@ -21,7 +21,7 @@ function tallSheetData() {
     );
 }
 
-describe('jfrefreshgrid across a multi-sheet calc chain', () => {
+describe('a delete across a multi-sheet calc chain', () => {
     it('does not crash when another sheet has a formula beyond the active sheet bounds', () => {
         const ctx = contextFactory({
             currentSheetId: 'id_1',
@@ -49,9 +49,9 @@ describe('jfrefreshgrid across a multi-sheet calc chain', () => {
 
         // Mirror the keyboard handler: ctrl-a, delete, then refresh the grid.
         selectAll(ctx);
-        deleteSelectedCellText(ctx);
+        const changed = deleteSelectedCellText(ctx);
 
-        expect(() => jfrefreshgrid(ctx, null, undefined)).not.toThrow();
+        expect(() => recomputeCells(ctx, changed)).not.toThrow();
 
         // The other sheet's formula must still be resolved against *its own*
         // data, not silently dropped.
@@ -74,17 +74,15 @@ describe('delete refreshes only the cells it actually changed', () => {
             sheets: [{ name: 'active', id: 'id_1', order: 0, data, calcChain: [{ r: 0, c: 2, id: 'id_1' }] }],
         }) as Context;
 
-        deleteSelectedCellText(ctx);
+        const changed = deleteSelectedCellText(ctx);
 
         // 1000 cells were selected, but only A1 had content — that's all we track.
-        expect(ctx.formulaCache.pendingChangedCells).toEqual([{ r: 0, c: 0, id: 'id_1' }]);
+        expect(changed).toEqual([{ r: 0, c: 0, id: 'id_1' }]);
 
         // Same call the keyboard handler makes after a delete.
-        jfrefreshgrid(ctx, null, undefined);
+        recomputeCells(ctx, changed);
 
         // C1 (=A1*2) lives outside the deleted column yet must recompute to 0.
-        const c1 = ctx.groupValuesRefreshData.find((e) => e.r === 0 && e.c === 2 && e.id === 'id_1');
-        expect(c1).toBeDefined();
-        expect(c1?.v).toBe(0);
+        expect(ctx.sheets[0].data?.[0][2]?.v).toBe(0);
     });
 });

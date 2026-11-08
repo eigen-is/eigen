@@ -13,9 +13,8 @@ import { applyBorder, clearSides } from './border';
 import { getRangetxt, isAllSelectedCellsInStatus, setCellValue } from './cell';
 import { openCellEditor } from './cell-editor';
 import { rangeColor } from './color';
-import { setFormulaCellInfo } from './formula-cache';
 import { israngeseleciton } from './formula-editor';
-import { execFunctionGroup, execfunction } from './formula-exec';
+import { execfunction } from './formula-exec';
 import { createFormulaRangeSelect, rangeSetValue } from './formula-range';
 import { showLinkCard } from './hyperlink';
 import {
@@ -26,6 +25,7 @@ import {
 } from './inline-string';
 import { colLocationByIndex, rowLocationByIndex } from './location';
 import { mergeCells } from './merge';
+import { recomputeCells } from './refresh';
 import { selectIsOverlap } from './selection';
 
 import { getCellTextInfo, measuringContext } from './text';
@@ -338,12 +338,7 @@ function backFormulaInput(
     const v = execfunction(ctx, f, r, c);
     const value = { v: v[1], f: v[2] };
     setCellValue(ctx, r, c, d, value);
-    ctx.formulaCache.execFunctionExist ||= [];
-    ctx.formulaCache.execFunctionExist.push({
-        r,
-        c,
-        id: ctx.currentSheetId,
-    });
+    recomputeCells(ctx, [{ r, c, id: ctx.currentSheetId }], d);
 }
 
 function singleFormulaInput(
@@ -357,21 +352,9 @@ function singleFormulaInput(
     ed_m: number,
     formula: string,
     type: string,
-    noNum?: boolean,
-    noNull?: boolean,
+    noNum = true,
+    noNull = true,
 ) {
-    if (type == null) {
-        type = 'r';
-    }
-
-    if (noNum == null) {
-        noNum = true;
-    }
-
-    if (noNull == null) {
-        noNull = true;
-    }
-
     let isNull = true;
     let isNum = false;
 
@@ -432,7 +415,7 @@ function singleFormulaInput(
                 }
             }
         }
-        return false;
+        return;
     }
     if (isNum && noNum) {
         let cell = null;
@@ -463,9 +446,7 @@ function singleFormulaInput(
                     len = d[0].length;
                 }
 
-                if (c >= len) {
-                    return false;
-                }
+                if (c >= len) return;
 
                 if (type === 'c') {
                     cell = d[c][fix];
@@ -486,9 +467,7 @@ function singleFormulaInput(
                 backFormulaInput(d, fix, ed_m + 1, [fix, fix], [st_m, ed_m], formula, ctx);
             }
         }
-        return false;
     }
-    return true;
 }
 
 export function autoSelectionFormula(
@@ -500,8 +479,6 @@ export function autoSelectionFormula(
     if (ctx.allowEdit === false) return;
     const flowdata = getFlowdata(ctx);
     if (flowdata == null) return;
-    let isfalse = true;
-    ctx.formulaCache.execFunctionExist = [];
 
     function execFormulaInput_c(
         d: CellMatrix,
@@ -535,8 +512,8 @@ export function autoSelectionFormula(
     forEach(ctx.selections, (selection) => {
         const [st_r, ed_r] = selection.row;
         const [st_c, ed_c] = selection.column;
-        const row_index = selection.row_focus;
-        const col_index = selection.column_focus;
+        const row_index = selection.row_focus ?? st_r;
+        const col_index = selection.column_focus ?? st_c;
 
         if (st_r === ed_r && st_c === ed_c) {
             if (ed_r - 1 < 0 && ed_c - 1 < 0) {
@@ -552,63 +529,44 @@ export function autoSelectionFormula(
                 execFormulaInput(flowdata, st_r, ed_r, st_c, ed_c, formula);
             }
         } else if (st_r === ed_r) {
-            isfalse = singleFormulaInput(cellInput, fxInput, ctx, flowdata, col_index!, st_r, st_c, ed_c, formula, 'r');
+            singleFormulaInput(cellInput, fxInput, ctx, flowdata, col_index, st_r, st_c, ed_c, formula, 'r');
         } else if (st_c === ed_c) {
-            isfalse = singleFormulaInput(cellInput, fxInput, ctx, flowdata, row_index!, st_c, st_r, ed_r, formula, 'c');
+            singleFormulaInput(cellInput, fxInput, ctx, flowdata, row_index, st_c, st_r, ed_r, formula, 'c');
         } else {
-            let r_false = true;
             for (let r = st_r; r <= ed_r; r += 1) {
-                r_false =
-                    singleFormulaInput(
-                        cellInput,
-                        fxInput,
-                        ctx,
-                        flowdata,
-                        col_index!,
-                        r,
-                        st_c,
-                        ed_c,
-                        formula,
-                        'r',
-                        true,
-                        false,
-                    ) && r_false;
+                singleFormulaInput(
+                    cellInput,
+                    fxInput,
+                    ctx,
+                    flowdata,
+                    col_index,
+                    r,
+                    st_c,
+                    ed_c,
+                    formula,
+                    'r',
+                    true,
+                    false,
+                );
             }
-
-            let c_false = true;
             for (let c = st_c; c <= ed_c; c += 1) {
-                c_false =
-                    singleFormulaInput(
-                        cellInput,
-                        fxInput,
-                        ctx,
-                        flowdata,
-                        row_index!,
-                        c,
-                        st_r,
-                        ed_r,
-                        formula,
-                        'c',
-                        true,
-                        false,
-                    ) && c_false;
+                singleFormulaInput(
+                    cellInput,
+                    fxInput,
+                    ctx,
+                    flowdata,
+                    row_index,
+                    c,
+                    st_r,
+                    ed_r,
+                    formula,
+                    'c',
+                    true,
+                    false,
+                );
             }
-
-            isfalse = !!r_false && !!c_false;
         }
-
-        isfalse = isfalse && isfalse;
     });
-
-    if (!isfalse) {
-        ctx.formulaCache.execFunctionExist.reverse();
-        for (const formulaCell of ctx.formulaCache.execFunctionExist) {
-            setFormulaCellInfo(ctx, { r: formulaCell.r, c: formulaCell.c, id: ctx.currentSheetId }, flowdata);
-        }
-
-        execFunctionGroup(ctx, null, null, null, null, flowdata);
-        ctx.formulaCache.execFunctionGlobalData = null;
-    }
 }
 
 export function cancelPaintModel(ctx: Context) {

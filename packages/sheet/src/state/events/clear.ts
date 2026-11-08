@@ -2,7 +2,7 @@
 
 import type { Context } from '../context';
 import { deleteActiveObject } from '../modules/floating';
-import { jfrefreshgrid } from '../modules/refresh';
+import { recomputeCells } from '../modules/refresh';
 import { deleteSelectedCellText } from '../modules/selection';
 
 export function clearSelectedContents(ctx: Context) {
@@ -10,7 +10,6 @@ export function clearSelectedContents(ctx: Context) {
     if (ctx.activeObject) {
         deleteActiveObject(ctx);
     } else {
-        deleteSelectedCellText(ctx);
+        recomputeCells(ctx, deleteSelectedCellText(ctx));
     }
-    jfrefreshgrid(ctx, null, undefined);
 }

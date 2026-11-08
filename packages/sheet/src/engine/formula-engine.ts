@@ -1,6 +1,5 @@
 // The formula engine the editor and the server's recalc share. It owns one Parser, answers its cell and range reads
-// from a computed value in execFunctionGlobalData first and the CellResolver after, and turns each result into a cell
-// value, a display string and a type. An error a cell holds reads back as an error, so ISERROR and IFERROR see it.
+// from the CellResolver, and turns each result into a cell value, a display string and a type. An error a cell holds reads back as an error, so ISERROR and IFERROR see it.
 // Every range read is clamped to the sheet's grid and counted against maxCellsRead.
 
 import { DependencyIndex } from './dependency-index';
@@ -71,7 +70,6 @@ export class FormulaEngine {
     public constructor({ maxCellsRead = Number.POSITIVE_INFINITY } = {}) {
         this.maxCellsRead = maxCellsRead;
         this.state = {
-            execFunctionGlobalData: {},
             formulaCellInfoMap: null,
             dependencyIndex: new DependencyIndex(),
         };
@@ -187,8 +185,7 @@ export class FormulaEngine {
     }
 
     private readValue(sheetId: string, row: number, col: number, resolver: CellResolver): FormulaValue {
-        const computed = this.state.execFunctionGlobalData[`${row}_${col}_${sheetId}`];
-        return getCellValue(computed ?? resolver.getCell(sheetId, row, col));
+        return getCellValue(resolver.getCell(sheetId, row, col));
     }
 
     // The number of columns a sheet has: its widest row's, as a stored matrix may lack rows, its first among them.

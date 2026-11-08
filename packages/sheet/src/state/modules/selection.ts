@@ -1205,23 +1205,21 @@ export function copy(ctx: Context, { cut = false }: { cut?: boolean } = {}) {
     setPendingCopy(clipboard.html, clipboard.text, clipboard.cellText);
 }
 
-export function deleteSelectedCellText(ctx: Context) {
-    // Record the cells we actually clear so the formula refresh recomputes only
-    // those, not every cell in the selection (which is the whole matrix for
-    // select-all). Reset up front so an aborted delete never leaves a stale set.
+// Returns the cells it cleared, for the recompute to name: every cell of a select-all would make clearing a large and
+// mostly empty selection slow.
+export function deleteSelectedCellText(ctx: Context): CalcChainEntry[] {
     const changed: CalcChainEntry[] = [];
-    ctx.formulaCache.pendingChangedCells = changed;
 
     const selection = ctx.selections;
     if (selection && !isEmpty(selection)) {
         const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
         const data = sheetIndex == null ? undefined : ctx.sheets[sheetIndex].data;
-        if (sheetIndex == null || !data) return;
+        if (sheetIndex == null || !data) return changed;
 
         for (const { row, column } of selection) {
             if (hasPartMC(ctx, row[0], row[1], column[0], column[1])) {
                 ctx.warnDialog = 'Cannot perform this operation on partially merged cells';
-                return;
+                return changed;
             }
         }
 
@@ -1255,6 +1253,7 @@ export function deleteSelectedCellText(ctx: Context) {
             }
         }
     }
+    return changed;
 }
 
 export function selectIsOverlap(ctx: Context, range?: Range) {

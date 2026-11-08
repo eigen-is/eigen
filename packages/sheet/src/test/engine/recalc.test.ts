@@ -181,7 +181,7 @@ describe('engine/recalc — recalcSheets', () => {
 
     test('downstream formula reads the cached value, not the engine error', () => {
         // B1 is an unsupported function with a cached 7; =B1+1 must see 7 → 8,
-        // proving the #NAME? never entered the eval cache (execFunctionGlobalData).
+        // proving the #NAME? never reached the formulas downstream.
         const sheets = [
             sheet('s1', 'Sheet1', [
                 [null, formula('=FILTER(1,2)', { v: 7, m: '7', ct: { fa: 'General', t: 'n' } }), formula('=B1+1')],

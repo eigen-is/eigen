@@ -8,19 +8,11 @@ import { findSheetByName } from '../../engine/a1-notation';
 import type { DependencyIndex } from '../../engine/dependency-index';
 import { FormulaEngine } from '../../engine/formula-engine';
 import { extractDependencies } from '../../engine/recalc';
-import type {
-    CalcChainEntry,
-    Cell,
-    CellMatrix,
-    CellResolver,
-    FormulaCellInfo,
-    FormulaCellInfoMap,
-    FormulaDependency,
-} from '../../engine/types';
+import type { Cell, CellMatrix, FormulaCellInfoMap, FormulaDependency } from '../../engine/types';
 import type { Context } from '../context';
 import type { FormulaCell, History, Selection } from '../types';
 import { getcellFormula } from './cell';
-import { execfunction, warmFormulaCellInfoMap } from './formula-exec';
+import { warmFormulaCellInfoMap } from './formula-exec';
 
 // The formula editor's hint and range state, which several modules of the formula editor share. It sits in an object,
 // so a write in one module is seen by the others.
@@ -46,9 +38,8 @@ export function resetRangeIndexes() {
 }
 
 // A plain copy of the context, not an immer draft. Evaluation reads cells one at a time. Each read through a draft is
-// several times slower, and it makes child drafts that immer must walk when the recipe ends. A pass in dependency order
-// resolves over this copy, because the values it computes reach the next formula through execFunctionGlobalData. A
-// sweep that writes between evaluations, such as a paste's, resolves over the live sheets.
+// several times slower, and it makes child drafts that immer must walk when the recipe ends. A sweep that writes between
+// evaluations, such as a paste's, resolves over the live sheets instead.
 export function snapshotContext(ctx: Context): Context {
     return isDraft(ctx) ? current(ctx) : ctx;
 }
@@ -83,12 +74,6 @@ export class FormulaCache {
 
     public functionlistMap: Record<string, unknown>;
 
-    public execFunctionExist?: CalcChainEntry[];
-
-    // The cells an edit changed, which deleteSelectedCellText sets. runExecFunction then recomputes only these, not
-    // every cell of the selection, so clearing a large and mostly empty selection stays cheap.
-    public pendingChangedCells?: CalcChainEntry[];
-
     public engine: FormulaEngine;
 
     public constructor() {
@@ -96,15 +81,6 @@ export class FormulaCache {
         this.functionlistMap = {};
         this.cellTextToIndexList = {};
         this.engine = new FormulaEngine();
-    }
-
-    // The engine keeps these, so the editor and the server read one cache.
-    public get execFunctionGlobalData(): Record<string, Cell> {
-        return this.engine.state.execFunctionGlobalData;
-    }
-
-    public set execFunctionGlobalData(v: Record<string, Cell> | null | undefined) {
-        this.engine.state.execFunctionGlobalData = v ?? {};
     }
 
     public get formulaCellInfoMap(): FormulaCellInfoMap | null {
@@ -215,41 +191,4 @@ export function registerSheetFormulas(ctx: Context, id: string, data: CellMatrix
             if (data[r][c]?.f != null) setFormulaCellInfo(ctx, { r, c, id }, data, id);
         }
     }
-}
-
-export function executeAffectedFormulas(
-    ctx: Context,
-    formulaRunList: FormulaCellInfo[],
-    calcChains: FormulaCell[],
-    resolver: CellResolver,
-) {
-    const calcChainSet = new Set(calcChains.map((item) => `${item.r}_${item.c}_${item.id}`));
-
-    // The results are collected here and assigned once. ctx is usually an immer draft, and each push through it would
-    // record a patch.
-    const refreshed: Context['groupValuesRefreshData'] = [];
-
-    for (const formulaCell of formulaRunList) {
-        const v = execfunction(ctx, formulaCell.formula, formulaCell.r, formulaCell.c, {
-            id: formulaCell.id,
-            calcChainSet,
-            resolver,
-        });
-
-        refreshed.push({
-            r: formulaCell.r,
-            c: formulaCell.c,
-            v: v[1],
-            f: v[2],
-            id: formulaCell.id,
-        });
-
-        ctx.formulaCache.execFunctionGlobalData[`${formulaCell.r}_${formulaCell.c}_${formulaCell.id}`] = {
-            v: v[1],
-            f: v[2],
-        };
-    }
-
-    ctx.groupValuesRefreshData =
-        ctx.groupValuesRefreshData.length > 0 ? ctx.groupValuesRefreshData.concat(refreshed) : refreshed;
 }

@@ -69,7 +69,7 @@ export function sortDataRange(
                 if (moveOffset !== 0) {
                     func = `=${functionCopy(func, moveOffset, 0)}`;
                 }
-                const funcV = execfunction(ctx, func, r, c, { isrefresh: true, resolver });
+                const funcV = execfunction(ctx, func, r, c, { resolver });
                 [, cell.v, cell.f] = funcV;
                 cell.m = numberDisplay(cell.v, cell.ct?.fa);
             }

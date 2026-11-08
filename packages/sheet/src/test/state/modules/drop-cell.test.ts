@@ -17,7 +17,7 @@ import {
     onDropCellSelectEnd,
     updateDropCell,
 } from '../../../state/modules/drop-cell';
-import { execFunctionGroup, groupValuesRefresh, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
+import { execFunctionGroup, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import { normalizeSelection } from '../../../state/modules/selection';
 import { validationAt } from '../../../state/modules/validation-rules';
 import type { Cell, DataValidationRule, SingleRange } from '../../../state/types';
@@ -433,9 +433,8 @@ describe('a filled formula', () => {
         warmFormulaCellInfoMap(ctx);
 
         autoFillCell(ctx, src, { row: [1, 2], column: [1, 1] }, 'down');
-        execFunctionGroup(ctx, 2, 0, 10, 'id_1');
         setCellValue(ctx, 2, 0, ctx.sheets[0].data, 10);
-        groupValuesRefresh(ctx);
+        execFunctionGroup(ctx, [{ r: 2, c: 0, id: 'id_1' }]);
 
         expect(ctx.sheets[0].data![2][1]?.v).toBe(20);
     });

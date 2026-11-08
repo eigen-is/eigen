@@ -4,7 +4,7 @@
 // extractDependencies, the walk that finds the cells a formula reads, builds the editor's formula map too.
 
 import type { Cell, CellMatrix, Sheet } from '@workspace/lib/sheets';
-import { createArrayResolver } from './cell-resolver';
+import { createArrayResolver, withComputedValues } from './cell-resolver';
 import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
 import { getCalculationOrder } from './dependency-graph';
@@ -156,11 +156,12 @@ export function recalcSheets(
     // 5. Order them. A cycle neither throws nor hangs.
     const order = getCalculationOrder(allInfos, infoMap);
 
-    // 6. Evaluate in order. A computed value reaches the formulas downstream through the engine's
-    //    execFunctionGlobalData, which it reads before the resolver, and the resolver reads the matrices the pass writes.
-    //    Volatiles keep their value. Each cell is guarded, so one poisoned formula never stops the pass.
+    // 6. Evaluate in order. A computed value reaches the formulas downstream through `computed`, which the resolver reads
+    //    before the matrices the pass writes, so they read the value without the type the cell keeps. Volatiles keep their
+    //    value. Each cell is guarded, so one poisoned formula never stops the pass.
     const engine = new FormulaEngine({ maxCellsRead });
-    const resolver = createArrayResolver(working);
+    const computed = new Map<string, Cell>();
+    const resolver = withComputedValues(createArrayResolver(working), computed);
     // A read past the budget fails its formula, which the pass would carry on past: it stops at the next.
     const overRead = () => {
         if (engine.cellsRead > maxCellsRead) throw new RangeError('Formula ranges read past the cell budget');
@@ -176,11 +177,11 @@ export function recalcSheets(
             if (existing == null) continue;
             // Our result is unreliable when it is an error, or when the formula uses a name the engine can't resolve.
             // It never overwrites a cached value that is no error, because that value is Excel's. A function Excel has
-            // and the engine lacks is such an error, even inside IFERROR. Skipping the execFunctionGlobalData seed too
-            // makes the formulas downstream read the cached value. A cell with no cached value still shows the error.
+            // and the engine lacks is such an error, even inside IFERROR. Leaving it out of `computed` too makes the formulas
+            // downstream read the cached value. A cell with no cached value still shows the error.
             const unreliable = () => result.type === 'error' || usesUnknownName(engine, info.formula);
             if (hasNonErrorCachedValue(existing) && unreliable()) continue;
-            engine.state.execFunctionGlobalData[`${info.r}_${info.c}_${info.id}`] = { v: result.value };
+            computed.set(`${info.r}_${info.c}_${info.id}`, { v: result.value });
             // The matrix may hold the input snapshot's frozen cells, so write a copy.
             const cell: Cell = { ...existing };
             writeCellValue(cell, result);

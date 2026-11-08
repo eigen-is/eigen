@@ -8,7 +8,7 @@ import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../../../en
 import { copySheet, getAllSheets, seedCalcChain, setSheetOrder } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { setCellValue } from '../../../state/modules/cell';
-import { execFunctionGroup, groupValuesRefresh, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
+import { execFunctionGroup, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import { addSheet, deleteSheet } from '../../../state/modules/sheet';
 import type { Sheet } from '../../../state/types';
 import { filterPatch, patchToOp } from '../../../state/utils/patch';
@@ -167,8 +167,7 @@ describe('sheet/core/api/sheet', () => {
         const copyId = copied.sheets[1].id ?? '';
         const edited = produce(copied, (draft: Context) => {
             setCellValue(draft, 0, 0, draft.sheets[1].data, 5);
-            execFunctionGroup(draft, 0, 0, null, copyId, draft.sheets[1].data);
-            groupValuesRefresh(draft);
+            execFunctionGroup(draft, [{ r: 0, c: 0, id: copyId }]);
         });
         expect(edited.sheets[1].data?.[0]?.[1]?.v).toBe(5);
         expect(edited.sheets[0].data?.[0]?.[1]?.v).toBe(1);
