@@ -31,7 +31,7 @@ import { ensureServer, TEST_DATA_DIR } from '../setup';
 
 // What the server does before it serves its first request: clear the staging folder a killed job
 // left behind, and put back the home folder of a restore that died between the move-aside and the
-// install. Both run at module scope in server.ts, so neither may throw and neither may create a
+// install. Both run at module scope in server.ts, so neither may stop the boot and neither may create a
 // folder the deployment did not ask for — in the container the backups path is a bind mount the
 // API runs as an unprivileged user next to.
 describe('Backup boot', () => {
@@ -104,6 +104,39 @@ describe('Backup boot', () => {
             if (previous === undefined) delete process.env['EIGEN_BACKUPS_DIR'];
             else process.env['EIGEN_BACKUPS_DIR'] = previous;
             rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    // A backups/ whose mount is down, or a .staging that cannot be emptied, must not keep the API from starting.
+    test('a staging wipe that throws leaves the boot going, and says so', async () => {
+        const rm = nodeFs.rmSync;
+        const rmSpy = spyOn(nodeFs, 'rmSync').mockImplementation((target, options) => {
+            if (String(target).endsWith('.staging')) {
+                throw Object.assign(new Error('directory not empty'), { code: 'ENOTEMPTY' });
+            }
+            rm(target, options);
+        });
+        const logged = spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            await recoverBackupsAfterRestart();
+            expect(logged.mock.calls.flat().join('\n')).toContain('directory not empty');
+        } finally {
+            rmSpy.mockRestore();
+            logged.mockRestore();
+        }
+    });
+
+    test('a homes folder that does not read leaves the boot going, and says so', async () => {
+        const readSpy = spyOn(nodeFs, 'readdirSync').mockImplementation(() => {
+            throw Object.assign(new Error('permission denied'), { code: 'EACCES' });
+        });
+        const logged = spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            await recoverBackupsAfterRestart();
+            expect(logged.mock.calls.flat().join('\n')).toContain('permission denied');
+        } finally {
+            readSpy.mockRestore();
+            logged.mockRestore();
         }
     });
 

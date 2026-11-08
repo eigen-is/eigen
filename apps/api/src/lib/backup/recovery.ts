@@ -28,13 +28,16 @@ type RestoringMarker = { ownerId: string; homeDir: string; preRestoreName: strin
 // Before the server listens: a request that resolved a home while the recovery was still deciding about it would
 // open a half-written folder as if it were the home. Then the staging folder in backups/ is cleared, because a backup
 // or verify cut off by a restart leaves a half-written folder that nothing resumes. Last, a server backup killed
-// mid-run left its record running, and it becomes a failed attempt.
+// mid-run left its record running, and it becomes a failed attempt. A step that throws, such as on a backups folder
+// whose mount is down, leaves the rest to the next boot: scratch space is no reason to keep the API down.
 export async function recoverBackupsAfterRestart(): Promise<void> {
-    recoverInterruptedRestores();
-    wipeBackupStaging();
-    await recoverInterruptedServerBackups().catch((error) =>
-        console.error('[backup] recovering server records:', error),
-    );
+    try {
+        recoverInterruptedRestores();
+        wipeBackupStaging();
+        await recoverInterruptedServerBackups();
+    } catch (error) {
+        console.error('[backup] the recovery stopped, the next boot tries again:', error);
+    }
 }
 
 // The notes go in the folder the restore staged beside the home, on the home's own disk, so a boot that finds the
@@ -69,7 +72,8 @@ export function recoverInterruptedRestores(): void {
             if (!isRestoreStagingName(name)) continue;
             const restoreDir = path.join(homesDir, name);
             if (!recoverRestore(restoreDir, homesDir)) continue;
-            // A throw here would stop every boot. The folder is acted on again by the next one, which changes nothing.
+            // A throw here would leave the other homes' notes unread. The next boot acts on the folder again, which
+            // changes nothing.
             try {
                 dropRestoringMarker(restoreDir);
                 fs.rmSync(restoreDir, { recursive: true, force: true });
@@ -82,8 +86,8 @@ export function recoverInterruptedRestores(): void {
     }
 }
 
-// Returns false when a move failed: a throw would stop every boot, so the notes stay for the next one and the home
-// stays shut until then.
+// Returns false when a move failed. The notes stay for the next boot, the home stays shut until then, and the other
+// homes still recover.
 function recoverRestore(restoreDir: string, homesDir: string): boolean {
     const marker = readRestoringMarker(path.join(restoreDir, RESTORING_MARKER));
     const homeDir = marker && homeBesideNotes(homesDir, marker);
@@ -124,7 +128,7 @@ function dropRestoringMarker(restoreDir: string): void {
 }
 
 // The mark a restore holds while it moves the home. It throws on a home marked already, such as by another of its
-// notes, and a throw here would stop the server from starting.
+// notes, and a throw here would leave the other homes' notes unread.
 function keepHomeShut(ownerId: string): void {
     try {
         markHomeRestoring(ownerId);
