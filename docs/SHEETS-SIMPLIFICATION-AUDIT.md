@@ -10,7 +10,17 @@ Like ROADMAP and the proposals, this doc holds only open work: strike a finding 
 - The goal is cleaner and simpler code. A product loss that removes a whole mechanism is welcome; there is no backward compatibility to keep, stored formats included.
 - [U2](#u2) is accepted: once another user edits, your own row, column or sheet insert or delete can no longer be undone. Pick the simplest cut rule that removes the machinery; a peer batch on that sheet, or any peer batch, are both fine. U1 is folded into U2, and U3 (the alternative if U2 were declined) is ruled out.
 - A tab rename rewrites the formulas that name the tab, as Excel does ([E9](#e9)).
-- The other product calls are listed in [§ Run plan](#run-plan) with a recommendation each, for the owner to rule on in one batch.
+- The batch of product calls, all as recommended:
+  - [D2](#d2) yes: sort moves borders, links and validation with their rows, fill copies links, and a paste adds no duplicate rule.
+  - [D4](#d4) yes: fill drops Chinese numeral and weekday series and the geometric guess.
+  - [D8](#d8) yes: a cut over filter-hidden rows, and a copy whose merge straddles one, get a notice.
+  - [E2](#e2) yes: the import recalcs once, with no `computed` flag and no export recalc.
+  - [F3](#f3) yes: past the validation cap the rule stops extending and the edit goes through.
+  - [F4](#f4) yes: sheet charts store their parts as Canvas and Docs do, and concurrent restyles of one part are last write wins.
+  - [F6](#f6) yes: chart code stops carrying keys a newer build might store.
+  - [F7](#f7) yes, after checking what Google does: pie slice colours stay at their index. If Google follows the rows, it comes back to the owner.
+  - [F8](#f8) yes, last in Wave 2: a tick box draws its box alone, and corner marks don't outrank the handles.
+  - [S4](#s4) skipped: [S9](#s9) removes the base and the remount.
 
 ## Where the piles come from
 
@@ -469,21 +479,9 @@ Wave 2 (cross-cutting, after the lanes they depend on merged): [E1](#e1) then [E
 
 Wave 3, the redesigns, in [§ If we built it today](#if-we-built-it-today)'s order. Each is sized again at its Step 0 and shown to the owner before it is built: [S10](#s10) with [D9](#d9), [S9](#s9) (which supersedes [S4](#s4)), [D10](#d10), [F9](#f9), [E7](#e7) and [E8](#e8), [R9](#r9) with [R10](#r10), [F10](#f10) (touches Docs and Canvas: tell the other session), [U6](#u6) only if still worth it after U2. [U7](#u7) stays parked in ROADMAP-POST-1.
 
-**Product calls for the owner, in one batch at the start**, each with the recommendation:
-
-| # | Call | Recommendation |
-|---|---|---|
-| [D2](#d2) | Sort moves borders, links and validation with their rows; fill copies links; no duplicate rule per paste | Yes, it is Excel's behaviour and fixes a bug |
-| [D4](#d4) | Fill drops Chinese numeral and weekday series and the geometric guess | Yes, about 850 lines |
-| [D8](#d8) | A cut over filter-hidden rows, and a copy whose merge straddles one, get a notice | Yes |
-| [E2](#e2) | The import recalcs once; no `computed` flag, no export recalc | Yes |
-| [F3](#f3) | Past the validation cap the rule stops extending instead of the edit being refused | Yes |
-| [F4](#f4) | Sheet charts store their parts as Canvas and Docs do; concurrent restyles of one chart: last write wins | Yes |
-| [F6](#f6) | Chart code stops carrying keys a newer build might store | Yes, the mirror of the no-compatibility ruling |
-| [F7](#f7) | Pie slice colours stay at their index through row ops | Yes, after checking what Google does |
-| [F8](#f8) | Tick box draws its box alone; corner marks don't outrank the handles | Yes, low payoff, last |
-| [S4](#s4) | A tab keeps no grid through a compaction; loses undo, keeps its view | Skip; [S9](#s9) removes the base and the remount |
-
 **Talking to the other session.** Another session works on other parts of Eigen in the main checkout. At the start and before each wave, list the other sessions (`ListAgents`) and send each one message: the branch, the worktree path, the paths this run owns (`packages/sheet`, `apps/sheets`, `packages/lib/src/sheets`, the sheets files under `apps/api/src/lib/document`, `export/sheets` and `import/sheets`, the sheets parts of `apps/api/src/lib/collab/collab-document.ts`), and the shared paths it will touch next. Ask for its own. Before changing a shared path (`packages/lib/src/charts`, `packages/lib/src/core`, `packages/ui`, `apps/docs`, the collab store, CODE-STANDARDS, ROADMAP, README), message first and wait for an answer. The API audit's [T2](API-SIMPLIFICATION-AUDIT.md#t2) is the server half of S4 and S9, so this run takes it and says so. Announce each merge to `develop`. Never push, and never merge to `develop`, without the owner's go.
 
-**Run state.** Not started. This section is the resume point: the orchestrator records here what merged, what was ruled out and why, and what comes next.
+**Run state.** Started 2026-11-08 on `sheets-audit` in the worktree `eigen-sheets`, cut from `develop` at `d55da56c1`. This section is the resume point: what merged, what was ruled out and why, and what comes next.
+
+- This run also takes the API audit's T2 and X2 (the other session agreed). Don't edit `API-SIMPLIFICATION-AUDIT.md` on this branch, because that session keeps editing it: tell it when T2 or X2 lands, and it strikes them. Its X2 ruling: a flat cap, the runner's deadline and its memory limit, and a timeout or out-of-memory is an accepted outcome. X2 joins Wave 2.
+- Wave 1 is running. Merged: nothing yet. Running: S1, U2, E9, D3, R4. F1 starts when a slot frees.
