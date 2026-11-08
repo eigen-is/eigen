@@ -114,15 +114,12 @@ export function recalcSheets(
                 const key = `r${r}c${c}i${w.id}`;
                 const deps = extractDependencies(walk, f, w.id, w.data);
                 infoMap[key] = {
-                    formulaDependency: deps,
-                    calc_funcStr: f,
+                    formula: f,
                     key,
                     r,
                     c,
                     id: w.id,
-                    parents: {},
-                    children: {},
-                    color: 'w',
+                    dependents: [],
                 };
                 const indexed = deps.flatMap((dep) => withinSheet(dep, extents) ?? []);
                 slots += dependencySlots(indexed, extentOf);
@@ -153,12 +150,8 @@ export function recalcSheets(
         if (edges > maxDependencyEdges) throw new RangeError('Formula references past the edge budget');
     }
 
-    // 4. Link each formula to the formulas that read its cell: parents[key] means the formula at key reads this one.
-    for (const info of allInfos) {
-        for (const depKey of depIndex.dependentsOf(info.id, info.r, info.c)) {
-            info.parents[depKey] = 1;
-        }
-    }
+    // 4. Link each formula to the formulas that read its cell.
+    for (const info of allInfos) info.dependents = depIndex.dependentsOf(info.id, info.r, info.c);
 
     // 5. Order them. A cycle neither throws nor hangs.
     const order = getCalculationOrder(allInfos, infoMap);
@@ -167,18 +160,16 @@ export function recalcSheets(
     //    execFunctionGlobalData, which it reads before the resolver, and the resolver reads the matrices the pass writes.
     //    Volatiles keep their value. Each cell is guarded, so one poisoned formula never stops the pass.
     const engine = new FormulaEngine({ maxCellsRead });
-    const resolver = createArrayResolver(
-        working.map((w) => ({ id: w.id, name: w.name, data: w.data, calculationChain: [], dynamicArrayCompute: [] })),
-    );
+    const resolver = createArrayResolver(working);
     // A read past the budget fails its formula, which the pass would carry on past: it stops at the next.
     const overRead = () => {
         if (engine.cellsRead > maxCellsRead) throw new RangeError('Formula ranges read past the cell budget');
     };
     for (const info of order) {
         overRead();
-        if (VOLATILE_RE.test(info.calc_funcStr)) continue;
+        if (VOLATILE_RE.test(info.formula)) continue;
         try {
-            const result = engine.evaluate(info.calc_funcStr, info.id, resolver);
+            const result = engine.evaluate(info.formula, info.id, resolver);
             const rowArr = byId.get(info.id)?.data[info.r];
             if (!rowArr) continue;
             const existing = rowArr[info.c];
@@ -187,7 +178,7 @@ export function recalcSheets(
             // It never overwrites a cached value that is no error, because that value is Excel's. A function Excel has
             // and the engine lacks is such an error, even inside IFERROR. Skipping the execFunctionGlobalData seed too
             // makes the formulas downstream read the cached value. A cell with no cached value still shows the error.
-            const unreliable = () => result.type === 'error' || usesUnknownName(engine, info.calc_funcStr);
+            const unreliable = () => result.type === 'error' || usesUnknownName(engine, info.formula);
             if (hasNonErrorCachedValue(existing) && unreliable()) continue;
             engine.state.execFunctionGlobalData[`${info.r}_${info.c}_${info.id}`] = { v: result.value };
             // The matrix may hold the input snapshot's frozen cells, so write a copy.

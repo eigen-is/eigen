@@ -9,6 +9,7 @@ import { parseCellKey } from '@workspace/lib/sheets';
 import { get, isEqual } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import { applyPatches, produce, produceWithPatches } from 'immer';
+import { createArrayResolver } from '../../engine/cell-resolver';
 import { celldataToData } from '../../engine/celldata';
 import { isRowColOp } from '../../engine/replay-ops';
 import type { Cell, CellMatrix } from '../../engine/types';
@@ -31,7 +32,7 @@ import {
 import { applyOpBatch } from './apply-ops';
 import { setCellValue } from './cell';
 import { withoutDeletedFloatingEdits } from './floating';
-import { createContextResolver, snapshotContext } from './formula-cache';
+import { snapshotContext } from './formula-cache';
 import { execFunctionGroup, execfunction, groupValuesRefresh } from './formula-exec';
 import { settleCurrentSheet, shiftSheetOrders } from './sheet';
 
@@ -232,12 +233,12 @@ function recalculate(ctx: Context, patches: Patch[]) {
         if (id != null) cells.set(`${r}_${c}_${id}`, { r, c, id });
     }
     if (cells.size === 0) return;
-    const resolver = createContextResolver(snapshotContext(ctx));
+    const resolver = createArrayResolver(snapshotContext(ctx).sheets);
     for (const { r, c, id } of cells.values()) {
         const data = getFlowdata(ctx, id);
         const f = data?.[r]?.[c]?.f;
         if (!data || f == null) continue;
-        const [, v] = execfunction(ctx, f, r, c, id, undefined, false, true, resolver);
+        const [, v] = execfunction(ctx, f, r, c, { id, notInsertFunc: true, resolver });
         setCellValue(ctx, r, c, data, { v, f });
     }
     ctx.formulaCache.execFunctionExist = [...cells.values()];

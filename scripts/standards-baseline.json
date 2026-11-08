@@ -102,7 +102,6 @@
     "packages/lib/src/core/public/hooks/use-public.ts": 1,
     "packages/lib/src/core/team/hooks/use-team-members.ts": 1,
     "packages/sheet/src/components/ContextMenu/useSheetContextMenu.tsx": 2,
-    "packages/sheet/src/engine/formula-engine.ts": 2,
     "packages/sheet/src/state/events/mouse-cell.ts": 3,
     "packages/sheet/src/state/events/mouse-header.ts": 6,
     "packages/sheet/src/state/modules/toolbar.ts": 5,
@@ -113,7 +112,7 @@
     "packages/ui/src/lib/eigenAppRouter.tsx": 1
   },
   "interface-decls": 2,
-  "biome-ignore": 47,
+  "biome-ignore": 45,
   "jsdoc-blocks": 0,
   "raw-colors": 0,
   "unused-primitive-types": 0

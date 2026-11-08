@@ -402,7 +402,7 @@ describe('execFunctionGroup — references resolved before the sheets changed', 
         expect(ctx.sheets[1].data?.[0][1]?.f).toBe('=Gone!A1');
         expect(ctx.formulaCache.formulaCellInfoMap).toBeNull();
         setFormulaCellInfo(ctx, { r: 0, c: 1, id: 'id_2' });
-        expect(ctx.formulaCache.formulaCellInfoMap?.r0c1iid_2?.formulaDependency).toHaveLength(1);
+        expect(ctx.formulaCache.dependencyIndex.dependentsOf('id_1', 0, 0)).toEqual(['r0c1iid_2']);
     });
 
     it('a sheet name another caller resolved reads no sheet once a peer renames it, before the map is built', () => {

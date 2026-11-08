@@ -1,54 +1,35 @@
+// Orders formula cells so that each comes before the formulas that read it. The editor's recompute and the server's
+// recalc both run the cells they found through it. It is an iterative depth-first walk, because a chain of formulas can
+// be deeper than the call stack, and a reference cycle neither throws nor hangs: its cells come out in visit order.
+
 import type { FormulaCellInfo, FormulaCellInfoMap } from './types';
 
-// Topological sort: returns formula cells in evaluation order (dependencies before dependents).
-// The DFS pushes a node before its parents, so the run list comes out dependents-first and is
-// reversed at the end.
 export function getCalculationOrder(
-    updateValueArray: FormulaCellInfo[],
+    cells: readonly FormulaCellInfo[],
     formulaCellInfoMap: FormulaCellInfoMap,
 ): FormulaCellInfo[] {
-    const formulaRunList: FormulaCellInfo[] = [];
-    const stack = [...updateValueArray];
-    const existsKeys: Record<string, 1> = {};
+    const order: FormulaCellInfo[] = [];
+    const stack = [...cells];
+    const expanded = new Set<string>();
+    const done = new Set<string>();
 
-    while (stack.length > 0) {
-        const formulaObject = stack.pop();
-
-        if (formulaObject == null || formulaObject.key in existsKeys) {
+    for (let node = stack.pop(); node != null; node = stack.pop()) {
+        if (done.has(node.key)) continue;
+        if (expanded.has(node.key)) {
+            done.add(node.key);
+            order.push(node);
             continue;
         }
-
-        if (formulaObject.color === 'b') {
-            // Already visited all parents — finalize this node
-            formulaObject.color = 'w';
-            formulaRunList.push(formulaObject);
-            existsKeys[formulaObject.key] = 1;
-            continue;
-        }
-
-        const parentNodes: FormulaCellInfo[] = [];
-        for (const parentKey of Object.keys(formulaObject.parents)) {
-            const parent = formulaCellInfoMap[parentKey];
-            if (parent != null) {
-                parentNodes.push(parent);
-            }
-        }
-
-        if (parentNodes.length === 0) {
-            formulaRunList.push(formulaObject);
-            existsKeys[formulaObject.key] = 1;
-        } else {
-            // Push self back, then the parents so they resolve first. In-place
-            // pushes, not concat — rebuilding the stack per visit is O(V·E)
-            // and cost 17s of a 21s import on a 125k-formula workbook.
-            formulaObject.color = 'b';
-            stack.push(formulaObject);
-            for (const parentNode of parentNodes) {
-                stack.push(parentNode);
-            }
+        // The node goes back under its dependents, so it comes off the stack after them. The order is built dependents
+        // first and reversed at the end. Pushing in place matters: rebuilding the stack per visit is quadratic.
+        expanded.add(node.key);
+        stack.push(node);
+        for (const key of node.dependents) {
+            const dependent = formulaCellInfoMap[key];
+            if (dependent != null) stack.push(dependent);
         }
     }
 
-    formulaRunList.reverse();
-    return formulaRunList;
+    order.reverse();
+    return order;
 }

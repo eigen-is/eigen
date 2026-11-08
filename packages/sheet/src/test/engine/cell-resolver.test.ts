@@ -17,15 +17,11 @@ const sheets = [
         id: 'sheet1',
         name: 'Sheet1',
         data: sheetData,
-        calculationChain: [{ r: 0, c: 0, id: 'sheet1' }],
-        dynamicArrayCompute: [],
     },
     {
         id: 'sheet2',
         name: 'Sheet2',
         data: null,
-        calculationChain: [],
-        dynamicArrayCompute: [],
     },
 ];
 
@@ -111,37 +107,26 @@ describe('engine/cell-resolver — getSheetData', () => {
     });
 });
 
-// ─── getSheets ───────────────────────────────────────────────────────────────
+// ─── hasSheet ────────────────────────────────────────────────────────────────
 
-describe('engine/cell-resolver — getSheets', () => {
+describe('engine/cell-resolver — hasSheet', () => {
     const resolver = createArrayResolver(sheets);
 
-    test('returns all sheets', () => {
-        const result = resolver.getSheets();
-        expect(result).toHaveLength(2);
+    test('a sheet with no matrix yet exists, an unknown id does not', () => {
+        expect(resolver.hasSheet('sheet2')).toBe(true);
+        expect(resolver.hasSheet('unknown')).toBe(false);
     });
+});
 
-    test('includes id and name for each sheet', () => {
-        const result = resolver.getSheets();
-        expect(result[0].id).toBe('sheet1');
-        expect(result[0].name).toBe('Sheet1');
-        expect(result[1].id).toBe('sheet2');
-        expect(result[1].name).toBe('Sheet2');
-    });
+// ─── live sheets ─────────────────────────────────────────────────────────────
 
-    test('includes calculationChain', () => {
-        const result = resolver.getSheets();
-        expect(result[0].calculationChain).toEqual([{ r: 0, c: 0, id: 'sheet1' }]);
-        expect(result[1].calculationChain).toEqual([]);
-    });
-
-    test('includes dynamicArrayCompute', () => {
-        const result = resolver.getSheets();
-        expect(result[0].dynamicArrayCompute).toEqual([]);
-    });
-
-    test('returns empty array when no sheets provided', () => {
-        const emptyResolver = createArrayResolver([]);
-        expect(emptyResolver.getSheets()).toEqual([]);
+describe('engine/cell-resolver — over live sheets', () => {
+    test("a matrix that replaces a sheet's after the resolver was made is read", () => {
+        const live = { id: 'live', name: 'Live', data: sheetData };
+        const resolver = createArrayResolver([live]);
+        expect(resolver.getSheetData('live')).toBe(sheetData);
+        const replaced = [[{ v: 1 }]];
+        live.data = replaced;
+        expect(resolver.getSheetData('live')).toBe(replaced);
     });
 });

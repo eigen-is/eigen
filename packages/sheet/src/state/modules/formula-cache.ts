@@ -1,7 +1,7 @@
 // The editor's formula bookkeeping: FormulaCache, the per-workbook state of the formula engine and the reference
-// picker, the map of which cells hold formulas and which cells each one reads, and the resolver that lets the engine
-// read cells from the live context. setFormulaCellInfo keeps the map in step with each write, through the dependency
-// walk the server's recalc uses too, and an undo or redo replays its patches.
+// picker, and the map of which cells hold formulas and which cells each one reads. setFormulaCellInfo keeps the map in
+// step with each write, through the dependency walk the server's recalc uses too, and an undo or redo replays its
+// patches.
 
 import { current, isDraft } from 'immer';
 import { findSheetByName } from '../../engine/a1-notation';
@@ -21,7 +21,6 @@ import type {
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import type { FormulaCell, History, Selection } from '../types';
-import { getSheetIdByName } from '../utils';
 import { getcellFormula } from './cell';
 import { execfunction, warmFormulaCellInfoMap } from './formula-exec';
 
@@ -49,45 +48,11 @@ export function resetRangeIndexes() {
 }
 
 // A plain copy of the context, not an immer draft. Evaluation reads cells one at a time. Each read through a draft is
-// several times slower, and it makes child drafts that immer must walk when the recipe ends.
+// several times slower, and it makes child drafts that immer must walk when the recipe ends. A pass in dependency order
+// resolves over this copy, because the values it computes reach the next formula through execFunctionGlobalData. A
+// sweep that writes between evaluations, such as a paste's, resolves over the live sheets.
 export function snapshotContext(ctx: Context): Context {
     return isDraft(ctx) ? current(ctx) : ctx;
-}
-
-// The CellResolver through which the FormulaEngine reads the editor's cells. It reads the context it is handed. A pass
-// in dependency order takes `snapshotContext(ctx)`: the values it computes reach the next formula through
-// execFunctionGlobalData, which the engine reads before the cells. A sweep that writes between evaluations, such as
-// a paste's, takes the live ctx, so each evaluation sees the writes before it.
-export function createContextResolver(source: Context): CellResolver {
-    const matrices = new Map<string, CellMatrix | null>();
-    const dataFor = (sheetId: string) => {
-        let matrix = matrices.get(sheetId);
-        if (matrix === undefined) {
-            matrix = getFlowdata(source, sheetId) ?? null;
-            matrices.set(sheetId, matrix);
-        }
-        return matrix;
-    };
-
-    return {
-        getCell(sheetId: string, row: number, col: number) {
-            return dataFor(sheetId)?.[row]?.[col] ?? null;
-        },
-        getSheetIdByName(name: string) {
-            return getSheetIdByName(source, name) ?? null;
-        },
-        getSheetData(sheetId: string) {
-            return dataFor(sheetId);
-        },
-        getSheets() {
-            return source.sheets.map((f) => ({
-                id: f.id,
-                name: f.name,
-                calculationChain: f.calcChain ?? [],
-                dynamicArrayCompute: f.dynamicArray_compute ?? [],
-            }));
-        },
-    };
 }
 
 // A class, because immer freezes the plain objects of a context but leaves a class instance alone, and the editor
@@ -224,7 +189,7 @@ export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?
     }
     // The server's recalc finds the cells a formula reads with this same walk. The editor keeps its cache of resolved
     // references from one edit to the next.
-    const formulaDependency = extractDependencies(
+    const dependencies = extractDependencies(
         {
             sheets: ctx.sheets,
             findSheet: (name) => findSheetByName(ctx.sheets, name),
@@ -236,18 +201,15 @@ export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?
     );
 
     formulaCellInfoMap[key] = {
-        formulaDependency,
-        calc_funcStr: formula,
+        formula,
         key,
         r: formulaCell.r,
         c: formulaCell.c,
         id: formulaCell.id,
-        parents: {},
-        children: {},
-        color: 'w',
+        dependents: [],
     };
     const { sheetExtents } = ctx.formulaCache;
-    ctx.formulaCache.dependencyIndex.set(key, formulaDependency, (sheetId) => {
+    ctx.formulaCache.dependencyIndex.set(key, dependencies, (sheetId) => {
         let extent = sheetExtents.get(sheetId);
         if (extent === undefined) {
             const matrix = getFlowdata(ctx, sheetId);
@@ -288,19 +250,11 @@ export function executeAffectedFormulas(
     const refreshed: Context['groupValuesRefreshData'] = [];
 
     for (const formulaCell of formulaRunList) {
-        const { calc_funcStr } = formulaCell;
-
-        const v = execfunction(
-            ctx,
-            calc_funcStr,
-            formulaCell.r,
-            formulaCell.c,
-            formulaCell.id,
+        const v = execfunction(ctx, formulaCell.formula, formulaCell.r, formulaCell.c, {
+            id: formulaCell.id,
             calcChainSet,
-            undefined,
-            undefined,
             resolver,
-        );
+        });
 
         refreshed.push({
             r: formulaCell.r,

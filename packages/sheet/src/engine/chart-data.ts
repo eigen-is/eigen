@@ -42,15 +42,14 @@ import type { Cell, CellResolver } from './types';
 // read like any other. A series whose values were deleted is left out, as Google does, and keeps its
 // id, so its style stays in the spec for an undo.
 export function resolveRangeChartData(data: RangeChartData, resolver: CellResolver): ChartData | ChartDataError {
-    const sheetIds = new Set(resolver.getSheets().map((sheet) => sheet.id));
     const usable = (ref: CellRangeRef): boolean =>
-        sheetIds.has(ref.sheetId) && (ref.row[0] === ref.row[1] || ref.column[0] === ref.column[1]);
+        resolver.hasSheet(ref.sheetId) && (ref.row[0] === ref.row[1] || ref.column[0] === ref.column[1]);
     const { categories } = data;
     if (categories !== null && !usable(categories)) return 'ref';
     const series = data.series.flatMap(({ values, ...rest }) => (values ? [{ ...rest, values }] : []));
     if (series.length === 0) return 'ref';
     for (const s of series) {
-        if (!usable(s.values) || (typeof s.name !== 'string' && !sheetIds.has(s.name.sheetId))) return 'ref';
+        if (!usable(s.values) || (typeof s.name !== 'string' && !resolver.hasSheet(s.name.sheetId))) return 'ref';
     }
 
     if (rangeChartPoints(data) === null) return 'too-many-points';

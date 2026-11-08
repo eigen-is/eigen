@@ -477,7 +477,7 @@ describe('engine/conditional-format — formula rules across several ranges', ()
     const data = buildMatrix(Array.from({ length: 6 }, (_, r) => Array.from({ length: 5 }, (_, c) => r * 10 + c)));
     const evaluateFormula = createCfFormulaEvaluator(
         new FormulaEngine(),
-        createArrayResolver([{ id: 's1', name: 'Sheet1', data, calculationChain: [], dynamicArrayCompute: [] }]),
+        createArrayResolver([{ id: 's1', name: 'Sheet1', data }]),
         's1',
     );
     const formulaRule = (cellrange: SingleRange[], formula: string): ConditionalFormatRule => ({

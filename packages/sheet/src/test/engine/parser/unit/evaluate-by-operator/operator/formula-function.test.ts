@@ -27,8 +27,6 @@ const resolver = createArrayResolver([
         id: 's1',
         name: 'Sheet1',
         data: Array.from({ length: 10 }, (_, r) => COLUMNS.map((_, c) => column(c)[r])),
-        calculationChain: [],
-        dynamicArrayCompute: [],
     },
 ]);
 

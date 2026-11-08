@@ -613,7 +613,7 @@ export function updateCell(
     if (curv && isPlainObject(curv)) {
         if (!isCurInline) {
             if (isFormula(value)) {
-                const v = execfunction(ctx, value, r, c, undefined, undefined, true);
+                const v = execfunction(ctx, value, r, c, { isrefresh: true });
                 curv = cloneDeep(d?.[r]?.[c] || {});
                 [, curv.v, curv.f] = v;
             } else {
@@ -642,7 +642,7 @@ export function updateCell(
         value = curv;
     } else {
         if (isFormula(value)) {
-            const v = execfunction(ctx, value, r, c, undefined, undefined, true);
+            const v = execfunction(ctx, value, r, c, { isrefresh: true });
             value = {
                 v: v[1],
                 f: v[2],

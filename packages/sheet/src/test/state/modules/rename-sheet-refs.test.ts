@@ -90,7 +90,7 @@ describe('a tab rename rewrites the text that names the tab', () => {
         expect(t.ctx.sheets[0].name).toBe('Inputs');
         expect(formula(t)).toBe('=Inputs!A1+1');
         warmFormulaCellInfoMap(t.ctx);
-        expect(t.ctx.formulaCache.formulaCellInfoMap?.r0c0iid_2?.formulaDependency).toHaveLength(1);
+        expect(t.ctx.formulaCache.dependencyIndex.dependentsOf('id_1', 0, 0)).toEqual(['r0c0iid_2']);
     });
 
     test('an edit of the tab recomputes a formula that named it before the rename', () => {

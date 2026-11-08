@@ -3,11 +3,12 @@
 // one, stays in place. Formulas in the sorted rows are shifted to the rows they land on and evaluated again.
 
 import numeral from 'numeral';
+import { createArrayResolver } from '../../engine/cell-resolver';
 import { cellValue } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
 import type { Context, Selection } from '..';
 import { diff, getFlowdata, isdatetime, isRealNull, isRealNum } from '..';
-import { createContextResolver, execfunction, functionCopy, numberDisplay } from '.';
+import { execfunction, functionCopy, numberDisplay } from '.';
 import { jfrefreshgrid } from './refresh';
 
 // The menus' Ascending and Descending: the one selected range, by its first column.
@@ -58,7 +59,7 @@ export function sortDataRange(
     const { sortedData, rowOffsets } = sortRows(isAsc, index, dataRange);
 
     // One live resolver serves every formula in the sort, so no formula takes its own snapshot of the workbook.
-    const resolver = createContextResolver(ctx);
+    const resolver = createArrayResolver(ctx.sheets);
     for (let r = startRow; r <= endRow; r += 1) {
         for (let c = startColumn; c <= endColumn; c += 1) {
             const cell = sortedData[r - startRow][c - startColumn];
@@ -68,7 +69,7 @@ export function sortDataRange(
                 if (moveOffset !== 0) {
                     func = `=${functionCopy(func, moveOffset, 0)}`;
                 }
-                const funcV = execfunction(ctx, func, r, c, undefined, undefined, true, undefined, resolver);
+                const funcV = execfunction(ctx, func, r, c, { isrefresh: true, resolver });
                 [, cell.v, cell.f] = funcV;
                 cell.m = numberDisplay(cell.v, cell.ct?.fa);
             }

@@ -511,7 +511,7 @@ describe('applySheetsInsertRowCol/Delete — a formula rule keeps its colors', (
         const data = sheet.data ?? [];
         const evaluateFormula = createCfFormulaEvaluator(
             new FormulaEngine(),
-            createArrayResolver([{ id: 's1', name: sheet.name, data, calculationChain: [], dynamicArrayCompute: [] }]),
+            createArrayResolver([{ id: 's1', name: sheet.name, data }]),
             's1',
         );
         return Object.keys(evaluateConditionalFormat(sheet.conditionalFormatRules, data, { evaluateFormula })).sort();

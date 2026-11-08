@@ -28,13 +28,13 @@ import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, us
 import type { RefValues, SetContextOptions } from '../../context';
 import { WorkbookContext } from '../../context';
 import { ModalProvider } from '../../context/modal';
+import { createArrayResolver } from '../../engine/cell-resolver';
 import { copySheetChartSpec, resolveRangeChartData, seriesName } from '../../engine/chart-data';
 import type { ChartPanelState, Context, GlobalCache, Op, Settings, Sheet as SheetType } from '../../state';
 import {
     api,
     applySheetView,
     COPY_ACTION_TABLE_MARKER,
-    createContextResolver,
     defaultContext,
     defaultSettings,
     deleteActiveObject,
@@ -271,12 +271,11 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
         // Rebuilt on every sheet change while a chart is selected: a renamed sheet renames its data range,
         // and an edited cell its slices. Memoized, so the app's setState bails out when nothing changed.
-        // biome-ignore lint/correctness/useExhaustiveDependencies: the resolver reads context.sheets alone; depending on `context` would rebuild on every selection and scroll
         const chartPanel = useMemo((): ChartPanelState | null => {
             if (!activeChart) return null;
             const { spec } = readChartSpec(activeChart);
             const data = spec?.data;
-            const resolver = createContextResolver(context);
+            const resolver = createArrayResolver(context.sheets);
             const resolved = data?.source === 'range' ? resolveRangeChartData(data, resolver) : data;
             return {
                 chart: activeChart,
