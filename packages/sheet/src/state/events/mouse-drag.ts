@@ -1,8 +1,7 @@
 // The pointer's move and release over the grid while a button is held. handleOverlayMouseMove extends the
 // selection, moves the column or row resize line, the freeze line, a cell or formula-range drag and the fill
 // handle, and updates the hover on painted glyphs. handleOverlayMouseUp ends each drag, such as writing the new
-// frozen pane. The sheet overlay calls both from its document-level mouse listeners. endPointerDrag ends a drag
-// without its edit, for a mouse-up the Workbook refuses.
+// frozen pane. The sheet overlay calls both from its document-level mouse listeners.
 
 import { freezesColumns, freezesRows } from '@workspace/lib/sheets';
 import { cloneDeep, isNil } from 'es-toolkit/compat';
@@ -241,17 +240,6 @@ export function handleOverlayMouseUp(
     if (ctx.cellSelectExtending) {
         onDropCellSelectEnd(ctx, e, container);
     }
-}
-
-// The Workbook refuses a mouse-up whose fill, move or paint would make a validation rule too complex. It then keeps the
-// context from before the mouse-up, where the press still has its drag on, so the next click would run the edit again.
-// This ends those drags and a one-shot painter as handleOverlayMouseUp does, without the edit.
-export function endPointerDrag(ctx: Context) {
-    if (ctx.selectionActive) cancelPaintModel(ctx);
-    ctx.selectionActive = false;
-    ctx.scrolling = false;
-    ctx.cellSelectMoving = false;
-    ctx.cellSelectExtending = false;
 }
 
 // Records which painted affordance the pointer is over, such as a filter button or a cell glyph. It writes only on a

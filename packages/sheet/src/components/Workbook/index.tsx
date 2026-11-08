@@ -23,7 +23,6 @@ import type {
 } from '@workspace/lib/types/clipboard';
 import { isTypingTarget } from '@workspace/ui/hooks/is-typing-target';
 import { isEqual } from 'es-toolkit/compat';
-import type { Patch } from 'immer';
 import { enablePatches, produce, produceWithPatches } from 'immer';
 import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import type { RefValues, SetContextOptions } from '../../context';
@@ -39,7 +38,6 @@ import {
     defaultContext,
     defaultSettings,
     deleteActiveObject,
-    endPointerDrag,
     ensureSheetIndex,
     filterPatch,
     getFlowdata,
@@ -59,7 +57,6 @@ import {
     sheetChartClipboardItem,
     stepNewestEntry,
     undoEntry,
-    ValidationLimitError,
     warmFormulaCellInfoMapOnIdle,
 } from '../../state';
 import { consumePendingCopy } from '../../state/modules/clipboard';
@@ -188,40 +185,17 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     ctx.scrollTop = globalCache.current.scrollTop;
                 };
 
-                // An edit that would make a validation rule too complex is refused whole: nothing of it applies, and
-                // the user sees why. A formula it evaluated may have reached the engine's map, which learns the sheets
-                // again. A mouse-up's edit still ends its drag.
-                const refuse = (e: unknown) => {
-                    if (!(e instanceof ValidationLimitError)) throw e;
-                    base.formulaCache.resetEngine();
-                    warmFormulaCellInfoMapOnIdle(getContext);
-                    commit(
-                        produce(base, (ctx: Context) => {
-                            endPointerDrag(ctx);
-                            ctx.warnDialog = e.message;
-                        }),
-                    );
-                };
-
                 // A write that records no history, such as a drag that moves the selection, skips the patches, which
                 // cost time on every change and which the selection would never ship anyway.
                 if (options.noHistory) {
-                    try {
-                        commit(produce(base, concatProducer(syncScroll, recipe, triggerGroupValuesRefresh)));
-                    } catch (e) {
-                        refuse(e);
-                    }
+                    commit(produce(base, concatProducer(syncScroll, recipe, triggerGroupValuesRefresh)));
                     return;
                 }
 
-                let edit: readonly [Context, Patch[], Patch[]];
-                try {
-                    edit = produceWithPatches(base, concatProducer(syncScroll, recipe, triggerGroupValuesRefresh));
-                } catch (e) {
-                    refuse(e);
-                    return;
-                }
-                const [result, patches, inversePatches] = edit;
+                const [result, patches, inversePatches] = produceWithPatches(
+                    base,
+                    concatProducer(syncScroll, recipe, triggerGroupValuesRefresh),
+                );
                 commit(result);
                 if (patches.length === 0) return;
                 const filteredPatches = filterPatch(patches);
@@ -255,7 +229,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 }
                 onOp?.(patchToOp(result, filteredPatches, entry.options));
             },
-            [commit, getContext, onOp],
+            [commit, onOp],
         );
 
         const handleUndo = useCallback(() => {
@@ -320,13 +294,11 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         // One paste of what the clipboard holds, from a paste event or from a menu row that read the clipboard.
         const pasteClipboard = useCallback(
             (clipboardData: DataTransfer) => {
-                // A paste past the grid's last row adds the rows it needs in its own edit, so a refused paste adds none.
                 const pasteCells = (cells: DataTransfer) =>
                     setContextWithProduce((draftCtx) => {
                         try {
                             handlePaste(draftCtx, cells);
                         } catch (err) {
-                            if (err instanceof ValidationLimitError) throw err;
                             console.error(err);
                         }
                     });

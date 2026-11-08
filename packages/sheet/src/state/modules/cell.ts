@@ -1013,10 +1013,9 @@ export function carryCells(
     rules.sort(([a], [b]) => compareValidationIds(a, b));
     const linkMap = cloneDeep(from.hyperlink) ?? {};
 
-    // The rules move before any cell, so a carry that would make a rule too complex throws before land evaluates a
-    // formula. A source cell without a rule takes the destination's away, as Excel does. The tiles are joined first,
-    // so a block pasted down a column clears the rules once. On the same sheet the landed cells join the rule itself,
-    // and on another sheet they become a rule of their own.
+    // A source cell without a rule takes the destination's away, as Excel does. The tiles are joined first, so a block
+    // pasted down a column clears the rules once. On the same sheet the landed cells join the rule itself, and on
+    // another sheet they become a rule of their own.
     if (cut) clearValidations(from, block);
     const landing = tiles.map(({ row, column, height, width }) => ({
         row: [row, row + height - 1],

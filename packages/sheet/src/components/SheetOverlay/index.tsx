@@ -35,7 +35,6 @@ import {
     selectAll,
     showLinkCard,
     tryInsertRowCol,
-    ValidationLimitError,
 } from '../../state';
 import { useSheetContextMenu } from '../ContextMenu/useSheetContextMenu';
 import { DropdownList } from '../DataValidation/DropdownList';
@@ -224,7 +223,6 @@ export const SheetOverlay: React.FC = () => {
                         refs.fxInput.current,
                     );
                 } catch (e) {
-                    if (e instanceof ValidationLimitError) throw e;
                     if (e instanceof Error) showNotice(e.message);
                 }
             });
