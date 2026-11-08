@@ -41,19 +41,6 @@ export function describeFailures(verify: Pick<BackupVerifyRecord, 'failures'>): 
     return verify.failures.slice(0, FAILURES_IN_MESSAGE).join('; ');
 }
 
-// The failures, the first MAX_LINES of them and a count of the rest.
-function cappedFailures(): { add: (message: string) => void; lines: () => string[] } {
-    const kept: string[] = [];
-    let suppressed = 0;
-    return {
-        add: (message) => {
-            if (kept.length < MAX_LINES) kept.push(message);
-            else suppressed++;
-        },
-        lines: () => (suppressed > 0 ? [...kept, `…and ${suppressed} more failures`] : kept),
-    };
-}
-
 // The refusal of what does not verify, `name` being what was judged.
 export function requireVerified(verified: BackupVerifyRecord, name: string): void {
     if (verified.status === 'verified') return;
@@ -64,93 +51,6 @@ export function requireVerified(verified: BackupVerifyRecord, name: string): voi
 // a collab container, the only kind stage 3 can decode. A chat's data.db is plain SQLite. `config` is the schema its
 // stamp is read against. A server database has none here: the stage refuses an archive of a newer Eigen as a whole.
 type ArchiveDatabase = { path: string; isYjsDocument: boolean; config?: DatabaseConfig<SchemaType> };
-
-async function listFolderFiles(root: string, relDir: string, present: Set<string>): Promise<void> {
-    for (const entry of await fsp.readdir(path.join(root, relDir), { withFileTypes: true })) {
-        const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
-        if (entry.isDirectory()) await listFolderFiles(root, rel, present);
-        else if (entry.isFile()) present.add(rel);
-    }
-}
-
-function listArchiveDatabases(
-    root: string,
-    entries: ReadonlyMap<string, BackupEntry>,
-    fail: (message: string) => void,
-): ArchiveDatabase[] {
-    // A home folder holds the first, the server member the second; neither holds the other's.
-    const fixed: ArchiveDatabase[] = [
-        ...HOME_DATABASES.map(([config, relPath]) => ({
-            path: archiveHomePath(relPath),
-            isYjsDocument: false,
-            config,
-        })),
-        ...Object.values(SERVER_DATABASES).map((name) => ({ path: archiveServerPath(name), isYjsDocument: false })),
-    ];
-    const found = fixed.filter((database) => fs.existsSync(path.join(root, database.path)));
-
-    const mountsDir = path.join(root, ARCHIVE_HOME_DIR, PATHS.DRIVE.ROOT);
-    if (!fs.existsSync(mountsDir)) return found;
-    for (const entry of fs.readdirSync(mountsDir, { withFileTypes: true })) {
-        if (!entry.isDirectory()) continue;
-        const relMetadata = archiveMountPath(entry.name, PATHS.DRIVE.METADATA_DB);
-        const metadata = path.join(root, relMetadata);
-        if (!fs.existsSync(metadata)) continue;
-        found.push({ path: relMetadata, isYjsDocument: false, config: MOUNT_DB_CONFIG });
-
-        // Which of a mount's files are Eigen's own databases follows from its tree, so the archived
-        // metadata.db is read back for it. One too broken to read is a failure of its own; stage 2
-        // opens the same file right after and says the same thing in SQLite's words.
-        try {
-            const db = new Database(metadata, { readonly: true });
-            try {
-                const rows = readMountPathRows(db);
-                // A restore serves a plain file's size and ETag from its row, so the row describes the bytes the
-                // manifest lists for it. Eigen's own databases are copies, and a row with no file has nothing to match.
-                const byId = new Map(rows.map((row) => [row.id, row]));
-                const archivePath = archivePaths(rows);
-                for (const row of rows) {
-                    if (row.type !== 'file' || managedDbContainer(row, byId)) continue;
-                    const file = entries.get(
-                        archiveMountPath(entry.name, `${PATHS.DRIVE.DATA_DIR}/${archivePath(row)}`),
-                    );
-                    if (!file) continue;
-                    if (row.size !== file.bytes) {
-                        fail(`${file.path}: ${file.bytes} bytes, its row says ${row.size}`);
-                    } else if (row.hash !== null && row.hash !== file.sha256) {
-                        fail(`${file.path}: sha256 does not match its row`);
-                    }
-                }
-                for (const managed of listManagedDatabases(rows)) {
-                    found.push({
-                        path: archiveMountPath(entry.name, `${PATHS.DRIVE.DATA_DIR}/${managed.path}`),
-                        isYjsDocument: managed.isContainerData && isCollabType(managed.containerType),
-                        config: managed.config,
-                    });
-                }
-            } finally {
-                db.close();
-            }
-        } catch (error) {
-            fail(`${relMetadata}: the mount tree could not be read (${describeError(error)})`);
-        }
-    }
-    return found;
-}
-
-function countYjsBlobs(dbPath: string): number {
-    const db = new Database(dbPath, { readonly: true });
-    try {
-        const row = db
-            .query<{ total: number }, []>(
-                'SELECT (SELECT COUNT(*) FROM doc_updates) + (SELECT COUNT(*) FROM doc_snapshots) AS total',
-            )
-            .get();
-        return row?.total ?? 0;
-    } finally {
-        db.close();
-    }
-}
 
 // Decides whether an unpacked backup folder counts as good: every file is the one the manifest
 // describes (transport), every Eigen database is structurally sound (structure), and a sample of
@@ -254,4 +154,104 @@ export function entryMismatch(entry: BackupEntry, bytes: number, sha256: string 
     if (bytes !== entry.bytes) return `${entry.path}: ${bytes} bytes, the manifest says ${entry.bytes}`;
     if (sha256 !== null && sha256 !== entry.sha256) return `${entry.path}: sha256 does not match the manifest`;
     return null;
+}
+
+async function listFolderFiles(root: string, relDir: string, present: Set<string>): Promise<void> {
+    for (const entry of await fsp.readdir(path.join(root, relDir), { withFileTypes: true })) {
+        const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
+        if (entry.isDirectory()) await listFolderFiles(root, rel, present);
+        else if (entry.isFile()) present.add(rel);
+    }
+}
+
+function listArchiveDatabases(
+    root: string,
+    entries: ReadonlyMap<string, BackupEntry>,
+    fail: (message: string) => void,
+): ArchiveDatabase[] {
+    // A home folder holds the first, the server member the second; neither holds the other's.
+    const fixed: ArchiveDatabase[] = [
+        ...HOME_DATABASES.map(([config, relPath]) => ({
+            path: archiveHomePath(relPath),
+            isYjsDocument: false,
+            config,
+        })),
+        ...Object.values(SERVER_DATABASES).map((name) => ({ path: archiveServerPath(name), isYjsDocument: false })),
+    ];
+    const found = fixed.filter((database) => fs.existsSync(path.join(root, database.path)));
+
+    const mountsDir = path.join(root, ARCHIVE_HOME_DIR, PATHS.DRIVE.ROOT);
+    if (!fs.existsSync(mountsDir)) return found;
+    for (const entry of fs.readdirSync(mountsDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const relMetadata = archiveMountPath(entry.name, PATHS.DRIVE.METADATA_DB);
+        const metadata = path.join(root, relMetadata);
+        if (!fs.existsSync(metadata)) continue;
+        found.push({ path: relMetadata, isYjsDocument: false, config: MOUNT_DB_CONFIG });
+
+        // Which of a mount's files are Eigen's own databases follows from its tree, so the archived
+        // metadata.db is read back for it. One too broken to read is a failure of its own; stage 2
+        // opens the same file right after and says the same thing in SQLite's words.
+        try {
+            const db = new Database(metadata, { readonly: true });
+            try {
+                const rows = readMountPathRows(db);
+                // A restore serves a plain file's size and ETag from its row, so the row describes the bytes the
+                // manifest lists for it. Eigen's own databases are copies, and a row with no file has nothing to match.
+                const byId = new Map(rows.map((row) => [row.id, row]));
+                const archivePath = archivePaths(rows);
+                for (const row of rows) {
+                    if (row.type !== 'file' || managedDbContainer(row, byId)) continue;
+                    const file = entries.get(
+                        archiveMountPath(entry.name, `${PATHS.DRIVE.DATA_DIR}/${archivePath(row)}`),
+                    );
+                    if (!file) continue;
+                    if (row.size !== file.bytes) {
+                        fail(`${file.path}: ${file.bytes} bytes, its row says ${row.size}`);
+                    } else if (row.hash !== null && row.hash !== file.sha256) {
+                        fail(`${file.path}: sha256 does not match its row`);
+                    }
+                }
+                for (const managed of listManagedDatabases(rows)) {
+                    found.push({
+                        path: archiveMountPath(entry.name, `${PATHS.DRIVE.DATA_DIR}/${managed.path}`),
+                        isYjsDocument: managed.isContainerData && isCollabType(managed.containerType),
+                        config: managed.config,
+                    });
+                }
+            } finally {
+                db.close();
+            }
+        } catch (error) {
+            fail(`${relMetadata}: the mount tree could not be read (${describeError(error)})`);
+        }
+    }
+    return found;
+}
+
+function countYjsBlobs(dbPath: string): number {
+    const db = new Database(dbPath, { readonly: true });
+    try {
+        const row = db
+            .query<{ total: number }, []>(
+                'SELECT (SELECT COUNT(*) FROM doc_updates) + (SELECT COUNT(*) FROM doc_snapshots) AS total',
+            )
+            .get();
+        return row?.total ?? 0;
+    } finally {
+        db.close();
+    }
+}
+
+// The failures, the first MAX_LINES of them and a count of the rest.
+function cappedFailures(): { add: (message: string) => void; lines: () => string[] } {
+    const kept: string[] = [];
+    let suppressed = 0;
+    return {
+        add: (message) => {
+            if (kept.length < MAX_LINES) kept.push(message);
+            else suppressed++;
+        },
+        lines: () => (suppressed > 0 ? [...kept, `…and ${suppressed} more failures`] : kept),
+    };
 }

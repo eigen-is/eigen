@@ -72,35 +72,6 @@ export function readMountPathRows(db: Database): MountPathRow[] {
     return db.query<MountPathRow, []>(`SELECT ${columns} FROM paths`).all();
 }
 
-// The name chain of every row from the root down. A row that does not reach the root, under a missing parent or in a
-// parent cycle, is never met, so it has no entry. The root contributes no segment.
-function pathsFromRoot(rows: readonly MountPathRow[], segment: (row: MountPathRow) => string): Map<string, string> {
-    const children = Map.groupBy(rows, (row) => row.parentId);
-    const walk = [...(children.get(null) ?? [])];
-    const built = new Map(walk.map((root) => [root.id, '']));
-    for (const parent of walk) {
-        const prefix = built.get(parent.id);
-        for (const child of children.get(parent.id) ?? []) {
-            built.set(child.id, prefix ? `${prefix}/${segment(child)}` : segment(child));
-            walk.push(child);
-        }
-    }
-    return built;
-}
-
-function lookUp(built: ReadonlyMap<string, string>): (row: MountPathRow) => string {
-    return (row) => {
-        const found = built.get(row.id);
-        if (found === undefined) throw new Error(`path row ${row.id} does not reach the root`);
-        return found;
-    };
-}
-
-// A trash root sits at `.trash/{id}.{ext}`, as trashPath spells it.
-function archiveSegment(row: MountPathRow): string {
-    return row.trashedFrom ? trashStorageKey(row.id, row.name) : row.name;
-}
-
 // Where each row's bytes go inside the archive: the storage key it would have on a `local` mount. Deriving it from
 // metadata.db instead of the mount's own keys is what makes the archive storage-independent: local-key and s3 mounts
 // store flat keys, and restore re-derives whichever shape the target mount needs.
@@ -188,4 +159,33 @@ export function listManagedDatabases(rows: readonly MountPathRow[]): ManagedArch
 function configOf(name: string, containerType: DrivePathType): DatabaseConfig<SchemaType> {
     if (name === CONTAINER_COMMENTS_DB) return COMMENT_INDEX_DB_CONFIG;
     return isCollabType(containerType) ? COLLAB_DB_CONFIG : CHAT_ROOM_DB_CONFIG;
+}
+
+// A trash root sits at `.trash/{id}.{ext}`, as trashPath spells it.
+function archiveSegment(row: MountPathRow): string {
+    return row.trashedFrom ? trashStorageKey(row.id, row.name) : row.name;
+}
+
+// The name chain of every row from the root down. A row that does not reach the root, under a missing parent or in a
+// parent cycle, is never met, so it has no entry. The root contributes no segment.
+function pathsFromRoot(rows: readonly MountPathRow[], segment: (row: MountPathRow) => string): Map<string, string> {
+    const children = Map.groupBy(rows, (row) => row.parentId);
+    const walk = [...(children.get(null) ?? [])];
+    const built = new Map(walk.map((root) => [root.id, '']));
+    for (const parent of walk) {
+        const prefix = built.get(parent.id);
+        for (const child of children.get(parent.id) ?? []) {
+            built.set(child.id, prefix ? `${prefix}/${segment(child)}` : segment(child));
+            walk.push(child);
+        }
+    }
+    return built;
+}
+
+function lookUp(built: ReadonlyMap<string, string>): (row: MountPathRow) => string {
+    return (row) => {
+        const found = built.get(row.id);
+        if (found === undefined) throw new Error(`path row ${row.id} does not reach the root`);
+        return found;
+    };
 }

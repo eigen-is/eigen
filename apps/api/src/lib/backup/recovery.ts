@@ -76,7 +76,7 @@ function recoverInterruptedRestores(): void {
     }
 }
 
-// Returns false when a move failed. The notes stay for the next boot, the home stays shut until then, and the other
+// Returns false when a move failed. The note stays for the next boot, the home stays shut until then, and the other
 // homes still recover.
 function recoverRestore(restoreDir: string, homesDir: string): boolean {
     const marker = readRestoringMarker(path.join(restoreDir, RESTORING_MARKER));
@@ -94,7 +94,7 @@ function recoverRestore(restoreDir: string, homesDir: string): boolean {
                 ? `${parked} is already there, so move the folder at ${homeDir} aside by hand, then run ./eigen stop, then ./eigen restart`
                 : 'run ./eigen stop, then ./eigen restart';
         console.error(
-            `[backup] could not finish the interrupted restore of ${marker.ownerId}'s home ${homeDir}: ${describeError(error)}. The account answers 503, and its notes stay in ${restoreDir} for the next boot: ${advice}`,
+            `[backup] could not finish the interrupted restore of ${marker.ownerId}'s home ${homeDir}: ${describeError(error)}. The account answers 503, and its note stays in ${restoreDir} for the next boot: ${advice}`,
         );
         return false;
     }

@@ -79,8 +79,8 @@ export function buildRestoreStagingDir(homeDir: string, jobId: string): string {
     return path.join(path.dirname(homeDir), `${RESTORE_STAGING_PREFIX}${jobId}`);
 }
 
-// The archive goes in a folder of its own inside that one. The notes the next boot reads sit beside it, so no entry
-// of the archive can be taken for one of them.
+// The archive goes in a folder of its own inside that one. The note the next boot reads sits beside it, so no entry
+// of the archive can be taken for it.
 export function buildRestoreUnpackDir(homeDir: string, jobId: string): string {
     return path.join(buildRestoreStagingDir(homeDir, jobId), 'unpack');
 }
