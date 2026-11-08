@@ -45,6 +45,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Date shortcut in Sheets** — Ctrl+Shift+; on a filled cell no longer wipes it, so Escape brings back what was there
 - **Formulas in Sheets** — `A1 : B2` with spaces recalculates, a formula reading a tab nobody opened stays current, undoing a replace restores the formulas that read those cells, and deleting a formula that reads a cell twice leaves the others reading it current
 - **Undo while others type formulas in Sheets** — two people typing formulas at once no longer lose their undo
+- **Undo after a paste or a new rule in Sheets** — undoing a paste that added rows or columns, or a conditional format rule you added, no longer deletes what someone else put there. Once someone else edits, you can't undo that step or anything before it
 - **Excel downloads from Sheets** — a tab named like a cell, such as Q1, gets the quotes Excel expects in formulas, a formula follows a tab the file has to rename, and a fill down from a linked cell no longer makes the download fail
 - **Tab names from a file in Sheets** — an import repairs a tab name Sheets would refuse, such as one past 31 characters, and the formulas naming it follow
 - **Paste past the last row in Sheets** — a paste that adds rows to a workbook full of formulas no longer pauses to read them all again
