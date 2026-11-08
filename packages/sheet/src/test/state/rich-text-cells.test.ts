@@ -6,9 +6,8 @@ import { describe, expect, test } from 'bun:test';
 import { evaluateConditionalFormat } from '../../engine/conditional-format';
 import { cellDisplay, cellValue } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
-import { setCellValue as apiSetCellValue } from '../../state/api/cell';
 import type { Context } from '../../state/context';
-import { getCellValue, getRealCellValue, setCellValue } from '../../state/modules/cell';
+import { getCellValue, getRealCellValue, setCellValue, updateCell } from '../../state/modules/cell';
 import { getDropdownList, validateCellData } from '../../state/modules/data-validation';
 import { buildFilterConditionMatcher, getFilterColumnValues } from '../../state/modules/filter';
 import { removeHyperlink, saveHyperlink, showLinkCard } from '../../state/modules/hyperlink';
@@ -183,9 +182,9 @@ describe('writers over a rich cell', () => {
         expect(cellValue(data[0][0])).toBe('Hello');
     });
 
-    test('the API writes a formula over a rich cell', () => {
+    test('a formula written over a rich cell drops its runs', () => {
         const ctx = sheetContext([[plain('Hi'), rich('Hello')]]);
-        apiSetCellValue(ctx, 0, 1, '=A1&"!"', null);
+        updateCell(ctx, 0, 1, null, '=A1&"!"');
         const cell = ctx.sheets[0].data![0][1];
         expect(cell?.ct?.s).toBeUndefined();
         expect(cellValue(cell)).toBe('Hi!');

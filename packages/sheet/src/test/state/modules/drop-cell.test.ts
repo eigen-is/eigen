@@ -3,23 +3,50 @@
 // in ALL four directions, and the display string renders through that format's
 // mask instead of an auto-detected one.
 //
-// Entry point: autoFillCell(ctx, copyRange, applyRange, direction) — the same
-// door onDropCellSelectEnd uses. It primes dropCellCache and calls
-// updateDropCell; results land in ctx.sheets[0].data (getFlowdata identity).
+// Entry point: autoFillCell below, which primes dropCellCache and calls updateDropCell
+// as onDropCellSelectEnd does; results land in ctx.sheets[0].data (getFlowdata identity).
 
 import { describe, expect, it } from 'bun:test';
 import { applyPatches, enablePatches, produceWithPatches } from 'immer';
-import { autoFillCell } from '../../../state/api/cell';
 import type { Context } from '../../../state/context';
 import { setCellValue } from '../../../state/modules/cell';
-import { fillFromEdge, onDropCellSelectEnd } from '../../../state/modules/drop-cell';
+import {
+    dropCellCache,
+    fillFromEdge,
+    getTypeItemHide,
+    onDropCellSelectEnd,
+    updateDropCell,
+} from '../../../state/modules/drop-cell';
 import { execFunctionGroup, groupValuesRefresh, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
+import { normalizeSelection } from '../../../state/modules/selection';
 import { validationAt } from '../../../state/modules/validation-rules';
 import type { Cell, DataValidationRule, SingleRange } from '../../../state/types';
 import { filterPatch } from '../../../state/utils/patch';
 import { contextFactory } from '../factories/context';
 
 enablePatches();
+
+function autoFillCell(
+    ctx: Context,
+    copyRange: SingleRange,
+    applyRange: SingleRange,
+    direction: 'up' | 'down' | 'left' | 'right',
+) {
+    dropCellCache.copyRange = copyRange;
+    dropCellCache.applyRange = applyRange;
+    dropCellCache.direction = direction;
+    dropCellCache.applyType = getTypeItemHide(ctx).slice(0, 7).some(Boolean) ? '1' : '0';
+    ctx.selections = normalizeSelection(ctx, [
+        {
+            row: [Math.min(copyRange.row[0], applyRange.row[0]), Math.max(copyRange.row[1], applyRange.row[1])],
+            column: [
+                Math.min(copyRange.column[0], applyRange.column[0]),
+                Math.max(copyRange.column[1], applyRange.column[1]),
+            ],
+        },
+    ]);
+    updateDropCell(ctx);
+}
 
 function grid(rows: number, cols: number): (Cell | null)[][] {
     return Array.from({ length: rows }, () => Array.from({ length: cols }, () => null));
@@ -351,13 +378,6 @@ describe('a fill touching a merge changes nothing', () => {
             expectUnchanged(mergedContext(merge, range), (ctx) => fillFromEdge(ctx, range, direction));
         });
     }
-
-    it('autoFillCell with a merged source', () => {
-        const src: SingleRange = { row: [0, 0], column: [0, 1] };
-        expectUnchanged(mergedContext({ r: 0, c: 0, rs: 1, cs: 2 }, src), (ctx) =>
-            autoFillCell(ctx, src, { row: [1, 2], column: [0, 1] }, 'down'),
-        );
-    });
 
     // Drags the fill handle from A1 down to row 3 (y = 50 lands in the third 20px row).
     function dragDown(ctx: Context) {

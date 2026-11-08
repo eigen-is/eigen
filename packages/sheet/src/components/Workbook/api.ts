@@ -130,19 +130,15 @@ export function generateAPIs(
             return accepted;
         },
 
-        setCellFormat: (
+        setCellFormat: <K extends keyof Cell>(
             row: number,
             column: number,
-            attr: keyof Cell,
-            value: unknown,
-            options: api.CommonOptions = {},
+            attr: K,
+            value: Cell[K],
+            options: api.SheetLookup = {},
         ) => setContext((draftCtx) => api.setCellFormat(draftCtx, row, column, attr, value, options)),
 
-        setSelection: (range: Range, options: api.CommonOptions = {}) =>
-            setContext((draftCtx) => api.setSelection(draftCtx, range, options)),
-
-        mergeCells: (ranges: Range, type: string, options: api.CommonOptions = {}) =>
-            setContext((draftCtx) => api.mergeCells(draftCtx, ranges, type, options)),
+        setSelection: (range: Range) => setContext((draftCtx) => api.setSelection(draftCtx, range)),
 
         getAllSheets: () => api.getAllSheets(getContext()),
 

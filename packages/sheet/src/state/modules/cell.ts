@@ -145,9 +145,7 @@ export function getCellValue(r: number, c: number, data: CellMatrix, attr?: keyo
     return retv;
 }
 
-// `v` covers every shape callers feed in: scalar (string/number/boolean), Cell-like patch
-// ({v, f, ct, …}), or null/undefined. Re-used by formula-eval, search/replace, data validation,
-// the public API, etc. — keeping the parameter shape here is the project-wide escape hatch.
+// `v` is a scalar, a Cell-like patch ({v, f, ct, …}) or null.
 // biome-ignore lint/suspicious/noExplicitAny: cross-cutting setter, callers pass scalars and Cell-like patches indistinguishably
 export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix | null | undefined, v: any) {
     if (isNil(d)) {
@@ -588,7 +586,6 @@ export function updateCell(
         curv.fs ||= SHEET_DEFAULT_FONT_SIZE;
     }
 
-    // API, we get value from user
     value = value || (runs.length === 1 && !isCurInline ? runs[0].v : $input?.innerText);
 
     if (!isCurInline) {
@@ -599,10 +596,6 @@ export function updateCell(
             }
         } else if (curv && curv.qp !== 1) {
             if (isPlainObject(curv) && (value === curv.f || value === curv.v || value === curv.m)) {
-                cancelNormalSelected(ctx);
-                return;
-            }
-            if (value === curv) {
                 cancelNormalSelected(ctx);
                 return;
             }
@@ -625,24 +618,6 @@ export function updateCell(
                 const v = execfunction(ctx, value, r, c, undefined, undefined, true);
                 curv = cloneDeep(d?.[r]?.[c] || {});
                 [, curv.v, curv.f] = v;
-            }
-            // A cell object, such as setCellValue(0, 0, { f: '=SUM(D1)', bg: '#0188fb' }), carries its formula in `f`.
-            else if (isPlainObject(value)) {
-                const valueFunction = value.f;
-
-                if (isFormula(valueFunction)) {
-                    const v = execfunction(ctx, valueFunction, r, c, undefined, undefined, true);
-                    // get v/m/ct
-
-                    curv = cloneDeep(d?.[r]?.[c] || {});
-                    [, curv.v, curv.f] = v;
-                }
-                // A cell object without a formula: its fields are copied onto the cell.
-                else {
-                    for (const attr of Object.keys(value)) {
-                        curv[attr as keyof Cell] = value[attr];
-                    }
-                }
             } else {
                 delFunctionGroup(ctx, r, c);
                 execFunctionGroup(ctx, r, c, value);
@@ -674,20 +649,6 @@ export function updateCell(
                 v: v[1],
                 f: v[2],
             };
-        }
-        // A cell object, such as setCellValue(0, 0, { f: '=SUM(D1)', bg: '#0188fb' }), carries its formula in `f`.
-        else if (isPlainObject(value)) {
-            const valueFunction = value.f;
-
-            if (isFormula(valueFunction)) {
-                const v = execfunction(ctx, valueFunction, r, c, undefined, undefined, true);
-                [, value.v, value.f] = v;
-            } else {
-                const v = curv;
-                if (isNil(value.v)) {
-                    value.v = v;
-                }
-            }
         } else {
             delFunctionGroup(ctx, r, c);
             execFunctionGroup(ctx, r, c, value);
@@ -760,18 +721,7 @@ export function getcellFormula(ctx: Context, r: number, c: number, i: string, da
 }
 
 export function getRange(ctx: Context) {
-    const rangeArr = cloneDeep(ctx.selections);
-    const result: Range = [];
-    if (!rangeArr) return result;
-
-    for (let i = 0; i < rangeArr.length; i += 1) {
-        const rangeItem = rangeArr[i];
-        const temp = {
-            row: rangeItem.row,
-            column: rangeItem.column,
-        };
-        result.push(temp);
-    }
+    const result: Range = cloneDeep(ctx.selections ?? []).map(({ row, column }) => ({ row, column }));
     return result;
 }
 
@@ -781,12 +731,10 @@ export function getFlattenedRange(ctx: Context, range?: Range) {
     const result: { r: number; c: number }[] = [];
 
     for (const ele of range) {
-        // This data may be a range or a single cell
         const rs = ele.row;
         const cs = ele.column;
         for (let r = rs[0]; r <= rs[1]; r += 1) {
             for (let c = cs[0]; c <= cs[1]; c += 1) {
-                // r c: current row index and current column index
                 result.push({ r, c });
             }
         }
@@ -901,7 +849,6 @@ export function getFontStyleByCell(cell: Cell | null | undefined, checksCF?: Cel
 export function getStyleByCell(ctx: Context, d: CellMatrix, r: number, c: number, cfCompute?: ComputeMap | null) {
     const style: Record<string, string> = {};
 
-    // Conditional format
     const cf_compute = cfCompute ?? getComputeMap(ctx);
     const checksCF = checkCF(r, c, cf_compute);
 
@@ -931,16 +878,8 @@ export function getStyleByCell(ctx: Context, d: CellMatrix, r: number, c: number
     return Object.assign(style, getFontStyleByCell(cell, checksCF));
 }
 
-// A formula is shown in the formula bar and the in-cell editor as colored spans, not as
-// text — the reference tokens have to be clickable and highlightable. Returns null when
-// the cell carries no formula, so the caller applies its own fallback: the two editors
-// disagree about rich text (the bar shows it plain, the cell shows it styled), so that
-// rule belongs to them, not here.
-//
-// This lives apart from getCellValue on purpose. Generating the markup inside the getter
-// meant `getCellValue(r, c, data, 'f')` returned HTML rather than the formula, which read
-// as a plain attribute read at every callsite and cost us a shipped regression: an
-// escaping pass wrapped it in escapeHtml and printed the markup at the user.
+// The formula as the colored spans the formula bar and the in-cell editor show. Null on a cell with no formula: the
+// two editors disagree about rich text, so the fallback belongs to them.
 export function getFormulaHtml(r: number, c: number, data: CellMatrix): string | null {
     const f = getCellValue(r, c, data, 'f');
     return isNil(f) ? null : functionHTMLGenerate(String(f));
@@ -1004,44 +943,6 @@ export function getQKBorder(width: string, type: string, color: string): BorderS
     }
 
     return { style, color };
-}
-
-export function getdatabyselection(ctx: Context, range: Selection | undefined, sheetId: string) {
-    if (range == null && ctx.selections) {
-        [range] = ctx.selections;
-    }
-
-    if (!range) return [];
-
-    if (range.row == null || range.row.length === 0) {
-        return [];
-    }
-
-    // Fetch data
-    const d = getFlowdata(ctx, sheetId);
-    const cfg = getSheetConfig(ctx, sheetId);
-
-    const data = [];
-    for (let r = range.row[0]; r <= range.row[1]; r += 1) {
-        if (d?.[r] == null) {
-            continue;
-        }
-        if (cfg?.rowhidden != null && cfg.rowhidden[r] != null) {
-            continue;
-        }
-
-        const row = [];
-
-        for (let c = range.column[0]; c <= range.column[1]; c += 1) {
-            if (cfg?.colhidden != null && cfg.colhidden[c] != null) {
-                continue;
-            }
-            row.push(d[r][c]);
-        }
-
-        data.push(row);
-    }
-    return data;
 }
 
 // The rows and columns a copy, cut, move or the format painter carries, in order. Every row and column of the

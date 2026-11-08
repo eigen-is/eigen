@@ -693,7 +693,7 @@ describe('a structural undo or redo applies exactly what it sends', () => {
     test("undoing your row insert keeps a peer's later column width", () => {
         const s = session(workbook());
         s.edit(s.a, ...insertRows(4, 1));
-        s.edit(s.b, (ctx) => setColumnWidth(ctx, { 2: 250 }, { id: ONE }));
+        s.edit(s.b, (ctx) => setColumnWidth(ctx, { 2: 250 }));
         s.undo(s.a);
         for (const sheets of [s.a.ctx.sheets, s.b.ctx.sheets, s.joiner()]) {
             expect(sheets[0].config?.columnlen).toEqual({ 2: 250 });
@@ -731,7 +731,7 @@ describe('a structural undo or redo applies exactly what it sends', () => {
         });
         const s = session(base);
         s.edit(s.a, ...deleteRows(4, 5));
-        s.edit(s.b, (ctx) => setColumnWidth(ctx, { 2: 250 }, { id: ONE }));
+        s.edit(s.b, (ctx) => setColumnWidth(ctx, { 2: 250 }));
         s.undo(s.a);
         for (const sheets of [s.a.ctx.sheets, s.b.ctx.sheets, s.joiner()]) {
             expect(sheets[0].config?.rowlen).toEqual({ 4: 40 });
