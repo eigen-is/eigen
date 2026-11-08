@@ -29,9 +29,7 @@ type Placement = { x: number; y: number; width: number; height: number; rot: num
 export type Place = (shape: Placement) => Placement;
 
 // A group lays its children out in its chOff/chExt space, scaled onto its off/ext, then flips and turns them about its
-// center. As PowerPoint, LibreOffice and POI draw it, a child is never skewed: its center moves with the group, its
-// turn adds the group's (negated by one flip), and its extents scale along the group's axes, swapped for a child
-// turned sideways.
+// center. A child is never skewed: its center and turn move, its extents scale along the group's axes.
 export function inGroup(outer: Place, xfrm: Xfrm): Place {
     const child = xfrm.child ?? { x: xfrm.x, y: xfrm.y, cx: xfrm.cx, cy: xfrm.cy };
     const kx = child.cx > 0 ? xfrm.cx / child.cx : 1;
@@ -91,9 +89,8 @@ export function place(placeIn: Place, xfrm: Xfrm): Placed {
     };
 }
 
-// Whether a box is on the slide. A box wholly off it, such as a master's guide or note copied onto every slide, would
-// be stored unseen past the frame, which the canvas clips, or drawn in the bands beside a letterboxed slide. A box a
-// group scaled past what a double holds is on no slide.
+// A box wholly off the slide, such as a master's guide copied onto every slide, would be stored unseen past the frame
+// or drawn in the bands beside a letterboxed slide. A box a group scaled past what a double holds is on no slide.
 export function onSlide(box: Box, deck: DeckWalk): boolean {
     if (![box.x, box.y, box.width, box.height].every(Number.isFinite)) return false;
     const r = (box.angle * Math.PI) / 180;

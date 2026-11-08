@@ -96,10 +96,8 @@ export class CommentIndex {
             .where(eq(commentSchema.comments.chatName, chatName));
     }
 
-    // Drops the rows and the mentions of every thread that is not in threads, which holds the folded names of the
-    // threads that are left. The mentions have no foreign key, so they go by name. The search table follows the rows
-    // through its delete trigger. The whole drop is one transaction with no await in it. So a caller that reads the
-    // threads right before the call never drops the row of a thread made meanwhile.
+    // Drops the rows and mentions of every thread not in threads, the folded names of those left. One transaction with
+    // no await, so a caller that read the threads just before never drops the row of a thread made meanwhile.
     public deleteRowsWithoutThread(threads: ReadonlySet<string>): void {
         const { comments, commentMentions } = commentSchema;
         this.db.transaction((tx) => {
@@ -163,9 +161,8 @@ export class CommentIndex {
     }
 }
 
-// Runs fn on the index of the document at pathId, with its comments.db open for just that long.
-// Through a SharedDrive, the lookup of comments.db checks that the caller may read the document. A
-// plain Drive belongs to the caller, so nothing is checked.
+// Runs fn on the index of the document at pathId, with its comments.db open for just that long. Through a SharedDrive
+// the lookup of comments.db checks that the caller may read the document.
 export async function withCommentIndex<T>(
     drive: DriveLike,
     mountId: string,

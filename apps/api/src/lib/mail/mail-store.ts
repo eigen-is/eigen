@@ -14,7 +14,7 @@ export type MailSearchOptions = {
 };
 
 // One entry per named, non-calendar part of a draft EML, under the part's raw index, the number a keep list addresses.
-export type DraftMetaAttachment = { filename: string; contentType: string; size: number; index: number };
+type DraftMetaAttachment = { filename: string; contentType: string; size: number; index: number };
 
 export type DraftMeta = {
     subject: string;
@@ -22,9 +22,8 @@ export type DraftMeta = {
     cc?: AddressObject;
     bcc?: AddressObject;
     text: string;
-    // "Clean" body as typed by the user — without the reference-card HTML that the EML
-    // on disk has baked in. Overlaid on messageGet so the compose view shows what the
-    // user typed, not the rendered card block at the bottom.
+    // The body as typed, without the reference-card HTML the EML on disk has baked in. Overlaid on messageGet, so the
+    // compose view shows what the user typed.
     html: string;
     attachments: DraftMetaAttachment[];
     driveReferences?: AttachmentReference[];

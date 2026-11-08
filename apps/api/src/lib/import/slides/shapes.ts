@@ -86,9 +86,7 @@ export const MAX_ELEMENTS = 20_000;
 const MAX_GROUP_DEPTH = 32;
 
 // An element is a Y.Map of about thirty fields, and a string costs per character besides: the weight caps both before
-// the update is built, and so the update the main thread reads back. The corpus's heaviest weighs 4,022 (a 2.9 MB
-// update); at the cap a text-heavy update is about 27 MB and applies in 70 ms. MAX_ELEMENTS shapes, under the cap,
-// make 17 MB that apply in 250 ms.
+// the update is built, and so the update the main thread reads back.
 export const MAX_PPTX_WEIGHT = 50_000;
 
 // How an imported element looks where the file says nothing: crisp, unframed, unfilled, never the editor's rounding.
@@ -327,8 +325,7 @@ function readShape(walk: Walk, leaf: Leaf): void {
         const ends = [arrowheadOf(lines.lns, 'headEnd'), arrowheadOf(lines.lns, 'tailEnd')];
         const headed = ends.some((end) => end !== 'none') && paint.strokeColor !== TRANSPARENT_COLOR;
         // A connector with a head is the arrow that draws it, and so is an open freeform line with one, which is how
-        // the pptx export writes an arrow of more than two points. One without a head has nothing to lose as a path,
-        // and a path comes back from the pptx export as it went.
+        // the pptx export writes an arrow of more than two points. One without a head stays a path.
         const [line, ...more] = outline;
         const freeform =
             geometry === 'custGeom' &&
@@ -407,12 +404,8 @@ function readPicture(
     });
 }
 
-// The pptx export fits a picture with a crop centered on one axis. A negative crop reaches past the picture to
-// contain it, and a positive one cuts into it to cover it. The reader never decodes a picture, so it can't check the
-// crop against the picture's aspect, and it reads any such crop as that fit. A side that doesn't read counts as
-// uncropped. Two sides within CROP_SLACK of each other count as equal, because Google Slides writes a centered crop
-// with a rounding leftover on one side (a logo's `l="0" r="10"`, a hundredth of a percent). Any other crop draws the
-// picture uncropped and is counted.
+// The pptx export fits a picture with a crop centered on one axis, so any such crop reads as that fit; CROP_SLACK
+// absorbs Google Slides's rounding. Any other crop draws the picture uncropped and is counted.
 function objectFitOf(blipFill: XmlElement | undefined, lost: Lost): ObjectFit {
     const rect = blipFill && childOf(blipFill, A_NS, 'srcRect');
     if (!rect) return 'fill';

@@ -16,10 +16,8 @@ import { paths } from './schema';
 import { markContainerContentDirty } from './search-index';
 import { getShutdownDrainDeadline } from './upload-limits';
 
-// A database with no holder stays open for five minutes. A close takes a version, and on a mount that
-// works on a temp copy, such as s3, it is also an upload. So a chat that gets a message now and then must
-// not pay that for each one. The content reindex reads a changed container every two minutes, and it must
-// not reopen what the idle close just closed.
+// A database with no holder stays open for five minutes: a close takes a version and on a temp-copy mount an upload, so
+// a chat with a message now and then must not pay that for each, and the reindex must not reopen it.
 export const IDLE_CLOSE_MS = 5 * 60_000;
 // A close waits this long for the holders to let go. Then it closes anyway and logs, so a holder that
 // hangs can't hang a shutdown.
@@ -63,9 +61,8 @@ export async function createDatabase<S extends SchemaType>(
     });
 }
 
-// Runs fn with the database open, and closes it IDLE_CLOSE_MS after the last holder lets go. A close
-// that comes meanwhile waits for fn, inside the slot and maybe under the container path lock, so fn
-// must never take that path lock or call withDatabase for the same pathId.
+// Runs fn with the database open, until IDLE_CLOSE_MS after the last holder lets go. A close waits for fn, maybe under
+// the container path lock, so fn must never take that lock or call withDatabase for the same pathId.
 export async function withDatabase<S extends SchemaType, T>(
     mount: Mount,
     config: DatabaseConfig<S>,
@@ -80,10 +77,8 @@ export async function withDatabase<S extends SchemaType, T>(
     }
 }
 
-// withDatabase for a holder that outlives one call, such as an open collab document. The document lets
-// go in its own close, and whatever closes its database, such as a trash, closes the document first. So
-// this holder may take the container path lock while it holds, as a workbook's version does. A close
-// waits out HOLDER_WAIT_MS only for a document that a restore or a create put in a folder being trashed.
+// withDatabase for a holder that outlives one call, such as an open collab document. Whatever closes its database
+// closes the document first, so this holder may take the container path lock while it holds.
 export async function holdDatabase<S extends SchemaType>(
     mount: Mount,
     config: DatabaseConfig<S>,
@@ -105,9 +100,8 @@ export async function holdDatabase<S extends SchemaType>(
     });
 }
 
-// Every open, create and close of one pathId runs here, one at a time, in call order.
-// Lock order: container path lock → slot → tree lock, never the reverse; the close-time snapshot try-locks.
-// A chain rather than withPathLock: `has` must also see queued opens and closes.
+// Every open, create and close of one pathId runs here in call order. Lock order: container path lock → slot → tree
+// lock, never the reverse. A chain rather than withPathLock, because `has` must also see queued calls.
 export async function withDocumentDb<T>(
     mount: Mount,
     pathId: string,
@@ -213,9 +207,8 @@ async function buildDocumentDb<S extends SchemaType>(
     const onSnapshot: SyncCallbacks['onSnapshot'] = snapshot
         ? async () => {
               const path = await mount.getPath(pathId);
-              // A database outside a container, or one whose row is gone, has nothing to snapshot.
-              // It answers 'taken', so the watermark moves and the tick doesn't try again every 30 s.
-              // 'skipped' means only that the container lock was busy.
+              // A database outside a container, or one whose row is gone, has nothing to snapshot. It answers 'taken',
+              // so the watermark moves and the tick doesn't try again every 30 s.
               if (!path?.parentId) return 'taken';
               return mount.trySnapshotContainerDataDb(path.parentId, snapshot.policy);
           }
@@ -235,9 +228,8 @@ async function buildDocumentDb<S extends SchemaType>(
                       if (mode === 'create') return;
                       const tempPath = mount.getTempPath(pathId);
                       if (fs.existsSync(tempPath)) {
-                          // A surviving temp signals an unclean shutdown. Adopt it only if it's a real,
-                          // non-collapsed SQLite: a 0-byte, partial or fresh-init temp (a failed or empty
-                          // S3 GET) would be uploaded as an empty doc over the good stored object.
+                          // A surviving temp signals an unclean shutdown. A 0-byte or partial temp (a failed S3 GET)
+                          // would upload as an empty doc over the good stored object, so only a real SQLite is adopted.
                           const known = await mount.getPath(pathId);
                           if (isViableRecoveryTemp(tempPath, known?.size ?? 0)) {
                               console.log(`[Mount] Recovering from crash: using existing tmp file for ${pathId}`);
@@ -255,9 +247,8 @@ async function buildDocumentDb<S extends SchemaType>(
                       // would read as a miss.
                       await mount.withTreeShared(async () => {
                           const currentKey = await mount.getStorageKey(pathId);
-                          // Clean close during an outage: the live temp was cleaned but a staged
-                          // copy holds bytes newer than storage (upload not yet acked). Recover
-                          // from it rather than downloading a stale object.
+                          // A clean close during an outage: the staged copy holds bytes newer than storage, so it is
+                          // the one to recover from.
                           const staged = mount.pendingStagedCopy(currentKey);
                           if (staged) {
                               console.log(`[Mount] Recovering from staged upload for ${pathId}`);
@@ -271,15 +262,12 @@ async function buildDocumentDb<S extends SchemaType>(
                           // empty working copy as a new database.
                       });
                   },
-                  // On s3 the sync stages a frozen copy and queues its upload, off the request and close
-                  // path. On a path-based local mount it copies at once: a local write never answers
-                  // 503, and a queue would only make the copy less durable when the sync returns.
+                  // On s3 the sync stages a frozen copy and queues its upload. A path-based local mount copies at once:
+                  // a local write never answers 503, and a queue would only weaken its durability.
                   onSync: () =>
                       mount.withTreeShared(async () => {
-                          // The key is resolved on every sync, under the tree lock. On `local` it is the
-                          // name path, so a move since the open, or during the sync, would write the old
-                          // tree back. A missing row means the document was deleted, and a sync then
-                          // must not bring its key back. Keys on s3 and local-key never change.
+                          // The key is resolved on every sync, under the tree lock: on `local` a move since the open
+                          // would write the old tree back. A deleted document's sync must not bring its key back.
                           const currentKey = await mount.findStorageKey(pathId);
                           if (currentKey === null) return;
                           if (mount.uploadQueue) {
@@ -328,9 +316,8 @@ async function buildDocumentDb<S extends SchemaType>(
         managed.markDirty();
     }
 
-    // On a mount that works on a temp copy, such as s3, the new empty schema goes to storage before
-    // this returns. Otherwise the stored object appears only with the next 30 s sync, and a restart in
-    // that window makes every later open answer 410. On local-key the database is the stored file.
+    // On a temp-copy mount the new empty schema goes to storage before this returns. Otherwise a restart before the
+    // next 30 s sync makes every later open answer 410.
     if (mode === 'create' && mount.needsTempCopy) {
         try {
             await managed.flush();
@@ -377,14 +364,8 @@ export async function closeInSlot(
     await db.close(opts);
 }
 
-// Syncs and closes every open document database at or below rootId, such as a container's data.db
-// and comments.db and those of a nested chat. A trash or a delete changes rows without the cache
-// knowing. A dirty database left open would then sync to the old key on its next tick, which writes
-// a dead tree back on `local` and a deleted object back on `s3`. The walk needs the rows, so callers
-// run this before they change them: trashPath before its storage rename, so the last bytes move to
-// the trash with the rest, and deletePath before it removes rows and bytes. Open collab documents
-// are closed before this, so it closes what readers and chats left open. skipFinalSnapshot: the
-// container is going away, and a snapshot would take its path lock again.
+// Syncs and closes every open document database at or below rootId. A trash or a delete changes rows without the cache
+// knowing, and a dirty database left open would sync to the old key, so callers run this first.
 export async function closeCachedDbsUnder(mount: Mount, rootId: string): Promise<void> {
     for (const id of [rootId, ...mount.collectDescendantIds(rootId)]) {
         if (mount.documentDbs.has(id)) {
@@ -409,9 +390,8 @@ export async function closeAllDatabases(mount: Mount): Promise<void> {
         mount.pruneTimer = null;
     }
 
-    // The reindex closes before the databases, and the extract in flight finishes. That extract may hold
-    // a document database, and the sweep below would otherwise wait for it. The other dirty rows wait
-    // for the next open. The wait has a deadline, so an extract that hangs can't stop the teardown.
+    // The reindex closes before the databases: its extract in flight may hold a document database the sweep would wait
+    // for. The wait has a deadline, so an extract that hangs can't stop the teardown.
     await mount.reindexQueue?.close();
 
     // A thumbnail job ends with a write to metadata.db, so it finishes first. The sharp worker it holds
@@ -432,12 +412,8 @@ export async function closeAllDatabases(mount: Mount): Promise<void> {
     }
 
     if (mount.uploadQueue) {
-        // At shutdown the queue flushes after the final close-time enqueues, so healthy uploads finish
-        // before metadata.db closes. The flush and the wait in close() both end at the shutdown deadline,
-        // even with a PUT or a semaphore slot stalled. Any other close has no deadline and skips the flush.
-        // Its wait in close() is instant for an idle close, because a PUT on the wire holds the Home. An
-        // eviction, such as for a restore, closes a held Home, and its wait keeps an old PUT from landing
-        // over what comes next.
+        // At shutdown the queue flushes after the final close-time enqueues, up to the deadline. An eviction, such as
+        // for a restore, closes a held Home, and its wait keeps an old PUT from landing over what comes next.
         const deadline = getShutdownDrainDeadline();
         if (deadline !== null) {
             await settlesWithin(

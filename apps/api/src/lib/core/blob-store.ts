@@ -62,9 +62,8 @@ export function computeResourceEtag(bytes: Uint8Array): string {
 // The terms both DAV protocols carry a precondition element for: bytes that do not parse, a broken object, a foreign component.
 export type InvalidReason = 'data' | 'object' | 'component';
 
-// A client-caused failure is a value, not a throw; a null etag is a write not stored verbatim, which has no validator to hand back (RFC 4791 § 5.3.4).
-// The id is the row the write landed on, read inside the lock: a facade announcing from it cannot lose the event to a racing delete.
-// An unchanged PUT sent the bytes already stored, so it committed nothing and there is nothing to announce.
+// A null etag is a write not stored verbatim, which has no validator to hand back (RFC 4791 § 5.3.4). The id is read
+// inside the lock, so a facade announcing from it cannot lose the event to a racing delete.
 export type PutResourceResult =
     | { ok: true; id: string; etag: string | null; created: boolean; unchanged: boolean }
     | {

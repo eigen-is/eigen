@@ -229,9 +229,8 @@ export async function replaceContainerDataDb(mount: Mount, containerId: string, 
                     fs.copyFileSync(sourcePath, staging);
                     mount.uploadQueue.enqueueStaged(storageKey, staging, true);
                 } else {
-                    // On local-key the object is the database file itself. Written over in place, it would hand
-                    // SQLite a stale vnode (SQLITE_IOERR_VNODE) at the next open, so it gets a new inode. A -wal
-                    // left beside it would be replayed over the new bytes.
+                    // On local-key the object is the database file itself. Written over in place it hands SQLite a
+                    // stale vnode (SQLITE_IOERR_VNODE) at the next open, and an old -wal would replay over the new bytes.
                     if (!mount.needsTempCopy) {
                         for (const file of [`${storageKey}-wal`, `${storageKey}-shm`, storageKey]) {
                             await mount.storage.delete(file);

@@ -15,9 +15,8 @@ const VERSION: string = pkg.version;
 const COMMIT = getBuildCommit();
 const BUILT_AT: Date | undefined = process.env['EIGEN_BUILT_AT'] ? new Date(process.env['EIGEN_BUILT_AT']) : undefined;
 
-// Identity + secrets for the deployment. The secret is made at first boot, the rest set during setup; only
-// orgName changes after, from the owner's settings page. Runtime-tunable defaults — including the storage backend —
-// live in ServerSettings (settings.json), not here. The web address is DOMAIN, from ./eigen setup.
+// Identity and secrets for the deployment. The secret is made at first boot and the rest at setup; only orgName changes
+// after. Runtime-tunable defaults, the storage backend included, live in ServerSettings.
 export type ServerConfig = {
     orgName: string;
     orgId: string;

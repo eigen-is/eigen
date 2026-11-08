@@ -29,9 +29,8 @@ const NOT_A_PRESENTATION = new Set([
     'application/vnd.ms-powerpoint.slideshow.macroenabled.main+xml',
 ]);
 
-// The content parts the reader parses, by relationship type: a part is parsed only when its content type agrees, so
-// a relationship can't hand the reader notes, a SmartArt graphic's layout or a part of another kind. contentTypeOf
-// answers in lower case.
+// The content parts the reader parses, by relationship type: a part is parsed only when its content type agrees, so a
+// relationship can't hand the reader another kind of part. contentTypeOf answers in lower case.
 const PART_TYPES = {
     slide: SLIDE_TYPE.toLowerCase(),
     slideLayout: SLIDE_LAYOUT_TYPE.toLowerCase(),
