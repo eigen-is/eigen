@@ -514,7 +514,7 @@ async function main(): Promise<void> {
         teamDocs.set(doc.name, docPath);
         await uploadMedia(teamDrive, teamMountId, docPath, doc.media ?? [], author);
 
-        // Comment threads are chats inside the container's chat/ subfolder (see assertCommentChatExists).
+        // Comment threads are chats inside the container's chat/ subfolder.
         const chatFolder = await teamDrive.getChildByName(teamMountId, docPath.id, CONTAINER_CHAT_FOLDER);
         if (!chatFolder) throw new Error(`chat/ subfolder missing for ${docPath.name}`);
         const docJson = htmlToDocJson(docSchema(), doc.html);

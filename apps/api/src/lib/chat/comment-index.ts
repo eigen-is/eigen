@@ -5,13 +5,12 @@
 
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { DocCommentMatch } from '@workspace/lib/types/doc-search';
-import { DRIVE_MIME_CHAT } from '@workspace/lib/types/drive';
 import { eq, getTableColumns, inArray, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { sanitizeFtsQuery } from '../core';
 import { ApiError } from '../core/errors';
 import type { DriveLike } from '../drive/get-drive';
-import { CONTAINER_CHAT_FOLDER, CONTAINER_COMMENTS_DB } from '../mount/container-dbs';
+import { CONTAINER_COMMENTS_DB } from '../mount/container-dbs';
 import { foldName } from '../mount/names';
 import { COMMENT_INDEX_DB_CONFIG } from './comment-db-config';
 import * as commentSchema from './comment-schema';
@@ -23,17 +22,8 @@ const COMMENT_SEARCH_LIMIT = 8;
 export class CommentIndex {
     public constructor(private readonly db: BunSQLiteDatabase<typeof commentSchema>) {}
 
-    public async ensureComment(chatName: string, seed?: { createdBy?: string | null }): Promise<void> {
-        await this.db
-            .insert(commentSchema.comments)
-            .values({ chatName, createdBy: seed?.createdBy ?? null })
-            .onConflictDoUpdate({
-                target: commentSchema.comments.chatName,
-                // A row that has a creator keeps it. Only a missing creator is filled in.
-                set: {
-                    createdBy: sql`COALESCE(${commentSchema.comments.createdBy}, EXCLUDED.createdBy)`,
-                },
-            });
+    public async ensureComment(chatName: string, createdBy: string): Promise<void> {
+        await this.db.insert(commentSchema.comments).values({ chatName, createdBy }).onConflictDoNothing();
     }
 
     public async updateActivity(chatName: string, authorEmail: string, incrementCount = true): Promise<void> {
@@ -174,17 +164,4 @@ export async function withCommentIndex<T>(
     return drive.withDatabase(mountId, COMMENT_INDEX_DB_CONFIG, dbPath.id, (managed) =>
         fn(new CommentIndex(managed.db)),
     );
-}
-
-// A made-up chatName would bring a history event and a notification that link nowhere, so a change of a
-// comment's state runs this first. A comment thread is a chat in the document's chat folder.
-export async function assertCommentChatExists(
-    drive: DriveLike,
-    mountId: string,
-    containerId: string,
-    chatName: string,
-): Promise<void> {
-    const chatFolder = await drive.getChildByName(mountId, containerId, CONTAINER_CHAT_FOLDER);
-    const chat = chatFolder ? await drive.getChildByName(mountId, chatFolder.id, chatName) : null;
-    if (chat?.mimeType !== DRIVE_MIME_CHAT) throw new ApiError(404, 'Comment thread not found');
 }

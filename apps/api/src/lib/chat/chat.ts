@@ -143,7 +143,7 @@ export class ChatRoom {
         // A comment thread inside a document keeps the document's comment index up to date.
         if (type !== 'whisper') {
             await this.updateCommentIndex(async (index) => {
-                await index.ensureComment(this.path.name, { createdBy: authorEmail });
+                await index.ensureComment(this.path.name, authorEmail);
                 await index.updateActivity(this.path.name, authorEmail);
                 for (const email of extractMentionedEmails(content)) {
                     await index.addMention(this.path.name, email);
