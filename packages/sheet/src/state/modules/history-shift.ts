@@ -84,10 +84,11 @@ function deleteMove(op: DeleteRowColOp): RowColMove {
 // A sheet, row or column entry records whole fields and matrices of the grid it found and left, so it can only step on
 // that grid. Each entry below it fits the grid as it leaves it, so those go too, on the undo and the redo stack alike.
 export function dropStructuralEntries(entries: History[]): History[] {
-    const newest = entries.findLastIndex(({ options }) => {
-        return options?.insertRowColOp || options?.deleteRowColOp || options?.addSheetOp || options?.deleteSheetOp;
-    });
-    return entries.slice(newest + 1);
+    return entries.slice(entries.findLastIndex(isStructural) + 1);
+}
+
+export function isStructural({ options }: History): boolean {
+    return Boolean(options?.insertRowColOp || options?.deleteRowColOp || options?.addSheetOp || options?.deleteSheetOp);
 }
 
 // A peer's row or column op moves your entries' cells, merges, borders, links, validation rules and row or column sizes

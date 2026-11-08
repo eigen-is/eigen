@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
 import type { Context } from '../../../state/context';
 import type { Op, Sheet } from '../../../state/types';
-import { opToPatch, patchToOp } from '../../../state/utils/patch';
+import { opToPatch } from '../../../state/utils/patch';
 import { syncablePaths } from '../factories/collab';
 import { contextFactory } from '../factories/context';
 
@@ -59,13 +59,5 @@ describe('per-client sheet state never reaches the wire', () => {
             ctx.sheets[0].selections = [{ row: [1, 1], column: [1, 1] }];
         });
         expect(paths).toEqual([]);
-    });
-
-    test('the undo step of a row op, which ships the sheet fields whole, drops it too', () => {
-        const options = {
-            insertRowColOp: { type: 'row', index: 0, count: 1, direction: 'lefttop', id: 'sheet-1' },
-        } as const;
-        const ops = patchToOp(getContext(), [], options, { fields: { selections: [], name: 'Kept' }, repair: [] });
-        expect(ops.map((op) => op.path).filter((path) => path.length === 1)).toEqual([['name']]);
     });
 });

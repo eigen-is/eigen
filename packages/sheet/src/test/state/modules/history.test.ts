@@ -9,8 +9,9 @@ import type { Patch } from 'immer';
 import { produce } from 'immer';
 import { generateAPIs } from '../../../components/Workbook/api';
 import { dataToCelldata } from '../../../engine/celldata';
+import { MAX_SHEET_ROW_COUNT } from '../../../engine/defaults';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
-import type { Cell } from '../../../engine/types';
+import type { Cell, ShiftedSheet } from '../../../engine/types';
 import { copySheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { applyDataValidation } from '../../../state/modules/data-validation';
@@ -20,7 +21,7 @@ import { mergeCells } from '../../../state/modules/merge';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import { addSheet, changeSheet, deleteSheet } from '../../../state/modules/sheet';
 import { clearValidations, validationAt } from '../../../state/modules/validation-rules';
-import type { DataValidationRule, History, Op, Sheet } from '../../../state/types';
+import type { ConditionalFormatRule, DataValidationRule, History, Op, Sheet } from '../../../state/types';
 import type { Tab } from '../factories/collab';
 import { author, join, tab, tabEdit, tabReceive, tabRedo, tabUndo } from '../factories/collab';
 import { workbookContextFactory } from '../factories/context';
@@ -97,6 +98,54 @@ function expectAgree(s: ReturnType<typeof session>) {
     expect(view(s.joiner())).toEqual(view(s.a.ctx.sheets));
 }
 
+// A chart on any sheet that reads B3:B6 of One.
+const chartReading = (id: string) => ({
+    ...newSheetChartSpecParts({
+        ...sampleChartSpec('column'),
+        series: { 's-1': { ...DEFAULT_CHART_SERIES_STYLE, color: '#2a78d6' } },
+        data: {
+            source: 'range',
+            categories: null,
+            series: [{ id: 's-1', name: 'Points', values: { sheetId: ONE, row: [2, 5], column: [1, 1] } }],
+        },
+    }),
+    id,
+    index: 'a0',
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 100,
+});
+
+const formulaRule = (formula: string, first = 0, last = 0): ConditionalFormatRule => ({
+    type: 'default',
+    conditionName: 'formula',
+    conditionValue: [formula],
+    cellrange: [{ row: [first, last], column: [0, 0] }],
+    format: {},
+});
+
+const byOrder = (x: LibSheet, y: LibSheet) => (x.order ?? 0) - (y.order ?? 0);
+
+// All a reader holds of a sheet. A joiner holds the stored cells of a sheet its batches never wrote into.
+const stored = (sheets: ShiftedSheet[]) =>
+    sheets.toSorted(byOrder).map((s) => ({
+        id: s.id,
+        name: s.name,
+        order: s.order,
+        row: s.row,
+        column: s.column,
+        cells: cells(s),
+        config: s.config,
+        hyperlink: s.hyperlink ?? {},
+        dataValidations: s.dataValidations ?? {},
+        conditionalFormatRules: s.conditionalFormatRules,
+        frozen: s.frozen,
+        filterRange: s.filterRange,
+        filter: s.filter,
+        charts: s.charts,
+    }));
+
 function cellAt(t: Tab, a1: string, id = ONE) {
     const [r, c] = at(a1);
     return t.ctx.sheets.find((x) => x.id === id)?.data?.[r]?.[c] ?? null;
@@ -118,6 +167,10 @@ const insertColumns = (index: number, count: number, id = ONE) => {
 };
 const deleteRows = (start: number, end: number, id = ONE) => {
     const op = { type: 'row', start, end, id } as const;
+    return [(ctx: Context) => deleteRowCol(ctx, op), { deleteRowColOp: op }] as const;
+};
+const deleteColumns = (start: number, end: number, id = ONE) => {
+    const op = { type: 'column', start, end, id } as const;
     return [(ctx: Context) => deleteRowCol(ctx, op), { deleteRowColOp: op }] as const;
 };
 const removeSheet = (id: string) => [(ctx: Context) => deleteSheet(ctx, id), { deleteSheetOp: { id } }] as const;
@@ -377,7 +430,7 @@ describe('working alone', () => {
             { A1: { ...num(6), f: '=SUM(One!A4:A6)' }, A2: { ...num(3), f: '=One!A6' } },
         );
         return produce(base, (ctx: Context) => {
-            const [one] = ctx.sheets;
+            const [one, two] = ctx.sheets;
             one.config = { ...one.config, merge: { '7_0': merge }, rowlen: { 4: 40 } };
             one.hyperlink = { '4_0': { linkType: 'webpage', linkAddress: 'https://eigen.is' } };
             one.dataValidations = {
@@ -386,42 +439,53 @@ describe('working alone', () => {
                     rule: { type: 'dropdown', type2: '', value1: 'a', value2: '' },
                 },
             };
+            one.config.borderInfo = { '4_0': { b: { style: 1, color: '#000' } } };
+            one.config.rowhidden = { 6: 0 };
+            one.frozen = { type: 'rangeBoth', range: { row_focus: 5, column_focus: 1 } };
+            one.filterRange = { row: [2, 9], column: [0, 2] };
+            one.filter = {
+                0: { rowhidden: { 6: 0 }, optionstate: true, str: 2, edr: 9, cindex: 0, stc: 0, edc: 2 },
+            };
+            one.conditionalFormatRules = [formulaRule('=A5>0', 3, 5)];
+            one.charts = { c1: chartReading('c1') };
+            two.conditionalFormatRules = [formulaRule('=One!A5>0')];
+            two.charts = { c2: chartReading('c2') };
         });
     };
-    const shown = (t: Tab) =>
-        t.ctx.sheets
-            .toSorted((x, y) => (x.order ?? 0) - (y.order ?? 0))
-            .map(({ id, order, data, config, hyperlink, dataValidations, calcChain, row, column }) => ({
-                id,
-                order,
-                data,
-                config,
-                hyperlink: hyperlink ?? {},
-                dataValidations,
-                calcChain: new Set(calcChain?.map(({ r, c, id: sheet }) => `${r}_${c}_${sheet}`)),
-                row,
-                column,
-            }));
+    const shown = (t: Tab) => ({
+        sheets: stored(t.ctx.sheets),
+        calcChains: t.ctx.sheets
+            .toSorted(byOrder)
+            .map(({ calcChain }) => new Set(calcChain?.map(({ r, c, id: sheet }) => `${r}_${c}_${sheet}`))),
+    });
 
     const kinds: [string, Structural][] = [
         ['a row insert', insertRows(4, 2)],
         ['a column insert', insertColumns(0, 2)],
+        ['a row insert inside a merge', insertRows(8, 1)],
         ['a row delete', deleteRows(4, 5)],
+        ['a column delete', deleteColumns(0, 1)],
+        ['a row delete through a merge', deleteRows(8, 8)],
+        ['a column delete through a merge', deleteColumns(1, 1)],
         ['a sheet delete', removeSheet(TWO)],
+        ['a copy', [(ctx: Context) => copySheet(ctx, TWO), { addSheetOp: true }]],
     ];
     test.each(kinds)('%s goes back and forth exactly, on both tabs and for a joiner', (_, structural) => {
         const s = session(rich());
         const before = shown(s.a);
         s.edit(s.a, ...structural);
         const after = shown(s.a);
+        const everyReaderHolds = (state: ReturnType<typeof shown>) => {
+            expect(shown(s.a)).toEqual(state);
+            expect(stored(s.b.ctx.sheets)).toEqual(state.sheets);
+            expect(stored(s.joiner())).toEqual(state.sheets);
+        };
+        expect(stored(s.b.ctx.sheets)).toEqual(after.sheets);
         for (let round = 0; round < 2; round += 1) {
             s.undo(s.a);
-            expect(shown(s.a)).toEqual(before);
-            expect(s.b.ctx.sheets[0].data).toEqual(s.a.ctx.sheets[0].data);
-            expectAgree(s);
+            everyReaderHolds(before);
             s.redo(s.a);
-            expect(shown(s.a)).toEqual(after);
-            expectAgree(s);
+            everyReaderHolds(after);
         }
     });
 
@@ -444,12 +508,33 @@ describe('working alone', () => {
         expectAgree(s);
     });
 
-    test('an undo ships only the fields the op wrote', () => {
-        const t = tab(rich());
-        tabEdit(t, ...insertRows(4, 1));
-        const fields = tabUndo(t).flatMap(({ path }) => (path.length === 1 ? [path[0]] : []));
+    test('an undo ships only the fields its marker did not bring back', () => {
+        const fieldsOfUndo = (...structural: Structural) => {
+            const t = tab(rich());
+            tabEdit(t, ...structural);
+            return tabUndo(t).flatMap(({ path }) => (path.length === 1 ? [path[0]] : []));
+        };
+        expect(fieldsOfUndo(...insertRows(4, 1))).toEqual([]);
+        const fields = fieldsOfUndo(...deleteRows(4, 4));
         expect(fields).toContain('config');
-        for (const field of ['name', 'color', 'hide', 'order']) expect(fields).not.toContain(field);
+        for (const field of ['name', 'color', 'hide', 'order', 'row', 'data']) expect(fields).not.toContain(field);
+    });
+
+    // A sheet past the row limit, as an import may bring: the delete applies, but the insert that would undo it fails.
+    test('an undo whose marker fails changes nothing, sends nothing and leaves nothing to redo', () => {
+        const base = workbook({ A5: text('gone'), A6: text('next') });
+        const rows = Array.from({ length: MAX_SHEET_ROW_COUNT + 2 }, (_, r) => base.sheets[0].data?.[r] ?? [null]);
+        const s = session(produce(base, (ctx: Context) => void (ctx.sheets[0].data = rows)));
+        s.edit(s.a, ...deleteRows(4, 4));
+        const sent = s.batches.length;
+        const held = s.a.ctx;
+        s.undo(s.a);
+        expect(s.a.ctx).toBe(held);
+        s.redo(s.a);
+        expect(s.a.ctx).toBe(held);
+        expect(s.batches).toHaveLength(sent);
+        expect(s.a.history).toMatchObject({ undoList: [], redoList: [] });
+        expect(cellAt(s.a, 'A5')?.v).toBe('next');
     });
 });
 
@@ -519,7 +604,7 @@ describe("a row op moves another sheet's formulas for every reader", () => {
         expectAgree(s);
     });
 
-    test('a row insert moves them in a copy nobody opened', () => {
+    test('a row insert moves them in a copy, which a joiner holds as stored cells', () => {
         const s = session(pointing());
         s.edit(s.a, (ctx) => copySheet(ctx, TWO), { addSheetOp: true });
         s.edit(s.b, ...insertRows(2, 2));
@@ -661,7 +746,7 @@ describe('a structural undo or redo applies exactly what it sends', () => {
         expectAgree(s);
     });
 
-    test('undoing your row delete brings back a formula it broke in a copy nobody opened', () => {
+    test('undoing your row delete brings back a formula it broke in a copy, which a joiner holds as stored cells', () => {
         const s = session(workbook({ A5: num(3) }, { A1: { f: '=One!A5', v: 3, m: '3' } }));
         s.edit(s.a, (ctx) => copySheet(ctx, TWO), { addSheetOp: true });
         s.edit(s.a, ...deleteRows(4, 4));
@@ -672,6 +757,31 @@ describe('a structural undo or redo applies exactly what it sends', () => {
         }
         expectAgree(s);
     });
+
+    test.each<[string, Structural]>([
+        ['row', deleteRows(4, 4)],
+        ['column', deleteColumns(0, 0)],
+    ])(
+        'undoing a %s delete brings back a formula rule on another sheet that named it, and redo breaks it again',
+        (_, deletion) => {
+            const base = produce(workbook({ A5: num(3) }), (ctx: Context) => {
+                ctx.sheets[1].conditionalFormatRules = [formulaRule('=One!A5>0')];
+            });
+            const s = session(base);
+            const everyReaderReads = (formula: string) => {
+                for (const sheets of [s.a.ctx.sheets, s.b.ctx.sheets, s.joiner()]) {
+                    const [rule] = sheets[1].conditionalFormatRules ?? [];
+                    expect(rule.type === 'default' && rule.conditionValue).toEqual([formula]);
+                }
+            };
+            s.edit(s.a, ...deletion);
+            everyReaderReads('=#REF!>0');
+            s.undo(s.a);
+            everyReaderReads('=One!A5>0');
+            s.redo(s.a);
+            everyReaderReads('=#REF!>0');
+        },
+    );
 
     test('undoing a delete of merged rows brings the merge back everywhere', () => {
         const merge = { r: 4, c: 0, rs: 2, cs: 2 };
@@ -719,7 +829,7 @@ describe('a structural undo or redo applies exactly what it sends', () => {
         expectAgree(s);
     });
 
-    test("a peer's edit to a copy you never opened applies on your side", () => {
+    test("a peer's edit to a copy you made applies on your side", () => {
         const s = session(workbook({}, { A1: text('two') }));
         s.edit(s.a, (ctx) => copySheet(ctx, TWO), { addSheetOp: true });
         const copy = String(s.a.ctx.sheets[3].id);
@@ -791,23 +901,7 @@ describe('shiftEntries', () => {
         ...rows(index, count),
         value: { ...rows(index, count).value, type: 'column' },
     });
-    const onOne = {
-        ...newSheetChartSpecParts({
-            ...sampleChartSpec('column'),
-            series: { 's-1': { ...DEFAULT_CHART_SERIES_STYLE, color: '#2a78d6' } },
-            data: {
-                source: 'range',
-                categories: null,
-                series: [{ id: 's-1', name: 'Points', values: { sheetId: ONE, row: [2, 5], column: [1, 1] } }],
-            },
-        }),
-        id: 'c1',
-        index: 'a0',
-        x: 0,
-        y: 0,
-        width: 100,
-        height: 100,
-    };
+    const onOne = chartReading('c1');
     const sheets: Sheet[] = [
         { ...sheet(ONE, 'One', 0), charts: { c1: onOne } },
         { ...sheet(TWO, 'Two', 1), charts: { c2: { ...onOne, id: 'c2' } } },

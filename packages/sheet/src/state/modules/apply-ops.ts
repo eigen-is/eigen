@@ -17,7 +17,6 @@ import { cancelNormalSelected } from './cell';
 import { registerSheetFormulas } from './formula-cache';
 import { rowColMove } from './history-shift';
 import { deleteRowCol, insertRowCol } from './rowcol';
-
 import { addSheet, deleteSheet, leaveCurrentSheet, renameSheet } from './sheet';
 
 // A row or column op the batch applied, with the sheets it was applied to.
