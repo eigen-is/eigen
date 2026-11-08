@@ -4,7 +4,6 @@
 // extractDependencies, the walk that finds the cells a formula reads, builds the editor's formula map too.
 
 import type { Cell, CellMatrix, Sheet } from '@workspace/lib/sheets';
-import { escapeRegExp } from 'es-toolkit';
 import { createArrayResolver } from './cell-resolver';
 import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
@@ -13,9 +12,9 @@ import type { SheetExtent } from './dependency-index';
 import { cellsOf, DependencyIndex, dependencySlots } from './dependency-index';
 import { booleanDisplay, numberDisplay } from './format';
 import { FormulaEngine, isFormula } from './formula-engine';
-import { inlineNames } from './formula-shift';
+import { forEachRef, inlineNames } from './formula-shift';
 import type { WalkContext } from './formula-utils';
-import { formulaOperators, iscelldata, matrixWidth, resolveCellRange } from './formula-utils';
+import { matrixWidth, resolveCellRange } from './formula-utils';
 import { valueIsError } from './parser/error';
 import { sheetFinder } from './parser/helper/cell';
 import type {
@@ -113,13 +112,7 @@ export function recalcSheets(
                 if (typeof f !== 'string' || !isFormula(f)) continue;
                 chain.push({ r, c, id: w.id });
                 const key = `r${r}c${c}i${w.id}`;
-                let deps: FormulaDependency[];
-                try {
-                    deps = extractDependencies(walk, f, w.id, w.data);
-                } catch {
-                    // A malformed formula must not stop the scan. It reads nothing here and still evaluates below.
-                    deps = [];
-                }
+                const deps = extractDependencies(walk, f, w.id, w.data);
                 infoMap[key] = {
                     formulaDependency: deps,
                     calc_funcStr: f,
@@ -232,83 +225,11 @@ export function extractDependencies(
     data: CellMatrix | null | undefined,
 ): FormulaDependency[] {
     const dependencies: FormulaDependency[] = [];
-    for (const token of tokenize(formula)) {
-        // A token keeps the spaces around it, as in `=A1 + B1`.
-        const reference = token.trim();
-        // resolveCellRange checks a reference that names a sheet with its own pattern, which also reads a quoted name
-        // on both ends of a range, as in 'My Data'!A1:'My Data'!B2.
-        if (reference.length < 2 || (!reference.includes('!') && !iscelldata(reference))) continue;
+    forEachRef(formula, (reference) => {
         const range = resolveCellRange(walk, reference, sheetId, data);
         if (range != null) dependencies.push(range);
-    }
+    });
     return dependencies;
-}
-
-// What a formula splits at: its operators, commas and brackets, and the name of a function it calls, so the LOG10 of
-// LOG10(A1) reads as no cell. A name is tried only where a word starts. Tried at every letter, a long run of letters
-// with no bracket after it would be read once per letter. A `:` that joins a reference to a function call, as in
-// A1:INDEX(…) or INDEX(…):B3, is one too, or A1 would read as a range up to a column named INDEX.
-const OPERATORS = new RegExp(
-    [
-        ...[...formulaOperators].map(escapeRegExp),
-        '[,()]',
-        '(?<![\\w.])[A-Za-z_][\\w.]*(?=\\s*\\()',
-        ':(?=[A-Za-z_][\\w.]*\\()',
-        '(?<=\\)):',
-    ].join('|'),
-);
-
-// Splits a formula at its operators, where a split on the operators alone would cut a quoted sheet name such as
-// '1-2' or a string. A double-quoted string is one token. A single-quoted sheet name is one token with the reference
-// after it, so ='1-2'!A1+5 gives '1-2'!A1 and 5. A name that ends a range joins its start, as in '1-2'!A1:'1-2'!B2.
-function tokenize(formula: string): string[] {
-    let tokenStart = 0;
-    let singleQuoteStart = -1;
-    let doubleQuoteStart = -1;
-    const tokens: string[] = [];
-    // A single-quoted sheet name waits here for the token after it, its `!A1`.
-    let sheetName: string | null = null;
-    const push = (parts: string[]) => {
-        if (sheetName != null) {
-            parts[0] = sheetName + parts[0];
-            sheetName = null;
-        }
-        for (const part of parts) tokens.push(part);
-    };
-    for (let j = 0; j < formula.length; j += 1) {
-        const char = formula.charAt(j);
-        if (char === "'" && doubleQuoteStart === -1) {
-            if (singleQuoteStart === -1) {
-                if (tokenStart !== j) push(formula.substring(tokenStart, j).split(OPERATORS));
-                singleQuoteStart = j;
-                tokenStart = j;
-            } else if (j < formula.length - 1 && formula.charAt(j + 1) === "'") {
-                // Two quotes in a row are an escaped quote inside the name.
-                j += 1;
-            } else {
-                const name = formula.substring(singleQuoteStart, j + 1);
-                const rangeStart = formula.charAt(singleQuoteStart - 1) === ':' && tokens.at(-1)?.endsWith(':');
-                sheetName = rangeStart ? `${tokens.pop()}${name}` : name;
-                tokenStart = j + 1;
-                singleQuoteStart = -1;
-            }
-        } else if (char === '"' && singleQuoteStart === -1) {
-            if (doubleQuoteStart === -1) {
-                if (tokenStart !== j) push(formula.substring(tokenStart, j).split(OPERATORS));
-                doubleQuoteStart = j;
-                tokenStart = j;
-            } else if (j < formula.length - 1 && formula.charAt(j + 1) === '"') {
-                j += 1;
-            } else {
-                tokenStart = j + 1;
-                push([formula.substring(doubleQuoteStart, tokenStart)]);
-                doubleQuoteStart = -1;
-            }
-        }
-    }
-    if (tokenStart !== formula.length) push(formula.substring(tokenStart).split(OPERATORS));
-    if (sheetName != null) tokens.push(sheetName);
-    return tokens;
 }
 
 // A dependency cut to the cells its sheet holds, null when it holds none. Only a formula cell is looked up in the

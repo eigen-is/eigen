@@ -36,8 +36,8 @@ const SHEET_REFERENCE = new RegExp(
 // True for a cell (A1, $A$1), a range (A1:B3) and a whole column or row (A:C, 1:2), on the formula's sheet or on
 // another (Sheet1!A1).
 export function iscelldata(txt: string): boolean {
-    const parts = txt.split('!');
-    const cells = parts.length > 1 ? parts[1] : parts[0];
+    // A quoted sheet name may hold a `!`, and the cells follow the last.
+    const cells = txt.slice(txt.lastIndexOf('!') + 1);
     if (!cells.includes(':')) return CELL.test(cells);
     // A reversed range (`A$3:A1`) is a ref too: Excel reads it as its sorted twin.
     const [start, end] = cells.split(':');
@@ -63,7 +63,6 @@ export function resolveCellRange(
     formulaSheetId: string,
     data: CellMatrix | null | undefined,
 ): FormulaDependency | null {
-    if (reference.length === 0) return null;
     const namesSheet = reference.includes('!');
     const key = namesSheet ? reference : `${reference}_${formulaSheetId}`;
     if (key in cellTextToIndexList) return cellTextToIndexList[key];

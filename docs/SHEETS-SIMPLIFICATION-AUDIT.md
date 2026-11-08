@@ -30,7 +30,7 @@ The API audit's six patterns all show up here. Read across the six areas, though
 
 1. **The wire is whatever immer wrote.** An op is a raw immer patch. So everything a reducer happens to write reaches every peer, and every leak got its own filter or repair: the recalc list on the wire ([E1](#e1)), per-tab fields on the shared sheet ([S7](#s7)), merge stamps that must land after the cells ([D9](#d9)), a link companion op for `hl` ([F2](#f2)), a pre-apply simulation of what `applyPatches` would throw on ([S5](#s5)), and `normalizeSheetConfig` at six entry points because a first write to a missing collection ships it whole. The cure is a closed op vocabulary ([S10](#s10)).
 2. **Facts stored twice inside the workbook.** `calcChain` beside the cells' `f` ([E1](#e1)), `cell.mc` beside `config.merge` ([D9](#d9)), `cell.hl` beside `sheet.hyperlink` ([F2](#f2)), `ctx.filter` beside `sheet.filter` ([D7](#d7)), the freeze and pixel boxes beside the indices ([R1](#r1), [R9](#r9)), the clipboard. Every writer has to keep the two in step, and each one that didn't is a fix in the log.
-3. **Two paths for one job.** The editor's batch applier beside the engine's replay ([S2](#s2)), writers doing their own formula bookkeeping beside the patch-derived recompute that undo already uses ([E7](#e7)), sort and fill outside `carryCells` ([D2](#d2)), two hand-written formula walkers ([E3](#e3)), four ways to turn a pointer into a cell ([R3](#r3)), and row and column handlers written twice ([R9](#r9)).
+3. **Two paths for one job.** The editor's batch applier beside the engine's replay ([S2](#s2)), writers doing their own formula bookkeeping beside the patch-derived recompute that undo already uses ([E7](#e7)), sort and fill outside `carryCells` ([D2](#d2)), four ways to turn a pointer into a cell ([R3](#r3)), and row and column handlers written twice ([R9](#r9)).
 4. **Structural undo across peers.** Undoing your own row, column or sheet op after a peer edited since needed a three-way merge, trial runs, a refusal path and half the shifter. The owner accepted the smaller undo, and that is done.
 5. **Fork scaffolding.** fill modes no menu can choose and Chinese numeral series ([D4](#d4)), dead formula state ([E6](#e6)). Each is still checked on edits, and at least one got a fix (`b6ecee4d3`, protection checked before a delete, for a protection nobody can switch on).
 
@@ -159,13 +159,6 @@ Root cause: pattern 4. With no older builds, the only uncomputed workbook is an 
 Simpler: the import recalcs once; a failure keeps Excel's cached values and its warning. Every reader serves the replayed values. The flag, `sheetsNeedRecalc`, the `recalc` option and the compaction's flag logic go.
 Lost: a failed import later cut below the budget isn't recomputed at export. ~90 LOC + ~150 test, low risk, high confidence.
 
-<a id="e3"></a>**E3. The dependency walk is a second hand-written formula walker, and it found again the corners the shift walker had fixed.**
-`engine/recalc.ts` (`tokenize`, `OPERATORS`, `extractDependencies`) beside `engine/formula-shift.ts` (`walkFormulaRefs`, `refOf`, `splitUnquoted`).
-History: the shift walker, Oct 13–18: `9fb03d4d6`, `5354adf31`, `3caaf9fc6`, `ddc21909b`, `59f95463a`. The dependency walk on Nov 2 alone: `43f96efba` (spaces), `4e22d2077` and `442be3889` (quoted sheets), `6687b24e2`, `e9e621216` (a function name read as a cell), `8cb7146d6` (quadratic), `3712a1358`, `5af81de86`.
-Root cause: root 3. Every gap between the two walkers showed as a stale value.
-Simpler: `forEachRef(formula, onRef)` on `walkFormulaRefs`; `extractDependencies` resolves what it hands over. Measure the import recalc and the idle map build on the 125k-formula workbook first; add an output-free variant if it costs.
-Lost: nothing. ~80 LOC, low-medium risk, high confidence.
-
 <a id="e4"></a>**E4. A whole column is closed at the grid's current last row, so every change in grid size must reset the formula map.**
 `engine/formula-utils.ts` (`resolveCellRange` sets `row[1] = matrix.length - 1` and caches by text), `engine/dependency-index.ts` (`layoutOf`), `formula-cache.ts` (`sheetExtents`), the resets in `expandRowsAndColumns` and `updateFormulaCache`.
 History: `fb733f291`, `31dc3e4fe` (a paste that grows the grid must reset), `680ba1e3d`, `d649008d1`, `2c63ee0a0`, `63281af69`, `6b9775d24`.
@@ -191,7 +184,7 @@ Design: the Workbook's commit does what `patchStep` does for every local recipe 
 
 <a id="e8"></a>**E8. Redesign: one tokenizer for formula text, the grammar's own lexer, behind every reader.**
 Five readers lex one formula's text: the jison lexer (`grammar-parser.ts`), `walkFormulaRefs`, `tokenize` in `recalc.ts`, the fork's highlighter `functionHTML` (`formula-editor.ts`) and `findRefSpans` (`formula-reference-cycle.ts`, F4). `9c6d0e040` left unquoted non-Latin sheet names failing in the grammar while the walkers kept their own `SIMPLE_SHEET_NAME`.
-Design: run the jison lexer alone for tokens with offsets; dependencies, copy and fill, shifts, renames, name inlining, highlighting and F4 all read that stream, so a reference is what evaluation reads, by construction. Do [E3](#e3) first.
+Design: run the jison lexer alone for tokens with offsets; dependencies, copy and fill, shifts, renames, name inlining, highlighting and F4 all read that stream, so a reference is what evaluation reads, by construction.
 ~450 LOC of walkers replaced by ~250; medium-high risk (the highlighter's `rangeindex` order is tied to the range picker), medium confidence.
 
 Judged essential: `DependencyIndex`'s block, column and row layouts (2.9 s → 78 ms); the iterative DFS in `getCalculationOrder`; the four server recalc budgets, which guard an untrusted import and bound memory; the error-as-value rules; "recalc keeps what it can't improve"; the hand-edited grammar and the formulajs patch; conditional formats compiled once with offsets; `function-list.ts`, descriptions kept a subset of the engine's functions by a test. Storing sheet references by id was considered and rejected: the translation at every boundary costs more than the rename lookups it removes.
@@ -382,7 +375,7 @@ Wave 1 (nothing lost, or decided):
 | Lane | Units, in order | Main files |
 |---|---|---|
 | Op log | [S7](#s7), [S8](#s8) | `state/utils/patch.ts`, `state/modules/sheet.ts`, `engine/replay-ops.ts`, `use-sheet.ts` |
-| Formulas | [E3](#e3), [E6](#e6), then [E4](#e4), [E5](#e5) | `engine/formula-shift.ts`, `engine/recalc.ts`, `formula-*` |
+| Formulas | [E6](#e6), then [E4](#e4), [E5](#e5) | `engine/formula-shift.ts`, `engine/recalc.ts`, `formula-*` |
 | Editing | [D7](#d7), [D5](#d5) | `state/api/*`, `paste.ts`, `clipboard.ts`, `filter.ts` |
 | Render and input | [R3](#r3), then [R6](#r6), [R7](#r7) | `state/context.ts`, `context/modal.tsx`, `state/events/*`, `SheetOverlay/*` |
 | Rules | [F3](#f3) | `protection.ts`, `validation*.ts`, `DataValidation/*` |
@@ -397,7 +390,8 @@ Wave 3, the redesigns, in [§ If we built it today](#if-we-built-it-today)'s ord
 
 - This run also takes the API audit's T2 and X2 (the other session agreed). Don't edit `API-SIMPLIFICATION-AUDIT.md` on this branch, because that session keeps editing it: tell it when T2 or X2 lands, and it strikes them. Its X2 ruling: a flat cap, the runner's deadline and its memory limit, and a timeout or out-of-memory is an accepted outcome. X2 joins Wave 2.
 - The owner allows an implementer to hand mechanical work (a grep sweep, rewiring similar test call sites, running a suite) to a cheaper sub-agent: Sonnet, or Haiku for a lookup, at low or medium effort. The implementer keeps Step 0, the design, the diff read and the commit. A sub-agent uses the implementer's worktree with no isolation option, one editing at a time, and never commits.
-- Wave 1 is running. Merged: U2, S3, R2, D1, F1, E9, S1, R5, R4 (`ctx.rowHeaderWidth` and `columnHeaderHeight` stay for R3 to inline), D3 (the ref's `setSelection` stays: 13 test callers and no other door to the stored selection copy; S7 may remove it). Running: E3, F1 fixes then F3, D7, U2 and E9 review fixes, R3. In cold review: S3. Next: S7, S8, E6, E4, E5, D5, R6, R7, then the wave's close.
+- Wave 1 is running. Merged: E3, U2, S3, R2, D1, F1, E9, S1, R5, R4 (`ctx.rowHeaderWidth` and `columnHeaderHeight` stay for R3 to inline), D3 (the ref's `setSelection` stays: 13 test callers and no other door to the stored selection copy; S7 may remove it). Running: E6, F1 fixes then F3, D7, U2 and E9 review fixes, R3. In cold review: S3. Next: S7, S8, E4, E5, D5, R6, R7, then the wave's close.
+- For E4: half-open legs (`B2:1`, `A:B1`, `TRUE:A1`) read more than their dependency list, and `A1\n:B2` is missed because only spaces join a range.
 - For R6: R2's implementer read that the date shortcut's `updateCell` with the closed, empty editor clears a filled cell before opening the edit, so Escape wouldn't restore it. Not run.
 - For R3: `handleCellAreaMouseDown` sets `ctx.selectionActive = true` and then tests it, so that block is always true.
 - For D5: `handlePaste` sits below its helpers; `setRowHeight` still runs before the guards in `pasteHandler`.
