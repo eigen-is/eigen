@@ -74,7 +74,6 @@ export class DependencyIndex {
     private points = new Map<string, Map<number, string[]>>();
     private buckets: Record<Layout, Buckets> = { blocks: new Map(), columns: new Map(), rows: new Map() };
     private byKey = new Map<string, KeyedEntry[]>();
-    private queryCache = new Map<string, Map<number, readonly string[]>>();
 
     public set(key: string, deps: readonly FormulaDependency[]): void {
         this.delete(key);
@@ -93,10 +92,10 @@ export class DependencyIndex {
                     this.points.set(sheetId, sheetPoints);
                 }
                 const keys = sheetPoints.get(point);
-                // One entry per formula: `delete` splices a single occurrence, so a formula reading the same cell
-                // twice (`=A1+A1`) must not be listed twice.
+                // `=A1+A1` lists its formula once. The delete above took the key out, so a repeat is the last entry.
                 if (keys == null) sheetPoints.set(point, [key]);
-                else if (!keys.includes(key)) keys.push(key);
+                else if (keys[keys.length - 1] !== key) keys.push(key);
+                else continue;
                 stored.push({ sheetId, point });
             } else {
                 const entry: RangeEntry = { r0, r1, c0, c1, key };
@@ -117,7 +116,6 @@ export class DependencyIndex {
         }
 
         if (stored.length > 0) this.byKey.set(key, stored);
-        this.queryCache.clear();
     }
 
     public delete(key: string): void {
@@ -149,46 +147,27 @@ export class DependencyIndex {
                 });
             }
         }
-        this.queryCache.clear();
     }
 
     public clear(): void {
         this.points.clear();
         for (const buckets of Object.values(this.buckets)) buckets.clear();
         this.byKey.clear();
-        this.queryCache.clear();
     }
 
-    // Keys of formulas whose dependency ranges cover (r, c). Results are cached until the next mutation, so callers
-    // must not change the returned array.
+    // Keys of formulas whose dependency ranges cover (r, c). With no range nearby that is the cell's own list, so a
+    // caller must not change what it gets.
     public dependentsOf(sheetId: string, r: number, c: number): readonly string[] {
-        const packed = r * CELL_PACK + c;
-        let sheetCache = this.queryCache.get(sheetId);
-        const cached = sheetCache?.get(packed);
-        if (cached != null) return cached;
-
-        const pointKeys = this.points.get(sheetId)?.get(packed);
+        const pointKeys = this.points.get(sheetId)?.get(r * CELL_PACK + c);
         const nearby = this.nearby(sheetId, r, c);
-
-        // With no range nearby the point bucket is the answer. It is safe to hand out, because every change to it
-        // clears the query cache.
-        let result = pointKeys ?? EMPTY;
-        if (nearby.some((entries) => entries != null)) {
-            const found = new Set<string>(pointKeys);
-            for (const entries of nearby) {
-                for (const entry of entries ?? []) {
-                    if (r >= entry.r0 && r <= entry.r1 && c >= entry.c0 && c <= entry.c1) found.add(entry.key);
-                }
+        if (!nearby.some((entries) => entries != null)) return pointKeys ?? EMPTY;
+        const found = new Set<string>(pointKeys);
+        for (const entries of nearby) {
+            for (const entry of entries ?? []) {
+                if (r >= entry.r0 && r <= entry.r1 && c >= entry.c0 && c <= entry.c1) found.add(entry.key);
             }
-            result = found.size === 0 ? EMPTY : [...found];
         }
-
-        if (sheetCache == null) {
-            sheetCache = new Map();
-            this.queryCache.set(sheetId, sheetCache);
-        }
-        sheetCache.set(packed, result);
-        return result;
+        return found.size === 0 ? EMPTY : [...found];
     }
 
     // How many entries dependentsOf visits for (r, c): each formula listed at the cell, and each range listed near it,
