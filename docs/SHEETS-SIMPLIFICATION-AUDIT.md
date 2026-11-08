@@ -142,13 +142,6 @@ Root cause: pattern 4. With no older builds, the only uncomputed workbook is an 
 Simpler: the import recalcs once; a failure keeps Excel's cached values and its warning. Every reader serves the replayed values. The flag, `sheetsNeedRecalc`, the `recalc` option and the compaction's flag logic go.
 Lost: a failed import later cut below the budget isn't recomputed at export. ~90 LOC + ~150 test, low risk, high confidence.
 
-<a id="e4"></a>**E4. A whole column is closed at the grid's current last row, so every change in grid size must reset the formula map.**
-`engine/formula-utils.ts` (`resolveCellRange` sets `row[1] = matrix.length - 1` and caches by text), `engine/dependency-index.ts` (`layoutOf`), `formula-cache.ts` (`sheetExtents`), the resets in `expandRowsAndColumns` and `updateFormulaCache`.
-History: `fb733f291`, `31dc3e4fe` (a paste that grows the grid must reset), `680ba1e3d`, `d649008d1`, `2c63ee0a0`, `63281af69`, `6b9775d24`.
-Root cause: pattern 1. An open reference is closed at registration, so it goes stale when the grid grows. It also needs the target's matrix, so a reference to an unopened sheet records no dependency (part of the copied-sheet TODO).
-Simpler: a whole column or row stays open; the index lists it by shape. The server's `withinSheet` clamp stays for its budget. The extents, the grid-size resets and the matrix requirement go.
-Lost: nothing. ~50 LOC + ~60 test, low-medium risk, medium-high confidence.
-
 <a id="e5"></a>**E5. A recompute passes inputs, an overlay of computed values and outputs through four long-lived fields that callers must clear.**
 `FormulaCache.execFunctionExist`, `pendingChangedCells`, `execFunctionGlobalData`, `ctx.groupValuesRefreshData`; flushed by `triggerGroupValuesRefresh` (`Workbook/index.tsx`), with a paint guard in `Sheet/index.tsx` and manual `= null` resets in `paste.ts` (twice), `history.ts`, `toolbar.ts`, `refresh.ts` and `cell.ts`.
 History: inherited; touched by `77ef9d2ac`, `4d90409ff`, `6890d5b29`.
@@ -315,7 +308,7 @@ Wave 1 (nothing lost, or decided):
 
 | Lane | Units, in order | Main files |
 |---|---|---|
-| Formulas | [E4](#e4), [E5](#e5) | `engine/formula-shift.ts`, `engine/recalc.ts`, `formula-*` |
+| Formulas | [E5](#e5) | `engine/formula-shift.ts`, `engine/recalc.ts`, `formula-*` |
 | Render and input | [R7](#r7) | `state/context.ts`, `context/modal.tsx`, `state/events/*`, `SheetOverlay/*` |
 
 Wave 2 (cross-cutting, after the lanes they depend on merged): [E1](#e1) then [E2](#e2); [F2](#f2) (after D2); [D2](#d2) after D4 is ruled; [S2](#s2) then [S5](#s5); [R1](#r1); [D4](#d4), [D8](#d8), [F4](#f4), [F7](#f7), [F8](#f8) as ruled. F4 and F7 change `packages/lib/src/charts`, which Docs, Slides and Vector share: tell the other session first.
@@ -329,8 +322,7 @@ Wave 3, the redesigns, in [§ If we built it today](#if-we-built-it-today)'s ord
 - This run also takes the API audit's T2 and X2 (the other session agreed). Don't edit `API-SIMPLIFICATION-AUDIT.md` on this branch, because that session keeps editing it: tell it when T2 or X2 lands, and it strikes them. Its X2 ruling: a flat cap, the runner's deadline and its memory limit, and a timeout or out-of-memory is an accepted outcome. X2 joins Wave 2.
 - The owner's standing word on merging: at a logical moment to merge, or to continue with a clean context, tell the owner and give the hand-off prompt. Merging with the other sessions' work is fine and a good idea. The first such moment is the end of Wave 1.
 - The owner allows an implementer to hand mechanical work (a grep sweep, rewiring similar test call sites, running a suite) to a cheaper sub-agent: Sonnet, or Haiku for a lookup, at low or medium effort. The implementer keeps Step 0, the design, the diff read and the commit. A sub-agent uses the implementer's worktree with no isolation option, one editing at a time, and never commits.
-- Wave 1 is running. Merged: R6 (the close effect stays, as a layout effect, since a write in the recipe would survive a rollback; the date shortcut's wipe was real and is fixed), S8 (`decodeOrDefault`, not a seed at creation: export, preview and search read `data.db` without opening the document, and a restored first-session version holds ops naming `sheet-1`; a document with neither snapshot nor ops now reads as one blank sheet), S7 (reviewed; the ref's `setSelection` went with it), E6, the U2 and E9 fixes, R3, D5, F3, D7, E3, U2, S3, R2, D1, F1, E9, S1, R5, R4, D3. Running: R7, E4. Next: E4, E5, D5, R6, R7, then the wave's close.
-- For E4: half-open legs (`B2:1`, `A:B1`, `TRUE:A1`) read more than their dependency list, and `A1\n:B2` is missed because only spaces join a range.
+- Wave 1 is running. Merged: E4 (a long top-anchored range, `$A$1:$B$60000`, also lists in columns, or the index regressed to 700 ms and 214 MB), R6 (the close effect stays, as a layout effect, since a write in the recipe would survive a rollback; the date shortcut's wipe was real and is fixed), S8 (`decodeOrDefault`, not a seed at creation: export, preview and search read `data.db` without opening the document, and a restored first-session version holds ops naming `sheet-1`; a document with neither snapshot nor ops now reads as one blank sheet), S7 (reviewed; the ref's `setSelection` went with it), E6, the U2 and E9 fixes, R3, D5, F3, D7, E3, U2, S3, R2, D1, F1, E9, S1, R5, R4, D3. Running: R7, E5. Next: E4, E5, D5, R6, R7, then the wave's close.
 - For S5 or S10: `sheet.filter ??= {}` means a `['filter','1']` op after a peer cleared the filter should throw and drop its batch, and two first filters at once overwrite each other (D7 read this; not run). The `state/types.ts` line saying filter criteria never reach the stored shape looks false, since `encodeSheetsSnapshot` keeps `filter`.
 - For F10: the owner ruled that ROADMAP's row "The zombie media sweep can remove a peer's upload" waits for F10. When F10 lands, remove that row. eigen-c6 adds a pointer in it on `relay-outbox`, so expect a one-line ROADMAP merge.
 - For R7: a copied or never-visited sheet opens with no cursor, so arrows and typing do nothing until a click (S7's review ran it). Seed A1 in `changeSheet` and delete the `SheetOverlay` effect, leaving one seed site.
@@ -346,4 +338,5 @@ Wave 3, the redesigns, in [§ If we built it today](#if-we-built-it-today)'s ord
 - From E6: `ID_CARD_NUMBER` isn't one line (a regex, a re-export, a `format.ts` branch, two `cell.ts` conditions); its month pattern omits October. It stays. Horizontal `AVERAGEIFS` returns 0, not 12, because formulajs doesn't flatten criteria ranges. `isrefresh` is uncovered: tell E5.
 - The browser pass must also drive what R6 changed: double-click a filled cell and type at once; a touch double-tap's focus and keyboard; an IME and an Android key on a filled, closed cell; F2, Enter, the date shortcut, Insert function (OK and Enter), autosum with and without a range, the formula bar's focus and mirroring.
 - For the close's fix wave: the editor's box and style follow the first selection, while the edit is the last selection's.
+- For the close: E4 can raise the server recalc's visit count on a real workbook, and past the 90M budget a recalc falls back to cached values. Its 1,062-file corpus wasn't re-run, so compare the budget on what corpus is reachable. `A1\n:B2` is still missed by `forEachRef`: accepted.
 - For the closing review: D3 deleted the API insert and delete tests as covered by `rowcol.test.ts` and `rowcol-ops` without comparing assertions. `state/modules/cell.ts` got only a light pass; `carryCells` could split out.

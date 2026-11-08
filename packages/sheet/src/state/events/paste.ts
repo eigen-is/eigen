@@ -610,7 +610,5 @@ function roomFor(ctx: Context, top: number, bottom: number, left: number, right:
     for (let r = 0; r < rowsToAdd; r += 1) data.push(times(columns, () => null));
     sheet.row = data.length;
     sheet.column = columns;
-    // A whole column or row in the formula map still ends where the grid ended, as after a row insert.
-    ctx.formulaCache.formulaCellInfoMap = null;
     return data;
 }

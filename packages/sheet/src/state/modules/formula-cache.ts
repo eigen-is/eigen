@@ -5,9 +5,8 @@
 
 import { current, isDraft } from 'immer';
 import { findSheetByName } from '../../engine/a1-notation';
-import type { DependencyIndex, SheetExtent } from '../../engine/dependency-index';
+import type { DependencyIndex } from '../../engine/dependency-index';
 import { FormulaEngine } from '../../engine/formula-engine';
-import { matrixWidth } from '../../engine/formula-utils';
 import { extractDependencies } from '../../engine/recalc';
 import type {
     CalcChainEntry,
@@ -19,7 +18,6 @@ import type {
     FormulaDependency,
 } from '../../engine/types';
 import type { Context } from '../context';
-import { getFlowdata } from '../context';
 import type { FormulaCell, History, Selection } from '../types';
 import { getcellFormula } from './cell';
 import { execfunction, warmFormulaCellInfoMap } from './formula-exec';
@@ -62,10 +60,6 @@ export class FormulaCache {
     public func_selectedrange?: Selection;
 
     public cellTextToIndexList: Record<string, FormulaDependency>;
-
-    // Each sheet's size, by id, which the dependency index lists ranges by. Measuring a sheet scans its rows, so it is
-    // kept as long as the resolved references, which a change to a grid's size resets too.
-    public sheetExtents = new Map<string, SheetExtent>();
 
     public rangechangeindex?: number;
 
@@ -119,12 +113,11 @@ export class FormulaCache {
 
     public set formulaCellInfoMap(v: FormulaCellInfoMap | null) {
         this.engine.state.formulaCellInfoMap = v;
-        // Code assigns the map only to reset it, such as after a row insert or a sheet rename. The reverse index mirrors
-        // the map, so it resets too. The resolved references and the sheet sizes go as well, because they hold the
-        // sheets' old sizes and names. setFormulaCellInfo fills them all again.
+        // Code assigns the map only to reset it, such as after a row insert or a sheet rename. The reverse index
+        // mirrors the map, so it resets too. The resolved references go as well, because they hold the sheets' old
+        // names. setFormulaCellInfo fills them all again.
         this.engine.state.dependencyIndex.clear();
         this.cellTextToIndexList = {};
-        this.sheetExtents.clear();
     }
 
     // For each cell, the formulas that read it. It lives in the engine's state next to the formula map, so a new
@@ -137,7 +130,6 @@ export class FormulaCache {
     public resetEngine() {
         this.engine = new FormulaEngine();
         this.cellTextToIndexList = {};
-        this.sheetExtents.clear();
     }
 
     public updateFormulaCache(ctx: Context, history: History, type: 'undo' | 'redo') {
@@ -151,10 +143,10 @@ export class FormulaCache {
             const [root, sheetIndex, field, r, c, cellField] = patch.path;
             if (root !== 'sheets' || (field != null && field !== 'data')) continue;
             const id = typeof sheetIndex === 'number' ? ctx.sheets[sheetIndex]?.id : undefined;
-            // A patch that adds or drops a sheet, a whole matrix, a row or a cell makes the map build again on next use.
-            // Adding or dropping a row or a cell resizes the grid, which moves where a whole column or row ends.
-            const resized = cellField == null && patch.op !== 'replace';
-            if (id == null || typeof r !== 'number' || (c != null && typeof c !== 'number') || resized) {
+            // A patch that adds or drops a sheet or a whole matrix, or drops a row, makes the map build again on next
+            // use, because no patch names the formulas that went with it.
+            const droppedRow = c == null && patch.op === 'remove';
+            if (id == null || typeof r !== 'number' || (c != null && typeof c !== 'number') || droppedRow) {
                 this.formulaCellInfoMap = null;
                 return;
             }
@@ -191,13 +183,11 @@ export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?
     // references from one edit to the next.
     const dependencies = extractDependencies(
         {
-            sheets: ctx.sheets,
             findSheet: (name) => findSheetByName(ctx.sheets, name),
             cellTextToIndexList: ctx.formulaCache.cellTextToIndexList,
         },
         formula,
         formulaCell.id,
-        cellData ?? getFlowdata(ctx, formulaCell.id),
     );
 
     formulaCellInfoMap[key] = {
@@ -208,17 +198,7 @@ export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?
         id: formulaCell.id,
         dependents: [],
     };
-    const { sheetExtents } = ctx.formulaCache;
-    ctx.formulaCache.dependencyIndex.set(key, dependencies, (sheetId) => {
-        let extent = sheetExtents.get(sheetId);
-        if (extent === undefined) {
-            const matrix = getFlowdata(ctx, sheetId);
-            if (matrix == null) return undefined;
-            extent = { rows: matrix.length, columns: matrixWidth(matrix) };
-            sheetExtents.set(sheetId, extent);
-        }
-        return extent;
-    });
+    ctx.formulaCache.dependencyIndex.set(key, dependencies);
 }
 
 // A sheet arriving whole carries no cell patches; an unbuilt map reads it when it builds.

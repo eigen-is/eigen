@@ -6,7 +6,7 @@ import { current, isDraft } from 'immer';
 import { findSheetByName } from '../../engine/a1-notation';
 import { createArrayResolver } from '../../engine/cell-resolver';
 import { getCalculationOrder } from '../../engine/dependency-graph';
-import { checkBracketNum, resolveCellRange } from '../../engine/formula-utils';
+import { checkBracketNum, LAST_COLUMN, LAST_ROW, matrixWidth, resolveCellRange } from '../../engine/formula-utils';
 import type {
     Cell,
     CellMatrix,
@@ -24,22 +24,23 @@ import { setCellValue } from './cell';
 import { executeAffectedFormulas, setFormulaCellInfo, snapshotContext } from './formula-cache';
 import { error } from './validation';
 
-export function getcellrange(
-    ctx: Context,
-    txt: string,
-    formulaId?: string,
-    data?: CellMatrix,
-): FormulaDependency | null {
-    return resolveCellRange(
+// The cells a reference in the grid's UI covers, such as a link or a highlighted range: a whole column or row stops at
+// its sheet's end. null when it covers none, or names a sheet with no matrix to show them on.
+export function getcellrange(ctx: Context, txt: string): FormulaDependency | null {
+    const range = resolveCellRange(
         {
-            sheets: ctx.sheets,
             findSheet: (name) => findSheetByName(ctx.sheets, name),
             cellTextToIndexList: ctx.formulaCache.cellTextToIndexList,
         },
         txt,
-        formulaId ?? ctx.currentSheetId,
-        data || getFlowdata(ctx, formulaId),
+        ctx.currentSheetId,
     );
+    const data = range && getFlowdata(ctx, range.sheetId);
+    if (range == null || data == null) return null;
+    const lastRow = range.row[1] >= LAST_ROW ? data.length - 1 : range.row[1];
+    const lastColumn = range.column[1] >= LAST_COLUMN ? matrixWidth(data) - 1 : range.column[1];
+    if (lastRow < range.row[0] || lastColumn < range.column[0]) return null;
+    return { row: [range.row[0], lastRow], column: [range.column[0], lastColumn], sheetId: range.sheetId };
 }
 
 export function getAllFunctionGroup(ctx: Context): FormulaCell[] {
