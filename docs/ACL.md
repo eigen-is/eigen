@@ -153,6 +153,20 @@ A source can be a team: a share on a team drive path records `team_<id>` as `fro
 
 User deletion cleans the registry: see [ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md#deleting-a-user-runs-one-teardown-from-every-entry-point).
 
+### A deleted owner's rows leave at the recipient's next listing
+
+Deleting a user or a team reaches into no other home, so the `shared_paths` rows in recipients' homes outlive the owner and could only answer 404 when opened. So `listSharedWithMe` and `listSharedWithMeByMimeType` (`apps/api/src/lib/drive/shared-with-me.ts`) look up each distinct owner of the rows they read, delete the rows of an owner that no longer exists, and return the rest. There is no relay message, no notification and no background job, and the same step heals an earlier deletion and a lost push. It costs one `users3.db` lookup per distinct owner per listing, about 85 µs each, on the event loop.
+
+Only a clean "not found" deletes. A lookup that throws fails the listing with every row in place, and an owner id that is neither a user nor a team is never judged.
+
+The Watched view doesn't take this step. `aggregateWatches` asks each owner in `listSharedOwnerIds` and treats a failure as an empty list, which it needs anyway for an owner whose home is mid-restore, so a deleted owner adds nothing to the view.
+
+A restore of a deleted owner pushes nothing. A recipient who listed at any time between the deletion and the end of the restore has lost the row, though the owner's ACL still lets them in. The row returns at the next change that pushes that path, such as an ACL change or a rename, as a new share with a bell row. This is the accepted cost of cleaning up on read.
+
+### An ACL entry naming a deleted person stays
+
+A deletion leaves the entries naming that person on other owners' paths on purpose, so a restored user gets their shares back. The cost is that a new account taking that address inherits those entries for now. It is a known open gap, tracked in the "A deleted user's email address stays taken" row of [ROADMAP.md](ROADMAP.md).
+
 ### Share Emails
 
 `propagateSharedPathChange` (`apps/api/src/lib/drive/acl-propagation.ts`) mails every email address newly added to an ACL, when the change has an actor. The gate is per recipient: `notifications.email.guestOnAclAdd` when the address has no account or belongs to a guest, `notifications.email.userOnAclAdd` when it is a registered user. Callers that send their own invite pass `suppressShareEmail`. `'registered'` suppresses mail to registered users only: an account-less address still gets the invite, because that mail is the only way in. `'all'` suppresses both, for a grant whose own message carries the invite link (a mail send). Both settings live in [SERVER-SETTINGS.md](SERVER-SETTINGS.md).
