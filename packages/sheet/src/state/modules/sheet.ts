@@ -134,8 +134,7 @@ export function deleteSheet(
 }
 
 // A sheet added at order `at`, or deleted from it, moves the sheets from there on one place. Only the author's edit
-// does this. Its batch carries the orders it left, which a peer and the replay apply as they are, so a peer's batch
-// must not move them again: two batches sent at once would each move them.
+// does this, since the batch carries the orders and moving them again for two batches sent at once would double it.
 export function shiftSheetOrders(sheets: Sheet[], at: number, by: 1 | -1) {
     for (const sheet of sheets) {
         const order = sheetOrder(sheet);

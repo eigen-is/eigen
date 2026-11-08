@@ -73,8 +73,7 @@ export function patchToOp(ctx: Context, patches: Patch[], options: EntryOptions 
         if (link) ops.push({ id: op.id, op: 'replace', path: ['hyperlink', key], value: link });
     }
     if (options.addedSheet) {
-        // A copy moves the sheets after it, and the batch carries their orders. The rest of the recipe still ships, such
-        // as the open edit the add button commits.
+        // A copy moves the sheets after it, and the batch carries their orders. The rest of the recipe still ships.
         const rest = ops.filter((op) => op.path.length > 0 && op.path[0] !== 'order');
         return [...rest, ...addSheetOps(options.addedSheet, ctx.sheets)];
     }
@@ -88,9 +87,8 @@ export function rowColMarker({ insertRowColOp, deleteRowColOp }: RowColOptions):
     return undefined;
 }
 
-// A sheet add as a batch: the sheet as stored, then the order of each sheet at or past its place, as `sheets` hold
-// them once it was added. A peer and a joiner's replay only add the sheet, and the orders come from the batch. The
-// edit, its undo and its redo all send this batch.
+// A sheet add as a batch: the sheet as stored, then the order of each sheet at or past its place. A peer and a joiner's
+// replay only add the sheet, so the orders come from the batch.
 export function addSheetOps(added: Sheet, sheets: readonly Sheet[]): Op[] {
     return [{ op: 'addSheet', id: added.id, path: [], value: storedCopy(added) }, ...orderOps(added, sheets)];
 }

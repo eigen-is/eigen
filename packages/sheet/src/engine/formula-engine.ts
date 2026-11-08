@@ -29,11 +29,8 @@ import type {
     RangeCell,
 } from './types';
 
-// A cell holds an error as its text, such as `#DIV/0!`. A formula reads it back as an error object, formulajs's where
-// it has one, because its functions recognize only those. A cell that holds such text as text stays text: a plain
-// (`ct.t === 's'`) or a rich one. A `#NAME?` doesn't say whether it comes from a typo or stands in for a function the
-// engine lacks. So it reads as the latter, which no function traps, because a fallback would read as the value Excel
-// computed.
+// A cell holds an error as its text and a formula reads it back as formulajs's error object, which its functions
+// recognize by identity. A `#NAME?` reads as an unsupported function, which no function traps, so no fallback passes.
 function getCellValue(cell: Cell | null | undefined): FormulaValue {
     if (cell?.ct?.t === 'n') {
         const n = Number(cell.v);

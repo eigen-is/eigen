@@ -170,9 +170,8 @@ export class DependencyIndex {
         return found.size === 0 ? EMPTY : [...found];
     }
 
-    // How many entries dependentsOf visits for (r, c): each formula listed at the cell, and each range listed near it,
-    // whether the range covers the cell or not. They are counted without a scan, so recalc can weigh what weighing the
-    // links will cost before it scans for them.
+    // How many entries dependentsOf visits for (r, c), a range near it counted whether it covers the cell or not.
+    // Counted without a scan, so recalc can weigh the scan before it runs.
     public lookupVisits(sheetId: string, r: number, c: number): number {
         let visits = this.points.get(sheetId)?.get(r * CELL_PACK + c)?.length ?? 0;
         for (const entries of this.nearby(sheetId, r, c)) visits += entries?.length ?? 0;
@@ -201,9 +200,8 @@ export class DependencyIndex {
     }
 }
 
-// A range to the grid's last row, or a long one from the top of its sheet, such as a table a lookup reads, is listed in
-// its columns, and likewise along the rows. A lookup there also scans the ranges that end above its cell, so any other
-// range goes by blocks, which keep a lookup to what is near.
+// A range to the grid's last row, or a long one from the top, is listed in its columns, and likewise along the rows.
+// A lookup there also scans the ranges that end above its cell, so any other range goes by blocks to keep it near.
 function layoutOf({ r0, r1, c0, c1 }: { r0: number; r1: number; c0: number; c1: number }): Layout {
     if (r1 >= LAST_ROW || (r0 === 0 && r1 >= LONG_RANGE)) return 'columns';
     if (c1 >= LAST_COLUMN || (c0 === 0 && c1 >= LONG_RANGE)) return 'rows';

@@ -1,7 +1,7 @@
-// How a peer's batch changes this tab's pending undos. Any batch ends your own structural entries, such as a row op or
-// a rename, and with them everything older (dropStructuralEntries). A row or column op then moves what is left, the cell
-// and field entries: shiftEntries moves their paths and values as the op moves the live sheets, so an undo lands where
-// its cell now is. The Workbook's applyOp runs both, and a RowColMove also moves the open editor along an applied op.
+// How a peer's batch changes this tab's pending undos. Any batch ends your own structural entries, such as a row op
+// or a rename, and with them everything older (dropStructuralEntries). A row or column op then moves what is left, the
+// cell and field entries: shiftEntries moves their paths and values as the op moves the live sheets, so an undo lands
+// where its cell now is. The Workbook's applyOp runs both, and a RowColMove also moves the open editor along an op.
 
 import type { MergeCell, SheetChart } from '@workspace/lib/sheets';
 import type { Patch } from 'immer';
@@ -75,9 +75,8 @@ export function deleteMove(op: DeleteRowColOp): RowColMove {
     };
 }
 
-// A structural entry records the workbook it found and left, as whole fields and matrices or as a sheet's old name, so
-// it can only step on that workbook. Each entry below it fits the workbook as it leaves it, so those go too, on the undo
-// and the redo stack alike.
+// A structural entry records the workbook it found and left, so it can only step on that workbook. Each entry below it
+// fits the workbook as it leaves it, so those go too, on the undo and the redo stack alike.
 export function dropStructuralEntries(entries: History[]): History[] {
     return entries.slice(entries.findLastIndex(isStructural) + 1);
 }
@@ -92,10 +91,8 @@ export function isStructural({ options }: History): boolean {
     );
 }
 
-// A peer's row or column op moves your entries' cells, merges, borders, links, validation rules and row or column sizes
-// on its sheet, and the formula text that points at it on any sheet. An entry the op makes meaningless is dropped: one
-// that writes inside deleted rows or columns or cuts a merge or a range on the op's sheet, or a chart's data on that
-// sheet.
+// A peer's row or column op moves your entries on its sheet, and the formula text that points at it on any sheet. An
+// entry the op makes meaningless is dropped, such as one that writes inside deleted rows or cuts a merge.
 export function shiftEntries(entries: History[], move: RowColMove, sheets: Sheet[]): History[] {
     const target = sheets.find((sheet) => sheet.id === move.id);
     if (!target) return entries;

@@ -82,10 +82,8 @@ export function withMaterializedData(s: Sheet): Sheet {
     return { ...s, data: celldataToData(s.celldata ?? [], row, column) };
 }
 
-// The insert a row op names. An op's value is untyped, and a buggy or hostile client may send any shape, so a value
-// that is not whole rows or columns on the grid, at least one of them, throws. The sheet throws too where the insert
-// would pass its size limit. Either way the op's whole batch rolls back, here and in a live
-// client, since its other ops were written for the rows the op would have moved.
+// The insert a row op names. An op's value is untyped and a hostile client may send any shape, so a bad one throws and
+// the op's whole batch rolls back, since its other ops were written for the rows the op would have moved.
 export function insertRowColOf(op: Op): InsertRowColOp {
     const value = asInsertValue(op.value);
     if (!value || !op.id) throw new Error('insertRowCol op has a malformed value');
@@ -128,9 +126,8 @@ function isLine(value: unknown, type: 'row' | 'column'): value is number {
     return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value < count;
 }
 
-// A new sheet needs an id, because every later op names its sheet by id. The id must be one no sheet has yet, or those
-// ops would be ambiguous. A name is the one other field every reader of a sheet needs, and it follows the sheet-name
-// rule, or a rename's undo could not restore it.
+// A new sheet needs an id no sheet has yet, because every later op names its sheet by id. Its name follows the
+// sheet-name rule, or a rename's undo could not restore it.
 export function isNewSheet(v: unknown, sheets: { id?: string }[]): v is Sheet & { id: string } {
     if (!isRecord(v)) return false;
     const { id, name } = v;
@@ -142,9 +139,8 @@ export function isRowColOp(op: Op): boolean {
     return op.op === 'insertRowCol' || op.op === 'deleteRowCol';
 }
 
-// Every sheet leaves the replay in one shape, whether it came from the snapshot or from an addSheet op. The editor
-// writes into its config collections, `images` and `charts` key by key, and a patch against a missing collection fails
-// and takes its whole batch down.
+// The editor writes into `images` and `charts` key by key, and a patch against a missing collection fails and takes
+// its whole batch down, so every sheet leaves the replay with them.
 function withNormalizedSheet(s: Sheet): Sheet {
     const next = { ...s, config: { ...s.config } };
     normalizeSheetConfig(next);

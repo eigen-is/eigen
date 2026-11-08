@@ -139,9 +139,8 @@ export class FormulaCache {
     }
 }
 
-// Records one cell's formula in the formula map with the cells it reads, so it runs after the cell was written. `data`
-// stands in for the matrix of `dataSheetId`, the current sheet by default. It is read only for a cell on that sheet: a
-// cell of another sheet at the same row and column would give the wrong formula.
+// Records one cell's formula in the formula map, so it runs after the cell was written. `data` stands in for the matrix
+// of `dataSheetId` and is read only for a cell on that sheet: another sheet's cell there would give the wrong formula.
 export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?: CellMatrix, dataSheetId?: string) {
     const dataSheet = dataSheetId ?? ctx.currentSheetId;
     // An entry written into an unbuilt map would pass for the whole map, and the build would never run.

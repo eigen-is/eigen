@@ -61,10 +61,8 @@ function isLink(value: unknown): boolean {
     return typeof linkType === 'string' && typeof linkAddress === 'string';
 }
 
-// Follows the rule ids each sheet holds through a batch, and says whether a validation write applies. A `replace` of
-// one rule means its writer saw the rule, because immer writes `add` for an id its base lacked. So where a peer
-// deleted the rule first, the replace is dropped and the delete wins, on every tab and in the replay alike. A new rule
-// on a sheet that holds MAX_VALIDATIONS is dropped too.
+// Says whether a validation write applies. A `replace` means its writer saw the rule, because immer writes `add` for an
+// id its base lacked, so where a peer deleted the rule first the delete wins on every tab and in the replay.
 function validationIds(sheets: readonly Sheet[]): (sheet: number, op: Op) => boolean {
     const held = new Map<number, Set<string>>();
     return (sheet, { op, path, value }) => {

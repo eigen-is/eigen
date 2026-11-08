@@ -37,9 +37,8 @@ import { settleCurrentSheet, shiftSheetOrders } from './sheet';
 
 type Step = { ctx: Context; ops: Op[] };
 
-// What setContextWithProduce keeps of one edit. A sheet add or delete keeps the sheet and nothing else, and a rename its
-// two names, because their undo and redo are ops. A row or column op keeps what its undo brings back, because its redo
-// is its marker again.
+// What setContextWithProduce keeps of one edit. A sheet add, delete or rename keeps only what its undo needs, because
+// undo and redo are ops. A row or column op keeps what its undo brings back, because its redo is its marker again.
 export function recordEntry(
     before: Context,
     after: Context,
@@ -213,9 +212,8 @@ function recalculate(ctx: Context, patches: Patch[]) {
     execFunctionGroup(ctx, [...cells.values()]);
 }
 
-// The marker moves the grid back, and the batch is the marker and what it did not bring back of the fields and cells
-// the entry recorded. A write the marker already made stays off the wire, so a receiver keeps its own shift of a batch
-// on its way. The live context gets only those ops, so it ends as a peer does.
+// The batch is the marker and what it did not bring back of the recorded fields and cells. A write the marker already
+// made stays off the wire, so a receiver keeps its own shift of a batch on its way.
 function undoRowCol(ctx: Context, marker: Op, recorded: Patch[]): Step {
     const moved = applyOpBatch(ctx, [marker]);
     if (!moved) return { ctx, ops: [] };

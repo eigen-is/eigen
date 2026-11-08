@@ -40,12 +40,8 @@ export type XlsxOptions = {
     maxMediaBytes: number;
 };
 
-// Every worksheet's grid and what lies past it, charged against the output budget as it is read. The cells count what
-// they emit, a value, a rich string's run, a border, a row's height or hidden flag, a merged or linked cell, a column's
-// width, a rule's range or a validated cell, and the grids recalc materializes; the text counts every value, display,
-// run, formula, link and rule text, each shared string and shared formula once per copy. The workbook's defined names
-// are written into the formulas that use them. A chart sheet is a sheet without a grid. The pictures come back beside
-// the sheets as the media files their images name, and what was left out as warnings that count it.
+// Every worksheet's grid and what lies past it, charged against the output budget as it is read, a shared string or
+// formula once per copy. A chart sheet is a sheet without a grid, and what was left out comes back as warnings.
 export function readXlsx(
     bytes: Uint8Array,
     options: XlsxOptions,
@@ -103,8 +99,8 @@ export function readXlsx(
                 inline: (formula) => inline(formula, written),
                 placed: worksheet.placed,
             });
-            // The cells' span, at least a default grid's so empty sheets add up; and the grid recalc materializes from it,
-            // at least a default grid deep and wide, so a narrow sheet builds far more slots than it spans.
+            // The cells' span, at least a default grid's so empty sheets add up, and the grid recalc materializes from
+            // it, at least a default grid deep and wide, so a narrow sheet builds far more slots than it spans.
             emitted.span.charge(
                 Math.max(grid.rows * grid.columns, DEFAULT_SHEET_ROW_COUNT * DEFAULT_SHEET_COLUMN_COUNT),
             );

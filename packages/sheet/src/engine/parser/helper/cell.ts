@@ -38,9 +38,8 @@ export function unquoteSheetName(raw: string): string {
     return raw.replace(/^'|'$/g, '').replace(/''/g, "'");
 }
 
-// What two sheet names are compared by. Excel ignores case, so `data!A1` reads the sheet named Data. Each character
-// folds to its uppercase on its own, so the Greek final ς matches σ. A character whose uppercase is longer keeps its
-// case, so ß never matches ss.
+// What two sheet names are compared by. Each character folds to its uppercase on its own, so the Greek final ς
+// matches σ, and one whose uppercase is longer keeps its case, so ß never matches ss.
 export function sheetNameKey(name: string): string {
     let key = '';
     for (const char of name) {
@@ -50,9 +49,8 @@ export function sheetNameKey(name: string): string {
     return key;
 }
 
-// The sheet a name reads: the one of exactly that name, else one of that name in another case. A rename refuses a
-// name another sheet holds in any case, but a workbook can still hold Data and data, such as one stored before that
-// rule or a peer's. Then each name keeps reading its own sheet.
+// The sheet a name reads: the one of exactly that name, else one in another case. A workbook can still hold Data and
+// data, from before the rename rule or a peer, and then each name keeps reading its own sheet.
 export function findSheetByName<S extends { name: string }>(sheets: readonly S[], name: string): S | undefined {
     const exact = sheets.find((sheet) => sheet.name === name);
     if (exact) return exact;
@@ -135,7 +133,7 @@ export function sortLegs(start: CellCoordinate, end: CellCoordinate): [CellCoord
     return start.index !== -1 && end.index !== -1 && start.index > end.index ? [end, start] : [start, end];
 }
 
-// Both axes move at once and legs sort before and after, as in Excel (`A$3:A1` down 1 is `A2:A$3`, `A1:$B$2` by (2,3) is `$B$2:D3`).
+// Both axes move at once and legs sort before and after, as in Excel (`A$3:A1` down 1 is `A2:A$3`).
 export function offsetRange(
     start: CellLeg,
     end: CellLeg,

@@ -37,9 +37,8 @@ export function applyOpBatch(
         next = produce(ctx, (draft: Context) => {
             for (const op of ops) {
                 const { id } = op;
-                // A batch's row or column op lands for a read-only viewer too, or the grid and the metadata patches
-                // part ways. The op names its sheet, as the replay reads it, whatever its value carries. One the
-                // shape check or the sheet refuses throws, and the whole batch is skipped.
+                // A row or column op lands for a read-only viewer too, or the grid and the metadata patches part ways.
+                // One the shape check or the sheet refuses throws, and the whole batch is skipped.
                 if (isRowColOp(op)) {
                     const sheets = current(draft.sheets);
                     let move: RowColMove;
@@ -87,9 +86,8 @@ export function applyOpBatch(
     return { ctx: next, moved };
 }
 
-// The open cell editor and the selections, the kept one of a sheet the tab left too, move with their cells, so a commit
-// or the next keystroke lands where the person chose, not in the row that slid under it. A delete of the editor's cell
-// closes the editor without writing.
+// The open cell editor and the selections move with their cells, so a commit lands where the person chose, not in the
+// row that slid under it. A delete of the editor's cell closes the editor without writing.
 function followView(draft: Context, move: RowColMove) {
     if (move.id !== draft.currentSheetId) {
         const left = draft.sheetViewRecord[move.id];
