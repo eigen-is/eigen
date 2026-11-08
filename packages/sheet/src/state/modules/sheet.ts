@@ -3,7 +3,7 @@
 // does a peer's batch through applyOpBatch.
 
 import { sheetDefaultColWidth, sheetDefaultRowHeight } from '@workspace/lib/sheets';
-import { isNil, times } from 'es-toolkit/compat';
+import { times } from 'es-toolkit/compat';
 import {
     MAX_SHEET_NAME_LENGTH,
     SHEET_NAME_END_QUOTES,
@@ -34,17 +34,16 @@ import { writeBackSheets } from './rowcol';
 export function storeSheetSelections(ctx: Context) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
-    const file = ctx.sheets[index];
-    file.selections = ctx.selections;
+    ctx.sheets[index].selections = ctx.selections;
 }
 
 export function changeSheet(ctx: Context, id: string) {
     if (id === ctx.currentSheetId) return;
 
-    const idx = getSheetIndex(ctx, id);
-    if (idx == null) return;
-    const file = ctx.sheets[idx];
-    if (file.hide === 1) return;
+    const index = getSheetIndex(ctx, id);
+    if (index == null) return;
+    const sheet = ctx.sheets[index];
+    if (sheet.hide === 1) return;
 
     storeSheetSelections(ctx);
     ctx.sheetScrollRecord[ctx.currentSheetId] = {
@@ -60,7 +59,7 @@ export function changeSheet(ctx: Context, id: string) {
     const record = ctx.sheetScrollRecord[id];
     ctx.scrollRequest = { left: record?.scrollLeft ?? 0, top: record?.scrollTop ?? 0 };
     ctx.selectionActive = record?.selectionActive ?? false;
-    ctx.selections = file.selections;
+    ctx.selections = sheet.selections;
     ctx.formulaRangeSelections = [];
     applySheetView(ctx);
 }
@@ -88,7 +87,6 @@ export function applySheetView(ctx: Context) {
     ctx.defaultrowlen = sheetDefaultRowHeight(sheet);
     ctx.defaultcollen = sheetDefaultColWidth(sheet);
     ctx.showGridLines = sheet.showGridLines !== 0 && sheet.showGridLines !== false;
-    // A sheet added this recipe has no data until the Workbook effect initializes it.
     if (sheet.data) updateContextWithSheetData(ctx, sheet.data);
     applySheetFilter(ctx);
 }
@@ -104,49 +102,34 @@ export function addSheet(
     fromBatch = false,
 ) {
     if (!fromBatch && ctx.allowEdit === false) return;
-    const order = ctx.sheets.length;
     // The add switches to the sheet it adds, so a sheet that comes with an id keeps it.
     const id = newSheetID ?? sheetData?.id ?? crypto.randomUUID();
-    if (!isNil(sheetData)) delete sheetData.data;
-    const sheetconfig: Sheet = isNil(sheetData)
-        ? {
-              name: sheetName || nextSheetName(ctx.sheets),
-              status: 0,
-              order,
-              id,
-              row: DEFAULT_SHEET_ROW_COUNT,
-              column: DEFAULT_SHEET_COLUMN_COUNT,
-              config: {},
-          }
-        : sheetData;
-    normalizeSheetConfig(sheetconfig);
-    if (sheetName !== undefined) sheetconfig.name = sheetName;
-    if (!isNil(sheetData) && !fromBatch) shiftSheetOrders(ctx.sheets, sheetOrder(sheetData), 1);
-
-    ctx.sheets.push(sheetconfig);
-
-    if (!newSheetID) {
-        changeSheet(ctx, id);
-    }
+    const sheet: Sheet = sheetData ?? {
+        name: sheetName || nextSheetName(ctx.sheets),
+        status: 0,
+        order: ctx.sheets.length,
+        id,
+        row: DEFAULT_SHEET_ROW_COUNT,
+        column: DEFAULT_SHEET_COLUMN_COUNT,
+        config: {},
+    };
+    if (sheetName !== undefined) sheet.name = sheetName;
+    if (sheetData && !fromBatch) shiftSheetOrders(ctx.sheets, sheetOrder(sheetData), 1);
+    initSheetData(sheet);
+    ctx.sheets.push(sheet);
+    if (!newSheetID) changeSheet(ctx, id);
 }
 
-// A sheet's cells come stored as a sparse list; the editor works on a full matrix, so a sheet gets one before
-// anything reads or writes its cells.
-export function initSheetData(draftCtx: Context, index: number, newData: Sheet) {
-    const { row, column } = gridSize(newData);
-    const expandedData = celldataToData(newData.celldata ?? [], row, column);
-    if (draftCtx.sheets[index] == null) {
-        newData.data = expandedData;
-        delete newData.celldata;
-        draftCtx.sheets.push(newData);
-    } else {
-        draftCtx.sheets[index].data = expandedData;
-        delete draftCtx.sheets[index].celldata;
-        if (newData.config) {
-            draftCtx.sheets[index].config = newData.config;
-        }
+// A sheet's cells come stored as a sparse list and the editor works on a full matrix. So a sheet gets its matrix where
+// it enters the editor, at the mount or an add, and every sheet the editor holds has one. A sheet the replay gave a
+// matrix keeps it.
+export function initSheetData(sheet: Sheet) {
+    if (!sheet.data) {
+        const { row, column } = gridSize(sheet);
+        sheet.data = celldataToData(sheet.celldata ?? [], row, column);
     }
-    normalizeSheetConfig(draftCtx.sheets[index]);
+    delete sheet.celldata;
+    normalizeSheetConfig(sheet);
 }
 
 export function deleteSheet(
@@ -158,11 +141,10 @@ export function deleteSheet(
 ) {
     if (!fromBatch && ctx.allowEdit === false) return;
 
-    const arrIndex = getSheetIndex(ctx, id);
+    const index = getSheetIndex(ctx, id);
+    if (index == null) return;
 
-    if (arrIndex == null) return;
-
-    const [deleted] = ctx.sheets.splice(arrIndex, 1);
+    const [deleted] = ctx.sheets.splice(index, 1);
     // The formula map and its resolved references still read the deleted sheet under its name, which a sheet added
     // later may take.
     ctx.formulaCache.formulaCellInfoMap = null;
@@ -190,33 +172,33 @@ export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
         editable.innerText = ctx.sheets[index].name;
         return;
     }
-    const oldtxt = editable.dataset.oldText || '';
-    const txt = editable.innerText;
+    const oldText = editable.dataset.oldText || '';
+    const text = editable.innerText;
 
-    if (txt.length === 0) {
-        editable.innerText = oldtxt;
+    if (text.length === 0) {
+        editable.innerText = oldText;
         throw new Error('Sheet name cannot be empty');
     }
 
     // `search` ignores the global pattern's lastIndex, which `test` would carry from one call into the next.
     if (
-        txt.length > MAX_SHEET_NAME_LENGTH ||
-        txt.search(SHEET_NAME_END_QUOTES) !== -1 ||
-        txt.search(SHEET_NAME_FORBIDDEN) !== -1
+        text.length > MAX_SHEET_NAME_LENGTH ||
+        text.search(SHEET_NAME_END_QUOTES) !== -1 ||
+        text.search(SHEET_NAME_FORBIDDEN) !== -1
     ) {
-        editable.innerText = oldtxt;
+        editable.innerText = oldText;
         throw new Error(SHEET_NAME_RULE);
     }
 
-    if (index == null || ctx.sheets[index].name === txt) return;
+    if (index == null || ctx.sheets[index].name === text) return;
 
     const { id } = ctx.sheets[index];
-    if (sheetNameTaken(ctx.sheets, id, txt)) {
-        editable.innerText = oldtxt;
+    if (sheetNameTaken(ctx.sheets, id, text)) {
+        editable.innerText = oldText;
         throw new Error('Another sheet already has this name');
     }
 
-    renameSheet(ctx, { id, name: txt });
+    renameSheet(ctx, { id, name: text });
 }
 
 // The walk reads a plain snapshot, since reading each formula through a draft is slow. A name that read no sheet may

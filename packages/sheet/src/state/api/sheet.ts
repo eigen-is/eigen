@@ -3,11 +3,10 @@
 
 import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { cloneDeep, sortBy } from 'es-toolkit/compat';
-import { dataToCelldata } from '../../engine/celldata';
 import { mapChartRefs } from '../../engine/chart-data';
 import { copySheetName } from '../../engine/sheet-name';
 import type { Context } from '../context';
-import { addSheet, initSheetData, leaveCurrentSheet } from '../modules';
+import { addSheet, leaveCurrentSheet } from '../modules';
 import type { FormulaCell } from '../types';
 import { getSheetIndex, sheetOrder } from '../utils';
 
@@ -44,9 +43,10 @@ export function copySheet(ctx: Context, sheetId: string) {
     const copyId = crypto.randomUUID();
     sheetData.id = copyId;
     delete sheetData.status;
-    sheetData.celldata = dataToCelldata(sheetData.data);
     // A copy starts without comments, as a duplicated canvas element does: a card stays on the cells it was put on.
-    for (const { v } of sheetData.celldata) delete v?.commentCardIds;
+    for (const row of sheetData.data ?? []) {
+        for (const cell of row) delete cell?.commentCardIds;
+    }
     // The formula map is built from every sheet's recalc list, which must name the copy, not the sheet copied.
     sheetData.calcChain = sheetData.calcChain?.map((entry) => ({ ...entry, id: copyId }));
     // A copy's images and charts take fresh ids, and its charts read the copy where they read the sheet copied, as
@@ -62,10 +62,6 @@ export function copySheet(ctx: Context, sheetId: string) {
     );
     addSheet(ctx, copyId, sheetName, sheetData);
     setSheetOrder(ctx, { [copyId]: order });
-    // The copy gets its cell matrix now, as a peer's tab builds it when the add arrives, so every read of the open
-    // workbook's cells finds the copy's.
-    const copyIndex = getSheetIndex(ctx, copyId);
-    if (copyIndex != null) initSheetData(ctx, copyIndex, ctx.sheets[copyIndex]);
     // A formula map built before the copy, such as while the browser was idle after a load, lacks the copy's formulas.
     // A peer's add reads them into the map once its batch applied; here the next edit builds the map again.
     ctx.formulaCache.formulaCellInfoMap = null;

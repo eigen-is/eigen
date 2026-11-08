@@ -12,13 +12,14 @@ import { shiftRangeForDelete, shiftRangeForInsert } from '../../engine/rowcol';
 import type { Context } from '../context';
 import type { Op, Selection, Sheet } from '../types';
 import type { PatchOptions } from '../utils';
-import { getSheetIndex, opToPatch } from '../utils';
+import { opToPatch } from '../utils';
 import { cancelNormalSelected } from './cell';
 import { createFilterOptions } from './filter';
 import { registerSheetFormulas } from './formula-cache';
 import { rowColMove } from './history-shift';
 import { deleteRowCol, insertRowCol } from './rowcol';
-import { addSheet, deleteSheet, initSheetData, leaveCurrentSheet, renameSheet } from './sheet';
+
+import { addSheet, deleteSheet, leaveCurrentSheet, renameSheet } from './sheet';
 
 // A row or column op the batch applied, with the sheets it was applied to.
 type AppliedRowCol = { op: Op; sheets: Sheet[] };
@@ -31,22 +32,12 @@ export function applyOpBatch(
     moveView = true,
 ): { ctx: Context; moved: AppliedRowCol[] } | null {
     let patches: Patch[] = [];
-    // The sheets this batch gives a cell matrix, whose formulas the formula map learns once the batch applied.
-    const materialized: string[] = [];
+    // The sheets this batch adds, whose formulas the formula map learns once the batch applied.
+    const added: string[] = [];
     const moved: AppliedRowCol[] = [];
     let next: Context;
     try {
         next = produce(ctx, (draft: Context) => {
-            // A sheet without its cell matrix, such as one this tab added before the grid opened it, gets one first.
-            // A cell or row op on it needs the matrix, as the replay builds it for a joiner.
-            for (const op of ops) {
-                const { id } = op;
-                if (id == null || (op.path[0] !== 'data' && !isRowColOp(op))) continue;
-                const index = getSheetIndex(draft, id);
-                if (index == null || draft.sheets[index].data) continue;
-                initSheetData(draft, index, draft.sheets[index]);
-                materialized.push(id);
-            }
             for (const op of ops) {
                 const { id } = op;
                 // A batch's row or column op lands for a read-only viewer too, or the grid and the metadata patches
@@ -66,15 +57,8 @@ export function applyOpBatch(
                     if (!isNewSheet(op.value, draft.sheets)) continue;
                     // addSheet keeps the value it is given, so the op itself never ends up in the frozen context.
                     const value = cloneDeep(op.value);
-                    // addSheet drops a cell matrix the value carries, but the replay keeps it, so it goes back once
-                    // the sheet is in.
-                    const { data } = value;
                     addSheet(draft, value.id, undefined, value, true);
-                    const index = getSheetIndex(draft, value.id);
-                    if (index == null) continue;
-                    initSheetData(draft, index, value);
-                    if (data) draft.sheets[index].data = data;
-                    materialized.push(value.id);
+                    added.push(value.id);
                 } else if (op.op === 'deleteSheet' && id) {
                     deleteSheet(draft, id, true);
                     if (moveView && id === draft.currentSheetId) leaveCurrentSheet(draft);
@@ -96,7 +80,7 @@ export function applyOpBatch(
         return null;
     }
     // The formula map lives outside immer, so it follows the batch only once the batch applied.
-    for (const id of materialized) {
+    for (const id of added) {
         const data = next.sheets.find((sheet) => sheet.id === id)?.data;
         if (data) registerSheetFormulas(next, id, data);
     }
