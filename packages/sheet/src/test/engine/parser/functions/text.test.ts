@@ -27,8 +27,6 @@ const resolver = createArrayResolver([
             ['South Korean Won'],
             ['Russian Ruble'],
         ]),
-        calculationChain: [],
-        dynamicArrayCompute: [],
     },
     {
         id: 's2',
@@ -42,8 +40,6 @@ const resolver = createArrayResolver([
             ['a6', 'b6'],
             ['a7', 'b7'],
         ]),
-        calculationChain: [],
-        dynamicArrayCompute: [],
     },
     {
         id: 's3',
@@ -58,8 +54,6 @@ const resolver = createArrayResolver([
             [',', ',', ',', ';'],
             [1.5, true, 'x', null],
         ]),
-        calculationChain: [],
-        dynamicArrayCompute: [],
     },
 ]);
 

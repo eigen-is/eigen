@@ -8,6 +8,7 @@ import { bundledFontOfStack, readCssFontSize } from '@workspace/lib/constants/fo
 import type { CellBorderSides, ConditionalFormatRule } from '@workspace/lib/sheets';
 import { BORDER_SIDE_CSS, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import { cloneDeep, forEach, includes, isEmpty, isNil, times, trim } from 'es-toolkit/compat';
+import { createArrayResolver } from '../../engine/cell-resolver';
 import { cfSplitRange, withCfRanges } from '../../engine/conditional-format';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { numberDisplay, parseCellInput } from '../../engine/format';
@@ -20,7 +21,7 @@ import { getFlowdata, getSheetConfig, updateContextWithSheetData } from '../cont
 import { carrySides } from '../modules/border';
 import type { CarryTile } from '../modules/cell';
 import { carriedLines, carryCells, getQKBorder, landedRanges, setCellValue } from '../modules/cell';
-import { createContextResolver, setFormulaCellInfo } from '../modules/formula-cache';
+import { setFormulaCellInfo } from '../modules/formula-cache';
 import { delFunctionGroup, execFunctionGroup, execfunction } from '../modules/formula-exec';
 import { jfrefreshgrid } from '../modules/refresh';
 import { storeSheetSelections } from '../modules/sheet';
@@ -146,14 +147,14 @@ function pasteCut(ctx: Context, copyState: NonNullable<Context['copyState']>) {
 
     // The formulas that read either range recompute, each queued once. A moved formula carries its old value, so it is
     // evaluated where it now lives.
-    const resolver = createContextResolver(ctx);
+    const resolver = createArrayResolver(ctx.sheets);
     const queued = new Map<string, { r: number; c: number; id: string }>();
     const queue = (id: string, { row, column }: SingleRange, evaluate: boolean) => {
         for (let r = row[0]; r <= row[1]; r += 1) {
             for (let c = column[0]; c <= column[1]; c += 1) {
                 const cell = evaluate ? d[r]?.[c] : undefined;
                 if (cell?.f != null) {
-                    [, cell.v] = execfunction(ctx, cell.f, r, c, id, undefined, false, false, resolver);
+                    [, cell.v] = execfunction(ctx, cell.f, r, c, { id, resolver });
                     cell.m = numberDisplay(cell.v, cell.ct?.fa);
                 }
                 setFormulaCellInfo(ctx, { r, c, id });
@@ -177,7 +178,7 @@ function pasteCut(ctx: Context, copyState: NonNullable<Context['copyState']>) {
 
 function pasteCopy(ctx: Context, copyState: NonNullable<Context['copyState']>) {
     // One live resolver per paste, so each evaluation sees the cells pasted before it.
-    const resolver = createContextResolver(ctx);
+    const resolver = createArrayResolver(ctx.sheets);
 
     const copySheetId = copyState.dataSheetId;
     const lines = carriedLines(ctx, copySheetId, copyState.copyRange, true);
@@ -225,7 +226,7 @@ function pasteCopy(ctx: Context, copyState: NonNullable<Context['copyState']>) {
             return cell;
         }
         const func = r === sr && c === sc ? cell.f : `=${functionCopy(cell.f, r - sr, c - sc)}`;
-        const funcV = execfunction(ctx, func, r, c, undefined, undefined, true, undefined, resolver);
+        const funcV = execfunction(ctx, func, r, c, { isrefresh: true, resolver });
         [, cell.v, cell.f] = funcV;
         cell.m = numberDisplay(funcV[1], cell.ct?.fa);
         return cell;
@@ -567,7 +568,7 @@ function pasteFormula(ctx: Context, formulaStr: string) {
     const r = selection.row[0];
     const c = selection.column[0];
 
-    const funcV = execfunction(ctx, formulaStr, r, c, undefined, undefined, true);
+    const funcV = execfunction(ctx, formulaStr, r, c, { isrefresh: true });
 
     const val = funcV[1];
 

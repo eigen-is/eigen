@@ -27,8 +27,6 @@ const resolver = createArrayResolver([
             [91, 1, 'a', 50, 16],
             [88, 1, null, 60, 32],
         ]),
-        calculationChain: [],
-        dynamicArrayCompute: [],
     },
 ]);
 

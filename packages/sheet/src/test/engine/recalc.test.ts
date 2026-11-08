@@ -650,9 +650,7 @@ describe('engine/recalc — extractDependencies', () => {
             name,
             data: grid(),
         }));
-        const resolver = createArrayResolver(
-            sheets.map((sheet) => ({ ...sheet, calculationChain: [], dynamicArrayCompute: [] })),
-        );
+        const resolver = createArrayResolver(sheets);
         const read: string[] = [];
         new FormulaEngine().evaluate(text, 's0', {
             ...resolver,

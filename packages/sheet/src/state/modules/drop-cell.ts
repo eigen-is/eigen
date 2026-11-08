@@ -5,6 +5,7 @@
 import dayjs from 'dayjs';
 import { cloneDeep, pick } from 'es-toolkit/compat';
 import { current, isDraft } from 'immer';
+import { createArrayResolver } from '../../engine/cell-resolver';
 import { cfSplitRange } from '../../engine/conditional-format';
 import { numberDisplay, parseCellInput, update } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
@@ -15,7 +16,6 @@ import type { Rect } from '../types';
 import { getSheetIndex } from '../utils';
 import { carrySides, getBorderInfoCompute } from './border';
 import { setCellValue } from './cell';
-import { createContextResolver } from './formula-cache';
 import { execFunctionGroup, execfunction } from './formula-exec';
 import { colLocation, rowLocation, sheetPoint } from './location';
 import { jfrefreshgrid } from './refresh';
@@ -1863,7 +1863,7 @@ export function updateDropCell(ctx: Context) {
 
     // Live resolver, hoisted: one per fill-drag instead of one snapshot per
     // filled formula cell.
-    const resolver = createContextResolver(ctx);
+    const resolver = createArrayResolver(ctx.sheets);
 
     const cfg = (file.config ??= {});
     cfg.borderInfo ??= {};
@@ -1941,17 +1941,7 @@ export function updateDropCell(ctx: Context) {
             if (cell?.f != null) {
                 const offset = pos - srcAxis;
                 const f = `=${functionCopy(cell.f, axisIsRow ? offset : 0, axisIsRow ? 0 : offset)}`;
-                const [, value, filledF] = execfunction(
-                    ctx,
-                    f,
-                    row,
-                    col,
-                    undefined,
-                    undefined,
-                    undefined,
-                    undefined,
-                    resolver,
-                );
+                const [, value, filledF] = execfunction(ctx, f, row, col, { resolver });
                 execFunctionGroup(ctx, row, col, value);
                 setCellValue(ctx, row, col, d, { v: value, f: filledF });
             }

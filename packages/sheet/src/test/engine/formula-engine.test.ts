@@ -20,8 +20,6 @@ const sheets: SheetData[] = [
                 { v: 100, m: '100', ct: { t: 'n', fa: 'General' } },
             ],
         ],
-        calculationChain: [],
-        dynamicArrayCompute: [],
     },
 ];
 
@@ -220,8 +218,6 @@ describe('engine/formula-engine — compiled formula at an offset', () => {
             data: Array.from({ length: 5 }, (_, r) =>
                 Array.from({ length: 5 }, (_, c) => ({ v: 2 ** (r * 5 + c), ct: { t: 'n', fa: 'General' } })),
             ),
-            calculationChain: [],
-            dynamicArrayCompute: [],
         },
     ]);
     const onGrid = (formula: string, rowOffset: number, colOffset: number) =>
@@ -312,10 +308,8 @@ describe('engine/formula-engine — an error held in a cell', () => {
                 // Row 7: one bit per column under row 1's errors, so a sum names the columns it matched.
                 [1, 2, 4, 8, 16, 32].map(number),
             ],
-            calculationChain: [],
-            dynamicArrayCompute: [],
         },
-        { id: 'other', name: 'Other', data: [[failed('#N/A')]], calculationChain: [], dynamicArrayCompute: [] },
+        { id: 'other', name: 'Other', data: [[failed('#N/A')]] },
     ]);
     const evaluate = (formula: string) => engine.evaluate(formula, 'errors', errorResolver).value;
     const columns = ['A', 'B', 'C', 'D', 'E', 'F'];

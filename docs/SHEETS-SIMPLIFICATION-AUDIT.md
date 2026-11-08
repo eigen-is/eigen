@@ -32,7 +32,7 @@ The API audit's six patterns all show up here. Read across the six areas, though
 2. **Facts stored twice inside the workbook.** `calcChain` beside the cells' `f` ([E1](#e1)), `cell.mc` beside `config.merge` ([D9](#d9)), `cell.hl` beside `sheet.hyperlink` ([F2](#f2)), the freeze and pixel boxes beside the indices ([R1](#r1), [R9](#r9)), the clipboard. Every writer has to keep the two in step, and each one that didn't is a fix in the log.
 3. **Two paths for one job.** The editor's batch applier beside the engine's replay ([S2](#s2)), writers doing their own formula bookkeeping beside the patch-derived recompute that undo already uses ([E7](#e7)), sort and fill outside `carryCells` ([D2](#d2)), and row and column handlers written twice ([R9](#r9)).
 4. **Structural undo across peers.** Undoing your own row, column or sheet op after a peer edited since needed a three-way merge, trial runs, a refusal path and half the shifter. The owner accepted the smaller undo, and that is done.
-5. **Fork scaffolding.** fill modes no menu can choose and Chinese numeral series ([D4](#d4)), dead formula state ([E6](#e6)). Each is still checked on edits, and at least one got a fix (`b6ecee4d3`, protection checked before a delete, for a protection nobody can switch on).
+5. **Fork scaffolding.** fill modes no menu can choose and Chinese numeral series ([D4](#d4)). Each is still checked on edits, and at least one got a fix (`b6ecee4d3`, protection checked before a delete, for a protection nobody can switch on).
 
 The API audit's tripwire applies here unchanged: at the third `fix(x)` on one mechanism within a week, stop and ask which root it is before a fourth patch lands.
 
@@ -168,9 +168,6 @@ History: inherited; touched by `77ef9d2ac`, `4d90409ff`, `6890d5b29`.
 Root cause: roots 2 and 5. The engine reads the overlay before the cell, so one missed clear shadows a cell with a stale value.
 Simpler: `execFunctionGroup(ctx, changedCells)` takes its cells as an argument, keeps the overlay local, and writes changed values at its end. The staging, the trailer and the paint guard go .
 Lost: nothing. ~80 LOC + ~40 test, low-medium risk, medium-high confidence. [E7](#e7) makes most of it moot.
-
-<a id="e6"></a>**E6. Fork scaffolding in formula state.**
-`SheetInfo.calculationChain` and `dynamicArrayCompute` (the only caller of `getSheets()` reads ids), `Sheet.dynamicArray`/`dynamicArray_compute` (never written), `FormulaCellInfo.children` (never read), `formulaDependency` (tests only), `color` (DFS state on long-lived nodes), `execfunction`'s nine positional parameters, `Parser`'s `tiny-emitter` for two reads (pass functions, drop the dependency), `createContextResolver` re-implementing `createArrayResolver`, and `ID_CARD_NUMBER` keeping an 18-digit Chinese ID as text (small product). Pattern 6. ~150 LOC + ~60 test, low risk, high confidence.
 
 <a id="e7"></a>**E7. Redesign: the commit works out the formula map and the recompute from the edit's patches, as undo already does.**
 20 `jfrefreshgrid`/`execFunctionGroup` calls in 11 files, 7 explicit `setFormulaCellInfo` calls, `refresh.ts`. The template exists: `patchStep` in `history.ts` runs `applyPatches` → `updateFormulaCache(patches)` → `produceWithPatches(recalculate(patches))`.
@@ -325,6 +322,7 @@ Run it as an orchestrated program (the [orchestrate skill](../.claude/skills/orc
 
 **Rules for every unit.**
 - One implementer per unit, one commit per unit. The implementer loads the [source-file skill](../.claude/skills/source-file/SKILL.md) and follows [CODE-STANDARDS.md](CODE-STANDARDS.md) on every file it touches: the header comment, no dead code, no module-level state, explicit types, and a redesign instead of a second patch.
+- Nothing written is true because it is written: the audit, a brief, a reviewer's claim and a suggested fix are leads. An implementer checks them in the code and the history, and reads the domain doc for design intent. A finding that removes something a doc calls deliberate stops and goes back to the owner.
 - Step 0 first: check the finding against the current code and say what mechanism or risk goes. Stop without building if it is wrong, already fixed, or smaller than stated, and strike it with the reason. The "Simpler" here is a hint, not a spec; a simpler design than the one written is better.
 - Every bug gets a red test first. A unit is judged by the mechanism it removes, not its line count. A unit that grows the code needs a reason.
 - The orchestrator, not the implementer, strikes a finding from this doc when it merges the unit, so parallel units never edit this doc at once. It also updates SHEETS.md and SHEETS-TODO.md where the unit changed what they say, through the [domain-doc skill](../.claude/skills/domain-doc/SKILL.md).
@@ -338,7 +336,7 @@ Wave 1 (nothing lost, or decided):
 | Lane | Units, in order | Main files |
 |---|---|---|
 | Op log | [S7](#s7), [S8](#s8) | `state/utils/patch.ts`, `state/modules/sheet.ts`, `engine/replay-ops.ts`, `use-sheet.ts` |
-| Formulas | [E6](#e6), then [E4](#e4), [E5](#e5) | `engine/formula-shift.ts`, `engine/recalc.ts`, `formula-*` |
+| Formulas | [E4](#e4), [E5](#e5) | `engine/formula-shift.ts`, `engine/recalc.ts`, `formula-*` |
 | Render and input | [R6](#r6), [R7](#r7) | `state/context.ts`, `context/modal.tsx`, `state/events/*`, `SheetOverlay/*` |
 
 Wave 2 (cross-cutting, after the lanes they depend on merged): [E1](#e1) then [E2](#e2); [F2](#f2) (after D2); [D2](#d2) after D4 is ruled; [S2](#s2) then [S5](#s5); [R1](#r1); [D4](#d4), [D8](#d8), [F4](#f4), [F7](#f7), [F8](#f8) as ruled. F4 and F7 change `packages/lib/src/charts`, which Docs, Slides and Vector share: tell the other session first.
@@ -352,7 +350,7 @@ Wave 3, the redesigns, in [§ If we built it today](#if-we-built-it-today)'s ord
 - This run also takes the API audit's T2 and X2 (the other session agreed). Don't edit `API-SIMPLIFICATION-AUDIT.md` on this branch, because that session keeps editing it: tell it when T2 or X2 lands, and it strikes them. Its X2 ruling: a flat cap, the runner's deadline and its memory limit, and a timeout or out-of-memory is an accepted outcome. X2 joins Wave 2.
 - The owner's standing word on merging: at a logical moment to merge, or to continue with a clean context, tell the owner and give the hand-off prompt. Merging with the other sessions' work is fine and a good idea. The first such moment is the end of Wave 1.
 - The owner allows an implementer to hand mechanical work (a grep sweep, rewiring similar test call sites, running a suite) to a cheaper sub-agent: Sonnet, or Haiku for a lookup, at low or medium effort. The implementer keeps Step 0, the design, the diff read and the commit. A sub-agent uses the implementer's worktree with no isolation option, one editing at a time, and never commits.
-- Wave 1 is running. Merged: R3, D5, F3, D7, E3, U2, S3, R2, D1, F1, E9, S1, R5, R4, D3 (the ref's `setSelection` stays: 13 test callers and no other door to the stored selection copy; S7 may remove it). Running: S7, S8, E6, R6. Next: E4, E5, D5, R6, R7, then the wave's close.
+- Wave 1 is running. Merged: E6, the U2 and E9 fixes, R3, D5, F3, D7, E3, U2, S3, R2, D1, F1, E9, S1, R5, R4, D3 (the ref's `setSelection` stays: 13 test callers and no other door to the stored selection copy; S7 may remove it). Running: S7, S8, R6, E4. Next: E4, E5, D5, R6, R7, then the wave's close.
 - For E4: half-open legs (`B2:1`, `A:B1`, `TRUE:A1`) read more than their dependency list, and `A1\n:B2` is missed because only spaces join a range.
 - For S5 or S10: `sheet.filter ??= {}` means a `['filter','1']` op after a peer cleared the filter should throw and drop its batch, and two first filters at once overwrite each other (D7 read this; not run). The `state/types.ts` line saying filter criteria never reach the stored shape looks false, since `encodeSheetsSnapshot` keeps `filter`.
 - For R6: R2's implementer read that the date shortcut's `updateCell` with the closed, empty editor clears a filled cell before opening the edit, so Escape wouldn't restore it. Not run.
@@ -365,4 +363,5 @@ Wave 3, the redesigns, in [§ If we built it today](#if-we-built-it-today)'s ord
 - Accepted, for the ledger: a rename can't be undone if its old name breaks `isSheetName`, such as an imported name over 31 characters. A surviving cell entry can restore `=One!A1` after a peer's rename, because `shiftEntries` ignores renames. An undo that sends nothing now leaves both stacks, so on a sheet past the row limit (imports are uncapped) a row delete can't be undone, silently: for the owner at the close. At exactly 1,024 rules, the undo of a write that drops one rule and adds one sends `add` before `remove`, so a peer drops the `add` and tabs differ by one rule until compaction (F9 would remove this). The dialog refuses to re-save an imported `1899-12-31` date rule. Past the rule cap the dialog's OK silently adds no rule.
 - For SHEETS-TODO in the docs unit: clearing a cell under `prohibitInput` is refused, unlike Excel's allow-blank; a formula typed under a number rule is refused because its text isn't a number.
 - For the closing efficiency seat: an undo of a column delete at 301k cells measured 283 and 305 ms before the forward matrices went, 319 and 631 ms after; the 631 is unresolved.
+- From E6: `ID_CARD_NUMBER` isn't one line (a regex, a re-export, a `format.ts` branch, two `cell.ts` conditions); its month pattern omits October. It stays. Horizontal `AVERAGEIFS` returns 0, not 12, because formulajs doesn't flatten criteria ranges. `isrefresh` is uncovered: tell E5.
 - For the closing review: D3 deleted the API insert and delete tests as covered by `rowcol.test.ts` and `rowcol-ops` without comparing assertions. `state/modules/cell.ts` got only a light pass; `carryCells` could split out.

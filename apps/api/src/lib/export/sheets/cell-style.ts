@@ -12,9 +12,7 @@ export function sheetsResolver(sheets: Sheet[]): CellResolver {
         sheets.map((sheet) => ({
             id: sheet.id ?? sheet.name,
             name: sheet.name,
-            data: sheet.data ?? null,
-            calculationChain: [],
-            dynamicArrayCompute: [],
+            data: sheet.data,
         })),
     );
 }

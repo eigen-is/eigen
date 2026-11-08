@@ -4,6 +4,7 @@
 
 import { current, isDraft } from 'immer';
 import { findSheetByName } from '../../engine/a1-notation';
+import { createArrayResolver } from '../../engine/cell-resolver';
 import { getCalculationOrder } from '../../engine/dependency-graph';
 import { checkBracketNum, resolveCellRange } from '../../engine/formula-utils';
 import type {
@@ -20,7 +21,7 @@ import { getFlowdata } from '../context';
 import type { FormulaCell } from '../types';
 import { getSheetIndex } from '../utils';
 import { setCellValue } from './cell';
-import { createContextResolver, executeAffectedFormulas, setFormulaCellInfo, snapshotContext } from './formula-cache';
+import { executeAffectedFormulas, setFormulaCellInfo, snapshotContext } from './formula-cache';
 import { error } from './validation';
 
 export function getcellrange(
@@ -42,25 +43,7 @@ export function getcellrange(
 }
 
 export function getAllFunctionGroup(ctx: Context): FormulaCell[] {
-    const { sheets } = ctx;
-    const ret: FormulaCell[] = [];
-    for (let i = 0; i < sheets.length; i += 1) {
-        const file = sheets[i];
-        const { calcChain, dynamicArray_compute } = file;
-
-        if (calcChain != null) {
-            for (const c of calcChain) {
-                ret.push(c);
-            }
-        }
-        if (dynamicArray_compute != null) {
-            for (const d of dynamicArray_compute) {
-                ret.push({ r: d.r, c: d.c, id: d.id });
-            }
-        }
-    }
-
-    return ret;
+    return ctx.sheets.flatMap((sheet) => sheet.calcChain ?? []);
 }
 
 export function delFunctionGroup(ctx: Context, r: number, c: number, id?: string): void {
@@ -84,23 +67,6 @@ export function delFunctionGroup(ctx: Context, r: number, c: number, id?: string
         }
         if (modified) {
             file.calcChain = calcChainClone;
-        }
-    }
-
-    const { dynamicArray } = file;
-    if (dynamicArray != null) {
-        let modified = false;
-        const dynamicArrayClone = dynamicArray.slice();
-        for (let i = 0; i < dynamicArrayClone.length; i += 1) {
-            const calc = dynamicArrayClone[i];
-            if (calc.r === r && calc.c === c && (calc.id == null || calc.id === id)) {
-                dynamicArrayClone.splice(i, 1);
-                modified = true;
-                break;
-            }
-        }
-        if (modified) {
-            file.dynamicArray = dynamicArrayClone;
         }
     }
 }
@@ -154,16 +120,27 @@ export function insertUpdateFunctionGroup(
 
 export type ExecFunctionResult = [boolean, Cell['v'], string];
 
+type ExecFunctionOptions = {
+    id?: string;
+    calcChainSet?: Set<string>;
+    isrefresh?: boolean;
+    notInsertFunc?: boolean;
+    // A pass over many formulas shares one, so no formula takes its own snapshot of the workbook.
+    resolver?: CellResolver;
+};
+
 export function execfunction(
     ctx: Context,
     txt: string,
     r: number,
     c: number,
-    id?: string,
-    calcChainSet?: Set<string>,
-    isrefresh?: boolean,
-    notInsertFunc?: boolean,
-    resolver?: CellResolver,
+    {
+        id = ctx.currentSheetId,
+        calcChainSet,
+        isrefresh,
+        notInsertFunc,
+        resolver = createArrayResolver(snapshotContext(ctx).sheets),
+    }: ExecFunctionOptions = {},
 ): ExecFunctionResult {
     if (txt.indexOf(error.r) > -1) {
         return [false, error.r, txt];
@@ -173,22 +150,14 @@ export function execfunction(
         txt += ')';
     }
 
-    if (id == null) {
-        id = ctx.currentSheetId;
+    const result = ctx.formulaCache.engine.evaluate(txt, id, resolver).value;
+
+    if (isrefresh) {
+        execFunctionGroup(ctx, r, c, result, id);
     }
 
-    resolver ??= createContextResolver(snapshotContext(ctx));
-    const evalResult = ctx.formulaCache.engine.evaluate(txt, id, resolver);
-    const result = evalResult.value;
-
-    if (r != null && c != null) {
-        if (isrefresh) {
-            execFunctionGroup(ctx, r, c, result, id);
-        }
-
-        if (!notInsertFunc) {
-            insertUpdateFunctionGroup(ctx, r, c, id, calcChainSet);
-        }
+    if (!notInsertFunc) {
+        insertUpdateFunctionGroup(ctx, r, c, id, calcChainSet);
     }
 
     return [true, result, txt];
@@ -286,7 +255,7 @@ export function execFunctionGroup(
     const formulaCellInfoMap = warmFormulaCellInfoMap(ctx, id === ctx.currentSheetId ? data : undefined);
     const { dependencyIndex } = ctx.formulaCache;
 
-    // Each affected formula's `parents`, which are its dependents, is refilled so the sort below sees fresh edges.
+    // Each affected formula's `dependents` is refilled so the sort below sees fresh edges.
     const affected: FormulaCellInfo[] = [];
     const affectedKeys = new Set<string>();
     const collect = (key: string) => {
@@ -304,17 +273,14 @@ export function execFunctionGroup(
 
     for (let i = 0; i < affected.length; i += 1) {
         const node = affected[i];
-        node.parents = {};
-        for (const key of dependencyIndex.dependentsOf(node.id, node.r, node.c)) {
-            node.parents[key] = 1;
-            collect(key);
-        }
+        node.dependents = dependencyIndex.dependentsOf(node.id, node.r, node.c);
+        for (const key of node.dependents) collect(key);
     }
 
     const formulaRunList = getCalculationOrder(affected, formulaCellInfoMap);
 
     if (formulaRunList.length > 0) {
-        executeAffectedFormulas(ctx, formulaRunList, getChains(), createContextResolver(getSnapshot()));
+        executeAffectedFormulas(ctx, formulaRunList, getChains(), createArrayResolver(getSnapshot().sheets));
     }
 
     ctx.formulaCache.execFunctionExist = undefined;

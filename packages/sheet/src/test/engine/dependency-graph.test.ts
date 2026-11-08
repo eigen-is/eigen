@@ -3,18 +3,8 @@ import { getCalculationOrder } from '../../engine/dependency-graph';
 import type { FormulaCellInfo, FormulaCellInfoMap } from '../../engine/types';
 
 // Helper to build a minimal FormulaCellInfo for test use
-function makeCell(key: string, parents: Record<string, number> = {}): FormulaCellInfo {
-    return {
-        key,
-        r: 0,
-        c: 0,
-        id: 'sheet1',
-        calc_funcStr: '=A1',
-        formulaDependency: [],
-        parents,
-        children: {},
-        color: 'w',
-    };
+function makeCell(key: string, dependents: string[] = []): FormulaCellInfo {
+    return { key, r: 0, c: 0, id: 'sheet1', formula: '=A1', dependents };
 }
 
 // ─── getCalculationOrder ─────────────────────────────────────────────────────
@@ -33,11 +23,7 @@ describe('engine/dependency-graph — getCalculationOrder', () => {
     });
 
     test('base cell comes before its dependent in the result', () => {
-        // In this codebase, `parents[key] = 1` means "formula at key depends ON me".
-        // So if A.parents = { B: 1 }, B depends on A → A must be evaluated first.
-        const a = makeCell('r0c0isheet1');
-        // B depends on A: set A.parents[B] = 1
-        a.parents['r1c0isheet1'] = 1;
+        const a = makeCell('r0c0isheet1', ['r1c0isheet1']);
         const b = makeCell('r1c0isheet1');
         const map: FormulaCellInfoMap = {
             r0c0isheet1: a,
@@ -53,14 +39,9 @@ describe('engine/dependency-graph — getCalculationOrder', () => {
     });
 
     test('chain A←B←C: C evaluates first, then B, then A', () => {
-        // C is a base value; B.parents = { C: 1 } means C depends on B (B needs C's value).
-        // Actually: A.parents[B] means B depends on A → A before B.
-        // Build: C has no dependents, B depends on C (C.parents[B]=1), A depends on B (B.parents[A]=1)
-        const c = makeCell('r2c0isheet1');
-        const b = makeCell('r1c0isheet1');
+        const c = makeCell('r2c0isheet1', ['r1c0isheet1']);
+        const b = makeCell('r1c0isheet1', ['r0c0isheet1']);
         const a = makeCell('r0c0isheet1');
-        c.parents['r1c0isheet1'] = 1; // B depends on C
-        b.parents['r0c0isheet1'] = 1; // A depends on B
         const map: FormulaCellInfoMap = {
             r0c0isheet1: a,
             r1c0isheet1: b,
@@ -82,15 +63,11 @@ describe('engine/dependency-graph — getCalculationOrder', () => {
     });
 
     test('hub cell precedes all of its dependents', () => {
-        // A hub many formulas read: hub.parents lists every dependent.
         const n = 5000;
-        const hub = makeCell('hub');
+        const keys = Array.from({ length: n }, (_, i) => `dep${i}`);
+        const hub = makeCell('hub', keys);
         const map: FormulaCellInfoMap = { hub };
-        for (let i = 0; i < n; i++) {
-            const key = `dep${i}`;
-            map[key] = makeCell(key);
-            hub.parents[key] = 1;
-        }
+        for (const key of keys) map[key] = makeCell(key);
         const result = getCalculationOrder([hub], map);
         expect(result).toHaveLength(n + 1);
         expect(result[0].key).toBe('hub');
@@ -99,12 +76,9 @@ describe('engine/dependency-graph — getCalculationOrder', () => {
     test('cyclic graph terminates and yields every node exactly once', () => {
         // Spreadsheets do contain circular references; recalc.ts relies on the sort
         // being cycle-tolerant by construction (no throw, no hang).
-        const a = makeCell('a');
-        const b = makeCell('b');
-        const c = makeCell('c');
-        a.parents.b = 1;
-        b.parents.c = 1;
-        c.parents.a = 1;
+        const a = makeCell('a', ['b']);
+        const b = makeCell('b', ['c']);
+        const c = makeCell('c', ['a']);
         const map: FormulaCellInfoMap = { a, b, c };
         const result = getCalculationOrder([a], map);
         expect(result.map((cell) => cell.key).sort()).toEqual(['a', 'b', 'c']);
@@ -116,10 +90,7 @@ describe('engine/dependency-graph — getCalculationOrder', () => {
         const n = 30000;
         const map: FormulaCellInfoMap = {};
         for (let i = 0; i < n; i++) {
-            map[`c${i}`] = makeCell(`c${i}`);
-        }
-        for (let i = 0; i < n - 1; i++) {
-            map[`c${i}`].parents[`c${i + 1}`] = 1;
+            map[`c${i}`] = makeCell(`c${i}`, i < n - 1 ? [`c${i + 1}`] : []);
         }
         const result = getCalculationOrder([map.c0], map);
         expect(result).toHaveLength(n);

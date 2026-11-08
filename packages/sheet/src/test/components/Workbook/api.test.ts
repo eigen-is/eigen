@@ -106,7 +106,7 @@ describe('applyOp and the formula dependency map', () => {
         const next = applyPeerOps(ctx, ops);
 
         const map = next.formulaCache.formulaCellInfoMap!;
-        expect(map[key(0, 1, 'id_2')]?.calc_funcStr).toBe('=A1*2');
+        expect(map[key(0, 1, 'id_2')]?.formula).toBe('=A1*2');
         expect(map[key(0, 1, 'id_1')]).toBeUndefined();
     });
 
@@ -160,7 +160,7 @@ describe('applyOp and the formula dependency map', () => {
 
         const next = applyPeerOps(ctx, [{ op: 'addSheet', id: 'id_3', path: [], value: added }]);
 
-        expect(next.formulaCache.formulaCellInfoMap![key(0, 1, 'id_3')]?.calc_funcStr).toBe('=A1*2');
+        expect(next.formulaCache.formulaCellInfoMap![key(0, 1, 'id_3')]?.formula).toBe('=A1*2');
     });
 });
 

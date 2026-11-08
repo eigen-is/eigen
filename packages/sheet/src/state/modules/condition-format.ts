@@ -11,6 +11,7 @@ import type {
 } from '@workspace/lib/sheets';
 import { isNil } from 'es-toolkit/compat';
 import { toA1 } from '../../engine/a1-notation';
+import { createArrayResolver } from '../../engine/cell-resolver';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
 import { createCfFormulaEvaluator, evaluateConditionalFormat } from '../../engine/conditional-format';
 import type { CellMatrix, ConditionalFormatRule } from '../../engine/types';
@@ -19,7 +20,6 @@ import type { Context } from '../context';
 import type { ConditionRulesProps } from '../types';
 import { getSheetIndex } from '../utils';
 import { getRangeByTxt } from './cell';
-import { createContextResolver } from './formula-cache';
 import { isRealNum } from './validation';
 
 // The rules the conditional formatting dialog makes. The others, such as a formula rule, come from a file or from a
@@ -181,7 +181,7 @@ export function getComputeMap(ctx: Context): ComputeMap | null {
     const computeMap = evaluateConditionalFormat(ruleArr, data, {
         evaluateFormula: createCfFormulaEvaluator(
             ctx.formulaCache.engine,
-            createContextResolver(ctx),
+            createArrayResolver(ctx.sheets),
             ctx.currentSheetId,
         ),
     });

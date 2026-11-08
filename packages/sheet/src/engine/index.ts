@@ -56,6 +56,5 @@ export type {
     CellResolver,
     EvaluationResult,
     FormulaEngineState,
-    SheetInfo,
 } from './types';
 export { valueIsError } from './validation';

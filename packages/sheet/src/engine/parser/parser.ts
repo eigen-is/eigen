@@ -1,19 +1,9 @@
 // The formula parser: it compiles formula text through the grammar into a function and evaluates it.
-// It answers the grammar's callbacks for names, cell and range reads, and error literals, and asks its
-// listeners for cell values, so the same parser serves the editor and the server. The FormulaEngine
-// owns one, for example, and turns each result into a value or an error string.
+// It answers the grammar's callbacks for names, cell and range reads, and error literals, and asks the
+// functions each evaluation hands it for cell values, so the same parser serves the editor and the
+// server. The FormulaEngine owns one, for example, and turns each result into a value or an error string.
 
-import { TinyEmitter } from 'tiny-emitter';
-import type {
-    CellInfo,
-    CompiledFormula,
-    FormulaArg,
-    FormulaValue,
-    ParseResult,
-    ParserEventListener,
-    ParserOptions,
-    RangeCell,
-} from '../types';
+import type { CompiledFormula, FormulaArg, FormulaValue, ParseResult, ParserOptions, RangeCell } from '../types';
 import errorParser, { ERROR, ERROR_NAME, ERROR_REF, ERROR_VALUE, toFormulaError } from './error';
 import { callFunction, evaluateByOperator } from './evaluate-by-operator/evaluate-by-operator';
 import { Parser as GrammarParser } from './grammar-parser/grammar-parser';
@@ -27,10 +17,8 @@ export class Parser {
     private parser: GrammarParserInstance;
     private variables: Record<string, FormulaArg>;
     private options: ParserOptions;
-    private emitter: TinyEmitter;
 
     public constructor() {
-        this.emitter = new TinyEmitter();
         this.parser = new GrammarParser();
         this.parser.yy = {
             toNumber,
@@ -49,10 +37,6 @@ export class Parser {
         this.options = Object.create(null);
 
         this.setVariable('TRUE', true).setVariable('FALSE', false).setVariable('NULL', null);
-    }
-
-    public on(event: string, listener: ParserEventListener): void {
-        this.emitter.on(event, listener);
     }
 
     public parse(expression: string, options: ParserOptions = {}): ParseResult {
@@ -108,10 +92,6 @@ export class Parser {
         return this.variables[name.toUpperCase()];
     }
 
-    private emit(event: string, ...args: unknown[]): void {
-        this.emitter.emit(event, ...args);
-    }
-
     // An unknown name is #NAME? in-band, like an unknown function, so IFERROR can trap it.
     private callVariable(name: string): FormulaArg {
         const value = this.getVariable(name);
@@ -143,13 +123,12 @@ export class Parser {
             throw Error(ERROR_REF);
         }
 
-        let value: FormulaValue;
-        const cell: CellInfo = { label: toLabel(cellRow, cellColumn), row: cellRow, column: cellColumn, sheetName };
-        this.emit('callCellValue', cell, this.options, (_value: FormulaValue) => {
-            value = _value;
+        return this.options.readCell?.({
+            label: toLabel(cellRow, cellColumn),
+            row: cellRow,
+            column: cellColumn,
+            sheetName,
         });
-
-        return value;
     }
 
     // Retrieve values by range label (`B3:A1`, `B$3:A1`, `B$3:$A1`, `$B$3:A$1`).
@@ -181,18 +160,6 @@ export class Parser {
         };
         const endCell: RangeCell = { row: rowEnd, column: colEnd, label: toLabel(rowEnd, colEnd) };
 
-        let value: FormulaValue[] | FormulaValue[][] = [];
-
-        this.emit(
-            'callRangeValue',
-            startCell,
-            endCell,
-            this.options,
-            (_value: FormulaValue[] | FormulaValue[][] = []) => {
-                value = _value;
-            },
-        );
-
-        return value;
+        return this.options.readRange?.(startCell, endCell) ?? [];
     }
 }

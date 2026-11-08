@@ -8,6 +8,7 @@ import type { DocSearchOptions } from '@workspace/lib/types/doc-search';
 import type { Box, ZOp } from '@workspace/lib/vector';
 import { current } from 'immer';
 import type { SetContextOptions } from '../../context';
+import { createArrayResolver } from '../../engine/cell-resolver';
 import type { ChartRangeRefusal } from '../../engine/chart-range';
 import { setUpChartRange } from '../../engine/chart-range';
 import { isRowColOp } from '../../engine/replay-ops';
@@ -29,7 +30,6 @@ import {
     applyOpBatch,
     cancelNormalSelected,
     collectMatches,
-    createContextResolver,
     deleteFloatingObject,
     dropStructuralEntries,
     getFlowdata,
@@ -194,7 +194,7 @@ export function generateAPIs(
 
         // Sets the range up, or says why it holds no chart and writes nothing.
         setChartDataRange: (id: string, ref: CellRangeRef): ChartRangeRefusal | undefined => {
-            const setup = setUpChartRange(ref, createContextResolver(getContext()));
+            const setup = setUpChartRange(ref, createArrayResolver(getContext().sheets));
             if (typeof setup === 'string') return setup;
             setContext((draftCtx) => setChartDataRange(draftCtx, id, ref));
         },

@@ -15,7 +15,6 @@ import type {
 import type { ChartSpecTexts } from '@workspace/lib/types/chart';
 import type { Patch as ImmerPatch } from 'immer';
 import type {
-    AncestorFormulaCell,
     CalcChainEntry,
     Cell,
     CellMatrix,
@@ -34,7 +33,6 @@ import type { PatchOptions } from './utils';
 // are lib's and reach this file through the engine's types. Op and the conditional-format and
 // validation rules come from lib directly, because the server reads them without the engine.
 export type {
-    AncestorFormulaCell,
     CalcChainEntry,
     Cell,
     CellMatrix,
@@ -108,11 +106,6 @@ export type Sheet = Omit<LibSheet, 'config' | 'id'> & {
     selections?: Selection[];
     calcChain?: CalcChainEntry[];
     filter?: Record<string, FilterEntry>;
-    // Dynamic-array formula source list — entries describe spill ranges; engine
-    // pushes here when a `=A1:A3*2`-style formula is evaluated. Same r/c/id
-    // shape as calcChain; `id` is optional for legacy entries.
-    dynamicArray_compute?: CalcChainEntry[];
-    dynamicArray?: { r: number; c: number; id?: string }[];
 };
 
 export type SearchResult = {
@@ -229,9 +222,4 @@ export type FormulaCell = {
     r: number;
     c: number;
     id: string;
-    parent?: AncestorFormulaCell;
-    func?: [boolean, number, string];
-    color?: string;
-    children?: AncestorFormulaCell;
-    times?: number;
 };

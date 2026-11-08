@@ -22,6 +22,5 @@ export type {
     FormulaCellInfoMap,
     FormulaDependency,
     FormulaEngineState,
-    SheetInfo,
 } from './engine/types';
 export * from './state';

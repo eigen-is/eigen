@@ -259,13 +259,18 @@ describe('setFormulaCellInfo — the cells a formula reads', () => {
                 { name: 'a!b', id: 's7', order: 6, data: grid(2, 2) },
             ],
         }) as Context;
-    // Types the formula into D6 and returns the cells the formula map says it reads.
-    const reads = (ctx: Context, f: string) => {
-        const sheet1 = ctx.sheets[0].data ?? [];
-        sheet1[5][3] = { f };
-        setFormulaCellInfo(ctx, { r: 5, c: 3, id: 's1' });
-        return ctx.formulaCache.formulaCellInfoMap?.r5c3is1?.formulaDependency;
-    };
+    // The cells the formula reads, through the editor's cache of resolved references.
+    const reads = (ctx: Context, f: string) =>
+        extractDependencies(
+            {
+                sheets: ctx.sheets,
+                findSheet: sheetFinder(ctx.sheets),
+                cellTextToIndexList: ctx.formulaCache.cellTextToIndexList,
+            },
+            f,
+            's1',
+            ctx.sheets[0].data,
+        );
 
     it.each(cases)('%s', (f, cells) => {
         const ctx = workbook();

@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, xit } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { Parser } from '../../../../../../engine/parser/parser';
+import type { RangeCell } from '../../../../../../engine/types';
 
 describe('.parse() financial formulas', () => {
     let parser: Parser | null;
@@ -220,11 +221,11 @@ describe('.parse() financial formulas', () => {
     });
 
     it('FVSCHEDULE', () => {
-        parser!.on('callRangeValue', (_a, _b, done) => done([[0.09, 0.1, 0.11]]));
+        const readRange = () => [[0.09, 0.1, 0.11]];
 
-        expect(parser!.parse('FVSCHEDULE(100, A1:C1)')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
+        expect(parser!.parse('FVSCHEDULE(100, A1:C1)', { readRange })).toBeMatchCloseTo({
+            error: null,
+            result: 133.089,
         });
     });
 
@@ -256,12 +257,9 @@ describe('.parse() financial formulas', () => {
     });
 
     it('IRR', () => {
-        parser!.on('callRangeValue', (_a, _b, done) => done([[-75000, 12000, 15000, 18000, 21000, 24000]]));
+        const readRange = () => [[-75000, 12000, 15000, 18000, 21000, 24000]];
 
-        expect(parser!.parse('IRR(A1:C1)')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
-        });
+        expect(parser!.parse('IRR(A1:C1)', { readRange })).toBeMatchCloseTo({ error: null, result: 0.057151428871 });
     });
 
     it('ISPMT', () => {
@@ -288,11 +286,11 @@ describe('.parse() financial formulas', () => {
     });
 
     it('MIRR', () => {
-        parser!.on('callRangeValue', (_a, _b, done) => done([[-75000, 12000, 15000, 18000, 21000, 24000]]));
+        const readRange = () => [[-75000, 12000, 15000, 18000, 21000, 24000]];
 
-        expect(parser!.parse('MIRR(A1:C1, 0.1, 0.12)')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
+        expect(parser!.parse('MIRR(A1:C1, 0.1, 0.12)', { readRange })).toBeMatchCloseTo({
+            error: null,
+            result: 0.079717103608,
         });
     });
 
@@ -597,34 +595,35 @@ describe('.parse() financial formulas', () => {
         });
     });
 
-    // TODO: Not supported yet
-    xit('XIRR', () => {
-        parser!.on('callRangeValue', (a, b, done) => {
+    it('XIRR', () => {
+        const readRange = (a: RangeCell, b: RangeCell) => {
             if (a.label === 'A1' && b.label === 'C1') {
-                done([[-10000, 2750, 4250, 3250, 2750]]);
+                return [[-10000, 2750, 4250, 3250, 2750]];
             } else if (a.label === 'A2' && b.label === 'C2') {
-                done([['01/jan/08', '01/mar/08', '30/oct/08', '15/feb/09', '01/apr/09']]);
+                return [['01/jan/08', '01/mar/08', '30/oct/08', '15/feb/09', '01/apr/09']];
             }
-        });
+            return [];
+        };
 
-        expect(parser!.parse('XIRR(A1:C1, A2:C2, 0.1)')).toMatchObject({
-            error: '#VALUE!',
-            result: null,
+        expect(parser!.parse('XIRR(A1:C1, A2:C2, 0.1)', { readRange })).toBeMatchCloseTo({
+            error: null,
+            result: 0.373362533,
         });
     });
 
     it('XNPV', () => {
-        parser!.on('callRangeValue', (a, b, done) => {
+        const readRange = (a: RangeCell, b: RangeCell) => {
             if (a.label === 'A1' && b.label === 'C1') {
-                done([[-10000, 2750, 4250, 3250, 2750]]);
+                return [[-10000, 2750, 4250, 3250, 2750]];
             } else if (a.label === 'A2' && b.label === 'C2') {
-                done([['01/01/2008', '03/01/2008', '10/30/2008', '02/15/2009', '04/01/2009']]);
+                return [['01/01/2008', '03/01/2008', '10/30/2008', '02/15/2009', '04/01/2009']];
             }
-        });
+            return [];
+        };
 
-        expect(parser!.parse('XNPV(0.09, A1:C1, A2:C2)')).toMatchObject({
-            error: '#ERROR!',
-            result: null,
+        expect(parser!.parse('XNPV(0.09, A1:C1, A2:C2)', { readRange })).toBeMatchCloseTo({
+            error: null,
+            result: 2086.647602,
         });
     });
 });
