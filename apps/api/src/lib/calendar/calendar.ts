@@ -51,17 +51,6 @@ import { buildCalendarEvent } from './sse-events';
 import { exportEvents, importEvents } from './transfer';
 import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload } from './types';
 
-// The one rule for what a calendar may be called and colored: REST, MKCALENDAR and PROPPATCH all land here.
-function validateCalendarProps(props: { name?: string; color?: string }): void {
-    if (props.name !== undefined && props.name.trim().length > CALENDAR_NAME_MAX_LENGTH) {
-        throw new ApiError(400, `Calendar name is longer than ${CALENDAR_NAME_MAX_LENGTH} characters`);
-    }
-    // Apple writes the eight-digit form, so all three hex lengths are valid.
-    if (props.color !== undefined && !isHexColor(props.color, [3, 6, 8])) {
-        throw new ApiError(400, 'Calendar color must be a hex color');
-    }
-}
-
 export class Calendar {
     private managedDb!: ManagedDatabase<typeof schema>;
     public db!: BunSQLiteDatabase<typeof schema>;
@@ -641,5 +630,16 @@ export class Calendar {
         },
     ): Promise<void> {
         return invitations.rsvp(this, eventId, user, input);
+    }
+}
+
+// The one rule for what a calendar may be called and colored: REST, MKCALENDAR and PROPPATCH all land here.
+function validateCalendarProps(props: { name?: string; color?: string }): void {
+    if (props.name !== undefined && props.name.trim().length > CALENDAR_NAME_MAX_LENGTH) {
+        throw new ApiError(400, `Calendar name is longer than ${CALENDAR_NAME_MAX_LENGTH} characters`);
+    }
+    // Apple writes the eight-digit form, so all three hex lengths are valid.
+    if (props.color !== undefined && !isHexColor(props.color, [3, 6, 8])) {
+        throw new ApiError(400, 'Calendar color must be a hex color');
     }
 }

@@ -64,15 +64,6 @@ type FolderLocks = { paths: Map<string, Promise<void>>; tree: RWLock };
 // same locks. An entry is small and stays for the process.
 const folderLocks = new Map<string, FolderLocks>();
 
-function locksFor(folder: string): FolderLocks {
-    let locks = folderLocks.get(folder);
-    if (!locks) {
-        locks = { paths: new Map(), tree: new RWLock() };
-        folderLocks.set(folder, locks);
-    }
-    return locks;
-}
-
 export class Mount {
     public readonly id: string;
     public readonly config: MountConfig;
@@ -1448,4 +1439,13 @@ export class Mount {
         tx.update(paths).set({ size: total }).where(eq(paths.id, folderId)).run();
         return total;
     }
+}
+
+function locksFor(folder: string): FolderLocks {
+    let locks = folderLocks.get(folder);
+    if (!locks) {
+        locks = { paths: new Map(), tree: new RWLock() };
+        folderLocks.set(folder, locks);
+    }
+    return locks;
 }
