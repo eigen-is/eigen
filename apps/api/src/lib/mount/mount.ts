@@ -178,11 +178,6 @@ export class Mount {
         return this.isRemote || this.isPathBased;
     }
 
-    // How many uploads on this mount still wait for the bucket to accept them.
-    public get pendingUploadCount(): number {
-        return this.uploadQueue?.pendingCount ?? 0;
-    }
-
     // ---- Lifecycle ----
 
     // `passive` reads a mount the home does not serve, such as a disabled one a backup archives, and changes
@@ -495,12 +490,12 @@ export class Mount {
             hash: row.hash,
             thumbnail: row.thumbnail,
             acl: row.acl,
-            visibility: row.visibility ?? 'private',
+            visibility: row.visibility,
             sharingRestricted: row.sharingRestricted,
-            details: row.details ?? null,
-            trashedAt: row.trashedAt ?? null,
-            createdAt: row.createdAt ?? new Date(),
-            updatedAt: row.updatedAt ?? new Date(),
+            details: row.details,
+            trashedAt: row.trashedAt,
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
         };
     }
 

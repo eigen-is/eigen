@@ -571,7 +571,7 @@ describe.skipIf(!live)('Mount (s3 storage, MinIO)', () => {
         await mount.closeDatabase(dataDbId);
 
         await mount.uploadQueue?.drain({ flushNow: true });
-        expect(mount.pendingUploadCount).toBe(0);
+        expect(mount.uploadQueue?.pendingCount).toBe(0);
         expect(await mount.storage.exists(storageKey)).toBe(true);
     });
 });

@@ -18,9 +18,8 @@ export class CollabRegistry {
     // The mounts destructMount swept, for the same reason. A mount that comes back is a new Mount, so
     // its documents open again.
     private readonly closedMounts = new WeakSet<Mount>();
-    // The keys of a path that is moving to the trash, and of everything under it. The trash closes their
-    // databases before it marks them trashed, so a document opened in between would lose its edits. A
-    // key counts the trashes that guard it, because two trashes of nested paths can overlap.
+    // The keys of a path moving to the trash, and of everything under it: a document opened after the trash closed its
+    // database would lose its edits. A key counts the trashes that guard it, because nested trashes can overlap.
     private readonly trashing = new Map<string, number>();
 
     public constructor(private readonly ownerId: string) {}
@@ -71,19 +70,16 @@ export class CollabRegistry {
         }
     }
 
-    // Whether the path is on its way to the trash, on its own or with a folder above it. The folders above
-    // count too, because a subfolder created after the trash began has no mark of its own. A move asks
-    // this inside the transaction of its row write, so the folders it reads are those the move sees.
+    // The folders above count too, because a subfolder created after the trash began has no mark of its own. A move
+    // asks inside the transaction of its row write, so the folders it reads are those the move sees.
     public isTrashing(mount: Mount, pathId: string): boolean {
         // Most moves run while nothing is trashed, and then the walk up the folders is not needed.
         if (this.trashing.size === 0) return false;
         return [pathId, ...mount.collectAncestorIds(pathId)].some((id) => this.trashing.has(this.key(mount.id, id)));
     }
 
-    // Runs a trash of the path and refuses every open at or below it until the trash is done. The
-    // refused socket tries again, and by then the path is in the trash, so it gets a 404. A move into
-    // any folder below the path is refused too (isTrashing). A document that a restore or a create puts
-    // in after the keys are read isn't refused, so the trash closes it itself.
+    // Refuses every open at or below the path until the trash is done. The refused socket tries again and gets a 404. A
+    // document that a restore or a create puts in after the keys are read isn't refused, so the trash closes it itself.
     public async whileTrashing(mount: Mount, pathId: string, trash: () => Promise<void>): Promise<void> {
         const keys = [pathId, ...mount.collectDescendantIds(pathId)].map((id) => this.key(mount.id, id));
         for (const key of keys) this.trashing.set(key, (this.trashing.get(key) ?? 0) + 1);
@@ -98,9 +94,8 @@ export class CollabRegistry {
         }
     }
 
-    // Checks read access again for every open document at or below the path. Read access comes from
-    // the whole chain of folders, so a check per connection also catches a share taken away from a
-    // folder above the document. Comparing the removed ACL entries would miss that.
+    // Read comes from the whole chain of folders, so a check per connection also catches a share taken away from a
+    // folder above the document, which comparing the removed ACL entries would miss.
     public async enforceReadAccessBelow(mount: Mount, pathId: string): Promise<void> {
         const path = await mount.getPath(pathId);
         if (!path) return;

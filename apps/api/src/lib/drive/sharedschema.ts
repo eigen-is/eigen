@@ -1,3 +1,6 @@
+// The Drizzle table of a home's shared.db: its copy of the paths other owners shared with it. The functions behind
+// "Shared with me" query it, and the drive's migrations create it.
+
 import type { DriveACL, DrivePathDetails, DrivePathType, DriveVisibility } from '@workspace/lib/types/drive';
 import { sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';

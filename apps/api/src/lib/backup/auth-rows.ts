@@ -15,13 +15,10 @@ import { getPublicConfig } from '../config/server-config';
 import { ApiError } from '../core';
 import { ARCHIVE_AUTH_FILE } from './paths';
 
-// The keys auth.json is written and read under. A union, not a string: restore branches on the key
-// (`user` gets a role, `member` a single membership), and a typo would read as a table nobody
-// archived.
+// A union, not a string: restore branches on the key, and a typo would read as a table nobody archived.
 type AuthArchiveKey = 'user' | 'account' | 'two_factor' | 'apikey' | 'member' | 'team_member';
 
-// A users3.db table one user's archive carries: the key it has in auth.json, the column that scopes
-// its rows to that user, and for a membership the parent row it would be an orphan without.
+// The column that scopes a table's rows to one user, and for a membership the parent row it would be an orphan without.
 type AuthTableSpec = {
     key: AuthArchiveKey;
     table: SQLiteTable;
@@ -29,9 +26,8 @@ type AuthTableSpec = {
     parent?: { table: SQLiteTable; id: SQLiteColumn; column: string };
 };
 
-// In insert order: the user row first, then the rows that reference it. Sessions and verification rows are left
-// out on purpose, because a restore re-inserts identity and does not hand out logins. Every column of the rest
-// rides along, so the insert on restore is complete.
+// In insert order: the user row first, then the rows that reference it. Sessions and verification rows stay out,
+// because a restore re-inserts identity and does not hand out logins.
 const AUTH_TABLES: AuthTableSpec[] = [
     { key: 'user', table: user, owner: user.id },
     { key: 'account', table: account, owner: account.userId },
@@ -51,10 +47,8 @@ const AUTH_TABLES: AuthTableSpec[] = [
     },
 ];
 
-// What a restored identity comes back as, whatever the archive says. `user.role` is better-auth's
-// own admin flag and a `member` row of the default org is what requireAdmin reads, so neither is
-// carried in from a file an admin uploaded: a restore puts a home's data back, it never hands out
-// privilege. An admin who was one before their restore is made one again by hand.
+// A restore puts a home's data back and never hands out privilege, so an uploaded file carries in no role. An admin
+// who was one before their restore is made one again by hand.
 const RESTORED_USER_ROLE = 'user';
 const RESTORED_MEMBER_ROLE = 'member';
 
