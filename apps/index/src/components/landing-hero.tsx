@@ -57,9 +57,9 @@ export function LandingHero({ demoMode }: LandingHeroProps) {
 
     return (
         <>
-            <h1 className="text-5xl leading-none tracking-normal">
+            <h1 className="text-4xl leading-none sm:text-5xl tracking-normal">
                 <span className="font-medium">your own</span>
-                <span className="font-normal" style={{ color: app.color }}>
+                <span className="font-normal whitespace-nowrap" style={{ color: app.color }}>
                     <Bar />
                     {word}
                     <Ket />
