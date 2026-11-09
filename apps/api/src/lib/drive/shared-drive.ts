@@ -33,8 +33,8 @@ import type { CopyTarget } from './copy-across';
 import type { ContentWriteOptions, ContentWriteResult, Drive } from './drive';
 import type { LockManager } from './lock-manager';
 
-// Some methods take a `_user` or `_actor` only so that their signature matches Drive's. The actor is
-// always this.user, whatever the caller passes.
+// A `_user` or `_actor` in the middle of a parameter list only keeps the arguments after it where
+// Drive has them. The actor is always this.user, whatever the caller passes.
 export class SharedDrive {
     private readonly drive: Drive;
     private readonly user: User;
@@ -200,13 +200,7 @@ export class SharedDrive {
         return this.drive.createFolder(mountId, parentId, folderName, this.user, containerType);
     }
 
-    public async create(
-        mountId: string,
-        parentId: string,
-        name: string,
-        type: EigenDocType,
-        _user?: User,
-    ): Promise<DrivePath> {
+    public async create(mountId: string, parentId: string, name: string, type: EigenDocType): Promise<DrivePath> {
         await this.requireWrite(mountId, parentId);
         return this.drive.create(mountId, parentId, name, type, this.user);
     }
@@ -216,7 +210,6 @@ export class SharedDrive {
         parentId: string,
         request: Request,
         maxSize: number,
-        _user?: User,
     ): Promise<DrivePath[]> {
         await this.requireWrite(mountId, parentId);
         return this.drive.uploadFiles(mountId, parentId, request, maxSize, this.user);
@@ -228,7 +221,6 @@ export class SharedDrive {
         name: string,
         mimeType: string,
         data: Buffer | StorageFile | ReadableStream<Uint8Array>,
-        _user?: User,
     ): Promise<DrivePath> {
         await this.requireWrite(mountId, parentId);
         return this.drive.createFileFromData(mountId, parentId, name, mimeType, data, this.user);
@@ -250,7 +242,7 @@ export class SharedDrive {
     }
 
     // A move takes the item out of its folder, so it needs write on that folder too, as a rename does.
-    public async movePath(mountId: string, pathId: string, targetParentId: string, _user?: User): Promise<DrivePath> {
+    public async movePath(mountId: string, pathId: string, targetParentId: string): Promise<DrivePath> {
         const memberships = await getMemberships(this.user.id);
         await this.requireWrite(mountId, pathId, memberships, 'No write permission on source');
         const path = await this.drive.getPath(mountId, pathId);
@@ -260,7 +252,7 @@ export class SharedDrive {
         return this.drive.movePath(mountId, pathId, targetParentId, this.user);
     }
 
-    public async renamePath(mountId: string, pathId: string, newName: string, _user?: User): Promise<void> {
+    public async renamePath(mountId: string, pathId: string, newName: string): Promise<void> {
         const path = await this.drive.getPath(mountId, pathId);
         if (!path?.parentId) throw new ApiError(403, 'No write permission');
         await this.requireWrite(mountId, path.parentId);
@@ -291,7 +283,7 @@ export class SharedDrive {
 
     // A path shared directly with the caller is left: only their own ACL entry goes, whatever their permission. Any
     // other path goes to the trash, which needs write. A path in the trash answers the 403 of a path they can't see.
-    public async deletePath(mountId: string, pathId: string, _user?: User): Promise<void> {
+    public async deletePath(mountId: string, pathId: string): Promise<void> {
         const path = await this.drive.getPath(mountId, pathId);
         const own = path?.acl?.find((entry) => canonicalACLId(entry.id) === canonicalACLId(this.user.email));
         if (
@@ -307,17 +299,12 @@ export class SharedDrive {
     }
 
     // Removing a failed copy needs write access, the same as a trash.
-    public async deleteFailedCopy(
-        mountId: string,
-        pathId: string,
-        createdIds: ReadonlySet<string>,
-        _user?: User,
-    ): Promise<void> {
+    public async deleteFailedCopy(mountId: string, pathId: string, createdIds: ReadonlySet<string>): Promise<void> {
         await this.requireWrite(mountId, pathId);
         return this.drive.deleteFailedCopy(mountId, pathId, createdIds, this.user);
     }
 
-    public async restorePath(mountId: string, pathId: string, _user?: User): Promise<void> {
+    public async restorePath(mountId: string, pathId: string): Promise<void> {
         await this.requireDriveOwner('Only the drive owner can restore from trash');
         return this.drive.restorePath(mountId, pathId, this.user);
     }
@@ -327,12 +314,12 @@ export class SharedDrive {
         return this.drive.listTrash(mountId);
     }
 
-    public async permanentlyDelete(mountId: string, pathId: string, _user?: User): Promise<void> {
+    public async permanentlyDelete(mountId: string, pathId: string): Promise<void> {
         await this.requireDriveOwner('Only the drive owner can permanently delete from trash');
         return this.drive.permanentlyDelete(mountId, pathId, this.user);
     }
 
-    public async emptyTrash(mountId: string, _user?: User): Promise<void> {
+    public async emptyTrash(mountId: string): Promise<void> {
         await this.requireDriveOwner('Only the drive owner can empty trash');
         return this.drive.emptyTrash(mountId, this.user);
     }
@@ -398,7 +385,6 @@ export class SharedDrive {
         subject: string | null,
         message: string,
         sendCopyToSelf: boolean,
-        _sender: User,
     ): Promise<{ sent: number }> {
         await this.requireWrite(mountId, pathId);
         return this.drive.emailCollaborators(mountId, pathId, subject, message, sendCopyToSelf, this.user);
@@ -406,12 +392,7 @@ export class SharedDrive {
 
     // An invite to a chat inside a document shares the document. So it needs write access to both, and
     // the document's sharing restriction counts.
-    public async inviteToChat(
-        mountId: string,
-        chatId: string,
-        email: string,
-        _actor?: User | null,
-    ): Promise<InviteResult> {
+    public async inviteToChat(mountId: string, chatId: string, email: string): Promise<InviteResult> {
         const memberships = await getMemberships(this.user.id);
         await this.requireWrite(mountId, chatId, memberships);
 
@@ -484,18 +465,13 @@ export class SharedDrive {
         return this.drive.listVersions(mountId, containerId);
     }
 
-    public async restoreContainer(
-        mountId: string,
-        containerId: string,
-        snapshotName: string,
-        _user?: User,
-    ): Promise<void> {
+    public async restoreContainer(mountId: string, containerId: string, snapshotName: string): Promise<void> {
         await this.requireWrite(mountId, containerId);
         return this.drive.restoreContainer(mountId, containerId, snapshotName, this.user);
     }
 
     // Delete history needs an owner of the drive, the same as a delete forever in the trash.
-    public async deleteVersions(mountId: string, containerId: string, _user?: User): Promise<void> {
+    public async deleteVersions(mountId: string, containerId: string): Promise<void> {
         await this.requireDriveOwner('Only the drive owner can delete version history');
         return this.drive.deleteVersions(mountId, containerId, this.user);
     }
@@ -517,23 +493,23 @@ export class SharedDrive {
         return this.drive.recordClientFileEvent(mountId, pathId, this.user, event);
     }
 
-    public async watchPath(mountId: string, pathId: string, _user: User): Promise<void> {
+    public async watchPath(mountId: string, pathId: string): Promise<void> {
         await this.requireRead(mountId, pathId);
         return this.drive.watchPath(mountId, pathId, this.user);
     }
 
     // Unwatching and the watch status have no access check. A user must be able to see and stop a
     // watch after the share is gone.
-    public async unwatchPath(mountId: string, pathId: string, _user: User): Promise<void> {
+    public async unwatchPath(mountId: string, pathId: string): Promise<void> {
         return this.drive.unwatchPath(mountId, pathId, this.user);
     }
 
-    public async getWatchStatus(mountId: string, pathId: string, _user: User): Promise<PathWatchStatus> {
+    public async getWatchStatus(mountId: string, pathId: string): Promise<PathWatchStatus> {
         return this.drive.getWatchStatus(mountId, pathId, this.user);
     }
 
     // A revoked share keeps its watch rows, so the paths the caller can no longer read drop out here.
-    public async getWatches(_user: User): Promise<DrivePath[]> {
+    public async getWatches(): Promise<DrivePath[]> {
         const breadcrumbs = await this.drive.getWatchedBreadcrumbs(this.user);
         const memberships = await getMemberships(this.user.id);
         return breadcrumbs

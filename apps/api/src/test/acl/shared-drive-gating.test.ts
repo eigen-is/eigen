@@ -130,12 +130,12 @@ describe('SharedDrive gating enumeration', () => {
         unwatchPath: {
             gate: 'ungated-by-design',
             reason: "removing one's own watch must work after a share is revoked",
-            call: (sd) => sd.unwatchPath(mountId, fileId, charlie),
+            call: (sd) => sd.unwatchPath(mountId, fileId),
         },
         getWatchStatus: {
             gate: 'ungated-by-design',
             reason: "reads only the caller's own watch rows",
-            call: async (sd) => expect((await sd.getWatchStatus(mountId, fileId, charlie)).direct).toBe(false),
+            call: async (sd) => expect((await sd.getWatchStatus(mountId, fileId)).direct).toBe(false),
         },
         getWatches: {
             gate: 'ungated-by-design',
@@ -143,7 +143,7 @@ describe('SharedDrive gating enumeration', () => {
             // pinned by file-watch.test.ts (a stranger has no rows either way).
             reason: 'per-caller listing; safe to call with no permissions',
             call: async (sd) => {
-                const paths = await sd.getWatches(charlie);
+                const paths = await sd.getWatches();
                 expect(paths.map((p) => p.id)).not.toContain(fileId);
             },
         },
@@ -197,7 +197,7 @@ describe('SharedDrive gating enumeration', () => {
         },
         listVersions: { gate: 'denies', reason: 'read-gated', call: (sd) => sd.listVersions(mountId, docId) },
         getFileHistory: { gate: 'denies', reason: 'read-gated', call: (sd) => sd.getFileHistory(mountId, fileId) },
-        watchPath: { gate: 'denies', reason: 'read-gated', call: (sd) => sd.watchPath(mountId, fileId, charlie) },
+        watchPath: { gate: 'denies', reason: 'read-gated', call: (sd) => sd.watchPath(mountId, fileId) },
 
         // Write-gated.
         copyPath: {
@@ -239,7 +239,7 @@ describe('SharedDrive gating enumeration', () => {
         emailCollaborators: {
             gate: 'denies',
             reason: 'write-gated',
-            call: (sd) => sd.emailCollaborators(mountId, fileId, null, 'hi', false, charlie),
+            call: (sd) => sd.emailCollaborators(mountId, fileId, null, 'hi', false),
         },
         inviteToChat: {
             gate: 'denies',

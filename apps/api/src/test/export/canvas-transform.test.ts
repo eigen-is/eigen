@@ -5,9 +5,10 @@ import * as Y from 'yjs';
 import type { DocumentExportFormat } from '../../lib/document/transform/protocol';
 import type { CanvasPage } from '../../lib/export/canvas/render';
 import { canvasHtmlDocument, renderEigenslidesHtml } from '../../lib/export/canvas/transform';
-import { htmlToPdf, isWeasyPrintAvailable } from '../../lib/export/weasyprint';
+import { htmlToPdf } from '../../lib/export/weasyprint';
 import { embeddedSliceFiles } from '../fixtures/font-slices';
 import { buildGoldenDeckScene, seedDeckDoc } from '../fixtures/golden-documents';
+import { weasyPrintPython } from '../pdf-test-helpers';
 
 // The standalone HTML document a canvas export leaves through. The screen document must fit a
 // fixed-size page to whatever viewport opens it; the PDF document must not, because WeasyPrint
@@ -175,7 +176,7 @@ function textOrigins(pdf: Buffer): string[] {
     });
 }
 
-const weasyprint = (await isWeasyPrintAvailable()) ? describe : describe.skip;
+const weasyprint = weasyPrintPython ? describe : describe.skip;
 
 // The editor shows an empty paragraph one line tall because ProseMirror gives it a trailing <br>; the
 // stored html has none, so the print must lay out `<p></p>` as the editor lays out `<p><br></p>`.

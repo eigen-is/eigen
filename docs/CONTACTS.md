@@ -10,7 +10,7 @@ The sections cover how a card is stored and written, the events a write sends, l
 
 ## A contact is its vCard bytes
 
-The `vcard` column of a `contacts` row holds the card exactly as it was stored. The names, the `uid`, the `data` JSON, the `etag` and the label junction are a projection of those bytes, written in the same transaction. So a CardDAV GET returns the bytes a client PUT, unknown properties and all, and body and ETag can never disagree. `rebuildProjection` (`contacts.ts`) proves the claim: it rebuilds every projected column from the blobs, and `contacts/contacts-store.test.ts` pins it.
+The `vcard` column of a `contacts` row holds the card exactly as it was stored. The names, the `uid`, the `data` JSON, the `etag` and the label junction are a projection of those bytes, written in the same transaction. So a CardDAV GET returns the bytes a client PUT, unknown properties and all, and body and ETag can never disagree.
 
 Some facts no card carries, so they live only in the database: label ids and colors, the server-owned `eigenId` self-link, the one-row `book` (the `ctag`, the `syncGen` and the `ownerSeeded` latch) and the delete tombstones. The schema is `schema.ts`.
 

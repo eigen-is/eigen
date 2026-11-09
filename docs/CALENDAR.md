@@ -27,7 +27,7 @@ The sections run in this order: how an event is stored and written, time zones, 
 
 A resource row holds the bytes a client wrote, `VALARM` details and unknown properties included, and the SHA-256 of those bytes is its etag. A CalDAV GET serves them back verbatim ([CALDAV.md](CALDAV.md#get-serves-the-stored-bytes-and-put-answers-an-etag-only-for-bytes-it-kept)). How a resource and a calendar are named is in [CALDAV.md](CALDAV.md#eigen-names-what-it-creates-and-keeps-a-clients-name-as-written).
 
-The `events` rows, `uid`, `etag` and `hasUnindexedRecurrence` are projected from the bytes. `rebuildProjection` (`calendar.ts`) rewrites all of them from the blobs in one transaction, and `apps/api/src/test/calendar/resource-store.test.ts` pins that contract. A new projected column is added by altering the table and calling it.
+The `events` rows, `uid`, `etag` and `hasUnindexedRecurrence` are projected from the bytes each time a resource is written.
 
 Some facts no VCALENDAR can hold live only in the database: a calendar's name, color, visibility, default flag, `shares`, `ctag` and `syncGen`, the `resource_tombstones` a sync delta reports as removals, and the recipient-side `shared_calendars`. See `schema.ts` and [DATABASE.md](DATABASE.md). Because the events themselves live in these rows, the database runs synchronous FULL ([DATABASE.md § A database that holds the truth runs synchronous FULL](DATABASE.md#a-database-that-holds-the-truth-runs-synchronous-full)).
 
@@ -43,7 +43,7 @@ iCalendar has no place for a row id, a creator, a color or an invitation link, s
 
 | Line | Carries |
 |---|---|
-| `X-EIGEN-EVENT-ID` | the `events` row id, so an id survives a projection rebuild |
+| `X-EIGEN-EVENT-ID` | the `events` row id, so an id survives each time the file is projected again |
 | `X-EIGEN-CREATED-BY` | the user who first wrote the resource |
 | `X-EIGEN-ORGANIZER-EVENT`, `-USER` | the invitation link on an attendee's copy ([§ A linked copy is an ordinary resource](#a-linked-copy-is-an-ordinary-resource-with-the-organizers-stamp)) |
 | `X-EIGEN-COLOR` | the per-event color |

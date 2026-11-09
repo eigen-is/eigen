@@ -74,7 +74,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Paste past the last row in Sheets** — a paste that adds rows to a workbook full of formulas no longer pauses to read them all again
 - **A tab opened for the first time in Sheets** — arrow keys and typing work at once, on A1, without a click first
 - **Downloading an empty spreadsheet** — a spreadsheet nobody edited downloads with its blank sheet
-- **Downloads that fail** — downloading or printing a document from Docs, Sheets, Slides or Vector that is too big to export says "Export failed: the document is too big, or it used too much memory" instead of "Internal server error"
+- **Downloads that fail** — downloading or printing a document from Docs, Sheets, Slides or Vector that is too big, or whose PDF takes too long to make, says "Export failed: the document is too big, or it used too much memory" instead of a server error or a timeout
 - **Mail apps during a restore** — a mail app that signs in while an account is being restored or deleted is told to try again later, so it can no longer make the restore fail and keep the account offline
 - **Sending in Chat and comments** — a send that fails keeps its text and files, and a slash command such as /help leaves your attachments waiting. Send stays off until the room has loaded, so a message can't go out without its files
 - **Changing room in Chat** — what you were about to send is cleared when you change room, so it can't go to the wrong one
@@ -87,13 +87,16 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Long date ranges in Calendar** — a repeating event lasting several days shows when it began before the days in view, in Calendar and in calendar apps. A calendar app asking for more than five years at once gets the events past the first five
 - **Time zones in calendar files** — an export keeps each event's time when two custom time zones share a name, and so does an import of a file holding several calendars. An event a calendar app saved in UTC shows as UTC, not GMT, and stays UTC when moved
 - **Importing a file that isn't a calendar** — Calendar says it is not a calendar file instead of showing an internal error
+- **Share notices in Calendar** — changing who a calendar is shared with, in Calendar or in a team's settings in Admin, no longer notifies people whose access stayed the same, so a notice they read stays read
 - **A refused Save** — in Calendar, Contacts and Personal info in Space, a Save refused because the item changed elsewhere keeps what you typed and takes the other fields from the server
 - **Removing someone with a document open** — removing someone from a team or an organization, or deleting their account, cuts them off within 15 seconds from the documents they can no longer read. A password reset does too
 - **Losing access to an open document** — in Docs, Sheets, Slides, Vector and Stickies, the page switches to "You need access" within 15 seconds, or to sign-in if your account was deleted, instead of leaving an editor where typing goes nowhere
 - **Signing out with a document open** — signing out or changing your password with **Log out of all other devices** ticked also ends open documents and live updates, within 15 seconds
 - **Shared with me** — items of a deleted person or team no longer show
+- **Removing a share in Drive** — no longer notifies someone who never had the file
 - **Restoring a deleted account or team** — a restore of a deleted team, or of a deleted user whose address another account now holds, is refused before it changes anything. A restore that fails no longer reloads open tabs, so they keep their unsaved edits
 - **Deleting during an upload** — on local storage, deleting a file while an upload of the same name runs no longer loses the new file
+- **Limits in Admin** — a storage, mount or upload limit outside its range keeps Save disabled, with a plain hint under the field, instead of failing with a confusing error
 
 ## [0.4.2] - 2026-11-03
 

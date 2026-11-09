@@ -21,7 +21,8 @@ The one-shot transform process ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)
 | Outcome | Status |
 |---|---|
 | WeasyPrint not installed, older than 68 or its import past 5 s (PDF only) | 501 naming the minimum and how to install it |
-| WeasyPrint past its 60 s timeout, or exits non-zero | 504, or a bare 500 with its traceback in the log. A SIGSEGV during the render renders once more in what is left of the 60 s, unless the first took over half |
+| WeasyPrint past its 60 s timeout | 413, the transform's message below |
+| WeasyPrint exits non-zero | A bare 500 with its traceback in the log, since a broken install and a document WeasyPrint can't lay out look alike. A SIGSEGV during the render renders once more in what is left of the 60 s, unless the first took over half |
 | The prepared media past 200 MB in all, the named SVGs' declared sizes, or one Office source | 413 |
 | The transform past its deadline or out of memory | 413, "Export failed: the document is too big, or it used too much memory" |
 | Transform runner saturated, or four PDF renders already waiting | 503, never a main-thread fallback |

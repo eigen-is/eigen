@@ -2,9 +2,9 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import { newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet } from '@workspace/lib/sheets';
 import { sheetsHtmlDocument } from '../../lib/export/sheets/render';
-import { htmlToPdf, isWeasyPrintAvailable } from '../../lib/export/weasyprint';
+import { htmlToPdf } from '../../lib/export/weasyprint';
 import type { Raster } from '../pdf-test-helpers';
-import { pageCount, pixelAt, rasterize, rasterizer } from '../pdf-test-helpers';
+import { pageCount, pixelAt, rasterize, rasterizer, weasyPrintPython } from '../pdf-test-helpers';
 import { NO_MEDIA, NO_PIXELS } from '../setup';
 
 // The page margin the export sets, in CSS px, and the points a CSS px prints at.
@@ -27,7 +27,7 @@ function inkBox(page: Raster): { minX: number; minY: number; maxX: number; maxY:
 }
 
 // CI installs neither WeasyPrint nor a rasterizer, so these suites run only where they are on the machine.
-const weasyPrint = await isWeasyPrintAvailable();
+const weasyPrint = weasyPrintPython !== null;
 const suite = weasyPrint && rasterizer ? describe : describe.skip;
 
 (weasyPrint ? describe : describe.skip)('sheets PDF — rows print at their stored height', () => {
