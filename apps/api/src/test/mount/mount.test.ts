@@ -18,7 +18,7 @@ import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
 import { parseSnapshotTimestamp } from '../../lib/versioning/timestamp';
 import { VERSIONS_FOLDER_NAME } from '../../lib/versioning/versions-folder';
 import { createGetLocalDatabase, FaultStorage } from '../fault-storage-helpers';
-import { createTestMountConfig } from '../mount-test-helpers';
+import { createTestMountConfig, TEST_ACTOR } from '../mount-test-helpers';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-mount-${Date.now()}`);
 const OWNER_ID = 'test-owner-id';
@@ -2166,8 +2166,12 @@ describe('Folder sizes', () => {
         expect((await mount.getPath(srcFolder))!.size).toBe(7);
         expect((await mount.getPath(dstFolder))!.size).toBe(0);
 
-        await mount.copyPath(await mount.listCopy(fileId), dstFolder, 'copied.txt', (pathId) =>
-            mount.deletePath(pathId),
+        await mount.copyPath(
+            await mount.listCopy(fileId),
+            dstFolder,
+            'copied.txt',
+            (pathId) => mount.deletePath(pathId),
+            TEST_ACTOR,
         );
 
         expect((await mount.getPath(srcFolder))!.size).toBe(7);

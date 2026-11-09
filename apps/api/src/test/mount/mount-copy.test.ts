@@ -5,7 +5,7 @@ import type { DatabaseConfig, SchemaType } from '../../lib/core';
 import { ManagedDatabase } from '../../lib/core';
 import { Mount } from '../../lib/mount/mount';
 import { VERSIONS_FOLDER_NAME } from '../../lib/versioning/versions-folder';
-import { createTestMountConfig } from '../mount-test-helpers';
+import { createTestMountConfig, TEST_ACTOR } from '../mount-test-helpers';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-mount-copy-${Date.now()}`);
 const OWNER_ID = 'test-owner-copy';
@@ -49,7 +49,7 @@ describe('Mount.copyPath', () => {
     test('copies a file with a new name', async () => {
         const data = Buffer.from('hello copy');
         const fileId = await mount.createFile(rootId, 'orig.txt', 'text/plain', data.length, data);
-        const copied = await mount.copyPath(await mount.listCopy(fileId), rootId, 'orig-copy.txt', discard);
+        const copied = await mount.copyPath(await mount.listCopy(fileId), rootId, 'orig-copy.txt', discard, TEST_ACTOR);
         expect(copied.id).not.toBe(fileId);
         expect(copied.name).toBe('orig-copy.txt');
         expect(copied.size).toBe(data.length);
@@ -61,7 +61,7 @@ describe('Mount.copyPath', () => {
     test('copies a folder with children', async () => {
         const folderId = await mount.createFolder(rootId, 'src-folder');
         const childId = await mount.createFile(folderId, 'a.txt', 'text/plain', 3, Buffer.from('abc'));
-        const copied = await mount.copyPath(await mount.listCopy(folderId), rootId, 'dst-folder', discard);
+        const copied = await mount.copyPath(await mount.listCopy(folderId), rootId, 'dst-folder', discard, TEST_ACTOR);
         const children = await mount.listFolder(copied.id);
         expect(children).toHaveLength(1);
         expect(children[0]!.name).toBe('a.txt');
@@ -76,7 +76,13 @@ describe('Mount.copyPath', () => {
         await Bun.write(join(mount.thumbsDir, `${fileId}.webp`), 'thumb-bytes');
         await mount.updatePath(fileId, { thumbnail: `${fileId}.webp`, details: { width: 12, height: 8 } });
 
-        const copied = await mount.copyPath(await mount.listCopy(fileId), rootId, 'photo-copy.png', discard);
+        const copied = await mount.copyPath(
+            await mount.listCopy(fileId),
+            rootId,
+            'photo-copy.png',
+            discard,
+            TEST_ACTOR,
+        );
         expect(copied.thumbnail).toBe(`${copied.id}.webp`);
         expect(await Bun.file(join(mount.thumbsDir, `${copied.id}.webp`)).text()).toBe('thumb-bytes');
         expect(copied.details?.width).toBe(12);
@@ -88,7 +94,13 @@ describe('Mount.copyPath', () => {
         const fileId = await mount.createFile(rootId, 'stale.png', 'image/png', data.length, data);
         await mount.updatePath(fileId, { thumbnail: `${fileId}.webp`, details: { width: 4, height: 2 } });
 
-        const copied = await mount.copyPath(await mount.listCopy(fileId), rootId, 'stale-copy.png', discard);
+        const copied = await mount.copyPath(
+            await mount.listCopy(fileId),
+            rootId,
+            'stale-copy.png',
+            discard,
+            TEST_ACTOR,
+        );
         expect(copied.thumbnail).toBeNull();
         expect(existsSync(join(mount.thumbsDir, `${copied.id}.webp`))).toBe(false);
         expect(copied.details?.width).toBe(4);
@@ -100,7 +112,7 @@ describe('Mount.copyPath', () => {
         const fileId = await mount.createFile(rootId, 'song.mp3', 'audio/mpeg', data.length, data);
         await mount.updatePath(fileId, { details: { duration: 42 } });
 
-        const copied = await mount.copyPath(await mount.listCopy(fileId), rootId, 'song-copy.mp3', discard);
+        const copied = await mount.copyPath(await mount.listCopy(fileId), rootId, 'song-copy.mp3', discard, TEST_ACTOR);
         expect(copied.details?.duration).toBe(42);
     });
 
@@ -109,7 +121,13 @@ describe('Mount.copyPath', () => {
         const fileId = await mount.createFile(rootId, 'upload.png', 'image/png', data.length, data);
         await mount.updatePath(fileId, { details: { originalName: 'holiday.png', width: 3 } });
 
-        const copied = await mount.copyPath(await mount.listCopy(fileId), rootId, 'upload-copy.png', discard);
+        const copied = await mount.copyPath(
+            await mount.listCopy(fileId),
+            rootId,
+            'upload-copy.png',
+            discard,
+            TEST_ACTOR,
+        );
         expect(copied.details?.width).toBe(3);
         expect(copied.details?.originalName).toBeUndefined();
     });
@@ -122,7 +140,7 @@ describe('Mount.copyPath', () => {
         await Bun.write(join(mount.thumbsDir, `${fileId}.webp`), 'late-thumb');
         await mount.updatePath(fileId, { thumbnail: `${fileId}.webp`, details: { width: 5, height: 6 } });
 
-        const copied = await mount.copyPath(tree, rootId, 'late-copy.png', discard);
+        const copied = await mount.copyPath(tree, rootId, 'late-copy.png', discard, TEST_ACTOR);
         expect(copied.thumbnail).toBe(`${copied.id}.webp`);
         expect(await Bun.file(join(mount.thumbsDir, `${copied.id}.webp`)).text()).toBe('late-thumb');
         expect(copied.details?.width).toBe(5);
@@ -135,7 +153,9 @@ describe('Mount.copyPath', () => {
         const tree = await mount.listCopy(fileId);
         await mount.trashPath(fileId);
 
-        await expect(mount.copyPath(tree, rootId, 'trashed-copy.txt', discard)).rejects.toMatchObject({ status: 404 });
+        await expect(mount.copyPath(tree, rootId, 'trashed-copy.txt', discard, TEST_ACTOR)).rejects.toMatchObject({
+            status: 404,
+        });
         expect(await mount.getChildByName(rootId, 'trashed-copy.txt')).toBeNull();
     });
 
@@ -146,7 +166,7 @@ describe('Mount.copyPath', () => {
         await Bun.write(join(mount.thumbsDir, `${childId}.webp`), 'child-thumb');
         await mount.updatePath(childId, { thumbnail: `${childId}.webp` });
 
-        const copied = await mount.copyPath(await mount.listCopy(folderId), rootId, 'album-copy', discard);
+        const copied = await mount.copyPath(await mount.listCopy(folderId), rootId, 'album-copy', discard, TEST_ACTOR);
         const child = (await mount.listFolder(copied.id))[0]!;
         expect(child.thumbnail).toBe(`${child.id}.webp`);
         expect(await Bun.file(join(mount.thumbsDir, `${child.id}.webp`)).text()).toBe('child-thumb');
@@ -172,7 +192,13 @@ describe('Mount.copyPath', () => {
         const versionsId = await mount.createFolder(docId, VERSIONS_FOLDER_NAME);
         await mount.createFile(versionsId, '2020.db', 'application/octet-stream', 3, Buffer.from('old'));
 
-        const copied = await mount.copyPath(await mount.listCopy(docId), rootId, 'My Doc copy.eigendoc', discard);
+        const copied = await mount.copyPath(
+            await mount.listCopy(docId),
+            rootId,
+            'My Doc copy.eigendoc',
+            discard,
+            TEST_ACTOR,
+        );
         expect(copied.type).toBe('doc');
         const children = await mount.listFolder(copied.id);
         const names = children.map((c) => c.name).sort();

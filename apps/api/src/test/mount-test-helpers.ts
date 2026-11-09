@@ -19,3 +19,6 @@ export function createTestMountConfig(id: string, storageType: MountConfig['stor
 export async function flushContentReindex(drive: Drive): Promise<void> {
     for (const mount of drive.getMounts()) await mount.reindexQueue?.drain();
 }
+
+// Mount.copyPath records who copied each path, so a copy straight on a mount needs someone to name.
+export const TEST_ACTOR = { id: 'test-actor', email: 'actor@test.eigen.is' };

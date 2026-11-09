@@ -382,9 +382,9 @@ describe('a copy', () => {
     });
 
     test('to another drive, and inside a copied folder, holds only what each state names', async () => {
-        const folder = await drive.createFolder(M, rootId, `CopyFolder-${crypto.randomUUID()}`);
+        const folder = await drive.createFolder(M, rootId, `CopyFolder-${crypto.randomUUID()}`, home.user);
         const { path, kept } = await sourceDoc('CopyAcross');
-        await drive.movePath(M, path.id, folder.id);
+        await drive.movePath(M, path.id, folder.id, home.user);
 
         const to = { drive, ownerId: home.user.id, mountId: M };
         const copied = await drive.copyPath(M, folder.id, rootId, `${folder.name} copy`, home.user, to);
@@ -434,7 +434,7 @@ describe('a copy', () => {
     });
 
     test('of a folder succeeds when its cleanup fails', async () => {
-        const folder = await drive.createFolder(M, rootId, `CopyCleanupFails-${crypto.randomUUID()}`);
+        const folder = await drive.createFolder(M, rootId, `CopyCleanupFails-${crypto.randomUUID()}`, home.user);
         let copyId = '';
         const copyPath = mount.copyPath.bind(mount);
         const copies = spyOn(mount, 'copyPath').mockImplementation(async (...args) => {

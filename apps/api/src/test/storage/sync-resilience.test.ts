@@ -34,7 +34,7 @@ import {
     STALL_BOUND_MS,
     settlesWithin,
 } from '../fault-storage-helpers';
-import { createTestMountConfig } from '../mount-test-helpers';
+import { createTestMountConfig, TEST_ACTOR } from '../mount-test-helpers';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-sync-resilience-${Date.now()}`);
 const OWNER_ID = 'test-owner-id';
@@ -475,8 +475,12 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
         expect(rangedBytes.equals(stagedBytes)).toBe(true);
 
         // Copy the whole container: the recursion into data.db must copy the staged {1,2}, not "S3" {1}.
-        const copy = await mount.copyPath(await mount.listCopy(containerId), rootId, 'doc-copy', (pathId) =>
-            mount.deletePath(pathId),
+        const copy = await mount.copyPath(
+            await mount.listCopy(containerId),
+            rootId,
+            'doc-copy',
+            (pathId) => mount.deletePath(pathId),
+            TEST_ACTOR,
         );
         const copiedDataDb = (await mount.getChildByName(copy.id, 'data.db'))!;
         expect(await countBackingRows(mount, copiedDataDb.id, TEST_DIR)).toBe(2);

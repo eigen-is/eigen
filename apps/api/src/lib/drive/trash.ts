@@ -13,10 +13,10 @@ import { propagateSharedPathChange } from './acl-propagation';
 import type { Drive } from './drive';
 import { broadcastFileHistoryUpdated } from './sse-events';
 
-export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, user?: User): Promise<void> {
+export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, user: User): Promise<void> {
     // Read before the trash moves the item to the mount root. The breadcrumb after the move has lost the
     // old folders, and with them the folder watchers this event is for.
-    const preTrashChain = user ? await mount.getBreadcrumb(item.id) : [];
+    const preTrashChain = await mount.getBreadcrumb(item.id);
 
     // Read before the trash for the same reason. The trash takes the item away from everyone it is
     // shared with, and they must still hear that it left their view.
@@ -32,25 +32,23 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
     // document closes now, before the slow steps below, and stops taking edits it can't save.
     await closeOpenDocumentsUnder(drive, mount, item.id, { skipFinalSnapshot: true });
     drive.emit(SSEventType.DRIVE_PATH_TRASHED, trashedItem, { oldParentId: item.parentId, members });
-    if (user) {
-        mount.history.record({ pathId: item.id, eventType: 'trashed', actor: user });
-        // The item as it was before the trash. fanOut skips paths in the trash, and this one isn't yet.
-        await mount.history.fanOut({
-            eventType: 'trashed',
-            actor: user,
-            path: item,
-            chainRootIds: [item.parentId],
-            verifyAncestors: preTrashChain,
-        });
-        // Nobody waits for it, the same as in Drive.recordFileEvent.
-        broadcastFileHistoryUpdated(item.ownerId, item, members).catch(() => {});
-    }
+    mount.history.record({ pathId: item.id, eventType: 'trashed', actor: user });
+    // The item as it was before the trash. fanOut skips paths in the trash, and this one isn't yet.
+    await mount.history.fanOut({
+        eventType: 'trashed',
+        actor: user,
+        path: item,
+        chainRootIds: [item.parentId],
+        verifyAncestors: preTrashChain,
+    });
+    // Nobody waits for it, the same as in Drive.recordFileEvent.
+    broadcastFileHistoryUpdated(item.ownerId, item, members).catch(() => {});
 
     // The sharing goes last, the same as in Drive.renamePath. It goes only once the trash is in, so a
     // trash that fails leaves it as it was. The rows keep their ACL in the trash, so the walk below
     // still finds every entry. Drive.deletePath holds the item's ACL chain, so the item's own push
     // goes out directly.
-    if (trashedItem.acl) await propagateSharedPathChange(trashedItem, trashedItem.acl, null, user ?? null);
+    if (trashedItem.acl) await propagateSharedPathChange(trashedItem, trashedItem.acl, null, user);
     if (isContainerType(item.type)) await pushSharingBelow(drive, mount, item.id, 'trashed', user);
 }
 
@@ -116,7 +114,7 @@ export async function deleteFailedCopy(
     mount: Mount,
     item: DrivePath,
     createdIds: ReadonlySet<string>,
-    user?: User,
+    user: User,
 ): Promise<void> {
     if (!(await holdsOnlyCopy(mount, item, createdIds))) return deletePath(drive, mount, item, user);
     const members = await drive.getEffectiveMembers(mount.id, item.id);

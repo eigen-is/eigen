@@ -376,7 +376,7 @@ export class Drive {
         mountId: string,
         parentId: string,
         folderName: string,
-        user?: User,
+        user: User,
         containerType: DriveContainerType = 'folder',
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
@@ -390,7 +390,7 @@ export class Drive {
         const folder = await mount.getPath(pathId);
         if (!folder) throw new ApiError(500, 'Failed to create folder');
         this.emit(SSEventType.DRIVE_FOLDER_CREATED, folder);
-        if (user) await this.recordFileEvent(mountId, folder.id, user, { eventType: 'created' }, { burst: true });
+        await this.recordFileEvent(mountId, folder.id, user, { eventType: 'created' }, { burst: true });
         return folder;
     }
 
@@ -416,10 +416,10 @@ export class Drive {
         // has seen it, so mount.deletePath is enough, without Drive.deletePath's trash, sharing and SSE work.
         try {
             if (type === DRIVE_TYPE_CHAT) {
-                await ChatRoom.create(this, mountId, pathId);
+                await ChatRoom.create(this, mount, pathId);
                 await this.seedCommentRow(mountId, pathId, parentId, user.email);
             } else {
-                await CollabDocument.create(this, mountId, pathId);
+                await CollabDocument.create(this, mount, pathId);
             }
         } catch (err) {
             await mount.deletePath(pathId).catch((rollbackErr) => {
@@ -620,10 +620,8 @@ export class Drive {
         }
     }
 
-    // A person never trashes, renames or moves a part of a document, which changes only with its whole document. Server
-    // code passes no user, such as a chat that trashes a deleted message's attachments.
-    private async refuseInsideDocument(mount: Mount, pathId: string, user: User | undefined): Promise<void> {
-        if (!user) return;
+    // A person never trashes, renames or moves a part of a document, which changes only with its whole document.
+    private async refuseInsideDocument(mount: Mount, pathId: string): Promise<void> {
         if (isInsideDocument(await mount.getBreadcrumb(pathId))) throw new ApiError(400, DOCUMENT_PART_ERROR);
     }
 
@@ -635,10 +633,10 @@ export class Drive {
         await this.getMount(mountId).updatePath(pathId, { updatedAt });
     }
 
-    public async movePath(mountId: string, pathId: string, targetParentId: string, user?: User): Promise<DrivePath> {
+    public async movePath(mountId: string, pathId: string, targetParentId: string, user: User): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const path = await mount.getActivePath(pathId);
-        await this.refuseInsideDocument(mount, pathId, user);
+        await this.refuseInsideDocument(mount, pathId);
         const oldParentId = path.parentId;
 
         const targetParent = await this.getTargetFolder(mount, targetParentId);
@@ -647,7 +645,7 @@ export class Drive {
         }
 
         // Read before the move: a watcher who could see the path through its old folders hears about it too.
-        const oldChain = user ? await mount.getBreadcrumb(pathId) : [];
+        const oldChain = await mount.getBreadcrumb(pathId);
         // Read before the move for the same reason: whoever saw the path in its old folder hears it left.
         const oldMembers = await this.getEffectiveMembers(mountId, pathId);
 
@@ -661,7 +659,7 @@ export class Drive {
             oldParentId,
             members: this.getEffectiveMembers(mountId, pathId).then((members) => [...oldMembers, ...members]),
         });
-        if (user && oldParentId) {
+        if (oldParentId) {
             // The move walks two parent chains, so it records and fans out here instead of in recordFileEvent.
             mount.history.record({
                 pathId,
@@ -682,17 +680,15 @@ export class Drive {
         return movedPath;
     }
 
-    public async renamePath(mountId: string, pathId: string, newName: string, user?: User): Promise<void> {
+    public async renamePath(mountId: string, pathId: string, newName: string, user: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getActivePath(pathId);
-        await this.refuseInsideDocument(mount, pathId, user);
+        await this.refuseInsideDocument(mount, pathId);
         const oldName = item.name;
 
         const renamedItem = await mount.updatePath(pathId, { name: newName });
         this.emit(SSEventType.DRIVE_PATH_RENAMED, renamedItem);
-        if (user) {
-            await this.recordFileEvent(mountId, pathId, user, { eventType: 'renamed', details: { oldName, newName } });
-        }
+        await this.recordFileEvent(mountId, pathId, user, { eventType: 'renamed', details: { oldName, newName } });
         // The people the path is shared with keep a copy of it, and this gives them the new name. It reaches other
         // homes, so it goes last. The actor stays null, because a rename must not email them.
         await this.pushSharing(mountId, pathId, 'live', null);
@@ -705,14 +701,14 @@ export class Drive {
         srcPathId: string,
         destParentId: string,
         name: string,
-        user?: User,
+        user: User,
         to?: CopyTarget,
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         if (to) {
             // Checked before the source is listed, so a user who may not write there never flushes the
             // source's documents or reads the target's limits. The target checks each write again.
-            if (!user || !(await to.drive.canWrite(to.mountId, destParentId, user))) {
+            if (!(await to.drive.canWrite(to.mountId, destParentId, user))) {
                 throw new ApiError(403, 'No write permission on target folder');
             }
             const tree = await this.listCopyWithinLimits(mount, srcPathId, to);
@@ -740,17 +736,15 @@ export class Drive {
             copied,
         );
         // Only the top of the copy fans out. Everything under it is new, so nobody watches it yet.
-        if (user) {
-            await mount.history.fanOut({
-                eventType: 'copied',
-                actor: user,
-                path: copied,
-                chainRootIds: [destParentId],
-                burst: true,
-                verifyAncestors: await mount.getBreadcrumb(copied.id),
-            });
-            this.broadcastHistoryUpdated(mountId, copied);
-        }
+        await mount.history.fanOut({
+            eventType: 'copied',
+            actor: user,
+            path: copied,
+            chainRootIds: [destParentId],
+            burst: true,
+            verifyAncestors: await mount.getBreadcrumb(copied.id),
+        });
+        this.broadcastHistoryUpdated(mountId, copied);
         return copied;
     }
 
@@ -774,7 +768,7 @@ export class Drive {
 
     // The folder new chats go in, looked up by name every time, so the user may rename, move or delete it. A file of
     // that name sends new chats to the mount root. The route checks ownership, so SharedDrive has no wrapper.
-    public async ensureChatsFolder(mountId: string): Promise<string> {
+    public async ensureChatsFolder(mountId: string, user: User): Promise<string> {
         const mount = this.getMount(mountId);
         const root = await mount.getRootFolder();
         if (!root) throw new Error(`Mount '${mountId}' has no root folder`);
@@ -785,7 +779,7 @@ export class Drive {
         // Drive.createFolder tells other tabs about the new folder. Two first chats at once both try to
         // create it, and the one that loses the race uses the folder of the winner.
         try {
-            return (await this.createFolder(mountId, root.id, CHATS_FOLDER_NAME)).id;
+            return (await this.createFolder(mountId, root.id, CHATS_FOLDER_NAME, user)).id;
         } catch (err) {
             if (err instanceof ApiError && err.status === 409) {
                 const winner = await mount.getChildByName(root.id, CHATS_FOLDER_NAME);
@@ -799,8 +793,8 @@ export class Drive {
 
     // The trash runs in the path's ACL chain. An ACL change that started first lands first, and the
     // trash then takes it away with the rest. One that comes after finds the path in the trash.
-    public async deletePath(mountId: string, pathId: string, user?: User): Promise<void> {
-        await this.refuseInsideDocument(this.getMount(mountId), pathId, user);
+    public async deletePath(mountId: string, pathId: string, user: User): Promise<void> {
+        await this.refuseInsideDocument(this.getMount(mountId), pathId);
         return this.removePath(mountId, pathId, (mount, item) => deletePath(this, mount, item, user));
     }
 
@@ -809,7 +803,7 @@ export class Drive {
         mountId: string,
         pathId: string,
         createdIds: ReadonlySet<string>,
-        user?: User,
+        user: User,
     ): Promise<void> {
         return this.removePath(mountId, pathId, (mount, item) => deleteFailedCopy(this, mount, item, createdIds, user));
     }

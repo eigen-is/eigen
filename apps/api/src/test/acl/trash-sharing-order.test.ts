@@ -49,7 +49,7 @@ describe('sharing pushed by a trash, a restore or a rename', () => {
     }
 
     test('a trash that fails keeps the item in Bob’s Shared with me', async () => {
-        const folder = await alice.drive.createFolder(MOUNT, rootId, `failing-trash-${Date.now()}`);
+        const folder = await alice.drive.createFolder(MOUNT, rootId, `failing-trash-${Date.now()}`, alice.user);
         await shareWithBob(folder.id);
         expect(await inBobsList(folder.id)).toBe(true);
 
@@ -118,7 +118,7 @@ describe('sharing pushed by a trash, a restore or a rename', () => {
     });
 
     test('a share that lands while a folder goes to the trash never reaches Bob', async () => {
-        const folder = await alice.drive.createFolder(MOUNT, rootId, `share-during-trash-${Date.now()}`);
+        const folder = await alice.drive.createFolder(MOUNT, rootId, `share-during-trash-${Date.now()}`, alice.user);
         const inner = await alice.drive.createFileFromData(
             MOUNT,
             folder.id,

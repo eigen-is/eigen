@@ -22,12 +22,12 @@ describe('emptyTrash', () => {
         (await home.drive.createFileFromData(mount.id, parentId, name, 'text/plain', Buffer.from(name))).id;
 
     test('a child the folder delete took with it is skipped', async () => {
-        const folder = await home.drive.createFolder(mount.id, rootId, 'Folder');
+        const folder = await home.drive.createFolder(mount.id, rootId, 'Folder', home.user);
         const child = await createFile(folder.id, 'child.txt');
         const other = await createFile(rootId, 'other.txt');
-        await home.drive.deletePath(mount.id, other);
-        await home.drive.deletePath(mount.id, child);
-        await home.drive.deletePath(mount.id, folder.id);
+        await home.drive.deletePath(mount.id, other, home.user);
+        await home.drive.deletePath(mount.id, child, home.user);
+        await home.drive.deletePath(mount.id, folder.id, home.user);
         // The trash lists the newest first, so the folder comes before its child and the other file.
         const earlier = new Date(Date.now() - 60 * 1000);
         await mount.updatePath(child, { trashedAt: earlier });
@@ -48,14 +48,14 @@ describe('emptyTrash', () => {
 
     // The query asks the tree for the folders under it, so its size can't reach SQLite's variable cap.
     test('a folder delete takes an item trashed on its own from a folder deep inside it', async () => {
-        const folder = await home.drive.createFolder(mount.id, rootId, 'Outer');
-        const middle = await home.drive.createFolder(mount.id, folder.id, 'Middle');
-        const inner = await home.drive.createFolder(mount.id, middle.id, 'Inner');
+        const folder = await home.drive.createFolder(mount.id, rootId, 'Outer', home.user);
+        const middle = await home.drive.createFolder(mount.id, folder.id, 'Middle', home.user);
+        const inner = await home.drive.createFolder(mount.id, middle.id, 'Inner', home.user);
         const loner = await createFile(inner.id, 'loner.txt');
         const outside = await createFile(rootId, 'outside.txt');
-        await home.drive.deletePath(mount.id, loner);
-        await home.drive.deletePath(mount.id, outside);
-        await home.drive.deletePath(mount.id, folder.id);
+        await home.drive.deletePath(mount.id, loner, home.user);
+        await home.drive.deletePath(mount.id, outside, home.user);
+        await home.drive.deletePath(mount.id, folder.id, home.user);
 
         expect(await mount.permanentlyDeleteFromTrash(folder.id)).toBe(true);
 
@@ -67,8 +67,8 @@ describe('emptyTrash', () => {
     test('an item restored before its turn is kept', async () => {
         const restored = await createFile(rootId, 'restored.txt');
         const deleted = await createFile(rootId, 'deleted.txt');
-        await home.drive.deletePath(mount.id, deleted);
-        await home.drive.deletePath(mount.id, restored);
+        await home.drive.deletePath(mount.id, deleted, home.user);
+        await home.drive.deletePath(mount.id, restored, home.user);
 
         const permanentlyDelete = mount.permanentlyDeleteFromTrash.bind(mount);
         const spy = spyOn(mount, 'permanentlyDeleteFromTrash').mockImplementation(async (pathId) => {
@@ -89,7 +89,7 @@ describe('emptyTrash', () => {
     // costs only the event, so the delete still goes, but it is logged.
     test('a failed members read other than a gone item is logged, and the delete still goes', async () => {
         const file = await createFile(rootId, 'logged.txt');
-        await home.drive.deletePath(mount.id, file);
+        await home.drive.deletePath(mount.id, file, home.user);
         const members = spyOn(home.drive, 'getEffectiveMembers').mockRejectedValue(new Error('auth db unavailable'));
         const errors = spyOn(console, 'error').mockImplementation(() => {});
         try {

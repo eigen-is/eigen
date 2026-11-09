@@ -20,6 +20,7 @@ import { ApiError } from '../core/errors';
 import { restampRestoredSheetsBase, stampMissingSheetsBase } from '../document/sheets';
 import { compactSheets, sheetsNeedCompaction } from '../document/sheets-compaction';
 import type { Drive } from '../drive';
+import type { Mount } from '../mount';
 import {
     CONTAINER_CHAT_FOLDER,
     CONTAINER_COMMENTS_DB,
@@ -94,13 +95,13 @@ export class CollabDocument {
 
     // Sets up a new document's container. If comments.db fails after data.db was made,
     // provisionManagedDbs removes both, so a retry starts clean.
-    public static async create(drive: Drive, mountId: string, docId: string): Promise<void> {
-        await drive.provisionManagedDbs(mountId, docId, [
+    public static async create(drive: Drive, mount: Mount, docId: string): Promise<void> {
+        await drive.provisionManagedDbs(mount.id, docId, [
             { name: CONTAINER_DATA_DB, config: COLLAB_DB_CONFIG },
             { name: CONTAINER_COMMENTS_DB, config: COMMENT_INDEX_DB_CONFIG },
         ]);
-        await drive.createFolder(mountId, docId, CONTAINER_MEDIA_FOLDER);
-        await drive.createFolder(mountId, docId, CONTAINER_CHAT_FOLDER);
+        await mount.createFolder(docId, CONTAINER_MEDIA_FOLDER);
+        await mount.createFolder(docId, CONTAINER_CHAT_FOLDER);
     }
 
     public async init(): Promise<CollabDocument> {
