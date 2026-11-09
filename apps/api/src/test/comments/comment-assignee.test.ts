@@ -5,11 +5,13 @@ import type { Notification } from '@workspace/lib/types/notification';
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
+import { withCommentIndex } from '../../lib/chat/comment-index';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home';
 import * as homeRelay from '../../lib/home/home-relay';
 import type { OutboundMail } from '../../lib/mailer/mailer';
 import * as mailer from '../../lib/mailer/mailer';
+import { foldName } from '../../lib/mount/names';
 import type { TestUser } from '../setup';
 import {
     addMember,
@@ -252,9 +254,13 @@ describe('Comment assignee', () => {
     });
 
     test('a thread with no index row answers 404 to a status or assignee write, with no event and no notification', async () => {
-        // A drive call with no user seeds no row, which is the one way a thread goes without.
+        // A thread whose row is gone, as after a crash between making the thread and indexing it.
         const home = await getHome(ctx.alice.user.id);
-        const thread = await home.drive.create(mountId, chatFolderId, 'no-row', 'chat');
+        const thread = await home.drive.create(mountId, chatFolderId, 'no-row', 'chat', home.user);
+        await withCommentIndex(home.drive, mountId, docId, async (index) => {
+            const others = (await index.list()).filter((row) => foldName(row.chatName) !== foldName(thread.name));
+            index.deleteRowsWithoutThread(new Set(others.map((row) => foldName(row.chatName))));
+        });
         const eventsBefore = await allEvents();
 
         const assign = await patchAssignee(

@@ -1,3 +1,7 @@
+// The chat app's queries and mutations: the sidebar's chat sections, a room's paged messages, posting, editing and
+// deleting them, and creating, finding and inviting to rooms. Contacts' "start a chat" and the wizards call these
+// too. Every write invalidates the caches it changes.
+
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { chatApi, openDocument } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
@@ -17,18 +21,27 @@ import { fetchPublicUser } from '../../public/user-batcher';
 import { chatKeys, invalidateChatMatches, invalidateMessages } from './keys';
 
 const MESSAGE_PAGE_SIZE = 50;
-const CHAT_MIME_SLUG = EIGEN_DOC_TYPE_INFO.chat.urlSlug; // 'application-eigenchat'
+const CHAT_MIME_SLUG = EIGEN_DOC_TYPE_INFO.chat.urlSlug;
 
 type ChatSections = {
     personal: DrivePath[];
     teams: { id: string; name: string; chats: DrivePath[] }[];
 };
 
-// Splits the aggregate chat list into one section per team (useMyTeams order, empty teams omitted)
-// and a personal catch-all: everything not owned by one of the caller's teams — own chats AND chats
-// other users shared with the caller (shared_paths mirrors carry the sharer's ownerId, e.g. 1:1 chat
-// invites), which have always rendered in the personal section. Pure — unit-tested.
-export function groupChatsBySection(chats: DrivePath[], teams: readonly { id: string; name: string }[]): ChatSections {
+// One aggregate request for the personal and team chats, split into sidebar sections that keep its newest-first
+// order. A closed wizard passes `enabled` false to skip the fetch.
+export function useChatSections(enabled: boolean = true): ChatSections & { isLoading: boolean } {
+    const { data: chats, isLoading } = useAggregateMimeContent(CHAT_MIME_SLUG, STALE_TIME.ONE_MINUTE, enabled);
+    const { data: myTeams, isLoading: teamsLoading } = useMyTeams();
+    return useMemo(() => {
+        const sections = groupChatsBySection(chats ?? [], myTeams ?? []);
+        return { ...sections, isLoading: isLoading || teamsLoading };
+    }, [chats, isLoading, myTeams, teamsLoading]);
+}
+
+// One section per team in useMyTeams order, empty teams left out, and a personal section for the rest: the user's
+// own chats and those other users shared, which carry the sharer's ownerId.
+function groupChatsBySection(chats: DrivePath[], teams: readonly { id: string; name: string }[]): ChatSections {
     const personal: DrivePath[] = [];
     const byTeamOwner = new Map<string, DrivePath[]>();
     for (const team of teams) byTeamOwner.set(teamOwnerId(team.id), []);
@@ -43,18 +56,6 @@ export function groupChatsBySection(chats: DrivePath[], teams: readonly { id: st
         if (teamChats?.length) teamSections.push({ id: team.id, name: team.name, chats: teamChats });
     }
     return { personal, teams: teamSections };
-}
-
-// One aggregate request (personal + all team chats), split into sidebar sections. Both the personal
-// and per-team lists keep the aggregate's updatedAt-desc order.
-export function useChatSections(enabled: boolean = true): ChatSections & { isLoading: boolean } {
-    // 1-min staleTime (sidebar wants fresher data); `enabled` lets closed wizards skip the fetch.
-    const { data: chats, isLoading } = useAggregateMimeContent(CHAT_MIME_SLUG, STALE_TIME.ONE_MINUTE, enabled);
-    const { data: myTeams, isLoading: teamsLoading } = useMyTeams();
-    return useMemo(() => {
-        const sections = groupChatsBySection(chats ?? [], myTeams ?? []);
-        return { ...sections, isLoading: isLoading || teamsLoading };
-    }, [chats, isLoading, myTeams, teamsLoading]);
 }
 
 // Flat chat list in sidebar order (personal first, then teams), for the chat index's auto-open. Empty
@@ -169,7 +170,6 @@ export function useCreateChatRoom(ownerId: string, mountId: string) {
                 // dedupeName lets the server suffix a colliding name (`Name (2)`), so no reconcile.
                 expectedName: dedupeName ? undefined : withEigenExtension(fileName, 'chat'),
             }),
-        // Refresh the parent folder, the sidebar aggregate, and the by-members family.
         onSuccess: (data) => {
             invalidateItemCreated(queryClient, ownerId, mountId, data.parentId, data.mimeType);
             invalidateChatMatches(queryClient, ownerId);
@@ -232,7 +232,6 @@ export function useInviteToChat(ownerId: string, mountId: string, chatId: string
             return response.data;
         },
         onSuccess: () => {
-            // Refresh chat path so roomMembers list updates
             queryClient.invalidateQueries({ queryKey: driveKeys.path(ownerId, mountId, chatId) });
         },
         onError: onMutationError,

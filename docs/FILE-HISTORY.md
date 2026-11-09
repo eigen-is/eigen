@@ -40,7 +40,7 @@ A plain file has no Yjs document, so its rows come from `Drive.writeFileContent`
 
 ## Clients post only the stickies card events
 
-`POST /drive/:ownerId/:mountId/path/:pathId/history` takes `sticky-added`, `sticky-moved` and `sticky-removed` and needs write access. The route's body schema is the allowlist, and `isClientFileEventType` checks it again. Identical events from one actor within 30 s collapse into one row. Each detail string is capped at `CARD_TITLE_MAX_LENGTH` (200), and `useRecordHistory` clips to it before posting.
+`POST /drive/:ownerId/:mountId/path/:pathId/history` takes `sticky-added`, `sticky-moved` and `sticky-removed` and needs write access. The route's body schema is the allowlist. Identical events from one actor within 30 s collapse into one row. Each detail string is capped at `CARD_TITLE_MAX_LENGTH` (200), and `useRecordHistory` clips to it before posting.
 
 Slide, sheet and doc structural changes stay `'edited'`. A stickies action is a discrete, nameable client action. Docs and sheets have no such clean boundary on the client, and the Yjs update log is a short-lived sync buffer, so naming their changes would take interpreting ops on the server.
 

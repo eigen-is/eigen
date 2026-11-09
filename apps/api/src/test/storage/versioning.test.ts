@@ -277,7 +277,7 @@ describe('versions HTTP routes', () => {
         const home = await getHome(ctx.alice.user.id);
         const drive = home.drive;
 
-        const sheetsPath = await drive.create(aliceMountId, aliceRootId, 'versions-yjs-surgery', 'sheets');
+        const sheetsPath = await drive.create(aliceMountId, aliceRootId, 'versions-yjs-surgery', 'sheets', home.user);
 
         const collab = await drive.getCollabDocument(aliceMountId, sheetsPath.id);
         collab.doc.getMap('state').set('marker', 'V1');
@@ -307,7 +307,7 @@ describe('versions HTTP routes', () => {
         const home = await getHome(ctx.alice.user.id);
         const drive = home.drive;
 
-        const sheetsPath = await drive.create(aliceMountId, aliceRootId, 'versions-corrupt-blob', 'sheets');
+        const sheetsPath = await drive.create(aliceMountId, aliceRootId, 'versions-corrupt-blob', 'sheets', home.user);
         const collab = await drive.getCollabDocument(aliceMountId, sheetsPath.id);
         collab.doc.getMap('state').set('marker', 'V1');
         const saved = await drive.saveVersion(aliceMountId, sheetsPath.id);
@@ -349,7 +349,13 @@ describe('versions HTTP routes', () => {
         const home = await getHome(ctx.alice.user.id);
         const drive = home.drive;
 
-        const sheetsPath = await drive.create(aliceMountId, aliceRootId, 'versions-concurrent-restore', 'sheets');
+        const sheetsPath = await drive.create(
+            aliceMountId,
+            aliceRootId,
+            'versions-concurrent-restore',
+            'sheets',
+            home.user,
+        );
         // Hold the doc open for the whole test so restores never open/close it themselves.
         const collab = await drive.getCollabDocument(aliceMountId, sheetsPath.id);
         collab.doc.getMap('state').set('marker', 'V1');
@@ -398,7 +404,7 @@ describe('versions HTTP routes', () => {
         const home = await getHome(ctx.alice.user.id);
         const drive = home.drive;
 
-        const docPath = await drive.create(aliceMountId, aliceRootId, 'versions-doc-surgery', 'doc');
+        const docPath = await drive.create(aliceMountId, aliceRootId, 'versions-doc-surgery', 'doc', home.user);
         const collab = await drive.getCollabDocument(aliceMountId, docPath.id);
 
         const fragment = () => collab.doc.getXmlFragment('default');
@@ -426,9 +432,10 @@ describe('versions HTTP routes', () => {
         const token = ctx.alice.user.sessionToken;
         const ownerId = ctx.alice.user.id;
         const { getHome } = await import('../../lib/home');
-        const drive = (await getHome(ownerId)).drive;
+        const home = await getHome(ownerId);
+        const drive = home.drive;
 
-        const docPath = await drive.create(aliceMountId, aliceRootId, 'versions-gone', 'doc');
+        const docPath = await drive.create(aliceMountId, aliceRootId, 'versions-gone', 'doc', home.user);
         const collab = await drive.getCollabDocument(aliceMountId, docPath.id);
         collab.doc.getMap('probe').set('kept', 'v1');
         const saved = await saveVersion(token, ownerId, aliceMountId, docPath.id);

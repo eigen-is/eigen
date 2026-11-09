@@ -178,7 +178,7 @@ export function elbowAnchorScene(shape: VectorBindableElement, fixedPoint: [numb
 
 // Where the line from `from` to the anchor crosses the shape's outline grown by `gap`, nearest to `from`. When it
 // never crosses, the anchor itself.
-export function outlinePoint(shape: VectorBindableElement, from: Point, anchor: Point, gap: number): Point {
+function outlinePoint(shape: VectorBindableElement, from: Point, anchor: Point, gap: number): Point {
     // Extend past the anchor so a far endpoint still reaches the inflated outline.
     const far = extendPast(from, anchor, Math.max(shape.width, shape.height) + 2 * gap);
     const hits = outlineIntersections(shape, from, far, gap);

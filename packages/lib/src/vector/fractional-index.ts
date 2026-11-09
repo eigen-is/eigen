@@ -69,7 +69,7 @@ function getIntegerPart(key: string): string {
     return key.slice(0, integerPartLength);
 }
 
-export function validateOrderKey(key: string, digits: string = BASE_62_DIGITS): void {
+function validateOrderKey(key: string, digits: string = BASE_62_DIGITS): void {
     const validChars = key.split('').every((char) => digits.includes(char));
     if (key === `A${digits[0].repeat(26)}` || !validChars) {
         throw new Error(`invalid order key: ${key}`);

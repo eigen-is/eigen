@@ -726,7 +726,7 @@ describe('Drive search', () => {
     });
 
     test('files inside an eigendoc container are excluded from search', async () => {
-        const container = await home.drive.create(mountId, rootId, 'zonkblat container', 'doc');
+        const container = await home.drive.create(mountId, rootId, 'zonkblat container', 'doc', home.user);
         const mount = findOrFail(home.drive.getMounts(), (m) => m.id === mountId);
         await mount.touchFile(container.id, 'zonkblat-internal.dat', 'application/octet-stream');
 

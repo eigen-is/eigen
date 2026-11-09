@@ -3,10 +3,9 @@ import { solidFill } from '../../../vector/fill';
 import { svgId } from '../../../vector/kinds/render-utils';
 import { diamondOutline, ellipseOutline, outlinePath, rectOutline, scaleNormalizedPath } from '../../../vector/outline';
 import { serializePoints } from '../../../vector/points';
-import { elementToSvg } from '../../../vector/scene-to-svg';
 import type { FillStyle, VectorElement } from '../../../vector/types';
 import { FILL_STYLES } from '../../../vector/types';
-import { ellipse, linear, path, pie, shape, textBox } from '../element-factories';
+import { elementSvg, ellipse, linear, path, pie, shape, textBox } from '../element-factories';
 
 const FILL = '#ff0000';
 const STROKE = '#0000ff';
@@ -56,7 +55,7 @@ describe('a hatched fill is clipped to its shape', () => {
     for (const style of HATCHES) {
         test(`${style}: the hatch draws inside a clip of the outline, the outline outside it`, () => {
             for (const { el, d } of elementsIn(style)) {
-                const svg = elementToSvg(el);
+                const svg = elementSvg(el);
                 const clip = clipOf(svg, svgId('hatch', el.id));
                 if (d !== null) expect([el.id, clip.d]).toEqual([el.id, d]);
                 expect([el.id, clip.d]).not.toEqual([el.id, '']);
@@ -71,11 +70,11 @@ describe('a hatched fill is clipped to its shape', () => {
 
     test('a solid fill draws as before, with no clip', () => {
         for (const { el } of elementsIn('solid'))
-            expect([el.id, elementToSvg(el).includes('clipPath')]).toEqual([el.id, false]);
+            expect([el.id, elementSvg(el).includes('clipPath')]).toEqual([el.id, false]);
     });
 
     test('a hatch with no paint draws no clip', () => {
         const el = shape({ id: 'r1', type: 'rectangle', fill: solidFill('transparent', 'zigzag') });
-        expect(elementToSvg(el)).not.toContain('clipPath');
+        expect(elementSvg(el)).not.toContain('clipPath');
     });
 });

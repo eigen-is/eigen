@@ -6,11 +6,11 @@ import {
     baseDefaultsFor,
     DEFAULT_SCENE_META,
     ELEMENT_KINDS,
-    elementLayer,
-    elementToSvg,
     layerInnerHtml,
     SLIDE_SIZES,
     SLIDES_STYLE_DEFAULTS,
+    sceneLayers,
+    sceneToSvg,
     VECTOR_STYLE_DEFAULTS,
 } from '@workspace/lib/vector';
 import { escapeXml } from '@workspace/lib/xml';
@@ -78,7 +78,7 @@ describe('a chart in the canvas exports', () => {
 
     test('the PDF page holds the chart layer the live canvas mounts', async () => {
         const html = decode((await renderEigenvectorExport(docOf(scene), 'Drawing', async () => [])).data);
-        const layer = elementLayer(chart);
+        const layer = sceneLayers(scene)[0];
         if (!layer) throw new Error('a chart always draws');
         const bodies = layerBodies(html, '.canvas-page > div');
         expect(bodies).toEqual([asParsed(layerInnerHtml(layer.content))]);
@@ -116,9 +116,9 @@ describe('a chart in the canvas exports', () => {
             meta: DEFAULT_SCENE_META,
         };
         const html = decode((await renderEigenslidesHtml(docOf(deck), 'html', 'Deck', async () => [])).data);
-        const layer = elementLayer(slide);
+        const layer = sceneLayers(deck)[0];
         if (!layer) throw new Error('a chart always draws');
         expect(layerBodies(html, '.canvas-page > div > div')).toEqual([asParsed(layerInnerHtml(layer.content))]);
-        expect(elementToSvg(slide)).toContain(`font-family="${escapeXml(getFontFamily('Inter'))}"`);
+        expect(sceneToSvg(deck)).toContain(`font-family="${escapeXml(getFontFamily('Inter'))}"`);
     });
 });

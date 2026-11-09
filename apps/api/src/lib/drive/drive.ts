@@ -33,7 +33,7 @@ import type {
     FileEventRecord,
     PathWatchStatus,
 } from '@workspace/lib/types/file-history';
-import { CARD_TITLE_MAX_LENGTH, isClientFileEventType } from '@workspace/lib/types/file-history';
+import { CARD_TITLE_MAX_LENGTH } from '@workspace/lib/types/file-history';
 import type { MountConfig, MountInfo } from '@workspace/lib/types/mount';
 import { mountStorageIdentity } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
@@ -397,7 +397,7 @@ export class Drive {
         parentId: string,
         name: string,
         type: EigenDocType,
-        user?: User,
+        user: User,
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const parent = await this.getTargetFolder(mount, parentId);
@@ -414,9 +414,7 @@ export class Drive {
         try {
             if (type === DRIVE_TYPE_CHAT) {
                 await ChatRoom.create(this, mountId, pathId);
-                if (user) {
-                    await this.seedCommentRow(mountId, pathId, parentId, user.email);
-                }
+                await this.seedCommentRow(mountId, pathId, parentId, user.email);
             } else {
                 await CollabDocument.create(this, mountId, pathId);
             }
@@ -430,7 +428,7 @@ export class Drive {
         if (!created) throw new ApiError(500, `Failed to create ${type}`);
         this.emit(SSEventType.DRIVE_FILE_CREATED, created);
         // Not a burst: a single new document gets its own notification.
-        if (user) await this.recordFileEvent(mountId, created.id, user, { eventType: 'created' });
+        await this.recordFileEvent(mountId, created.id, user, { eventType: 'created' });
         return created;
     }
 
@@ -1318,10 +1316,6 @@ export class Drive {
         user: User,
         event: ClientFileEventRecord,
     ): Promise<void> {
-        // The route's schema already refuses these. This check keeps other callers honest too.
-        if (!isClientFileEventType(event.eventType)) {
-            throw new ApiError(400, `Event type not client-postable: ${event.eventType}`);
-        }
         await this.recordFileEvent(mountId, pathId, user, event, { dedupeWindowMs: 30_000 });
     }
 

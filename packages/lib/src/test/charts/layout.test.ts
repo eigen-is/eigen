@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { chartPointCount, layoutChartMessage, MAX_SKETCH_POINTS, sampleChartSpec } from '../../charts';
+import { isSketchCapped, layoutChartMessage, MAX_SKETCH_POINTS, sampleChartSpec } from '../../charts';
 import type { ChartData, ChartLayout, ChartType } from '../../types/chart';
 import { CHART_STACKINGS, CHART_TYPES, LEGEND_POSITIONS } from '../../types/chart';
 import { parseFill, serializeFill, solidFill, TRANSPARENT_FILL } from '../../vector/fill';
@@ -236,10 +236,12 @@ describe('sketch cap', () => {
     }
     const DATA_PARTS = new Set(['bar', 'slice', 'line', 'marker']);
 
-    test('counts the points the chart plots: a pie its first series, others every series', () => {
+    test('a chart past the cap is capped, but a pie plots only its first series', () => {
         const spec = sampleChartSpec('column');
-        expect(chartPointCount(spec, wide('column', 40))).toBe(40);
-        expect(chartPointCount({ ...spec, chart: { ...spec.chart, type: 'pie' } }, wide('column', 40))).toBe(10);
+        const pie = { ...spec, chart: { ...spec.chart, type: 'pie' } } as const;
+        expect(isSketchCapped(spec, wide('column', MAX_SKETCH_POINTS))).toBe(false);
+        expect(isSketchCapped(spec, wide('column', MAX_SKETCH_POINTS + 4))).toBe(true);
+        expect(isSketchCapped(pie, wide('column', MAX_SKETCH_POINTS + 4))).toBe(false);
     });
 
     test.each([...CHART_TYPES])('%s: at the cap every shape keeps the sketch', (type) => {

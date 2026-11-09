@@ -28,7 +28,7 @@ async function homeWithDoc(): Promise<{ home: TeamHome; mountId: string; docId: 
     home.touch();
     const { id: mountId } = await home.addMount({ name: 'Teardown' });
     const root = await home.drive.getRootFolder(mountId);
-    const doc = await home.drive.create(mountId, root!.id, 'teardown', 'doc');
+    const doc = await home.drive.create(mountId, root!.id, 'teardown', 'doc', home.user);
     return { home, mountId, docId: doc.id };
 }
 

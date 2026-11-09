@@ -9,7 +9,7 @@ import {
     COLLAB_STORAGE_GONE_CLOSE,
     COLLAB_STORAGE_UNAVAILABLE_CLOSE,
 } from '../../../../constants/collab';
-import type { CollabDoc, UseCollabDocOptions } from '../../../../core/collab/hooks/use-collab-doc';
+import type { CollabDoc, useCollabDoc as UseCollabDoc } from '../../../../core/collab/hooks/use-collab-doc';
 import { DATA_EPOCHS_KEY } from '../../../../core/home/reload-replaced-home';
 import { installHappyDom } from '../../../happy-dom';
 
@@ -109,6 +109,7 @@ afterAll(() => {
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { useCollabDoc } = await import('../../../../core/collab/hooks/use-collab-doc');
+type UseCollabDocOptions = Parameters<typeof UseCollabDoc>[0];
 
 function Harness({ options, onRender }: { options: UseCollabDocOptions; onRender: (c: CollabDoc) => void }) {
     onRender(useCollabDoc(options));

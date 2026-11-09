@@ -2,7 +2,7 @@ import { describe, expect, mock, spyOn, test } from 'bun:test';
 import { toast } from 'sonner';
 import { FLAT_CHART_LOOK } from '../../../charts';
 import { sampleChartSpec } from '../../../charts/defaults';
-import { MAX_CHART_SPEC_BYTES, MAX_CHART_SPEC_DEPTH } from '../../../charts/limits';
+import { MAX_CHART_SPEC_BYTES } from '../../../charts/limits';
 import { newChartSpecParts, newSheetChartSpecParts } from '../../../charts/spec';
 import {
     buildChartClipboardItem,
@@ -33,6 +33,9 @@ import type { DrivePath } from '../../../types/drive';
 import { serializeFill } from '../../../vector/fill';
 import { eigenMediaHref } from '../../../vector/media-refs';
 import { installHappyDom } from '../../happy-dom';
+
+// Mirrors the parser's nesting limit.
+const MAX_CHART_SPEC_DEPTH = 32;
 
 // hasRichHtmlBeyondMarker parses text/html with DOMParser.
 installHappyDom();
@@ -245,9 +248,9 @@ describe('materializeClipboardSvg', () => {
         expect(out).not.toContain(eigenMediaHref("Bob's chart.png"));
     });
 
-    test('leaves a traversal-name ref alone (parseEigenMediaHref rejects it)', async () => {
+    test('leaves a traversal-name ref alone (the media-ref scan rejects it)', async () => {
         stubFetch();
-        // eigen-media:a%2Fb.png decodes to "a/b.png" — rejected by parseEigenMediaHref, so
+        // eigen-media:a%2Fb.png decodes to "a/b.png" — rejected as an unsafe name, so
         // listEigenMediaRefs never surfaces it: no fetch, no upload, token untouched.
         const forged = 'eigen-media:a%2Fb.png';
         const svg = `<svg xmlns="http://www.w3.org/2000/svg"><image href="${forged}"/></svg>`;

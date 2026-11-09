@@ -2,7 +2,6 @@ import { describe, expect, test } from 'bun:test';
 import { ELEMENT_KINDS, richTextCssText, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
 import { readElementFromFields } from '../../vector/read-vector';
 import {
-    elementLayer,
     layerBoxCss,
     layerContent,
     layerInnerHtml,
@@ -13,6 +12,10 @@ import {
 import type { VectorArrowElement, VectorElement, VectorImageElement } from '../../vector/types';
 import { DEFAULT_ARROW_PROPS, DEFAULT_ELEMENT_PROPS } from '../../vector/types';
 import { arrow, chart, ellipse, image, linear, path, pie, scene, shape, textBox } from './element-factories';
+
+// The one layer a scene of a single element makes, or null when its content renders nothing.
+const layerOf = (el: VectorElement, opts: Parameters<typeof sceneLayers>[1] = {}) =>
+    sceneLayers(scene([el]), opts)[0] ?? null;
 
 describe('sceneLayers', () => {
     test('orders by fractional index and carries the element box and opacity', () => {
@@ -127,7 +130,7 @@ describe('sceneLayers', () => {
         );
         const content = layers[2].content;
         // Rendered without the scene there is no route to derive, so the same arrow draws differently.
-        const unrouted = elementLayer(elbow)?.content;
+        const unrouted = layerContent(elbow);
         expect(!('html' in content) && content.svg).not.toBe(unrouted && !('html' in unrouted) && unrouted.svg);
         expect(layers[2].box).toEqual({ x: 100, y: 30, width: 200, height: 160, angle: 0 });
     });
@@ -137,10 +140,10 @@ describe('sceneLayers', () => {
     });
 });
 
-describe('elementLayer', () => {
+describe('a single element layer', () => {
     test('places one element and returns unpositioned content', () => {
         const el = shape({ id: 'r1', type: 'rectangle', x: 12, y: 34, width: 100, height: 50, angle: 30, opacity: 60 });
-        const layer = elementLayer(el);
+        const layer = layerOf(el);
         expect(layer).not.toBeNull();
         expect(layer?.box).toEqual({ x: 12, y: 34, width: 100, height: 50, angle: 30 });
         expect(layer?.opacity).toBe(60);
@@ -184,10 +187,10 @@ describe('elementLayer', () => {
             mediaName: '',
             strokeColor: 'transparent',
         };
-        expect(elementLayer(img, { resolveMedia: () => null })).toBeNull();
+        expect(layerOf(img, { resolveMedia: () => null })).toBeNull();
     });
 
-    test('sceneLayers is elementLayer over the ordered, frame-scoped elements', () => {
+    test('layers come in index order, scoped to the frame when one is given', () => {
         const framed = scene([
             shape({ id: 'a', type: 'rectangle', index: 'a1', frameId: 'f1' }),
             shape({ id: 'b', type: 'rectangle', index: 'a0', frameId: 'f1' }),
@@ -210,7 +213,7 @@ describe('elementLayer', () => {
     });
 
     test('a rich-text body carries the shared class, so lists and quotes are styled', () => {
-        const layer = elementLayer(textBox({ id: 't', html: '<ul><li>one</li></ul>' }));
+        const layer = layerOf(textBox({ id: 't', html: '<ul><li>one</li></ul>' }));
         expect(layer).not.toBeNull();
         const html = layer === null ? '' : layerInnerHtml(layer.content);
         expect(html).toContain(`<div class="${RICH_TEXT_CLASS}" style="`);
@@ -233,7 +236,7 @@ describe('elementLayer', () => {
                 content: { html: '<p>label</p>', style: richTextCssText(el), svg },
             });
         }
-        const layer = elementLayer(shape({ id: 'r', type: 'rectangle', html: '<p>label</p>' }));
+        const layer = layerOf(shape({ id: 'r', type: 'rectangle', html: '<p>label</p>' }));
         const html = layer === null ? '' : layerInnerHtml(layer.content);
         expect(html).toStartWith('<svg');
         expect(html).toContain(`</svg><div class="${RICH_TEXT_CLASS}" style="`);
@@ -247,7 +250,7 @@ describe('elementLayer', () => {
     });
 
     test('an svg body carries no rich-text wrapper', () => {
-        const layer = elementLayer(shape({ id: 'r', type: 'rectangle' }));
+        const layer = layerOf(shape({ id: 'r', type: 'rectangle' }));
         expect(layer === null ? '' : layerInnerHtml(layer.content)).not.toContain(RICH_TEXT_CLASS);
     });
 

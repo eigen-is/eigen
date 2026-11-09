@@ -101,15 +101,10 @@ export function layoutChart({ spec, data, sourceFormat, ...box }: ChartLayoutInp
     return { shapes: [...background, ...plot, ...legend.shapes], labels: ctx.labels };
 }
 
-// The values the chart plots: a pie's first series, every series' otherwise.
-export function chartPointCount(spec: ChartSpec, data: ChartData): number {
-    const plotted = spec.chart.type === 'pie' ? data.series.slice(0, 1) : data.series;
-    return plotted.reduce((sum, series) => sum + series.values.length, 0);
-}
-
-// Whether the chart's data marks draw flat whatever its look, which a panel says.
+// Whether the chart's data marks draw flat whatever its look, which a panel says. A pie plots only its first series.
 export function isSketchCapped(spec: ChartSpec, data: ChartData): boolean {
-    return chartPointCount(spec, data) > MAX_SKETCH_POINTS;
+    const plotted = spec.chart.type === 'pie' ? data.series.slice(0, 1) : data.series;
+    return plotted.reduce((sum, series) => sum + series.values.length, 0) > MAX_SKETCH_POINTS;
 }
 
 // The same for a chart that holds its data, as a doc's and a canvas's do; a range's lives on its sheet.
