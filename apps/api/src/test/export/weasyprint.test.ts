@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -227,6 +227,9 @@ describe('htmlToPdf with a stub WeasyPrint', () => {
 });
 
 suite('htmlToPdf', () => {
+    // A first render caches the probe, so a test's first spawn is its render.
+    beforeAll(() => htmlToPdf(HTML));
+
     test('a render killed by the timeout is the export that was too big, not a failed render', async () => {
         const spawn = spyOn(Bun, 'spawn');
         try {
