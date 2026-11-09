@@ -17,7 +17,6 @@ import { cancelNormalSelected, updateCell } from '../modules/cell';
 import { openCellEditor } from '../modules/cell-editor';
 import { cellFocus, checkboxChange, getCellDataValidation } from '../modules/data-validation';
 import { fillFromEdge } from '../modules/drop-cell';
-import { handleFormulaInput } from '../modules/formula-editor';
 import { moveHighlightCell, moveHighlightRange, normalizeSelection, selectAll } from '../modules/selection';
 import { handleBold, handleItalic, handleUnderline } from '../modules/toolbar';
 import { getSheetIndex } from '../utils';
@@ -182,12 +181,7 @@ function handleControlPlusArrowKey(ctx: Context, e: KeyboardEvent, shiftPressed:
 
 const floatingObjectSelected = (ctx: Context) => ctx.activeObject != null;
 
-export function handleWithCtrlOrMetaKey(
-    ctx: Context,
-    e: KeyboardEvent,
-    cellInput: HTMLDivElement,
-    fxInput: HTMLDivElement | null | undefined,
-) {
+function handleWithCtrlOrMetaKey(ctx: Context, e: KeyboardEvent, cellInput: HTMLDivElement) {
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
 
@@ -203,7 +197,6 @@ export function handleWithCtrlOrMetaKey(
 
             const html = dayjs().format('YYYY-MM-DD HH:mm:ss');
             openCellEditor(ctx, last.row_focus, last.column_focus, { html, caret: 'end' });
-            handleFormulaInput(ctx, fxInput, cellInput, e.keyCode);
         }
     } else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
         handleControlPlusArrowKey(ctx, e, false);
@@ -317,12 +310,7 @@ function openFocusedDropdown(ctx: Context, e: KeyboardEvent) {
     return true;
 }
 
-export function handleGlobalKeyDown(
-    ctx: Context,
-    cellInput: HTMLDivElement,
-    fxInput: HTMLDivElement | null | undefined,
-    e: KeyboardEvent,
-) {
+export function handleGlobalKeyDown(ctx: Context, cellInput: HTMLDivElement, e: KeyboardEvent) {
     ctx.selectionActive = false;
     const kcode = e.keyCode;
     const kstr = e.key;
@@ -394,7 +382,7 @@ export function handleGlobalKeyDown(
         // Not editing: the key bubbles to the document, where the find bar's Escape hotkey dismisses it.
         return;
     } else if (e.ctrlKey || e.metaKey) {
-        handleWithCtrlOrMetaKey(ctx, e, cellInput, fxInput);
+        handleWithCtrlOrMetaKey(ctx, e, cellInput);
         return;
     } else if (
         e.shiftKey &&
@@ -417,7 +405,6 @@ export function handleGlobalKeyDown(
             const last = ctx.selections?.at(-1);
             if (last?.row_focus == null || last.column_focus == null) return;
             openCellEditor(ctx, last.row_focus, last.column_focus, { html: '' });
-            handleFormulaInput(ctx, fxInput, cellInput, kcode);
         }
     }
 

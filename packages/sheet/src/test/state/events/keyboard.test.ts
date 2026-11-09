@@ -69,7 +69,7 @@ function keyDown(
         },
         stopPropagation() {},
     } as unknown as KeyboardEvent;
-    handleGlobalKeyDown(ctx, input, null, e);
+    handleGlobalKeyDown(ctx, input, e);
     return prevented;
 }
 
