@@ -16,7 +16,6 @@ import { RowColError } from '../../engine/rowcol';
 import type { Cell, CellMatrix } from '../../engine/types';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
-import { getFlowdata } from '../context';
 import type { FormulaCell, History, Op, Sheet } from '../types';
 import type { EntryOptions, PatchOptions } from '../utils';
 import {
@@ -32,10 +31,8 @@ import {
     storedCopy,
 } from '../utils';
 import { applyOpBatch } from './apply-ops';
-import { setCellValue } from './cell';
 import { withoutDeletedFloatingEdits } from './floating';
-import { snapshotContext } from './formula-cache';
-import { computeFormula, execFunctionGroup } from './formula-exec';
+import { execFunctionGroup, warmFormulaCellInfoMap } from './formula-exec';
 import { namesStructuralOp, unitOf } from './history-shift';
 import { settleCurrentSheet, shiftSheetOrders } from './sheet';
 
@@ -201,19 +198,24 @@ function patchStep(ctx: Context, apply: Patch[], written: Patch[]): Step {
     return { ctx: next, ops: patchToOp(next, [...patches, ...filterPatch(recalculated)]) };
 }
 
-// The patches without the value and display text the engine computed for a cell that holds a formula once they
-// apply. A peer may have changed that formula's inputs, or the formula itself, since.
+// The patches without the value and display text the engine computes for a cell that holds a formula once they apply.
+// A peer may have changed that formula's inputs, or the formula itself, since. A formula the engine can't calculate
+// keeps them, as a recompute keeps its number.
 function withoutComputedValues(ctx: Context, patches: Patch[]): Patch[] {
     const after = applyPatches(ctx, patches);
+    const { engine } = ctx.formulaCache;
+    const resolver = createArrayResolver(after.sheets);
     return patches.filter(({ path }) => {
         const [, index, field, r, c, key] = path;
         if (field !== 'data' || path.length !== 6 || (key !== 'v' && key !== 'm')) return true;
         if (typeof index !== 'number' || typeof r !== 'number' || typeof c !== 'number') return true;
-        return after.sheets[index].data?.[r]?.[c]?.f == null;
+        const { id, data } = after.sheets[index];
+        const f = data?.[r]?.[c]?.f;
+        return f == null || engine.cantEvaluate(f, engine.evaluate(f, id, resolver));
     });
 }
 
-// Recomputes each formula the patches wrote, then every formula that reads a cell they wrote, as an edit does.
+// Recomputes each formula the patches wrote and every formula that reads a cell they wrote, as an edit does.
 function recalculate(ctx: Context, patches: Patch[]) {
     const cells = new Map<string, FormulaCell>();
     for (const { path } of patches) {
@@ -223,15 +225,9 @@ function recalculate(ctx: Context, patches: Patch[]) {
         cells.set(computedKey(r, c, id), { r, c, id });
     }
     if (cells.size === 0) return;
-    const resolver = createArrayResolver(snapshotContext(ctx).sheets);
-    for (const { r, c, id } of cells.values()) {
-        const data = getFlowdata(ctx, id);
-        const f = data?.[r]?.[c]?.f;
-        if (!data || f == null) continue;
-        const [v] = computeFormula(ctx, f, { id, resolver });
-        setCellValue(ctx, r, c, data, { v, f });
-    }
-    execFunctionGroup(ctx, [...cells.values()]);
+    const map = warmFormulaCellInfoMap(ctx);
+    const formulas = [...cells.values()].flatMap(({ r, c, id }) => map[`r${r}c${c}i${id}`] ?? []);
+    execFunctionGroup(ctx, [...cells.values()], formulas);
 }
 
 // The batch is the marker and what it did not bring back of the recorded fields and cells, read off the engine's own

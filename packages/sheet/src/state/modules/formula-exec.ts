@@ -8,7 +8,7 @@ import { createArrayResolver } from '../../engine/cell-resolver';
 import { checkBracketNum, LAST_COLUMN, LAST_ROW, matrixWidth, resolveCellRange } from '../../engine/formula-utils';
 import { affectedFormulas, evaluateFormulas, recomputeAfter } from '../../engine/recalc';
 import { seedsOf } from '../../engine/replay-ops';
-import type { Cell, CellResolver, FormulaCellInfoMap, FormulaDependency } from '../../engine/types';
+import type { Cell, CellResolver, FormulaCellInfo, FormulaCellInfoMap, FormulaDependency } from '../../engine/types';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import type { FormulaCell, Op } from '../types';
@@ -78,13 +78,17 @@ export function warmFormulaCellInfoMapOnIdle(getContext: () => Context): () => v
     return () => clearTimeout(id);
 }
 
-// Recomputes every formula that reads a cell in `changedCells`, directly or through another formula, and writes the
-// values that changed. The cells are already written, and the formula map already knows them. A clock or a random number
-// recomputes here, as its author's value then goes out on the wire.
-export function execFunctionGroup(ctx: Context, changedCells: readonly FormulaCell[]): void {
+// Recomputes `formulas` and every formula that reads a cell in `changedCells` or one of those, directly or through
+// another formula, and writes the values that changed. The cells are already written, and the formula map already knows
+// them. A clock or a random number recomputes here, as its author's value then goes out on the wire.
+export function execFunctionGroup(
+    ctx: Context,
+    changedCells: readonly FormulaCell[],
+    formulas: readonly FormulaCellInfo[] = [],
+): void {
     const formulaCellInfoMap = warmFormulaCellInfoMap(ctx);
     const { dependencyIndex, engine } = ctx.formulaCache;
-    const runList = affectedFormulas({ formulaCellInfoMap, dependencyIndex }, changedCells);
+    const runList = affectedFormulas({ formulaCellInfoMap, dependencyIndex }, changedCells, formulas);
     if (runList.length === 0) return;
 
     // Reading cells through immer drafts is slow, so the pass reads a plain view it can't write.

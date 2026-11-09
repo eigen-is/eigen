@@ -822,3 +822,39 @@ describe('a percent sign', () => {
         else expect(result).toBe(expected);
     });
 });
+
+describe('an undo over a function this build lacks', () => {
+    test('keeps the recorded number, on the author, a peer and a joiner', () => {
+        const base = book({ cells: [[n(1), f('=FILTER(A1:A1,1)', 77), f('=B1+1', 78)]] });
+        const t = tab(base);
+        const peer = tab(base);
+        const typed = tabEdit(t, (d) => {
+            updateCell(d, 0, 1, null, 5);
+        });
+        tabReceive(peer, typed);
+        expect(at(t.ctx.sheets, 's1', 0, 1)?.v).toBe(5);
+        const undo = tabUndo(t);
+        tabReceive(peer, undo);
+        const joiner = join(base, [typed, undo]);
+        for (const sheets of [t.ctx.sheets, peer.ctx.sheets, joiner]) {
+            expect(at(sheets, 's1', 0, 1)?.f).toBe('=FILTER(A1:A1,1)');
+            expect(at(sheets, 's1', 0, 1)?.v).toBe(77);
+            expect(at(sheets, 's1', 0, 2)?.v).toBe(78);
+        }
+    });
+
+    test('a formula this build can compute takes today`s inputs, not the recorded number', () => {
+        const t = tab(book({ cells: [[n(1), f('=A1*2', 2)]] }));
+        tabEdit(t, (d) => {
+            updateCell(d, 0, 1, null, 5);
+        });
+        const [typed] = t.history.undoList;
+        tabEdit(t, (d) => {
+            updateCell(d, 0, 0, null, 10);
+        });
+        t.history.undoList = [typed];
+        tabUndo(t);
+        expect(at(t.ctx.sheets, 's1', 0, 1)?.f).toBe('=A1*2');
+        expect(at(t.ctx.sheets, 's1', 0, 1)?.v).toBe(20);
+    });
+});
