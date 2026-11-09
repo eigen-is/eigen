@@ -4,13 +4,13 @@
 
 import type { BorderType } from '@workspace/lib/sheets';
 import { isNil, isPlainObject, pick } from 'es-toolkit/compat';
-import { is_date, numberDisplay } from '../../engine/format';
+import { is_date, numberDisplay, writeFormulaResult } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
 import { clipToUsedExtent, getSheetIndex } from '../utils';
 import { applyBorder, clearSides } from './border';
-import { isAllSelectedCellsInStatus, writeFormulaResult } from './cell';
+import { isAllSelectedCellsInStatus } from './cell';
 import { showLinkCard } from './hyperlink';
 import {
     editorSelectionStyle,

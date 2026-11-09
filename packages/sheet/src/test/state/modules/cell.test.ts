@@ -332,6 +332,14 @@ describe('state/modules/cell — setCellValue formula results', () => {
         });
     });
 
+    test('an empty-text result is stored, and a blank one holds no value and no type its last one left', () => {
+        expect(computed('')).toMatchObject({ v: '', m: '', ct: { fa: 'General', t: 'g' } });
+        const ctx = contextFactory({}) as Context;
+        const data: CellMatrix = [[{ f: '=X', v: '#N/A', m: '#N/A', ct: { fa: 'General', t: 'e' } }]];
+        setCellValue(ctx, 0, 0, data, { f: '=X' });
+        expect(data[0][0]).toEqual({ f: '=X', ct: { fa: 'General', t: 'g' } });
+    });
+
     test('a number result stays a number in the cell format', () => {
         expect(computed(2)).toMatchObject({ v: 2, m: '2', ct: { fa: 'General', t: 'n' } });
         expect(computed(0.5, { fa: '0.00', t: 'n' })).toMatchObject({ v: 0.5, m: '0.50' });

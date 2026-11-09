@@ -785,7 +785,7 @@ describe('a long formula', () => {
         const engine = tab(book({ cells: [[n(1)]] })).ctx.formulaCache.engine;
         const formula = `=${'a'.repeat(400_000)}&FILTRE(1)&"#REF!"`;
         const started = performance.now();
-        expect(engine.cantEvaluate(formula, { value: '#NAME?', display: '#NAME?', type: 'error' })).toBe(true);
+        expect(engine.cantEvaluate(formula, { value: '#NAME?' })).toBe(true);
         // Quadratic takes minutes at this size and linear a few milliseconds, so no load makes this flake.
         expect(performance.now() - started).toBeLessThan(10_000);
     });

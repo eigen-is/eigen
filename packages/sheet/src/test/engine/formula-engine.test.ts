@@ -68,52 +68,44 @@ describe('engine/formula-engine — FormulaEngine.evaluate', () => {
     test('simple arithmetic =1+2', () => {
         const result = engine.evaluate('=1+2', 'sheet1', resolver);
         expect(result.value).toBe(3);
-        expect(result.type).toBe('number');
     });
 
     test('cell reference =A1', () => {
         const result = engine.evaluate('=A1', 'sheet1', resolver);
         expect(result.value).toBe(10);
-        expect(result.type).toBe('number');
     });
 
     test('SUM function =SUM(A1:C1)', () => {
         const result = engine.evaluate('=SUM(A1:C1)', 'sheet1', resolver);
         expect(result.value).toBe(60);
-        expect(result.type).toBe('number');
     });
 
     test('cross-cell arithmetic =A1+B1', () => {
         const result = engine.evaluate('=A1+B1', 'sheet1', resolver);
         expect(result.value).toBe(30);
-        expect(result.type).toBe('number');
     });
 
     test('IF function =IF(A1>5,"yes","no")', () => {
         const result = engine.evaluate('=IF(A1>5,"yes","no")', 'sheet1', resolver);
         expect(result.value).toBe('yes');
-        expect(result.type).toBe('string');
     });
 
     test('error for invalid formula', () => {
-        const result = engine.evaluate('=UNKNOWNFUNC()', 'sheet1', resolver);
-        expect(result.type).toBe('error');
+        expect(engine.evaluate('=UNKNOWNFUNC()', 'sheet1', resolver).value).toBe('#NAME?');
     });
 
     test('referencing a string cell', () => {
         const result = engine.evaluate('=B2', 'sheet1', resolver);
         expect(result.value).toBe('hello');
-        expect(result.type).toBe('string');
     });
 
     test('mixed arithmetic and cell ref =A2*2', () => {
         const result = engine.evaluate('=A2*2', 'sheet1', resolver);
         expect(result.value).toBe(10);
-        expect(result.type).toBe('number');
     });
 
     test('an array result keeps its top-left value, as a spill anchor does =B1:C2', () => {
-        expect(engine.evaluate('=B1:C2', 'sheet1', resolver)).toEqual({ value: 20, display: '20', type: 'number' });
+        expect(engine.evaluate('=B1:C2', 'sheet1', resolver)).toEqual({ value: 20 });
         expect(engine.evaluate('=TRANSPOSE(B1:B2)', 'sheet1', resolver).value).toBe(20);
     });
 });
@@ -123,21 +115,19 @@ describe('engine/formula-engine — FormulaEngine.evaluate', () => {
 describe('engine/formula-engine — date results', () => {
     const engine = new FormulaEngine();
 
-    test('DATE yields the Excel serial, typed date', () => {
+    test('DATE yields the Excel serial', () => {
         const result = engine.evaluate('=DATE(2026,1,5)', 'sheet1', resolver);
-        expect(result).toEqual({ value: 46027, display: '46027', type: 'date' });
+        expect(result).toEqual({ value: 46027 });
     });
 
     test('date arithmetic stays a day count =DATE(2026,1,5)-DATE(2026,1,1)', () => {
         const result = engine.evaluate('=DATE(2026,1,5)-DATE(2026,1,1)', 'sheet1', resolver);
         expect(result.value).toBe(4);
-        expect(result.type).toBe('number');
     });
 
     test('NOW yields a number, not a stringified Date', () => {
         const result = engine.evaluate('=NOW()', 'sheet1', resolver);
         expect(typeof result.value).toBe('number');
-        expect(result.type).toBe('date');
     });
 });
 
@@ -318,7 +308,6 @@ describe('engine/formula-engine — criteria over blanks', () => {
     test('a result that is no finite number reaches no cell', () => {
         expect(evaluate('=STDEV(5)')).toBe('#NUM!');
         expect(evaluate('=1e999')).toBe('#NUM!');
-        expect(engine.evaluate('=STDEV(5)', 's', blanks).type).toBe('error');
     });
 });
 
@@ -528,11 +517,7 @@ describe('engine/formula-engine — an error held in a cell', () => {
     });
 
     test('an operator and a function hand a referenced error on', () => {
-        expect(engine.evaluate('=B1+1', 'errors', errorResolver)).toEqual({
-            value: '#DIV/0!',
-            display: '#DIV/0!',
-            type: 'error',
-        });
+        expect(engine.evaluate('=B1+1', 'errors', errorResolver)).toEqual({ value: '#DIV/0!' });
         expect(evaluate('=-F1')).toBe('#N/A');
         expect(evaluate('=ABS(C1)')).toBe('#VALUE!');
         expect(evaluate('=B1:C1')).toBe('#DIV/0!');
@@ -563,11 +548,7 @@ describe('engine/formula-engine — an error held in a cell', () => {
     });
 
     test('a text result that starts with # is text, not an error', () => {
-        expect(engine.evaluate('="#tag"', 'errors', errorResolver)).toEqual({
-            value: '#tag',
-            display: '#tag',
-            type: 'string',
-        });
+        expect(engine.evaluate('="#tag"', 'errors', errorResolver)).toEqual({ value: '#tag' });
     });
 
     // A cell's #NAME? may be the stand-in for a value Excel computed with a function the engine lacks, and the cell

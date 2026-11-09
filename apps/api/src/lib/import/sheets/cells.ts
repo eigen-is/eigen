@@ -161,7 +161,8 @@ function readCell(element: XmlElement, look: Look, context: GridContext, formula
         const is = xmlChild(element, SML_NS, 'is');
         string = is && readString(is, context.palette);
         value = (string && sharedStringText(string)) || undefined;
-    } else if (raw !== '') {
+    } else if (raw !== '' || (v && formula && type === 'str')) {
+        // An empty <v> under a text formula is the empty text it computed, as in IF(A1,"",1).
         if (type === 's') {
             string = context.strings[Number(raw)];
             value = string === undefined ? undefined : sharedStringText(string);

@@ -52,14 +52,6 @@ const NAME_RE = /^[\p{L}_\\][\p{L}\p{N}_.\\?]*$/u;
 // The lookbehind starts a match only at a name's first letter. Without it a long name costs its length squared.
 const FUNCTION_CALL_RE = /(?<![\p{L}\p{N}_.])([\p{L}_][\p{L}\p{N}_.]*)\s*\(/gu;
 
-function inferType(value: unknown): EvaluationResult['type'] {
-    if (typeof value === 'number') return 'number';
-    if (typeof value === 'boolean') return 'boolean';
-    // A text result that reads as an error is stored as one, as the editor's setCellValue stores it.
-    if (typeof value === 'string' && valueIsError(value)) return 'error';
-    return 'string';
-}
-
 export class FormulaEngine {
     public state: FormulaEngineState;
     private parser: Parser;
@@ -83,9 +75,9 @@ export class FormulaEngine {
 
     // True when the result says nothing because of the formula's own text: a parse failure, a function this build
     // lacks that the branch taken holds, an operator applied to an array, or a name it can't resolve, whose #NAME? an
-    // IFERROR would trap into a fallback nobody computed. A #NAME? read from another cell is the other cell's. A name Excel reads past its last column
-    // (RhoCO2) is one the engine reads as a cell. A result of #REF! is an answer, the one a function this build lacks
-    // hands on included, whatever else the text holds.
+    // IFERROR would trap into a fallback nobody computed. A #NAME? read from another cell is the other cell's. A name
+    // Excel reads past its last column (RhoCO2) is one the engine reads as a cell. A result of #REF! is an answer, the
+    // one a function this build lacks hands on included, whatever else the text holds.
     public cantEvaluate(formula: string, { value, arrayOperation }: EvaluationResult): boolean {
         if (arrayOperation) return true;
         if (value === errorParser(ERROR_REF)) return false;
@@ -138,7 +130,7 @@ export class FormulaEngine {
         while (Array.isArray(result)) result = result[0];
         const failure = result instanceof Error ? (errorParser(result.message) ?? errorParser(ERROR)) : error;
         if (failure != null) {
-            return { value: failure, display: failure, type: 'error', arrayOperation };
+            return { value: failure, arrayOperation };
         }
 
         // A Date result stores as its Excel serial, as the parser's operators read a Date operand. As a string, a DATE
@@ -147,21 +139,14 @@ export class FormulaEngine {
         // NaN and Infinity survive no JSON, so a tab and a joiner would hold different cells. Excel's word is #NUM!.
         if (typeof serial === 'number' && !Number.isFinite(serial)) {
             const overflow = errorParser(ERROR_NUM);
-            return { value: overflow, display: overflow, type: 'error' };
+            return { value: overflow };
         }
-        if (result instanceof Date) return { value: serial, display: String(serial), type: 'date' };
 
         // Any other non-primitive is stored as its string.
-        const value: Cell['v'] =
-            typeof result === 'string' || typeof result === 'number' || typeof result === 'boolean'
-                ? result
-                : result == null
-                  ? undefined
-                  : String(result);
-        const type = inferType(value);
-        const display = value == null ? '' : String(value);
-
-        return { value, display, type };
+        if (typeof serial === 'string' || typeof serial === 'number' || typeof serial === 'boolean') {
+            return { value: serial };
+        }
+        return { value: serial == null ? undefined : String(serial) };
     }
 
     private readCell(cell: CellInfo, formulaSheetId: string, resolver: CellResolver): FormulaValue {

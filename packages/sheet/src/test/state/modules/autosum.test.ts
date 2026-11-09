@@ -31,6 +31,20 @@ function sumOver(cells: Record<string, Cell>, row: number[], column: number[]) {
 }
 
 describe('autosum', () => {
+    test('a column that reaches the last row has no cell for its sum', () => {
+        const last = (contextFactory({}).sheets?.[0].data?.length ?? 0) - 1;
+        const { ctx } = sumOver({ [`${last - 1}_0`]: number(1), [`${last}_0`]: number(2) }, [last - 1, last], [0, 0]);
+        expect(ctx.sheets[0].data?.[last][0]?.f).toBeUndefined();
+        expect(ctx.sheets[0].data?.length).toBe(last + 1);
+    });
+
+    test('a row that reaches the last column writes nothing past the grid', () => {
+        const width = contextFactory({}).sheets?.[0].data?.[0].length ?? 0;
+        const cells = { [`0_${width - 2}`]: number(1), [`0_${width - 1}`]: number(2) };
+        const { ctx } = sumOver(cells, [0, 0], [width - 2, width - 1]);
+        expect(ctx.sheets[0].data?.[0].length).toBe(width);
+    });
+
     test('a column of numbers sums below it', () => {
         const { f } = sumOver({ '0_0': number(1), '1_0': number(2) }, [0, 1], [0, 0]);
         expect(f(2, 0)).toBe('=SUM(A1:A2)');

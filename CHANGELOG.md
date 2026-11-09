@@ -33,8 +33,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Pasting and filling rules in Sheets** — a paste or fill from a cell with no rule takes the rule off the cell it lands on, so a rule can get a gap. A fill also copies links and replaces the data validation it lands on
 - **Cutting filtered rows in Sheets** — a cut or a drag over rows a filter hides moves nothing and says to clear the filter first. So does a copy of a merged cell a filter partly hides
 - **Filling in Sheets** — Chinese number and weekday series copy, and 1, 2, 4 fills as a straight line
-- **Formulas Sheets can't calculate** — a function it doesn't have, such as `FILTER`, `ROW` or `FIXED`, keeps the number the cell holds when its inputs change, instead of turning into an error. Typed new, it shows `#NAME?`
-- **Excel files in Sheets** — an import keeps the numbers Excel saved, and calculates only a formula saved with none or with an error
+- **Formulas Sheets can't calculate** — a function it doesn't have, such as `FILTER`, `ROW` or `FIXED`, keeps what the cell holds, an error included, when its inputs change or you sort or cut it. Typed new, copied or filled, it shows `#NAME?`
+- **Pasted errors in Sheets** — a copied formula that lands on an error, such as `#DIV/0!`, is an error to the formulas that read it, so `ISERROR` and `IFERROR` see it. A formula pasted as text, or under the format painter, keeps the type of its own result
+- **Empty results in Sheets** — a formula that gives empty text, such as `=IF(A1=1,"",5)`, plus 1 is `#VALUE!` as in Excel, whether you typed it or imported it
+- **Excel files in Sheets** — an import keeps what Excel saved, and calculates only a formula saved with no result or with an error, where Sheets can calculate it
 - **Large PDFs from Sheets** — a tall or chart-heavy spreadsheet prints whole, or fails if it takes too long, where it could be cut short to fit. PDFs and web pages draw at most 1,000 images and charts
 - **Default drive size reaches existing users** — raising **Default mount (MB)** in Admin's server settings now gives every user's drive the new size at once, not only users who sign in for the first time. Lowering it shrinks no one's drive
 
@@ -85,7 +87,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Paste past the last row in Sheets** — a paste that adds rows to a workbook full of formulas no longer pauses to read them all again
 - **Dates from a formula in Sheets** — a formula formatted as a date shows its formula in the formula bar and the open cell. Editing the date it showed there used to replace the formula with a typed date
 - **Text from a formula under a number format in Sheets** — a formula that gives the text `005` shows `005` under any number format, as in Excel, and the format applies again when it gives a number
-- **Insert function and autosum in Sheets** — what they put in the cell shows in the formula bar at once, also over a formula you were still typing
+- **Insert function and autosum in Sheets** — what they put in the cell shows in the formula bar at once, also over a formula you were still typing. Autosum on a selection that reaches the sheet's last row or column does nothing, where it failed or wrote past the grid
 - **Typing with an input method in Sheets** — the Enter that confirms what you compose, such as Japanese or Chinese, leaves the cell open. The next Enter confirms the cell
 - **A tab opened for the first time in Sheets** — arrow keys and typing work at once, on A1, without a click first
 - **Downloading an empty spreadsheet** — a spreadsheet nobody edited downloads with its blank sheet
