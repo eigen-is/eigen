@@ -10,7 +10,7 @@ import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
 import { clipToUsedExtent, getSheetIndex } from '../utils';
 import { applyBorder, clearSides } from './border';
-import { getRangetxt, isAllSelectedCellsInStatus, setCellValue } from './cell';
+import { getRangetxt, isAllSelectedCellsInStatus, setCellValue, writeFormulaResult } from './cell';
 import { openCellEditor } from './cell-editor';
 import { rangeColor } from './color';
 import { functionCallHtml, israngeseleciton } from './formula-editor';
@@ -34,7 +34,7 @@ export function updateFormatCell(
     ctx: Context,
     d: CellMatrix,
     attr: keyof Cell,
-    foucsStatus: string | number,
+    status: string | number,
     row_st: number,
     row_ed: number,
     col_st: number,
@@ -49,6 +49,7 @@ export function updateFormatCell(
     }
     const cfg = (ctx.sheets[sheetIndex].config ??= {});
     if (attr === 'ct') {
+        const fa = String(status);
         for (let r = row_st; r <= row_ed; r += 1) {
             if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[r])) {
                 continue;
@@ -56,34 +57,25 @@ export function updateFormatCell(
 
             for (let c = col_st; c <= col_ed; c += 1) {
                 const cell = d[r][c];
-                let value = cell?.v;
+                if (cell?.f != null) {
+                    // The result keeps the type it has, so a format makes no number of a text result.
+                    (cell.ct ??= {}).fa = fa;
+                    writeFormulaResult(cell, cell.v);
+                    continue;
+                }
 
-                if (foucsStatus !== '@' && isRealNum(value)) {
+                let value = cell?.v;
+                if (fa !== '@' && isRealNum(value)) {
                     value = Number(value);
                 }
 
-                const mask = numberDisplay(value, String(foucsStatus));
+                const mask = numberDisplay(value, fa);
                 let type = 'n';
-
-                if (
-                    is_date(foucsStatus) ||
-                    foucsStatus === 14 ||
-                    foucsStatus === 15 ||
-                    foucsStatus === 16 ||
-                    foucsStatus === 17 ||
-                    foucsStatus === 18 ||
-                    foucsStatus === 19 ||
-                    foucsStatus === 20 ||
-                    foucsStatus === 21 ||
-                    foucsStatus === 22 ||
-                    foucsStatus === 45 ||
-                    foucsStatus === 46 ||
-                    foucsStatus === 47
-                ) {
+                if (is_date(fa)) {
                     type = 'd';
-                } else if (foucsStatus === '@' || foucsStatus === 49) {
+                } else if (fa === '@') {
                     type = 's';
-                } else if (foucsStatus === 'General' || foucsStatus === 0) {
+                } else if (fa === 'General') {
                     type = isRealNum(value) ? 'n' : 'g';
                 }
 
@@ -92,12 +84,12 @@ export function updateFormatCell(
                     if (isNil(cell.ct)) {
                         cell.ct = {};
                     }
-                    cell.ct.fa = String(foucsStatus);
+                    cell.ct.fa = fa;
                     cell.ct.t = type;
                 } else {
                     d[r][c] = {
-                        ct: { fa: String(foucsStatus), t: type },
-                        v: value as string,
+                        ct: { fa, t: type },
+                        v: value,
                         m: mask,
                     };
                 }
@@ -105,28 +97,28 @@ export function updateFormatCell(
         }
     } else {
         if (attr === 'ht') {
-            if (foucsStatus === 'left') {
-                foucsStatus = '1';
-            } else if (foucsStatus === 'center') {
-                foucsStatus = '0';
-            } else if (foucsStatus === 'right') {
-                foucsStatus = '2';
+            if (status === 'left') {
+                status = '1';
+            } else if (status === 'center') {
+                status = '0';
+            } else if (status === 'right') {
+                status = '2';
             }
         } else if (attr === 'vt') {
-            if (foucsStatus === 'top') {
-                foucsStatus = '1';
-            } else if (foucsStatus === 'middle') {
-                foucsStatus = '0';
-            } else if (foucsStatus === 'bottom') {
-                foucsStatus = '2';
+            if (status === 'top') {
+                status = '1';
+            } else if (status === 'middle') {
+                status = '0';
+            } else if (status === 'bottom') {
+                status = '2';
             }
         } else if (attr === 'tb') {
-            if (foucsStatus === 'overflow') {
-                foucsStatus = '1';
-            } else if (foucsStatus === 'clip') {
-                foucsStatus = '0';
-            } else if (foucsStatus === 'wrap') {
-                foucsStatus = '2';
+            if (status === 'overflow') {
+                status = '1';
+            } else if (status === 'clip') {
+                status = '0';
+            } else if (status === 'wrap') {
+                status = '2';
             }
         }
 
@@ -139,12 +131,12 @@ export function updateFormatCell(
                 const value = d[r][c];
 
                 if (value && isPlainObject(value)) {
-                    if (isRunStyleKey(attr)) updateInlineStringFormatOutside(value, attr, foucsStatus);
-                    Object.assign(value, { [attr]: foucsStatus });
+                    if (isRunStyleKey(attr)) updateInlineStringFormatOutside(value, attr, status);
+                    Object.assign(value, { [attr]: status });
                     // A larger size or wrapped lines need a taller row.
-                    if (attr === 'fs' || (attr === 'tb' && foucsStatus === '2')) growRowToFit(ctx, cfg, value, r, c);
+                    if (attr === 'fs' || (attr === 'tb' && status === '2')) growRowToFit(ctx, cfg, value, r, c);
                 } else {
-                    d[r][c] = { [attr]: foucsStatus };
+                    d[r][c] = { [attr]: status };
                 }
             }
         }
@@ -156,13 +148,13 @@ export function updateFormat(
     $input: HTMLDivElement,
     d: CellMatrix,
     attr: keyof Cell,
-    foucsStatus: string | number,
+    status: string | number,
 ) {
     if (ctx.allowEdit === false) return;
 
     if (isRunStyleKey(attr) && isEditingText(ctx, $input)) {
         const [r, c] = ctx.editingCellPosition;
-        formatEditorSelection($input, d[r]?.[c], attr, foucsStatus);
+        formatEditorSelection($input, d[r]?.[c], attr, status);
         return;
     }
 
@@ -170,7 +162,7 @@ export function updateFormat(
         const [row_st, row_ed] = selection.row;
         const [col_st, col_ed] = selection.column;
 
-        updateFormatCell(ctx, d, attr, foucsStatus, row_st, row_ed, col_st, col_ed);
+        updateFormatCell(ctx, d, attr, status, row_st, row_ed, col_st, col_ed);
     });
 }
 
@@ -412,7 +404,7 @@ function singleFormulaInput(
             cell = d[fix][ed_m + 1];
         }
 
-        /* Note: exclude the cell itself during search to prevent a cell formula from referencing itself */
+        // The sum lands past the selection, or it would read itself.
         if (holdsValue(cell)) {
             let c = ed_m + 1;
 
@@ -691,8 +683,9 @@ export function handleMerge(ctx: Context, type: string) {
 export function handleFreeze(ctx: Context, type: string) {
     if (ctx.allowEdit === false) return;
 
-    const file = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!];
-    if (!file) return;
+    const index = getSheetIndex(ctx, ctx.currentSheetId);
+    if (index == null) return;
+    const file = ctx.sheets[index];
 
     if (type === 'freeze-cancel') {
         delete file.frozen;

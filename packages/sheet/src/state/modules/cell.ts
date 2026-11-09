@@ -240,12 +240,12 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
 
 // A formula's result takes the value's type and shows in the cell's format, which outlives it. Text stays text however
 // it reads (=TEXT(5,"000") is "005"), as recalc stores it.
-function writeFormulaResult(cell: Cell, value: Cell['v']) {
+export function writeFormulaResult(cell: Cell, value: Cell['v']) {
     const ct = (cell.ct ??= { fa: 'General' });
     cell.v = value;
     if (typeof value === 'number') cell.m = numberDisplay(value, ct.fa);
     else if (typeof value === 'boolean') cell.m = booleanDisplay(value);
-    else cell.m = String(value);
+    else cell.m = String(value ?? '');
     ct.t = formulaResultType(ct.fa, value);
 }
 
