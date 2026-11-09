@@ -72,7 +72,7 @@ Workspace imports resolve through each package's `exports` map, never tsconfig a
 
 Worked examples: [CODE-EXAMPLES.md § Key Patterns](CODE-EXAMPLES.md#key-patterns).
 
-- **Query keys** are hierarchical per domain (`driveKeys.folder(ownerId, mountId, pathId)`) and always include `ownerId`, or personal and team contexts serve each other's stale cache. Every `useQuery` has a `queryKey` from the domain keys, a `queryFn` that checks errors, an `enabled` guard and an explicit `staleTime`
+- **Query keys** are hierarchical per domain (`driveKeys.folder(ownerId, mountId, pathId)`) and always include `ownerId`, or personal and team contexts serve each other's stale cache. Every `useQuery` has a `queryKey` from the domain keys, a `queryFn` that checks errors, an `enabled` guard or `skipToken` and an explicit `staleTime`
 - **A query whose argument may be missing** passes `skipToken` as its `queryFn` (`queryFn: teamId ? () => … : skipToken`) instead of `enabled: !!teamId` plus `teamId!`, so the guard also narrows the type
 - **Eden Treaty**: `driveApi({ ownerId })({ mountId }).folder({ pathId }).get()`, typed from the Elysia routes
 - **Errors are handled in hooks**, never app components: every `useMutation` has an `onError` using `onMutationError` from `api-error.ts`; apps add no `try/catch` + `toast.error()` ([NOTIFICATIONS.md](NOTIFICATIONS.md))
