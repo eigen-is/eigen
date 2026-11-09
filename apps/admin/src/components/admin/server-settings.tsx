@@ -333,7 +333,7 @@ export function ServerSettingsPage() {
                 <div className="space-y-3">
                     <SwitchRow
                         label="Email guests when added to share"
-                        description="Guests have no in-app channel, so without email they have no way to know."
+                        description="A guest rarely has Eigen open, and one who never signed in has no bell, so email is how they find out."
                         checked={current.notifications.email.guestOnAclAdd}
                         onChange={(v) => updateEmailFlag('guestOnAclAdd', v)}
                     />
