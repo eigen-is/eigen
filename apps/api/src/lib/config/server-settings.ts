@@ -1,4 +1,4 @@
-// The settings an admin changes for the whole server, such as quotas, storage defaults and which emails go out. They
+// The settings the org owner changes for the whole server, such as quotas, storage defaults and which emails go out. They
 // live in one JSON file under the server's data folder, read once at import, and any part of the API reads them
 // through getServerSettings. A value the file doesn't hold has its default here.
 
