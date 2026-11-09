@@ -227,7 +227,7 @@ describe('htmlToPdf with a stub WeasyPrint', () => {
 });
 
 suite('htmlToPdf', () => {
-    test('a render killed by the timeout is a 504, not a failed render', async () => {
+    test('a render killed by the timeout is the export that was too big, not a failed render', async () => {
         const spawn = spyOn(Bun, 'spawn');
         try {
             const pending = htmlToPdf(HTML);
@@ -235,7 +235,10 @@ suite('htmlToPdf', () => {
             // SIGTERM is what the spawn timeout sends.
             const spawned = spawn.mock.results.at(-1);
             if (spawned?.type === 'return') spawned.value.kill();
-            await expect(pending).rejects.toMatchObject({ status: 504 });
+            await expect(pending).rejects.toMatchObject({
+                status: 413,
+                message: 'Export failed: the document is too big, or it used too much memory',
+            });
         } finally {
             spawn.mockRestore();
         }
