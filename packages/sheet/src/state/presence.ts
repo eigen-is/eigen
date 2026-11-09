@@ -1,6 +1,9 @@
+// A peer's awareness state as the cursor the grid draws for it. The sheet app's presence hook hands the live peers
+// through here to the workbook, which draws each row over its cell.
+
 import type { Presence } from './types';
 
-// A collaborator's awareness snapshot, reduced to the two fields presence needs.
+// What a sheet's window publishes over awareness, of which presence reads two fields.
 export type PeerPresence = {
     user?: { name: string; color: string; userId?: string };
     selection?: { sheetId: string; r: number; c: number };
