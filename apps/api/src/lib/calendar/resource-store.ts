@@ -40,7 +40,7 @@ export async function readCalendarTotalSize(homeFs: LocalFilesystem): Promise<nu
 // ctag advances on each change, syncGen rotates on a recreated calendar so stale sync tokens are refused.
 export type CalendarCollection = CalendarItem & { syncGen: number };
 
-// The columns a (re)index computes for one projected VEVENT or exclusion.
+// The columns one projected VEVENT or exclusion fills.
 export type EventRowInput = Omit<typeof schema.events.$inferInsert, 'createdAt' | 'updatedAt'> & {
     createdAt: Date;
     updatedAt: Date;
@@ -56,30 +56,31 @@ export const PURGED_RESOURCE = {
 };
 export type PurgedResource = { [K in keyof typeof PURGED_RESOURCE]: (typeof schema.resources.$inferSelect)[K] };
 
-// What one commit writes: the resource's own columns plus every event row its bytes project to.
-export type ResourceCommit = {
+export type PreparedResource = {
     id: string;
-    calendarId: string;
-    uri: string;
     uid: string;
-    ics: Buffer;
+    text: string;
+    bytes: Buffer;
     etag: string;
     rows: EventRowInput[];
     hasUnindexedRecurrence: boolean;
+    skipped: number;
+    duplicateMaster: boolean;
 };
 
-export function uidOfResource(resource: ICAL.Component): string {
-    return uidOf(resource.getAllSubcomponents('vevent')[0]);
-}
-
-// The rows a file projects to, ids from its `X-EIGEN-EVENT-ID` lines: one stored id belongs to one row.
-export function projectRows(
+// The pure half of a resource write: a component in, the bytes it serializes to and the rows they project
+// to out. `existingId` is the id of the resource this one replaces, so a rewrite keeps its row.
+export function prepareResource(
     calendarId: string,
-    resourceId: string,
     resource: ICAL.Component,
-): { rows: EventRowInput[]; hasUnindexedRecurrence: boolean; skipped: number; duplicateMaster: boolean } {
+    existingId: string | null,
+): PreparedResource {
+    const resourceId = existingId ?? crypto.randomUUID();
+    const text = serializeResource(resource);
+    const bytes = Buffer.from(new TextEncoder().encode(text));
     const projected = projectResource(resource);
     const now = new Date();
+    // Row ids come from the file's `X-EIGEN-EVENT-ID` lines, and one stored id belongs to one row.
     const claimed = new Set<string>();
     const identified = projected.events.map((event) => {
         const id = event.eventId && !claimed.has(event.eventId) ? event.eventId : crypto.randomUUID();
@@ -122,6 +123,11 @@ export function projectRows(
     }));
 
     return {
+        id: resourceId,
+        uid: uidOf(resource.getAllSubcomponents('vevent')[0]),
+        text,
+        bytes,
+        etag: computeResourceEtag(bytes),
         rows,
         hasUnindexedRecurrence: projected.hasUnindexedRecurrence,
         skipped: projected.skipped,
@@ -129,39 +135,6 @@ export function projectRows(
     };
 }
 
-export type PreparedResource = {
-    id: string;
-    uid: string;
-    text: string;
-    bytes: Buffer;
-    etag: string;
-    rows: EventRowInput[];
-    hasUnindexedRecurrence: boolean;
-    skipped: number;
-    duplicateMaster: boolean;
-};
-
-// The pure half of a resource write: a component in, the bytes it serializes to and the rows they project
-// to out. `existingId` is the id of the resource this one replaces, so a rewrite keeps its row.
-export function prepareResource(
-    calendarId: string,
-    resource: ICAL.Component,
-    existingId: string | null,
-): PreparedResource {
-    const id = existingId ?? crypto.randomUUID();
-    const text = serializeResource(resource);
-    const bytes = Buffer.from(new TextEncoder().encode(text));
-    return {
-        id,
-        uid: uidOfResource(resource),
-        text,
-        bytes,
-        etag: computeResourceEtag(bytes),
-        ...projectRows(calendarId, id, resource),
-    };
-}
-
-// Runs inside the transaction that bumped the ctag, so a write and a rebuild leave one shape behind.
 export function indexResource(tx: Tx, resource: typeof schema.resources.$inferInsert, rows: EventRowInput[]): void {
     const row = {
         uri: resource.uri,
@@ -175,7 +148,9 @@ export function indexResource(tx: Tx, resource: typeof schema.resources.$inferIn
         .values({ id: resource.id, calendarId: resource.calendarId, ...row })
         .onConflictDoUpdate({ target: schema.resources.id, set: row })
         .run();
-    reindexEvents(tx, resource.id, rows);
+    // The projected rows are replaced wholesale, so an event a rewrite no longer carries leaves no row behind.
+    tx.delete(schema.events).where(eq(schema.events.resourceId, resource.id)).run();
+    for (const event of rows) tx.insert(schema.events).values(event).run();
     // A resource at this uri is alive, so one written over a deleted name drops its stale removal.
     tx.delete(schema.resourceTombstones)
         .where(
@@ -185,10 +160,4 @@ export function indexResource(tx: Tx, resource: typeof schema.resources.$inferIn
             ),
         )
         .run();
-}
-
-// The projected rows are replaced wholesale, so an event a rewrite no longer carries leaves no row behind.
-export function reindexEvents(tx: Tx, resourceId: string, rows: EventRowInput[]): void {
-    tx.delete(schema.events).where(eq(schema.events.resourceId, resourceId)).run();
-    for (const event of rows) tx.insert(schema.events).values(event).run();
 }

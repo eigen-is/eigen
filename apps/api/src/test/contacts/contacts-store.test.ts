@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import type { Contacts } from '../../lib/contacts/contacts';
 import * as contactsSchema from '../../lib/contacts/schema';
-import { CONTACTS_TEST_ROOT, cardTextOf, makeContacts, stageAvatar, validContact } from '../contacts-test-helpers';
+import { CONTACTS_TEST_ROOT, cardTextOf, makeContacts, validContact } from '../contacts-test-helpers';
 import { breakTransaction } from '../db-test-helpers';
 import { ensureServer } from '../setup';
 
@@ -85,46 +85,6 @@ describe('the book row at init', () => {
         } finally {
             ticked.mockRestore();
         }
-    });
-});
-
-describe('rebuildProjection', () => {
-    test('every projected column and the junction come back from the blobs', async () => {
-        const { instance: contacts } = await makeContacts();
-        const db = contacts.db;
-        const labelId = await contacts.addLabel({ name: 'Rebuilt', color: '#abcdef' });
-        const withPhoto = await contacts.addContact(
-            validContact({ firstName: 'Photo', avatar: await stageAvatar(contacts), labels: [labelId] }),
-        );
-        const plain = await contacts.addContact(validContact({ firstName: 'Plain', email: ['plain@example.com'] }));
-        const before = [rowOf(db, withPhoto), rowOf(db, plain)];
-        const ctagBefore = db.select().from(contactsSchema.book).get()!.ctag;
-        const linksBefore = db.select().from(contactsSchema.contactsToLabels).all();
-        expect(linksBefore.length).toBeGreaterThan(0);
-
-        // Corrupt every column the blob decides, plus the junction. `data.avatar` is the derived cache URL,
-        // which no blob carries, so it stays as it is.
-        for (const row of before) {
-            db.update(contactsSchema.contacts)
-                .set({
-                    uid: `corrupt-${row.id}`,
-                    firstName: 'corrupt',
-                    lastName: 'corrupt',
-                    isGroup: true,
-                    data: { email: [], phone: [], avatar: row.data?.avatar ?? '' },
-                    etag: 'corrupt',
-                })
-                .where(eq(contactsSchema.contacts.id, row.id))
-                .run();
-        }
-        db.delete(contactsSchema.contactsToLabels).run();
-
-        contacts.rebuildProjection();
-
-        for (const row of before) expect(rowOf(db, row.id)).toEqual(row);
-        expect(db.select().from(contactsSchema.contactsToLabels).all()).toEqual(linksBefore);
-        // A rebuild is not a change: no ctag moves, so no client is told to resync.
-        expect(db.select().from(contactsSchema.book).get()!.ctag).toBe(ctagBefore);
     });
 });
 
