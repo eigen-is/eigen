@@ -149,26 +149,10 @@ export function generateAPIs(
 
         getAllSheets: () => api.getAllSheets(getContext()),
 
-        addPresences: (newPresences: Presence[]) => {
+        // The live set, whole each time, so a window that left is gone and a remount gets every peer back.
+        setPresences: (presences: Presence[]) => {
             setContext((draftCtx) => {
-                const newKeys = new Set(newPresences.map(presenceKey));
-                draftCtx.presences = (draftCtx.presences ?? [])
-                    .filter((v) => !newKeys.has(presenceKey(v)))
-                    .concat(newPresences);
-            });
-        },
-
-        removePresences: (
-            arr: {
-                username: string;
-                userId?: string;
-            }[],
-        ) => {
-            setContext((draftCtx) => {
-                if (draftCtx.presences != null) {
-                    const removeKeys = new Set(arr.map(presenceKey));
-                    draftCtx.presences = draftCtx.presences.filter((v) => !removeKeys.has(presenceKey(v)));
-                }
+                draftCtx.presences = presences;
             });
         },
 
@@ -268,6 +252,3 @@ export function generateAPIs(
         },
     };
 }
-
-// A collaborator's key: the user id, or the name for a presence that has none.
-const presenceKey = (presence: { username: string; userId?: string }) => presence.userId ?? presence.username;
