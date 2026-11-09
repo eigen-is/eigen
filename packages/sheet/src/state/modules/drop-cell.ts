@@ -263,7 +263,9 @@ function fillLine(line: readonly (Cell | null | undefined)[], count: number, lon
         while (end < line.length && seriesKind(line[end]) === kind) end += 1;
 
         const run = line.slice(start, end);
-        const cellAt = runFill(kind, run, line.length === 1 ? loneStep : 0);
+        // The kind of a text ending in a number ends in the number's mark.
+        const lone = line.length === 1 && kind.endsWith('#') && typeof run[0]?.v === 'string';
+        const cellAt = runFill(kind, run, lone ? loneStep : 0);
         let nth = 0;
         for (let roundStart = start; roundStart < count; roundStart += line.length) {
             for (let i = 0; i < run.length && roundStart + i < count; i += 1) {
@@ -288,8 +290,7 @@ function seriesKind(cell: Cell | null | undefined) {
 function runFill(kind: string, run: readonly (Cell | null | undefined)[], loneStep: number) {
     const copy = (nth: number) => cloneDeep(run[nth % run.length]) ?? null;
     const cells = run.filter((cell) => cell != null);
-    if (kind === 'copy') return copy;
-    if (cells.length < 2 && !(loneStep !== 0 && endsInNumber(cells[0]))) return copy;
+    if (kind === 'copy' || (cells.length < 2 && loneStep === 0)) return copy;
 
     const valueAt =
         kind === 'number' ? numberSeries(cells) : kind === 'date' ? dateSeries(cells) : textSeries(cells, loneStep);
@@ -343,10 +344,6 @@ function textSeries(cells: readonly Cell[], loneStep: number) {
 function evenStep(values: readonly number[]) {
     const step = values[1] - values[0];
     return values.every((value, i) => i === 0 || value - values[i - 1] === step) ? step : null;
-}
-
-function endsInNumber({ v, m }: Cell) {
-    return typeof v === 'string' && lastNumber(m)?.after === '';
 }
 
 function lastNumber(shown: Cell['m']) {

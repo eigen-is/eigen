@@ -78,9 +78,11 @@ describe('a writer recomputes after it writes', () => {
         const data = ctx.sheets[0].data;
         if (!data) throw new Error('no data');
         data[1][0] = { v: 1, m: '1' };
-        sortRange(ctx, selectionFactory([0, 1], [0, 0], 0, 0)[0], true);
-        expect(ctx.sheets[0].data?.[0][0]?.v).toBe(1);
-        expect(ctx.sheets[0].data?.[0][1]?.v).toBe(1);
+        const next = produce(ctx, (draft: Context) =>
+            sortRange(draft, selectionFactory([0, 1], [0, 0], 0, 0)[0], true),
+        );
+        expect(next.sheets[0].data?.[0][0]?.v).toBe(1);
+        expect(next.sheets[0].data?.[0][1]?.v).toBe(1);
     });
 
     test('a second edit in one recipe reads what the first recomputed', () => {

@@ -3,6 +3,7 @@
 // writer that writes plain text drops the runs, which would otherwise outrank what it wrote.
 
 import { describe, expect, test } from 'bun:test';
+import { produce } from 'immer';
 import { evaluateConditionalFormat } from '../../engine/conditional-format';
 import { cellDisplay, cellValue } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
@@ -108,8 +109,8 @@ describe('readers of a rich cell', () => {
             [[rich('Cherry')], [plain('apple')], [rich('Banana')]],
             selectionFactory([0, 2], [0, 0], 0, 0),
         );
-        sortSelection(ctx, true);
-        expect(ctx.sheets[0].data!.map((row) => cellValue(row[0]))).toEqual(['apple', 'Banana', 'Cherry']);
+        const next = produce(ctx, (draft: Context) => sortSelection(draft, true));
+        expect(next.sheets[0].data!.map((row) => cellValue(row[0]))).toEqual(['apple', 'Banana', 'Cherry']);
     });
 
     test('filter conditions and the value list read the text', () => {

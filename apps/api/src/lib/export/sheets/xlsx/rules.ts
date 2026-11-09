@@ -328,7 +328,7 @@ function tileGrid(rows: number, columns: number) {
 function cutOut(range: SingleRange, above: readonly SingleRange[]): SingleRange[] {
     let pieces = [range];
     for (const higher of above) {
-        pieces = pieces.flatMap((piece) => (rangesOverlap(higher, piece) ? rangeWithout(piece, higher) : [piece]));
+        pieces = pieces.flatMap((piece) => rangeWithout(piece, higher));
     }
     return pieces;
 }

@@ -63,29 +63,28 @@ export function sortDataRange(
     if (!plain.data || !data) return;
     const [startRow, endRow] = row;
     const [startColumn, endColumn] = column;
-    const rows = plain.data.slice(startRow, endRow + 1).map((cells) => cells.slice());
-    const links = { ...plain.hyperlink };
 
     const order = sortedOrder(
         isAsc,
         index,
-        rows.map((cells) => cells.slice(startColumn, endColumn + 1)),
+        plain.data.slice(startRow, endRow + 1).map((cells) => cells.slice(startColumn, endColumn + 1)),
     );
     if (order.every((from, to) => from === to)) return;
 
-    // A formula reading a moved cell is recomputed below, so it may land with the value of the rows as they were.
+    // The recompute below reaches only a formula that reads a written cell, so one reading outside the range gets its
+    // value here. One reading a moved cell lands with the value of the rows as they were, and is recomputed.
     const resolver = createArrayResolver(snapshot.sheets);
     for (const [to, from] of order.entries()) {
         if (to === from) continue;
         const r = startRow + to;
         const sr = startRow + from;
         for (let c = startColumn; c <= endColumn; c += 1) {
-            const cell = landedCell(ctx, rows[from][c], to - from, 0, resolver);
-            if (!isEqual(cell, rows[to][c])) data[r][c] = cell;
+            const cell = landedCell(ctx, plain.data[sr][c], to - from, 0, resolver);
+            if (!isEqual(cell, plain.data[r][c])) data[r][c] = cell;
             const key = `${r}_${c}`;
-            const link = links[`${sr}_${c}`];
+            const link = plain.hyperlink?.[`${sr}_${c}`];
             if (link) (sheet.hyperlink ??= {})[key] = link;
-            else if (links[key]) delete sheet.hyperlink?.[key];
+            else if (plain.hyperlink?.[key]) delete sheet.hyperlink?.[key];
         }
     }
 

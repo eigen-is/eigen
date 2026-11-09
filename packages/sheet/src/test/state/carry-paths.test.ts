@@ -216,6 +216,36 @@ describe('a sort moves what a cell holds, and leaves the rest where it is', () =
 
 // A formula landed on a new row is recalculated in the same edit, which writes into its ct.
 describe('a table of formulas moves', () => {
+    test('a sort of a formula reading beside the range takes the value of its new row', () => {
+        const s = session((d) => {
+            d[0][0] = number(2);
+            d[0][1] = calculated('=D1*2', 20);
+            d[0][3] = number(10);
+            d[1][0] = number(1);
+            d[1][1] = calculated('=D2*2', 60);
+            d[1][3] = number(30);
+        });
+        s.edit(s.a, (ctx) => sortRange(ctx, range(0, 1, 0, 1), true));
+        expectEveryoneAgrees(s, (sheet) => {
+            expect(sheet.data?.[0][1]).toMatchObject({ f: '=D1*2', v: 20, m: '20' });
+            expect(sheet.data?.[1][1]).toMatchObject({ f: '=D2*2', v: 60, m: '60' });
+        });
+    });
+
+    test('a formula moved onto a result of another type takes that type', () => {
+        const s = session((d) => {
+            d[0][0] = number(2);
+            d[0][1] = { f: '=IF(A1>1,"big",0)', v: 'big', m: 'big', ct: { fa: 'General', t: 's' } };
+            d[1][0] = number(1);
+            d[1][1] = { f: '=IF(A2>1,"big",0)', v: 0, m: '0', ct: { fa: '##0.00', t: 'n' } };
+        });
+        s.edit(s.a, (ctx) => sortRange(ctx, range(0, 1, 0, 1), true));
+        expectEveryoneAgrees(s, (sheet) => {
+            expect(sheet.data?.[0][1]).toMatchObject({ v: 0, ct: { fa: '##0.00', t: 'n' } });
+            expect(sheet.data?.[1][1]).toMatchObject({ v: 'big', m: 'big', ct: { fa: 'General', t: 'g' } });
+        });
+    });
+
     test('a sort by a formula reading to its right', () => {
         const s = session((d) => {
             d[0][0] = calculated('=B1*2', 6);
@@ -483,6 +513,50 @@ describe('a source with a rule extends it', () => {
             expect(sheet.conditionalFormatRules).toEqual([greater([range(0, 0, 3, 5)])]);
             expect(sheet.dataValidations?.v.ranges).toEqual([range(0, 0, 3, 5)]);
         });
+    });
+
+    test('paste twice on another sheet, and it is one validation', () => {
+        const s = session(
+            (d) => {
+                d[0][0] = number(9);
+            },
+            {
+                dataValidations: { v: { ranges: [range(0, 0, 0, 0)], rule: dropdown('v') } },
+                conditionalFormatRules: [greater([range(0, 0, 0, 0)])],
+            },
+        );
+        for (const c of [0, 1]) {
+            s.edit(s.a, (ctx) => {
+                ctx.selections = select(0, 0, 0, 0);
+                copy(ctx, {});
+                ctx.currentSheetId = TWO;
+                ctx.selections = select(0, 0, c, c);
+                pasteCopy(ctx);
+                ctx.currentSheetId = ONE;
+            });
+        }
+        for (const sheet of s.everyone(TWO)) {
+            expect(sheet?.conditionalFormatRules).toEqual([greater([range(0, 0, 0, 1)])]);
+            expect(Object.values(sheet?.dataValidations ?? {})).toEqual([
+                { ranges: [range(0, 0, 0, 1)], rule: dropdown('v') },
+            ]);
+        }
+    });
+
+    test('a paste inside its own validation writes no rule', () => {
+        const s = session(
+            (d) => {
+                d[0][0] = number(9);
+            },
+            { dataValidations: { v: { ranges: [range(0, 2, 0, 0)], rule: dropdown('v') } } },
+        );
+        const ops = s.edit(s.a, (ctx) => {
+            ctx.selections = select(0, 0, 0, 0);
+            copy(ctx, {});
+            ctx.selections = select(1, 1, 0, 0);
+            pasteCopy(ctx);
+        });
+        expect(writesTo(ops, 'dataValidations')).toEqual([]);
     });
 
     test('a fill down gives one range', () => {

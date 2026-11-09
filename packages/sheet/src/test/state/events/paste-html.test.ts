@@ -14,7 +14,7 @@ import { COPY_ACTION_TABLE_MARKER, copy, rangeValueToClipboard } from '../../../
 import { filterPatch } from '../../../state/utils';
 import { clipboardWith } from '../factories/clipboard';
 import { syncablePaths } from '../factories/collab';
-import { contextFactory } from '../factories/context';
+import { contextFactory, editInPlace } from '../factories/context';
 import { pastedHtmlFactory } from '../factories/pasted-html';
 
 // The branch reads the *global* `document` (not a passed-in window). Install a real
@@ -402,11 +402,13 @@ describe('HTML-table paste — the <style> block', () => {
 // A cut's formula follows Excel's rule for a move: its refs into the moved block follow the cells.
 describe('a cut landing its own formulas', () => {
     function cutAndPaste(ctx: Context, from: Context['selections'], at: number[]) {
-        ctx.selections = from;
-        handleCopy(ctx, { cut: true });
-        const pending = consumePendingCopy();
-        ctx.selections = single(at[0], at[1]);
-        handlePaste(ctx, clipboardWith({ html: pending?.html ?? '' }));
+        editInPlace(ctx, (draft) => {
+            draft.selections = from;
+            handleCopy(draft, { cut: true });
+            const pending = consumePendingCopy();
+            draft.selections = single(at[0], at[1]);
+            handlePaste(draft, clipboardWith({ html: pending?.html ?? '' }));
+        });
     }
 
     it('rewrites a ref into the block and computes it where it landed', () => {
@@ -416,9 +418,10 @@ describe('a cut landing its own formulas', () => {
         d[4][4] = { f: '=D5*2', v: 20, m: '20', ct: { fa: 'General', t: 'n' } };
         cutAndPaste(ctx, [{ row: [4, 4], column: [3, 4], row_focus: 4, column_focus: 3 }], [2, 6]);
 
-        expect(d[2][7]?.f).toBe('=G3*2');
-        expect(d[2][7]?.v).toBe(20);
-        expect(d[4][4]).toBeNull();
+        const landed = ctx.sheets[0].data!;
+        expect(landed[2][7]?.f).toBe('=G3*2');
+        expect(landed[2][7]?.v).toBe(20);
+        expect(landed[4][4]).toBeNull();
     });
 
     it('keeps a ref outside the block where it pointed', () => {
@@ -428,8 +431,9 @@ describe('a cut landing its own formulas', () => {
         d[4][4] = { f: '=A1*2', v: 6, m: '6', ct: { fa: 'General', t: 'n' } };
         cutAndPaste(ctx, single(4, 4), [2, 6]);
 
-        expect(d[2][6]?.f).toBe('=A1*2');
-        expect(d[2][6]?.v).toBe(6);
+        const landed = ctx.sheets[0].data!;
+        expect(landed[2][6]?.f).toBe('=A1*2');
+        expect(landed[2][6]?.v).toBe(6);
     });
 });
 
@@ -725,8 +729,10 @@ describe('HTML-table paste — the copy of this tab', () => {
     }
 
     function pasteAt(ctx: Context, html: string, r: number, c: number) {
-        ctx.selections = single(r, c);
-        pasteHtml(ctx, html);
+        editInPlace(ctx, (draft) => {
+            draft.selections = single(r, c);
+            pasteHtml(draft, html);
+        });
     }
 
     it('takes the copy state for its own table, with a merge in it', () => {

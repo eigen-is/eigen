@@ -14,7 +14,7 @@ import type { Context } from '../../../state/context';
 import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import { copy } from '../../../state/modules/selection';
 import { pasteCopy, pasteText } from '../factories/clipboard';
-import { contextFactory } from '../factories/context';
+import { contextFactory, editInPlace } from '../factories/context';
 import { edit, typed } from '../factories/edit-cycle';
 
 // Explicit selection builders. selectionFactory takes (row, column, ...) as
@@ -50,10 +50,12 @@ function copyThenPaste(
     dest: ReturnType<typeof single>,
     { cut = false }: { cut?: boolean } = {},
 ) {
-    ctx.selections = source;
-    copy(ctx, { cut });
-    ctx.selections = dest;
-    pasteCopy(ctx);
+    editInPlace(ctx, (draft) => {
+        draft.selections = source;
+        copy(draft, { cut });
+        draft.selections = dest;
+        pasteCopy(draft);
+    });
 }
 
 // A paste past the last row or column grows the grid, and the sheet's size grows with it: a stored snapshot keeps the
@@ -364,11 +366,13 @@ describe('cut/paste — cross-range move', () => {
         }) as Context;
 
         // copy from sheet two, switch to sheet one, cut-paste
-        ctx.selections = single(0, 0);
-        copy(ctx, { cut: true });
-        ctx.currentSheetId = 'id_1';
-        ctx.selections = single(2, 2);
-        pasteCopy(ctx);
+        editInPlace(ctx, (draft) => {
+            draft.selections = single(0, 0);
+            copy(draft, { cut: true });
+            draft.currentSheetId = 'id_1';
+            draft.selections = single(2, 2);
+            pasteCopy(draft);
+        });
 
         // destination on sheet one filled
         expect(ctx.sheets[0].data![2][2]?.v).toBe('Z');

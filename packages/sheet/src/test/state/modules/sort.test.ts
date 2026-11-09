@@ -5,6 +5,7 @@
 // a merged cell stops the sort.
 
 import { describe, expect, test } from 'bun:test';
+import { produce } from 'immer';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import { sortedOrder, sortRange, sortSelection } from '../../../state/modules/sort';
@@ -58,9 +59,9 @@ describe('sortRange — CJK rows participate', () => {
 
         // Sort ascending by column 1 (values 3,1,2 → 1,2,3). If the CJK row in
         // column 0 is excluded, row 0 stays put; if included, it moves to the end.
-        sortRange(ctx, { row: [0, 2], column: [0, 1] }, true, 1);
+        const next = produce(ctx, (draft: Context) => sortRange(draft, { row: [0, 2], column: [0, 1] }, true, 1));
 
-        const d = ctx.sheets[0].data!;
+        const d = next.sheets[0].data!;
         expect(d[0]?.[1]?.v).toBe(1);
         expect(d[2]?.[0]?.v).toBe('要');
     });
@@ -77,8 +78,10 @@ describe('sortRange — a header row', () => {
         const ctx = contextFactory({
             sheets: [{ name: 'sheet', id: 'id_1', data: data(), order: 0 }],
         }) as Context;
-        sortRange(ctx, { row: [0, 3], column: [0, 1] }, true, 1, hasHeaderRow);
-        return ctx.sheets[0].data?.map((row) => row[0]?.v);
+        const next = produce(ctx, (draft: Context) =>
+            sortRange(draft, { row: [0, 3], column: [0, 1] }, true, 1, hasHeaderRow),
+        );
+        return next.sheets[0].data?.map((row) => row[0]?.v);
     };
 
     test('stays in place and only the rows below it sort', () => {

@@ -88,8 +88,6 @@ export function carryCells(
     // Everything is read from a plain view, because a read through an immer draft makes a child draft of each cell.
     const snapshot = snapshotContext(ctx);
     const read = getSheet(snapshot, { id: lines.sheetId });
-    const cells = new Map<number, (Cell | null)[]>();
-    for (const r of rows) cells.set(r, read.data?.[r]?.slice() ?? []);
     // A spread would overflow the stack on a whole column, so the bounds are folded.
     const lowest = (line: number, next: number) => Math.min(line, next);
     const highest = (line: number, next: number) => Math.max(line, next);
@@ -97,7 +95,6 @@ export function carryCells(
     const [left, right] = [columns.reduce(lowest), columns.reduce(highest)];
     const block = { row: [top, bottom], column: [left, right] };
     const borders = getBorderInfoCompute(snapshot, lines.sheetId, [top, bottom, left, right]);
-    const linkMap = { ...read.hyperlink };
 
     carryRules(ctx, snapshot, lines, tiles, block, cut);
 
@@ -106,9 +103,8 @@ export function carryCells(
         const { hyperlink } = from;
         for (const r of rows) {
             const row = source[r];
-            const carried = cells.get(r);
             for (const c of columns) {
-                const mc = carried?.[c]?.mc;
+                const mc = read.data?.[r]?.[c]?.mc;
                 if (mc?.rs != null) delete merge?.[`${mc.r}_${mc.c}`];
                 row[c] = null;
                 const key = `${r}_${c}`;
@@ -131,7 +127,7 @@ export function carryCells(
             const r = tile.row + i;
             const sr = rows[skipRows + i];
             const row = d[r];
-            const sourceRow = cells.get(sr);
+            const sourceRow = read.data?.[sr];
             for (let j = 0; j < tile.width; j += 1) {
                 const c = tile.column + j;
                 const sc = columns[skipColumns + j];
@@ -140,7 +136,8 @@ export function carryCells(
                 if (borders[sourceKey] || held.config?.borderInfo?.[key])
                     carrySides(borderInfo, r, c, borders[sourceKey]);
                 // A source cell without a link takes the destination's away, as Excel does.
-                if (links && linkMap[sourceKey]) (to.hyperlink ??= {})[key] = linkMap[sourceKey];
+                const link = read.hyperlink?.[sourceKey];
+                if (links && link) (to.hyperlink ??= {})[key] = link;
                 else if (links && held.hyperlink?.[key]) delete to.hyperlink?.[key];
 
                 const replaced = held.data?.[r]?.[c]?.mc && row[c];
@@ -200,12 +197,24 @@ function carryRules(
         return tiles.flatMap((tile) => near.flatMap((range) => landedRanges(range, lines, tile)));
     };
 
-    const validations = Object.entries(read.dataValidations ?? {}).sort(([a], [b]) => compareValidationIds(a, b));
-    if (cut) clearValidations(from, block);
-    for (const area of landing) clearValidations(to, area);
-    for (const [id, { ranges, rule }] of validations) {
+    // Worked out on a plain copy: a rule that ends as it was, after a paste inside its own cells, is not written.
+    const before = held.dataValidations ?? {};
+    const after = { ...before };
+    const working = { ...held, dataValidations: after };
+    if (cut) clearValidations(sameSheet ? working : from, block);
+    for (const area of landing) clearValidations(working, area);
+    const sources = Object.entries(read.dataValidations ?? {}).sort(([a], [b]) => compareValidationIds(a, b));
+    for (const [id, { ranges, rule }] of sources) {
         const landed = landedOver(ranges);
-        if (landed.length > 0) addValidation(to, sameSheet ? id : crypto.randomUUID(), rule, landed);
+        if (landed.length === 0) continue;
+        // On another sheet a landed rule joins one that says the same, or is a new one.
+        const twin = sameSheet ? id : Object.keys(before).find((target) => isEqual(before[target].rule, rule));
+        addValidation(working, twin ?? crypto.randomUUID(), rule, landed);
+    }
+    for (const id of Object.keys({ ...before, ...after })) {
+        if (isEqual(before[id], after[id])) continue;
+        if (after[id]) (to.dataValidations ??= {})[id] = after[id];
+        else delete to.dataValidations?.[id];
     }
 
     if (sameSheet) {
@@ -213,7 +222,6 @@ function carryRules(
         writeCfRanges(to, read.conditionalFormatRules, cleared, ({ cellrange }) => landedOver(cellrange));
         return;
     }
-    // On another sheet a landed rule joins one that says the same, or is a new one.
     const joining = new Map<ConditionalFormatRule, SingleRange[]>();
     const added: ConditionalFormatRule[] = [];
     for (const rule of read.conditionalFormatRules ?? []) {

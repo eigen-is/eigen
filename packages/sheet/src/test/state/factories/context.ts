@@ -1,5 +1,11 @@
+import { produce } from 'immer';
 import type { Context, SheetConfig } from '../../../state/index';
 import { defaultContext, FormulaCache } from '../../../state/index';
+
+// Runs an edit as the app runs it, in a recipe, and leaves the next state in ctx for the test to read.
+export function editInPlace(ctx: Context, recipe: (draft: Context) => void) {
+    Object.assign(ctx, produce(ctx, recipe));
+}
 
 export function selectionFactory(row: number[], column: number[], row_focus: number, column_focus: number) {
     return [

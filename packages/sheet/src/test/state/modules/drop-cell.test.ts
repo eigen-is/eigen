@@ -608,6 +608,12 @@ describe('a fill counts on from what its source holds', () => {
         expect(shown(filled([text('Item 007')], 1, 'right'))).toEqual(['Item 008']);
     });
 
+    it('copies one text ending in a number that a number format left as text', () => {
+        const numbered = (v: string): Cell => ({ v, m: v, ct: { fa: '##0.00', t: 'n' } });
+        expect(shown(filled([numbered('x1')], 2, 'down'))).toEqual(['x1', 'x1']);
+        expect(shown(filled([numbered('12')], 2, 'down'))).toEqual(['12', '12']);
+    });
+
     it('fill down copies one text ending in a number', () => {
         const range: SingleRange = { row: [0, 1], column: [0, 0] };
         const ctx = makeCtx((d) => {
