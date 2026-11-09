@@ -3,7 +3,6 @@
 // no other actions, so the page hands the list its own rows instead of the Drive item menu's.
 
 import { createFileRoute } from '@tanstack/react-router';
-import { useAuth } from '@workspace/lib/auth';
 import {
     DEFAULT_MOUNT_ID,
     getDriveComparator,
@@ -46,8 +45,8 @@ function TrashToolbar({ itemCount, onEmptyTrash }: { itemCount: number; onEmptyT
 }
 
 function TrashRoute() {
-    const auth = useAuth();
-    const ownerId = auth.user!.id;
+    const { user } = Route.useRouteContext();
+    const ownerId = user.id;
     const mountId = DEFAULT_MOUNT_ID;
 
     const { data: trashedItems = [], isLoading, error } = useListTrash(ownerId, mountId);

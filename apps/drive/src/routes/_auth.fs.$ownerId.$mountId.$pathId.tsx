@@ -6,7 +6,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { getDriveShareUrl } from '@workspace/lib/api';
 import { AppError } from '@workspace/lib/api-error';
-import { useAuth } from '@workspace/lib/auth';
 import { useUnreadChatIds } from '@workspace/lib/chat';
 import {
     useCheckPermissions,
@@ -38,8 +37,8 @@ function FolderRoute() {
     const { pid, sharePathId, shareEmail } = Route.useSearch();
     const navigate = useNavigate();
     const { rootPath } = useContext(DriveContext);
-    const { user } = useAuth();
-    const unreadChatIds = useUnreadChatIds(user?.id ?? '');
+    const { user } = Route.useRouteContext();
+    const unreadChatIds = useUnreadChatIds(user.id);
 
     // "root" in the URL is an alias: once the root folder is known, the page moves to its real id.
     useEffect(() => {

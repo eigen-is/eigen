@@ -13,9 +13,11 @@ export const Route = createFileRoute('/_auth/_sidebar/')({
 function DriveRoute() {
     const { pid, uid, mid } = Route.useSearch();
     const navigate = useNavigate();
+    const { user } = Route.useRouteContext();
     return (
         <EigenDocListView
             config={SLIDES_CONFIG}
+            viewerId={user.id}
             pid={pid}
             uid={uid}
             mid={mid}

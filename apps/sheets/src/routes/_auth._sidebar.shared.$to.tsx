@@ -14,9 +14,11 @@ function SharedRoute() {
     const { to } = Route.useParams();
     const { pid, uid, mid } = Route.useSearch();
     const navigate = useNavigate();
+    const { user } = Route.useRouteContext();
     return (
         <EigenDocSharedView
             config={SHEETS_CONFIG}
+            viewerId={user.id}
             to={to}
             pid={pid}
             uid={uid}

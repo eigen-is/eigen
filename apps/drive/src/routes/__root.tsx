@@ -1,5 +1,9 @@
+// Drive's root route: the app shell around every Drive page. A signed-in user gets the sidebar with the New
+// menu and their personal root folder, shared with the pages through DriveContext. A guest gets the sidebar
+// without a root folder, and a signed-out visitor only the shell.
+
 import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
-import type { RouterAppContext } from '@workspace/lib/auth';
+import type { AuthUser, RouterAppContext } from '@workspace/lib/auth';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useRootFolder } from '@workspace/lib/drive';
 import type { DriveContextType } from '@workspace/lib/types/drive';
@@ -11,11 +15,15 @@ export const DriveContext = createContext<DriveContextType>({
     rootPath: null,
 });
 
+export const Route = createRootRouteWithContext<RouterAppContext>()({
+    component: DriveRoot,
+});
+
 function DriveRoot() {
     const { user } = useAuth();
     const isGuest = useIsGuest();
 
-    if (user && !isGuest) return <AuthenticatedDriveRoot />;
+    if (user && !isGuest) return <AuthenticatedDriveRoot user={user} />;
 
     // Signed-out and guest share one shell: a guest gets the sidebar and a null-root
     // DriveContext, a signed-out visitor gets neither.
@@ -36,11 +44,9 @@ function DriveRoot() {
     );
 }
 
-function AuthenticatedDriveRoot() {
-    const { user } = useAuth();
-    const mountId = DEFAULT_MOUNT_ID;
-    const { data: root, isLoading, error } = useRootFolder(user!.id, mountId);
-    const rootPath = root || null;
+function AuthenticatedDriveRoot({ user }: { user: AuthUser }) {
+    const { data: root, isLoading, error } = useRootFolder(user.id, DEFAULT_MOUNT_ID);
+    const rootPath = root ?? null;
 
     if (isLoading) {
         return (
@@ -75,7 +81,3 @@ function AuthenticatedDriveRoot() {
         </AppShell>
     );
 }
-
-export const Route = createRootRouteWithContext<RouterAppContext>()({
-    component: DriveRoot,
-});

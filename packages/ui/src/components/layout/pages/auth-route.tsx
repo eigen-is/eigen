@@ -1,22 +1,20 @@
+// The `_auth` route guard most apps share. Its beforeLoad sends a signed-out visitor to /login with a way
+// back, and hands the signed-in user to every child route's context, so a page under `_auth` reads a user
+// that is always there. Apps with no guest surface, such as Mail, also send a guest out to Drive.
+
 import { Outlet, redirect } from '@tanstack/react-router';
 import { getDriveAppUrl } from '@workspace/lib/api';
+import type { RouterAppContext } from '@workspace/lib/auth';
 
 function AuthOutlet() {
     return <Outlet />;
 }
 
-// Shared `_auth` guard: bounce anonymous visitors to /login with a return path; when
-// `redirectGuests` is set (apps with no guest surface), also bounce guests out to Drive.
 export function createAuthRouteOptions({ redirectGuests = false }: { redirectGuests?: boolean } = {}) {
     return {
-        beforeLoad: ({
-            context,
-            location,
-        }: {
-            context: { auth: { isAuthenticated: boolean; user?: { role?: string | null } | null } };
-            location: { href: string };
-        }) => {
-            if (!context.auth.isAuthenticated) {
+        beforeLoad: ({ context, location }: { context: RouterAppContext; location: { href: string } }) => {
+            const { user } = context.auth;
+            if (!user) {
                 // Widened like login-route's `to`: this file compiles in every app's Register,
                 // including apps without a /login route of their own (the index app).
                 const loginPath: string = '/login';
@@ -27,9 +25,10 @@ export function createAuthRouteOptions({ redirectGuests = false }: { redirectGue
                     },
                 });
             }
-            if (redirectGuests && context.auth.user?.role === 'guest') {
+            if (redirectGuests && user.role === 'guest') {
                 window.location.href = getDriveAppUrl();
             }
+            return { user };
         },
         component: AuthOutlet,
     };
