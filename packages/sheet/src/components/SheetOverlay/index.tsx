@@ -68,6 +68,7 @@ export const SheetOverlay: React.FC = () => {
     const cellAreaMouseDown = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
             const { nativeEvent } = e;
+            refs.hooks.current.onCommentHover?.(null);
             // A click inside a floating UI, such as a validation dropdown, must not move the selection.
             if (e.target instanceof Element && e.target.closest('.sheet-mousedown-cancel')) return;
             if (e.button !== 2) {
@@ -101,7 +102,7 @@ export const SheetOverlay: React.FC = () => {
                 });
             }
         },
-        [setContext, refs.globalCache, refs.cellInput, refs.cellArea, refs.fxInput],
+        [setContext, refs.globalCache, refs.cellInput, refs.cellArea, refs.fxInput, refs.hooks],
     );
 
     const cellAreaDoubleClick = useCallback(
@@ -199,7 +200,7 @@ export const SheetOverlay: React.FC = () => {
                     },
                     { noHistory: true },
                 );
-                // Outside the recipe, because a host's report sets its state or writes to the workbook.
+                // Outside the recipe, because a host's report sets its state.
                 const cellArea = refs.cellArea.current;
                 if (cellArea) refs.hooks.current.onCommentHover?.(commentHoverAt(getContext(), ev, cellArea));
             });
@@ -215,6 +216,12 @@ export const SheetOverlay: React.FC = () => {
             setContext,
         ],
     );
+
+    // A key or a double click opens the editor under a resting pointer, and no move comes to report it.
+    const editing = context.editingCellPosition.length > 0;
+    useEffect(() => {
+        if (editing) refs.hooks.current.onCommentHover?.(null);
+    }, [editing, refs.hooks]);
 
     const onMouseUp = useCallback(
         (nativeEvent: MouseEvent) => {

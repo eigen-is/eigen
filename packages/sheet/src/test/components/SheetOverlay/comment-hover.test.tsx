@@ -148,6 +148,23 @@ test('an open cell editor reports nothing', async () => {
     expect(await moveOn(find('.sheet-cell-table'), COMMENTED)).toBeNull();
 });
 
+test('a press on the cell area reports nothing, before any move', async () => {
+    const { find, moveOn, press, reports } = await mount();
+    expect((await moveOn(find('.sheet-cell-table'), COMMENTED))?.cardId).toBe('c1');
+    await press(COMMENTED);
+    expect(reports.at(-1)).toBeNull();
+});
+
+test('an edit opened from the keyboard reports nothing, with the pointer at rest on the cell', async () => {
+    const { find, moveOn, workbook, reports } = await mount();
+    await act(async () => workbook.current?.revealSearchMatch({ sheetId: 's1', r: 0, c: 0 }));
+    expect((await moveOn(find('.sheet-cell-table'), COMMENTED))?.cardId).toBe('c1');
+    await act(async () => {
+        find('.sheet-overlay').dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', bubbles: true }));
+    });
+    expect(reports.at(-1)).toBeNull();
+});
+
 test('a write the host makes on the report stays, since the report comes after the frame is written', async () => {
     const { find, moveOn, workbook } = await mount((target, opened) => {
         if (target) opened.setCellFormat(4, 4, 'bl', 1);
