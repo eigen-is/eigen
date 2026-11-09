@@ -5,7 +5,7 @@ type: how-to
 tags: [stickies, comments, cards, discussion, collaboration]
 related: [stickies/add-and-edit-cards, stickies/get-started]
 order: 80
-updated: 2026-11-02
+updated: 2026-11-09
 ---
 
 Every card on a Stickies board has a built-in comment thread. You can use it to ask questions, post updates, or keep a record of decisions, all in one place alongside the card itself.
@@ -24,7 +24,7 @@ When a card has at least one message, a small reply count appears at the bottom 
 
 ## Unread dot
 
-A red dot in a card's top-right corner means the card has something new for you: a reply in a thread you've written in, a mention, or an assignment to you. Opening the card clears the dot, and so does reading the notification in the bell menu.
+A red dot at the start of a card's footer means the card has something new for you: a reply in a thread you've written in, a mention, or an assignment to you. Opening the card clears the dot, and so does reading the notification in the bell menu.
 
 ## Who can comment
 
