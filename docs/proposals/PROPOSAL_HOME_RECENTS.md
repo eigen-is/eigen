@@ -1,229 +1,203 @@
-# Proposal: Per-Home Recents
+# Proposal: Recent files
 
-This proposal has Eigen remember what a user recently used, the addresses they mailed and the files they opened, so that autosuggest and the command palette can offer those first.
+Finding a file you just worked on is harder than it should be when it sits deep in a shared folder or a team drive. Drive's listings show where a file lives, and the bell shows events, not files. This proposal adds a **Recent** page to Drive: one flat list of the files and folders that involve you, wherever they live, each once, newest first.
 
-**Status:** not built: there is no `eigen.recents/recents.db`. [ROADMAP-POST-1.md](../ROADMAP-POST-1.md) keeps its row, since nothing is blocked on it.
+**Status:** not built. The owner agreed to the design on 2026-11-09, including the `shared.db` migration and the two routes below. A builder still asks the owner right before building each of them, per AGENTS.md. A cold review checked it against the code on 2026-11-09, and nothing has been run. Size: M. It replaces the June version of this proposal, which bundled email suggestions and the command palette; those are now the later steps at the end.
 
-> **TLDR**: A per-user `home.recents` module records "implicit usage" — recently used
-> email addresses and recently opened files — so the data feeds autosuggest and the
-> command palette the next time the user reaches for them. **One typed Drizzle table
-> per kind** in a new `eigen.recents/recents.db` on `UserHome`. All writes are
-> **server-side** on canonical commit paths (mail send, ACL grant, chat mention,
-> collab-doc open), cross-home via `home-relay` — the FE only reads. No SSE, no
-> settings toggles in v1 (per-kind *Clear* instead). Auto-pruned from the per-Home
-> lifecycle. Viewer-side sibling of the owner-side activity timeline in
-> [FILE-HISTORY.md](../FILE-HISTORY.md).
->
-> *Revised 2026-06-12 after code verification + adversarial review: corrected the
-> derive-vs-store argument (`emails.recipientsAll` exists) and the method names
-> (`Mail.messageSend`, `Drive.updateACL`), fixed the ACL/team relay wiring, moved
-> the file-open write server-side, dropped the SSE event, the settings toggles, the
-> `context`/`firstUsedAt` columns, useCount on files, and the v1 Drive Recent view.*
+> **TLDR**: A small `recent_paths` table in each user's own `shared.db` holds which file and when, nothing else. A file moves to the top when you open it or when a notification about it reaches you. The Drive route `/recent` checks the newest rows against each file's owner at read time, so names are always current and a file you can no longer read never shows. One helper in `home-relay.ts` asks at most eight homes at a time per load, and Watched, All docs and file search use it too. Every app's sidebar links to that one page, directly below Drive.
 
-## Goals
+## What counts
 
-1. An email address used in mail compose / ACL share / chat mention reappears in
-   autosuggest next time, ranked by recency and frequency — strictly below real
-   contacts and team members.
-2. A "recently opened files" feed for the command palette's empty state (a Drive
-   *Recent* view can consume the same data later).
-3. The shape extends to future kinds (search history, calendar attendees, …) by
-   adding a typed table — not by widening a generic schema.
-4. The user can clear what's been collected, per kind.
+A row is one file for one user, so a file can't appear twice. Two things write it.
 
-## Non-goals
+**You opened the file.** The app reports it, for a document in its editor, a plain file in the preview or the inline editor, and a chat. Editing and commenting need an open first, so they are covered.
 
-- **Replacement for curated contacts.** Recents augment autosuggest; they don't
-  become Contact rows.
-- **Cross-user recents.** Each user has their own. Team-context writes touch the
-  *typing user's* recents via the relay, never the team's.
-- **Audit logging.** Recents is best-effort, lossy, prunable. The audit-shaped
-  timeline is `file_events` ([FILE-HISTORY.md](../FILE-HISTORY.md)).
-- **Full-text search across recents.** See `../SEARCH.md`.
-- **Settings toggles in v1.** Per-kind *Clear* covers the privacy story; an
-  `UserSettings.recents` enable flag is an additive JSON field on the existing
-  per-user `settings.json` store later, if asked — no migration.
-- **A Drive *Recent* view or new sidebar surfaces in v1.** The first consumers
-  (autosuggest, palette empty state) need no new view.
+**A notification about the file reached you.** A share, a mention, a reply, an assignment, an access request or a watched change moves the file to the top. Without this, a doc someone just shared with you wouldn't appear until you had opened it, which is the case the page most needs to serve. The Recent row is separate from the bell row, so dismissing the notification leaves the file in Recent.
 
-## Why store rather than derive
+Accepted edges:
 
-Derivation at query time was investigated. One earlier claim here was wrong and is
-corrected:
+- Opening a folder doesn't count, because clicking through folders would fill the list with ones you only passed through. A folder still appears when a notification names it, as a burst of uploads does.
+- An upload, a WebDAV edit or a rename counts only if you also open the file or get notified about it.
+- A team file appears only when it involves you. Nearly everyone is in the default team, so showing every edit would make this a feed of the whole company.
+- A colleague editing a doc they shared with you doesn't bring it up unless you watch it. Default-watch on share, parked in the File History row of [ROADMAP.md](../ROADMAP.md), would change that.
+- The chat app's index route opens your first chat by itself, so visiting the app counts as opening that chat.
+- Trashing many watched files at once writes a row per file, and those rows stay hidden. Two hundred or more would push your older rows out for good.
+- The table starts empty and fills from first use. There is no backfill.
 
-- **Mail**: `emails.recipientsAll` **does** exist (mail.db v3,
-  `../../apps/api/src/lib/mail/schema.ts`, FTS-indexed) — recent mail recipients *are*
-  derivable today.
-- **Drive ACL**: a JSON array in the single `shared_paths.acl` column
-  (`../../apps/api/src/lib/drive/sharedschema.ts`). No index on grantees — JSON1
-  extraction is a full table scan per autosuggest keystroke.
-- **Chat mentions**: `comment_mentions(chatName, email)` exists but has **no
-  timestamp** — you can't order by recency.
-- Raw addresses typed into chat bodies (not `@`-mentions) exist only in markdown.
-- File opens are recorded nowhere at all.
+Non-goals for now: guests, removing one row by hand, a Clear button, per-type Recent pages in the document apps, grouping by day.
 
-So mail alone is derivable; the other contexts aren't, and ranking across contexts
-wants one uniform `(lastUsedAt, useCount)` shape. Store.
+## Data
 
-## Architecture
+One table in the viewer's own `shared.db` (`apps/api/src/lib/drive/sharedschema.ts`), added as schema version 2 in `apps/api/src/lib/drive/db-config.ts`. `shared.db` is already in `HOME_DATABASES`, so backups carry it with no new registration, and no new database file or class is needed.
 
-```
-apps/api/src/lib/recents/
-  recents.ts          # Recents class — wired into UserHome like NotificationCenter
-  schema.ts           # Drizzle: email_recents, file_recents
-  db-config.ts        # version 1
+```sql
+CREATE TABLE recent_paths (
+    ownerId TEXT NOT NULL,
+    mountId TEXT NOT NULL,
+    pathId TEXT NOT NULL,
+    lastActivityAt INTEGER NOT NULL,
+    PRIMARY KEY (ownerId, mountId, pathId)
+);
 ```
 
-No `sse-events.ts` — see § Reads.
+It holds no name, type or reason. A stored name would go stale on a rename and would keep showing a file you lost access to. `lastActivityAt` is in seconds, like the other timestamps in this database; two rows in one second may swap places, which is harmless. The table is capped at 200 rows, trimmed in the same write that adds a row, so it needs no scheduled cleanup and no age limit. At that size it needs no index on the time.
 
-DB location follows the per-domain convention:
-`data/home/{userId}/eigen.recents/recents.db`, opened via `home.getLocalDatabase`
-(the `eigen.notifications/notifications.db` precedent — no special registration).
+A team home gets the empty table with its migration, and nothing writes to it. A guest home can collect rows from notifications, and nothing reads them.
 
-Wired onto **`UserHome` only**. The base `Home` class gets a `hasRecents` boolean
-mirroring `hasCalendar` — that's the relay guard, since `sendToHome` can target a
-`TeamHome` or `GuestHome`. One new `HomeMessage` variant:
-`{ type: 'recents:touch', … }`, dropped silently when `!hasRecents`.
+## Writing a row
 
-## Data model
+`recent.ts` in `apps/api/src/lib/drive/` holds the upsert, the trim and the list as functions over `sharedDb`, like `shared-with-me.ts`, behind `Drive.touchRecent` and `Drive.listRecent`.
 
-One typed table per kind — no generic `(kind, key, JSON)` bag. That's the correct
-reading of CODE-STANDARDS §Typing (`$inferSelect`, types flow Elysia → Eden Treaty →
-hooks) and the NotificationCenter precedent (flat typed columns). Adding a kind = a
-migration + a typed domain method + a typed route response.
-
-```typescript
-// apps/api/src/lib/recents/schema.ts
-export const emailRecents = sqliteTable('email_recents', {
-    email: text('email').primaryKey(),       // lowercased on store; +tag aliases stay distinct
-    lastUsedAt: integer('lastUsedAt', { mode: 'timestamp' }).notNull(),
-    useCount: integer('useCount').notNull().default(1),  // frequency matters for correspondents
-});
-
-export const fileRecents = sqliteTable('file_recents', {
-    ownerId: text('ownerId').notNull(),
-    mountId: text('mountId').notNull(),
-    pathId: text('pathId').notNull(),
-    name: text('name').notNull(),             // denormalized at write — live resolution would
-    mimeType: text('mimeType'),               // mean per-owner relay pulls + ACL checks per
-    lastUsedAt: integer('lastUsedAt', { mode: 'timestamp' }).notNull(),  // read; staleness is
-}, t => [primaryKey({ columns: [t.ownerId, t.mountId, t.pathId] })]);
-// fine — the open target re-validates access anyway (404 on miss → prune the row)
-```
-
-Deliberately absent (cut in review): `context` (`'mail'|'chat'|'acl'` — nothing read
-it), `firstUsedAt` (nothing read it), `useCount` on files (quick-open ranks by plain
-recency, like every quick-open UI).
-
-## Writes — all server-side, fire-and-forget with `.catch()`
-
-The FE never writes recents. Each touch happens on the canonical commit path:
-
-| Source | Where | Path to the actor's home |
-|---|---|---|
-| Mail send | `Mail.messageSend()` (`../../apps/api/src/lib/mail/mail-domain.ts`), after sendmail succeeds (failed sends don't pollute) | direct — own home |
-| ACL grant | `Drive.updateACL()` added-entries diff | **relay** — runs in the owner's (possibly team) home. The actor is available as a full `User`: `Drive.updateACL` takes `actor?: User \| null` (`../../apps/api/src/lib/drive/drive.ts`) and `file_events` carries `actorUserId` / `actorEmail` (`../../apps/api/src/lib/mount/schema.ts`), so recents reads `actorUserId` directly to address the actor's home. No prerequisite left |
-| Chat mention commit | `ChatRoom.postMessage` mention extraction (`chat.ts`); the actor's user id arrives from the chat route | **relay** |
-| Collab doc open | the `GET /collab/:ownerId/:mountId/:pathId/info` handler, after its `canRead` check — the one seam all four eigendoc editors share (`useEigenDocEditorRoute` → `useCollabDocumentInfo`; its 60 s `staleTime` gives open-debouncing for free) | **relay** (`sendToHome(user.id, …)`) — zero FE code; future eigendoc apps are covered automatically |
-
-Deliberately not covered in v1: **drive previews** of plain files (the `/preview`
-route also serves folder-grid thumbnails — recording there would log every file the
-user scrolls past; when previews should count, one POST from the shared
-`PreviewProvider` covers all apps) and **`.eigenchat` opens** (no shared scaffold).
-
-## Reads
-
-Routes (`apps/api/src/routes/recents.ts`, `:ownerId` second segment, `requireSelf` +
-`requireNonGuest` — the `space.ts` pattern):
+**An open** comes from the client:
 
 ```
-GET    /recents/:ownerId/emails     ranked list for autosuggest merge
-GET    /recents/:ownerId/files      most-recent-first for the palette
-DELETE /recents/:ownerId/emails     Clear
-DELETE /recents/:ownerId/files      Clear
+POST /drive/:ownerId/recent     requireSelf + requireNonGuest
+body: { fileOwnerId, mountId, pathId }
 ```
 
-FE: `recentsKeys` (ownerId-scoped) + `useRecentEmails` / `useRecentFiles` in
-`packages/lib/src/core/recents/hooks/`, `staleTime` ~30 s, invalidations exported.
+`:ownerId` is the caller, so the write stays in the caller's own home and opens nobody else's. The handler only refuses a `fileOwnerId` that `parseOwnerId` doesn't read as a user or a team. It doesn't check access to the file: the read does that for every row, so a row for a file you can't read only uses up a slot in your own list. It opens nothing a request couldn't already open, since `getSharedDrive` opens the home before it checks access.
 
-**No SSE event.** The own-home stream fans every event through all domain handlers,
-and every consumer here is pull-on-demand: the tab that opened the file *caused* the
-write; autosuggest reads a cached query while typing; the palette mounts its queries
-when opened; cross-tab catches up via TanStack's default `refetchOnWindowFocus`. A
-live-updating Drive *Recent* view would be the first surface to justify a push — add
-the event together with that view, not before.
+`useRecordOpened` in `packages/lib/src/core/drive/hooks/` returns `record(path)`. A failed report is dropped silently, because the person did nothing that failed. A guest records nothing. Where the app calls it:
 
-### Surfaces
+- `useEigenDocEditorRoute`, the chat route in `apps/chat` and the `_auth.edit` route in `apps/drive`, in an effect keyed on the file's three ids and run once the path has loaded. Keying on the ids matters: `docInfo` refetches, and each refetch must not count as an open.
+- `useDriveListRoute`, when a row opens the preview, and `useDriveQuickLook`.
+- `useDriveFileActionRunner`, whose quick look serves the detail panel, the context menu and the palette's selection. On a phone a plain file reaches its preview this way.
+- The palette's `openPathPreview` in `app-shell.tsx`.
 
-- **`useContactSuggestions` gains recents as a third source** — ranked strictly
-  below team members and personal contacts, deduped by lowercased email. That one
-  hook lights up mail compose, ACL share, calendar attendees *and* the command
-  palette's contact provider in one change. Addresses are recorded
-  **unconditionally and deduped at read**: write-time exclusion of known contacts
-  would couple every writer to contacts/team lookups, and read-side dedupe is
-  needed regardless (an address can become a contact *after* it was recorded).
-- **Command palette empty state** shows a *Recent files* section before any
-  keystroke. No overlap to reconcile: the palette has no usage/frecency tracking
-  anywhere (`rank.ts` is structural match quality only); files currently appear
-  only via FTS search.
+Not `PreviewProvider` itself: `attachment-chip.tsx` and mail attachments open previews too, and a document's attachment must not use up a slot. Not `GET /collab/.../info` either, even though every editor passes through it. Its query refetches on window focus and on someone else's rename or ACL change (`invalidatePathRenamed`, `invalidateAclUpdated`), so each of those would look like an open.
 
-## Pruning
+**A notification** writes in `Home.notify`, after the row persists, when the home has a notification center. It runs in the recipient's own home. A failure there is caught and logged: as in `FileHistory.notifyWatchers`, a notification never fails the change that caused it, and `assignComment` awaits this path directly. The file comes from the tag, through a new `parseNotificationPath(type, tag)` in `packages/lib/src/core/notification/tags.ts`. The share and file-event parsers move there from `resolve-link.ts`, which then imports them, so one module spells every tag. Mail, calendar, admin alerts and unshares have no file, so they write nothing.
 
-From the per-Home lifecycle — homes idle-evict on a per-type window (`UserHome`
-5 minutes, `TeamHome` 30 minutes via `TEAM_HOME_IDLE_MS`,
-`../../apps/api/src/lib/home/team-home.ts`) and there is no global home registry, so no
-scheduler tick. Recents lives on `UserHome` only, so the 5-minute window is the
-one that paces pruning:
+## Reading the list
 
-- When the home opens, in the part's own `init` that `Home.init` runs, fire-and-forget per kind: drop rows older than `maxAge`, then LRU-trim to `maxRows` by `lastUsedAt`.
-- Limits: email — 500 rows / 365 days; file — 200 rows / 90 days.
-- No useCount-weighted eviction (cut in review): at these sizes plain LRU is
-  enough — a frequent contact is by definition recently used.
+```
+GET /drive/:ownerId/recent     requireSelf + requireNonGuest
+```
 
-## Relationship to File History + Watch
+`aggregateRecents` in `apps/api/src/lib/drive/aggregate.ts`:
 
-Siblings sharing write moments, opposite directions — kept separate by design:
+1. Take the caller's newest 100 rows and group them by owner, skipping an owner `getOwnerExists` says is gone, so a deleted user's rows don't log an error on each load.
+2. Look up the caller's team memberships once, for the whole load.
+3. Ask each owner through `pullFromEach` and `pullRecentPaths` ([below](#one-limit-for-reads-that-open-homes)). The caller's own home is asked the same way. An owner whose read fails is logged and adds nothing, and the others still answer.
+4. If fewer than 100 rows came back visible, do the same for the remaining rows, at most 100 more. This is what the other 100 stored rows are for: after a bulk trash the page still has older files to show, and in the usual load those owners are never asked.
+5. Merge and sort by `lastActivityAt`, newest first, and return at most 100, each as the current `DrivePath` plus `lastActivityAt`.
 
-|                | `file_events` (activity/watch)          | Recents                              |
-|----------------|------------------------------------------|--------------------------------------|
-| Direction      | Owner-side: what happened *to this file* | Viewer-side: what *I* touched/used   |
-| Visibility     | Shared with anyone holding read access   | Private to the user                  |
-| Shape          | Append-only timeline, pruned by age      | LRU set, upsert per key              |
-| Storage        | Owner's mount `metadata.db`              | User's own `recents.db`              |
+`Drive.getRecentPathsFor(user, memberships, rows)` answers for one owner, batched per mount with `mount.getBreadcrumbs`. It does its own access check and is called only from the relay, so it falls under the "server code" clause of [ARCHITECTURE.md](../ARCHITECTURE.md#drive-architecture) and needs no `SharedDrive` wrapper. A row whose mount this home doesn't have, because it is disabled, removed or failed to start, is skipped, because `Drive.getMount` would otherwise throw and lose that owner's other rows. It drops a row when:
 
-The same commit path often writes both: an ACL grant records owner-side
-`'acl-changed'` (timeline + watchers) *and* an actor-side email-recent touch
-(autosuggest). Different facts — no one-source-of-truth violation. The shared
-dependency is already satisfied: the actor-as-`User` threading through `Drive`
-landed with File History, so recents reuses `actor` / `file_events.actorUserId`
-as-is.
+| Dropped | Why |
+|---|---|
+| Empty breadcrumb | The file was deleted for good |
+| `canReadFromAncestors` fails | You lost access. The owner, members of the owning team, a direct or parent folder ACL and a public visibility all pass |
+| `isTrashedChain` | It is in the trash. A trash already ends a sharee's access, but the owner and team members can still read it, so they need this check. A restore brings the file back, sharing included |
+| Any ancestor is a document type | It is inside a doc container. `FileHistory` and the comment tags already avoid these, and this is the one check that guarantees it |
+| `parentId` is null | A mount root, such as Drive home, which would otherwise rank first |
 
-## Resolved questions
+**A read never deletes a row.** A failed lookup looks the same as a missing file at this level, and a brief error must not wipe someone's history. A hidden row comes back when access or the file does, and otherwise falls off through the 200-row trim.
 
-- **Naming**: *Recents* — matches the OS idiom for LRU-shaped data.
-- **Email normalization**: lowercase the whole address on store; keep `+tag`
-  aliases distinct; preserve IDN as typed, match case-insensitively.
-- **Mail-send write timing**: after sendmail succeeds.
-- **GDPR / user delete**: removing the home directory removes `recents.db` by
-  layout; relay touches are dropped for non-existent homes.
-- **Settings placement**: moot in v1 — the two *Clear* actions live in Space
-  settings, next to where a future enable toggle would go.
+## One limit for reads that open homes
 
-## Files
+Opening a closed home costs about 25 to 30 file descriptors and a burst of database opens. Today only pushes have a limit: `sendToUserHomes` runs under `deliveryBudget`, a semaphore of eight. Direct `sendToHome` calls and every read go around it, and `aggregateWatches`, `aggregateMimeContents` and `aggregateFileSearch` each ask their homes in one unbounded `Promise.all`.
 
-| File                                                              | Purpose                                                        |
-|-------------------------------------------------------------------|----------------------------------------------------------------|
-| `packages/lib/src/types/recents.ts`                               | `EmailRecent`, `FileRecent` shared types                       |
-| `apps/api/src/lib/recents/recents.ts`                             | `Recents` domain class (touch, list, clear, prune)             |
-| `apps/api/src/lib/recents/schema.ts` + `db-config.ts`             | Tables + v1 config                                             |
-| `../../apps/api/src/lib/home/home.ts` / `user-home.ts`                  | `hasRecents` flag; UserHome wiring                             |
-| `../../apps/api/src/lib/home/home-relay.ts`                             | `recents:touch` `HomeMessage` variant, guarded by `hasRecents` |
-| `../../apps/api/src/lib/mail/mail-domain.ts`                            | Touch recipients after `messageSend` success                   |
-| `../../apps/api/src/lib/drive/drive.ts`                                 | `updateACL` added-entries diff → relay touch (reuses the landed `actor: User` threading) |
-| `../../apps/api/src/lib/chat/chat.ts`                                   | Mention commit → relay touch                                   |
-| `../../apps/api/src/routes/collab.ts`                                   | `info` handler → relay touch after `canRead`                   |
-| `apps/api/src/routes/recents.ts`                                  | GET/DELETE per kind, `requireSelf` + `requireNonGuest`         |
-| `packages/lib/src/core/recents/hooks/use-recents.ts`              | `useRecentEmails`, `useRecentFiles`, `recentsKeys`, invalidations |
-| `../../packages/lib/src/core/contacts/hooks/use-contact-suggestions.ts` | Recents as third suggestion source                             |
-| `../../packages/lib/src/core/command-palette`                          | *Recent files* section in the empty state                      |
-| Space settings                                                     | Two *Clear my recents* actions                                 |
+`sendToUserHomes` can't be the limit for reads. It returns no answer and mostly runs after the response, and [PROPOSAL_HOME_RELAY_OUTBOX.md](PROPOSAL_HOME_RELAY_OUTBOX.md) replaces its semaphore with the drain's `inFlight` map. So `home-relay.ts`, which every cross-home call already passes through, becomes the one place that sets the number:
+
+- One constant, `HOME_OPEN_BUDGET = 8`, replaces the bare number. `deliveryBudget` takes it today, and the outbox's `inFlight` takes it when that lands.
+- One helper runs a fan-out of reads:
+
+```ts
+// One read per owner, at most HOME_OPEN_BUDGET of them at a time for this call. A failed read is logged and
+// leaves that owner out, so the other owners still answer.
+export async function pullFromEach<T>(ownerIds: string[], pull: (ownerId: string) => Promise<T>): Promise<T[]> {
+    const budget = new Semaphore(HOME_OPEN_BUDGET);
+    const results = await Promise.all(
+        ownerIds.map((ownerId) =>
+            budget.run(() =>
+                pull(ownerId).catch((err) => {
+                    console.error(`home-relay: reading ${ownerId} failed:`, err);
+                    return null;
+                }),
+            ),
+        ),
+    );
+    return results.filter((result) => result !== null);
+}
+```
+
+- `aggregateWatches`, `aggregateMimeContents`, `aggregateFileSearch` and `aggregateRecents` all go through it, in place of their own `Promise.all` and `.catch(() => [])`.
+
+The limit is per call on purpose, not one queue for the server. A queue shared by every user would make a stuck home everyone's problem: `runInit` has no deadline, `openHome` waits for a closing home inside its permit, and eight viewers of one stuck home would stop all Watched, All docs and search on the server. Per call, a stuck home stalls only the loads that asked for it, as it does today, and needs no deadline or special case to get there. The price is that several users loading at once can each run eight. A home being built is shared by everyone who asks for it, so the same closed homes don't open twice.
+
+The limit smooths the burst of opens. It doesn't limit how many homes stay open afterwards: thirty owners read eight at a time still leave thirty homes open for their idle time, as any read of those homes does. That is the job of the LRU cap in [PROPOSAL_FD_BUDGET.md](PROPOSAL_FD_BUDGET.md). Production pins a high file limit in `docker-compose.yml`, and a dev machine at a low `ulimit -n` can run out sooner, as it already can with Watched or a large share. Recent is normally the lighter of the two, because it asks only the owners in your list, while Watched asks every team and everyone who shared with you.
+
+`pullRecentPaths` is an ordinary pull:
+
+```ts
+export async function pullRecentPaths(ownerId: string, user: User, memberships: Memberships, rows: RecentRow[]) {
+    const home = await getHome(ownerId);
+    return home.drive.getRecentPathsFor(user, memberships, rows);
+}
+```
+
+| | Cost per load |
+|---|---|
+| The list itself | One small query in your own home |
+| Each owner already open | One batched query per mount |
+| Each owner closed | A full open, which also runs what any open runs (history prune, trash purge, reindex kick), then the same queries. The home stays open for its idle time, so the next load is the row above |
+
+## The page
+
+- **Route:** `apps/drive/src/routes/_auth.recent.tsx`, modeled on `_auth.watched.tsx`, including its `?pid=&uid=&mid=` selection and detail panel, read-only like it (`DRIVE_CAPABILITIES.readOnly`), with `useRecentPaths` in `packages/lib/src/core/drive/hooks/`.
+- **Sidebar:** a row with lucide's `Clock` directly below Drive, in the same section of `UserAppSidebar` (`app-sidebar.tsx`). It uses `to` in Drive and `href: getDriveAppUrl('recent')` in the other apps, as Watched and Trash do. One page serves every app, since Recent is most useful across types and the chat app has no list view of its own. Nothing loads until you open the page.
+- **Order:** the page opens newest first, every time. It keeps its own sort in state, starting at Modified descending, because following the shared view preference could open it alphabetically. `DriveTable` and `DriveBrowser` already take a controlled `sort` and `onSortChange` for the file picker, so a click sorts this page and never writes the preference. `DriveLayout` and `DriveList` pass them through, and `DriveLayout` sorts by them. `DriveViewControls` needs them too, because the grid's sort menu and the phone's `SortMenuItems` write the preference today.
+- **Date:** the list shows `lastActivityAt` under the label "Last activity", the way Trash shows "Trashed". `DriveTable` already takes `dateLabel` and `getItemDate`, and `DriveLayout` passes them through and hands the same date to `getDriveComparator`, as Trash does. `getItemDate` takes a `DrivePath`, so the page looks the date up in a map by path id. The grid shows no date, which is accepted.
+- **Freshness:** no SSE and no live updates, because every refetch reads every owner in the list. `useRecentPaths` has a one-minute `staleTime` and refetches on mount and focus. A report of an open marks the query stale without refetching it, so a row doesn't jump while its preview is open and the next visit is current. A share arriving while you sit on the page still raises its toast, and shows in the list on the next focus.
+- **Empty state:** "Files you open or get notified about will appear here."
+
+**Each row shows the file's latest activity, as a second step.** "Mark commented · 2h" is what makes this more than a list of files. It needs no stored text: the read takes the file's newest row in `file_events`, using `idx_file_events_path_created`, and renders it with `describeFileEvent`. It reports what last happened, which isn't always why the file is listed: a file you opened today can read "Mark commented" from three weeks ago, so the line carries that event's own time. A file with no events shows no line. This adds a line to `DriveList`, so it lands after the page works.
+
+## Build order
+
+1. `HOME_OPEN_BUDGET` and `pullFromEach` in `home-relay.ts`, with Watched, All docs and file search on them. Its own commit: these get the limit whether or not Recent ships.
+2. Table, `Drive.getRecentPathsFor`, `pullRecentPaths`, both routes, the `Home.notify` write, tests.
+3. Sidebar row, page, the sort and date props, the open reports.
+4. The latest-activity line.
+
+Later steps get their own go, below.
+
+## Tests
+
+`apps/api/src/test/drive/recent.test.ts`: one row after repeated opens, the 200-row trim, a revoked share hidden and back after re-sharing, a trashed file hidden and back after restore, a deleted file, a mount root, a file inside a container, a shared, a team and a public file, a share notification adding a row, a dismissed notification keeping it, a type without a path adding none, a failing write not failing the notification, a guest refused by both routes, a row for a file the user can't read staying hidden, a row on a missing mount leaving that owner's other rows, one failing owner leaving the others and keeping its rows, a deleted owner skipped, only the newest 100 rows asked in the usual load, and the older rows asked when too few are visible.
+
+In `apps/api/src/test/home/`: `pullFromEach` runs no more than eight reads at once, leaves out a failed read, and a stuck read in one call leaves another call moving.
+
+Plus `app-sidebar.test.tsx` for the row in Drive and in an app, a test that sorting Recent leaves the shared preference alone, and a run through the verify-in-browser skill.
+
+## Docs when it lands
+
+`docs/STORAGE.md` or a new domain doc for the table, [ARCHITECTURE.md](../ARCHITECTURE.md) for the concept, [NOTIFICATION-CENTER.md](../NOTIFICATION-CENTER.md) for the write in `Home.notify`, [SCALABILITY.md](../SCALABILITY.md) for `pullFromEach`, the "pulls don't pass the budget" lines in [PROPOSAL_HOME_RELAY_OUTBOX.md](PROPOSAL_HOME_RELAY_OUTBOX.md) and [PROPOSAL_FD_BUDGET.md](PROPOSAL_FD_BUDGET.md), a help-center article under `apps/index/src/data/support/drive/` and `CHANGELOG.md`.
+
+## Later: Recent files in the command palette
+
+The palette's empty box shows the published selection or the curated Suggested list (`SUGGESTED_COMMAND_IDS`). `buildSections` would add a Recent files section beside Suggested, from `useRecentPaths`. It is decided when it is built whether Recent comes before Suggested, how many rows it shows, and whether opening the palette may read every owner in the list or needs a lighter read. [COMMAND-PALETTE.md](../COMMAND-PALETTE.md) then needs correcting, since it says the palette stores nothing and searches nothing until there is text. This covers files only: the recency boost for commands in [PROPOSAL_COMMAND_PALETTE.md](PROPOSAL_COMMAND_PALETTE.md) needs per-command usage, which this table doesn't hold.
+
+## Later: addresses used in mail
+
+The owner wants addresses entered in mail saved for future suggestions. They are not part of this table, because they have a different shape and belong to mail. The likely design:
+
+- An `email_recents` table in the user's `mail.db` (`email`, `lastUsedAt`, `useCount`), written in `Mail.messageSend` after the send succeeds. `emails.recipientsAll` already holds past recipients, so a first fill can come from it. That is a mail migration, with its own yes.
+- A third source in `useContactSuggestions`, strictly below team members and personal contacts, deduped by lowercased email, stored lowercased with `+tag` aliases kept distinct.
+- `ContactSuggestion` gains a kind for it. `suggestionToResult` in the palette's contacts provider has to handle that kind: today it links to the contact's page, and a recent address has no contact, so its row composes a mail instead.
+
+To decide then: whether an address typed into a draft that is never sent counts, and whether calendar, chat and the share dialog also suggest these or only mail.
+
+## Rejected
+
+- **Notifications alone.** Every producer skips the actor and plain edits reach only watchers, so your own work would never appear, and dismissing a bell row deletes it.
+- **Deriving the list from `file_events`.** It needs no table, but it can't see a file you only read, has no index on the actor, and searches every mount of every team and sharing owner on each load.
+- **A new `eigen.recents/recents.db`.** A new class, more open files per home and a backup registration, for one small table that fits in `shared.db`.
+- **Storing names and types.** Stale after a rename, and they show a file you lost access to.
+- **Recording opens in `GET /collab/.../info`.** It counts refetches as opens, and misses chats and plain files.
+- **Reporting an open through the file's owner, with an access check.** It would open the owner's home for each report, and it would cross from the owner's route into the caller's home. The read's check already covers it.
+- **`sendToUserHomes` as the read limit.** It returns no answer, and the outbox removes its semaphore.
+- **One queue for all reads, or a limit inside `getHome`.** Either bounds the whole server, but a stuck open would then stall other users too, and the fix is a deadline plus a bypass for open homes. A limit per call has neither problem.
+- **Closing a home straight after reading it, with `openHome` and `withHomeHeld`.** It would hold down how many homes stay open, but every load would rerun each closed owner's whole open and close: `history.prune`, the trash purge, the reindex kick, and a close that waits on them while that owner's own requests wait too.
+- **A list that updates live.** Each notification, such as every message in a busy chat, would read every owner again.
