@@ -842,12 +842,10 @@ describe('document transform (xlsx import)', () => {
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
 // The doc's HTML download and the document fed to WeasyPrint. The golden doc holds nothing that prints otherwise on
 // paper, no band, note, equation or small caps, so the two differ by the page-number counters every PDF's head holds,
-// and by the image: the download embeds its WebP preview, the PDF a JPEG made from its source. Both last moved when
-// they embedded only the font slices the doc's text touches and the math rule named New Computer Modern Math, after
-// the table of contents' rules in the prose stylesheet changed (the Links rule, an entry's cursor) and the PDF's head
-// took the page-number rules of all three layouts, for every doc.
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = '6b8e113fac9f4d1b9de37578d9c4ef84169a0356011556a4224f4ede74679e6f';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '24c2a73f3646936c0b6498a7b88ae374bfa7ae38d4d04631760be4c8ce994756';
+// and by the image: the download embeds its WebP preview, the PDF a JPEG made from its source. Both embed the prose
+// stylesheet, so an edit to it moves them. They last moved when a resolved comment lost its highlight.
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '3228785235b3e013f5dd37e01e19ded144d88eae28bd2edafe88295fcd92cc24';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '61298386da02af857d43bcf46b8a70cd346603590523502562ec5f290fe2a3b9';
 // The doc's docx: the writer's parts and embedded fonts, deflated by libdeflate, and the thumbnail Worker's JPEG of the
 // image. It last moved when the Hyperlink style took the editor's underline.
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = '7e18568669cea9afc673aed909d64df660e1e9edec779d7ff7cf82fbe3f4fa36';
