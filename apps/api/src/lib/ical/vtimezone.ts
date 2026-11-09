@@ -26,8 +26,8 @@ type WallInfo = {
 };
 
 const tznameCache = new Map<string, Intl.DateTimeFormat>();
-// Entries are returned by reference — callers must not mutate them.
-const resultCache = new Map<string, string[]>();
+// The last block built per zone, so it holds one entry per zone. Returned by reference: callers must not mutate it.
+const builtBlocks = new Map<string, { years: string; lines: string[] }>();
 
 function offsetMinutes(tzid: string, instant: Date): number {
     const l = utcToLocal(instant, tzid);
@@ -144,9 +144,9 @@ function observanceFor(tzid: string, tr: Transition): string[] {
 }
 
 export function buildVTimezone(tzid: string, fromYear: number, toYear: number): string[] {
-    const key = `${tzid}|${fromYear}|${toYear}`;
-    const cached = resultCache.get(key);
-    if (cached) return cached;
+    const years = `${fromYear}-${toYear}`;
+    const built = builtBlocks.get(tzid);
+    if (built?.years === years) return built.lines;
 
     // ical.js reports UTC for instants before the earliest onset, so the scan starts a year early to anchor the range.
     const scanStart = Date.UTC(fromYear - 1, 0, 1);
@@ -172,7 +172,7 @@ export function buildVTimezone(tzid: string, fromYear: number, toYear: number): 
     }
 
     lines.push('END:VTIMEZONE');
-    resultCache.set(key, lines);
+    builtBlocks.set(tzid, { years, lines });
     return lines;
 }
 
