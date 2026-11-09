@@ -137,15 +137,9 @@ async function processImage(input: WorkerInput, deadline: number): Promise<Image
 
 async function heicToJpeg(source: Buffer | string): Promise<Buffer | null> {
     try {
-        // @ts-expect-error -- no type declarations available for heic-convert
-        const convert = (await import('heic-convert')).default as (opts: {
-            buffer: Buffer;
-            format: string;
-            quality: number;
-        }) => Promise<ArrayBuffer>;
+        const { default: convert } = await import('heic-convert');
         const buffer = typeof source === 'string' ? Buffer.from(await Bun.file(source).arrayBuffer()) : source;
-        const output = await convert({ buffer, format: 'JPEG', quality: 0.8 });
-        return Buffer.from(output);
+        return await convert({ buffer, format: 'JPEG', quality: 0.8 });
     } catch {
         return null;
     }
