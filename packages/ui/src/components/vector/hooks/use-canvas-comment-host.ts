@@ -1,17 +1,23 @@
 // The comments and activity host a canvas app mounts, such as Vector or Slides: the card read, the panel state, the
-// lifecycle, and the bookkeeping that ties a card to the element it was raised on. Apps differ in how a reveal moves
-// the view, for example by going to the element's slide first, so that step comes in as `onReveal`. A shell such as
-// CanvasDocumentShell renders what this returns.
+// lifecycle, the hover card's state, and the bookkeeping that ties a card to the element it was raised on. Apps differ
+// in how a reveal moves the view, for example by going to the element's slide first, so that step comes in as
+// `onReveal`. A shell such as CanvasDocumentShell renders what this returns.
 
 import { useAuth } from '@workspace/lib/auth';
-import { useCommentCards, useCommentFilter, useCommentLifecycle, useDocumentPanels } from '@workspace/lib/comments';
-import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/comments';
+import {
+    useCommentCards,
+    useCommentFilter,
+    useCommentHover,
+    useCommentLifecycle,
+    useDocumentPanels,
+} from '@workspace/lib/comments';
+import type { CardAttachmentDraft, CardFormPatch, CommentHover } from '@workspace/lib/types/comments';
 import type { DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
 import type { VectorElement } from '@workspace/lib/vector';
 import { elementForCommentCard, parseIdList, serializeIdList } from '@workspace/lib/vector';
 import type { ComponentProps } from 'react';
 import { useCallback, useState } from 'react';
-import type { CommentContextMenuItem, PanelColumn } from '../../comments';
+import type { CommentContextMenuItem, CommentHoverCard, PanelColumn } from '../../comments';
 import { useContextMenu } from '../../context-menu';
 import { useCanvasComments } from './use-canvas-comments';
 import type { CanvasDoc } from './use-canvas-doc';
@@ -45,7 +51,9 @@ export type CanvasCommentHost = ReturnType<typeof useDocumentPanels> & {
         assignee?: string | null,
     ) => Promise<void>;
     deleteCard: (cardId: string) => void;
+    onCommentHover: CommentHover['report'];
     panelProps: Omit<ComponentProps<typeof PanelColumn>, 'activePanel'>;
+    hoverCardProps: Omit<ComponentProps<typeof CommentHoverCard>, 'side'>;
 };
 
 export function useCanvasCommentHost({
@@ -61,8 +69,7 @@ export function useCanvasCommentHost({
 }: CanvasCommentHostArgs): CanvasCommentHost {
     const { user } = useAuth();
 
-    // The cards are read here, so the active set doesn't depend on the lifecycle's own read of them. A card
-    // anchored to an element takes that element's text as its panel row.
+    // The cards are read here, so the active set doesn't depend on the lifecycle's own read of them.
     const cards = useCommentCards(doc.yjsDoc, 'comments');
     const activeComments = useCanvasComments(doc.elements, cards);
 
@@ -90,9 +97,9 @@ export function useCanvasCommentHost({
         openChat: openLifecycleChat,
     } = lifecycle;
 
-    // The host owns the filter, so it survives closing and opening the panel.
     const commentFilter = useCommentFilter();
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
+    const hover = useCommentHover();
 
     const [addOpen, setAddOpen] = useState(false);
     // The element the pending new comment anchors to. The canvas menu's Comment row sets it. It is null for a card
@@ -109,7 +116,6 @@ export function useCanvasCommentHost({
         if (!open) setCommentAnchorId(null);
     }, []);
 
-    // Opening a card first reveals the element it is anchored to.
     const openCard = useCallback(
         (cardId: string) => {
             const el = elementForCommentCard(doc.elements, cardId);
@@ -125,19 +131,14 @@ export function useCanvasCommentHost({
         [openCard, openLifecycleChat],
     );
 
-    // A comment raised from an element anchors to it. One raised from the panel stays document-level.
     const handleSaveNew = useCallback(
         async (patch: CardFormPatch, attachments?: CardAttachmentDraft[], assignee?: string | null) => {
             const anchorId = commentAnchorId;
             const card = await createCard({ ...patch, attachments });
             if (card && anchorId) {
                 const el = doc.elements.find((e) => e.id === anchorId);
-                // A double submit must not list the same card twice on the element.
                 const ids = el ? parseIdList(el.commentCardIds) : [];
                 if (el && !ids.includes(card.id)) {
-                    // The write is untracked, as the delete is. The card lives in the `comments` map, outside the
-                    // UndoManager's scope, so a ⌘Z that reverted only the anchor would turn the new comment into a
-                    // document-level one.
                     doc.updateElementUntracked(anchorId, { commentCardIds: serializeIdList([...ids, card.id]) });
                 }
             }
@@ -163,6 +164,7 @@ export function useCanvasCommentHost({
         openCard,
         handleSaveNew,
         deleteCard: doc.deleteCommentCard,
+        onCommentHover: hover.report,
         panelProps: {
             onClose: panels.closePanels,
             path,
@@ -178,6 +180,13 @@ export function useCanvasCommentHost({
             onOpenCard: isMobile ? setOpenCardId : openCard,
             onOpenChat: isMobile ? openLifecycleChat : openChat,
             onAddComment: canWrite && chatFolderId ? () => setAddOpen(true) : undefined,
+        },
+        hoverCardProps: {
+            hover,
+            cards: lifecycleCards,
+            entries: allComments,
+            isCardDeleted: lifecycle.isCardDeleted,
+            onOpenCard: openCard,
         },
     };
 }

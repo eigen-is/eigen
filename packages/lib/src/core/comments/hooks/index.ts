@@ -4,6 +4,7 @@
 export { invalidateComments, useAssignComment, useComments, useResolveComment } from '../../chat';
 export { useAssignedCommentCount } from './use-assigned-comment-count';
 export { readCards, useCommentCards } from './use-comment-cards';
+export { useCommentHover } from './use-comment-hover';
 export { useCommentLifecycle } from './use-comment-lifecycle';
 export { type CreateCommentCardInput, useCreateCommentCard, writeCardToDoc } from './use-create-comment-card';
 export { useDocumentPanels } from './use-document-panels';

@@ -1,7 +1,8 @@
 // The comment list in a document's side panel: one card per comment the document still anchors, narrowed by the
-// comment filter, with a line saying how many the filter hides. Each card shows its replies, status and assignee,
-// and a dot while its thread holds an unread notification. A card whose thread is gone shows the deleted state
-// instead. Opening a card is the host's to handle.
+// comment filter, with a line saying how many the filter hides. Each card shows its title, its replies, status and
+// assignee, and a dot while its thread holds an unread notification. A host may put a prefix before the title, such as
+// another sheet's name. A card whose thread is gone shows the deleted state instead. Opening a card is the host's to
+// handle.
 
 import { useAuth } from '@workspace/lib/auth';
 import { useUnreadCommentChatNames } from '@workspace/lib/chat';
@@ -11,53 +12,15 @@ import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import { MessageSquareOff } from 'lucide-react';
 import { useMemo } from 'react';
-import { useAttachmentMeta } from '../attachment/use-attachment-meta';
-import { NoteCard } from '../notes/note-card';
 import { PropertiesPanel } from '../properties-panel';
 import { FilterSummary } from './comment-filter-summary';
-
-// One row per card, so each card gets its own useAttachmentMeta call: a hook can't run inside the map.
-function PanelCard({
-    card,
-    entry,
-    title,
-    unread,
-    deleted,
-    onClick,
-    onContextMenu,
-}: {
-    card: CommentCard;
-    entry: CommentEntry | undefined;
-    title: string;
-    unread: boolean;
-    deleted: boolean;
-    onClick?: () => void;
-    onContextMenu?: (e: React.MouseEvent) => void;
-}) {
-    const { coverThumbnailUrl, attachmentCount } = useAttachmentMeta(card.attachments);
-    return (
-        <NoteCard
-            title={title}
-            description={card.description}
-            color={card.color}
-            replyCount={entry?.messageCount}
-            unread={unread}
-            resolved={entry?.status === 'resolved'}
-            coverThumbnailUrl={coverThumbnailUrl}
-            attachmentCount={attachmentCount}
-            assigneeEmail={entry?.assignee}
-            deleted={deleted}
-            onClick={onClick}
-            onContextMenu={onContextMenu}
-        />
-    );
-}
+import { CommentNoteCard } from './comment-note-card';
 
 type CommentPanelProps = {
     cards: Readonly<Record<string, CommentCard>>;
     entries: readonly CommentEntry[];
     activeCardIds: ReadonlySet<string>;
-    anchorTexts: ReadonlyMap<string, string>;
+    titlePrefixes?: ReadonlyMap<string, string>;
     isCardDeleted: (card: CommentCard) => boolean;
     pathId: string;
     currentUserEmail: string;
@@ -71,7 +34,7 @@ export function CommentPanel({
     cards,
     entries,
     activeCardIds,
-    anchorTexts,
+    titlePrefixes,
     isCardDeleted,
     pathId,
     currentUserEmail,
@@ -119,20 +82,24 @@ export function CommentPanel({
             ) : (
                 <>
                     <div className="space-y-2 app-gutter-x py-2">
-                        {visible.map(({ card, entry }) => (
-                            <PanelCard
-                                key={card.id}
-                                card={card}
-                                entry={entry}
-                                title={anchorTexts.get(card.id) || card.title || 'Comment'}
-                                unread={!!card.chatName && unreadChatNames.has(card.chatName)}
-                                deleted={isCardDeleted(card)}
-                                onClick={() => onCommentClick?.(card.id)}
-                                onContextMenu={
-                                    onCommentContextMenu ? (e) => onCommentContextMenu(e, card, entry) : undefined
-                                }
-                            />
-                        ))}
+                        {visible.map(({ card, entry }) => {
+                            const prefix = titlePrefixes?.get(card.id);
+                            const title = card.title || 'Comment';
+                            return (
+                                <CommentNoteCard
+                                    key={card.id}
+                                    card={card}
+                                    entry={entry}
+                                    title={prefix ? `${prefix} · ${title}` : title}
+                                    unread={!!card.chatName && unreadChatNames.has(card.chatName)}
+                                    deleted={isCardDeleted(card)}
+                                    onClick={() => onCommentClick?.(card.id)}
+                                    onContextMenu={
+                                        onCommentContextMenu ? (e) => onCommentContextMenu(e, card, entry) : undefined
+                                    }
+                                />
+                            );
+                        })}
                     </div>
                     {hidden > 0 && (
                         <div className="app-gutter-x pb-3 text-center text-[11px] text-muted-foreground">

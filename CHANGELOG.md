@@ -7,6 +7,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 ### Added
 
 - **Delete history** — in Docs, Sheets, Slides, Vector and Stickies, File › Version history › **Delete history…** deletes every earlier version of a document, and the images and comments deleted from it, to free space. It keeps what was added or replied to in the last three days. Only an owner of the drive sees it
+- **Comments on hover** — in Docs, Sheets, Slides and Vector, rest the mouse on a comment to read its card, then click to open it. The pane lists comments by title, and in Sheets a click there jumps to the cell
 
 ### Changed
 
@@ -20,7 +21,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Deleted comments** — a link, notification, activity entry or search result for a deleted comment opens it as "This comment was deleted" under its grayed title, with nothing to reply to, resolve or assign
 - **Copies in Drive** — a copy or Duplicate of a document leaves out the images and comments deleted from the original
 - **Folder depth in Drive** — folders nest at most 256 levels deep, in Drive and over WebDAV. A deeper tree you already have stays readable
-- **Comments in Sheets** — the comments pane lists the comments on every tab, with the tab's name, such as Sheet2 · B2. Deleting a comment removes it from every cell it sits on, and a duplicated tab starts without comments
+- **Comments in Sheets** — the comments pane lists the comments on every tab, with another tab's name first. Deleting a comment removes it from every cell it sits on, and a duplicated tab starts without comments
 - **Undo in Sheets** — once someone else edits the spreadsheet, you can no longer undo or redo your last insert or delete of rows or columns, your last added, duplicated, deleted or renamed tab, or anything before it. What you did after it still undoes. When someone else renames a tab, you can no longer undo or redo anything before that. Pressing undo or redo with nothing left for this reason shows a notice that says so
 - **Renaming a tab in Sheets** — formulas, formula rules, dropdown lists and links that name the tab follow its new name, as in Excel, and undo renames it back
 - **Paste from a menu in Sheets** — **Edit › Paste** and the right-click **Paste** paste what is on the clipboard, from any app. Where the browser blocks that, a notice says to press ⌘V (Ctrl+V on Windows and Linux)
@@ -63,6 +64,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Editing a draft in a mail app** — while Eigen's composer holds the draft, the next auto-save makes two drafts, with neither's text lost. Eigen's copy keeps its links but not its attachments, and the mail app's keeps both
 - **A draft left open** — opened from Drafts and left idle while a mail app edits it, it says the message is gone, and one draft remains. In two Eigen tabs, the last save wins
 - **Sent mail** — a tab left open after a send can no longer pull the message back into Drafts or mail it twice. A collapsed message keeps Bcc off its To line, and shows Bcc on its summary line only when it went to nobody else
+- **Comments on a text box in Docs** — **Add comment** on a text box opens the new comment form, where it did nothing
 - **Resolved comments in Docs** — resolving a comment removes its highlight from the text, which used to stay yellow
 - **Merged cells in Sheets** — pasting text over a merged cell replaces the merge, and wrapped text in a merged cell no longer makes its row very tall
 - **Restoring in Slides and Vector** — restoring an earlier version of a deck or drawing brings back the comments deleted since, as Docs and Sheets do. Their replies stay as they are now

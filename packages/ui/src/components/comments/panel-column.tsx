@@ -21,7 +21,7 @@ import type { CommentContextMenuItem } from './comment-menu-items';
 import { CommentPanel } from './comment-panel';
 
 // A host that shows only the activity, such as stickies, never renders the comments body, so it passes neither.
-const NO_ACTIVE_COMMENTS: ActiveComments = { ids: new Set(), anchorTexts: new Map() };
+const NO_ACTIVE_COMMENTS: ActiveComments = { ids: new Set() };
 const NEVER_DELETED = () => false;
 
 type PanelColumnProps = {
@@ -95,7 +95,7 @@ export function PanelColumn({
                     cards={cards}
                     entries={entries}
                     activeCardIds={activeComments.ids}
-                    anchorTexts={activeComments.anchorTexts}
+                    titlePrefixes={activeComments.titlePrefixes}
                     isCardDeleted={isCardDeleted}
                     pathId={path.id}
                     currentUserEmail={currentUserEmail}

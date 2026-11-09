@@ -1,7 +1,8 @@
 // The Docs comment anchor: the mark a card holds on a run of text, and the attribute it holds on a node the Yjs binding
 // keeps no mark on, such as an image or a text box. It adds, finds, selects and removes a card's anchors, quotes the
-// anchored text for the card, and paints each card's color from the comment panel's state as decorations, which the
-// editor component updates and a figure's node view draws as its corner mark.
+// anchored text for the card, tells the hover card which anchor the pointer is on, and paints each card's color from
+// the comment panel's state as decorations, which the editor component updates and a figure's node view draws as its
+// corner mark.
 
 import type { Editor } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
@@ -19,6 +20,8 @@ import {
     PAGE_NUMBER_TEXT,
     readEquation,
 } from '@workspace/lib/docs/eigendoc';
+import type { CommentHover } from '@workspace/lib/types/comments';
+import type React from 'react';
 import { textOutsideStories } from './story';
 
 type CommentMarkOptions = {
@@ -47,7 +50,6 @@ const decorationKey = new PluginKey('commentDecorations');
 // the Yjs binding persists a mark only on text.
 const anchorsByAttribute = (node: Node): boolean => node.type.spec.attrs?.[COMMENT_CARD_ATTRIBUTE] !== undefined;
 
-// The card a node anchors: by attribute, or on text as the comment mark.
 export function nodeCommentCardId(node: Node): string | null {
     if (anchorsByAttribute(node)) return node.attrs[COMMENT_CARD_ATTRIBUTE];
     return node.marks.find((m) => m.type.name === CommentMarkSchema.name)?.attrs[COMMENT_MARK_CARD_ATTRIBUTE] ?? null;
@@ -67,6 +69,27 @@ export function commentCardIdAt(target: EventTarget | null): string | null {
     return target.closest('.comment-highlight')?.getAttribute('data-comment-id') || null;
 }
 
+// From a React handler, as node views stop ProseMirror's events: unlike commentCardIdAt it also finds a corner mark.
+export function reportCommentHover(editor: Editor, { report }: CommentHover, event: React.MouseEvent): void {
+    const anchor = event.target instanceof Element ? event.target.closest('[data-comment-id]') : null;
+    const cardId = anchor?.getAttribute('data-comment-id');
+    if (!anchor || !cardId || event.buttons !== 0) {
+        report(null);
+        return;
+    }
+    const highlightGone =
+        anchor.classList.contains('comment-highlight') && editor.storage.comment.resolvedIds.has(cardId);
+    report(highlightGone ? null : { cardId, rect: lineUnderPointer(anchor, event) });
+}
+
+// One rect per line of a wrapped span, so the card opens by the line the pointer is on.
+function lineUnderPointer(anchor: Element, { clientX, clientY }: React.MouseEvent): DOMRect {
+    const line = [...anchor.getClientRects()].find(
+        ({ left, right, top, bottom }) => left <= clientX && clientX <= right && top <= clientY && clientY <= bottom,
+    );
+    return line ?? anchor.getBoundingClientRect();
+}
+
 // A node that holds a card attribute and is selected alone takes the new card there. Any other range takes it as the
 // comment mark on its text.
 export function addCommentAnchor(editor: Editor, { from, to }: { from: number; to: number }, cardId: string): void {
@@ -78,9 +101,8 @@ export function addCommentAnchor(editor: Editor, { from, to }: { from: number; t
     editor.chain().focus().setTextSelection({ from, to }).setComment(cardId).run();
 }
 
-// Whether addCommentAnchor would anchor a card on the selection: a node holding a card attribute selected alone, or
-// text. AtomMarks strips the mark from any other atom, so a page number alone takes no comment. A story keeps the
-// body's marks off its text, so a note's reference alone takes none either. A text box takes its card as a figure does.
+// Whether addCommentAnchor would anchor a card on the selection. AtomMarks strips the mark from any other atom, and a
+// story keeps the body's marks off its text, so a page number or a note's reference alone takes no comment.
 export function canAnchorComment({ doc, selection: { from, to, empty } }: EditorState): boolean {
     if (empty) return false;
     const node = doc.nodeAt(from);
@@ -93,7 +115,6 @@ export function canAnchorComment({ doc, selection: { from, to, empty } }: Editor
     return text;
 }
 
-// A deleted card leaves no anchor behind.
 export function removeCommentAnchors(editor: Editor, cardId: string): void {
     const { tr } = editor.state;
     const commentType = editor.state.schema.marks[CommentMarkSchema.name];
@@ -104,7 +125,6 @@ export function removeCommentAnchors(editor: Editor, cardId: string): void {
     editor.view.dispatch(tr);
 }
 
-// Scrolls to a card's first anchor and selects it: a node whole, text at its start.
 export function selectCommentAnchor(editor: Editor, cardId: string): void {
     const anchors = findCommentAnchors(editor.state.doc, cardId);
     if (anchors.length === 0) return;
@@ -116,16 +136,15 @@ export function selectCommentAnchor(editor: Editor, cardId: string): void {
 
 const QUOTE_WORDS: Record<FigureFrameNode, string> = { figure: 'Image', chart: 'Chart', textBox: 'Text box' };
 
-// A comment on an image, a chart or a text box alone has no text to quote, so it reads as the word for that node,
-// such as "Image". An equation with no text reads as "Equation", and a page number as its #. A story's text stays
-// out of the quote, because a story takes no comment.
+// A comment on an image, a chart or a text box alone has no text to quote, so it reads as the word for that node, such
+// as "Image". A story's text stays out of the quote, because a story takes no comment, so a note reads as nothing.
 export function commentAnchorText(doc: Node, from: number, to: number): string {
     return textOutsideStories(
         doc,
         from,
         to,
         ' ',
-        () => '',
+        (story) => (isFigureFrameNode(story.type.name) ? QUOTE_WORDS[story.type.name] : ''),
         (leaf) => {
             if (isFigureFrameNode(leaf.type.name)) return QUOTE_WORDS[leaf.type.name];
             if (leaf.type.name === 'equation') return readEquation(leaf.attrs).text || 'Equation';
@@ -160,13 +179,7 @@ function buildDecorations(state: EditorState, panel: CommentPanelState): Decorat
 
 export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions, CommentPanelState>({
     addOptions() {
-        return {
-            onCommentClick: undefined,
-            onCommentContextMenu: undefined,
-            onSelectionContextMenu: undefined,
-            onAddComment: undefined,
-            onToggleCommentPanel: undefined,
-        };
+        return {};
     },
 
     addStorage() {

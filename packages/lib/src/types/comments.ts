@@ -34,8 +34,19 @@ export type CardFormPatch = Partial<Pick<CommentCard, 'title' | 'description' | 
 export type CardAttachmentDraft = ChatAttachment | DrivePath | File;
 
 export type ActiveComments = {
-    ids: Set<string>;
-    anchorTexts: Map<string, string>;
+    ids: ReadonlySet<string>;
+    // By card id, what a pane row shows before the title, such as the name of the other sheet the card sits on.
+    titlePrefixes?: ReadonlyMap<string, string>;
 };
 
 export type DocumentPanel = 'comments' | 'activity';
+
+export type CommentHoverTarget = { cardId: string; rect: DOMRect };
+
+export type CommentHover = {
+    target: CommentHoverTarget | null;
+    report: (reported: CommentHoverTarget | null) => void;
+    enterCard: () => void;
+    leaveCard: () => void;
+    dismiss: () => void;
+};

@@ -159,8 +159,7 @@ export function VectorEditor({
                     onAspectLockChange={setAspectLocked}
                     emptySection={
                         <PropertySection title="Background">
-                            {/* The scene background is a plain color (meta.background), not a Fill. A frame's
-                                background is a Fill, which the deck's own panel edits. Transparent is the default
+                            {/* The scene background is a plain color, not a frame's Fill. Transparent is the default
                                 and draws as such, so None is the way back from a color. */}
                             <ColorRow
                                 label="Color"
@@ -195,6 +194,7 @@ export function VectorEditor({
                     onOpenCard={comments.openCard}
                     commentCards={comments.lifecycle.cards}
                     onAddComment={canWrite && chatFolderId ? comments.addCommentTo : undefined}
+                    onCommentHover={comments.onCommentHover}
                     searchMatchedIds={searchMatchedIds}
                     searchActiveId={searchActiveId}
                     onInsertImage={insertImage}

@@ -5,13 +5,13 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2139 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2143 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (192)
+## Components (194)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -104,10 +104,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `AssigneePicker` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/assignee-picker.tsx |
 | `CommentContextMenu` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-context-menu.tsx |
 | `CommentFilterMenuItems` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-filter-menu-items.tsx |
+| `CommentHoverCard` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-hover-card.tsx |
 | `CommentIndicator` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-indicator.tsx |
 | `CommentLifecycleDialogs` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-lifecycle-dialogs.tsx |
 | `CommentLifecycleMenuItems` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-lifecycle-menu-items.tsx |
 | `CommentMenuItems` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-menu-items.tsx |
+| `CommentNoteCard` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-note-card.tsx |
 | `CommentPanel` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-panel.tsx |
 | `CommentThread` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-thread.tsx |
 | `CreatedByMeta` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/created-by-meta.tsx |
@@ -244,7 +246,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (303)
+## Hooks (304)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -354,6 +356,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useAssignedCommentCount` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-assigned-comment-count.ts |
 | `useCommentCards` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-cards.ts |
 | `useCommentFilter` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
+| `useCommentHover` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-hover.ts |
 | `useCommentLifecycle` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-lifecycle.ts |
 | `useCreateCommentCard` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
 | `useDocumentPanels` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-document-panels.ts |
@@ -552,7 +555,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (448)
+## Types (450)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -851,6 +854,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CardAttachmentDraft` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `CardFormPatch` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `CommentCard` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
+| `CommentHover` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
+| `CommentHoverTarget` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `CommentMapName` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `DocumentPanel` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `DocCommentMatch` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
@@ -1005,7 +1010,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1170)
+## Utilities & constants (1169)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1838,7 +1843,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `clamp` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `clampFrameViewport` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `COARSE_HIT_SLOP_MULTIPLIER` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
-| `commentAnchorTexts` | `@workspace/lib/vector` | packages/lib/src/vector/comments.ts |
 | `computeArrange` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
 | `computeSnapTargets` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `convertToShapes` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |

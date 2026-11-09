@@ -43,10 +43,8 @@ import { pageScale, pageWidths, textColumnWidth } from './text-column';
 const IMAGE_FLOOR: FigureSize = { width: 1, height: 1 };
 export const CHART_FLOOR: FigureSize = { width: 100, height: 100 };
 
-// The widest a resize makes a figure. A figure in the flow gets the text column, and a wrapped one half of it. A figure
-// in front of or behind the text gets the paper of the page map. In a page-less doc a block figure may grow past the
-// reader's column up to the paper, and a wrapped one keeps half the page map's column. Neither depends on the
-// reader's own text width.
+// The widest a resize makes a figure. A page-less doc reads the page map, never the reader's own text width, so a block
+// figure there may grow past the reader's column up to the paper.
 export function figureMaxWidth(editor: Editor, layout: FigureLayout | null | undefined) {
     const { paper, column, pageless } = pageWidths(editor);
     const wrap = layout === 'wrap-left' || layout === 'wrap-right';
@@ -63,10 +61,8 @@ export function clampFigureWidth(width: number, maxWidth: number, minWidth: numb
 // A figure's drawn box, such as an image's, a chart's or a text box's, in page px.
 export type FigureSize = { width: number; height: number };
 
-// A size the panel asks for, fitted to `maxWidth`: the width within the floor and the cap, and a height that comes with
-// it scaled alongside, so the figure keeps the shape it was given, above the floor. A side the size leaves out stays
-// out, so an unlocked edit of one side never moves the other. Unlike a grip's, it stays unrounded, as a typed cm gives
-// a fraction of a px.
+// A size the panel asks for, fitted to `maxWidth`. A side it leaves out stays out, so an unlocked edit of one side
+// never moves the other, and unlike a grip's it stays unrounded, as a typed cm gives a fraction of a px.
 export function fitFigureSize(size: CoupledSize, maxWidth: number, floor: FigureSize = IMAGE_FLOOR): CoupledSize {
     const { width, height } = size;
     if (width === undefined) return height === undefined ? {} : { height: Math.max(floor.height, height) };
@@ -75,9 +71,8 @@ export function fitFigureSize(size: CoupledSize, maxWidth: number, floor: Figure
     return { width: fitted, height: Math.max(floor.height, heightAtWidth({ width, height }, fitted)) };
 }
 
-// A dragged box fitted to the column. With a ratio, the width is the one the box allows at that ratio and the height
-// follows it, so a box whose top stopped at the paper's caps the width too. Without one, the width keeps to its floor
-// and the height to the floor's.
+// A dragged box fitted to the column. With a ratio the width is the one the box allows at it, so a box whose top
+// stopped at the paper's caps the width too.
 export function fitFigureBox(
     next: Box,
     maxWidth: number,
@@ -94,9 +89,8 @@ export function fitFigureBox(
     return { width, height: width / ratio };
 }
 
-// A layout or an alignment for the selected image or chart, from its panel or Format › Image, which `write` writes. A
-// place in front of or behind the text keeps the figure where it is drawn instead. A wrap halves the cap, so a switch
-// to one shrinks a wider figure to it in the same write, or nothing wraps beside it, and a chart keeps its shape.
+// A wrap halves the cap, so a switch to one shrinks a wider figure in the same write, or nothing wraps beside it. A
+// place in front of or behind the text keeps the figure where it is drawn instead.
 export function setFigureLayout(
     editor: Editor,
     attributes: FigureFrameAttrs,
@@ -115,16 +109,13 @@ export function setFigureLayout(
     });
 }
 
-// The Image panel's and Format › Image's write of a layout or an alignment.
 export const setImageLayout = (editor: Editor, attributes: FigureFrameAttrs) =>
     setFigureLayout(editor, attributes, readFigureAttrs(editor.getAttributes('figure')), (written) =>
         editor.commands.updateFigure(written),
     );
 
-// A positioned box's place: its top inline, and its left and width as custom properties, which one prose rule draws.
-// In a page-less doc another rule reads the same properties and clamps the box into the text column and the strip
-// beside it. The stored place is left as it is, so it draws unchanged when the doc goes back to pages. The export
-// writes the place inline instead.
+// Left and width go as custom properties, because in a page-less doc a prose rule clamps them into the column and the
+// strip beside it, and the stored place draws unchanged when the doc goes back to pages.
 const placeStyle = (top: number, left: number, width: number | undefined): Record<string, string | number> => ({
     top,
     '--figure-left': `${left}px`,
@@ -134,10 +125,8 @@ const placeStyle = (top: number, left: number, width: number | undefined): Recor
 // A grip's readout, in cm as Docs' fields show a size.
 const figureSize = ({ width, height }: Box) => `${cmText(pxToMm(width), 1)} × ${cmText(pxToMm(height), 1)} cm`;
 
-// The node view options of a view that draws its decorations, such as a figure's or an equation's. TipTap re-renders a
-// React node view only when its node changes, not when only its decorations change. Some of what a view draws arrives
-// as a decoration, such as the comment mark's color and Keep aspect ratio, so this re-renders it on every update.
-// Returning true keeps the view, as TipTap's own update does. False would make ProseMirror draw a new one.
+// TipTap re-renders a React node view only when its node changes, and a comment mark's color arrives as a decoration,
+// so this re-renders on every update. True keeps the view, where false would make ProseMirror draw a new one.
 export const RERENDER_ON_DECORATIONS: Partial<ReactNodeViewRendererOptions> = {
     update: ({ updateProps }) => {
         updateProps();
@@ -245,10 +234,8 @@ export function useFigureResize<T extends FigureSize>({
 // How far, in screen px, a press travels before it is a drag rather than a click.
 const CLICK_SLOP = 3;
 
-// A drag of a figure in front of or behind the text previews its travel in page px and writes once, at the release,
-// moving the figure by that travel from where it draws then. A press on an unselected figure selects it and drags it in
-// the same gesture; a finger on one scrolls the page instead. With `onClick`, a press that travels no further than a
-// click's slop moves nothing and is a click.
+// A drag of a figure in front of or behind the text previews its travel in page px and writes once, at the release.
+// With `onClick`, a press that travels no further than a click's slop moves nothing and is a click.
 function useFigureMove({ editor, getPos, selected }: Pick<NodeViewProps, 'editor' | 'getPos' | 'selected'>): {
     travel: FigureShift | null;
     startMove: (e: React.PointerEvent, onClick?: (e: React.PointerEvent) => void) => void;
@@ -321,9 +308,8 @@ type FigureFrameProps = Pick<NodeViewProps, 'node' | 'selected' | 'editor' | 'ex
     label: string;
     keyShortcuts?: string;
     className?: string;
-    // A text box's: the move, the drag and the selection start on a band along its edge alone, and a press inside it
-    // goes to `onInsidePress`, which opens it, or to its open editor when there is none. `text` is the element whose
-    // border and padding hold the band.
+    // A text box's: a move, a drag or a selection starts on a band along its edge alone, in the border and padding of
+    // `text`, and a press inside goes to `onInsidePress`, or to its open editor when there is none.
     dragSurface?: { onInsidePress: ((e: React.PointerEvent) => void) | null; text: HTMLElement | null };
     children: ReactNode;
 };
@@ -346,10 +332,8 @@ function inEdgeBand(edge: Element, text: HTMLElement | null, { clientX: x, clien
     return x < left + band('left') || x > right - band('right') || y < top + band('top') || y > bottom - band('bottom');
 }
 
-// The figure box the node view draws: the wrapper the page's .figure rules lay out, the selection ring and the
-// transform chrome over the content, the comment mark and the caption. A positioned figure's wrapper is its absolute
-// box, and while it is selected its chrome is a sibling at the same place above both layers, so text over a behind
-// image never covers its grips. A press there, or on a front image, drags it.
+// A selected positioned figure's chrome is a sibling at the same place above both layers, so text over a behind image
+// never covers its grips.
 export function FigureFrame({
     node,
     selected,
@@ -373,8 +357,7 @@ export function FigureFrame({
     const isEditable = editor.isEditable;
     const frame = readFigureFrameAttrs(node.attrs);
     const placement = figurePlacement(frame);
-    // The ring insets over the content, shrink-wrapped by the relative wrapper. A figure's size is in the page's pixels,
-    // and it draws smaller than that on a page drawn scaled, or when it is wider than the room it has, so a grip's
+    // A figure draws smaller than its stored size on a page drawn scaled, or when wider than its room, so a grip's
     // delta divides by its drawn width over its stored one, measured as it is pressed.
     const boxToStyle = useCallback((): React.CSSProperties => ({ inset: 0 }), []);
     const scale = useRef(1);
@@ -414,9 +397,8 @@ export function FigureFrame({
             onGestureEnd={resize.onGestureEnd}
         />
     );
-    // The mark comes after the transform, so the transform's top-right grip never covers it. It is a button, so
-    // ProseMirror leaves its press alone and selects no node. Its press is prevented, which keeps the focus in the
-    // editor and starts no drag.
+    // After the transform, whose top-right grip would cover it. A button, so ProseMirror selects no node, and a
+    // prevented press keeps the focus in the editor and starts no drag.
     const comment = commentCardId && (
         <button
             type="button"
@@ -424,16 +406,14 @@ export function FigureFrame({
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => onOpenComment(commentCardId)}
             aria-label="Open comment"
-            title="Open comment"
+            data-comment-id={commentCardId}
         >
             <CommentIndicator color={commentColor} className="block" />
         </button>
     );
 
-    // A press moves a positioned figure. On a text box a press on its edge band does, and one inside it goes to its
-    // text. A box with no padding and no outline has no band, so a drag inside a selected one in front of or behind
-    // the text moves it too, as in Google Docs, and only a click goes to its text. A box in the flow drags from its edge
-    // as ProseMirror drags a node. The comment mark is a button of its own, which neither moves nor opens the box.
+    // A box with no padding and no outline has no band, so a drag inside a selected positioned one moves it too, as in
+    // Google Docs, and only a click goes to its text.
     const press =
         (move: ((e: React.PointerEvent, onClick?: (e: React.PointerEvent) => void) => void) | undefined) =>
         (e: React.PointerEvent) => {
@@ -454,9 +434,8 @@ export function FigureFrame({
                 className={cn('figure', className)}
                 data-layout={placement.layout}
                 data-alignment={placement.alignment}
-                // A positioned figure moves by the pointer gesture above, never by the browser's drag and drop. A text
-                // box is draggable only from its edge, which ProseMirror's own press makes draggable, as WebKit starts
-                // the browser's drag from a draggable box even inside its open editor.
+                // A text box is draggable only from its edge, which ProseMirror's own press makes draggable, as WebKit
+                // starts the browser's drag from a draggable box even inside its open editor.
                 data-drag-handle={place ? undefined : ''}
                 draggable={!place && isEditable && !dragSurface}
                 style={
@@ -471,10 +450,8 @@ export function FigureFrame({
                     if (pos !== undefined) onContextMenu(node, pos, e);
                 }}
             >
-                {/* Relative wrapper shrink-wraps the content so the inset-0 ObjectTransform ring lands exactly on it.
-                    When no transform mounts (placeholder, read-only, pre-load), the same ring shows via the class. It
-                    takes no focus: the editor's keymap resizes the selected figure, and a press stays free to start a
-                    drag. */}
+                {/* Shrink-wraps the content so the inset-0 ObjectTransform ring lands exactly on it. It takes no focus:
+                    the editor's keymap resizes the selected figure, and a press stays free to start a drag. */}
                 <div
                     ref={contentRef}
                     className={cn('relative', className, selected && !box && 'eigen-selection-ring')}
@@ -490,9 +467,8 @@ export function FigureFrame({
                 {caption && <span className="figcaption">{caption}</span>}
             </NodeViewWrapper>
             {chrome && (
-                // Why: the grips sit above the front layer's 1, the Docs figure layer of the z-index scale. The
-                // paragraph makes no stacking context, so both stack in the page's. Its height follows the width it
-                // draws at, as the figure's does, where a page-less column draws it narrower.
+                // Why: the grips sit above the front layer's 1, the Docs figure layer of the z-index scale, and the
+                // paragraph makes no stacking context, so both stack in the page's.
                 <span
                     className="absolute z-2 cursor-move touch-none"
                     data-figure-chrome=""
@@ -511,9 +487,8 @@ export function FigureFrame({
     );
 }
 
-// Keep aspect ratio, which the panel's box and the grips share: on for a picture and off for a chart and a text box, as
-// on a slide.
-// A choice lasts while its figure stays selected, as a node has no id to remember it by.
+// Keep aspect ratio, by default on for a picture alone, as on a slide. A choice lasts while its figure stays selected,
+// as a node has no id to remember it by.
 const ASPECT_LOCKED_BY_DEFAULT: Record<FigureFrameNode, boolean> = { figure: true, chart: false, textBox: false };
 type AspectChoice = { pos: number; locked: boolean };
 const ASPECT_LOCK_KEYS: Record<FigureFrameNode, PluginKey<AspectChoice | null>> = {
