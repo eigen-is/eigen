@@ -6,7 +6,6 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, usePathInfo, useSharedPaths, validateDriveSearch } from '@workspace/lib/drive';
 import type { DriveCapabilities, DrivePath } from '@workspace/lib/types/drive';
-import { EmptyState } from '@workspace/ui';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
 import { useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';
@@ -58,10 +57,6 @@ function SharedRoute() {
         navigate({ to: Route.fullPath, params: { to } });
     };
 
-    if (error) {
-        return <EmptyState message="Encountering the null vector: a rendezvous with nothing at all." />;
-    }
-
     return (
         <DriveLayout
             pid={pid}
@@ -77,15 +72,6 @@ function SharedRoute() {
             capabilities={capabilities}
             title={to === 'by-me' ? 'Shared by me' : 'Shared with me'}
             onQuickLook={onQuickLook}
-            emptyState={
-                <EmptyState
-                    message={
-                        to === 'by-me'
-                            ? 'Files you’ve shared will appear here.'
-                            : 'Files shared with you will appear here.'
-                    }
-                />
-            }
         />
     );
 }

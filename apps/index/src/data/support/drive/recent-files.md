@@ -13,11 +13,11 @@ updated: 2026-11-09
 
 ## Open Recent files
 
-1. In the sidebar, click **Recent files**, right below **Drive**.
+1. In the sidebar, click **Recent files**. In Drive, Docs, Sheets, Slides, Stickies, and Vector, it sits right below **Drive**. In Chat, Calendar, Mail, and Contacts, it has a section of its own in the sidebar.
 2. Click a file to see its details in the panel on the right, including what happened to it lately.
-3. Click it again to open it. A folder opens in Drive.
+3. Click **Open** in that panel to open it. You can also press Enter, or click the file again. A document opens in its app and a folder opens in Drive. A picture or a PDF has no **Open** button and opens in a preview instead.
 
-The link sits in the sidebar of Drive, Docs, Sheets, Slides, Stickies, Vector, Chat, Calendar, Mail, and Contacts, and always opens the same page in Drive. This page is for finding things, so you cannot upload or create files in it.
+Every one of those links opens the same page in Drive. This page is for finding things, so you cannot upload or create files in it.
 
 ## What shows up here
 

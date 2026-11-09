@@ -6,7 +6,6 @@
 import { getDriveItemUrl } from '@workspace/lib/api';
 import { getDriveComparator } from '@workspace/lib/drive';
 import type { DriveCapabilities, DrivePath } from '@workspace/lib/types/drive';
-import type { ReactNode } from 'react';
 import { useCallback, useMemo } from 'react';
 import { Column, ColumnLayout } from '../layout/app/column-layout';
 import { useLayout } from '../layout/app/layout-context';
@@ -37,7 +36,6 @@ export type DriveLayoutProps = {
     onQuickLook?: (path: DrivePath, sortedSiblings: DrivePath[]) => void;
     pid?: string;
     unreadPathIds?: ReadonlySet<string>;
-    emptyState?: ReactNode;
     sort?: DriveSortControl;
     date?: DriveListDate;
 };
@@ -61,7 +59,6 @@ export function DriveLayout({
     pid,
     title,
     unreadPathIds,
-    emptyState,
     sort,
     date,
 }: DriveLayoutProps) {
@@ -112,7 +109,6 @@ export function DriveLayout({
         actions,
         onQuickLook: onQuickLook ? wrappedQuickLook : undefined,
         unreadPathIds,
-        emptyState,
         sort,
         date,
     };

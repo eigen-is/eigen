@@ -7,7 +7,7 @@ import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useAggregateMimeContent, usePathInfo, validateDriveSearch } from '@workspace/lib/drive';
 import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
 import { getEigenDocInfoByMime } from '@workspace/lib/types/drive';
-import { EmptyState, FILTER_LABELS } from '@workspace/ui';
+import { FILTER_LABELS } from '@workspace/ui';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
 import { useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';
@@ -42,10 +42,6 @@ function MimeRoute() {
     const handleBackToList = () => {
         navigate({ to: Route.fullPath, params: { mimeType } });
     };
-
-    if (error) {
-        return <EmptyState message="Encountering the null vector: a rendezvous with nothing at all." />;
-    }
 
     // The mime route is keyed on the url-slug form (`application-eigendoc`); resolve it
     // back to the matching EigenDocType so create is offered only for that kind.

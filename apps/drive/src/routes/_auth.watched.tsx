@@ -6,7 +6,6 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useAllWatches, usePathInfo, validateDriveSearch } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { EmptyState } from '@workspace/ui';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
 import { useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';
@@ -58,7 +57,6 @@ function WatchedRoute() {
             capabilities={DRIVE_CAPABILITIES.readOnly}
             title="Watched"
             onQuickLook={onQuickLook}
-            emptyState={<EmptyState message="Watched files will appear here." />}
         />
     );
 }

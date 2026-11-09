@@ -7,7 +7,6 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, usePathInfo, useRecentPaths, validateDriveSearch } from '@workspace/lib/drive';
 import type { DrivePath, DriveSort } from '@workspace/lib/types/drive';
-import { EmptyState } from '@workspace/ui';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
 import { useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';
@@ -65,7 +64,6 @@ function RecentRoute() {
             capabilities={DRIVE_CAPABILITIES.readOnly}
             title="Recent files"
             onQuickLook={onQuickLook}
-            emptyState={<EmptyState message="Files you open or get notified about will appear here." />}
             sort={{ value: sort, onChange: setSort }}
             date={{ label: 'Last activity', of: (path) => lastActivity.get(path.id) ?? null }}
         />

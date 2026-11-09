@@ -11,7 +11,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Covers on the blog** — a blog post can have a cover image, shown big on the post and on the newest post in the blog overview
 - **Delete history** — in Docs, Sheets, Slides, Vector and Stickies, File › Version history › **Delete history…** deletes every earlier version of a document, and the images and comments deleted from it, to free space. It keeps what was added or replied to in the last three days. Only an owner of the drive sees it
 - **Assignment emails** — assigning a comment or card in Docs, Sheets, Slides, Vector or Stickies emails a guest a link to it, at most once an hour per document. Admin's server settings have a toggle for guests (on) and one for users (off)
-- **Recent files in Drive** — **Recent files** lists the files you lately opened or were notified about, from any drive, newest first. Every app's sidebar links to it
+- **Recent files in Drive** — **Recent files** lists the files you lately opened or were notified about, from any drive, newest first. The sidebars of Drive, the document apps, Chat, Calendar, Mail and Contacts link to it
 
 ### Changed
 

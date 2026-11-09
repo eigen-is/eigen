@@ -16,7 +16,7 @@ import {
     validateDriveSearch,
 } from '@workspace/lib/drive';
 import type { DrivePath, DriveSearchParams } from '@workspace/lib/types/drive';
-import { EmptyState, LoadingState, RequestAccessView } from '@workspace/ui';
+import { LoadingState, RequestAccessView } from '@workspace/ui';
 import { DriveAccessDialog } from '@workspace/ui/components/drive/drive-access-dialog';
 import { browseCapabilities } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
@@ -134,12 +134,9 @@ function FolderRoute() {
         return <LoadingState />;
     }
 
-    if (folderContentError) {
-        if (isForbidden) {
-            if (isSelectedPathLoading || selectedPath) return <LoadingState />;
-            return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={pathId} />;
-        }
-        return <EmptyState message="Encountering the null vector: a rendezvous with nothing at all." />;
+    if (isForbidden) {
+        if (isSelectedPathLoading || selectedPath) return <LoadingState />;
+        return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={pathId} />;
     }
 
     return (

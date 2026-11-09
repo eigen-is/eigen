@@ -245,7 +245,6 @@ type DriveListProps = CreateCallbacks & {
     // The rows of a listing with actions of its own, such as Trash, for the items they act on: the
     // rows' menu draws them and the command palette offers them.
     ownActions?: (items: readonly DrivePath[]) => PaletteSelectionAction[];
-    emptyState?: ReactNode;
     sort?: DriveSortControl;
 };
 
@@ -271,7 +270,6 @@ export function DriveList({
     hideShared,
     date,
     ownActions,
-    emptyState,
     sort,
 }: DriveListProps) {
     const { data: breadcrumbPaths } = useBreadcrumb(ownerId, mountId, pathId);
@@ -292,15 +290,13 @@ export function DriveList({
         }
     };
 
-    const { targetProps, isDragging } = useFileDropTarget(
-        (files) => onUploadFiles?.(files),
-        allowUpload && !!onUploadFiles,
-    );
+    const dropWorks = allowUpload && !!onUploadFiles;
+    const { targetProps, isDragging } = useFileDropTarget((files) => onUploadFiles?.(files), dropWorks);
 
     const createItems = getCreateMenuItems({ onCreateFolder, onUploadFile, onCreateEigenDoc });
 
     if (error) {
-        return <ErrorState message="Error loading files" detail={error.message} />;
+        return <ErrorState />;
     }
 
     const sharedProps = {
@@ -316,14 +312,14 @@ export function DriveList({
     };
 
     // The empty listing's hint names a drop only where a drop uploads, and the New button only where
-    // there is something to create.
-    const dropWorks = allowUpload && !!onUploadFiles;
-    const defaultEmptyHint = dropWorks
+    // there is something to create, by the label it has where it creates one kind only.
+    const newLabel = createItems.length === 1 ? createItems[0].buttonLabel : 'New';
+    const emptyHint = dropWorks
         ? createItems.length > 0
-            ? 'Drop files here, or use the “New” button.'
+            ? `Drop files here, or use the “${newLabel}” button.`
             : 'Drop files here.'
         : createItems.length > 0
-          ? 'Use the “New” button to create one.'
+          ? `Use the “${newLabel}” button to create one.`
           : undefined;
 
     const contentDiv = (
@@ -347,7 +343,7 @@ export function DriveList({
                 />
             )}
 
-            {items.length === 0 && (emptyState ?? <EmptyState hint={defaultEmptyHint} />)}
+            {items.length === 0 && <EmptyState hint={emptyHint} />}
             <DrivePaletteSelection
                 items={selection.selectedItems}
                 listing={items}

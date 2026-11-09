@@ -1,5 +1,5 @@
-// Watched lists what the viewer watches. A list that failed to load says so, instead of claiming there is
-// nothing watched yet.
+// Watched lists what the viewer watches. A list that failed to load shows the standard error text alone,
+// instead of claiming there is nothing watched yet, and an empty one shows the standard empty text.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { drivePath } from '@workspace/ui/test/drive-path';
@@ -78,16 +78,16 @@ async function open() {
     return rendered.container;
 }
 
-test('a Watched list that failed to load shows the error, not the empty state', async () => {
+test('a Watched list that failed to load shows the null vector, with no detail and no empty text', async () => {
     watches.data = undefined;
     watches.error = new Error('The server is unreachable');
     const container = await open();
-    expect(container.textContent).toContain('Error loading files');
-    expect(container.textContent).toContain('The server is unreachable');
-    expect(container.textContent).not.toContain('Watched files will appear here.');
+    expect(container.textContent).toContain('Encountering the null vector: a rendezvous with nothing at all.');
+    expect(container.textContent).not.toContain('The server is unreachable');
+    expect(container.textContent).not.toContain('Within this void, all possibilities are yet unobserved.');
 });
 
-test('an empty Watched says what will appear', async () => {
+test('an empty Watched shows the standard empty text', async () => {
     const container = await open();
-    expect(container.textContent).toContain('Watched files will appear here.');
+    expect(container.textContent).toContain('Within this void, all possibilities are yet unobserved.');
 });
