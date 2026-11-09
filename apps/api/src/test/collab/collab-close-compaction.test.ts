@@ -635,7 +635,7 @@ describe('CollabDocument compacts a workbook at close', () => {
             for (let i = 0; i < 2; i++) expect(await sheet.closeOnce(fail)).toBe(true);
             expect(await sheet.closeOnce(fail)).toBe(false);
             const version = await home.drive.saveVersion(mountId, sheet.id);
-            await home.drive.restoreContainer(mountId, sheet.id, version.name);
+            await home.drive.restoreContainer(mountId, sheet.id, version.name, home.user);
             await pushEdit();
             expect(await sheet.closeOnce(succeed)).toBe(true);
         } finally {
@@ -814,7 +814,7 @@ describe('a snapshot writer starts a fresh base', () => {
         let updates = 0;
         const count = () => updates++;
         collab.doc.on('update', count);
-        await home.drive.restoreContainer(mountId, created.id, version.name);
+        await home.drive.restoreContainer(mountId, created.id, version.name, home.user);
         collab.doc.off('update', count);
 
         expect(updates).toBe(1);

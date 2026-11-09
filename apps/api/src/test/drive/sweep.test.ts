@@ -336,7 +336,7 @@ describe('Delete history', () => {
         collab.doc.getXmlFragment('default').delete(0, 1);
 
         // The document stays open, as when its owner deletes its history from the File menu.
-        await drive.deleteVersions(M, path.id);
+        await drive.deleteVersions(M, path.id, home.user);
         expect(await drive.listVersions(M, path.id)).toEqual([]);
         expect(await mediaNames(mount, path.id)).toEqual(['kept.png', 'young.png']);
         expect(await threadNames(mount, path.id)).toEqual([]);
@@ -481,7 +481,7 @@ describe('the sweep on s3', () => {
         await addThread(s3.mount, S3_MOUNT, path.id, { messages: [{ content: 'gone' }] });
         addCard(collab.doc, 'c1', { chatName: kept.name });
 
-        await drive.deleteVersions(S3_MOUNT, path.id);
+        await drive.deleteVersions(S3_MOUNT, path.id, home.user);
         expect(await mediaNames(s3.mount, path.id)).toEqual(['kept.png']);
         expect(await threadNames(s3.mount, path.id)).toEqual([kept.name]);
         expect(await commentRows(S3_MOUNT, path.id)).toEqual([kept.name]);

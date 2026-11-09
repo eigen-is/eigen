@@ -113,7 +113,7 @@ import { finalizeUpload, regenerateThumbnailAsync } from './upload';
 
 // How a content write is guarded and recorded. ifMatch is an If-Match value, checked under the file's
 // lock. The history row says `uploaded`, or `edited` for a save from the inline editor.
-export type ContentWriteOptions = { user?: User; ifMatch?: string; event?: 'uploaded' | 'edited' };
+export type ContentWriteOptions = { user: User; ifMatch?: string; event?: 'uploaded' | 'edited' };
 
 // The row and its etag as this write committed them, under the file's lock. A write that lands right
 // after can't show in either. The caller sends them back, so its next save is checked against its own bytes.
@@ -455,7 +455,7 @@ export class Drive {
         parentId: string,
         request: Request,
         maxSize: number,
-        user?: User,
+        user: User,
     ): Promise<DrivePath[]> {
         const mount = this.getMount(mountId);
         const parent = await this.getTargetFolder(mount, parentId);
@@ -491,7 +491,7 @@ export class Drive {
         // Watchers hear about the batch once. The notification is tagged on the folder, so the
         // last file stands for all of them.
         const last = uploaded.at(-1);
-        if (user && last) await this.fanOutUpload(mount, user, last);
+        if (last) await this.fanOutUpload(mount, user, last);
         return uploaded;
     }
 
@@ -501,7 +501,7 @@ export class Drive {
         name: string,
         mimeType: string,
         data: Buffer | StorageFile | ReadableStream<Uint8Array>,
-        user?: User,
+        user: User,
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const parent = await this.getTargetFolder(mount, parentId);
@@ -520,7 +520,7 @@ export class Drive {
             throw e;
         }
         // Outside the try: the file is created, and its thumbnail job owns the temp file now.
-        if (user) await this.fanOutUpload(mount, user, created);
+        await this.fanOutUpload(mount, user, created);
         return created;
     }
 
@@ -540,7 +540,7 @@ export class Drive {
         mountId: string,
         pathId: string,
         data: Buffer | StorageFile | ReadableStream<Uint8Array>,
-        { user, ifMatch, event = 'uploaded' }: ContentWriteOptions = {},
+        { user, ifMatch, event = 'uploaded' }: ContentWriteOptions,
     ): Promise<ContentWriteResult> {
         const mount = this.getMount(mountId);
         const path = await mount.getActivePath(pathId);
@@ -584,16 +584,12 @@ export class Drive {
         // The file can be deleted or trashed right after the write. That is a 404, the same as during it.
         const updated = await mount.getActivePath(pathId);
         this.emit(SSEventType.DRIVE_FILE_UPLOADED, updated);
-        if (user) {
-            await this.recordFileEvent(
-                mountId,
-                pathId,
-                user,
-                event === 'edited'
-                    ? { eventType: 'edited' }
-                    : { eventType: 'uploaded', details: { size: updated.size } },
-            );
-        }
+        await this.recordFileEvent(
+            mountId,
+            pathId,
+            user,
+            event === 'edited' ? { eventType: 'edited' } : { eventType: 'uploaded', details: { size: updated.size } },
+        );
         return { path: committed, etag: computeEtag(committed) };
     }
 
@@ -831,7 +827,7 @@ export class Drive {
         this.lockManager.releaseAllForPaths([pathId, ...mount.collectDescendantIds(pathId)]);
     }
 
-    public async restorePath(mountId: string, pathId: string, user?: User): Promise<void> {
+    public async restorePath(mountId: string, pathId: string, user: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getPath(pathId);
         if (!item?.trashedAt) throw new ApiError(404, 'Trashed item not found');
@@ -842,7 +838,7 @@ export class Drive {
         return this.getMount(mountId).listTrash();
     }
 
-    public async permanentlyDelete(mountId: string, pathId: string, user?: User): Promise<void> {
+    public async permanentlyDelete(mountId: string, pathId: string, user: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getPath(pathId);
         if (!item?.trashedAt || !(await permanentlyDelete(this, mount, item, user))) {
@@ -852,7 +848,7 @@ export class Drive {
 
     // The list can hold items that left the trash meanwhile, through a folder's delete or a restore that won an item's
     // lock. permanentlyDelete returns false for such an item, and the loop moves on.
-    public async emptyTrash(mountId: string, user?: User): Promise<void> {
+    public async emptyTrash(mountId: string, user: User): Promise<void> {
         const mount = this.getMount(mountId);
         for (const item of await mount.listTrash()) {
             await permanentlyDelete(this, mount, item, user);
@@ -1280,31 +1276,29 @@ export class Drive {
 
     // Delete history. The media and threads that only the versions named go at once, even while the document is open,
     // and so do the files nothing ever named, such as an abandoned upload.
-    public async deleteVersions(mountId: string, containerId: string, user?: User): Promise<void> {
+    public async deleteVersions(mountId: string, containerId: string, user: User): Promise<void> {
         const mount = this.getMount(mountId);
         const container = await mount.getActivePath(containerId);
         if (!isDocumentType(container.type)) throw new ApiError(400, 'Only a document has versions');
         await deleteVersions(mount, containerId);
         await sweepDocument(this, container, SWEEP_GRACE_MS);
-        if (user) await this.recordFileEvent(mountId, containerId, user, { eventType: 'versions-deleted' });
+        await this.recordFileEvent(mountId, containerId, user, { eventType: 'versions-deleted' });
     }
 
     public async restoreContainer(
         mountId: string,
         containerId: string,
         snapshotName: string,
-        user?: User,
+        user: User,
     ): Promise<void> {
         const mount = this.getMount(mountId);
         const container = await mount.getPath(containerId);
         if (!container) throw new ApiError(404, `Container ${containerId} not found`);
         await restoreContainer(this, mount, container, snapshotName);
-        if (user) {
-            await this.recordFileEvent(mountId, containerId, user, {
-                eventType: 'version-restored',
-                details: { versionName: snapshotName },
-            });
-        }
+        await this.recordFileEvent(mountId, containerId, user, {
+            eventType: 'version-restored',
+            details: { versionName: snapshotName },
+        });
     }
 
     // ---- File history and watches ----

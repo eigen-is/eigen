@@ -14,7 +14,7 @@ A row stores both `actorUserId` and `actorEmail`, so it renders without an auth-
 
 ## No actor means no row
 
-Drive mutations take an optional `user`. Without one, nothing is recorded, so internal scaffolding (a chat's seed files, `media/` folders) stays out of the timeline users see.
+Every change to the tree, its files and their versions names its `user`, so it records a row. Internal scaffolding, such as a new document's `media/` and chat folders, is made on the mount directly and stays out of the timeline users see. Only an ACL change can come with no actor, and then it records nothing.
 
 `FileHistory` also drops every event below an eigendoc or chat container: per-card comment threads, attachment media, `data.db`. The container speaks through its own events. `list` reads a subtree: a file's own events, or a folder's or container's whole subtree through a recursive CTE, newest first.
 

@@ -115,7 +115,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
                     await drive.deletePath(params.mountId, chat.id, user).catch((e) => {
                         console.warn(`Failed to trash orphaned chat ${chat.id} after share failure:`, e);
                     });
-                    await drive.permanentlyDelete(params.mountId, chat.id).catch((e) => {
+                    await drive.permanentlyDelete(params.mountId, chat.id, user).catch((e) => {
                         console.warn(`Failed to purge orphaned chat ${chat.id} after share failure:`, e);
                     });
                     throw err;

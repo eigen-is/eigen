@@ -19,7 +19,7 @@ describe('emptyTrash', () => {
     });
 
     const createFile = async (parentId: string, name: string) =>
-        (await home.drive.createFileFromData(mount.id, parentId, name, 'text/plain', Buffer.from(name))).id;
+        (await home.drive.createFileFromData(mount.id, parentId, name, 'text/plain', Buffer.from(name), home.user)).id;
 
     test('a child the folder delete took with it is skipped', async () => {
         const folder = await home.drive.createFolder(mount.id, rootId, 'Folder', home.user);
@@ -36,7 +36,7 @@ describe('emptyTrash', () => {
         // The child is gone by its turn, which is no failure, so nothing is logged.
         const errors = spyOn(console, 'error');
         try {
-            await home.drive.emptyTrash(mount.id);
+            await home.drive.emptyTrash(mount.id, home.user);
             expect(errors).not.toHaveBeenCalled();
         } finally {
             errors.mockRestore();
@@ -76,7 +76,7 @@ describe('emptyTrash', () => {
             return permanentlyDelete(pathId);
         });
         try {
-            await home.drive.emptyTrash(mount.id);
+            await home.drive.emptyTrash(mount.id, home.user);
         } finally {
             spy.mockRestore();
         }
@@ -93,7 +93,7 @@ describe('emptyTrash', () => {
         const members = spyOn(home.drive, 'getEffectiveMembers').mockRejectedValue(new Error('auth db unavailable'));
         const errors = spyOn(console, 'error').mockImplementation(() => {});
         try {
-            await home.drive.permanentlyDelete(mount.id, file);
+            await home.drive.permanentlyDelete(mount.id, file, home.user);
             expect(errors.mock.calls.flat().some((arg) => String(arg).includes('auth db unavailable'))).toBe(true);
         } finally {
             members.mockRestore();

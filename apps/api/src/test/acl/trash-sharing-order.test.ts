@@ -26,7 +26,14 @@ describe('sharing pushed by a trash, a restore or a rename', () => {
     });
 
     async function sharedWithBob(name: string): Promise<DrivePath> {
-        const file = await alice.drive.createFileFromData(MOUNT, rootId, name, 'text/plain', Buffer.from('x'));
+        const file = await alice.drive.createFileFromData(
+            MOUNT,
+            rootId,
+            name,
+            'text/plain',
+            Buffer.from('x'),
+            alice.user,
+        );
         await shareWithBob(file.id);
         return file;
     }
@@ -125,6 +132,7 @@ describe('sharing pushed by a trash, a restore or a rename', () => {
             'inner.txt',
             'text/plain',
             Buffer.from('x'),
+            alice.user,
         );
         const { mount } = await alice.drive.resolveFile(MOUNT, folder.id);
         // The share passes its checks before the trash, and its row write waits until the trash is in.

@@ -93,7 +93,7 @@ describe('trash closes open collab documents', () => {
         expect(logged.some((call) => call.some((part) => String(part).includes('closed database')))).toBe(false);
         expect(home.drive.hasCollabDocument(mountId, doc.id)).toBe(false);
 
-        await home.drive.restorePath(mountId, doc.id);
+        await home.drive.restorePath(mountId, doc.id, home.user);
         const restored = await home.drive.getCollabDocument(mountId, doc.id);
         expect(restored.doc.getMap('state').get('before')).toBe('kept');
     });
@@ -229,7 +229,7 @@ describe('trash closes open collab documents', () => {
         const { mount } = await home.drive.resolveFile(mountId, folder.id);
         const withTreeExclusive = mount.withTreeExclusive.bind(mount);
         const lockSpy = spyOn(mount, 'withTreeExclusive').mockImplementationOnce(async (work) => {
-            await home.drive.restorePath(mountId, doc.id);
+            await home.drive.restorePath(mountId, doc.id, home.user);
             const collab = await home.drive.getCollabDocument(mountId, doc.id);
             collab.doc.getMap('state').set('before', 'kept');
             return withTreeExclusive(work);
@@ -247,7 +247,7 @@ describe('trash closes open collab documents', () => {
         expect((await mount.getPath(doc.id))?.trashedAt).not.toBeNull();
         expect(home.drive.hasCollabDocument(mountId, doc.id)).toBe(false);
 
-        await home.drive.restorePath(mountId, folder.id);
+        await home.drive.restorePath(mountId, folder.id, home.user);
         const reopened = await home.drive.getCollabDocument(mountId, doc.id);
         reopened.doc.getMap('state').set('afterRestore', 'typed');
         await home.drive.closeCollabDocument(mountId, doc.id);

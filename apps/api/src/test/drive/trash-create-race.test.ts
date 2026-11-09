@@ -34,7 +34,7 @@ describe('a create into a folder that goes to the trash', () => {
                 },
             });
             const upload = home.drive
-                .createFileFromData(mount.id, folder.id, 'late.txt', 'text/plain', body)
+                .createFileFromData(mount.id, folder.id, 'late.txt', 'text/plain', body, home.user)
                 .catch((e: unknown) => e);
             await Bun.sleep(20);
             await home.drive.deletePath(mount.id, folder.id, home.user);

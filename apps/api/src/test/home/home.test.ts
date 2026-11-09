@@ -211,7 +211,14 @@ describe('Home init', () => {
         const home = await getHome(user.id);
         const root = await home.drive.getRootFolder('default');
         if (!root) throw new Error('The default mount has no root folder');
-        await home.drive.createFileFromData('default', root.id, 'note.txt', 'text/plain', Buffer.from('some bytes'));
+        await home.drive.createFileFromData(
+            'default',
+            root.id,
+            'note.txt',
+            'text/plain',
+            Buffer.from('some bytes'),
+            home.user,
+        );
         const before = await home.size();
         expect(before.drive.default.used).toBeGreaterThan(0);
         await home.settings.set({ mounts: { default: { enabled: false } } });
