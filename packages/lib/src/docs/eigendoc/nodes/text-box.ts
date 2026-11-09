@@ -9,6 +9,7 @@ import { DOMSerializer, Fragment, DOMParser as PMDOMParser } from '@tiptap/pm/mo
 import type { Transaction } from '@tiptap/pm/state';
 import { readHexColor } from '../../../constants/colors';
 import { readNumberIn } from '../../../core/guards';
+import { isElement } from '../../../core/html';
 import { MAX_PAPER_PX, mmToPx } from '../page';
 import type { Border } from './border';
 import { borderValue, readBorder } from './border';
@@ -128,8 +129,6 @@ export function textBoxHTMLAttributes(attrs: TextBoxAttrs): Record<string, strin
         style: style.filter(Boolean).join('; '),
     };
 }
-
-const isElement = (node: globalThis.Node): node is Element => node.nodeType === 1;
 
 // The box span a parse rule matched: the frame's span holds it, or a paste kept the box span alone.
 function boxOf(element: Element): Element | undefined {
