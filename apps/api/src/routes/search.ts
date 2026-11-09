@@ -9,10 +9,10 @@ import { aggregateFileSearch } from '../lib/drive/aggregate';
 import { getHome } from '../lib/home';
 import { betterAuth } from './auth';
 
-const SOURCE_VALUES: SearchSource[] = ['mail', 'file'];
+const SOURCE_VALUES: readonly SearchSource[] = ['mail', 'file'];
 
 function isSource(value: string): value is SearchSource {
-    return (SOURCE_VALUES as string[]).includes(value);
+    return SOURCE_VALUES.some((source) => source === value);
 }
 
 export const searchRouter = new Elysia({ name: 'search' })

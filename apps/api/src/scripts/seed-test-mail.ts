@@ -1,26 +1,9 @@
-// Stress-test mail seeder: writes fake messages straight into a user's on-disk maildir,
-// distributed across ALL standard mailboxes (Inbox / Sent / Drafts / Trash / Junk / Archive).
-//
-// Why: to load a real account with a large, believable mailbox for stress-testing the mail
-// UI (list virtualization, search, keyboard shortcuts, per-mailbox counts) without going
-// through SMTP/the delivery endpoint (which is rate-limited and only targets the Inbox).
-//
-// How it works: messages are written as raw RFC822 files directly into each mailbox's
-// maildir. Inbox/Junk/Trash/Archive get an external `From` addressed to the user; Sent/Drafts
-// get the user's own address as `From` (believable outgoing mail). A fraction land in `new/`
-// (unseen) and the rest in `cur/` with realistic flags (mostly Seen, some Flagged; Drafts get
-// the Draft flag). Every subject is prefixed `[SEED]` and every external address ends in
-// `@seed.eigen.test`, so the whole set is trivially filterable and deletable afterwards.
-//
-// Usage:
-//   bun run apps/api/src/scripts/seed-test-mail.ts                       # 10000 mails, first user
-//   bun run apps/api/src/scripts/seed-test-mail.ts --count=50000         # custom count
-//   bun run apps/api/src/scripts/seed-test-mail.ts --user=<userId>       # target a specific user
-//   bun run apps/api/src/scripts/seed-test-mail.ts --count=2000 --user=<userId>
-//   EIGEN_DATA_ROOT=/abs/path bun run apps/api/src/scripts/seed-test-mail.ts   # non-default data dir
-//
-// The target account picks it up on the next mailbox sync (open the app / reload). To clean up
-// later, delete the `[SEED]` messages in the UI, or remove the seeded files from the maildir.
+// A stress-test seeder that writes fake mail straight into one user's maildir, spread over every standard mailbox, to
+// load the mail UI with a large mailbox without going through rate-limited delivery. A developer runs it by hand:
+// `bun run apps/api/src/scripts/seed-test-mail.ts [--count=50000] [--user=<userId>]`, the first user by default. The
+// account picks the mail up on its next sync. Every subject starts with [SEED] and every sender ends in
+// @seed.eigen.test, so the set is easy to find and delete.
+
 import { Database } from 'bun:sqlite';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -37,6 +20,7 @@ import {
 } from '@workspace/lib/constants/mailboxes';
 import { PATHS, SERVER_DATABASES, SERVER_DIR } from '../lib/config/paths';
 import { buildMaildirFilename, createUniqueMessageId, maildirFolder } from '../lib/mail/mailutils';
+import type { User } from '../lib/user/user';
 
 // Data root: honor EIGEN_DATA_ROOT (as the server does), else the repo's ./data resolved from
 // this file's location so the script works regardless of the cwd it's launched from.
@@ -62,10 +46,10 @@ if (!existsSync(usersDbPath)) {
     process.exit(1);
 }
 const db = new Database(usersDbPath, { readonly: true });
-type UserRow = { id: string; email: string; name: string | null };
+type UserRow = Pick<User, 'id' | 'email' | 'name'>;
 const resolved = values.user
-    ? (db.query('SELECT id, email, name FROM user WHERE id = ?').get(values.user) as UserRow | null)
-    : (db.query('SELECT id, email, name FROM user ORDER BY created_at ASC LIMIT 1').get() as UserRow | null);
+    ? db.query<UserRow, [string]>('SELECT id, email, name FROM user WHERE id = ?').get(values.user)
+    : db.query<UserRow, []>('SELECT id, email, name FROM user ORDER BY created_at ASC LIMIT 1').get();
 db.close();
 if (!resolved) {
     console.error(values.user ? `No user with id ${values.user}` : 'No users found in users3.db');

@@ -1,14 +1,8 @@
-// Demo-world content for "Tuimel Festival" — a small, volunteer-run community arts & music
-// festival, ~3 weeks out, line-up ~80% confirmed, short on volunteers, iffy Sunday forecast.
-//
-// This module is DATA: personas, folder names, document/mail/event/chat/contact text, and the few one-line helpers
-// that spell some of it, such as an equation's MathML. The seeder's mechanics turn it into a live workspace
-// through the real product surfaces. Keep it that way so a later content-deepening pass swaps data here without
-// touching mechanics.
-//
-// Personas are keyed by a fixed local-part; the runtime email is `<key>@<MAIL_DOMAIN>`. Everything
-// the data model keys on (ACLs, comments, calendar attendees, stickies creators) resolves by that
-// email, so ids may be random per rebuild. All names, acts and vendors are fictional.
+// The data of the "Tuimel Festival" demo world, a small volunteer-run arts and music festival three weeks out: its
+// personas, folders and the text of its documents, mail, events, chats and contacts, plus a few one-line helpers that
+// spell some of it, such as an equation's MathML. The demo seeder turns it into a live workspace through the real
+// product surfaces, so a richer pass changes data here, not mechanics. Personas resolve by `<key>@<MAIL_DOMAIN>`, so
+// ids may differ per rebuild. All names, acts and vendors are fictional.
 
 import { CHART_DEFAULT_SIZE, FLAT_CHART_LOOK, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { escapeHtml } from '@workspace/lib/html';
@@ -225,9 +219,9 @@ const EUR = '_(€* #,##0.00_);_(€* (#,##0.00);_(€* "-"??_);_(@_)';
 const BUDGET_STATUSES = ['confirmed', 'pending', 'paid'];
 
 export const BUDGET = {
-    folder: 'finance' as TeamFolder,
+    folder: 'finance' as const satisfies TeamFolder,
     name: 'budget', // lowercase, no extension
-    author: 'finance' as LeadRole,
+    author: 'finance' as const satisfies LeadRole,
     sheets: [
         {
             name: 'Budget',
@@ -376,9 +370,9 @@ const DECK_BODY = {
 } as const;
 
 export const SPONSOR_DECK = {
-    folder: 'marketing' as TeamFolder,
+    folder: 'marketing' as const satisfies TeamFolder,
     name: 'sponsor pitch', // lowercase, no extension
-    author: 'comms' as LeadRole,
+    author: 'comms' as const satisfies LeadRole,
     slides: [
         {
             key: 'title',
@@ -471,8 +465,8 @@ export type CardSpec = {
     attach?: string[]; // seeded team documents pinned to the card, see ChatLine.attach
 };
 
-export const KANBAN = {
-    folder: 'production' as TeamFolder,
+export const KANBAN: { folder: TeamFolder; name: string; columns: string[]; cards: CardSpec[] } = {
+    folder: 'production',
     name: 'festival kanban', // lowercase, no extension
     columns: ['to do', 'doing', 'done'],
     cards: [
@@ -570,7 +564,7 @@ export const KANBAN = {
                 },
             ],
         },
-    ] as CardSpec[],
+    ],
 };
 
 // --- Site photos (committed .webp fixtures uploaded into the team drive's images/ folder) ---
@@ -735,9 +729,9 @@ const BUILDING = { fill: '#e9ecef' } as const;
 const NOTE = '#495057';
 
 export const SITE_PLAN = {
-    folder: 'production' as TeamFolder,
+    folder: 'production' as const satisfies TeamFolder,
     name: 'site plan', // lowercase, no extension
-    author: 'production' as LeadRole,
+    author: 'production' as const satisfies LeadRole,
     background: '#fffbeb', // the scene's paper; the fence fill is the meadow on it
     // Drawn bottom-up: lines (ground), shapes, images, arrows, then every text on top.
     lines: [

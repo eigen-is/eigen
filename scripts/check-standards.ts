@@ -26,6 +26,8 @@ function inScope(path: string): boolean {
 // holds no `;` or `=`.
 const MODULE_STATEMENT =
     /(?:^|\n)[ \t]*(?:import|export)\b[^;=]*?from[ \t]*(?:'[^'\n]*'|"[^"\n]*")|(?:^|\n)[ \t]*import[ \t]*(?:'[^'\n]*'|"[^"\n]*")|(?:^|\n)[ \t]*export[ \t]*\{[^}=;]*\}/g;
+// A mapped type's `as` renames its keys, `{ [P in Parts as Key<P>]: … }`, so drop that clause too.
+const KEY_REMAP = /(?<=\{\s*(?:[+-]?readonly\s+)?)\[\s*[\w$]+\s+in\s+(?:[^[\]\n]|\[[^[\]\n]*\])*?\bas\b/g;
 const DEEP_IMPORT = /@workspace\/(?:lib\/core\/|lib\/src\/|ui\/src\/)|['"]@workspace\/[\w@./-]+\.tsx?['"]/g;
 // Tailwind's default palette. A theme token replaces every one of these (CODE-STANDARDS § Code Style).
 const PALETTE =
@@ -217,7 +219,10 @@ const METRICS: Metric[] = [
         // `as unknown as T` is one escape hatch, not two.
         count: ({ code }) =>
             countMatches(
-                code.replaceAll(MODULE_STATEMENT, '').replaceAll(/\bas\s+unknown\s+as\b/g, 'as'),
+                code
+                    .replaceAll(MODULE_STATEMENT, '')
+                    .replaceAll(KEY_REMAP, '')
+                    .replaceAll(/\bas\s+unknown\s+as\b/g, 'as'),
                 /\bas\s+(?!const\b)/g,
             ),
     },

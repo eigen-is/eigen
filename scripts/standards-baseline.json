@@ -1,17 +1,12 @@
 {
   "as-casts": {
-    "apps/api/scripts/mail-bench.ts": 3,
+    "apps/api/scripts/mail-bench.ts": 2,
     "apps/api/scripts/mail-profile.ts": 1,
     "apps/api/src/lib/document/transform/run-transform.ts": 1,
     "apps/api/src/lib/home/home.ts": 1,
     "apps/api/src/lib/mount/document-db.ts": 1,
-    "apps/api/src/lib/shared/thumbnail-worker.ts": 1,
     "apps/api/src/lib/shared/video-thumbnail.ts": 1,
-    "apps/api/src/routes/search.ts": 1,
     "apps/api/src/scripts/demo/author-fixtures.ts": 1,
-    "apps/api/src/scripts/demo/content.ts": 8,
-    "apps/api/src/scripts/migrate-users.ts": 5,
-    "apps/api/src/scripts/seed-test-mail.ts": 2,
     "apps/calendar/src/routes/_auth.view.$mode.$from.$to.tsx": 1,
     "apps/drive/src/components/editor/markdown-editor.tsx": 4,
     "apps/index/scripts/build-search-index.ts": 2,
@@ -26,7 +21,6 @@
     "packages/lib/src/core/mail/hooks/use-emails.ts": 1,
     "packages/lib/src/core/search/pagefind.ts": 1,
     "packages/lib/src/sheets/snapshot-codec.ts": 4,
-    "packages/lib/src/types/chart.ts": 1,
     "packages/lib/src/types/file-history.ts": 1,
     "packages/sheet/src/components/ContextMenu/FilterMenu.tsx": 1,
     "packages/sheet/src/components/SheetOverlay/FormulaHint/index.tsx": 1,
@@ -62,8 +56,6 @@
     "packages/ui/src/hooks/use-scroll-to-index.ts": 1
   },
   "non-null-assertions": {
-    "apps/api/scripts/mail-bench.ts": 5,
-    "apps/api/scripts/version-retention-sim.ts": 1,
     "apps/api/src/lib/calendar/calendar.ts": 2,
     "apps/api/src/lib/contacts/contacts.ts": 5,
     "apps/api/src/lib/contacts/dav-store.ts": 1,
