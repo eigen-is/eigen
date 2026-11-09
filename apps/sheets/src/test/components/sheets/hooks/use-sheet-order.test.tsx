@@ -19,6 +19,7 @@ const { replaySheetsOps, withMaterializedData } = await import('@workspace/sheet
 type Op = import('@workspace/sheet').Op;
 type Sheet = import('@workspace/lib/sheets').Sheet;
 type WorkbookInstance = import('@workspace/sheet').WorkbookInstance;
+type Selection = import('@workspace/sheet').Selection;
 type CollabDocContext = import('@workspace/lib/collab').CollabDocContext;
 type UseCollabDocOptions = import('@workspace/lib/collab').UseCollabDocOptions;
 type YDoc = import('yjs').Doc;
@@ -123,7 +124,7 @@ async function openTab(from: YDoc, clientID: number) {
     const pathId = `tab-${clientID}`;
     tabDocs.set(pathId, doc);
     const workbookRef = createRef<WorkbookInstance>();
-    const seen = { version: 0 };
+    const seen: { version: number; selection?: Selection } = { version: 0 };
     function Host() {
         const { initialData, snapshotVersion, handleOp } = useSheet('o', 'm', pathId, workbookRef);
         seen.version = snapshotVersion;
@@ -133,6 +134,11 @@ async function openTab(from: YDoc, clientID: number) {
             ref: workbookRef,
             data: initialData,
             onOp: handleOp,
+            hooks: {
+                afterSelectionChange: (_id, selection) => {
+                    seen.selection = selection;
+                },
+            },
         });
     }
     const container = document.createElement('div');
@@ -149,21 +155,38 @@ async function openTab(from: YDoc, clientID: number) {
     };
     const edit = (run: (workbook: WorkbookInstance) => void) => act(async () => run(workbook()));
     const cell = (r: number, c: number) => workbook().getFlowdata()?.[r]?.[c] ?? null;
-    // Types `text` into a cell through this tab's own cell editor and commits it with Enter, as a person does.
-    const type = async (r: number, c: number, text: string) => {
-        await edit((w) => w.revealSearchMatch({ sheetId: 's1', r: r, c: c }));
+    const select = (r: number, c: number) => edit((w) => w.revealSearchMatch({ sheetId: 's1', r, c }));
+    const press = async (key: string, keyCode = 0) => {
         const input = container.querySelector<HTMLElement>('#sheet-rich-text-editor');
         if (!input) throw new Error('no cell editor');
         input.focus();
         await act(async () => {
-            input.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', keyCode: 88, bubbles: true }));
+            input.dispatchEvent(new KeyboardEvent('keydown', { key, keyCode, bubbles: true }));
         });
-        input.textContent = text;
-        await act(async () => {
-            input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
-        });
+        return input;
     };
-    return { doc, workbook, edit, cell, type, seen, sync: () => act(async () => syncs.get(pathId)?.()) };
+    // Types `text` over the selected cell through this tab's own cell editor and commits it with Enter, as a person does.
+    const typeOver = async (text: string) => {
+        const input = await press('x', 88);
+        input.textContent = text;
+        await press('Enter', 13);
+    };
+    const type = async (r: number, c: number, text: string) => {
+        await select(r, c);
+        await typeOver(text);
+    };
+    return {
+        doc,
+        workbook,
+        edit,
+        cell,
+        select,
+        press,
+        typeOver,
+        type,
+        seen,
+        sync: () => act(async () => syncs.get(pathId)?.()),
+    };
 }
 type Tab = Awaited<ReturnType<typeof openTab>>;
 
@@ -207,6 +230,10 @@ const rule = (type: string): Op[] => [
 
 const rowInsert = (index: number): Op[] => [
     { op: 'insertRowCol', id: 's1', path: [], value: { type: 'row', index, count: 1, direction: 'lefttop', id: 's1' } },
+];
+
+const rowDelete = (index: number): Op[] => [
+    { op: 'deleteRowCol', id: 's1', path: [], value: { type: 'row', start: index, end: index } },
 ];
 
 const opsIn = (doc: YDoc) => doc.getArray<Op[]>('ops').length;
@@ -582,35 +609,162 @@ test('a row op that overtakes another row op takes the focus off the grid', asyn
     expectJoined(tab);
 });
 
-// A peer's sheet add must not bring back the selection the row delete took, or the keystroke lands on the row that slid
-// up.
-test("a peer's sheet add after a peer deleted the selected row brings no selection back", async () => {
+// As in Google Sheets and Excel for the web: the box stays on D6, now showing what was row 7. Two tabs hold it, and each
+// goes on from there, one typing over the cell with no warning and the other moving down first.
+test("a peer's delete of the selected row leaves the box there, and the arrows and typing go on from it", async () => {
+    const s = server({ '5_3': 'gone', '6_3': 'next', '7_3': 'below' });
+    const a = await openTab(s, 50);
+    const b = await openTab(s, 60);
+    const peer = replica(s, 100);
+    await a.select(5, 3);
+    await b.select(5, 3);
+    push(peer, rowDelete(5));
+    await deliver(peer, a.doc);
+    await deliver(peer, b.doc);
+    for (const { seen } of [a, b])
+        expect([seen.selection?.row, seen.selection?.column]).toEqual([
+            [5, 5],
+            [3, 3],
+        ]);
+    await b.press('ArrowDown');
+    expect(b.seen.selection?.row).toEqual([6, 6]);
+    await b.typeOver('down');
+    await a.typeOver('over');
+    expect([a.cell(5, 3)?.v, b.cell(6, 3)?.v]).toEqual(['over', 'down']);
+    await deliver(a.doc, b.doc);
+    await deliver(b.doc, a.doc);
+    expect([a.cell(5, 3)?.v, a.cell(6, 3)?.v]).toEqual(['over', 'down']);
+    expectJoined(a, b);
+});
+
+test("a peer's delete of the selected column leaves the box there, and the arrows and typing go on from it", async () => {
+    const s = server({ '2_1': 'gone', '2_2': 'next', '2_3': 'right' });
+    const a = await openTab(s, 50);
+    const b = await openTab(s, 60);
+    const peer = replica(s, 100);
+    await a.select(2, 1);
+    await b.select(2, 1);
+    push(peer, [{ op: 'deleteRowCol', id: 's1', path: [], value: { type: 'column', start: 1, end: 1 } }]);
+    await deliver(peer, a.doc);
+    await deliver(peer, b.doc);
+    for (const { seen } of [a, b])
+        expect([seen.selection?.row, seen.selection?.column]).toEqual([
+            [2, 2],
+            [1, 1],
+        ]);
+    await b.press('ArrowRight');
+    expect(b.seen.selection?.column).toEqual([2, 2]);
+    await b.typeOver('right of it');
+    await a.typeOver('over');
+    expect([a.cell(2, 1)?.v, b.cell(2, 2)?.v]).toEqual(['over', 'right of it']);
+    await deliver(a.doc, b.doc);
+    await deliver(b.doc, a.doc);
+    expectJoined(a, b);
+});
+
+// A sheet add commits the workbook again, and the landed selection stays through it.
+test("a peer's sheet add after a peer deleted the selected row leaves the selection where it landed", async () => {
     const s = server({ '3_0': 'mine', '4_0': 'theirs' });
     const tab = await openTab(s, 50);
     const peer = replica(s, 100);
-    await tab.edit((w) => w.revealSearchMatch({ sheetId: 's1', r: 3, c: 0 }));
-    const input = document.getElementById('sheet-rich-text-editor');
-    input?.focus();
-    push(peer, [{ op: 'deleteRowCol', id: 's1', path: [], value: { type: 'row', start: 3, end: 3 } }]);
+    await tab.select(3, 0);
+    push(peer, rowDelete(3));
     push(peer, [{ op: 'addSheet', id: 's2', path: [], value: { ...sheet({}), id: 's2', name: 'Two', order: 1 } }]);
     await deliver(peer, tab.doc);
+    expect(tab.seen.selection?.row).toEqual([3, 3]);
+    await tab.typeOver('typed');
+    expect(tab.cell(3, 0)?.v).toBe('typed');
+    expectJoined(tab);
+});
+
+// The merge's head shows what the merge holds, so text typed into a covered cell would never show.
+test("a peer's delete that lands the selection inside a merge types into the head", async () => {
+    const s = new Y.Doc();
+    s.clientID = 1000;
+    const covered = { mc: { r: 3, c: 1 } };
+    const merged: Sheet = {
+        ...sheet({}),
+        config: { merge: { '3_1': { r: 3, c: 1, rs: 2, cs: 2 } } },
+        celldata: [
+            { r: 3, c: 1, v: { v: 'HEAD', m: 'HEAD', mc: { r: 3, c: 1, rs: 2, cs: 2 } } },
+            { r: 3, c: 2, v: covered },
+            { r: 4, c: 1, v: covered },
+            { r: 4, c: 2, v: covered },
+        ],
+    };
+    writeSheetsSnapshot(s, encodeSheetsSnapshot([merged], { computed: true }), null);
+    const tab = await openTab(s, 50);
+    const peer = replica(s, 100);
+    await tab.select(2, 2);
+    push(peer, rowDelete(2));
+    await deliver(peer, tab.doc);
+    expect([tab.seen.selection?.row, tab.seen.selection?.column]).toEqual([
+        [2, 3],
+        [1, 2],
+    ]);
+    await tab.typeOver('typed');
+    expect([tab.cell(2, 1)?.v, tab.cell(2, 2)?.v]).toEqual(['typed', undefined]);
+    expectJoined(tab);
+});
+
+// Concurrent deletes can leave no rows. No cell is left to land on, so no key opens an editor or throws, and a peer's
+// insert brings the grid back for a click to select in.
+test("a peer's delete of every row drops the selection, the keys do nothing, and a peer's insert works", async () => {
+    const s = server({ '3_0': 'gone' });
+    const tab = await openTab(s, 50);
+    const peer = replica(s, 100);
+    await tab.select(3, 0);
+    push(peer, [{ op: 'deleteRowCol', id: 's1', path: [], value: { type: 'row', start: 0, end: 11 } }]);
+    await deliver(peer, tab.doc);
+    expect(tab.workbook().getFlowdata()).toEqual([]);
+    const thrown: unknown[] = [];
+    const onError = (event: ErrorEvent) => thrown.push(event.error);
+    window.addEventListener('error', onError);
     const sent = opsIn(tab.doc);
-    await act(async () => {
-        input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', keyCode: 88, bubbles: true }));
-    });
-    if (input) input.textContent = 'typed';
-    await act(async () => {
-        input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
-    });
+    for (const [key, keyCode] of [
+        ['ArrowDown', 40],
+        ['Enter', 13],
+        ['Enter', 13],
+        ['Tab', 9],
+        ['Escape', 27],
+        ['x', 88],
+    ] as const) {
+        await tab.press(key, keyCode);
+    }
+    window.removeEventListener('error', onError);
+    expect(thrown).toEqual([]);
     expect(opsIn(tab.doc)).toBe(sent);
+    push(peer, rowInsert(0));
+    push(peer, [
+        { op: 'insertRowCol', id: 's1', path: [], value: { type: 'column', index: 0, count: 1, direction: 'lefttop' } },
+    ]);
+    await deliver(peer, tab.doc);
+    expect(tab.workbook().getFlowdata()).toEqual([[null]]);
+    await tab.type(0, 0, 'back');
+    expect(tab.cell(0, 0)?.v).toBe('back');
+    expectJoined(tab);
+});
+
+// The box lands on the next row, and the text typed for the cell that went must not follow it there.
+test("a peer's delete of the cell being edited closes the editor and writes its text nowhere", async () => {
+    const s = server({ '3_0': 'mine', '4_0': 'theirs' });
+    const tab = await openTab(s, 50);
+    const peer = replica(s, 100);
+    await tab.select(3, 0);
+    const input = await tab.press('h', 72);
+    input.textContent = 'hello';
+    push(peer, rowDelete(3));
+    await deliver(peer, tab.doc);
+    expect(tab.seen.selection?.row).toEqual([3, 3]);
+    expect(input.textContent).toBe('');
+    await tab.press('Enter', 13);
+    await tab.press('Enter', 13);
     expect(tab.cell(3, 0)?.v).toBe('theirs');
+    expectJoined(tab);
 });
 
 // The open cell editor follows its cell when a peer inserts or deletes a row above it, so the text typed there stays in
 // the editor and Enter writes it into the cell that moved, as the log has it.
-const rowDelete = (index: number): Op[] => [
-    { op: 'deleteRowCol', id: 's1', path: [], value: { type: 'row', start: index, end: index } },
-];
 for (const [name, rowOp, to] of [
     ['insert', rowInsert(2), 6],
     ['delete', rowDelete(1), 4],

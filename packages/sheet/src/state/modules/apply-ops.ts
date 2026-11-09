@@ -9,13 +9,12 @@ import type { Patch } from 'immer';
 import { applyPatches, current, produce } from 'immer';
 import { deleteRowColOf, insertRowColOf, isNewSheet, isRowColOp, renameSheetOf } from '../../engine/replay-ops';
 import type { Context } from '../context';
-import type { Op, Selection, Sheet } from '../types';
+import type { Op, Sheet } from '../types';
 import { opToPatch } from '../utils';
-import { cancelNormalSelected } from './cell';
 import { recomputeAfterOps } from './formula-exec';
 import type { RowColMove } from './history-shift';
 import { deleteMove, insertMove } from './history-shift';
-import { deleteRowCol, insertRowCol, movedSelection } from './rowcol';
+import { deleteRowCol, followView, insertRowCol } from './rowcol';
 import { addSheet, deleteSheet, leaveCurrentSheet, renameSheet } from './sheet';
 
 // A row or column op the batch applied, with the sheets it was applied to.
@@ -78,28 +77,4 @@ export function applyOpBatch(
     // The formula map lives outside immer, so it follows the batch only once the batch applied.
     if (patches.length > 0) next.formulaCache.updateFormulaCache(next, patches);
     return { ctx: next, moved };
-}
-
-// The open cell editor and the selections move with their cells, so a commit lands where the person chose, not in the
-// row that slid under it. A delete of the editor's cell closes the editor without writing.
-function followView(draft: Context, move: RowColMove) {
-    if (move.id !== draft.currentSheetId) {
-        const left = draft.sheetViewRecord[move.id];
-        if (left) left.selections = movedSelections(left.selections, move);
-        return;
-    }
-    const row = move.type === 'row';
-    const [r, c] = draft.editingCellPosition;
-    if (r != null && c != null) {
-        const moved = move.to(row ? r : c);
-        if (moved == null) cancelNormalSelected(draft);
-        else draft.editingCellPosition = row ? [moved, c] : [r, moved];
-    }
-    draft.selections = movedSelections(draft.selections, move);
-}
-
-// A selected range the op's delete takes whole goes.
-function movedSelections(selections: Selection[] | undefined, move: RowColMove): Selection[] | undefined {
-    const moved = selections?.flatMap((selection) => movedSelection(selection, move) ?? []);
-    return moved?.length ? moved : undefined;
 }
