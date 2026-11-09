@@ -20,7 +20,7 @@ import {
 } from '@workspace/lib/constants/mailboxes';
 import { PATHS, SERVER_DATABASES, SERVER_DIR } from '../lib/config/paths';
 import { buildMaildirFilename, createUniqueMessageId, maildirFolder } from '../lib/mail/mailutils';
-import type { User } from '../lib/user/user';
+import type { User } from '../lib/user';
 
 // Data root: honor EIGEN_DATA_ROOT (as the server does), else the repo's ./data resolved from
 // this file's location so the script works regardless of the cwd it's launched from.

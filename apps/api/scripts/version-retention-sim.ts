@@ -3,10 +3,10 @@
 // continuous editing crosses writesPerSnapshot every tick. A developer runs it by hand:
 // `bun apps/api/scripts/version-retention-sim.ts`.
 
+import type { SnapshotEntry } from '../src/lib/versioning/retention';
 import { DEFAULT_RETENTION, selectSnapshotsToPrune } from '../src/lib/versioning/retention';
 import { formatSnapshotTimestamp, parseSnapshotTimestamp } from '../src/lib/versioning/timestamp';
 
-type Snap = { id: string; name: string };
 const START = Date.parse('2026-06-01T09:00:00.000Z');
 
 function editingTimeline(days: number, sessionHours: number, tickMs: number): number[] {
@@ -20,10 +20,10 @@ function editingTimeline(days: number, sessionHours: number, tickMs: number): nu
 
 // Mirror Mount.snapshotContainerDataDb: append a snapshot, then prune (excluding the
 // just-written copy) with the real retention function.
-function simulate(timeline: number[]): Snap[] {
-    let stored: Snap[] = [];
+function simulate(timeline: number[]): SnapshotEntry[] {
+    let stored: SnapshotEntry[] = [];
     for (const [i, t] of timeline.entries()) {
-        const snap: Snap = { id: `s${i}`, name: formatSnapshotTimestamp(new Date(t)) };
+        const snap: SnapshotEntry = { id: `s${i}`, name: formatSnapshotTimestamp(new Date(t)) };
         stored.push(snap);
         const prune = new Set(
             selectSnapshotsToPrune(
