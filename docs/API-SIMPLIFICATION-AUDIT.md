@@ -80,6 +80,7 @@ Judged essential: holders and idle close of document databases, the two copy ord
 Root cause: compaction runs only when no socket is connected, so the `{id, compactedFrom}` base exists for one case: a tab away longer than the 60 s linger.
 Simpler: drop the base, and remount the grid on any new snapshot. Also consider swapping only when `dropped === 0`, which makes the pre-swap version and `skipFinalSnapshot` optional.
 Lost: a tab that slept through a compaction loses its undo stack, selection and scroll. ~80 LOC across API, lib and client. Medium risk, medium-high confidence.
+Don't build "drop the base": the Sheets audit's plan keeps it (2026-11-09), and owns what is left of T2.
 
 <a id="t4"></a>**T4. Three "this input keeps failing" memos.**
 Preview `.failed` marker files (`preview-cache.ts:86-104`, from `2789b4d` and `412b8af`). The compaction strike map with reset calls from other modules (`sheets-compaction.ts`, `import/import-document.ts:141`, `versioning/restore.ts:68`). And extract-text's timeout turned into a 413 that search reads as "empty".
