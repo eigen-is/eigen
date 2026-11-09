@@ -1,0 +1,82 @@
+// Drive's Recent page: the files and folders the viewer opened or was notified about, wherever they live,
+// each once, with the time of that last activity. It opens newest first every time and keeps its own sort,
+// because the shared view preference could open it alphabetically. The rows belong to many owners, so the
+// page is read-only, and a selected row's ?pid=&uid=&mid= opens its detail beside the list.
+
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { useAuth } from '@workspace/lib/auth';
+import { DEFAULT_MOUNT_ID, usePathInfo, useRecentPaths } from '@workspace/lib/drive';
+import type { DrivePath, DriveSearchParams, DriveSort } from '@workspace/lib/types/drive';
+import { EmptyState, LoadingState } from '@workspace/ui';
+import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
+import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
+import { useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';
+import { useMemo, useState } from 'react';
+
+export const Route = createFileRoute('/_auth/recent')({
+    component: RecentRoute,
+    validateSearch: (search: Record<string, unknown>): DriveSearchParams => {
+        const pid = typeof search.pid === 'string' ? search.pid : undefined;
+        const uid = typeof search.uid === 'string' ? search.uid : undefined;
+        const mid = typeof search.mid === 'string' ? search.mid : undefined;
+        return { pid, uid, mid };
+    },
+});
+
+function RecentRoute() {
+    const navigate = useNavigate();
+    const { user } = useAuth();
+    const { pid, uid, mid } = Route.useSearch();
+
+    const { data: recentPaths = [], isLoading, error } = useRecentPaths();
+    const { data: selectedPath = null } = usePathInfo(uid || '', mid || DEFAULT_MOUNT_ID, pid || '');
+    const [sort, setSort] = useState<DriveSort>({ key: 'modified', dir: 'desc' });
+    const lastActivity = useMemo(
+        () => new Map(recentPaths.map((path) => [path.id, path.lastActivityAt])),
+        [recentPaths],
+    );
+
+    const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({
+        items: recentPaths,
+        capabilities: DRIVE_CAPABILITIES.readOnly,
+        onOpenFolder: (path: DrivePath) =>
+            navigate({
+                to: '/fs/$ownerId/$mountId/$pathId',
+                params: { ownerId: path.ownerId, mountId: path.mountId, pathId: path.id },
+            }),
+        onSelectItem: (path: DrivePath) =>
+            navigate({
+                to: Route.fullPath,
+                search: { pid: path.id, uid: path.ownerId, mid: path.mountId },
+            }),
+    });
+
+    const handleBack = () => {
+        navigate({ to: Route.fullPath, search: { pid: undefined, uid: undefined, mid: undefined } });
+    };
+
+    if (isLoading) return <LoadingState />;
+
+    return (
+        <DriveLayout
+            pid={pid}
+            selectedPath={selectedPath}
+            ownerId={uid || user?.id || ''}
+            mountId={mid || DEFAULT_MOUNT_ID}
+            folderContents={recentPaths}
+            isLoading={false}
+            error={error}
+            onRowSelect={onRowSelect}
+            onRowActivate={onRowActivate}
+            onBackToList={handleBack}
+            capabilities={DRIVE_CAPABILITIES.readOnly}
+            title="Recent files"
+            onQuickLook={onQuickLook}
+            emptyState={<EmptyState message="Files you open or get notified about will appear here." />}
+            sort={sort}
+            onSortChange={setSort}
+            dateLabel="Last activity"
+            getItemDate={(path) => lastActivity.get(path.id) ?? null}
+        />
+    );
+}

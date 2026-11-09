@@ -490,6 +490,7 @@ export type DriveViewMode = 'list' | 'grid';
 export const DRIVE_SORT_KEYS = ['name', 'modified', 'size'] as const;
 export type DriveSortKey = (typeof DRIVE_SORT_KEYS)[number];
 export type DriveSortDir = 'asc' | 'desc';
+export type DriveSort = { key: DriveSortKey; dir: DriveSortDir };
 export type DriveViewPreferences = { mode: DriveViewMode; sortKey: DriveSortKey; sortDir: DriveSortDir };
 
 // What a Drive view lets the user do. Each view declares its whole set as one value, such as a preset
@@ -514,8 +515,7 @@ export type DriveCapabilities = {
 // the routes behind them cannot drift apart on the body they post (importFromDriveSchema mirrors it).
 export type DriveImportSource = { sourceOwnerId: string; sourceMountId: string; sourcePathId: string };
 
-// The identity subset of DrivePath needed to resolve a URL or open an item
-// (getDriveItemUrl, openDocument). DrivePath is assignable to it.
+// The part of a DrivePath that names an item, enough to build its URL or open it. DrivePath is assignable to it.
 export type DriveItemRef = {
     id: string;
     ownerId: string;

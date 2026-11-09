@@ -3,14 +3,14 @@
 // and it reports the folder it is in and the rows the user picks. A folder picker can also make a new folder there.
 
 import {
+    DEFAULT_MOUNT_ID,
     getDriveComparator,
     useBreadcrumb,
     useCreateFolder,
-    useDriveViewPreferences,
     useFolderContent,
     useRootFolder,
 } from '@workspace/lib/drive';
-import type { DrivePath, DriveSortDir, DriveSortKey } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { isFolderType } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
@@ -21,9 +21,10 @@ import { ContextMenuAnchor, useContextMenu } from '../context-menu';
 import { DriveBreadcrumb } from './drive-breadcrumb';
 import { DriveItemNameDialog } from './drive-item-name-dialog';
 import { DriveMountList, useMountLabel } from './drive-mount-list';
-import { DriveTable } from './drive-table';
+import type { DriveSortProps } from './drive-table';
+import { DriveTable, useDriveSort } from './drive-table';
 
-type DriveBrowserProps = {
+type DriveBrowserProps = DriveSortProps & {
     ownerId: string;
     mode: 'file' | 'folder';
     // Which rows are pickable; every row when omitted.
@@ -39,13 +40,8 @@ type DriveBrowserProps = {
     hideHeader?: boolean;
     createFolderOpen?: boolean;
     onCreateFolderOpenChange?: (open: boolean) => void;
-    externalSelectedIds?: Set<string>;
     onSelectionChange?: (items: DrivePath[]) => void;
     ownMountsOnly?: boolean;
-    // When set, the browser sorts by this, and the table's headers call onSortChange instead of changing the
-    // user's view preference, so a picker's sort stays inside its dialog.
-    sort?: { key: DriveSortKey; dir: DriveSortDir };
-    onSortChange?: (sort: { key: DriveSortKey; dir: DriveSortDir }) => void;
     className?: string;
 };
 
@@ -57,14 +53,13 @@ export function DriveBrowser({
     onSelect,
     onConfirm,
     onFolderChange,
-    defaultMountId = 'default',
+    defaultMountId = DEFAULT_MOUNT_ID,
     defaultFolderId,
     showNewFolder = mode === 'folder',
     hideToolbar = false,
     hideHeader = false,
     createFolderOpen: controlledCreateFolderOpen,
     onCreateFolderOpenChange,
-    externalSelectedIds,
     onSelectionChange,
     ownMountsOnly,
     sort,
@@ -82,10 +77,10 @@ export function DriveBrowser({
     // since the rows stop it from reaching the listing.
     const newFolderMenu = useContextMenu<true>();
 
-    const prevDefaultFolderId = useRef(defaultFolderId);
+    const prevDefaultFolderIdRef = useRef(defaultFolderId);
     useEffect(() => {
-        if (defaultFolderId !== prevDefaultFolderId.current) {
-            prevDefaultFolderId.current = defaultFolderId;
+        if (defaultFolderId !== prevDefaultFolderIdRef.current) {
+            prevDefaultFolderIdRef.current = defaultFolderId;
             if (defaultFolderId !== undefined) {
                 setCurrentFolderId(defaultFolderId);
             }
@@ -121,11 +116,7 @@ export function DriveBrowser({
     const mountLabel = useMountLabel(activeOwnerId, activeMountId);
     const folderId = currentFolderId ?? rootFolder?.id ?? '';
     const { data: folderContents = [] } = useFolderContent(activeOwnerId, activeMountId, folderId);
-    // Sort by the override when there is one, else by the view preference, so the header arrows match the row order
-    // either way.
-    const prefs = useDriveViewPreferences();
-    const sortKey = sort?.key ?? prefs.sortKey;
-    const sortDir = sort?.dir ?? prefs.sortDir;
+    const { key: sortKey, dir: sortDir } = useDriveSort({ sort, onSortChange });
     const sortedContents = useMemo(
         () => [...folderContents].sort(getDriveComparator(sortKey, sortDir)),
         [folderContents, sortKey, sortDir],
@@ -180,11 +171,6 @@ export function DriveBrowser({
         [navigateToFolder, mode, isPickable, onSelect, onConfirm, selectedId],
     );
 
-    const handleBreadcrumbClick = (path: DrivePath) => {
-        setCurrentFolderId(path.id);
-        onFolderChange?.(path, activeMountId);
-    };
-
     const handleCreateFolder = async (folderName: string) => {
         const newFolder = await createFolder.mutateAsync({
             ownerId: activeOwnerId,
@@ -214,7 +200,7 @@ export function DriveBrowser({
                     <DriveBreadcrumb
                         paths={breadcrumbPaths}
                         mountLabel={mountLabel}
-                        onNavigate={handleBreadcrumbClick}
+                        onNavigate={navigateToFolder}
                         className="flex-1"
                     />
                     {showNewFolder && (
@@ -235,7 +221,6 @@ export function DriveBrowser({
                 hideShareClick
                 hideActions
                 hideHeader={hideHeader}
-                externalSelectedIds={externalSelectedIds}
                 onSelectionChange={onSelectionChange}
                 sort={sort}
                 onSortChange={onSortChange}

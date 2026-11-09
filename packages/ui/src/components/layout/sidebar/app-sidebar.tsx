@@ -1,5 +1,5 @@
-// The sidebar of Drive and the document apps: the New button, a filter row per kind of file, such as All images,
-// the user's own drives and the team drives. A guest sees only what was shared with them.
+// The sidebar of Drive and the document apps: the New button, the Drive and Recent files rows, a filter row per kind
+// of file, such as All images, the sharing pages and the team drives. A guest sees only what was shared with them.
 
 import { getDriveAppUrl } from '@workspace/lib/api';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
@@ -16,6 +16,7 @@ import { EIGEN_DOC_APP_CONFIGS, eigenDocSharedTitle } from '../../drive/eigendoc
 import { StorageUsage } from '../../home/usage';
 import { UserAvatar } from '../../user/user-avatar';
 import { useLayout } from '../app/layout-context';
+import { RecentFilesSidebarItem } from './recent-files-sidebar-item';
 import { SidebarBody } from './sidebar-body';
 import { SidebarItem } from './sidebar-item';
 import { SidebarSection } from './sidebar-section';
@@ -143,6 +144,7 @@ function UserAppSidebar({ condensed = false, newButton }: AppSidebarProps) {
                     label="Drive"
                     condensed={condensed}
                 />
+                <RecentFilesSidebarItem inDrive={inDrive} condensed={condensed} />
             </SidebarSection>
 
             <SidebarSection condensed={condensed} title={condensed ? undefined : 'Filters'}>

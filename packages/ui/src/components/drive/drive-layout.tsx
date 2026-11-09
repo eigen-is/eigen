@@ -4,7 +4,7 @@
 // may do; this lays them out and wires the actions.
 
 import { getDriveItemUrl } from '@workspace/lib/api';
-import { getDriveComparator, useDriveViewPreferences } from '@workspace/lib/drive';
+import { getDriveComparator } from '@workspace/lib/drive';
 import type { DriveCapabilities, DrivePath } from '@workspace/lib/types/drive';
 import type { ReactNode } from 'react';
 import { useCallback, useMemo } from 'react';
@@ -14,8 +14,10 @@ import { LoadingState } from '../layout/app/loading-state';
 import { useDriveActionRunner } from './drive-action-runner';
 import { DriveDetail, DriveDetailToolbar } from './drive-detail';
 import { DriveList, DriveListToolbar } from './drive-list';
+import type { DriveSortProps } from './drive-table';
+import { useDriveSort } from './drive-table';
 
-export type DriveLayoutProps = {
+export type DriveLayoutProps = DriveSortProps & {
     ownerId: string;
     mountId: string;
     pathId?: string;
@@ -36,6 +38,9 @@ export type DriveLayoutProps = {
     pid?: string;
     unreadPathIds?: ReadonlySet<string>;
     emptyState?: ReactNode;
+    // The date the list shows and Modified sorts by, such as Recent's last activity, in place of the last edit.
+    dateLabel?: string;
+    getItemDate?: (item: DrivePath) => Date | null;
 };
 
 export function DriveLayout({
@@ -58,6 +63,10 @@ export function DriveLayout({
     title,
     unreadPathIds,
     emptyState,
+    sort,
+    onSortChange,
+    dateLabel,
+    getItemDate,
 }: DriveLayoutProps) {
     const { isMobile } = useLayout();
     const actions = useDriveActionRunner({
@@ -69,9 +78,11 @@ export function DriveLayout({
         onAfterAction,
     });
 
-    // Sort order comes from the shared view preference.
-    const { sortKey, sortDir } = useDriveViewPreferences();
-    const activeSortFn = useMemo(() => getDriveComparator(sortKey, sortDir), [sortKey, sortDir]);
+    const { key: sortKey, dir: sortDir } = useDriveSort({ sort, onSortChange });
+    const activeSortFn = useMemo(
+        () => getDriveComparator(sortKey, sortDir, (path) => getItemDate?.(path) ?? path.updatedAt),
+        [sortKey, sortDir, getItemDate],
+    );
     const sortedContents = useMemo(() => [...folderContents].sort(activeSortFn), [folderContents, activeSortFn]);
 
     const wrappedQuickLook = useCallback(
@@ -87,7 +98,6 @@ export function DriveLayout({
 
     const listProps = {
         items: sortedContents,
-        isLoading,
         error,
         onRowSelect,
         onRowActivate,
@@ -106,6 +116,10 @@ export function DriveLayout({
         onQuickLook: onQuickLook ? wrappedQuickLook : undefined,
         unreadPathIds,
         emptyState,
+        sort,
+        onSortChange,
+        dateLabel,
+        getItemDate,
     };
 
     const listToolbar = (
@@ -120,6 +134,8 @@ export function DriveLayout({
             onCreateFolder={actions.onCreateFolder}
             onUploadFile={actions.onUploadFile}
             onCreateEigenDoc={actions.onCreateEigenDoc}
+            sort={sort}
+            onSortChange={onSortChange}
         />
     );
 
@@ -127,7 +143,7 @@ export function DriveLayout({
     // refetches would draw the folder's details, Open button included, for a moment on every arrow key.
     const detailPath = pid ? selectedPath : selectedPath || currentPath;
 
-    const mobileShowDetail = !!(selectedPath || (currentPath && currentPath?.type !== 'folder'));
+    const mobileShowDetail = !!(selectedPath || (currentPath && currentPath.type !== 'folder'));
     // A folder shows the detail of its own rows only, since a file moved out keeps its pid in the URL. A
     // feed without a folder, such as Shared with me, shows any pid it resolves: a share link or a
     // reference chip can land there on an item the feed itself doesn't list.

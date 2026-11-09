@@ -19,8 +19,7 @@ export const driveKeys = {
         [...driveKeys.folders(ownerId), mountId, pathId] as const,
     mimeTypes: (ownerId: string) => [...driveKeys.owner(ownerId), 'mime'] as const,
     mime: (ownerId: string, mimeType: string) => [...driveKeys.mimeTypes(ownerId), mimeType] as const,
-    // Aggregate (personal + every team the caller belongs to) mime listing. Deliberately owner-less
-    // (always "the current user's everything"); the mimeAllTypes prefix enables form-agnostic invalidation.
+    // The user's own and their teams' files of one type, so the key has no owner.
     mimeAllTypes: () => [...driveKeys.all, 'mimeAll'] as const,
     mimeAll: (mimeType: string) => [...driveKeys.mimeAllTypes(), mimeType] as const,
     mountMime: (ownerId: string, mountId: string, mimeType: string) =>
@@ -44,8 +43,6 @@ export const driveKeys = {
     icsPreviews: (ownerId: string) => [...driveKeys.owner(ownerId), 'ics-preview'] as const,
     icsPreview: (ownerId: string, mountId: string, pathId: string, updatedAt: Date) =>
         [...driveKeys.icsPreviews(ownerId), mountId, pathId, updatedAt.getTime()] as const,
-    // Owner-scoped prefix for the effective-members family (every mount+path under one owner).
-    // invalidateEffectiveMembers drops the whole family on an ancestor ACL change.
     effectiveMembersForOwner: (ownerId: string) => [...driveKeys.owner(ownerId), 'effective-members'] as const,
     effectiveMembers: (ownerId: string, mountId: string, pathId: string) =>
         [...driveKeys.effectiveMembersForOwner(ownerId), mountId, pathId] as const,
@@ -55,14 +52,13 @@ export const driveKeys = {
     fileHistory: (ownerId: string, mountId: string, pathId: string, limit: number) =>
         [...driveKeys.history(ownerId), mountId, pathId, limit] as const,
     watches: (ownerId: string) => [...driveKeys.owner(ownerId), 'watches'] as const,
-    // Aggregate watches across the caller's own home, teams, and shared owners. Owner-less like
-    // mimeAll: it always means "everything the current user watches".
+    // Everything the user watches, in their own home, their teams' and their sharers', so the key has no owner.
     watchesAll: () => [...driveKeys.all, 'watchesAll'] as const,
     pathWatched: (ownerId: string, mountId: string, pathId: string) =>
         [...driveKeys.watches(ownerId), mountId, pathId] as const,
+    recent: (ownerId: string) => [...driveKeys.owner(ownerId), 'recent'] as const,
 };
 
-// Invalidators, called from the write hooks' onSuccess and from the drive SSE handlers.
 export function invalidateAclSharedOrUnshared(queryClient: QueryClient, ownerId: string): void {
     queryClient.invalidateQueries({ queryKey: driveKeys.shared(ownerId, 'with-me') });
 }
@@ -168,9 +164,8 @@ export function invalidateAclUpdated(
     if (parentId) {
         queryClient.invalidateQueries({ queryKey: driveKeys.folder(ownerId, mountId, parentId) });
     }
-    // The eigendoc app listings (stickies/docs/slides/sheets) render from the mime-type
-    // queries and pass their row objects into the share dialog — without this, the dialog
-    // reopens on a stale ACL after a change made from those views.
+    // The document apps' lists read the mime queries and hand their rows to the share dialog, which would
+    // otherwise reopen on the old ACL.
     if (mimeType) {
         queryClient.invalidateQueries({ queryKey: driveKeys.mimeTypes(ownerId) });
         queryClient.invalidateQueries({ queryKey: driveKeys.mimeAllTypes() });
@@ -181,8 +176,7 @@ export function invalidateTrash(queryClient: QueryClient, ownerId: string, mount
     queryClient.invalidateQueries({ queryKey: driveKeys.trashList(ownerId, mountId) });
 }
 
-// Owner-broad prefix invalidation: an ancestor ACL change alters effective membership for every
-// descendant, so per-path invalidation is insufficient — drop the whole effective-members family.
+// An ancestor's ACL change alters the members of every path below it, so the owner's whole family goes.
 export function invalidateEffectiveMembers(queryClient: QueryClient, ownerId: string): void {
     queryClient.invalidateQueries({ queryKey: driveKeys.effectiveMembersForOwner(ownerId) });
 }

@@ -1,12 +1,12 @@
 // The list view of a Drive listing: a virtualized table with sortable column headers, rows and their
 // context menu. DriveList draws it in list mode, and the pickers draw it bare, without actions. It also
-// holds the shared props of both listing views and the sort rule the grid's sort menu reuses.
+// holds the shared props of both listing views and useDriveSort, the sort a listing and its sort menu read.
 
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useDriveViewPreferences } from '@workspace/lib/drive';
 import { useIsCoarsePointer } from '@workspace/lib/media';
 import type { PaletteSelectionAction } from '@workspace/lib/types/command-palette';
-import type { DrivePath, DriveSortDir, DriveSortKey } from '@workspace/lib/types/drive';
+import type { DrivePath, DriveSort, DriveSortDir, DriveSortKey } from '@workspace/lib/types/drive';
 import { nextSortDir, SortHeader, SortHeaderRow } from '@workspace/ui/components/sort-header';
 import { cn } from '@workspace/ui/lib/utils';
 import { useRef } from 'react';
@@ -17,12 +17,30 @@ import { DriveItemContextMenu } from './drive-item-context-menu';
 import { DriveRow } from './drive-row';
 import { useDriveItemController } from './use-drive-item-controller';
 
-// Re-selecting the active field flips the direction; switching field uses that field's default. The
-// grid's sort menu follows the same rule through nextDriveSort.
+// The direction a field starts in when a pick switches to it.
 const DEFAULT_DIR: Record<DriveSortKey, DriveSortDir> = { name: 'asc', modified: 'desc', size: 'desc' };
 
-export function nextDriveSort(key: DriveSortKey, sortKey: DriveSortKey, sortDir: DriveSortDir): DriveSortDir {
-    return nextSortDir(key, sortKey, sortDir, DEFAULT_DIR).dir;
+// A controlled sort, for a listing that keeps its own, such as a picker or the Recent page: a pick calls
+// onSortChange and never writes the shared view preference.
+export type DriveSortProps = {
+    sort?: DriveSort;
+    onSortChange?: (sort: DriveSort) => void;
+};
+
+// The sort a listing draws: the caller's own, else the shared view preference. choose is the pick of a
+// column header or a sort menu, and it goes back to where the sort came from.
+export function useDriveSort({ sort, onSortChange }: DriveSortProps): DriveSort & {
+    choose: (key: DriveSortKey) => void;
+} {
+    const prefs = useDriveViewPreferences();
+    const key = sort?.key ?? prefs.sortKey;
+    const dir = sort?.dir ?? prefs.sortDir;
+    const choose = (picked: DriveSortKey) => {
+        const next = nextSortDir(picked, key, dir, DEFAULT_DIR);
+        if (sort) onSortChange?.(next);
+        else prefs.setSort(next.key, next.dir);
+    };
+    return { key, dir, choose };
 }
 
 // The props both listing views take, the table's column flags aside. DriveGrid takes exactly these.
@@ -60,11 +78,7 @@ export type DriveTableProps = DriveViewProps & {
     getItemDate?: (item: DrivePath) => Date | null;
     ancestorBreadcrumb?: DrivePath[];
     externalSelectedIds?: ReadonlySet<string>;
-    // A controlled sort: a header click calls onSortChange instead of writing the shared view
-    // preference. A picker passes it, so its sort stays inside the dialog.
-    sort?: { key: DriveSortKey; dir: DriveSortDir };
-    onSortChange?: (sort: { key: DriveSortKey; dir: DriveSortDir }) => void;
-};
+} & DriveSortProps;
 
 // Every combination is written out, so Tailwind finds each class in the source. The key names the
 // optional columns that show. Size always shows from 800px on, right before Modified, so every
@@ -93,7 +107,7 @@ const GRID_COLS_800_NO_ACTIONS: Record<string, string> = {
 };
 
 export function DriveTable({
-    items = [],
+    items,
     activeItemId,
     onItemClick,
     isItemDisabled,
@@ -120,17 +134,7 @@ export function DriveTable({
     const containerRef = useRef<HTMLDivElement>(null);
     const listRef = useRef<HTMLDivElement>(null);
 
-    // By default the sort is the shared view preference, which a header click writes as the grid's
-    // sort menu does, so every listing sorts alike. A picker passes sort and onSortChange instead, and
-    // its clicks never write the preference.
-    const prefs = useDriveViewPreferences();
-    const sortKey = sort?.key ?? prefs.sortKey;
-    const sortDir = sort?.dir ?? prefs.sortDir;
-    const onSortHeader = (key: DriveSortKey) => {
-        const dir = nextDriveSort(key, sortKey, sortDir);
-        if (sort) onSortChange?.({ key, dir });
-        else prefs.setSort(key, dir);
-    };
+    const { key: sortKey, dir: sortDir, choose: onSortHeader } = useDriveSort({ sort, onSortChange });
 
     // A first guess only: every row is measured, as its height follows the container's width.
     const ROW_HEIGHT = 41;
