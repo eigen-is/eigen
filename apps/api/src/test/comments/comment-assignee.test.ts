@@ -2,22 +2,27 @@ import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 
 import type { CommentEntry, DrivePath } from '@workspace/lib/types';
 import type { FileEvent } from '@workspace/lib/types/file-history';
 import type { Notification } from '@workspace/lib/types/notification';
+import { teamOwnerId } from '@workspace/lib/types/owner';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
+import { getServerConfig } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home';
 import * as homeRelay from '../../lib/home/home-relay';
 import type { OutboundMail } from '../../lib/mailer/mailer';
 import * as mailer from '../../lib/mailer/mailer';
 import type { TestUser } from '../setup';
 import {
+    addMember,
+    addTeamMount,
     assertJson,
     authedRequest,
+    createTeam,
     createTestGuest,
     driveGet,
     drivePost,
     drivePut,
-    eventually,
     findOrFail,
+    firstMountId,
     getTestContext,
 } from '../setup';
 
@@ -337,6 +342,8 @@ describe('Assignment email', () => {
     let rootId: string;
     let guest: TestUser;
     let otherGuest: TestUser;
+    let teamOwner: string;
+    let teamMountId: string;
     let mail: ReturnType<typeof catchMail>;
 
     function catchMail() {
@@ -353,23 +360,6 @@ describe('Assignment email', () => {
                     message.subject.includes('assigned you a comment') &&
                     message.to.some((recipient) => recipient.address === address),
             );
-    }
-
-    // A detached mail may still be on its way when the route answers.
-    function oneMailTo(address: string): Promise<OutboundMail> {
-        return eventually(async () => assignMailsTo(address)[0], `the mail to ${address}`);
-    }
-
-    function twoMailsTo(address: string): Promise<OutboundMail[]> {
-        return eventually(async () => {
-            const mails = assignMailsTo(address);
-            return mails.length >= 2 ? mails : undefined;
-        }, `a second mail to ${address}`);
-    }
-
-    async function expectNoMailTo(address: string): Promise<void> {
-        await Bun.sleep(50);
-        expect(assignMailsTo(address)).toEqual([]);
     }
 
     function linkIn(message: OutboundMail): URL {
@@ -411,6 +401,20 @@ describe('Assignment email', () => {
         return { docId: doc.id, chatName: chatNames[0], chatNames };
     }
 
+    async function teamDocWithCard(name: string) {
+        const token = ctx.alice.user.sessionToken;
+        const root = await driveGet<DrivePath>(token, teamOwner, teamMountId, 'root');
+        const doc = await drivePost<DrivePath>(token, teamOwner, teamMountId, `folder/${root.id}/create/doc`, {
+            fileName: name,
+        });
+        const children = await driveGet<DrivePath[]>(token, teamOwner, teamMountId, `folder/${doc.id}`);
+        const chatFolder = findOrFail(children, (c: DrivePath) => c.name === 'chat');
+        const chat = await drivePost<DrivePath>(token, teamOwner, teamMountId, `folder/${chatFolder.id}/create/chat`, {
+            fileName: 'card',
+        });
+        return { docId: doc.id, chatName: chat.name };
+    }
+
     function assign(docId: string, chatName: string, assignee: string | null, title?: string, actor?: TestUser) {
         return patchAssignee(
             (actor ?? ctx.alice.user).sessionToken,
@@ -431,6 +435,21 @@ describe('Assignment email', () => {
         rootId = root.id;
         guest = await createTestGuest('Assign Guest');
         otherGuest = await createTestGuest('Other Guest');
+
+        const orgId = getServerConfig()?.orgId ?? '';
+        // The team routes act on the session's active organization.
+        await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ organizationId: orgId }),
+        });
+        const teamId = await createTeam(ctx, orgId, 'Assign Mail Team');
+        teamOwner = teamOwnerId(teamId);
+        for (const member of [ctx.alice.user, ctx.bob.user, ctx.charlie.user]) {
+            await addMember(ctx, teamId, member.id);
+        }
+        await addTeamMount(ctx, teamId, 'Assign Mail Drive');
+        teamMountId = await firstMountId(ctx.alice.user.sessionToken, teamOwner);
     });
 
     beforeEach(async () => {
@@ -448,8 +467,9 @@ describe('Assignment email', () => {
 
         expect((await assign(docId, chatName, guest.email, 'Fix header')).status).toBe(200);
 
-        const message = await oneMailTo(guest.email);
-        expect(assignMailsTo(guest.email)).toHaveLength(1);
+        const mails = assignMailsTo(guest.email);
+        expect(mails).toHaveLength(1);
+        const message = mails[0];
         expect(message.subject).toBe(`${ctx.alice.user.name} assigned you a comment on "mail-guest"`);
         expect(message.from).toEqual({ name: ctx.alice.user.name, address: ctx.alice.user.email });
         expect(message.html).toContain('Fix header');
@@ -473,7 +493,9 @@ describe('Assignment email', () => {
 
         await assign(docId, chatName, guest.email);
 
-        expect(linkIn(await oneMailTo(guest.email)).searchParams.get('chat')).toBe(chatName);
+        const mails = assignMailsTo(guest.email);
+        expect(mails).toHaveLength(1);
+        expect(linkIn(mails[0]).searchParams.get('chat')).toBe(chatName);
     });
 
     test('an address with no account on the ACL gets a mail and no notification, and the assignment stands', async () => {
@@ -484,7 +506,6 @@ describe('Assignment email', () => {
 
         try {
             expect((await assign(docId, chatName, ghost, 'For the ghost')).status).toBe(200);
-            await oneMailTo(ghost);
             expect(assignMailsTo(ghost)).toHaveLength(1);
             const tag = bellTag(docId, chatName);
             const told = relay.mock.calls.filter(
@@ -509,7 +530,7 @@ describe('Assignment email', () => {
 
         await assign(docId, chatName, ctx.bob.user.email);
 
-        await expectNoMailTo(ctx.bob.user.email);
+        expect(assignMailsTo(ctx.bob.user.email)).toEqual([]);
         const tag = bellTag(docId, chatName);
         expect((await notificationsFor(ctx.bob.user.id)).some((n) => n.tag === tag)).toBe(true);
     });
@@ -520,7 +541,6 @@ describe('Assignment email', () => {
 
         await assign(docId, chatName, ctx.bob.user.email);
 
-        await oneMailTo(ctx.bob.user.email);
         expect(assignMailsTo(ctx.bob.user.email)).toHaveLength(1);
     });
 
@@ -532,8 +552,8 @@ describe('Assignment email', () => {
         await assign(docId, chatNames[0], guest.email);
         await assign(docId, chatNames[1], ghost);
 
-        await expectNoMailTo(guest.email);
-        await expectNoMailTo(ghost);
+        expect(assignMailsTo(guest.email)).toEqual([]);
+        expect(assignMailsTo(ghost)).toEqual([]);
     });
 
     test('a self-assign sends no mail', async () => {
@@ -542,7 +562,7 @@ describe('Assignment email', () => {
 
         await assign(docId, chatName, ctx.alice.user.email);
 
-        await expectNoMailTo(ctx.alice.user.email);
+        expect(assignMailsTo(ctx.alice.user.email)).toEqual([]);
     });
 
     test('a self-assign by a guest sends no mail', async () => {
@@ -550,18 +570,17 @@ describe('Assignment email', () => {
 
         expect((await assign(docId, chatName, guest.email, undefined, guest)).status).toBe(200);
 
-        await expectNoMailTo(guest.email);
+        expect(assignMailsTo(guest.email)).toEqual([]);
     });
 
     test('an unassign sends no mail', async () => {
         const { docId, chatName } = await freshDoc('mail-unassign', [guest.email]);
         await assign(docId, chatName, guest.email);
-        await oneMailTo(guest.email);
+        expect(assignMailsTo(guest.email)).toHaveLength(1);
         mail.mockClear();
 
         expect((await assign(docId, chatName, null)).status).toBe(200);
 
-        await Bun.sleep(50);
         expect(mail).not.toHaveBeenCalled();
     });
 
@@ -570,12 +589,10 @@ describe('Assignment email', () => {
         // The failed first mail frees the window, so only "nothing changed" can hold the second one back.
         mail.mockResolvedValueOnce(false);
         await assign(docId, chatName, guest.email);
-        await oneMailTo(guest.email);
-        await Bun.sleep(50);
+        expect(assignMailsTo(guest.email)).toHaveLength(1);
 
         await assign(docId, chatName, guest.email);
 
-        await Bun.sleep(50);
         expect(assignMailsTo(guest.email)).toHaveLength(1);
     });
 
@@ -584,13 +601,11 @@ describe('Assignment email', () => {
         const other = await freshDoc('mail-window-other', [guest.email]);
 
         await assign(first.docId, first.chatNames[0], guest.email);
-        await oneMailTo(guest.email);
         await assign(first.docId, first.chatNames[1], guest.email);
-        await Bun.sleep(50);
         expect(assignMailsTo(guest.email)).toHaveLength(1);
 
         await assign(other.docId, other.chatName, guest.email);
-        const mails = await twoMailsTo(guest.email);
+        const mails = assignMailsTo(guest.email);
         expect(mails).toHaveLength(2);
         expect(mails[1].subject).toContain('mail-window-other');
     });
@@ -601,8 +616,8 @@ describe('Assignment email', () => {
         await assign(docId, chatNames[0], guest.email);
         await assign(docId, chatNames[1], otherGuest.email);
 
-        await oneMailTo(guest.email);
-        await oneMailTo(otherGuest.email);
+        expect(assignMailsTo(guest.email)).toHaveLength(1);
+        expect(assignMailsTo(otherGuest.email)).toHaveLength(1);
     });
 
     test('a reassign back and forth on one card mails each person once', async () => {
@@ -611,9 +626,7 @@ describe('Assignment email', () => {
         await assign(docId, chatName, guest.email);
         await assign(docId, chatName, otherGuest.email);
         await assign(docId, chatName, guest.email);
-        await oneMailTo(otherGuest.email);
 
-        await Bun.sleep(50);
         expect(assignMailsTo(guest.email)).toHaveLength(1);
         expect(assignMailsTo(otherGuest.email)).toHaveLength(1);
     });
@@ -623,11 +636,9 @@ describe('Assignment email', () => {
         mail.mockResolvedValueOnce(false);
 
         await assign(docId, chatNames[0], guest.email);
-        await oneMailTo(guest.email);
-        await Bun.sleep(50);
         await assign(docId, chatNames[1], guest.email);
 
-        expect(await twoMailsTo(guest.email)).toHaveLength(2);
+        expect(assignMailsTo(guest.email)).toHaveLength(2);
     });
 
     test('a guest actor mails like anyone', async () => {
@@ -635,7 +646,9 @@ describe('Assignment email', () => {
 
         expect((await assign(docId, chatName, otherGuest.email, 'From a guest', guest)).status).toBe(200);
 
-        const message = await oneMailTo(otherGuest.email);
+        const mails = assignMailsTo(otherGuest.email);
+        expect(mails).toHaveLength(1);
+        const message = mails[0];
         expect(message.subject).toBe(`${guest.name} assigned you a comment on "mail-guest-actor"`);
         expect(message.from).toEqual({ name: guest.name, address: guest.email });
     });
@@ -645,7 +658,9 @@ describe('Assignment email', () => {
 
         await assign(docId, chatName, guest.email, '<b>Bold</b> move');
 
-        const message = await oneMailTo(guest.email);
+        const mails = assignMailsTo(guest.email);
+        expect(mails).toHaveLength(1);
+        const message = mails[0];
         expect(message.html).toContain('&lt;b&gt;Bold&lt;/b&gt; move');
         expect(message.html).not.toContain('<b>Bold');
         expect(message.text).toContain('<b>Bold</b> move');
@@ -657,7 +672,9 @@ describe('Assignment email', () => {
 
         await home.drive.assignComment(mountId, docId, chatName, guest.email, { ...home.user, name: '' });
 
-        const message = await oneMailTo(guest.email);
+        const mails = assignMailsTo(guest.email);
+        expect(mails).toHaveLength(1);
+        const message = mails[0];
         const title = `${ctx.alice.user.email} assigned you a comment on "mail-no-name"`;
         expect(message.subject).toBe(title);
         const tag = bellTag(docId, chatName);
@@ -676,7 +693,7 @@ describe('Assignment email', () => {
 
         try {
             expect((await assign(docId, chatName, guest.email)).status).toBe(200);
-            await oneMailTo(guest.email);
+            expect(assignMailsTo(guest.email)).toHaveLength(1);
         } finally {
             relay.mockRestore();
         }
@@ -688,7 +705,7 @@ describe('Assignment email', () => {
 
         expect((await assign(docId, chatName, guest.email)).status).toBe(200);
 
-        await oneMailTo(guest.email);
+        expect(assignMailsTo(guest.email)).toHaveLength(1);
         const tag = bellTag(docId, chatName);
         expect((await notificationsFor(guest.id)).some((n) => n.tag === tag)).toBe(true);
     });
@@ -700,5 +717,55 @@ describe('Assignment email', () => {
         expect((await assign(docId, chatName, guest.email)).status).toBe(200);
 
         expect(assignMailsTo(guest.email)).toHaveLength(1);
+    });
+
+    test('a team member assigning another member mails a link into the team drive, from the actor', async () => {
+        await setFlags({ userOnAssign: true });
+        const { docId, chatName } = await teamDocWithCard('team-mail');
+
+        const res = await patchAssignee(
+            ctx.bob.user.sessionToken,
+            teamOwner,
+            teamMountId,
+            docId,
+            chatName,
+            ctx.charlie.user.email,
+        );
+        expect(res.status).toBe(200);
+
+        const mails = assignMailsTo(ctx.charlie.user.email);
+        expect(mails).toHaveLength(1);
+        expect(mails[0].from).toEqual({ name: ctx.bob.user.name, address: ctx.bob.user.email });
+        expect(linkIn(mails[0]).pathname).toContain(`/${teamOwner}/${teamMountId}/${docId}`);
+    });
+
+    test('a team document trashed while the assignment is written sends no mail and no notification', async () => {
+        await setFlags({ userOnAssign: true });
+        const { docId, chatName } = await teamDocWithCard('team-mail-trashed');
+        const team = await getHome(teamOwner);
+        // The route refuses a document in the trash, so the trash lands between the write and the notice.
+        const record = team.drive.recordFileEvent.bind(team.drive);
+        const trashing = spyOn(team.drive, 'recordFileEvent').mockImplementationOnce(async (...args) => {
+            await record(...args);
+            await team.drive.deletePath(teamMountId, docId);
+        });
+
+        try {
+            const res = await patchAssignee(
+                ctx.bob.user.sessionToken,
+                teamOwner,
+                teamMountId,
+                docId,
+                chatName,
+                ctx.charlie.user.email,
+            );
+            expect(res.status).toBe(200);
+        } finally {
+            trashing.mockRestore();
+        }
+
+        expect(assignMailsTo(ctx.charlie.user.email)).toEqual([]);
+        const tag = `assigned:${teamOwner}:${teamMountId}:${docId}:${chatName}`;
+        expect((await notificationsFor(ctx.charlie.user.id)).some((n) => n.tag === tag)).toBe(false);
     });
 });
