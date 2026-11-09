@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, guests, sharing, access]
 related: [admin/get-started, drive/share-a-file]
 order: 50
-updated: 2026-10-26
+updated: 2026-11-09
 ---
 
 Guest access lets people outside your organization view files you have shared with them. Guests sign in with a one-time code sent to their email address, not a password, so they do not need a full account on your server.
@@ -50,3 +50,5 @@ Click a guest to open their detail panel, which shows when they were last active
 When you share a file with a guest's email address, Eigen can send them a notification email. You control this from [**Settings**](/admin/settings), under **Email notifications**, using the **Email guests when added to share** toggle.
 
 This is on by default. Guests have no in-app notification channel, so turning it off means they will not know a file has been shared with them unless you tell them yourself.
+
+The **Email guests when assigned a comment or card** toggle, also on by default, does the same when someone assigns a guest a comment or card.

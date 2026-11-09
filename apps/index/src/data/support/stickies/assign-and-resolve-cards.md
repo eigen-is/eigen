@@ -24,7 +24,11 @@ You can also set the assignee while you fill a card in. The **Add sticky** dialo
 
 An open card has the same control in the row under the description, on the right. Picking someone there takes effect straight away.
 
-If you assign a card to someone else, they get a notification. To take the assignee off again, choose **Unassigned**.
+If you assign a card to someone else, they get a notification. A guest also gets an email that names the card and links to it, because a guest rarely has Eigen open. Someone the board is shared with who has no account yet gets only the email. These are the defaults, and the server owner can change them in [Server settings](/support/admin/server-settings).
+
+A person gets at most one email an hour for each board. Any other cards you assign them in that hour show up in the bell, not in their inbox.
+
+To take the assignee off again, choose **Unassigned**.
 
 On the board, the assignee shows as a small avatar in the bottom corner of the card. On an open card assigned to you, the avatar has a colored ring, so the cards waiting on you stand out.
 

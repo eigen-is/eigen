@@ -22,7 +22,7 @@ Paths are under `apps/api/src/` unless they say otherwise.
 | **Public routes** | `routes/public.ts` | `/p/*`, the deliberate unauthenticated surface; never add auth to one |
 | **XML reads** | `lib/core/xml.ts` | `parseXml`, the one XML reader: refuses a DOCTYPE, matches by namespace, never prefix ([WEBDAV.md](WEBDAV.md)) |
 | **OOXML** | `lib/ooxml/` | What the docx, xlsx and pptx readers and writers share, apart so `export/` and `import/` never import each other (`lib/ooxml/README.md`, [EXPORT.md](EXPORT.md)) |
-| **Window limiter** | `lib/core/window-limiter.ts` | An in-memory sliding window per key (protocol auth failures, demo entry, access-request mail) |
+| **Window limiter** | `lib/core/window-limiter.ts` | An in-memory sliding window per key (protocol auth failures, demo entry, access-request and assignment mail) |
 | **SSE emission** | `lib/[domain]/sse-events.ts` | `home.broadcast(buildEvent(...))` ([SSE.md](SSE.md)) |
 | **Notifications** | `lib/notification-center/` | `home.notify({...})` stores and broadcasts a notification, shown as a toast ([NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md), [ACTIVITY-ROWS.md](ACTIVITY-ROWS.md)) |
 | **Auth** | `lib/auth/auth.ts` | better-auth over `users3.db`, which has no migrations: a new column goes into `auth-schema.ts`, the `setup.ts` DDL and `ensureAuthSchemaColumns` together, or better-auth refuses to start ([DATABASE.md](DATABASE.md)) |
