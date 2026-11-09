@@ -7,7 +7,7 @@ import { renderInDocument } from '@workspace/ui/test/render-in-document';
 installHappyDom();
 
 const { act, createElement } = await import('react');
-const { AppError } = await import('@workspace/lib/api-error');
+const { AppError, onMutationError } = await import('@workspace/lib/api-error');
 const { AuthProvider } = await import('@workspace/lib/auth');
 const { buildSaveOptions, initFields, mergeServerAttachments, useDraft } = await import(
     '../../../../components/mail/hooks/use-draft'
@@ -156,6 +156,29 @@ test('after the server says the message is no longer a draft, nothing saves agai
     await unmount();
     expect(saves).toBe(1);
 });
+
+// Bun fails a test on an unhandled rejection, as the browser raises a page error on one.
+test('a failed auto-save reaches the toast and raises no page error', async () => {
+    const seen: { draft?: ReturnType<typeof useDraft> } = {};
+    function Probe() {
+        seen.draft = useDraft({
+            email: savedDraft([]),
+            // What a mutation's mutateAsync does: the hook's onError toasts, and the promise still rejects.
+            onSave: async () => {
+                const error = new AppError({ status: 503, error: { status: 503, value: 'Service unavailable' } });
+                onMutationError(error);
+                throw error;
+            },
+        });
+        return null;
+    }
+    const { unmount } = await renderInDocument(createElement(AuthProvider, null, createElement(Probe)));
+
+    await act(async () => seen.draft?.setField('subject', 'Typed'));
+    await act(async () => void (await Bun.sleep(2700)));
+    await unmount();
+    await Bun.sleep(10);
+}, 10_000);
 
 describe('a forward carries the parts of the message it forwards', () => {
     const forward: NewDraft = { subject: 'FW: Lunch', html: '<p>quoted</p>', text: 'quoted' };

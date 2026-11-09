@@ -254,7 +254,8 @@ export class MaildirStore {
         return this.db.getEmailsCountUnread(mailbox);
     }
 
-    // null means "no summary row" only: a parse, read or DB fault propagates rather than masking as a missing message.
+    // null means no such message, which includes a file a mail client renamed or removed before the next sync caught the
+    // row up. Any other parse, read or DB fault propagates rather than masking as a missing message.
     public async getMessage(messageId: string): Promise<Email | null> {
         const cached = this.db.getEmail(messageId);
         if (!cached) return null;
@@ -264,7 +265,11 @@ export class MaildirStore {
             cached.mailbox,
             this.getMessageFile(cached.mailbox, cached.filename),
             cached.isDraft,
-        );
+        ).catch((e: unknown) => {
+            if (isEnoent(e)) return null;
+            throw e;
+        });
+        if (!parsed) return null;
         applyFlagsFromFilename(parsed, cached.filename);
         return { ...parsed, ...cached };
     }

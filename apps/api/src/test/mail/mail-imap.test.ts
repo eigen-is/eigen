@@ -3,6 +3,7 @@ import { readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from
 import { join } from 'node:path';
 import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
+import { getHome } from '../../lib/home';
 import {
     applyFlagsFromFilename,
     buildMaildirFilename,
@@ -287,6 +288,18 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
     });
 
     // -- Simulated Dovecot: external file changes --
+
+    test('a read of a message whose file a client just removed answers 404', async () => {
+        const home = await getHome(charlieId);
+        const id = await home.mail.mailboxDeliver(Buffer.from(testEml('Removed by a client')));
+        const name = readdirSync(curDir(charlieId, MAILBOX_INBOX)).find((file) => file.startsWith(`${id},`));
+        if (!name) throw new Error('the delivered file is not in cur/');
+
+        unlinkSync(join(curDir(charlieId, MAILBOX_INBOX), name));
+
+        expect(home.mail.messageGetSummary(id)).toBeDefined();
+        expect(await home.mail.messageGet(id)).toBeNull();
+    });
 
     test('sync detects new message placed in cur/ by Dovecot', async () => {
         const eml = testEml('Dovecot Delivered', 'dovecot@example.com');

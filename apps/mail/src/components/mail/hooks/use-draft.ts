@@ -3,7 +3,7 @@
 // forward counts as saved, so a draft only reaches Drafts once the user changes something. The field
 // conversions and the attachment reconcile are exported for their own tests.
 
-import { AppError } from '@workspace/lib/api-error';
+import { AppError, rethrowUntoasted } from '@workspace/lib/api-error';
 import type { AuthUser } from '@workspace/lib/auth';
 import { useAuth } from '@workspace/lib/auth';
 import { flattenAddresses } from '@workspace/lib/mail';
@@ -391,7 +391,7 @@ export function useDraft({
         if (disabledRef.current) return;
         if (!isSaveable(state.fields)) return;
         if (!isDirty(state)) return;
-        const timer = setTimeout(() => void runSave(), AUTO_SAVE_DEBOUNCE_MS);
+        const timer = setTimeout(() => void runSave().catch(rethrowUntoasted), AUTO_SAVE_DEBOUNCE_MS);
         return () => clearTimeout(timer);
     }, [state]);
 
@@ -401,9 +401,7 @@ export function useDraft({
             if (disabledRef.current) return;
             const { state: s, user: u, onSave: cb } = latestRef.current;
             if (!isSaveable(s.fields) || !isDirty(s)) return;
-            cb(fieldsToDraft(s.fields, u), buildSaveOptions(s.fields)).catch((err) =>
-                console.warn('draft unmount save failed', err),
-            );
+            cb(fieldsToDraft(s.fields, u), buildSaveOptions(s.fields)).catch(rethrowUntoasted);
         };
     }, []);
 

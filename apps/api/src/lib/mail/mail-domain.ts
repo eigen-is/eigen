@@ -194,7 +194,6 @@ export class Mail {
     // -- Message operations --
 
     public async messageGet(messageId: string): Promise<Email | null> {
-        // null means "no summary row" only: a parse, read or DB fault propagates to a 500, never a silent 404.
         const message = await this.store.getMessage(messageId);
         if (!message) return null;
 
