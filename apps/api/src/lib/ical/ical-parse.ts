@@ -79,7 +79,8 @@ export function projectResource(resource: ICAL.Component): ProjectedResource {
     return { events: events.map(stamped), skipped, hasUnindexedRecurrence };
 }
 
-// ical.js keeps a vCard-style group in the name (RFC 5545 §3.1), so `A.ATTENDEE` is an ATTENDEE that `getFirstProperty('attendee')` misses.
+// ical.js keeps a vCard-style group in the name (RFC 5545 §3.1), so `A.ATTENDEE` is an ATTENDEE that
+// `getFirstProperty('attendee')` misses.
 export function bareName(name: string): string {
     return name.slice(name.lastIndexOf('.') + 1).toLowerCase();
 }
@@ -94,7 +95,8 @@ export function propTzid(prop: ICAL.Property | null | undefined): string | null 
     return normalizeTimezone(tzid) ?? (prop && tzid ? licLocation(prop, tzid) : null);
 }
 
-// Built once per root: Outlook's unnamed "Customized Time Zone" misses on every DTSTART, DTEND and EXDATE, and a scan per miss is quadratic.
+// Built once per root: Outlook's "Customized Time Zone" misses on every DTSTART, DTEND and EXDATE, and a scan per miss
+// is quadratic.
 const licLocationsByRoot = new WeakMap<ICAL.Component, Map<string, string | null>>();
 
 // libical names a zone by a TZID no standard knows and states its IANA name only in the file's VTIMEZONE.
@@ -117,7 +119,8 @@ function licLocation(prop: ICAL.Property, tzid: string): string | null {
     return locations.get(tzid) ?? null;
 }
 
-// A CAL-ADDRESS is a URI, so its scheme is case-insensitive (RFC 3986) and clients emit both `mailto:` and `MAILTO:`: a surviving prefix matches no address and the row reads as someone else's invitation.
+// A CAL-ADDRESS is a URI, so its scheme is case-insensitive (RFC 3986) and clients write `MAILTO:` too: a prefix left
+// on matches no address, and the row reads as someone else's invitation.
 export function calAddress(raw: unknown): string {
     return (typeof raw === 'string' ? raw : String(raw ?? '')).trim().replace(/^mailto:\s*/i, '');
 }
@@ -138,14 +141,16 @@ function startOfDay(t: ICAL.Time): Date {
     return new Date(Date.UTC(t.year, t.month - 1, t.day));
 }
 
-// Expansion keys in wall-clock space, so an exception must key to the same wall-clock date to attach to its instance; `tz` is the series' own zone and matters only for the UTC-Z form.
-export function icalTimeToRecurrenceKey(t: ICAL.Time, tz: string | null): string {
-    // RFC 5545 puts a RECURRENCE-ID in the master DTSTART's tz, so converting a TZID value mis-keys a cross-tz move; toJSDate() would read a floating or DATE value in the server's zone.
+// Expansion keys in wall-clock space, so an exception keys to the same wall-clock date to attach to its occurrence.
+// Only the UTC form needs the series' zone.
+export function icalTimeToRecurrenceKey(t: ICAL.Time, seriesTz: string | null): string {
+    // RFC 5545 states a RECURRENCE-ID in the master DTSTART's zone, so converting a TZID value would mis-key a move
+    // across zones.
     if (t.isDate || t.zone !== ICAL.Timezone.utcTimezone) return recurrenceKey(t.year, t.month, t.day);
-    // A timed series crossing midnight UTC has a UTC day one off, so this form keys through the SERIES zone; Exchange-lineage clients and Eigen's tz-null exceptions emit it.
+    // A timed series crossing midnight UTC has a UTC day one off, so this form keys through the series' zone.
     const instant = t.toJSDate();
-    if (tz) {
-        const { year, month, day } = utcToLocal(instant, tz);
+    if (seriesTz) {
+        const { year, month, day } = utcToLocal(instant, seriesTz);
         return recurrenceKey(year, month, day);
     }
     return recurrenceKey(instant.getUTCFullYear(), instant.getUTCMonth() + 1, instant.getUTCDate());
@@ -266,7 +271,8 @@ export type ParsedEvent = {
     // RFC 5546 § 2.1.5 breaks a SEQUENCE tie with it, so a receiver can order two messages sent without a bump.
     dtstamp: Date | null;
     recurrenceDate: string | null;
-    // A UTC-Z RECURRENCE-ID, kept because an inbound single-VEVENT iMIP has no master to supply the series tz: the caller re-keys it against the linked event's stored timezone.
+    // A UTC RECURRENCE-ID, kept because a mailed lone occurrence has no master to name the series' zone: the caller
+    // re-keys it against the linked event's.
     recurrenceInstant: Date | null;
     data: EventData | null;
 };
@@ -290,7 +296,8 @@ export type IcsParseResult = {
 export type ProjectedResource = {
     events: StoredEvent[];
     skipped: number;
-    // Recurrence the index cannot expand (a stripped rule, an RDATE): a time-range REPORT returns the resource for every window rather than lose an occurrence.
+    // Recurrence the index can't expand, such as a stripped rule or an RDATE: a time-range REPORT returns the resource
+    // for every window rather than lose an occurrence.
     hasUnindexedRecurrence: boolean;
 };
 
@@ -364,7 +371,8 @@ function readResource(resource: ICAL.Component, triesRule: boolean): ReadResult 
     const method = parseImipMethod(resource.getFirstPropertyValue('method'));
     const vevents = resource.getAllSubcomponents('vevent');
 
-    // A UTC-Z RECURRENCE-ID / EXDATE keys in the SERIES timezone, so an override whose UID groups with no master falls back to its own DTSTART tz and then to the file's first master's.
+    // A UTC RECURRENCE-ID or EXDATE keys in the series' zone, so an override with no master falls back to its own
+    // DTSTART's zone and then to the file's first master's.
     const seriesTzByUid = seriesTimezones(vevents);
     const fileTz = seriesTzByUid.values().next().value ?? null;
 
@@ -377,7 +385,7 @@ function readResource(resource: ICAL.Component, triesRule: boolean): ReadResult 
         // Every row this VEVENT yields, so a failure halfway through leaves none of it behind.
         const parsed: ReadEvent[] = [];
         try {
-            // The empty exception list skips ICAL.Event's own sibling scan, which is quadratic over a calendar export; overrides are related here instead.
+            // The empty exception list skips ICAL.Event's own sibling scan, which is quadratic over a calendar export.
             const event = new ICAL.Event(vevent, { exceptions: [] });
 
             const uid = event.uid || '';
@@ -394,7 +402,7 @@ function readResource(resource: ICAL.Component, triesRule: boolean): ReadResult 
             const tzid = propTzid(vevent.getFirstProperty('dtstart'));
             const startTime = allDay ? startOfDay(start) : icalTimeToInstant(start, tzid, null);
 
-            // Never ICAL.Event.endDate: ical.js adds a DURATION month by month, so that read takes as long as the number says.
+            // Never ICAL.Event.endDate: ical.js adds a DURATION month by month, so that read costs as much as it says.
             const end = dtend?.getFirstValue();
             const duration = vevent.getFirstPropertyValue('duration');
             let endTime: Date;
@@ -439,7 +447,7 @@ function readResource(resource: ICAL.Component, triesRule: boolean): ReadResult 
             if (recurrenceId) {
                 const rid = recurrenceId.getFirstValue();
                 if (rid instanceof ICAL.Time) {
-                    // A master that named no TZID keeps its series in UTC; only a UID with no master falls back to this VEVENT's zone and then the file's first master's.
+                    // A master that named no TZID keeps its series in UTC; only a UID with no master falls back.
                     const seriesTz = seriesTzByUid.has(uid) ? (seriesTzByUid.get(uid) ?? null) : (tzid ?? fileTz);
                     recurrenceDate = icalTimeToRecurrenceKey(rid, seriesTz);
                     if (!rid.isDate && rid.zone === ICAL.Timezone.utcTimezone) {
@@ -500,10 +508,12 @@ function readResource(resource: ICAL.Component, triesRule: boolean): ReadResult 
                 },
             });
 
-            // EXDATE is how every client round-trips a deleted occurrence, so each becomes a synthetic cancelled row taking its id and SEQUENCE from the stamp beside it, else from the master.
+            // Every client round-trips a deleted occurrence as an EXDATE, so each becomes a cancelled row, its id and
+            // SEQUENCE from the stamp beside it, else from the master.
             if (rrule) {
                 const stamps = readExclusionStamps(vevent);
-                // Clients repeat an EXDATE value and rewrite it between TZID, UTC and comma-joined forms, so only the key names the occurrence.
+                // Clients repeat an EXDATE value and rewrite it between TZID, UTC and comma-joined forms, so only the
+                // key names the occurrence.
                 const excluded = new Set<string>();
                 for (const exdateProp of vevent.getAllProperties('exdate')) {
                     const exTzid = propTzid(exdateProp);

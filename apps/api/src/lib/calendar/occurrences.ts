@@ -11,7 +11,7 @@ import { toEvent } from './mappers';
 import { expandRecurrence } from './recurrence';
 import * as schema from './schema';
 
-// Bounds one series' expansion against a year-9999 span. Cut rather than refused, so a wide CalDAV sync still gets data.
+// Bounds one series' expansion against a year-9999 span. Cut rather than refused, so a wide CalDAV sync gets data.
 const MAX_EXPANSION_MS = 5 * 366 * 24 * 60 * 60 * 1000;
 
 export async function getEventsInRange(
@@ -41,7 +41,7 @@ export async function getEventsInRange(
         .all()
         .map(toEvent);
 
-    // An override is read twice: as the parent occurrence it replaces, and — when its own times overlap — where it was moved to.
+    // An override is read twice: as the occurrence it replaces, and where it was moved to when its own times overlap.
     // The parents ride as a subquery: one bound variable per master would pass SQLite's cap on a large home.
     const masterIds = calendar.db
         .select({ id: schema.events.id })
