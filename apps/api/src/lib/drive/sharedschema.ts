@@ -1,9 +1,9 @@
-// The Drizzle table of a home's shared.db: its copy of the paths other owners shared with it. The functions behind
-// "Shared with me" query it, and the drive's migrations create it.
+// The Drizzle tables of a home's shared.db: its copy of the paths other owners shared with it, behind "Shared with
+// me", and the paths its user opened or was notified about, behind Recent. The drive's migrations create them.
 
 import type { DriveACL, DrivePathDetails, DrivePathType, DriveVisibility } from '@workspace/lib/types/drive';
 import { sql } from 'drizzle-orm';
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 export const sharedPaths = sqliteTable('shared_paths', {
     id: text('id').primaryKey(),
@@ -22,3 +22,16 @@ export const sharedPaths = sqliteTable('shared_paths', {
     createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
     updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });
+
+export const recentPaths = sqliteTable(
+    'recent_paths',
+    {
+        ownerId: text('ownerId').notNull(),
+        mountId: text('mountId').notNull(),
+        pathId: text('pathId').notNull(),
+        lastActivityAt: integer('lastActivityAt', { mode: 'timestamp' }).notNull(),
+    },
+    (table) => ({
+        pk: primaryKey({ columns: [table.ownerId, table.mountId, table.pathId] }),
+    }),
+);

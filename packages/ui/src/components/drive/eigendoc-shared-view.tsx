@@ -9,9 +9,7 @@ import { DEFAULT_MOUNT_ID, usePathInfo, useSharedPaths } from '@workspace/lib/dr
 import type { DrivePath, DriveSearchParams } from '@workspace/lib/types/drive';
 import { isDocumentType } from '@workspace/lib/types/drive';
 import { useContext } from 'react';
-import { EmptyState } from '../layout/app/empty-state';
 import { useLayout } from '../layout/app/layout-context';
-import { LoadingState } from '../layout/app/loading-state';
 import { DRIVE_CAPABILITIES } from './drive-capabilities';
 import { DriveLayout } from './drive-layout';
 import type { EigenDocAppConfig } from './eigendoc-config';
@@ -57,14 +55,6 @@ export function EigenDocSharedView({ config, to, pid, uid, mid, onNavigate, onNa
         }
     };
 
-    if (error) {
-        return <EmptyState message="Encountering the null vector: a rendezvous with nothing at all." />;
-    }
-
-    if (isLoading) {
-        return <LoadingState />;
-    }
-
     return (
         <DriveLayout
             pid={pid}
@@ -87,15 +77,6 @@ export function EigenDocSharedView({ config, to, pid, uid, mid, onNavigate, onNa
             }}
             title={eigenDocSharedTitle(to === 'by-me' ? 'by' : 'with', config.labelPlural)}
             currentPath={rootPath}
-            emptyState={
-                <EmptyState
-                    message={
-                        to === 'by-me'
-                            ? `${config.labelPlural} you’ve shared will appear here.`
-                            : `${config.labelPlural} shared with you will appear here.`
-                    }
-                />
-            }
         />
     );
 }

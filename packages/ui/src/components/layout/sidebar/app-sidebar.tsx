@@ -1,5 +1,5 @@
-// The sidebar of Drive and the document apps: the New button, a filter row per kind of file, such as All images,
-// the user's own drives and the team drives. A guest sees only what was shared with them.
+// The sidebar of Drive and the document apps: the New button, the Drive and Recent files rows, a filter row per kind
+// of file, such as All images, the sharing pages and the team drives. A guest sees only what was shared with them.
 
 import { getDriveAppUrl } from '@workspace/lib/api';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
@@ -16,6 +16,7 @@ import { EIGEN_DOC_APP_CONFIGS, eigenDocSharedTitle } from '../../drive/eigendoc
 import { StorageUsage } from '../../home/usage';
 import { UserAvatar } from '../../user/user-avatar';
 import { useLayout } from '../app/layout-context';
+import { RecentFilesSidebarItem } from './recent-files-sidebar-item';
 import { SidebarBody } from './sidebar-body';
 import { SidebarItem } from './sidebar-item';
 import { SidebarSection } from './sidebar-section';
@@ -116,8 +117,7 @@ function UserAppSidebar({ condensed = false, newButton }: AppSidebarProps) {
     const host = currentHostConfig(appName);
     const inDrive = host === null;
     const userId = user!.id;
-    const { data: ownRoot } = useRootFolder(userId, DEFAULT_MOUNT_ID);
-    const personalRoot = ownRoot ?? null;
+    const { data: personalRoot } = useRootFolder(userId, DEFAULT_MOUNT_ID);
 
     // Empty ownerId short-circuits the hook's enabled guard; only fetch trash count in Drive.
     const { data: trashedItems } = useListTrash(inDrive ? userId : '', DEFAULT_MOUNT_ID);
@@ -143,6 +143,7 @@ function UserAppSidebar({ condensed = false, newButton }: AppSidebarProps) {
                     label="Drive"
                     condensed={condensed}
                 />
+                <RecentFilesSidebarItem inDrive={inDrive} condensed={condensed} />
             </SidebarSection>
 
             <SidebarSection condensed={condensed} title={condensed ? undefined : 'Filters'}>
@@ -189,9 +190,8 @@ function UserAppSidebar({ condensed = false, newButton }: AppSidebarProps) {
                             .filter((mount) => mount.rootPathId)
                             .map((mount) => {
                                 const owner = teamOwnerId(team.id);
-                                // A team drive always opens its folder view — in Drive directly, from
-                                // an eigendoc app over in the Drive app (like the Drive home link). The
-                                // type-filtered slice already lives in this app's "All …" view.
+                                // A team drive opens its folder view in Drive, even from a document app,
+                                // whose own All view already lists that drive's files of its kind.
                                 const fsPath = `fs/${owner}/${mount.id}/${mount.rootPathId}`;
                                 const mountProps = inDrive ? { to: `/${fsPath}` } : { href: getDriveAppUrl(fsPath) };
                                 return (

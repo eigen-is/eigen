@@ -1,10 +1,11 @@
-// Who may read or write a Drive path, decided from the chain of folders above it. SharedDrive asks
-// this before every call it passes on, and the watcher fan-out asks it before each notification. The
-// helpers that merge, normalize and trim an ACL before Drive saves it live here too.
+// Who may read or write a Drive path, decided from the chain of folders above it, and what else that chain says,
+// such as whether the path is in the trash or inside a document. SharedDrive asks this before every call it passes
+// on, and the watcher fan-out asks it before each notification. The helpers that merge, normalize and trim an ACL
+// before Drive saves it live here too.
 
 import { parseOwnerId } from '@workspace/lib/types';
 import type { DriveACL, DriveACLDelta, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
-import { isCollabType } from '@workspace/lib/types/drive';
+import { isCollabType, isDocumentType } from '@workspace/lib/types/drive';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import type { Memberships, User } from '../user';
 
@@ -14,14 +15,19 @@ export function grantsPublicRead(visibility: DriveVisibility): boolean {
 
 // Whether the path, or a folder above it, is in the trash. A path in the trash is the owner's alone until
 // it is restored. Its ACL and visibility stay, so the restore gives everyone their access back.
-export function isTrashedChain(ancestors: DrivePath[]): boolean {
+export function isTrashedChain(ancestors: readonly DrivePath[]): boolean {
     return ancestors.some((path) => path.trashedAt);
+}
+
+// Whether a folder above the path is a document, so the path is one of its parts. The chain ends with the path itself.
+export function isInsideDocument(chain: readonly DrivePath[]): boolean {
+    return chain.slice(0, -1).some((crumb) => isDocumentType(crumb.type));
 }
 
 // Ownership, team membership, public visibility or an ACL entry on the path or any ancestor. Only the
 // first two count in the trash.
 function canFromAncestors(
-    ancestors: DrivePath[],
+    ancestors: readonly DrivePath[],
     user: User,
     memberships: Memberships,
     permission: 'read' | 'write',
@@ -31,9 +37,7 @@ function canFromAncestors(
         if (path.ownerId === user.id) return true;
 
         const parsed = parseOwnerId(path.ownerId);
-        if (parsed.type === 'team') {
-            if (memberships.teamIds.includes(parsed.id)) return true;
-        }
+        if (parsed.type === 'team' && memberships.teamIds.includes(parsed.id)) return true;
 
         if (trashed) continue;
 
@@ -41,24 +45,22 @@ function canFromAncestors(
             return true;
         }
 
-        if (path.acl) {
-            if (matchesACL(path.acl, user, memberships, permission)) return true;
-        }
+        if (path.acl && matchesACL(path.acl, user, memberships, permission)) return true;
     }
 
     return false;
 }
 
-export function canReadFromAncestors(ancestors: DrivePath[], user: User, memberships: Memberships): boolean {
+export function canReadFromAncestors(ancestors: readonly DrivePath[], user: User, memberships: Memberships): boolean {
     return canFromAncestors(ancestors, user, memberships, 'read');
 }
 
-export function canWriteFromAncestors(ancestors: DrivePath[], user: User, memberships: Memberships): boolean {
+export function canWriteFromAncestors(ancestors: readonly DrivePath[], user: User, memberships: Memberships): boolean {
     return canFromAncestors(ancestors, user, memberships, 'write');
 }
 
 export function matchesACL(
-    acl: DriveACL[],
+    acl: readonly DriveACL[],
     user: User,
     memberships: Memberships,
     permission: 'read' | 'write',
@@ -73,18 +75,14 @@ export function matchesACL(
             return true;
         }
 
-        if (parsed.type === 'team') {
-            if (memberships.teamIds.includes(parsed.id)) return true;
-        }
+        if (parsed.type === 'team' && memberships.teamIds.includes(parsed.id)) return true;
     }
     return false;
 }
 
-// Merges a change onto the ACL as it is now. The removals go first, matched by canonicalACLId. Then each
-// added entry goes in, and one for an id that is there already replaces it, which is how a permission
-// changes. The merge runs on the server, so two people who share at once keep each other's entries. A
-// whole ACL built from an old copy in a tab would drop them.
-export function mergeACLDelta(current: DriveACL[] | null, delta: DriveACLDelta): DriveACL[] {
+// The merge runs on the server, so two people who share at once keep each other's entries. An added entry
+// for an id that is there already replaces it, which is how a permission changes.
+export function mergeACLDelta(current: readonly DriveACL[] | null, delta: DriveACLDelta): DriveACL[] {
     const removed = new Set((delta.remove ?? []).map(canonicalACLId));
     const merged = (current ?? []).filter((entry) => !removed.has(canonicalACLId(entry.id)));
     for (const entry of delta.add ?? []) {
@@ -104,7 +102,7 @@ export function canonicalACLId(id: string): string {
     return validateEmailAddress(id) ? id.toLowerCase() : id;
 }
 
-export function normalizeACL(acl: DriveACL[] | null): DriveACL[] | null {
+export function normalizeACL(acl: readonly DriveACL[] | null): DriveACL[] | null {
     if (!acl || acl.length === 0) {
         return null;
     }
@@ -112,39 +110,26 @@ export function normalizeACL(acl: DriveACL[] | null): DriveACL[] | null {
     return acl.map((a) => ({ ...a, id: canonicalACLId(a.id) }));
 }
 
-// Walk the ancestors list (root-first) to find the outermost collab container.
-// Returns null for standalone chats not inside a container.
-export function findContainerFromAncestors(ancestors: DrivePath[]): DrivePath | null {
-    let container: DrivePath | null = null;
-
-    for (const path of ancestors) {
-        if (isCollabType(path.type)) {
-            container = path;
-        }
-    }
-
-    return container;
+// The innermost collab container in a root-first chain, or null for a chat on its own.
+export function findContainerFromAncestors(ancestors: readonly DrivePath[]): DrivePath | null {
+    return ancestors.findLast((path) => isCollabType(path.type)) ?? null;
 }
 
 // Splits an ACL into the entries worth storing and the ones an ancestor's ACL (or team
 // ownership of the drive) already grants.
 export function filterRedundantACL(
-    acl: DriveACL[],
+    acl: readonly DriveACL[],
     path: DrivePath,
-    ancestors: DrivePath[],
+    ancestors: readonly DrivePath[],
 ): { filtered: DriveACL[]; removed: DriveACL[] } {
     const inherited = new Map<string, { read: boolean; write: boolean }>();
 
     // Breadcrumbs include the path itself; without the skip every entry would cover itself.
     for (const ancestor of ancestors) {
         if (ancestor.id === path.id) continue;
-        if (ancestor.acl) {
-            for (const entry of ancestor.acl) {
-                const key = canonicalACLId(entry.id);
-                if (!inherited.has(key)) {
-                    inherited.set(key, { read: entry.read, write: entry.write });
-                }
-            }
+        for (const entry of ancestor.acl ?? []) {
+            const key = canonicalACLId(entry.id);
+            if (!inherited.has(key)) inherited.set(key, { read: entry.read, write: entry.write });
         }
     }
 
@@ -154,28 +139,11 @@ export function filterRedundantACL(
     const removed: DriveACL[] = [];
 
     for (const entry of acl) {
-        let isRedundant = false;
         const entryParsed = parseOwnerId(entry.id);
-
-        // Team ACL on a path owned by the same team is always redundant
-        if (ownerParsed.type === 'team' && entryParsed.type === 'team' && entryParsed.id === ownerParsed.id) {
-            isRedundant = true;
-        }
-
-        if (!isRedundant) {
-            const inheritedPerms = inherited.get(canonicalACLId(entry.id));
-            if (inheritedPerms) {
-                const readCovered = !entry.read || inheritedPerms.read;
-                const writeCovered = !entry.write || inheritedPerms.write;
-                if (readCovered && writeCovered) isRedundant = true;
-            }
-        }
-
-        if (isRedundant) {
-            removed.push(entry);
-        } else {
-            filtered.push(entry);
-        }
+        const ownTeam = ownerParsed.type === 'team' && entryParsed.type === 'team' && entryParsed.id === ownerParsed.id;
+        const granted = inherited.get(canonicalACLId(entry.id));
+        const covered = granted !== undefined && (!entry.read || granted.read) && (!entry.write || granted.write);
+        (ownTeam || covered ? removed : filtered).push(entry);
     }
 
     return { filtered, removed };

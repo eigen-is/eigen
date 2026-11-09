@@ -14,7 +14,6 @@ import {
 import type { DrivePath, DriveSearchParams } from '@workspace/lib/types/drive';
 import { isDocumentType } from '@workspace/lib/types/drive';
 import { useContext } from 'react';
-import { EmptyState } from '../layout/app/empty-state';
 import { useLayout } from '../layout/app/layout-context';
 import { DRIVE_CAPABILITIES } from './drive-capabilities';
 import { DriveLayout } from './drive-layout';
@@ -84,10 +83,6 @@ export function EigenDocListView({
         }
     };
 
-    if (error) {
-        return <EmptyState message="Encountering the null vector: a rendezvous with nothing at all." />;
-    }
-
     return (
         <DriveLayout
             pid={pid}
@@ -105,7 +100,6 @@ export function EigenDocListView({
             capabilities={capabilities}
             title={config.allLabel}
             currentPath={rootPath}
-            emptyState={<EmptyState hint={`Use the “${config.newLabel}” button to create one.`} />}
         />
     );
 }

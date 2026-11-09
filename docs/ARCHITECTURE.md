@@ -49,7 +49,7 @@ Paths are under `apps/api/src/` unless they say otherwise.
 | **Mailer** | `lib/mailer/` | `sendMail()` with one From rule; imports only config and `core`, so any domain can send ([SERVER-SETTINGS.md](SERVER-SETTINGS.md#one-rule-decides-who-a-mail-is-from)) |
 | **Environment** | `lib/config/env.ts` | `isProduction()`, `isDemo()` ([DEMO_MODE.md](DEMO_MODE.md)), `isMailEnabled()` ([SERVER-SETTINGS.md](SERVER-SETTINGS.md#hosted-mail-and-the-relay-are-environment-not-settings)) |
 | **Async singleton** | `utils/singleton.ts` | `createAsyncSingleton()`: one async build shared by every caller while it runs |
-| **Home relay** | `lib/home/home-relay.ts` | Every call from one Home into another ([SCALABILITY.md](SCALABILITY.md)) |
+| **Home relay** | `lib/home/home-relay.ts` | Every call from one Home into another, and `pullFromEach` for a read across many ([SCALABILITY.md](SCALABILITY.md)) |
 | **Data epoch** | `lib/home/data-epoch.ts` | Changes on a restore or update, so a stale tab reloads ([SSE.md](SSE.md#a-restore-reloads-every-tab-of-the-home)) |
 | **Scheduler** | `lib/scheduler/` | In-process periodic jobs, registered in `jobs.ts` |
 | **Document transforms** | `lib/document/transform/` | Every CPU-heavy transform in a bounded child process ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)) |
@@ -58,6 +58,7 @@ Paths are under `apps/api/src/` unless they say otherwise.
 | **Versioning** | `lib/versioning/` | Opt-in snapshots inside the container ([STORAGE.md](STORAGE.md#version-snapshots-live-inside-the-container)) |
 | **Copy and move** | `lib/mount/copy.ts`, `lib/drive/copy-across.ts` | A move stays in its mount; a copy goes anywhere ([STORAGE.md](STORAGE.md#copy-goes-anywhere-a-move-stays-in-its-mount)) |
 | **Import from Drive** | `lib/drive/import-source.ts` | `readImportSourceBytes`, the one import-from-drive reader, with the user's access and a byte cap |
+| **Recent files** | `lib/drive/recent.ts`, `lib/drive/aggregate.ts`, `apps/drive/src/routes/_auth.recent.tsx` | Which paths a user opened or was notified about, in their own `shared.db`, checked against each owner on every load ([STORAGE.md](STORAGE.md#recent-files-stores-only-which-path-and-when)) |
 | **File history** | `lib/drive/history.ts` | Typed file events and watcher notifications ([FILE-HISTORY.md](FILE-HISTORY.md)) |
 | **Trash** | `lib/mount/trash.ts`, `lib/drive/trash.ts` | A delete moves to trash and revokes shares ([SOFT-DELETE.md](SOFT-DELETE.md)) |
 | **Comments** | `lib/chat/` | A card in the Y.Doc and a chat thread in its container ([COMMENTS.md](COMMENTS.md)) |

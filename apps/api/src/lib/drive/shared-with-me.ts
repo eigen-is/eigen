@@ -4,18 +4,18 @@
 // pushes nothing, so a listing drops the rows of an owner who no longer exists. This file is the only
 // one that reads or writes that table. Drive calls it with its shared database.
 
+import { shareTag } from '@workspace/lib/notification/tags';
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
 import { getEigenDocInfoByType, isFolderType, stripEigenExtension } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq, inArray } from 'drizzle-orm';
-import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import type { Home } from '../home';
 import { actorDisplayName, getMemberships, getOwnerExists } from '../user';
 import { matchesACL } from './acl';
+import type { SharedDb } from './shared';
 import * as sharedSchema from './sharedschema';
 import { buildDriveEvent } from './sse-events';
 
-type SharedDb = BunSQLiteDatabase<typeof sharedSchema>;
 type SharedPathRow = typeof sharedSchema.sharedPaths.$inferSelect;
 
 export async function receiveSharedPathChange(
@@ -86,7 +86,7 @@ export async function receiveSharedPathChange(
             actorEmail,
             title: actorDisplay ? `${actorDisplay} shared a ${noun}` : 'Shared with you',
             body: displayName,
-            tag: `share:${path.ownerId}:${path.mountId}:${path.id}`,
+            tag: shareTag({ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }),
             details: { pathType: path.type },
         });
     }

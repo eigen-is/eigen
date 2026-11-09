@@ -21,14 +21,16 @@ export type NotificationType =
     | 'file-event'
     | 'admin-alert';
 
-// The thread a chat notification belongs to: a standalone chat's own path, or the container a comment
-// sits in plus that comment chat's file name. Tag spelling: core/notification/tags.ts.
-export type ChatNotificationThread = {
+// The Drive path a notification's tag names.
+export type NotificationPath = {
     ownerId: string;
     mountId: string;
     pathId: string;
-    chatName?: string;
 };
+
+// The thread a chat notification belongs to: a standalone chat's own path, or the container a comment
+// sits in plus that comment chat's file name.
+export type ChatNotificationThread = NotificationPath & { chatName?: string };
 
 type NotificationDetailsMap = {
     mail: { mailId: string; snippet?: string };
@@ -45,8 +47,7 @@ type NotificationDetailsMap = {
 
 export type NotificationDetails = NotificationDetailsMap[keyof NotificationDetailsMap];
 
-// Discriminated write input: details allowed exactly when the type carries them. Mirrors
-// FileEventInput in file-history.ts.
+// The write input allows details exactly when the type carries them.
 export type NotificationPersistInput = {
     [K in NotificationType]: {
         type: K;
@@ -58,8 +59,7 @@ export type NotificationPersistInput = {
     } & (K extends keyof NotificationDetailsMap ? { details?: NotificationDetailsMap[K] } : { details?: undefined });
 }[NotificationType];
 
-// type stays `string`: persisted rows can hold retired type strings and there is no honest
-// coercion target — the NotificationType union types the producers, not the read shape.
+// The type stays a string, because a stored row can hold a retired type and there is no honest value to coerce it to.
 export type Notification = {
     id: string;
     type: string;

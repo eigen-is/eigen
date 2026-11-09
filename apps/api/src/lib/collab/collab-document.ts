@@ -33,9 +33,8 @@ import { DbProvider } from './db-provider';
 export const MESSAGE_SYNC = 0;
 export const MESSAGE_AWARENESS = 1;
 
-// A y-websocket client owns one awareness client id per document, and a tab that reconnects opens a
-// new socket with a new id. So 8 ids per socket tolerate a client that changes its id a few times.
-// The cap stops a flood that would grow the map every peer receives.
+// A tab that reconnects gets a new awareness client id, so a socket may own a few. The cap stops a flood that would
+// grow the map every peer receives.
 const MAX_AWARENESS_CLIENT_IDS = 8;
 // A real awareness state is a name, a color, a user id and a cursor. That is a few hundred bytes, or a
 // few KiB for a large canvas selection. The cap bounds what one state costs every peer.
@@ -50,7 +49,7 @@ const TOUCH_THROTTLE_MS = 60_000;
 // How long a document with no socket stays open. A reload or a y-websocket retry within it
 // reattaches to the loaded document instead of loading it again.
 export const CLOSE_LINGER_MS = 60_000;
-// The origin of a compaction's swap. It changes what is stored, not what the workbook shows, so it moves no Modified time.
+// A compaction's swap changes what is stored, not what the workbook shows, so it moves no Modified time.
 const COMPACTION_ORIGIN = Symbol('compaction');
 // One 'edited' history row per user per window. The window lives in memory, so a document that closes
 // and opens again within it records an extra row. That is cheaper than storing the window.
@@ -86,7 +85,7 @@ export class CollabDocument {
 
     public constructor(
         private readonly drive: Drive,
-        private readonly path: DrivePath,
+        public readonly path: DrivePath,
     ) {}
 
     public get connectionCount(): number {
@@ -330,9 +329,8 @@ export class CollabDocument {
             this.compaction = new AbortController();
             // It resolves whatever the run's outcome, with null when there is no snapshot to swap in.
             const snapshot = await compactSheets(this.path, this.doc, this.compaction.signal);
-            // The swap deletes the log, so a result that is still current first gets a version that keeps the log.
-            // The version waits for the container lock while this document holds data.db. That is safe: the
-            // hold takes no place in the slot chain, and every closer of a live document destructs it first.
+            // The swap deletes the log, so a current result first gets a version that keeps it. Its wait for the
+            // container lock while this holds data.db is safe, as every closer of a live document destructs it first.
             let saved = false;
             if (snapshot !== null && !this.closed && this.connections.size === 0 && this.generation === generation) {
                 try {
@@ -354,7 +352,7 @@ export class CollabDocument {
                     this.scheduleClose();
                     return;
                 }
-                // Nothing changed, so the op log holds exactly the batches the snapshot folded, and the swap drops them.
+                // Nothing changed, so the op log holds just the batches the snapshot folded, and the swap drops them.
                 // A version that failed stops the swap, and the document closes with its log, as after a failed run.
                 if (saved) {
                     this.doc.transact(

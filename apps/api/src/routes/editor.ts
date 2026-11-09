@@ -1,12 +1,13 @@
-// The routes behind Drive's inline text editor: one reads a file's text for editing, one saves it back.
-// They work on another owner's drive too, such as a shared file or a team drive, because access goes
-// through getSharedDrive. A save is guarded by the etag the read gave, and answers a conflict when the
-// file changed since.
+// The routes behind Drive's inline text editor: one reads a file's text for editing, one saves it back. A read counts
+// as an open on the user's Recent page. They work on another owner's drive too, such as a shared file or a team drive,
+// because access goes through getSharedDrive. A save is guarded by the etag the read gave, and answers a conflict when
+// the file changed since.
 
-import type { EditorSaveResult } from '@workspace/lib/types/drive';
+import type { EditorSaveResult, FileEditorContent } from '@workspace/lib/types/drive';
 import { Elysia, t } from 'elysia';
 import { getSharedDrive } from '../lib/drive';
 import { getEditableContent, saveEditableContent } from '../lib/drive/inline-edit';
+import { recordOpenedUnlessInDocument } from '../lib/drive/recent';
 import { betterAuth } from './auth';
 
 export const editorRouter = new Elysia({ name: 'editor' })
@@ -14,10 +15,12 @@ export const editorRouter = new Elysia({ name: 'editor' })
 
     .get(
         '/editor/:ownerId/:mountId/:pathId/content',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<FileEditorContent> => {
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
-            return await getEditableContent(mount, path);
+            const content = await getEditableContent(mount, path);
+            recordOpenedUnlessInDocument(user, mount, path);
+            return content;
         },
         { auth: true },
     )

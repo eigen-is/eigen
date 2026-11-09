@@ -60,7 +60,7 @@ export function DriveRow({
     hideModified = false,
     hideShareClick = false,
     hideActions = false,
-    getItemDate = (i) => i.updatedAt,
+    getItemDate = (path) => path.updatedAt,
     ancestorBreadcrumb,
     unreadPathIds,
 }: DriveRowProps) {

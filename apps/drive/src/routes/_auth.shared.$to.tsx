@@ -4,24 +4,18 @@
 
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
-import { DEFAULT_MOUNT_ID, usePathInfo, useSharedPaths } from '@workspace/lib/drive';
-import type { DriveCapabilities, DrivePath, DriveSearchParams } from '@workspace/lib/types/drive';
-import { EmptyState, LoadingState } from '@workspace/ui';
+import { DEFAULT_MOUNT_ID, usePathInfo, useSharedPaths, validateDriveSearch } from '@workspace/lib/drive';
+import type { DriveCapabilities, DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
 import { useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';
 
 export const Route = createFileRoute('/_auth/shared/$to')({
-    component: DriveRoute,
-    validateSearch: (search: Record<string, unknown>): DriveSearchParams => {
-        const pid = typeof search.pid === 'string' ? search.pid : undefined;
-        const uid = typeof search.uid === 'string' ? search.uid : undefined;
-        const mid = typeof search.mid === 'string' ? search.mid : undefined;
-        return { pid, uid, mid };
-    },
+    component: SharedRoute,
+    validateSearch: validateDriveSearch,
 });
 
-function DriveRoute() {
+function SharedRoute() {
     const { to } = Route.useParams();
     const navigate = useNavigate();
     const { uid, pid, mid } = Route.useSearch();
@@ -63,14 +57,6 @@ function DriveRoute() {
         navigate({ to: Route.fullPath, params: { to } });
     };
 
-    if (error) {
-        return <EmptyState message="Encountering the null vector: a rendezvous with nothing at all." />;
-    }
-
-    if (isLoading) {
-        return <LoadingState />;
-    }
-
     return (
         <DriveLayout
             pid={pid}
@@ -86,15 +72,6 @@ function DriveRoute() {
             capabilities={capabilities}
             title={to === 'by-me' ? 'Shared by me' : 'Shared with me'}
             onQuickLook={onQuickLook}
-            emptyState={
-                <EmptyState
-                    message={
-                        to === 'by-me'
-                            ? 'Files you’ve shared will appear here.'
-                            : 'Files shared with you will appear here.'
-                    }
-                />
-            }
         />
     );
 }
