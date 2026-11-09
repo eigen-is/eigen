@@ -139,7 +139,7 @@ describe('Maildir write durability', () => {
         const home = await getHome(userId);
 
         const events = await record({ cur, tmp: join(box(MAILBOX_DRAFTS), 'tmp') }, async () => {
-            await saveDraft('Ordered save', 'a longer second body, so the file gets a new name', draft.id);
+            await saveDraft('Ordered save', 'final', draft.id);
         });
 
         expect(events).toEqual(['file', 'rename', 'cur', 'unlink', 'cur']);
@@ -147,14 +147,30 @@ describe('Maildir write durability', () => {
         expect(await home.mail.size()).toBe(await readMailTotalSize(home.fs));
     });
 
-    test('a re-save whose file keeps its name keeps the file', async () => {
+    // Dovecot keys a UID on the name before the `:`. A save that kept it would serve new bytes under an old UID.
+    test('two saves of the same size land under two names, with one file on disk', async () => {
         const draft = await saveDraft('Same size', 'aaaa');
         const saved = await saveDraft('Same size', 'bbbb', draft.id);
 
-        expect(saved.filename).toBe(draft.filename);
+        expect(saved.size).toBe(draft.size);
+        expect(saved.filename.split(':')[0]).not.toBe(draft.filename.split(':')[0]);
+        expect(saved.filename).toContain(`,S=${saved.size}:2,`);
         expect(draftFiles(draft.id)).toEqual([saved.filename]);
         const home = await getHome(userId);
         expect((await home.mail.messageGet(draft.id))?.text).toContain('bbbb');
+        expect(await home.mail.size()).toBe(await readMailTotalSize(home.fs));
+    });
+
+    test('a flag change keeps the name a save gave, and the id stays', async () => {
+        const home = await getHome(userId);
+        const saved = await saveDraft('Flagged', 'words');
+        await home.mail.messageSetFlagged(saved.id, true);
+
+        const [file] = draftFiles(saved.id);
+        expect(file.split(':')[0]).toBe(saved.filename.split(':')[0]);
+        expect(file.endsWith(':2,DFS')).toBe(true);
+        await home.mail.mailboxGet(MAILBOX_DRAFTS);
+        expect(home.mail.messageGetSummary(saved.id)?.filename).toBe(file);
     });
 
     test('a save that throws on a missing staged part leaves the draft whole', async () => {

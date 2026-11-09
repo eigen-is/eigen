@@ -19,7 +19,7 @@ Dovecot moves, renames and deletes messages behind the API's back, so only a dif
 
 **The file lands before the index row, always.** A crash between the two leaves the index behind the disk, and the next `reconcileMailbox` repairs it.
 
-**A draft save writes before it deletes.** The new file lands, then the row, then the old file goes, all under `storeLock`, so a save that throws on the way, such as on a staged attachment that is gone, leaves the draft whole. A crash in between leaves two files with one id, which only a draft save can do. The next Drafts sync keeps the newer by modification time and unlinks the other, because the older could otherwise win a later sync over every save after it, or bring back a draft that was deleted or sent. Until the next save the row may keep the old subject, preview and size. The byte counter stays right, because it sums the rows.
+**A draft save writes before it deletes.** The new file lands, then the row, then the old file goes, all under `storeLock`, so a save that throws on the way, such as on a staged attachment that is gone, leaves the draft whole. A crash in between leaves two files with one id, which only a draft save can do. The next Drafts sync keeps the newer by modification time and unlinks the other, because the older could otherwise win a later sync over every save after it, or bring back a draft that was deleted or sent. A tie keeps either, which takes a crash and two saves in one clock tick, so at worst the draft loses that last save. Until the next save the row may keep the old subject, preview and size. The byte counter stays right, because it sums the rows.
 
 Every Maildir write fsyncs the staged file and each indexed directory its rename or unlink changes (`lib/core/local-filesystem.ts`). A directory fsync the file system refuses (NFS, some FUSE mounts) is logged once, not thrown: the rename already happened, and a delivery answering 500 makes the MTA send a duplicate. `apps/api/src/test/mail/mail-durability.test.ts` pins each write.
 
@@ -42,6 +42,8 @@ cur/:  {unique},S={size}:2,{flags}
 ```
 
 `createUniqueMessageId` builds the unique part as `{time}.M{usec}P{pid}Q{seq}.{host}`. That part alone is the message id: `getMailIDfromFileName` cuts the name at the first `,` or `:`. So a flag change, which renames the file, never changes the id the index and the API use.
+
+A draft save adds a field of its own, `{unique},M={stamp},S={size}:2,DS`, with a fresh stamp each time. Dovecot keys a UID on the name before the `:`. Without the stamp, an edit that keeps the byte size keeps the name, and Dovecot serves new bytes under the UID a client already cached. With it, every save is a new message to IMAP, as a save that changes the size always was, and the id stays. The stamp is a UUID, not a time, because the save removes the old file by name, and two saves of one size in one millisecond would then remove the file just written. So there is no case where the new file has the old name.
 
 ## Flags live in the filename and the index mirrors four
 

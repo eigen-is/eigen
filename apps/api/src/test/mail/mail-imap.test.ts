@@ -55,6 +55,7 @@ describe('Maildir Utility Functions', () => {
         expect(getMailIDfromFileName('1709234567.M412345P9876.host:2,S')).toBe('1709234567.M412345P9876.host');
         expect(getMailIDfromFileName('1709234567.M412345P9876.host')).toBe('1709234567.M412345P9876.host');
         expect(getMailIDfromFileName('abc,S=100:2,DS')).toBe('abc');
+        expect(getMailIDfromFileName('abc,M=stamp,S=100:2,DS')).toBe('abc');
     });
 
     test('parseFlagsFromFilename extracts all standard flags', () => {

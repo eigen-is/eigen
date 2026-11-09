@@ -315,8 +315,13 @@ export class MaildirStore {
             // A stale tab or a replayed send names a message that has left Drafts: saving it would take it out of Sent.
             if (replaced && !replaced.isDraft) throw new ApiError(409, 'This message is no longer a draft');
 
-            // Straight into cur/: Eigen placed it there itself, with the flags already in the name.
-            const filename = buildMaildirFilename(messageId, { draft: true, seen: true }, bytes.byteLength);
+            // Straight into cur/: Eigen placed it there itself, with the flags already in the name. Dovecot keys a UID on the
+            // name before the `:`, so the stamp makes every save a new message to IMAP, even one that keeps the byte size.
+            const filename = buildMaildirFilename(
+                `${messageId},M=${crypto.randomUUID()}`,
+                { draft: true, seen: true },
+                bytes.byteLength,
+            );
             await this.deliver(MAILBOX_DRAFTS, PATHS.MAIL.CUR, filename, bytes);
 
             applyFlagsFromFilename(parsed, filename);
@@ -325,7 +330,7 @@ export class MaildirStore {
             this.db.insertEmails([parsed]);
             this.indexBytes += parsed.size - (replaced?.size ?? 0);
             // The old file goes last, so a crash leaves the draft twice and never not at all. A sync keeps the newer.
-            if (replaced && (replaced.mailbox !== MAILBOX_DRAFTS || replaced.filename !== filename)) {
+            if (replaced) {
                 await this.storage.unlinkDurable(
                     path.join(this.mailboxDir(replaced.mailbox), PATHS.MAIL.CUR, replaced.filename),
                 );
