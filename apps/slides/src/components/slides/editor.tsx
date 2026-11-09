@@ -52,9 +52,8 @@ type SlideEditorProps = {
     initialSearchTerm?: string;
 };
 
-// The deck: a canvas with one frame of the deck's slide size per slide. Tool, selection and the active
-// frame live here, so the toolbar, rail, canvas and panel share them. The viewport, gestures, keymap,
-// clipboard and in-place editing all belong to the engine.
+// Tool, selection and the active frame live here, so the toolbar, rail, canvas and panel share them.
+// The viewport, gestures, keymap, clipboard and in-place editing all belong to the engine.
 export function SlideEditor({
     ownerId,
     path,
@@ -86,7 +85,7 @@ export function SlideEditor({
 
     const { addFrame, deleteFrame, duplicateFrame, updateFrame, updateFrames } = doc;
 
-    // The first writer to open an empty deck seeds its one slide. seedDeck explains why.
+    // The first writer to open an empty deck seeds its one slide.
     useEffect(() => {
         const yjsDoc = doc.yjsDoc;
         if (!doc.loaded || !canWrite || !yjsDoc) return;
@@ -109,9 +108,8 @@ export function SlideEditor({
     // so either can land on an element the canvas is not showing.
     const revealElement = useCallback(
         (el: VectorElement) => {
-            // An element may sit on no live slide, such as when a peer deleted its slide. It still shows in
-            // search and still carries comments. Going to its frame would empty the canvas, so it is
-            // selected on the current slide instead.
+            // An element may sit on no live slide, such as when a peer deleted its slide. Going to its frame
+            // would empty the canvas, so it is selected on the current slide instead.
             if (doc.frames.some((f) => f.id === el.frameId)) setFrameId(el.frameId);
             setSelectedIds([el.id]);
         },
@@ -243,11 +241,8 @@ export function SlideEditor({
         [frameIndex, doc.frames, exitPresent, setFrameId],
     );
 
-    // Escape is layered, and present is the outermost layer: it claims Escape before anything else
-    // sees it. The find bar and the canvas layers, such as text editing and deselect, handle the rest.
-    // This listener uses the capture phase because the find bar closes itself on bubble, so a bubble
-    // handler here could never tell the bar had been open. The flag rides a ref so the listener never
-    // goes stale.
+    // Present is Escape's outermost layer. It listens in the capture phase because the find bar closes
+    // itself on bubble, so a bubble handler here could never tell the bar had been open.
     const presentingRef = useRef(false);
     presentingRef.current = isPresenting;
     useEffect(() => {
@@ -294,9 +289,8 @@ export function SlideEditor({
         [mediaFolderId, frame, copyToMediaFolder, updateFrame],
     );
 
-    // Present mode replaces the editor outright: no tools, no rail, no panels. The doc hook stays
-    // mounted above it, so leaving present returns to the same slide and selection. Present renders
-    // the leave guard too, or a presenter could navigate away from unsynced edits without a warning.
+    // Present mode replaces the editor outright, and the doc hook stays mounted above it, so leaving
+    // returns to the same slide. It renders the leave guard too, or unsynced edits could go unwarned.
     if (isPresenting && frame) {
         return (
             <>
@@ -443,6 +437,7 @@ export function SlideEditor({
                             onOpenCard={comments.openCard}
                             commentCards={comments.lifecycle.cards}
                             onAddComment={canWrite && chatFolderId ? comments.addCommentTo : undefined}
+                            onCommentHover={comments.onCommentHover}
                             searchMatchedIds={searchMatchedIds}
                             searchActiveId={searchActiveId}
                             onInsertImage={insertImage}

@@ -1,8 +1,7 @@
-// The chrome both canvas apps wrap their canvas in: the leave guard, the find-bar session, the
-// toolbar Column, the loading gate, the right-edge pane/panel swap, the image picker and the two
-// comment dialogs. What genuinely differs between the drawing app and the deck — the toolbar, the
-// canvas area (slides adds its rail and slide-count footer) and the properties panel — arrives as
-// props, so neither app owns a copy of this layout.
+// The chrome both canvas apps wrap their canvas in, such as the leave guard, the find-bar session, the toolbar Column,
+// the loading gate, the right-edge pane or panel, the image picker, and the comment dialogs and hover card. What differs
+// between the drawing app and the deck, such as the toolbar, the canvas area and the properties panel, arrives as props,
+// so neither app owns a copy of this layout.
 
 import type { DocSearchController } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -10,7 +9,7 @@ import { isImageMime } from '@workspace/lib/types/drive';
 import { cn } from '@workspace/ui/lib/utils';
 import type { ReactNode, RefObject } from 'react';
 import { CardFormDialog } from '../cards';
-import { CommentLifecycleDialogs, PanelColumn } from '../comments';
+import { CommentHoverCard, CommentLifecycleDialogs, PanelColumn } from '../comments';
 import { DrivePickerWithUpload } from '../drive/drive-picker-with-upload';
 import { CollabDocumentGate } from '../layout/app/collab-document-gate';
 import { Column, ColumnLayout } from '../layout/app/column-layout';
@@ -59,8 +58,8 @@ export function CanvasDocumentShell({
 }: CanvasDocumentShellProps) {
     const { isMobile } = useLayout();
     const { panel, mobilePanelOpen, panelProps } = comments;
-    // A w-64 sibling occupies the right edge whenever the comment/activity pane or the properties
-    // panel is up — inset the find bar clear of it.
+    // A w-64 sibling holds the right edge whenever the comment/activity pane or the properties panel is up, so the find
+    // bar insets clear of it.
     const rightPanelShown = (!isMobile && !!panel) || canEdit;
 
     return (
@@ -68,9 +67,8 @@ export function CanvasDocumentShell({
         <CollabDocumentGate collab={doc} path={path} canWrite={canWrite}>
             <ColumnLayout>
                 <UnsyncedEditsGuard active={doc.unsyncedEdits} />
-                {/* The pane hides the canvas on mobile (a Column sibling below); keep the canvas mounted
-                    (hidden wrapper) so Yjs state and selection survive a pane visit. */}
-                {/* Hiding takes the find bar with it: it floats in this wrapper, outside the Column. */}
+                {/* The pane hides the canvas on mobile, which stays mounted so Yjs state and selection survive a pane
+                    visit. Hiding takes the find bar too: it floats in this wrapper, outside the Column. */}
                 <div className={cn('flex-1 min-w-0 h-full', mobilePanelOpen && 'hidden')}>
                     <DocSearchProvider
                         controller={searchController}
@@ -88,9 +86,8 @@ export function CanvasDocumentShell({
                         >
                             <div className="flex h-full w-full overflow-hidden">
                                 {children}
-                                {/* Right side: the comment/activity pane wins over the properties panel;
-                                    mobile hosts the pane as an outside sibling. The panel stays up for the
-                                    whole session — with nothing selected it edits the canvas itself. */}
+                                {/* The pane wins over the properties panel, and mobile hosts the pane as an outside
+                                    sibling. The panel stays up: with nothing selected it edits the canvas itself. */}
                                 {!isMobile && panel ? (
                                     <PanelColumn activePanel={panel} {...panelProps} />
                                 ) : canEdit ? (
@@ -129,6 +126,8 @@ export function CanvasDocumentShell({
                     dialogTitle="New comment"
                     submitLabel="Add comment"
                 />
+
+                <CommentHoverCard side="right" {...comments.hoverCardProps} />
 
                 <CommentLifecycleDialogs
                     lifecycle={comments.lifecycle}
