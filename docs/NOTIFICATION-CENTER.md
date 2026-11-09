@@ -14,7 +14,7 @@ Three things surprise people: the tag is both the row's identity and the source 
 
 ## A notification about a path puts it in Recent
 
-`Home.notify` writes the row, then reads the path the tag names with `parseNotificationPath` and moves it to the top of the recipient's Recent files (`Drive.touchRecent`). A comment, mention or assignment names its container, a chat message the chat, and a burst of file events the folder. Mail, calendar, admin alerts and unshares name no path. The Recent row is separate from the bell row, so dismissing the notification leaves the path in Recent. A failed Recent write is logged with a `recent:` prefix and never fails the notification, because some producers, such as an assignment, await the delivery.
+`Home.notify` writes the row, then reads the path the tag names with `parseNotificationPath` and moves it to the top of the recipient's Recent files (`Drive.touchRecent`, [STORAGE.md § A notification about a path adds it too](STORAGE.md#a-notification-about-a-path-adds-it-too)). A comment, mention or assignment names its container, a chat message the chat, and a burst of file events the folder. Mail, calendar, admin alerts and unshares name no path. The Recent row is separate from the bell row, so dismissing the notification leaves the path in Recent. A failed Recent write is logged with a `recent:` prefix and never fails the notification, because some producers, such as an assignment, await the delivery.
 
 ## Notifications and domain events are separate broadcasts
 
@@ -33,16 +33,16 @@ The tag also carries the ids the link is built from, so each producer's tag deci
 | `calendar-invite`, `-updated`, `-cancelled` | `lib/calendar/invitations.ts` | `calendar-invite:{eventId}:{startTime}`, shared by all three, so one occurrence is one row |
 | `mail` | `Mail` (`lib/mail/mail-domain.ts`) | `mail:new`, a constant, so all incoming mail folds into one row |
 | `mention-chat`, `mention-comment`, `chat-message`, `comment-reply` | `ChatRoom.postMessage` | built in `core/notification/tags.ts` ([the tags name the thread](#chat-and-comment-tags-name-the-thread)) |
-| `assigned` | the assignee route in `routes/collab.ts` | built in `core/notification/tags.ts` |
+| `assigned` | `propagateAssignment` (`lib/drive/assignment-propagation.ts`), from `Drive.assignComment` | built in `core/notification/tags.ts` |
 | `access-request` | `propagateAccessRequest` (`lib/drive/access-request-propagation.ts`) | `access-request:{ownerId}:{mountId}:{pathId}:{email}` |
 | `file-event` | `FileHistory.notifyWatchers` | `file-event:{ownerId}:{mountId}:{pathId}`; burst events tag the parent folder ([FILE-HISTORY.md](FILE-HISTORY.md#notifications-coalesce-per-file-and-bursts-per-folder)) |
-| `admin-alert` | `alertUser` and `alertOwner` (`lib/user/alert-owner.ts`): backup verify to the admin who started it (`lib/backup/jobs.ts`), whole-server backup (`lib/backup/server-job.ts`, `upload-job.ts`, `server-archives.ts`) and mail queue (`routes/internal.ts`) to the owner | `backup-verify-{ownerId}`, `server-backup-{archive}` and `server-backup-upload-{archive}` (`interrupted` for the boot's alert), `mail-queue-backlog` |
+| `admin-alert` | `alertUser` and `alertOwner` (`lib/user/alert-owner.ts`): backup verify to the admin who started it (`lib/backup/jobs.ts`), whole-server backup (`lib/backup/server-job.ts`, `upload-job.ts`, `server-archives.ts`) and mail queue (`routes/internal.ts`) to the owner | `backup-verify-{ownerId}`, `server-backup-{archive}`, `server-backup-warnings-{archive}` and `server-backup-upload-{archive}` (`interrupted` for the boot's alert), `mail-queue-backlog` |
 
-Every tag that names a Drive path, the share, access-request and file-event tags as well as the chat ones, is built and parsed in `packages/lib/src/core/notification/tags.ts` (imported by the API as `@workspace/lib/notification/tags`), so no producer or reader spells one by hand.
+Every tag in the table is built in `packages/lib/src/core/notification/tags.ts` (imported by the API as `@workspace/lib/notification/tags`), and every tag a reader reads back is parsed there, so no producer or reader spells one by hand.
 
 An unshare carries no tag, because the reader has lost access and there is nothing to link to. For the same reason `isClickableNotification` leaves both unshare types out, so their rows are not links.
 
-A producer can also read its own row: `Mail` calls `markReadByTag('mail:new')` once the inbox holds no unread mail, so the bell stops announcing mail the user has already read.
+A producer can also read its own row: `Mail` calls `markReadByTag(NEW_MAIL_TAG)` once the inbox holds no unread mail, so the bell stops announcing mail the user has already read.
 
 ## A coalesced persist skips the toast, not the row
 
