@@ -1,0 +1,27 @@
+diff --git a/dist/ical.js b/dist/ical.js
+index be2228f64159a784e9c4550cf121c3deb62d608d..ddb2aa03a4af548eb53f2ac12e6659cbe62c98df 100644
+--- a/dist/ical.js
++++ b/dist/ical.js
+@@ -2579,9 +2579,9 @@ parse._parseParameters = function(line, start, designSet) {
+       }
+       value = line.slice(valuePos, pos);
+       lastParam = line.indexOf(PARAM_DELIMITER, pos);
+-      let propValuePos = line.indexOf(VALUE_DELIMITER, pos);
+       // if either no next parameter or delimeter in property value, let's stop here
+-      if (lastParam === -1 || (propValuePos !== -1 && lastParam > propValuePos)) {
++      // Patched (Eigen, patches/): ':' only up to the next ';', as a search to the end of the line per parameter is quadratic.
++      if (lastParam === -1 || line.slice(pos, lastParam).includes(VALUE_DELIMITER)) {
+         pos = false;
+       }
+     } else {
+@@ -2589,7 +2589,9 @@ parse._parseParameters = function(line, start, designSet) {
+ 
+       // move to next ";"
+       let nextPos = line.indexOf(PARAM_DELIMITER, valuePos);
+-      let propValuePos = line.indexOf(VALUE_DELIMITER, valuePos);
++      // Patched (Eigen, patches/): as above.
++      let inValue = line.slice(valuePos, nextPos === -1 ? line.length : nextPos).indexOf(VALUE_DELIMITER);
++      let propValuePos = inValue === -1 ? -1 : valuePos + inValue;
+       if (propValuePos !== -1 && nextPos > propValuePos) {
+         // this is a delimiter in the property value, let's stop here
+         nextPos = propValuePos;

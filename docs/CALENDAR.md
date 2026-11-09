@@ -84,7 +84,7 @@ A save of two writes takes the etag the first one answered: an update and then a
 
 ## ical.js is the one serializer, and an edit touches only what it changes
 
-`ICAL.Component.toString()` writes every resource, so folding, escaping and parameter quoting are ical.js's problem. `buildResource` assembles a new VCALENDAR from rows, for a REST create and for an iMIP message about a whole series. Every other write edits the stored component in place (`patchEvent`, `putOverride`, `addExclusion`, `removeExclusion` in `ical-component.ts`), so every property Eigen didn't touch stays as the client wrote it.
+`ICAL.Component.toString()` writes every resource, so folding, escaping and parameter quoting are ical.js's problem. It runs with one `bun patch` (`patches/`) on `parse._parseParameters`, which now looks for the `:` that ends the parameters only up to the next `;`, since a search to the end of the line per parameter grows with the square of the line. The fix belongs upstream, and the patch goes when a release carries it. `buildResource` assembles a new VCALENDAR from rows, for a REST create and for an iMIP message about a whole series. Every other write edits the stored component in place (`patchEvent`, `putOverride`, `addExclusion`, `removeExclusion` in `ical-component.ts`), so every property Eigen didn't touch stays as the client wrote it.
 
 A written `DTEND` removes the `DURATION` that stated the length before it, since RFC 5545 §3.6.1 allows one or the other. An end instant that falls in the second pass of a repeated hour can't be named in the stored zone's wall clock. It is written as a UTC `DTEND` beside the TZID `DTSTART`, which RFC 5545 allows, so the duration survives.
 
