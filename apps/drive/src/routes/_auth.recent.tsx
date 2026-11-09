@@ -5,8 +5,8 @@
 
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
-import { DEFAULT_MOUNT_ID, usePathInfo, useRecentPaths } from '@workspace/lib/drive';
-import type { DrivePath, DriveSearchParams, DriveSort } from '@workspace/lib/types/drive';
+import { DEFAULT_MOUNT_ID, usePathInfo, useRecentPaths, validateDriveSearch } from '@workspace/lib/drive';
+import type { DrivePath, DriveSort } from '@workspace/lib/types/drive';
 import { EmptyState, LoadingState } from '@workspace/ui';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
@@ -15,12 +15,7 @@ import { useMemo, useState } from 'react';
 
 export const Route = createFileRoute('/_auth/recent')({
     component: RecentRoute,
-    validateSearch: (search: Record<string, unknown>): DriveSearchParams => {
-        const pid = typeof search.pid === 'string' ? search.pid : undefined;
-        const uid = typeof search.uid === 'string' ? search.uid : undefined;
-        const mid = typeof search.mid === 'string' ? search.mid : undefined;
-        return { pid, uid, mid };
-    },
+    validateSearch: validateDriveSearch,
 });
 
 function RecentRoute() {
