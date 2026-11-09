@@ -558,6 +558,44 @@ describe('stamp trust', () => {
         expect(masterOf(incoming).getAllProperties('x-eigen-exdate')).toHaveLength(20_000);
     });
 
+    test('thirty-two thousand EXDATEs with no SEQUENCE re-stamp without rescanning the properties per stamp', () => {
+        const count = 32_000;
+        const padding = 128_000;
+        const days = Array.from({ length: count }, (_, day) =>
+            new Date(Date.UTC(2026, 3, 29) + day * 86400_000).toISOString(),
+        );
+        const incoming = parseResource(
+            vcal([
+                'BEGIN:VEVENT',
+                'UID:series@eigen',
+                'DTSTAMP:20260101T000000Z',
+                'DTSTART:20260415T120000Z',
+                ...Array<string>(padding).fill('X-PAD:p'),
+                ...days.map((iso) => `EXDATE:${iso.replace(/[-:]|\.\d{3}/g, '')}`),
+                'END:VEVENT',
+            ]),
+        );
+
+        const cpuMs = cpuClock();
+        restampResource(incoming, null);
+        expect(cpuMs()).toBeLessThan(700);
+
+        const master = masterOf(incoming);
+        expect(master.getAllProperties().map((prop) => prop.name)).toEqual([
+            'uid',
+            'dtstamp',
+            'dtstart',
+            ...Array<string>(padding).fill('x-pad'),
+            ...Array<string>(count).fill('exdate'),
+            'x-eigen-event-id',
+            ...Array<string>(count).fill('x-eigen-exdate'),
+        ]);
+        const stamps = master.getAllProperties('x-eigen-exdate');
+        expect(stamps.map((stamp) => stamp.getFirstValue())).toEqual(days.map((iso) => iso.slice(0, 10)));
+        expect(stamps.every((stamp) => stamp.getFirstParameter('x-eigen-seq') === '0')).toBe(true);
+        expect(new Set(stamps.map((stamp) => stamp.getFirstParameter('x-eigen-event-id'))).size).toBe(count);
+    });
+
     test('a body that stripped every X- line gets its ids and links back', () => {
         const bare = parseResource(serializeResource(buildResource([MASTER, OVERRIDE, EXCLUSION])));
         stripEigenStamps(bare);
@@ -1094,6 +1132,47 @@ describe('refusals', () => {
 });
 
 describe('stripping', () => {
+    test('sixty-four thousand forged stamp names go in one pass and the rest keep their order', () => {
+        const forged = Array.from({ length: 64_000 }, (_, n) => `X-EIGEN-${n}:forged`);
+        const incoming = parseResource(
+            vcal(
+                VTZ_AMS,
+                clientSeries(
+                    'X-KEEP-FIRST:a',
+                    ...forged.slice(0, 32_000),
+                    'ATTENDEE;X-EIGEN-SEQ=9;CN=Bob:mailto:bob@eigen.example',
+                    ...forged.slice(32_000),
+                    'X-KEEP-LAST:z',
+                ),
+            ),
+        );
+
+        const cpuMs = cpuClock();
+        restampResource(incoming, null);
+        expect(cpuMs()).toBeLessThan(250);
+
+        const expected = [
+            'uid',
+            'dtstamp',
+            'summary',
+            'sequence',
+            'dtstart',
+            'dtend',
+            'rrule',
+            'x-keep-first',
+            'attendee',
+            'x-keep-last',
+            'x-eigen-event-id',
+        ];
+        const names = (resource: ICAL.Component) =>
+            masterOf(resource)
+                .getAllProperties()
+                .map((prop) => prop.name);
+        expect(names(incoming)).toEqual(expected);
+        expect(names(parseResource(serializeResource(incoming)))).toEqual(expected);
+        expect(masterOf(incoming).getFirstProperty('attendee')?.toJSON()[1]).toEqual({ cn: 'Bob' });
+    });
+
     test('strip leaves no X-EIGEN substring and changes nothing else', () => {
         const withStamps = buildResource([MASTER, OVERRIDE, EXCLUSION]);
         const stripped = parseResource(serializeResource(withStamps));
