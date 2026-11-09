@@ -22,7 +22,6 @@
     "packages/lib/src/core/mail/hooks/use-emails.ts": 1,
     "packages/lib/src/core/search/pagefind.ts": 1,
     "packages/lib/src/sheets/snapshot-codec.ts": 4,
-    "packages/lib/src/types/chart.ts": 1,
     "packages/lib/src/types/file-history.ts": 1,
     "packages/sheet/src/components/ContextMenu/FilterMenu.tsx": 1,
     "packages/sheet/src/components/SheetOverlay/FormulaHint/index.tsx": 1,
