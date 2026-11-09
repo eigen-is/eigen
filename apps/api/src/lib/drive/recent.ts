@@ -6,15 +6,14 @@
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { desc, sql } from 'drizzle-orm';
-import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { sendToHome } from '../home/home-relay';
 import type { Mount } from '../mount';
 import type { User } from '../user';
 import { isGuest } from '../user';
 import { isInsideDocument } from './acl';
+import type { SharedDb } from './shared';
 import * as sharedSchema from './sharedschema';
 
-type SharedDb = BunSQLiteDatabase<typeof sharedSchema>;
 export type RecentRow = typeof sharedSchema.recentPaths.$inferSelect;
 
 const ROWS_KEPT = 200;

@@ -8,7 +8,9 @@ import type { Home } from '../home';
 import { SHARED_DB_CONFIG } from './db-config';
 import type * as sharedSchema from './sharedschema';
 
-export async function getSharedDatabase(home: Home): Promise<BunSQLiteDatabase<typeof sharedSchema>> {
+export type SharedDb = BunSQLiteDatabase<typeof sharedSchema>;
+
+export async function getSharedDatabase(home: Home): Promise<SharedDb> {
     const managedDb = await home.getLocalDatabase(SHARED_DB_CONFIG, PATHS.DRIVE.SHARED_DB);
     return managedDb.db;
 }
