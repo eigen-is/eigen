@@ -235,7 +235,7 @@ Receivers never raise. A message over `EVENT_MAX_BYTES` or the storage budget is
 
 `Mail.mailboxDeliver` (`lib/mail/mail-domain.ts`) scans a delivered message for a `text/calendar` part after the INBOX append ([MAIL.md](MAIL.md)). It waits for the calendar, so a client reacting to the new-mail event already finds the change. A failure is only logged and never fails the delivery.
 
-Every change binds to the `From:` address, so the delivery computes a verdict with `verifyImipSender` (`lib/mail/imip-auth.ts`). A sender is verified when the topmost `Authentication-Results` header stamped with our own authserv-id records a `dkim=pass` for a domain aligned with the `From:` domain. OpenDKIM prepends its result and strips older ones with our id (`docker/postfix/entrypoint.sh`), so a header below it is a stale hop or a forgery. Anything else fails closed and the invite stays a plain attachment. An imported `.eml` never reaches the calendar, and an operator whose MTA writes no such header has automatic iMIP off. A message is acted on for its first `IMIP_MAX_EVENTS` (50) events only, since more is a mailed export, not a scheduling message.
+Every change binds to the `From:` address, so the delivery computes a verdict with `verifyImipSender` (`lib/mail/imip-auth.ts`). A sender is verified when the topmost `Authentication-Results` header stamped with our own authserv-id records a `dkim=pass` for a domain aligned with the `From:` domain. OpenDKIM prepends its result and strips older ones with our id (`docker/postfix/entrypoint.sh`), so a header below it is a stale hop or a forgery. Anything else fails closed and the invite stays a plain attachment, unparsed. An imported `.eml` never reaches the calendar, and an operator whose MTA writes no such header has automatic iMIP off. A calendar part past `EVENT_MAX_BYTES` is skipped, since no stored event could be that large. A message is acted on for its first `IMIP_MAX_EVENTS` (50) events only, since more is a mailed export, not a scheduling message.
 
 A REQUEST or CANCEL from the recipient's own address is dropped. It is their own mail coming back through a forward or a list, and acting on it would turn their own event into somebody else's copy. A REPLY from one's own address is still processed.
 
@@ -243,7 +243,7 @@ REQUEST takes the [locked decision](#every-inbound-request-takes-one-locked-deci
 
 ## The mail app draws an invite from the server's summary
 
-`Mail.messageGet` summarizes each calendar part through the same parser into `Attachment.calendarInvite`, and `calendar-invite-widget.tsx` (`apps/mail/`) draws it inline instead of in the attachment list. A `null` summary is an unparseable file and draws as an error card.
+`Mail.messageGet` summarizes each calendar part through the same parser into `Attachment.calendarInvite`, and `calendar-invite-widget.tsx` (`apps/mail/`) draws it inline instead of in the attachment list. A `null` summary is an unparseable file or a part past `EVENT_MAX_BYTES`, and draws as an error card.
 
 ## Import replays each series through putResource, as a device sync does
 

@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { Email, EmailSummary } from '@workspace/lib/types/mail';
+import { EVENT_MAX_BYTES } from '../../lib/calendar/resource-store';
 import { assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
@@ -130,6 +131,26 @@ describe('Mail calendar-invite payload', () => {
 
     test('an unparseable ICS yields an explicit null, and the message still serves', async () => {
         const message = await deliverAndGetMessage('Invitation: Broken Payload', 'inv-broken', 'NOT AN ICS FILE');
+
+        const attachment = findOrFail(message.attachments, (a) => a.contentType.startsWith('text/calendar'));
+        expect(attachment.calendarInvite).toBeNull();
+    });
+
+    test('a calendar part past the event size limit lands with no summary', async () => {
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:REQUEST',
+            'BEGIN:VEVENT',
+            'UID:invite-payload-large@external.com',
+            'SUMMARY:Large Payload',
+            'DTSTART:20260420T120000Z',
+            `X-PAD:${'p'.repeat(EVENT_MAX_BYTES)}`,
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        const message = await deliverAndGetMessage('Invitation: Large Payload', 'inv-large', ics);
 
         const attachment = findOrFail(message.attachments, (a) => a.contentType.startsWith('text/calendar'));
         expect(attachment.calendarInvite).toBeNull();

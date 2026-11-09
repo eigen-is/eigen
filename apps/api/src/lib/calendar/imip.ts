@@ -1,6 +1,7 @@
 // iMIP, the way calendar invitations travel by email. It builds the mails for an invitation, a cancellation and an
 // RSVP reply, with the calendar file attached, and it reads such a mail when one arrives. Inbound mail is only
-// trusted when the sender is verified, and a mail with too many events is ignored.
+// trusted when the sender is verified, a calendar part past the event size limit is skipped, and only a message's
+// first events are acted on.
 
 import { formatEventWhen, isInvitationFromOthers, normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
 import { escapeHtml } from '@workspace/lib/html';
@@ -13,6 +14,7 @@ import { parseIcs, serializeEventForImip } from '../ical';
 import { computeOccurrenceTimes } from '../ical/wall-clock';
 import { EMAIL_MUTED, EMAIL_TEXT, renderEigenEmail } from '../mailer/mail-template';
 import type { OutboundICalEvent, OutboundMail } from '../mailer/mailer';
+import { EVENT_MAX_BYTES } from './resource-store';
 
 type Organizer = NonNullable<EventData['organizer']>;
 
@@ -170,14 +172,20 @@ export function composeRsvpReply(
     };
 }
 
-function extractCalendarAttachment(mail: { attachments: Attachment[] }): { ics: string; method?: ImipMethod } | null {
-    const attachment = mail.attachments.find(isCalendarPart);
+// A part past the size a stored event may have is no invitation, and the mail goes on without one.
+function extractCalendarAttachment(mail: { attachments: readonly Attachment[] }): {
+    ics: string;
+    method?: ImipMethod;
+} | null {
+    const attachment = mail.attachments.find(
+        (part) => isCalendarPart(part) && part.content.byteLength <= EVENT_MAX_BYTES,
+    );
     if (!attachment) return null;
 
     return { ics: Buffer.from(attachment.content).toString(), method: attachment.calendarMethod };
 }
 
-// Null for unparseable ICS: the mail widget renders that as an explicit error state.
+// Null for a part nobody can read, too large or unparseable: the mail widget renders that as an explicit error state.
 export function summarizeCalendarInvite(attachment: Attachment): CalendarInvite | null {
     const cal = extractCalendarAttachment({ attachments: [attachment] });
     if (!cal) return null;
@@ -203,24 +211,24 @@ export function summarizeCalendarInvite(attachment: Attachment): CalendarInvite 
     }
 }
 
-// Every mutation below binds to `From:`, trustworthy only where our MTA recorded an aligned DKIM pass (mail-domain.ts).
+// Every mutation below binds to `From:`, trustworthy only where our MTA recorded an aligned DKIM pass.
 export async function processInboundImip(
     home: Home,
-    mail: { attachments: Attachment[]; from?: AddressObject },
+    mail: { attachments: readonly Attachment[]; from?: AddressObject },
     verdict: { verified: boolean; reason: string },
 ): Promise<void> {
     const calAttachment = extractCalendarAttachment(mail);
     if (!calAttachment) return;
 
+    const sender = mail.from?.value?.[0]?.address?.toLowerCase() ?? null;
+    if (!sender || !verdict.verified) {
+        console.info(`iMIP: not acting on mail from ${sender ?? 'unknown sender'} — ${verdict.reason}`);
+        return;
+    }
+
     const { events, method: parsedMethod } = parseIcs(calAttachment.ics);
     const method = parsedMethod ?? calAttachment.method;
     if (!method || events.length === 0) return;
-
-    const sender = mail.from?.value?.[0]?.address?.toLowerCase() ?? null;
-    if (!sender || !verdict.verified) {
-        console.info(`iMIP: not acting on ${method} from ${sender ?? 'unknown sender'} — ${verdict.reason}`);
-        return;
-    }
 
     // The user's own mail coming back: acting on it would seize their own event as somebody else's copy, reducing every CalDAV PUT to alarms.
     if (method !== 'REPLY' && sender === home.user.email.toLowerCase()) {
@@ -228,7 +236,7 @@ export async function processInboundImip(
         return;
     }
 
-    const sentBy = (email: string | undefined): email is string => !!sender && email?.toLowerCase() === sender;
+    const sentBy = (email: string | undefined): email is string => email?.toLowerCase() === sender;
 
     const calendar = home.calendar;
 

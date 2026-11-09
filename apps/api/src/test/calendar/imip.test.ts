@@ -2,6 +2,7 @@ import { beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem, ImipMethod } from '@workspace/lib/types/calendar';
 import type { AddressObject, Attachment } from '@workspace/lib/types/mail';
 import { composeCancelEmail, composeInviteEmail, composeRsvpReply, processInboundImip } from '../../lib/calendar/imip';
+import { EVENT_MAX_BYTES } from '../../lib/calendar/resource-store';
 import { getMailDomain } from '../../lib/config/server-config';
 import type { Home } from '../../lib/home';
 import { getHome } from '../../lib/home/get-home';
@@ -1023,6 +1024,49 @@ describe('iMIP inbound sender binding (audit P1-7a)', () => {
         ctx = await getTestContext();
         const res = await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/calendars`);
         bobCalendarId = findOrFail(await assertJson<CalendarItem[]>(res), (c) => c.isDefault).id;
+    });
+
+    const calendarMail = (ics: string, sender: string) => ({
+        attachments: [
+            {
+                contentType: 'text/calendar; method=REQUEST',
+                content: new TextEncoder().encode(ics),
+                index: 0,
+                size: ics.length,
+            },
+        ],
+        from: { text: sender, value: [{ name: '', address: sender }] },
+    });
+
+    test('an unverified sender returns before the calendar part is parsed', async () => {
+        const home = await getHome(ctx.bob.user.id);
+        const verdict = { verified: false, reason: 'no DKIM pass' };
+
+        await processInboundImip(home, calendarMail('NOT AN ICS FILE', 'stranger@evil.com'), verdict);
+    });
+
+    test('a verified sender with a part past the event size limit writes nothing', async () => {
+        const home = await getHome(ctx.bob.user.id);
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:REQUEST',
+            'BEGIN:VEVENT',
+            'UID:imip-large-part@external.com',
+            'SUMMARY:Large Part',
+            'DTSTART:20260420T120000Z',
+            'ORGANIZER:mailto:organizer@external.com',
+            `X-PAD:${'p'.repeat(EVENT_MAX_BYTES)}`,
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        await processInboundImip(home, calendarMail(ics, 'organizer@external.com'), {
+            verified: true,
+            reason: 'dkim pass',
+        });
+
+        expect(await home.calendar.getEventsByUid('imip-large-part@external.com')).toEqual([]);
     });
 
     test('forged REPLY (envelope From != attendee) does not change the attendee status', async () => {
