@@ -107,6 +107,91 @@ describe('a sort writes only what it lands', () => {
     });
 });
 
+describe('a pasted formula takes the type of its own answer', () => {
+    test('an error reads as an error, on every reader', () => {
+        const s = session({ A1: held('=1/H1', 0.5), H1: number(2) });
+        s.edit(pasted('A1', 'A6'));
+        expectEveryone(s, 'A6', { f: '=1/H6', v: '#DIV/0!', m: '#DIV/0!', ct: { fa: 'General', t: 'e' } });
+        s.edit(typed('C6', '=ISERROR(A6)'));
+        s.edit(typed('D6', '=IFERROR(A6,"none")'));
+        s.edit(typed('E6', '=A6+1'));
+        expectEveryone(s, 'C6', { v: true });
+        expectEveryone(s, 'D6', { v: 'none' });
+        expectEveryone(s, 'E6', { v: '#DIV/0!' });
+    });
+
+    test('an undo takes the pasted cell away on every reader', () => {
+        const s = session({ A1: held('=1/H1', 0.5), H1: number(2) });
+        s.edit(pasted('A1', 'A6'));
+        s.undo();
+        for (const sheet of s.readers()) expect(at(sheet, 'A6')?.f).toBeUndefined();
+    });
+
+    test('a source this build cannot evaluate lands as #NAME?, with the type of an error', () => {
+        const s = session({ A1: held('=FILTER(H1,1)', 7) });
+        s.edit(pasted('A1', 'A6'));
+        expectEveryone(s, 'A6', { v: '#NAME?', m: '#NAME?', ct: { fa: 'General', t: 'e' } });
+    });
+
+    test('a number shows in the format that came with it', () => {
+        const s = session({ A1: held('=H1*2', 2, '0.00'), H1: number(1), H6: number(3) });
+        s.edit(pasted('A1', 'A6'));
+        expectEveryone(s, 'A6', { f: '=H6*2', v: 6, m: '6.00', ct: { fa: '0.00', t: 'n' } });
+    });
+
+    test('a number under a date format is a date', () => {
+        const s = session({ A1: held('=H1', 46000, 'yyyy-mm-dd'), H1: number(46000), H2: number(46001) });
+        s.edit(pasted('A1', 'A2'));
+        expectEveryone(s, 'A2', { v: 46001, ct: { fa: 'yyyy-mm-dd', t: 'd' } });
+    });
+
+    test('text stays text under a number format', () => {
+        const s = session({ B1: held('=IF(H1>0,"005",5)', 5, '0.00'), H1: number(0), H6: number(1) });
+        s.edit(pasted('B1', 'B6'));
+        expectEveryone(s, 'B6', { v: '005', m: '005', ct: { fa: '0.00', t: 'g' } });
+    });
+
+    test('a formula pasted on its own cell keeps what it holds', () => {
+        const s = session({ A1: held('=$H$1*2', 999), H1: number(5) });
+        s.edit(pasted('A1', 'A1'));
+        expectEveryone(s, 'A1', { v: 999 });
+    });
+
+    test('pasted formulas that read each other compute in order', () => {
+        const s = session({ A1: number(1), B1: held('=A1+1', 2), C1: held('=B1+1', 3), A2: number(10) });
+        s.edit((draft) => {
+            draft.selections = [{ row: [0, 0], column: [1, 2] }];
+            copy(draft, { cut: false });
+            draft.selections = [{ row: [1, 1], column: [1, 1] }];
+            pasteCopy(draft);
+        });
+        expectEveryone(s, 'C2', { f: '=B2+1', v: 12 });
+    });
+});
+
+describe('a formula pasted as text writes its result as any formula does', () => {
+    const pastedOver = (text: string) => {
+        const s = session({ A1: number(5) });
+        s.edit((draft) => {
+            draft.selections = [{ row: [0, 0], column: [0, 0] }];
+            pasteText(draft, text);
+        });
+        return s;
+    };
+
+    test('text over a number stays text', () => {
+        expectEveryone(pastedOver('="005"'), 'A1', { v: '005', m: '005', ct: { fa: 'General', t: 'g' } });
+    });
+
+    test('an error over a number is an error', () => {
+        expectEveryone(pastedOver('=1/0'), 'A1', { v: '#DIV/0!', ct: { fa: 'General', t: 'e' } });
+    });
+
+    test('a missing closing bracket is added, as a typed formula has it', () => {
+        expectEveryone(pastedOver('=SUM(1,2'), 'A1', { f: '=SUM(1,2)', v: 3 });
+    });
+});
+
 describe('an empty-text result', () => {
     const IF_ONE = '=IF(A1=1,"",5)';
     const IMPORTED: Cell = { f: IF_ONE, v: '', m: '', ct: { fa: 'General', t: 'g' } };

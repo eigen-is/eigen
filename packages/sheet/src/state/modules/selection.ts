@@ -4,7 +4,7 @@
 
 import { cloneDeep, isEmpty, isNil, isNumber } from 'es-toolkit/compat';
 import { format } from 'numfmt';
-import { cellDisplay, numberDisplay } from '../../engine/format';
+import { cellDisplay, numberDisplay, writeFormulaResult } from '../../engine/format';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
 import type { FormulaCell, Range, Selection } from '../types';
@@ -281,10 +281,9 @@ export function pasteHandlerOfPaintModel(
                 Object.assign(item, value);
             }
         }
-        if (cell.v != null && value.ct?.fa != null) {
-            // The painted number format changes what the kept value shows.
-            cell.m = numberDisplay(cell.v, value.ct.fa);
-        }
+        // The painted number format changes what the kept value shows. A formula's result keeps its own type.
+        if (cell.f != null) writeFormulaResult(cell, cell.v);
+        else if (cell.v != null && value.ct?.fa != null) cell.m = numberDisplay(cell.v, value.ct.fa);
         return cell;
     });
 }

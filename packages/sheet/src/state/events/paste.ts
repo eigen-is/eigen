@@ -7,15 +7,14 @@ import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { CellBorderSides } from '@workspace/lib/sheets';
 import { BORDER_SIDE_CSS } from '@workspace/lib/sheets';
 import { cloneDeep, isEmpty, isNil, times } from 'es-toolkit/compat';
-import { createArrayResolver } from '../../engine/cell-resolver';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
-import { numberDisplay } from '../../engine/format';
+import { writeFormulaResult } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
 import type { CellMatrix } from '../../engine/types';
 import { setRowHeight } from '../api';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
-import { getFlowdata, getSheetConfig } from '../context';
+import { getSheetConfig } from '../context';
 import { carrySides } from '../modules/border';
 import type { CarryTile } from '../modules/carry';
 import { carriedLines, carryCells, moveCells, movedLines } from '../modules/carry';
@@ -24,6 +23,7 @@ import { computeFormula } from '../modules/formula-exec';
 import { cellsIn, jfrefreshgrid, recomputeCells } from '../modules/refresh';
 import { normalizeSelection } from '../modules/selection';
 import { hasPartMC, PART_MERGE_REFUSAL } from '../modules/validation';
+import type { FormulaCell } from '../types';
 import { getSheetIndex } from '../utils';
 import { SHEET_HOTKEYS } from './keyboard';
 import { pastedCell, readStyleRules } from './paste-cell';
@@ -112,9 +112,6 @@ function pasteCut(ctx: Context, copyState: NonNullable<Context['copyState']>) {
 }
 
 function pasteCopy(ctx: Context, copyState: NonNullable<Context['copyState']>) {
-    // One live resolver per paste, so each evaluation sees the cells pasted before it.
-    const resolver = createArrayResolver(ctx.sheets);
-
     const copySheetId = copyState.dataSheetId;
     const lines = carriedLines(ctx, copySheetId, copyState.copyRange);
     if (!lines) return;
@@ -145,23 +142,26 @@ function pasteCopy(ctx: Context, copyState: NonNullable<Context['copyState']>) {
 
     // A copy of several ranges pastes the values of its formulas, not the formulas.
     const several = copyState.copyRange.length > 1;
+    const landed: FormulaCell[] = [];
     carryCells(ctx, lines, tiles, ({ source, r, c, sr, sc }) => {
         if (source?.f == null) return source;
         if (several) {
             const { f: _, ...value } = source;
             return value;
         }
-        // A copy on its own cell is the same formula. Anywhere else it is a new one, so its source's number isn't its
-        // own: this build's answer stands, even #NAME?. On a copy, as the recompute writes into the cell's format.
+        // A copy on its own cell is the same formula. Anywhere else it is a new one, so its source's value isn't its
+        // own: it lands with none and this build's answer stands, even #NAME?. On a copy, as the write changes its ct.
         if (copySheetId === ctx.currentSheetId && r === sr && c === sc) return cloneDeep(source);
-        const [v, f] = computeFormula(ctx, `=${functionCopy(source.f, r - sr, c - sc)}`, { resolver });
-        return { ...cloneDeep(source), v, f, m: numberDisplay(v, source.ct?.fa) };
+        const cell = { ...cloneDeep(source), f: `=${functionCopy(source.f, r - sr, c - sc)}` };
+        writeFormulaResult(cell, undefined);
+        landed.push({ r, c, id: ctx.currentSheetId });
+        return cell;
     });
 
     last.row = [top, bottom];
     last.column = [left, right];
 
-    jfrefreshgrid(ctx);
+    recomputeCells(ctx, cellsIn({ row: last.row, column: last.column }, ctx.currentSheetId), landed);
 }
 
 // An HTML table from another program, or from a copy of another tab, with the cells' styles as the HTML carries them.
@@ -304,15 +304,8 @@ function pasteFormula(ctx: Context, formulaStr: string) {
     const r = selection.row[0];
     const c = selection.column[0];
 
-    const [val] = computeFormula(ctx, formulaStr);
-
-    const d = getFlowdata(ctx);
-    if (!d) return;
-
-    const cell = (d[r][c] ??= {});
-    cell.m = numberDisplay(val, cell.ct?.fa);
-    cell.v = val;
-    cell.f = formulaStr;
+    const [v, f] = computeFormula(ctx, formulaStr);
+    setCellValue(ctx, r, c, null, { v, f });
 
     jfrefreshgrid(ctx, [{ row: [r, r], column: [c, c] }]);
 }
