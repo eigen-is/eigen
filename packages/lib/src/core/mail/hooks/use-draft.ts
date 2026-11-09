@@ -44,9 +44,7 @@ async function updateDraftEmail(
 ): Promise<EmailDraft> {
     const response = await mailApi({ ownerId }).message.draft.put({
         mail: draft,
-        tempAttachmentIds: options.tempAttachmentIds,
-        keepAttachmentIndexes: options.keepAttachmentIndexes,
-        forceFullSave: options.forceFullSave,
+        ...options,
     });
     if (response.error) throw new AppError(response);
     return response.data;
@@ -83,13 +81,8 @@ export function useUpdateDraft() {
     return useMutation({
         mutationFn: ({ draft, ...options }: { draft: NewDraft } & DraftUpdateOptions) =>
             updateDraftEmail(draft, ownerId, options),
-        // Optimistically merge the user's edits into the cached detail. This matters for
-        // fire-and-forget unmount saves: if the user navigates away then immediately back, the
-        // detail query is observed before the network save completes, and useEmail's
-        // staleTime: Infinity would otherwise serve the pre-edit copy. Fields are assigned
-        // directly (no `?? previous` fallback) so that *clearing* a field — e.g. removing the
-        // sole recipient, where draft.to becomes undefined — propagates to the cache rather
-        // than silently reverting to the previous value.
+        // A navigation back would otherwise read the pre-edit copy before a closing save lands, under staleTime: Infinity.
+        // Assigned with no `?? previous`, so clearing a field, such as the sole recipient, reaches the cache.
         onMutate: ({ draft }) => {
             if (!draft.id) return;
             queryClient.setQueryData<EmailDraft | null>(emailKeys.detail(ownerId, draft.id), (previous) =>
@@ -108,9 +101,7 @@ export function useUpdateDraft() {
             );
         },
         onSuccess: (data) => {
-            // Push the parsed response into the cache so the next observe doesn't need a
-            // refetch. The list still gets invalidated because per-message metadata (date,
-            // attachment count) may have changed.
+            // The list still refetches, because a row's date and attachment count may have changed.
             if (data.id) queryClient.setQueryData(emailKeys.detail(ownerId, data.id), data);
             queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, MAILBOX_DRAFTS) });
             invalidateMailboxes(queryClient, ownerId);

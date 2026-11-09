@@ -3,7 +3,6 @@ import {
     copyFileSync,
     existsSync,
     fstatSync,
-    mkdirSync,
     readdirSync,
     readFileSync,
     statSync,
@@ -17,7 +16,7 @@ import { join } from 'node:path';
 import { MAILBOX_DRAFTS, MAILBOX_INBOX, MAILBOX_TRASH } from '@workspace/lib/constants/mailboxes';
 import { getHome } from '../../lib/home';
 import { readMailTotalSize } from '../../lib/mail/maildir-store';
-import { boxDir, mailRootOf, makeEml, seedMaildirFolder } from '../mail-test-helpers';
+import { boxDir, makeEml, seedMaildirFolder } from '../mail-test-helpers';
 import { createTestUser, ensureServer, eventually, TEST_DATA_DIR } from '../setup';
 
 // Durability can only be proven by killing the machine, so what these tests pin is the protocol that buys
@@ -106,7 +105,6 @@ describe('Maildir write durability', () => {
         const dirs = {
             tmp: join(box(MAILBOX_DRAFTS), 'tmp'),
             cur: join(box(MAILBOX_DRAFTS), 'cur'),
-            meta: join(mailRootOf(userId), 'draft-meta'),
         };
 
         const events = await record(dirs, async () => {
@@ -118,8 +116,7 @@ describe('Maildir write durability', () => {
             });
         });
 
-        // The EML, then the sidecar write that follows — writeAtomic's own file + directory pair.
-        expect(events).toEqual(['file', 'rename', 'cur', 'file', 'rename', 'meta']);
+        expect(events).toEqual(['file', 'rename', 'cur']);
         expect(readdirSync(dirs.tmp)).toEqual([]);
     });
 
@@ -145,7 +142,7 @@ describe('Maildir write durability', () => {
             await saveDraft('Ordered save', 'a longer second body, so the file gets a new name', draft.id);
         });
 
-        expect(events.slice(0, 5)).toEqual(['file', 'rename', 'cur', 'unlink', 'cur']);
+        expect(events).toEqual(['file', 'rename', 'cur', 'unlink', 'cur']);
         expect(draftFiles(draft.id).length).toBe(1);
         expect(await home.mail.size()).toBe(await readMailTotalSize(home.fs));
     });
@@ -371,27 +368,5 @@ describe('Maildir write durability', () => {
 
         expect(existsSync(stale)).toBe(false);
         expect(existsSync(fresh)).toBe(true);
-    });
-
-    test('an atomic temp a crash left in draft-meta/ is swept after 24 hours, and a real sidecar is not', async () => {
-        const home = await getHome(userId);
-        const store = (home.mail as unknown as { store: { cleanupStaleDraftTemps: () => Promise<void> } }).store;
-        const metaDir = join(mailRootOf(userId), 'draft-meta');
-        mkdirSync(metaDir, { recursive: true });
-        const stale = join(metaDir, '.draft-1.json.tmp-abc');
-        const inFlight = join(metaDir, '.draft-2.json.tmp-def');
-        const sidecar = join(metaDir, 'draft-1.json');
-        writeFileSync(stale, '{}');
-        writeFileSync(inFlight, '{}');
-        writeFileSync(sidecar, '{}');
-        const old = new Date(Date.now() - 48 * 60 * 60 * 1000);
-        utimesSync(stale, old, old);
-        utimesSync(sidecar, old, old);
-
-        await store.cleanupStaleDraftTemps();
-
-        expect(existsSync(stale)).toBe(false);
-        expect(existsSync(inFlight)).toBe(true);
-        expect(existsSync(sidecar)).toBe(true);
     });
 });

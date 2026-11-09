@@ -19,7 +19,7 @@ function eml(html: string): Buffer {
 describe('parseEmlBytes', () => {
     test('a message with a body carries no html out of the parse', async () => {
         const bytes = eml('<p>Hi</p><script>alert(1)</script>');
-        const mail = await parseEmlBytes('m1', 'INBOX', bytes, bytes.length);
+        const mail = await parseEmlBytes('m1', 'INBOX', bytes);
 
         expect(mail.html).toBeNull();
         expect(mail.subject).toBe('t');
@@ -30,7 +30,7 @@ describe('parseEmlBytes', () => {
         const bytes = eml(
             '<p>Hello <a href="https://example.com/track?id=1">there</a></p><img src="https://example.com/pixel.png" alt="">',
         );
-        const mail = await parseEmlBytes('m2', 'INBOX', bytes, bytes.length);
+        const mail = await parseEmlBytes('m2', 'INBOX', bytes);
 
         expect(mail.textShort).toBe('Hello there');
     });

@@ -2,11 +2,8 @@
 // and the mail app use them. It keeps the messages in a mail store and turns the changes the store
 // discovers, such as new mail arriving, into live updates and notifications for the user.
 
-import { MAIL_PREVIEW_CHARS, MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
 import { canonicalMailbox, MAILBOX_DRAFTS, MAILBOX_INBOX, MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
-import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type {
-    AddressObject,
     Attachment,
     DraftAttachmentUpload,
     DraftUpdateOptions,
@@ -27,7 +24,7 @@ import { isDemo, isMailAppEnabled } from '../config/env';
 import { getMailDomain, isInternalAddress } from '../config/server-config';
 import { ApiError, isSafePathSegment, NOT_AN_EMAIL_FILE } from '../core';
 import type { Home } from '../home';
-import { renderAttachmentLinksText, renderAttachmentPills } from '../mailer/mail-template';
+import { renderAttachmentLinksText } from '../mailer/mail-template';
 import type { OutboundMail } from '../mailer/mailer';
 import { sendMail } from '../mailer/mailer';
 import { MaxFileSizeExceededError, parseMultipartRequest } from '../multipart';
@@ -37,17 +34,17 @@ import { grantAccessForReferences } from './access-grants';
 import { verifyImipSender } from './imip-auth';
 import type { PartHeaders } from './mail-parser';
 import { parseMail, splitMime } from './mail-parser';
-import type { DraftMeta, MailSearchOptions } from './mail-store';
+import type { MailSearchOptions } from './mail-store';
 import type { MaildirStore } from './maildir-store';
 import type { EmlAttachment } from './mailfile';
 import { createEmlContent } from './mailfile';
 import { createUniqueMessageId } from './mailutils';
 import { MAX_PERSONALISED_SEND_BYTES } from './recipients';
+import { appendDraftReferences, appendReferenceLinks } from './reference-links';
 import { draftToOutboundMail } from './sender';
 import { buildMailEvent } from './sse-events';
 import { welcomeMail } from './welcome';
 
-const FULL_SAVE_INTERVAL_MS = 5 * 60 * 1000;
 const MAIL_NOTIFICATION_TAG = 'mail:new';
 
 // A blank id normalizes to undefined, so `?? createUniqueMessageId()` bakes a `Message-ID: <@domain>` into the EML.
@@ -60,14 +57,6 @@ function draftIdOf(email: NewDraft): string | undefined {
 
 export function attachmentTooLarge(maxSize: number): ApiError {
     return new ApiError(413, `Attachment exceeds ${Math.floor(maxSize / (1024 * 1024))}MB limit`);
-}
-
-function appendReferenceLinks(html: string, refs: AttachmentReference[], recipientEmail?: string): string {
-    const refHtml = renderAttachmentPills(refs, recipientEmail);
-    if (!refHtml) return html;
-    if (!html) return refHtml;
-    const replaced = html.replace(/<\/body>/i, `${refHtml}</body>`);
-    return replaced !== html ? replaced : html + refHtml;
 }
 
 // An answer to the browser names a part and its size. The bytes come from the part's own route: as JSON they are about
@@ -217,21 +206,6 @@ export class Mail {
         }
         blankAttachmentBytes(message);
 
-        // A fast-path save leaves the EML stale, so the sidecar wins over both the EML and the summary row.
-        if (message.isDraft) {
-            const meta = await this.store.readDraftMeta(messageId);
-            if (meta) {
-                message.subject = meta.subject;
-                message.html = meta.html;
-                message.text = meta.text;
-                // Unconditional: both save paths write the full field set, so an absent one means cleared.
-                message.to = meta.to;
-                message.cc = meta.cc;
-                message.bcc = meta.bcc;
-                message.driveReferences = meta.driveReferences ?? [];
-            }
-        }
-
         return message;
     }
 
@@ -260,7 +234,6 @@ export class Mail {
         if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
 
         await this.store.delete(messageId);
-        await this.store.deleteDraftMeta(messageId);
 
         this.emit(SSEventType.MAIL_DELETED, { messageId, mailbox: email.mailbox });
         this.readNotificationOnceInboxRead();
@@ -322,163 +295,53 @@ export class Mail {
     // -- Draft & Send --
 
     public async messageHandleDraft(email: NewDraft, options: DraftUpdateOptions = {}): Promise<EmailDraft> {
+        return blankAttachmentBytes(await this.writeDraft(email, options));
+    }
+
+    // The request is the whole draft: a field it leaves out is cleared. Only the attachments live on the server alone,
+    // so it names the parts to keep.
+    private async writeDraft(email: NewDraft, options: DraftUpdateOptions): Promise<EmailDraft> {
+        const user = this.home.user;
         const existingId = draftIdOf(email);
-        const hasNewTemps = !!options.tempAttachmentIds?.length;
 
-        // A body-only save skips the EML re-compose, so an IMAP client reading Drafts sees stale content until a full save.
-        if (existingId && !hasNewTemps && !options.forceFullSave) {
-            const dbRecord = this.store.getSummary(existingId);
-            if (dbRecord) {
-                const meta = await this.store.readDraftMeta(existingId);
-                if (meta && meta.attachments.length > 0) {
-                    // The keep list names raw EML parts: anything but the sidecar's exact set needs a rebuild.
-                    const parts = meta.attachments;
-                    const kept = options.keepAttachmentIndexes ? new Set(options.keepAttachmentIndexes) : null;
-                    const keepAll = !kept || (kept.size === parts.length && parts.every((a) => kept.has(a.index)));
-
-                    const stale = meta.lastFullSaveAt && Date.now() - meta.lastFullSaveAt > FULL_SAVE_INTERVAL_MS;
-                    if (keepAll && !stale) {
-                        return this.draftFastSave(email, existingId, meta, dbRecord);
-                    }
-                }
-            }
-        }
-
-        return blankAttachmentBytes(await this.draftFullSave(email, existingId, options));
-    }
-
-    private async draftFastSave(
-        email: NewDraft,
-        existingId: string,
-        prevMeta: DraftMeta,
-        dbRecord: EmailSummary,
-    ): Promise<EmailDraft> {
-        const driveReferences = email.driveReferences ?? prevMeta.driveReferences;
-        const meta: DraftMeta = {
-            subject: email.subject || '',
-            to: email.to,
-            cc: email.cc,
-            bcc: email.bcc,
-            text: email.text || '',
-            html: email.html || '',
-            attachments: prevMeta.attachments,
-            driveReferences,
-            inReplyTo: email.inReplyTo,
-            references: email.references,
-            repliedToId: email.repliedToId ?? prevMeta.repliedToId,
-            lastFullSaveAt: prevMeta.lastFullSaveAt,
-        };
-        await this.store.writeDraftMeta(existingId, meta);
-
-        const textShort = (email.text || '').slice(0, MAIL_PREVIEW_CHARS);
-        this.store.applyDraftMeta(existingId, meta);
-
-        this.emit(SSEventType.MAIL_DRAFT_UPDATED, { messageId: existingId, mailbox: MAILBOX_DRAFTS });
-
-        const user = this.home.user;
-        const attachments = prevMeta.attachments.map((a) => ({
-            contentType: a.contentType,
-            filename: a.filename,
-            content: Buffer.alloc(0),
-            size: a.size,
-            index: a.index,
-        }));
-
-        return {
-            ...dbRecord,
-            subject: meta.subject,
-            textShort,
-            hasAttachments: attachments.length > 0,
-            attachments,
-            html: meta.html,
-            text: meta.text,
-            to: email.to,
-            cc: email.cc,
-            bcc: email.bcc,
-            from: {
-                value: [{ address: user.email, name: user.name }],
-                text: user.email,
-            },
-            messageId: email.messageId,
-            inReplyTo: email.inReplyTo,
-            references: email.references,
-            driveReferences: driveReferences ?? [],
-        };
-    }
-
-    private async draftFullSave(
-        email: NewDraft,
-        existingId: string | undefined,
-        options: Pick<DraftUpdateOptions, 'tempAttachmentIds' | 'keepAttachmentIndexes'>,
-    ): Promise<EmailDraft> {
-        const user = this.home.user;
-
-        // The caller's references win. Without them, the draft keeps the ones it saved last.
-        let driveReferences = email.driveReferences;
-
-        // to/cc/bcc stay request-verbatim: the FE sends `undefined` for "cleared", so a `?? meta.X` would resurrect a recipient.
-        if (existingId) {
-            const meta = await this.store.readDraftMeta(existingId);
-            if (meta) {
-                email = {
-                    ...email,
-                    subject: email.subject ?? meta.subject,
-                    text: email.text ?? meta.text,
-                    html: email.html || meta.html, // || not ?? — empty html also falls back to the sidecar
-                    inReplyTo: email.inReplyTo ?? meta.inReplyTo,
-                    references: email.references ?? meta.references,
-                    repliedToId: email.repliedToId ?? meta.repliedToId,
-                };
-                driveReferences = driveReferences ?? meta.driveReferences;
-            }
-        }
-
-        const existingAttachments: EmlAttachment[] = [];
+        const attachments: EmlAttachment[] = [];
+        // No row means an IMAP client replaced this draft under another id. This save writes the old id again, and the
+        // user sees two drafts with neither lost.
         if (existingId && this.store.getSummary(existingId)) {
-            const attachments = await this.store.getAttachments(existingId);
             const keepSet = options.keepAttachmentIndexes ? new Set(options.keepAttachmentIndexes) : null;
-            for (const a of attachments) {
+            for (const a of await this.store.getAttachments(existingId)) {
                 if (keepSet && !keepSet.has(a.index)) continue;
-                existingAttachments.push({
+                attachments.push({
                     filename: mailAttachmentName(a, a.index),
                     content: Buffer.from(a.content),
                     contentType: a.contentType,
                 });
             }
         }
-
-        const newAttachments: EmlAttachment[] = [];
         for (const tempId of options.tempAttachmentIds ?? []) {
             const temp = await this.store.readDraftTempFile(tempId);
             if (!temp) throw new ApiError(404, `Temp attachment '${tempId}' not found`);
-            newAttachments.push({ filename: temp.filename, content: temp.content, contentType: temp.contentType });
+            attachments.push({ filename: temp.filename, content: temp.content, contentType: temp.contentType });
         }
-
-        const allAttachments = [...existingAttachments, ...newAttachments];
-
-        const from: AddressObject = {
-            value: [{ address: user.email, name: user.name }],
-            text: user.email,
-        };
 
         const newId = existingId ?? createUniqueMessageId();
         const cleanHtml = email.html || '';
-        // The links go into the EML, so the Sent copy and the sent message carry them. The sidecar keeps the clean
-        // html for compose.
-        const bakedHtml = driveReferences?.length ? appendReferenceLinks(cleanHtml, driveReferences) : cleanHtml;
+        const driveReferences = email.driveReferences ?? [];
         const emlContent = await createEmlContent({
             id: newId,
             subject: email.subject || '',
-            from,
+            from: { value: [{ address: user.email, name: user.name }], text: user.email },
             to: email.to,
             cc: email.cc,
             bcc: email.bcc,
-            text: email.text || '',
-            html: bakedHtml,
+            // MailComposer leaves an empty text part out, and the parser would then derive the text from the pills.
+            text: email.text || ' ',
+            html: appendDraftReferences(cleanHtml, driveReferences),
             date: new Date(),
             inReplyTo: email.inReplyTo,
             references: email.references,
-            attachments: allAttachments.length ? allAttachments : undefined,
+            repliedToId: email.repliedToId,
+            attachments: attachments.length ? attachments : undefined,
         });
 
         // Persist under the id baked into the EML header: a minted id leaves the wire Message-ID out of sync with the Sent EML.
@@ -490,37 +353,12 @@ export class Mail {
             await this.store.cleanupDraftTemp(tempId);
         }
 
-        // Write draft-meta so subsequent body-only saves can use the fast path.
-        await this.store.writeDraftMeta(saved.id, {
-            subject: email.subject || '',
-            to: email.to,
-            cc: email.cc,
-            bcc: email.bcc,
-            text: email.text || '',
-            html: cleanHtml,
-            attachments: saved.attachments.map((a) => ({
-                filename: mailAttachmentName(a, a.index),
-                contentType: a.contentType,
-                size: a.size,
-                index: a.index,
-            })),
-            driveReferences,
-            inReplyTo: email.inReplyTo,
-            references: email.references,
-            repliedToId: email.repliedToId,
-            lastFullSaveAt: Date.now(),
-        });
-
         this.emit(SSEventType.MAIL_DRAFT_UPDATED, { messageId: saved.id, mailbox: MAILBOX_DRAFTS });
 
-        // The clean html goes back so compose does not re-render the baked card block.
+        // What the composer sent, not the file's copy of it: the file's holds the pills, which a send draws afresh.
         saved.html = cleanHtml;
-        // messageSend needs the threading headers, and the EML re-parse is not relied on to recover them.
-        saved.inReplyTo = email.inReplyTo;
-        saved.references = email.references;
-        // MailComposer strips Bcc from the compiled EML, so the re-parse never recovers it and messageSend would lose those recipients.
-        saved.bcc = email.bcc;
-        saved.driveReferences = driveReferences ?? [];
+        saved.text = email.text || '';
+        saved.driveReferences = driveReferences;
         return saved;
     }
 
@@ -575,8 +413,8 @@ export class Mail {
         mailToSend: NewDraft,
         options?: { grantAccessRefIds?: string[] },
     ): Promise<SentMailResult> {
-        // Full EML rebuild so attachment content is available for SMTP.
-        const mail = await this.draftFullSave(mailToSend, draftIdOf(mailToSend), {});
+        // The save hands back the parts' bytes for SMTP, and From pinned to the account.
+        const mail = await this.writeDraft(mailToSend, {});
         const message = draftToOutboundMail(mail, this.home.user.email);
         const allRecipients = [...message.to, ...(message.cc ?? []), ...(message.bcc ?? [])];
 
@@ -585,10 +423,6 @@ export class Mail {
         const baseHtml = message.html || '';
         const baseText = message.text;
 
-        // The route schema bounds this too. It is checked again because `refs` can come from the draft sidecar.
-        if (refs.length > MAX_SEND_REFERENCES) {
-            throw new ApiError(400, `A message can have at most ${MAX_SEND_REFERENCES} attachment links`);
-        }
         // Links count as content, so a ref-only send is legitimate and only an empty subject, body and ref list is refused.
         if (!message.subject.trim() && !message.text.trim() && !message.html && !refs.length) {
             throw new ApiError(400, 'Cannot send email with empty subject and body');
@@ -658,15 +492,13 @@ export class Mail {
             }
         }
 
-        const repliedToId = (await this.store.readDraftMeta(mail.id))?.repliedToId;
-        await this.store.deleteDraftMeta(mail.id);
         await this.messageMove(mail.id, MAILBOX_SENT);
         await this.store.setFlags(mail.id, { draft: false });
         this.emit(SSEventType.MAIL_FLAGS_CHANGED, { messageId: mail.id, mailbox: MAILBOX_SENT });
         this.emit(SSEventType.MAIL_SENT, { messageId: mail.id, mailbox: MAILBOX_SENT });
 
         // The mail is out: a reply mark that fails to stick must not fail the send, or a retry sends it twice.
-        const answered = repliedToId ? this.store.getSummary(repliedToId) : undefined;
+        const answered = mail.repliedToId ? this.store.getSummary(mail.repliedToId) : undefined;
         if (answered) {
             await this.markReplied(answered.id, answered.mailbox).catch((err) =>
                 console.error('mail: marking the answered message failed', err),
@@ -686,41 +518,6 @@ export class Mail {
 
     public async destruct(): Promise<void> {
         await this.store.unwatch();
-        // With mail off no index is open for a sidecar to be saved into.
-        if (isMailAppEnabled()) await this.flushDraftSidecars();
         return this.store.destruct();
-    }
-
-    private async flushDraftSidecars(): Promise<void> {
-        const ids = await this.store.listDraftMetaIds();
-        for (const id of ids) {
-            try {
-                const dbRecord = this.store.getSummary(id);
-                if (!dbRecord?.isDraft) {
-                    await this.store.deleteDraftMeta(id);
-                    continue;
-                }
-                const meta = await this.store.readDraftMeta(id);
-                if (!meta) continue;
-                await this.draftFullSave(
-                    {
-                        id,
-                        subject: meta.subject,
-                        text: meta.text,
-                        html: meta.html,
-                        to: meta.to,
-                        cc: meta.cc,
-                        bcc: meta.bcc,
-                        driveReferences: meta.driveReferences,
-                        inReplyTo: meta.inReplyTo,
-                        references: meta.references,
-                    },
-                    id,
-                    {},
-                );
-            } catch (err) {
-                console.error(`[mail] Failed to flush draft sidecar ${id}:`, err);
-            }
-        }
     }
 }

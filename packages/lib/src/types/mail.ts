@@ -1,3 +1,6 @@
+// The shapes the mail app and its API share: an address, a parsed message and its list row, a draft and what a save and
+// a send answer. The routes return them and the mail hooks read them.
+
 import type { ImipMethod } from './calendar';
 import { isIcsMime } from './drive';
 import type { AttachmentReference } from './drive-reference';
@@ -69,6 +72,8 @@ export type ParsedMail = {
     replyTo?: AddressObject | undefined;
     messageId?: string | undefined;
     inReplyTo?: string | undefined;
+    // The message a draft answers, by its id here. Read off the message, so it can name anything or nothing.
+    repliedToId?: string | undefined;
     // Raw `Authentication-Results` header values, in document order (topmost first). The verifying
     // MTA prepends its own, so the first entry stamped with our authserv-id is the trusted one.
     authenticationResults?: string[] | undefined;
@@ -98,8 +103,7 @@ export type RecipientSummary = Pick<EmailSummary, 'toShort' | 'toAddress' | 'rec
 
 export type Email = ParsedMail &
     EmailSummary & {
-        // Populated only on drafts (read from the sidecar). Absent on sent/received mail —
-        // for those, references are baked into the HTML body when the draft was finalized.
+        // Only a draft's read fills this. A sent or received message shows them as links in its body.
         driveReferences?: AttachmentReference[];
     };
 
@@ -148,12 +152,10 @@ export type NewDraft = {
 
 export type DraftInput = Pick<NewDraft, 'to' | 'cc' | 'bcc' | 'subject' | 'text' | 'html' | 'inReplyTo' | 'references'>;
 
-// Sent with a draft save: staged uploads to embed, parsed attachments to keep, and whether to force
-// the EML rebuild (MAIL.md § A draft skips the rebuild until its attachments change).
+// Sent with a draft save: staged uploads to embed and parsed attachments to keep.
 export type DraftUpdateOptions = {
     tempAttachmentIds?: string[];
     keepAttachmentIndexes?: number[];
-    forceFullSave?: boolean;
 };
 
 export type DraftAttachmentUpload = {

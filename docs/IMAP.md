@@ -15,7 +15,7 @@ The sections go from the files up: how a message is written and named, how folde
 
 ## The files are the truth because Dovecot writes them too
 
-Dovecot moves, renames and deletes messages behind the API's back, so only a diff of the directories against the index sees its work. That diff, and the watchers that start it, are what mail has and contacts and calendar don't: only the API writes their databases. `mail.db` holds parsed metadata and flags for fast queries, and every row can be rebuilt by scanning the files: the `.eml`s, plus the `draft-meta/` sidecar a fast draft save writes ([MAIL.md § A draft skips the rebuild](MAIL.md#a-draft-skips-the-rebuild-until-its-attachments-change)). The Drafts sync projects the sidecar back over the row it rebuilds from the stale `.eml`. A sidecar that can't be read counts as absent, so one torn file can't fail that sync.
+Dovecot moves, renames and deletes messages behind the API's back, so only a diff of the directories against the index sees its work. That diff, and the watchers that start it, are what mail has and contacts and calendar don't: only the API writes their databases. `mail.db` holds parsed metadata and flags for fast queries, and every row can be rebuilt by scanning the `.eml`s. That holds for a draft too, whose file is its only copy ([MAIL.md § A draft's `.eml` is its only copy](MAIL.md#a-drafts-eml-is-its-only-copy)).
 
 **The file lands before the index row, always.** A crash between the two leaves the index behind the disk, and the next `reconcileMailbox` repairs it.
 

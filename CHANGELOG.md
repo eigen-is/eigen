@@ -27,6 +27,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Fixed
 
+- **Drafts in Mail** — a save that fails, or a crash during one, no longer loses the draft
+- **Drafts in other mail apps** — a mail app reading over IMAP always sees the draft as last saved, with its links to Drive documents and its Bcc. Bcc also stays on the copy in **Sent**
 - **Resolved comments in Docs** — resolving a comment removes its highlight from the text, which used to stay yellow
 - **Merged cells in Sheets** — pasting text over a merged cell replaces the merge, and wrapped text in a merged cell no longer makes its row very tall
 - **Restoring in Slides and Vector** — restoring an earlier version of a deck or drawing brings back the comments deleted since, as Docs and Sheets do. Their replies stay as they are now

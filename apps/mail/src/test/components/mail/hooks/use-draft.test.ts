@@ -85,9 +85,8 @@ describe('mergeServerAttachments', () => {
     });
 
     test('chips take the index the server gave each part, not its position in the answer', () => {
-        // What a fast save answers with: the named parts only, each under its raw EML index.
-        const fastSave: Attachment[] = [att('a.pdf', 'application/pdf', 1), att('b.pdf', 'application/pdf', 3)];
-        const { localNext } = mergeServerAttachments([], [], fastSave);
+        const answer: Attachment[] = [att('a.pdf', 'application/pdf', 1), att('b.pdf', 'application/pdf', 3)];
+        const { localNext } = mergeServerAttachments([], [], answer);
         expect(localNext.map((c) => c.index)).toEqual([1, 3]);
     });
 });
@@ -108,6 +107,11 @@ describe('initFields', () => {
     });
 });
 
+test('a reopened reply keeps the message it answers, which its next save names', () => {
+    const reopened = { ...savedDraft([]), repliedToId: 'original-1' };
+    expect(initFields(reopened).repliedToId).toBe('original-1');
+});
+
 describe('buildSaveOptions', () => {
     test('the keep list names the surviving chips by the index the server gave them', () => {
         const fields = initFields(
@@ -119,7 +123,7 @@ describe('buildSaveOptions', () => {
         );
         // The user removes the middle chip: the two survivors keep 0 and 2, never 0 and 1.
         const afterRemove = { ...fields, attachments: fields.attachments.filter((a) => a.filename !== 'b.pdf') };
-        const options = buildSaveOptions(afterRemove, false);
+        const options = buildSaveOptions(afterRemove);
         expect(options.keepAttachmentIndexes).toEqual([0, 2]);
         expect(options.tempAttachmentIds).toBeUndefined();
     });
@@ -133,7 +137,7 @@ describe('buildSaveOptions', () => {
             size: 10,
             contentType: 'application/pdf',
         };
-        const options = buildSaveOptions({ ...fields, attachments: [...fields.attachments, uploading] }, false);
+        const options = buildSaveOptions({ ...fields, attachments: [...fields.attachments, uploading] });
         expect(options.tempAttachmentIds).toEqual(['t1']);
         expect(options.keepAttachmentIndexes).toEqual([0]);
     });
@@ -190,6 +194,23 @@ describe('a forward carries the parts of the message it forwards', () => {
         await run((d) => d.setField('to', 'bob@test.eigen.is'));
         await flush();
         expect(saved).toEqual([['t1', 't2']]);
+    });
+
+    test('closing the composer saves what is not saved yet, and nothing when all of it is', async () => {
+        const { saved, run, flush } = await openForward();
+        await run((d) => d.setField('to', 'bob@test.eigen.is'));
+        await flush();
+        expect(saved.length).toBe(1);
+
+        await unmount();
+        unmount = async () => {};
+        expect(saved.length).toBe(1);
+
+        const edited = await openForward();
+        await edited.run((d) => d.setField('to', 'bob@test.eigen.is'));
+        await unmount();
+        unmount = async () => {};
+        expect(edited.saved.length).toBe(1);
     });
 
     test('removing one part in the composer sends the other', async () => {

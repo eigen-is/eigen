@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { EmailDraft } from '@workspace/lib/types/mail';
 import type { FileSink } from 'bun';
 import { getHome } from '../../lib/home';
 import { MaildirStore } from '../../lib/mail/maildir-store';
@@ -8,9 +9,6 @@ import { mailRootOf } from '../mail-test-helpers';
 import { assertJson, authedRequest, getTestContext, putDraft, uploadDraftAttachment } from '../setup';
 
 const isWindows = process.platform === 'win32';
-
-// The store names the sidecar after the draft id, which a client only ever gets from the server.
-const sidecarPath = (ownerId: string, draftId: string) => join(mailRootOf(ownerId), 'draft-meta', `${draftId}.json`);
 
 describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -271,15 +269,15 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         expect(result.contentType).toBe('application/octet-stream');
     });
 
-    test('body-only re-save uses fast path and preserves attachments', async () => {
-        const file = new File(['fast-path-bytes'], 'fastpath.txt', { type: 'text/plain' });
+    test('a body-only re-save keeps the attachments', async () => {
+        const file = new File(['body-only-bytes'], 'bodyonly.txt', { type: 'text/plain' });
         const uploaded = await uploadDraftAttachment(ctx.alice.user.sessionToken, ctx.alice.user.id, file);
 
         const first = await putDraft(
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
             {
-                subject: 'Fast path test',
+                subject: 'Body only',
                 to: {
                     value: [{ address: 'bob@test.eigen.is', name: 'Bob' }],
                     text: 'Bob <bob@test.eigen.is>',
@@ -291,13 +289,13 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         );
         expect(first.attachments.length).toBe(1);
 
-        // Body-only save with all attachments kept — should use fast path
+        // Body-only save with all attachments kept.
         const second = await putDraft(
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
             {
                 id: first.id,
-                subject: 'Fast path test updated',
+                subject: 'Body only updated',
                 to: first.to,
                 text: 'v2',
                 html: '<p>v2</p>',
@@ -305,8 +303,8 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
             { keepAttachmentIndexes: [0] },
         );
         expect(second.attachments.length).toBe(1);
-        expect(second.attachments[0].filename).toBe('fastpath.txt');
-        expect(second.subject).toBe('Fast path test updated');
+        expect(second.attachments[0].filename).toBe('bodyonly.txt');
+        expect(second.subject).toBe('Body only updated');
 
         // Reading the draft should return the latest content
         const getRes = await authedRequest(
@@ -318,7 +316,7 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         expect(fetched.attachments.length).toBe(1);
     });
 
-    test("a keep list that is not the sidecar's set takes the full save", async () => {
+    test('a keep list naming a part that is gone keeps only the parts that are there', async () => {
         const alpha = new File(['alpha-bytes'], 'alpha.txt', { type: 'text/plain' });
         const beta = new File(['beta-bytes'], 'beta.txt', { type: 'text/plain' });
         const upAlpha = await uploadDraftAttachment(ctx.alice.user.sessionToken, ctx.alice.user.id, alpha);
@@ -328,7 +326,7 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
             {
-                subject: 'Stale sidecar',
+                subject: 'Stale keep list',
                 to: {
                     value: [{ address: 'bob@test.eigen.is', name: 'Bob' }],
                     text: 'Bob <bob@test.eigen.is>',
@@ -340,18 +338,17 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         );
         expect(first.attachments.length).toBe(2);
 
-        // The sidecar lists the parts at 0 and 1. Keeping [1, 2] is as long as that list but is a
-        // different set, so it drops alpha and needs the EML rebuilt.
+        // The draft has parts at 0 and 1. Keeping [1, 2] drops alpha.
         const second = await putDraft(
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
-            { id: first.id, subject: 'Stale sidecar', to: first.to, text: 'v2', html: '<p>v2</p>' },
+            { id: first.id, subject: 'Stale keep list', to: first.to, text: 'v2', html: '<p>v2</p>' },
             { keepAttachmentIndexes: [1, 2] },
         );
         expect(second.attachments.map((a) => a.filename)).toEqual(['beta.txt']);
     });
 
-    test('a draft that keeps its invite chip takes the fast path', async () => {
+    test('a draft that keeps its invite chip keeps the calendar part', async () => {
         const token = ctx.alice.user.sessionToken;
         const ownerId = ctx.alice.user.id;
         const to = { value: [{ address: 'bob@test.eigen.is', name: 'Bob' }], text: 'Bob <bob@test.eigen.is>' };
@@ -368,7 +365,6 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         );
         expect(first.attachments.map((a) => a.filename)).toEqual(['invite.ics', 'agenda.txt']);
 
-        // The sidecar lists the calendar part like any other, so keeping both chips matches its set.
         const second = await putDraft(
             token,
             ownerId,
@@ -378,9 +374,8 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         expect(second.attachments.map((a) => a.filename)).toEqual(['invite.ics', 'agenda.txt']);
         expect(second.subject).toBe('Invite draft updated');
 
-        // A fast save leaves the EML stale, so the old subject on disk is what proves it ran.
         const raw = await (await authedRequest(token, `/mail/${ownerId}/message/${first.id}/download`)).text();
-        expect(raw).not.toContain('Invite draft updated');
+        expect(raw).toContain('Invite draft updated');
     });
 
     test('removing the invite chip drops the calendar part for good', async () => {
@@ -462,7 +457,7 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         expect(raw.match(/text\/calendar/gi)?.length).toBe(1);
     });
 
-    test('a fast save hands every kept part back with its raw index', async () => {
+    test('a save hands every kept part back with its raw index', async () => {
         const token = ctx.alice.user.sessionToken;
         const ownerId = ctx.alice.user.id;
         const stage = async (name: string, type: string) =>
@@ -480,7 +475,7 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         );
         expect(first.attachments.map((a) => a.index)).toEqual([0, 1, 2]);
 
-        // Body-only save with every chip kept: the fast path hands each part back under the number
+        // Body-only save with every chip kept: the save hands each part back under the number
         // the parser gave it rather than under its position in the answer.
         const second = await putDraft(
             token,
@@ -509,53 +504,15 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         expect(fetched.attachments.map((a) => a.filename)).toEqual(['invite.ics', 'report.pdf']);
     });
 
-    test('a sidecar whose parts carry no index takes the full save', async () => {
-        const token = ctx.alice.user.sessionToken;
-        const ownerId = ctx.alice.user.id;
-        const uploaded = await uploadDraftAttachment(
-            token,
-            ownerId,
-            new File(['legacy-bytes'], 'legacy.txt', { type: 'text/plain' }),
-        );
-        const first = await putDraft(
-            token,
-            ownerId,
-            {
-                subject: 'Legacy sidecar',
-                to: { value: [{ address: 'bob@test.eigen.is', name: 'Bob' }], text: 'Bob <bob@test.eigen.is>' },
-                text: 'v1',
-                html: '<p>v1</p>',
-            },
-            { tempAttachmentIds: [uploaded.tempId] },
-        );
-
-        // Rewrite the sidecar in the shape it had before parts carried an index.
-        const metaPath = sidecarPath(ownerId, first.id);
-        const meta = JSON.parse(readFileSync(metaPath, 'utf8')) as { attachments: Array<{ index?: number }> };
-        for (const a of meta.attachments) delete a.index;
-        writeFileSync(metaPath, JSON.stringify(meta));
-
-        const second = await putDraft(
-            token,
-            ownerId,
-            { id: first.id, subject: 'Legacy sidecar', to: first.to, text: 'v2', html: '<p>v2</p>' },
-            { keepAttachmentIndexes: [0] },
-        );
-        expect(second.attachments.map((a) => a.filename)).toEqual(['legacy.txt']);
-        // A fast save leaves the EML stale, so the new body on disk is what proves the full path ran.
-        const raw = await (await authedRequest(token, `/mail/${ownerId}/message/${first.id}/download`)).text();
-        expect(raw).toContain('v2');
-    });
-
-    test('send after fast-path saves includes attachments', async () => {
-        const file = new File(['send-after-fast'], 'send-after-fast.txt', { type: 'text/plain' });
+    test('send after a body-only save includes attachments', async () => {
+        const file = new File(['send-after-save'], 'send-after-save.txt', { type: 'text/plain' });
         const uploaded = await uploadDraftAttachment(ctx.alice.user.sessionToken, ctx.alice.user.id, file);
 
         const first = await putDraft(
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
             {
-                subject: 'Send after fast path',
+                subject: 'Send after a save',
                 to: {
                     value: [{ address: 'bob@test.eigen.is', name: 'Bob' }],
                     text: 'Bob <bob@test.eigen.is>',
@@ -566,13 +523,13 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
             { tempAttachmentIds: [uploaded.tempId] },
         );
 
-        // Fast-path save (body-only update)
+        // Body-only update
         await putDraft(
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
             {
                 id: first.id,
-                subject: 'Send after fast path - updated',
+                subject: 'Send after a save - updated',
                 to: first.to,
                 text: 'final body',
                 html: '<p>final body</p>',
@@ -587,7 +544,7 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
             body: JSON.stringify({
                 mail: {
                     id: first.id,
-                    subject: 'Send after fast path - updated',
+                    subject: 'Send after a save - updated',
                     text: 'final body',
                     html: '<p>final body</p>',
                     to: first.to,
@@ -727,67 +684,33 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         expect(readdirSync(dir).sort()).toEqual(before);
     });
 
-    test('threading headers survive a fast-save then a sidecar-driven full save', async () => {
-        const uploaded = await uploadDraftAttachment(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            new File(['thread-bytes'], 'thread.txt', { type: 'text/plain' }),
-        );
-
-        // Full save #1: seeds the EML + sidecar with the threading headers and one attachment.
-        const first = await putDraft(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            {
-                subject: 'Threaded reply',
-                to: {
-                    value: [{ address: 'bob@test.eigen.is', name: 'Bob' }],
-                    text: 'Bob <bob@test.eigen.is>',
-                },
-                text: 'v1',
-                html: '<p>v1</p>',
-                inReplyTo: '<parent@x.com>',
-                references: ['<r1@x.com>'],
-            },
-            { tempAttachmentIds: [uploaded.tempId] },
-        );
-        expect(first.attachments.length).toBe(1);
-
-        // Fast save: body-only edit, attachment kept — rewrites the sidecar from the request body.
-        await putDraft(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            {
-                id: first.id,
-                subject: 'Threaded reply',
-                to: first.to,
-                text: 'v2',
-                html: '<p>v2</p>',
-                inReplyTo: '<parent@x.com>',
-                references: ['<r1@x.com>'],
-            },
-            { keepAttachmentIndexes: [0] },
-        );
-
-        // Staleness-style full save that rebuilds from the sidecar: the request omits the threading
-        // headers, so they can only reach the EML if the sidecar preserved them.
-        const forceRes = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/draft`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                mail: { id: first.id, subject: 'Threaded reply', to: first.to, text: 'v3', html: '<p>v3</p>' },
-                keepAttachmentIndexes: [0],
-                forceFullSave: true,
-            }),
+    test('a read hands back the threading headers the next save needs', async () => {
+        const token = ctx.alice.user.sessionToken;
+        const ownerId = ctx.alice.user.id;
+        const to = { value: [{ address: 'bob@test.eigen.is', name: 'Bob' }], text: 'Bob <bob@test.eigen.is>' };
+        const first = await putDraft(token, ownerId, {
+            subject: 'Threaded reply',
+            to,
+            text: 'v1',
+            html: '<p>v1</p>',
+            inReplyTo: '<parent@x.com>',
+            references: ['<r1@x.com>'],
         });
-        expect(forceRes.status).toBe(200);
 
-        const rawRes = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/mail/${ctx.alice.user.id}/message/${first.id}/download`,
-        );
-        const raw = await rawRes.text();
+        const read = await assertJson<EmailDraft>(await authedRequest(token, `/mail/${ownerId}/message/${first.id}`));
+        await putDraft(token, ownerId, {
+            id: first.id,
+            subject: 'Threaded reply',
+            to,
+            text: 'v2',
+            html: '<p>v2</p>',
+            inReplyTo: read.inReplyTo,
+            references: read.references,
+        });
+
+        const raw = await (await authedRequest(token, `/mail/${ownerId}/message/${first.id}/download`)).text();
         expect(raw).toMatch(/In-Reply-To:\s*<parent@x\.com>/i);
         expect(raw).toContain('<r1@x.com>');
+        expect(raw).toContain('v2');
     });
 });

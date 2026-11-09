@@ -12,7 +12,7 @@ The sections run from the store through reading, the mailbox names and the list,
 
 Every user route in `apps/api/src/routes/mail.ts` is `requireSelf`: a mailbox belongs to one user and has no ACL. The route hands off to the user's `Mail` (`mail-domain.ts`), which talks to `MaildirStore`. No file name crosses into the domain or the routes, so a second backend ([JMAP](proposals/PROPOSAL_STALWART_MAIL.md), or [the user's own provider over IMAP](proposals/PROPOSAL_EXTERNAL_MAIL_PROVIDER.md)) extracts its interface from that class when it lands.
 
-The `emails` row is the `EmailSummary` the list and the search return, unmapped except that both cut `textShort` to its preview length (`MAIL_PREVIEW_CHARS`): a received message's row keeps the whole body for the full-text index. A draft's row keeps only the first `MAIL_PREVIEW_CHARS`, so a draft is searched at preview length. A full message is re-parsed from its `.eml`.
+The `emails` row is the `EmailSummary` the list and the search return, unmapped except that both cut `textShort` to its preview length (`MAIL_PREVIEW_CHARS`): a received message's row keeps the whole body for the full-text index. A full message is re-parsed from its `.eml`.
 
 ## The Maildir is the truth and the index follows it
 
@@ -22,7 +22,7 @@ Mail is the one domain whose truth is files, because Dovecot moves and renames t
 
 `parseMail` (`mail-parser/`) is Eigen's own parser. Its contract is the golden corpus in `apps/api/src/test/fixtures/mail-corpus/`. `UPDATE_GOLDEN=1` regenerates it, every golden at once, so revert the ones your change did not mean to move.
 
-DOMPurify costs more than the parse (9.4 ms against 2.5 ms on a 25 KiB message), and almost nothing that parses a message wants its body. So `parseEml` returns an `IndexedEmail`, whose `html` is `null` by type, for the index, the sync and attachment reads. `parseEmlForReader` sanitizes, and only `MaildirStore.getMessage` calls it. The type guarantees that a caller that never asked for a body never gets an unsanitized one.
+DOMPurify costs more than the parse (9.4 ms against 2.5 ms on a 25 KiB message), and almost nothing that parses a message wants its body. So `parseEml` returns an `IndexedEmail`, whose `html` is `null` by type, for the index, the sync and attachment reads. `parseEmlForReader` sanitizes, and only `MaildirStore.getMessage` calls it, for a draft too. The type guarantees that a caller that never asked for a body never gets an unsanitized one.
 
 ## The reader holds back what a message would fetch until Load images
 
@@ -60,9 +60,25 @@ At 50k messages a mailbox, the whole list is 34 MB and one 200-row page is 130 K
 
 A notification goes out only for mail that arrives, coalesced on the `mail:new` tag. What counts as an arrival: [IMAP.md § Only a delivered message is new mail](IMAP.md#only-a-delivered-message-is-new-mail). The row goes read once the inbox holds no unread mail, whether the app or an IMAP client read the last message.
 
-## A draft skips the rebuild until its attachments change
+## A draft's `.eml` is its only copy
 
-A full save rebuilds the `.eml` and bakes the Drive link pills into its HTML. A fast save writes only the sidecar and the row. `messageHandleDraft` takes the fast path when the sidecar lists attachments, the kept set equals that list, and the last full save is under five minutes old. Meanwhile IMAP clients see the stale `.eml`, so `Mail.destruct` full-saves every pending sidecar. `messageGet` overlays the sidecar, so the composer shows what the user typed, not the baked markup.
+Every save, an auto-save included, rebuilds the whole `.eml`. So nothing beside the file has to be merged on a read, and a mail client always sees what the composer last saved. The request is the whole draft: a field it leaves out is cleared, and only the attachments live on the server alone, named by the keep list. A save takes about 27 ms at 5 MiB and 100 ms at 25 MiB, and blocks the event loop for about 40 ms at worst. How a save survives a crash: [IMAP.md § The files are the truth](IMAP.md#the-files-are-the-truth-because-dovecot-writes-them-too).
+
+The file holds what never goes out too. The Bcc stays because `createEmlContent` sets `keepBcc` on the node it compiles. An outgoing message is built by the mailer from its fields, so the Bcc stays off the wire, and the Sent copy, being the moved draft, keeps it, as a mail client's Sent folder does. The message a reply answers is an `X-Eigen-Replied-To` header. It can't be derived from `In-Reply-To`, because the index has no Message-ID column to find the original by.
+
+The Drive links sit in the HTML as one block, where a send places its pills:
+
+```
+<!--eigen-refs:BASE64URL-OF-JSON--><div>…the pills…</div><!--/eigen-refs-->
+```
+
+The JSON is the `AttachmentReference[]`, in base64url because a file name may hold `--`, which ends an HTML comment. A mail client shows the pills as links and keeps them when it re-saves or sends the draft. The plain-text part holds no links, and a send appends them.
+
+Only the read of a message with the draft flag takes the block out, in `cutDraftReferences` (`reference-links.ts`), which hands the clean HTML and the references to the composer. An IMAP client or a mail moved into Drafts can write this block, so the read treats it as input: it searches with `indexOf`, never a regex that could backtrack, checks every field of every reference and the `MAX_SEND_REFERENCES` cap, and takes the last block, since a body may quote another. Anything else, malformed, over the cap or with no markers, leaves the HTML as it is with no references and no throw, so the pills stay plain links. The read runs before the sanitize, which drops comments, and a draft reads sanitized like any message. The Sent copy keeps the comment, which is invisible, and reads with its pills.
+
+A send builds its copies from the clean HTML with fresh pills, so the marker never leaves. An empty text part is written as one space, because the composer library would leave it out and the parser would then derive the text from the HTML, pills included.
+
+An IMAP client that edits a draft saves a new message and removes the old, and the composer's next auto-save writes the old id again. The user sees two drafts and neither is lost. So a save naming an id with no row neither throws nor loses text (`mail-draft-file.test.ts`).
 
 A save's and a send's answer name each part and its size and carry none of its bytes, as a read does: `messageSend` needs the bytes to send, so they are blanked at the public answers. As JSON the bytes of a 25 MiB part are 89 MiB, about 900 ms on the event loop, and the browser's query cache would keep them.
 
@@ -82,17 +98,17 @@ The forwarded chips are prefill, like the quoted body (`add-prefill-attachment` 
 
 ## Delivery attempts every copy and retries none
 
-`messageSend` full-saves the draft and hands each copy to `sendMail` (`lib/mailer/mailer.ts`). That save pins From to the account, so a crafted draft can't send as anyone else. The route needs hosted mail, so user mail leaves through the bundled Postfix ([SERVER-SETTINGS.md § Hosted mail and the relay are environment, not settings](SERVER-SETTINGS.md#hosted-mail-and-the-relay-are-environment-not-settings)).
+`messageSend` saves the draft and hands each copy to `sendMail` (`lib/mailer/mailer.ts`). That save pins From to the account, so a crafted draft can't send as anyone else. The route needs hosted mail, so user mail leaves through the bundled Postfix ([SERVER-SETTINGS.md § Hosted mail and the relay are environment, not settings](SERVER-SETTINGS.md#hosted-mail-and-the-relay-are-environment-not-settings)).
 
 `sendMail` returns `false` instead of throwing, so the loop tries every copy. If any is accepted, the draft moves to Sent and the response lists `failedRecipients`. If all fail, the route answers 500. Nothing retries, because a retry would deliver the accepted copies twice.
 
 The outbound side lives in its own folder, `apps/api/src/lib/mailer/`: `sendMail`, the HTML shell every system email wears (`mail-template.ts`) and the share, access-request, invite and sign-in emails (`mail-composers.ts`). Auth, Drive, Calendar and the routes send through it, so it imports only config and `core`, never `mail`, `drive` or `home`. One such import would close an import loop.
 
-A reply names the message it answers (`repliedToId`), and once a copy is accepted that message gets the `R` flag, which IMAP clients show as answered and the list row as a reply arrow (`isReplied`). A failure to set it is logged and the send still succeeds, for the same reason. The draft's sidecar keeps the id, and a save without one keeps the stored one, since a draft reopened from Drafts never learns it. So a reply sent later from Drafts marks its original too.
+A reply names the message it answers (`repliedToId`), and once a copy is accepted that message gets the `R` flag, which IMAP clients show as answered and the list row as a reply arrow (`isReplied`). A failure to set it is logged and the send still succeeds, for the same reason. The draft's file keeps the id and a read hands it back to the composer, so a reply sent later from Drafts marks its original too. The header is read off a file, so it can name anything: an id with no row marks nothing.
 
 ## A send with links splits per external recipient
 
-`canonicalizeRecipients` is the one recipient set, for delivery and for grants. It flattens address groups and dedupes with To over Cc over Bcc. It asks only for an `@`, so `@localhost` still sends. The route schema caps the linked documents (`MAX_SEND_REFERENCES`) before any save, because a save renders a pill per link.
+`canonicalizeRecipients` is the one recipient set, for delivery and for grants. It flattens address groups and dedupes with To over Cc over Bcc. It asks only for an `@`, so `@localhost` still sends. The route schema caps the linked documents (`MAX_SEND_REFERENCES`) before any save, because a save renders a pill per link, and the read of a draft's block caps what another program wrote.
 
 When a mail links documents and has external recipients, internal recipients share one bare copy. Each external recipient gets a copy whose links carry `?email=<address>`, which lands them on the guest login with the address filled in ([GUEST-ACCESS.md](GUEST-ACCESS.md)). Each copy has its own SMTP envelope, so a personalized link can't reach the wrong person. Every copy resends the attachments, so past `MAX_PERSONALISED_SEND_BYTES` (20 MB of externals times attachment bytes) everyone gets the bare copy, whose links still work.
 

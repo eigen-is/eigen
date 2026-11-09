@@ -1,3 +1,6 @@
+// Reads the headers of one MIME part into typed fields: addresses, dates, content type and the threading headers. The
+// sender writes all of it, so nothing here trusts a value. The part splitter calls it for every part of a message.
+
 import { extname } from 'node:path';
 import { domainToUnicode } from 'node:url';
 import type { AddressObject, EmailAddress, ParsedMail } from '@workspace/lib/types/mail';
@@ -5,11 +8,23 @@ import libmime from 'libmime';
 import type { Address } from 'nodemailer/lib/addressparser';
 import addressparser from 'nodemailer/lib/addressparser';
 
+export const REPLIED_TO_HEADER = 'X-Eigen-Replied-To';
+
 export type StructuredValue = { value: string; params: Record<string, string> };
 
 export type PartHeaders = Pick<
     ParsedMail,
-    'subject' | 'date' | 'from' | 'to' | 'cc' | 'bcc' | 'replyTo' | 'messageId' | 'inReplyTo' | 'references'
+    | 'subject'
+    | 'date'
+    | 'from'
+    | 'to'
+    | 'cc'
+    | 'bcc'
+    | 'replyTo'
+    | 'messageId'
+    | 'inReplyTo'
+    | 'references'
+    | 'repliedToId'
 > & {
     contentType: StructuredValue;
     contentDisposition: StructuredValue;
@@ -41,6 +56,7 @@ export function parseHeaders(head: Buffer): PartHeaders {
     const subject = last('subject');
     const messageId = last('message-id');
     const inReplyTo = last('in-reply-to');
+    const repliedToId = last(REPLIED_TO_HEADER.toLowerCase());
     const references = lines
         .filter((line) => line.key === 'references')
         .flatMap((line) => libmime.decodeWords(line.value).split(/\s+/).filter(Boolean).map(messageIdFormat));
@@ -67,6 +83,7 @@ export function parseHeaders(head: Buffer): PartHeaders {
         bcc: oneOrMany(addresses('bcc')),
         messageId: messageId && messageIdFormat(libmime.decodeWords(messageId)),
         inReplyTo: inReplyTo && messageIdFormat(libmime.decodeWords(inReplyTo)),
+        repliedToId: repliedToId && libmime.decodeWords(repliedToId),
         references: references.length > 1 ? references : references.at(0),
     };
 }

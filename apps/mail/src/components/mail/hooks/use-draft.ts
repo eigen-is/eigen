@@ -7,7 +7,14 @@ import type { AuthUser } from '@workspace/lib/auth';
 import { useAuth } from '@workspace/lib/auth';
 import { flattenAddresses } from '@workspace/lib/mail';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
-import type { AddressObject, Attachment, AttachmentMeta, EmailDraft, NewDraft } from '@workspace/lib/types/mail';
+import type {
+    AddressObject,
+    Attachment,
+    AttachmentMeta,
+    DraftUpdateOptions,
+    EmailDraft,
+    NewDraft,
+} from '@workspace/lib/types/mail';
 import { mailAttachmentName } from '@workspace/lib/types/mail';
 import { useEffect, useReducer, useRef } from 'react';
 
@@ -37,13 +44,7 @@ type DraftState = {
     lastSavedFingerprint: string;
 };
 
-type SaveOptions = {
-    tempAttachmentIds?: string[];
-    keepAttachmentIndexes?: number[];
-    forceFullSave?: boolean;
-};
-
-type SaveFn = (draft: NewDraft, options?: SaveOptions) => Promise<EmailDraft | null | undefined>;
+type SaveFn = (draft: NewDraft, options?: DraftUpdateOptions) => Promise<EmailDraft | null | undefined>;
 
 type Action =
     | { type: 'set-field'; field: DraftEditableField; value: string }
@@ -59,9 +60,7 @@ type Action =
 type UseDraftOptions = {
     email: EmailDraft | null;
     prefillTo?: string;
-    // Seed the composer with quoted body / subject / recipients for reply/forward, without
-    // persisting a draft until the user actually edits. lastSavedFingerprint is computed from
-    // these fields so no save fires on mount.
+    // A reply's or forward's quoted body, subject and recipients. They count as saved, so no save fires until an edit.
     prefillDraft?: NewDraft;
     signatureHtml?: string;
     onSave?: SaveFn;
@@ -71,9 +70,7 @@ type UseDraftOptions = {
 function addressObjectToString(addr?: AddressObject): string {
     if (!addr) return '';
     if (addr.text) return addr.text;
-    // Fall back to the value list when text is empty — reply-all builds AddressObjects with only
-    // `value` populated. Inverse of stringToAddressObject: `name <address>`, else bare address.
-    // Flattened so an RFC 2822 group can never render as `Team <>`.
+    // Reply-all builds AddressObjects with only `value` set. Flattened so an RFC 2822 group can never render as `Team <>`.
     return flattenAddresses(addr.value)
         .map(({ name, address }) => (name ? `${name} <${address}>` : address))
         .join(', ');
@@ -90,25 +87,19 @@ function stringToAddressObject(text: string): AddressObject | undefined {
     return { value, text };
 }
 
-// Canonical empty paragraph — matches TipTap's normalized form so the seeded body survives
-// first interaction without the editor rewriting it (which would otherwise diff as a user
-// edit and trip the auto-save fingerprint).
+// TipTap's own form of an empty paragraph, so its first normalization doesn't read as an edit and trip the auto-save.
 const EMPTY_PARA = '<p><br></p>';
 
 function injectSignature(body: string, sig: string | undefined, kind: 'new' | 'reply'): string {
     if (!sig) return body;
     if (kind === 'new') return body + EMPTY_PARA + sig;
-    // formatEmailQuote prefixes the quoted body with <br><br>; bare <br>s between block
-    // elements aren't canonical and TipTap rewrites them on first edit. Strip them and use
-    // one explicit empty paragraph for the breathing room between sig and quote.
+    // TipTap rewrites bare <br>s between blocks on first edit, so the quote's leading ones become one empty paragraph.
     const trimmed = body.replace(/^(<br\s*\/?>)+/i, '');
     return EMPTY_PARA + sig + EMPTY_PARA + trimmed;
 }
 
-// Mirror TipTap getText(): block boundaries become \n\n, <br> becomes \n. Keeps the seeded
-// bodyText close to what the editor will emit so the auto-save fingerprint stays stable
-// when the user first interacts. Covers the block elements LightEditor exposes (p, blockquote,
-// ul/ol/li); inline marks (strong, em, link) need no special handling.
+// Mirrors TipTap getText() over the blocks LightEditor exposes (p, blockquote, ul/ol/li), so the seeded bodyText stays
+// close to what the editor emits and the fingerprint holds on first interaction.
 function plainSignature(sig: string | undefined): string {
     if (!sig) return '';
     return sig
@@ -146,6 +137,7 @@ export function initFields(
             driveReferences: email.driveReferences ?? [],
             inReplyTo: email.inReplyTo,
             references: email.references,
+            repliedToId: email.repliedToId,
             messageId: email.messageId,
         };
     }
@@ -222,7 +214,7 @@ function fieldsToDraft(f: DraftFields, user: AuthUser | null | undefined): NewDr
     };
 }
 
-export function buildSaveOptions(fields: DraftFields, forceFullSave: boolean): SaveOptions {
+export function buildSaveOptions(fields: DraftFields): DraftUpdateOptions {
     const tempIds = fields.attachments.map((a) => a.tempId).filter((id): id is string => !!id);
     const keepIdx = fields.attachments.map((a) => a.index).filter((i): i is number => typeof i === 'number');
     return {
@@ -230,15 +222,11 @@ export function buildSaveOptions(fields: DraftFields, forceFullSave: boolean): S
         // Always send the keep list when the draft has an id — an empty array means "user removed
         // all original attachments", which we must respect.
         keepAttachmentIndexes: fields.id ? keepIdx : undefined,
-        forceFullSave,
     };
 }
 
-// Reconcile the server's response with edits made while the save was in flight. `serverActual`
-// is what the server has now (with local keys preserved by filename+size so React chips don't
-// remount). `localNext` is the user's intent — serverActual minus attachments removed during
-// the save, plus tempId attachments added during the save. Drift between the two naturally
-// re-triggers the auto-save to sync the server.
+// Edits made while the save was in flight: `serverActual` is what the server has now, with local keys kept so chips don't
+// remount, and `localNext` is the user's intent. Drift between the two re-triggers the auto-save.
 export function mergeServerAttachments(
     local: AttachmentMeta[],
     sent: AttachmentMeta[],
@@ -313,10 +301,8 @@ function draftReducer(state: DraftState, action: Action): DraftState {
                 },
             };
         case 'sync-editor': {
-            // Snapshot the editor's canonical HTML/text post-parse and reset the saved
-            // fingerprint to match. Without this, TipTap's normalization of the seeded body
-            // (or its emission of the quoted-content text via getText) drifts from the seed
-            // on first interaction and tricks the auto-save into firing without any user edit.
+            // TipTap's normalization of the seeded body would otherwise drift from the seed on first interaction and fire the
+            // auto-save without any user edit.
             return savedState({ ...state.fields, body: action.html, bodyText: action.text });
         }
         case 'save-completed': {
@@ -325,9 +311,8 @@ function draftReducer(state: DraftState, action: Action): DraftState {
                 action.sentFields.attachments,
                 action.serverAttachments,
             );
-            // The fingerprint reflects what the server actually has: the fields we sent + the
-            // server's post-parse attachment list. Edits made during the save will diff against
-            // this and trigger another save automatically.
+            // What the server has: the fields we sent and its post-parse attachment list. An edit made during the save diffs against
+            // this and saves again.
             const serverHas = { ...action.sentFields, attachments: serverActual };
             return {
                 ...state,
@@ -357,21 +342,16 @@ export function useDraft({
         savedState(initFields(email, prefillTo, prefillDraft, signatureHtml)),
     );
 
-    // Non-reactive control flow: the in-flight save promise (for serialization), a kill switch
-    // for the send/delete path, and a "anything ever saved" flag (drives the unmount-save
-    // heuristic — we force a full EML rebuild even when the current state matches the server,
-    // so Dovecot IMAP clients see fresh content).
+    // Non-reactive control flow: the in-flight save promise (for serialization) and a kill switch
+    // for the send/delete path.
     const inFlightRef = useRef<Promise<EmailDraft | null | undefined> | null>(null);
     const disabledRef = useRef(false);
-    const everSavedRef = useRef(false);
 
-    // Latest-state mirror — used by code that runs after an `await` (auto-save timer firing,
-    // unmount cleanup, the send-path flush) where the captured closure may be stale by render
-    // count or many edits.
+    // For code that runs after an `await`, where the captured closure may be stale: the timer, the unmount, the send flush.
     const latestRef = useRef({ state, user, onSave });
     latestRef.current = { state, user, onSave };
 
-    const runSave = async (options: { forceFullSave?: boolean } = {}): Promise<EmailDraft | null | undefined> => {
+    const runSave = async (): Promise<EmailDraft | null | undefined> => {
         if (disabledRef.current) return null;
         // Serialize: if a save is already in flight, wait for it before starting a new one. This
         // also lets the send path flush any racing auto-save.
@@ -384,11 +364,10 @@ export function useDraft({
         const { state: s, user: u, onSave: cb } = latestRef.current;
         const fields = s.fields;
         const draft = fieldsToDraft(fields, u);
-        const promise = cb(draft, buildSaveOptions(fields, options.forceFullSave === true));
+        const promise = cb(draft, buildSaveOptions(fields));
         inFlightRef.current = promise;
         try {
             const result = await promise;
-            everSavedRef.current = true;
             if (result) {
                 dispatch({
                     type: 'save-completed',
@@ -406,9 +385,7 @@ export function useDraft({
         }
     };
 
-    // Auto-save: schedule a debounced save whenever fields drift from the saved fingerprint.
-    // Each render either (a) nothing changed → the cleanup runs without setting a new timer, or
-    // (b) state changed → the cleanup clears the previous timer and we set a new one.
+    // Saves a short while after the fields drift from the saved fingerprint. Any newer state resets the timer.
     useEffect(() => {
         if (disabledRef.current) return;
         if (!isSaveable(state.fields)) return;
@@ -417,15 +394,13 @@ export function useDraft({
         return () => clearTimeout(timer);
     }, [state]);
 
-    // Save on unmount — force a full EML rebuild so IMAP clients see fresh content. Fires when
-    // the current state is dirty OR anything was saved during this session.
+    // Closing the composer saves what the debounce has not reached yet.
     useEffect(() => {
         return () => {
             if (disabledRef.current) return;
             const { state: s, user: u, onSave: cb } = latestRef.current;
-            if (!isSaveable(s.fields)) return;
-            if (!isDirty(s) && !everSavedRef.current) return;
-            cb(fieldsToDraft(s.fields, u), buildSaveOptions(s.fields, true)).catch((err) =>
+            if (!isSaveable(s.fields) || !isDirty(s)) return;
+            cb(fieldsToDraft(s.fields, u), buildSaveOptions(s.fields)).catch((err) =>
                 console.warn('draft unmount save failed', err),
             );
         };
@@ -452,10 +427,8 @@ export function useDraft({
         markEditorReady,
         isSendable: !!state.fields.to.trim(),
 
-        // Kill auto-save + unmount-save. Called the moment a send is actually dispatched, NOT at
-        // flush time — so abandoning a send-time dialog ("Share before sending?") returns to a draft
-        // that still auto-saves. A dispatched send navigates away and its own draftFullSave owns the
-        // write, so no unmount save should fire behind it.
+        // Called when a send is dispatched, not at flush time, so backing out of "Share before sending?" returns to a draft that
+        // still auto-saves. The send's own save owns the write from here.
         disableSaves: () => {
             disabledRef.current = true;
         },
@@ -465,10 +438,8 @@ export function useDraft({
             disabledRef.current = false;
         },
 
-        // Send path: flush any pending/in-flight save and return a NewDraft with the server-assigned
-        // id spliced in (the dispatch from the first save may not have rendered yet — callers can't
-        // await React state propagation). Saves stay enabled; the caller disables them via
-        // disableSaves() only once it commits to sending.
+        // Flushes any pending save and splices in the server's id, since the first save's dispatch may not have rendered yet.
+        // Saves stay enabled: the caller disables them only once it commits to sending.
         flushAndGetDraft: async (): Promise<NewDraft> => {
             let result: EmailDraft | null | undefined = null;
             if (isDirty(state)) {

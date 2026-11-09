@@ -3,7 +3,6 @@
 // and half-applied grants never need a rollback. Chat exclusion keys off the resolved path type, never the
 // client-authored `ref.driveType`.
 
-import { MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
 import { DRIVE_TYPE_CHAT } from '@workspace/lib/types/drive';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import { ApiError } from '../core/errors';
@@ -17,14 +16,8 @@ export async function grantAccessForReferences(
     grantRefIds: string[],
     emails: string[],
 ): Promise<void> {
-    // Dedupe and cap before any resolution or side effect: without this, N copies of one id would
-    // fan out into N full ACL writes — the amplification the send-reference cap exists to prevent.
-    const uniqueRefIds = [...new Set(grantRefIds)];
-    if (uniqueRefIds.length > MAX_SEND_REFERENCES) {
-        throw new ApiError(400, `A message can grant access to at most ${MAX_SEND_REFERENCES} references`);
-    }
-
-    const grantRefs = uniqueRefIds.map((id) => {
+    // Copies of one id would each cost a full ACL write.
+    const grantRefs = [...new Set(grantRefIds)].map((id) => {
         const ref = refs.find((r) => r.id === id);
         if (!ref) throw new ApiError(400, `Unknown attachment reference '${id}'`);
         return ref;

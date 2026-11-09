@@ -17,7 +17,7 @@ import {
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_CHAT, isContainerType, stripEigenExtension } from '@workspace/lib/types/drive';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
-import type { EmailDraft as EmailDraftType, NewDraft } from '@workspace/lib/types/mail';
+import type { DraftUpdateOptions, EmailDraft as EmailDraftType, NewDraft } from '@workspace/lib/types/mail';
 import { ConfirmDialog, FileDropOverlay, Toolbar, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { ContactAutosuggest } from '@workspace/ui/components/contacts';
@@ -41,10 +41,8 @@ import { useDraft } from './hooks/use-draft';
 import type { ShareGrant } from './share-and-send-dialog';
 import { ShareAndSendDialog } from './share-and-send-dialog';
 
-// Recipients as the backend will see them at send, minus the sender: the shared canonicaliser
-// flattens RFC 2822 groups and dedupes case-insensitively with to > cc > bcc precedence (an address
-// in both To and Bcc classifies as To), so this preview's grant set matches what the server grants.
-// `bcc` holds the lowercased addresses that resolved as Bcc-only — the set the backend never grants.
+// Recipients as the server will see them at send, minus the sender, so this preview's grant set matches what it grants.
+// `bcc` holds the lowercased addresses that resolved as Bcc-only, which the server never grants.
 function collectRecipientEmails(draft: NewDraft, ownEmail: string | undefined): { all: string[]; bcc: Set<string> } {
     const own = ownEmail?.toLowerCase();
     const all: string[] = [];
@@ -96,17 +94,12 @@ type EmailDraftProps = {
     // has no saved draft, and its chip is part of the prefill, so they alone save no draft.
     forwardedParts?: FileSubject[];
     to?: string;
-    // Drive paths to attach when the composer opens (e.g. palette "Mail to…" passes the
-    // selection through the URL). Routed through the same handleDriveAttach the in-app
-    // picker uses, so containers become driveReferences and plain files are copied via
-    // useAttachFromDrive. Fired once per compose session.
+    // Drive paths to attach when the composer opens, such as palette "Mail to…". They go through handleDriveAttach, once
+    // per compose session.
     initialDriveAttachments?: DrivePath[];
     signatureHtml?: string;
     sendDraft: (mail: NewDraft, grantAccessRefIds?: string[]) => Promise<unknown>;
-    onAutoSave?: (
-        mail: NewDraft,
-        options?: { tempAttachmentIds?: string[]; keepAttachmentIndexes?: number[]; forceFullSave?: boolean },
-    ) => Promise<EmailDraftType | null | undefined>;
+    onAutoSave?: (mail: NewDraft, options?: DraftUpdateOptions) => Promise<EmailDraftType | null | undefined>;
     onDraftIdAssigned?: (id: string) => void;
     // A forward's parts stay in history state until a saved draft holds them all, so a reload before
     // then attaches them again.
@@ -245,10 +238,8 @@ export function EmailDraft({
         }
     };
 
-    // Cross-app drive attachments (palette "Mail to…") arrive as DrivePath[] from the route
-    // once the URL refs resolve. Hand them to handleDriveAttach — same path the toolbar's
-    // Paperclip button uses — once per compose session, so a re-render of the route doesn't
-    // attach them twice (attachFromDriveMutation is not idempotent).
+    // Once per compose session, so a re-render of the route doesn't attach them twice: attachFromDriveMutation is not
+    // idempotent.
     const didApplyInitialAttachmentsRef = useRef(false);
     // handleDriveAttach is recreated each render (over useDraft's stable dispatch); read the
     // latest via an Effect Event so the effect stays reactive to initialDriveAttachments only.
@@ -262,9 +253,8 @@ export function EmailDraft({
         applyInitialAttachments(initialDriveAttachments);
     }, [initialDriveAttachments]);
 
-    // The forwarded parts arrive with the composer, so they are attached once on mount. The results are
-    // added in the original's order, and a part that fails was toasted by the hook and is left out.
-    // A composer that opens on the saved draft finds them already in it and attaches none again.
+    // Attached once on mount, in the original's order. A part that fails was toasted by the hook and is left out, and a
+    // composer that opens on the saved draft finds them already in it.
     const didAttachForwardedPartsRef = useRef(false);
     const [forwardedPartsAttached, setForwardedPartsAttached] = useState(false);
     const attachForwardedParts = useEffectEvent(async (parts: FileSubject[]) => {
@@ -300,9 +290,8 @@ export function EmailDraft({
         if (forwardedPartsSaved) reportForwardedPartsSaved();
     }, [forwardedPartsSaved]);
 
-    // Every actual send funnels through here: stop auto-saving (we're leaving this draft behind) then
-    // dispatch. Deferring disableSaves() to dispatch time is what keeps the draft editable when the
-    // user backs out of the "Share before sending?" dialog, or when the send itself is rejected.
+    // Saves stop only at dispatch, which keeps the draft editable when the user backs out of "Share before sending?" or the
+    // send is rejected.
     const dispatchSend = (mail: NewDraft, grantAccessRefIds?: string[]) => {
         disableSaves();
         return sendDraft(mail, grantAccessRefIds).catch((error) => {
@@ -315,9 +304,7 @@ export function EmailDraft({
     // where the mutation hasn't started yet: state alone would re-render too late to disable Send.
     const sendingRef = useRef(false);
 
-    // Both send entry points funnel here (the Send button via handleSendEmail, and the no-subject
-    // ConfirmDialog). When the draft links documents, offer recipients who need it view access before
-    // sending.
+    // When the draft links documents, offer the recipients who need it view access before sending.
     const sendWithFreshDraft = async () => {
         if (sendingRef.current) return;
         sendingRef.current = true;
@@ -335,9 +322,8 @@ export function EmailDraft({
                 return;
             }
 
-            // Probe each reference for the current recipient set. A failed check (stale 404, network)
-            // makes that reference non-checkable — excluded from the dialog entirely, so the mail
-            // sends as-is with whatever access already exists (the link may be dead).
+            // A failed check (stale 404, network) leaves that reference out of the dialog, so the mail sends with whatever access
+            // already exists.
             const checks = await Promise.all(
                 refs.map((ref) =>
                     checkPathAccess(ref.ownerId, ref.mountId, ref.id, emails)
@@ -362,9 +348,8 @@ export function EmailDraft({
                     notes.push(`You can't share ${stripEigenExtension(ref.name)}. Recipients can request access.`);
                     continue;
                 }
-                // The backend only grants To/Cc recipients; a Bcc grant would leak the Bcc identity to
-                // every reader. Flag any shareable ref with a needing Bcc recipient — even one whose
-                // needing recipients are all Bcc — so the exclusion note shows once the dialog opens.
+                // The server grants only To and Cc, since a Bcc grant would show the Bcc to every reader. Any shareable reference with a
+                // needing Bcc recipient is flagged, so the exclusion note shows once the dialog opens.
                 const needingToCc = needing.filter((r) => !bcc.has(r.email));
                 if (needing.length > needingToCc.length) hasShareableBcc = true;
                 if (needingToCc.length === 0) continue;
@@ -414,10 +399,8 @@ export function EmailDraft({
         }
     };
 
-    // ⌘/Ctrl+Enter sends from subject, recipients, or body. Mod+Enter is a modifier
-    // combo so the app-wide hotkey listener fires it even while an input/editor is
-    // focused; the body editor's submitOnModEnter keeps HardBreak from firing first. Being
-    // document-wide, it is also the one send entry point the Share & send dialog doesn't block.
+    // A modifier combo fires even while an input or editor is focused, and the body editor's submitOnModEnter keeps HardBreak
+    // from firing first. Being document-wide, it is the one send entry point the Share & send dialog doesn't block.
     useHotkey('Mod+Enter', () => void handleSendEmail(), { enabled: !isSending && !shareState });
 
     const { targetProps, isDragging } = useFileDropTarget(uploadFiles);
@@ -434,9 +417,8 @@ export function EmailDraft({
                     e.preventDefault();
                     handleSendEmail();
                 }}
-                // Enter in a field would submit the form, which sends, with any modifier: on a Mac Ctrl+Enter
-                // is not the send hotkey. Mod+Enter still sends, as the hotkey ignores defaultPrevented.
-                // ContactAutosuggest's own Enter, picking a suggestion, runs on the input first.
+                // Enter would submit the form, which sends, with any modifier, and on a Mac Ctrl+Enter is not the send hotkey. Mod+Enter
+                // still sends, as the hotkey ignores defaultPrevented.
                 onKeyDown={(e) => {
                     if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
                     if (!(e.target instanceof HTMLInputElement)) return;
