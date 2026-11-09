@@ -143,9 +143,8 @@ export function ServerSettingsPage() {
             const saved = await updateSettings.mutateAsync(
                 draft.landing ? { ...draft, landing: { links: normalizeLinks(draft.landing.links ?? []) } } : draft,
             );
-            // The notice comes once, when the backup bucket is new: it asks the owner to keep the bucket's keys
-            // somewhere other than this server. The warning comes from the bucket check. That check runs on every
-            // save of the upload settings while the upload is on, even when the bucket stayed the same.
+            // A new backup bucket brings a one-time notice to keep its keys off this server. A bucket that lacks
+            // something, such as versioning, warns on every save of the upload settings, even when it stayed the same.
             if (saved.notice || saved.warning) setBackupNotice({ notice: saved.notice, warning: saved.warning });
         }
         handleReset();
@@ -328,7 +327,7 @@ export function ServerSettingsPage() {
 
             <SettingsSection
                 title="Email notifications"
-                description="Send email when a notification fires. In-app notifications always fire regardless."
+                description="Send email when a notification fires. Anyone with an account gets the in-app notification either way."
             >
                 <div className="space-y-3">
                     <SwitchRow
@@ -427,8 +426,7 @@ export function ServerSettingsPage() {
     );
 }
 
-// The server refuses an empty title or URL, and a URL that does not start with http:// or https://. A save also trims
-// both fields, drops a row that misses one, lowercases the scheme and puts https:// before a URL that has none.
+// The server refuses an empty title or URL and a URL without http:// or https://, so a save mends what it can first.
 function normalizeLinks(links: readonly LandingLink[]): LandingLink[] {
     return links
         .map((link) => ({ title: link.title.trim(), url: link.url.trim() }))

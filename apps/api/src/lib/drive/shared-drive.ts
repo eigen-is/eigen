@@ -398,7 +398,7 @@ export class SharedDrive {
         subject: string | null,
         message: string,
         sendCopyToSelf: boolean,
-        sender: { name: string; email: string },
+        sender: User,
     ): Promise<{ sent: number }> {
         await this.requireWrite(mountId, pathId);
         return this.drive.emailCollaborators(mountId, pathId, subject, message, sendCopyToSelf, sender);

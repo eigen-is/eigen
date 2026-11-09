@@ -611,7 +611,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 body.subject ?? null,
                 body.message,
                 body.sendCopyToSelf,
-                { name: user.name, email: user.email },
+                user,
             );
         },
         {

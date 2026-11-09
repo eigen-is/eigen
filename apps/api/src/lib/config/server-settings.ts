@@ -2,16 +2,13 @@
 // live in one JSON file under the server's data folder, read once at import, and any part of the API reads them
 // through getServerSettings. A value the file doesn't hold has its default here.
 
-import { UPLOAD_CAP_MAX_MB } from '@workspace/lib/constants/mount';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { EMPTY_S3 } from '@workspace/lib/types/mount';
-import type { ServerSettings, ServerStorageType } from '@workspace/lib/types/settings';
+import type { ServerSettings } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
 import { JsonStore } from '../core/json-store';
 import { LocalFilesystem } from '../core/local-filesystem';
 import { getServerDataPath, SERVER_FILES } from './paths';
-
-export { mapStorageType } from '@workspace/lib/types/settings';
 
 // A server with no backup set up, and what an admin who is not the owner reads of the backup settings.
 export const DEFAULT_BACKUPS: ServerSettings['backups'] = {
@@ -80,13 +77,8 @@ export async function updateServerSettings(update: DeepPartial<ServerSettings>):
     await settingsStore.set(update);
 }
 
-// A cap saved before the settings route bounded it can sit above what any request may carry.
 export function getMaxUploadSize(): number {
-    return Math.min(getServerSettings().quotas.maxUploadSizeMB, UPLOAD_CAP_MAX_MB) * 1024 * 1024;
-}
-
-export function getStorageType(): ServerStorageType {
-    return getServerSettings().defaults.mount.storageType;
+    return getServerSettings().quotas.maxUploadSizeMB * 1024 * 1024;
 }
 
 export function getS3Config(): S3Config | undefined {

@@ -1062,7 +1062,7 @@ export class Drive {
         subject: string | null,
         message: string,
         sendCopyToSelf: boolean,
-        sender: { name: string; email: string },
+        sender: User,
     ): Promise<{ sent: number }> {
         const path = await this.getPath(mountId, pathId);
         if (!path) throw new ApiError(404, 'Path not found');
