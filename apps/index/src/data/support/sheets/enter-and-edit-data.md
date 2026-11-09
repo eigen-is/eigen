@@ -43,7 +43,7 @@ Press **Alt+Enter** (Mac: **⌥+Enter**) while a cell is open for editing. The c
 
 ## Clear cell contents
 
-Select one or more cells, then press **Delete** or **Backspace**. The values, formulas and links are removed, and the cells keep their formatting, such as colors, bold and number format. To remove the formatting too, use **Format → Clear formatting**.
+Select one or more cells, then press **Delete** or **Backspace**. The values, formulas and links are removed, and the cells keep their formatting, such as colors, bold and number format. To remove the formatting too, apart from the number format, use **Format → Clear formatting**.
 
 To clear contents from the right-click menu, right-click the selection and choose **Clear contents**. The same option is available under **Edit → Delete → Clear contents**.
 

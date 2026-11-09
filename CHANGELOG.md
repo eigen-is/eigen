@@ -28,7 +28,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Validation limits in Sheets** — an edit that would push a validation rule past its limit goes through, and the cells past it get no rule
 - **Speed in Sheets** — editing a cell in a workbook of 100,000 formulas takes milliseconds, where it took over a tenth of a second, and a cell that 100,000 formulas read no longer stalls a sheet for a minute
 - **Links in Sheets (breaking)** — an existing spreadsheet opens without its cell links, and their text keeps its blue underline. Add them again, or import the Excel file again. A link now moves with its cell through a sort or a fill
-- **Deleting a tab in Sheets** — formulas that name the tab show `#REF!`, as after deleting a row, and dropdown lists and links that name it stop working. A new tab with that name doesn't bring them back. Undo does
+- **Deleting a tab in Sheets** — formulas that name the tab show `#REF!`, as after deleting a row, and dropdown lists and links that name it stop working. A new tab with that name doesn't bring them back. Undo does, until someone else edits
 - **Sorting in Sheets** — a sort moves a cell's contents, formatting and link, and leaves borders, data validation and conditional formatting where they are. Hidden rows stay put, whether you hid them or a filter did
 - **Pasting and filling rules in Sheets** — a paste or fill from a cell with no rule takes the rule off the cell it lands on, so a rule can get a gap. A fill also copies links and replaces the data validation it lands on
 - **Cutting filtered rows in Sheets** — a cut or a drag over rows a filter hides moves nothing and says to clear the filter first. So does a copy of a merged cell a filter partly hides
@@ -37,7 +37,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Pasted errors in Sheets** — a copied formula that lands on an error, such as `#DIV/0!`, is an error to the formulas that read it, so `ISERROR` and `IFERROR` see it. A formula pasted as text, or under the format painter, keeps the type of its own result
 - **Empty results in Sheets** — a formula that gives empty text, such as `=IF(A1=1,"",5)`, plus 1 is `#VALUE!` as in Excel, whether you typed it or imported it
 - **Excel files in Sheets** — an import keeps what Excel saved, and calculates only a formula saved with no result or with an error, where Sheets can calculate it
-- **Large PDFs from Sheets** — a tall or chart-heavy spreadsheet prints whole, or fails if it takes too long, where it could be cut short to fit. PDFs and web pages draw at most 1,000 images and charts
+- **Large PDFs from Sheets** — a tall or chart-heavy spreadsheet prints up to the export's limit of 250,000 cells, or fails if it takes too long. The page count no longer cuts it. PDFs and web pages draw at most 1,000 images and charts, and about 200 MB of images
 - **Default drive size reaches existing users** — raising **Default mount (MB)** in Admin's server settings now gives every user's drive the new size at once, not only users who sign in for the first time. Lowering it shrinks no one's drive
 
 ### Fixed
@@ -51,7 +51,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Fills in Sheets** — a block dragged up or left lands in step with its source, and a date series counts by the date, not the text it shows
 - **Frozen panes in Sheets** — a press in a frozen cell that moves a pixel no longer throws the view back to the start
 - **Frozen panes and selection while others edit in Sheets** — a row someone inserts or a freeze someone sets moves your selection and panes at once
-- **Deleting frozen rows in Sheets** — deleting every frozen row or column ends the freeze on that side, for everyone, instead of pinning a row that was never frozen. Undo brings it back
+- **Deleting frozen rows in Sheets** — deleting every frozen row or column ends the freeze on that side, for everyone, instead of pinning a row that was never frozen. Undo brings it back, until someone else edits
 - **Deleting rows and columns in Sheets** — your selection lands on the row or column that took the deleted one's place, so the name box, the status bar and the arrow keys keep working. If someone else deletes what you selected, the header highlight and the count clear
 - **Comments in Sheets** — **Clear formatting** keeps a cell's link and comment, and **Delete comment** in a cell's menu asks first
 - **Array formulas in Sheets** — a formula such as `SUMPRODUCT(A1:A3*B1:B3)`, which Sheets can't calculate yet, keeps the number it has when you edit around it, instead of turning into 0. Typed new, it shows `#CALC!`

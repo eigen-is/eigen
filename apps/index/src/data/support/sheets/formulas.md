@@ -65,6 +65,6 @@ To delete a formula, select the cell and press **Backspace** or **Delete**.
 
 ## When a formula shows an error
 
-A formula that reads a row, column, or sheet you delete shows `#REF!`. A new sheet with the old name doesn't bring it back, but **Undo** does.
+A formula that names a deleted cell or sheet shows `#REF!`. A new sheet with the old name doesn't bring it back, but **Undo** does, until someone else edits the spreadsheet.
 
 Some formulas Sheets can't calculate yet: one with a function it doesn't have, such as `FILTER` or `ROW`, or one that applies an operator to a whole range, such as `SUMPRODUCT(A1:A3*B1:B3)`. If such a formula already holds a result, for example from an Excel file, it keeps that result, even when it is an error or empty. The result doesn't change when its cells do, or when you sort the formula or cut it to another cell. Typed new, or copied or filled to another cell, it shows `#NAME?` or `#CALC!`.

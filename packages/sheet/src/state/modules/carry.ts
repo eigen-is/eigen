@@ -20,12 +20,12 @@ import { addValidation, clearValidations } from './validation-rules';
 const FILTERED_MERGE_REFUSAL = 'Cannot copy merged cells a filter partly hides. Clear the filter first.';
 const FILTERED_MOVE_REFUSAL = 'Cannot cut or move rows a filter hides. Clear the filter first.';
 
+type CarriedLines = { sheetId: string; rows: readonly number[]; columns: readonly number[] };
+
 // The rows and columns a copy, a move or the format painter carries, in order. Every row and column of the ranges comes
 // along, hidden ones too, as in Excel, except the rows an active filter hides, which stay out so the block closes up.
 // Ranges side by side share their rows, and ranges above each other share their columns. A merge can't close up, so one
 // that a filter's row straddles refuses the carry, with a notice, before anything is written.
-type CarriedLines = { sheetId: string; rows: readonly number[]; columns: readonly number[] };
-
 export function carriedLines(ctx: Context, sheetId: string, ranges: readonly SingleRange[]): CarriedLines | undefined {
     const sheet = getSheet(ctx, { id: sheetId });
     // A filter entry lists the rows it hides. A row the user has shown again since is not hidden any more.
@@ -103,8 +103,8 @@ export function carryCells(
     const from = getSheet(ctx, { id: lines.sheetId });
     const to = getSheet(ctx);
     const source = from.data;
-    const d = to.data;
-    if (!source || !d || rows.length === 0 || columns.length === 0) return;
+    const data = to.data;
+    if (!source || !data || rows.length === 0 || columns.length === 0) return;
 
     // Everything is read from a plain view, because a read through an immer draft makes a child draft of each cell.
     const snapshot = snapshotContext(ctx);
@@ -145,7 +145,7 @@ export function carryCells(
         for (let i = 0; i < tile.height; i += 1) {
             const r = tile.row + i;
             const sr = rows[skipRows + i];
-            const row = d[r];
+            const row = data[r];
             const sourceRow = read.data?.[sr];
             for (let j = 0; j < tile.width; j += 1) {
                 const c = tile.column + j;
@@ -276,7 +276,7 @@ function writeCfRanges(
         );
         const next = joinedRanges(kept, landed);
         if (next.length === 0) emptied.push(i);
-        // A fill or a paste inside a rule's own cells leaves the rule as it was.
+        // A fill or a paste inside a rule's own cells leaves the rule as it was, unless it lands on the corner.
         else if (!isEqual(next, rule.cellrange)) written[i] = withCfRanges(rule, next);
     }
     for (const i of emptied.reverse()) written.splice(i, 1);

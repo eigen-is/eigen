@@ -437,6 +437,19 @@ describe('a source cell without a rule takes the destination rule away, cell by 
         });
     });
 
+    test('a paste inside a formula rule that lands on its corner moves the corner', () => {
+        const s = columnC({ conditionalFormatRules: [formula([range(0, 2, 2, 2)], '=C1>0')] });
+        s.edit(s.a, (ctx) => {
+            ctx.selections = select(1, 1, 2, 2);
+            copy(ctx, {});
+            ctx.selections = select(0, 0, 2, 2);
+            pasteCopy(ctx);
+        });
+        expectEveryoneAgrees(s, (sheet) => {
+            expect(sheet.conditionalFormatRules).toEqual([formula([range(1, 2, 2, 2), range(0, 0, 2, 2)], '=C2>0')]);
+        });
+    });
+
     test('only the landed cells change, on a sheet of rules, and an undo restores them', () => {
         const seed = {
             dataValidations: { far: { ranges: [range(11, 11, 5, 5)], rule: dropdown('far') } },
