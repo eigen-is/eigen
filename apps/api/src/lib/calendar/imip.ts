@@ -18,7 +18,7 @@ import type { OutboundICalEvent, OutboundMail } from '../mailer/mailer';
 type Organizer = NonNullable<EventData['organizer']>;
 
 // Above this a body is a mailed calendar export, not a scheduling message, and it does not get to write a Home once per VEVENT.
-export const IMIP_MAX_EVENTS = 50;
+const IMIP_MAX_EVENTS = 50;
 
 // An answer for one date of a series walks the series from its start to that date, so a REPLY answers this many.
 const IMIP_MAX_REPLY_DATES = 5;

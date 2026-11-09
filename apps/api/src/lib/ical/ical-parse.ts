@@ -293,7 +293,7 @@ export type IcsParseResult = {
     skipped: number;
 };
 
-export type ProjectedResource = {
+type ProjectedResource = {
     events: StoredEvent[];
     skipped: number;
     // Recurrence the index can't expand, such as a stripped rule or an RDATE: a time-range REPORT returns the resource

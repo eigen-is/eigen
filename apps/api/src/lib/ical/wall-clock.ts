@@ -34,7 +34,7 @@ function getIntlFormatter(tz: string): Intl.DateTimeFormat {
 export function utcToLocal(date: Date, tz: string): LocalComponents {
     const fmt = getIntlFormatter(tz);
     const parts = fmt.formatToParts(date);
-    const get = (type: Intl.DateTimeFormatPartTypes) => parseInt(parts.find((p) => p.type === type)!.value, 10);
+    const get = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)?.value);
     return {
         year: get('year'),
         month: get('month'),
@@ -147,7 +147,6 @@ export function computeOccurrenceTimes(
         }
     }
 
-    // Fallback: place dtstart's time-of-day onto the occurrence date
     if (tz) {
         const local = utcToLocal(parent.startTime, tz);
         const startTime = localToUtc(

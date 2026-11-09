@@ -74,7 +74,6 @@
     "apps/api/src/lib/contacts/dav-store.ts": 1,
     "apps/api/src/lib/drive/drive.ts": 1,
     "apps/api/src/lib/home/home.ts": 1,
-    "apps/api/src/lib/ical/wall-clock.ts": 1,
     "apps/api/src/lib/mail/maildb.ts": 4,
     "apps/api/src/lib/mail/maildir-store.ts": 2,
     "apps/api/src/lib/mount/mount.ts": 2,
