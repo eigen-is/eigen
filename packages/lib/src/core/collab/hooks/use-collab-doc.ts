@@ -27,19 +27,19 @@ const STORAGE_RETRY_MS = 5_000;
 // offline verdict this long so neither flashes the icon.
 const OFFLINE_GRACE_MS = 1_500;
 
-export type CollabDocContext = {
+type CollabDocContext = {
     doc: Y.Doc;
     provider: WebsocketProvider;
     // Null unless the host declared an `undoScope`; docs and sheets own undo elsewhere.
     undoManager: Y.UndoManager | null;
 };
 
-export type UseCollabDocOptions = {
+type UseCollabDocOptions = {
     ownerId: string;
     mountId: string;
     pathId: string;
     // Shared types the UndoManager tracks, or none without this. A transaction with a non-null origin escapes it, so
-    // reuse an origin such as NORMALIZE_ORIGIN before inventing another.
+    // reuse an origin, such as the one normalizeParentChildRefs repairs under, before inventing another.
     undoScope?: (doc: Y.Doc) => ConstructorParameters<typeof Y.UndoManager>[0];
     // Runs once per doc creation, to attach observers and seed React state. Its cleanup runs before the UndoManager,
     // the provider and the doc are destroyed.
