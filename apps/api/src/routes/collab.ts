@@ -1,6 +1,7 @@
 // The collab routes: a document's access info and comment index over HTTP, and the WebSocket each editor opens to sync
 // a document. The socket checks read and its session when it opens and on its keepalive, and write on every message,
-// and it hands the frames to the CollabDocument the Drive keeps open for that document.
+// and it hands the frames to the CollabDocument the Drive keeps open for that document. An open that succeeds counts on
+// the user's Recent page.
 
 import {
     COLLAB_ACCESS_LOST_CLOSE,
@@ -22,6 +23,7 @@ import { startLoadingHeartbeat } from '../lib/collab/loading-heartbeat';
 import { ApiError } from '../lib/core/errors';
 import { getSharedDrive } from '../lib/drive';
 import type { DriveLike } from '../lib/drive/get-drive';
+import { recordOpened } from '../lib/drive/recent';
 import { getDataEpoch } from '../lib/home/data-epoch';
 import { getSessionUser } from '../lib/user';
 import { betterAuth } from './auth';
@@ -170,13 +172,15 @@ export const collabRouter = new Elysia({
                 session.drive = drive;
                 session.collabDocument = document;
                 const authSessionId = ws.data.session.id;
-                const checkAccess = async () => {
+                // Answers whether the socket keeps its access, and closes it when it doesn't.
+                const checkAccess = async (): Promise<boolean> => {
                     // The row, not the user the socket opened with: an ACL entry outlives its user, and matches on
                     // the email.
                     const current = await getSessionUser(authSessionId);
-                    if (current && (await drive.canRead(mountId, pathId, current))) return;
+                    if (current && (await drive.canRead(mountId, pathId, current))) return true;
                     rawWs.close(COLLAB_ACCESS_LOST_CLOSE, COLLAB_ACCESS_LOST_REASON);
                     cleanupSession(session, rawWs);
+                    return false;
                 };
                 // The ping keeps a proxy from dropping the connection. A check that throws says nothing about the
                 // access, so the socket stays and the next tick asks again.
@@ -194,8 +198,9 @@ export const collabRouter = new Elysia({
                 }, 15_000);
 
                 // A change during the load is found now, not at the first tick. A frame that waits for `opened` finds
-                // no document once the session is cleaned up.
-                await checkAccess();
+                // no document once the session is cleaned up. Only an open that keeps its access counts on Recent.
+                if (!(await checkAccess())) return;
+                recordOpened(user, document.path);
             } catch (err) {
                 const status = err instanceof ApiError ? err.status : 500;
                 // A refusal, such as a document in the trash, is expected on every reconnect, so it gets one line.

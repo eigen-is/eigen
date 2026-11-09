@@ -1,10 +1,25 @@
 import { describe, expect, test } from 'bun:test';
 import {
+    accessRequestTag,
+    calendarInviteTag,
+    calendarShareTag,
     chatActivityTag,
     chatMentionTag,
     chatThreadKey,
     commentAssignedTag,
+    fileEventTag,
+    homeBackupUnverifiedTag,
+    MAIL_QUEUE_BACKLOG_TAG,
+    NEW_MAIL_TAG,
+    parseAccessRequestTag,
+    parseCalendarInviteTag,
     parseChatNotificationThread,
+    parseNotificationPath,
+    parsePathTag,
+    serverBackupFailedTag,
+    serverBackupNotUploadedTag,
+    serverBackupWarningsTag,
+    shareTag,
 } from '../../../core/notification/tags';
 
 const CHAT = { ownerId: 'owner-1', mountId: 'mount-1', pathId: 'chat-1' };
@@ -64,5 +79,87 @@ describe('chat notification tags', () => {
         const thread = parseChatNotificationThread('comment-reply', chatActivityTag(COMMENT));
         expect(thread && chatThreadKey(thread)).toBe(chatThreadKey(COMMENT));
         expect(thread && chatThreadKey(thread)).not.toBe(chatThreadKey({ pathId: 'chat-1' }));
+    });
+});
+
+const PATH = { ownerId: 'owner-1', mountId: 'mount-1', pathId: 'file-1' };
+
+describe('file notification tags', () => {
+    test('a share, an access request and a file event parse back to the path they were built from', () => {
+        expect(shareTag(PATH)).toBe('share:owner-1:mount-1:file-1');
+        expect(parsePathTag('share', shareTag(PATH))).toEqual(PATH);
+        expect(accessRequestTag(PATH, 'bob@eigen.is')).toBe('access-request:owner-1:mount-1:file-1:bob@eigen.is');
+        expect(parseAccessRequestTag(accessRequestTag(PATH, 'bob@eigen.is'))).toEqual({
+            ...PATH,
+            email: 'bob@eigen.is',
+        });
+        expect(fileEventTag(PATH)).toBe('file-event:owner-1:mount-1:file-1');
+        expect(parsePathTag('file-event', fileEventTag(PATH))).toEqual(PATH);
+    });
+
+    test('a tag of another kind parses to nothing', () => {
+        expect(parsePathTag('share', fileEventTag(PATH))).toBeNull();
+        expect(parseAccessRequestTag(shareTag(PATH))).toBeNull();
+        expect(parsePathTag('file-event', shareTag(PATH))).toBeNull();
+    });
+});
+
+describe('the path a notification names', () => {
+    const MENTION = 'bob@eigen.is';
+
+    test('a share, an access request and a file event name the path in their tag', () => {
+        expect(parseNotificationPath('share', shareTag(PATH))).toEqual(PATH);
+        expect(parseNotificationPath('access-request', accessRequestTag(PATH, MENTION))).toMatchObject(PATH);
+        expect(parseNotificationPath('file-event', fileEventTag(PATH))).toEqual(PATH);
+    });
+
+    test('a chat message and a chat mention name the chat', () => {
+        const chat = { ownerId: CHAT.ownerId, mountId: CHAT.mountId, pathId: CHAT.pathId };
+        expect(parseNotificationPath('chat-message', chatActivityTag(CHAT))).toEqual(chat);
+        expect(parseNotificationPath('mention-chat', chatMentionTag(CHAT, MENTION))).toEqual(chat);
+    });
+
+    test('a comment, a comment mention and an assignment name the container, not the thread', () => {
+        const container = { ownerId: COMMENT.ownerId, mountId: COMMENT.mountId, pathId: COMMENT.pathId };
+        expect(parseNotificationPath('comment-reply', chatActivityTag(COMMENT))).toMatchObject(container);
+        expect(parseNotificationPath('mention-comment', chatMentionTag(COMMENT, MENTION))).toMatchObject(container);
+        expect(parseNotificationPath('assigned', commentAssignedTag(COMMENT))).toMatchObject(container);
+    });
+
+    test('mail, calendar, admin alerts and unshares name none, whatever their tag holds', () => {
+        expect(parseNotificationPath('mail', NEW_MAIL_TAG)).toBeNull();
+        expect(parseNotificationPath('calendar-share', calendarShareTag('cal-1', 'owner-1'))).toBeNull();
+        expect(parseNotificationPath('calendar-unshare', calendarShareTag('cal-1', 'owner-1'))).toBeNull();
+        for (const type of ['calendar-invite', 'calendar-invite-updated', 'calendar-invite-cancelled']) {
+            expect(parseNotificationPath(type, calendarInviteTag('event-1', new Date(1700000000000)))).toBeNull();
+        }
+        expect(parseNotificationPath('admin-alert', homeBackupUnverifiedTag('owner-1'))).toBeNull();
+        expect(parseNotificationPath('unshare', shareTag(PATH))).toBeNull();
+    });
+});
+
+// Byte-identical to what each producer has always persisted, so a repeat still folds into the stored row.
+describe('tags that name no file', () => {
+    test('mail and a calendar share are spelled as they are stored', () => {
+        expect(NEW_MAIL_TAG).toBe('mail:new');
+        expect(calendarShareTag('cal-1', 'owner-1')).toBe('calendar-share:cal-1:owner-1');
+    });
+
+    test('an invitation parses back to the event and the start it was built from', () => {
+        const tag = calendarInviteTag('event-1', new Date(1700000000000));
+        expect(tag).toBe('calendar-invite:event-1:1700000000000');
+        expect(parseCalendarInviteTag(tag)).toEqual({ eventId: 'event-1', startTime: 1700000000000 });
+        expect(parseCalendarInviteTag(calendarShareTag('cal-1', 'owner-1'))).toBeNull();
+    });
+
+    test('the admin alerts are spelled as they are stored', () => {
+        expect(MAIL_QUEUE_BACKLOG_TAG).toBe('mail-queue-backlog');
+        expect(serverBackupFailedTag('eigen-1.tar')).toBe('server-backup-eigen-1.tar');
+        expect(serverBackupFailedTag('schedule')).toBe('server-backup-schedule');
+        expect(serverBackupFailedTag('interrupted')).toBe('server-backup-interrupted');
+        expect(serverBackupWarningsTag('eigen-1.tar')).toBe('server-backup-warnings-eigen-1.tar');
+        expect(serverBackupNotUploadedTag('eigen-1.tar')).toBe('server-backup-upload-eigen-1.tar');
+        expect(serverBackupNotUploadedTag('interrupted')).toBe('server-backup-upload-interrupted');
+        expect(homeBackupUnverifiedTag('owner-1')).toBe('backup-verify-owner-1');
     });
 });

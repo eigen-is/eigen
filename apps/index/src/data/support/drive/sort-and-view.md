@@ -6,10 +6,10 @@ category: Basics
 tags: [drive, files, sort, view, grid, list]
 related: [drive/get-started, drive/filter-by-type]
 order: 85
-updated: 2026-09-13
+updated: 2026-11-09
 ---
 
-Drive can show your files as a list with columns or as a grid of thumbnails, in whichever order suits you. Both choices are remembered, so the next time you open Drive it looks the way you left it.
+Drive can show your files as a list with columns or as a grid of thumbnails, in whichever order suits you. Both choices are remembered, so the next time you open Drive it looks the way you left it. **Recent files** is the one exception to the sort: it always opens with the most recent files first, and sorting it changes no other list (see [Find files you worked on recently](/support/drive/recent-files)).
 
 ## Sort the list
 

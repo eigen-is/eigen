@@ -2,13 +2,11 @@
 // belongs to, with those teams' members, mounts and calendars. The app uses them for its storage meter and its
 // team lists.
 
-import { teamOwnerId } from '@workspace/lib/types';
+import type { HomeSizeResponse, MyTeam } from '@workspace/lib/types/settings';
 import { Elysia } from 'elysia';
 import { requireSelf } from '../lib/auth/access';
-import { ApiError } from '../lib/core/errors';
 import { getHome } from '../lib/home';
-import { pullCalendars, pullTeamMounts } from '../lib/home/home-relay';
-import { getTeam, getTeamMembers } from '../lib/team';
+import { listMyTeams } from '../lib/team/my-teams';
 import { getMemberships } from '../lib/user';
 import { betterAuth } from './auth';
 
@@ -17,53 +15,20 @@ export const homeRouter = new Elysia({ name: 'home' })
 
     .get(
         '/home/:ownerId/size',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<HomeSizeResponse> => {
             requireSelf(params.ownerId, user.id);
             const home = await getHome(user.id);
             const { teamIds } = await getMemberships(user.id);
             return await home.size(teamIds);
         },
-        {
-            auth: true,
-        },
+        { auth: true },
     )
 
     .get(
         '/home/:ownerId/my-teams',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<MyTeam[]> => {
             requireSelf(params.ownerId, user.id);
-            const { teamIds } = await getMemberships(user.id);
-
-            return Promise.all(
-                teamIds.map(async (teamId) => {
-                    const teamOwner = teamOwnerId(teamId);
-                    const [team, members, mounts, calendars] = await Promise.all([
-                        getTeam(teamId),
-                        getTeamMembers(teamId),
-                        pullTeamMounts(teamOwner).catch((err) => {
-                            console.error(`[my-teams] Failed to pull mounts for ${teamId}:`, err);
-                            return [];
-                        }),
-                        pullCalendars(teamOwner)
-                            .then((cals) => cals.map((c) => ({ id: c.id, name: c.name, color: c.color })))
-                            .catch((err) => {
-                                // 404 = team calendar disabled (the default) — expected, not a failure
-                                if (!(err instanceof ApiError && err.status === 404)) {
-                                    console.error(`[my-teams] Failed to pull calendars for ${teamId}:`, err);
-                                }
-                                return [];
-                            }),
-                    ]);
-
-                    return {
-                        id: teamId,
-                        name: team?.name ?? teamId,
-                        members: members.map((m) => ({ email: m.user.email, name: m.user.name })),
-                        mounts,
-                        calendars,
-                    };
-                }),
-            );
+            return await listMyTeams(user.id);
         },
         { auth: true },
     );

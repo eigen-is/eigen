@@ -109,7 +109,7 @@ export function composeAccessRequestEmail(
     if (message) textParts.push(`Message: ${message}`);
     textParts.push(buildAttachmentUrl(reference));
     return {
-        from: { name: requester.name, address: requester.email },
+        from: { name: requesterDisplay, address: requester.email },
         to: [{ name: owner.name, address: owner.email }],
         subject,
         text: textParts.join('\n\n'),

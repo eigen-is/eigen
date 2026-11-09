@@ -151,6 +151,10 @@ A fixed color mapped onto the palette (`eigenColor(name, step)`) takes the neare
 
 Only `apps/drive` mounts `DriveLayout` directly. Docs, Stickies, Slides and Sheets go through `EigenDocListView` and `EigenDocSharedView`, configured by `buildConfig` in `eigendoc-config.ts` from the EigenDocType registry, so an app gets its sidebar, list and shared views without Drive code of its own.
 
+## Every Drive list has one empty text and one error text
+
+`DriveList` draws both, so no page passes copy of its own. An empty list shows `EmptyState`'s default sentence, with a hint only where you can drop or create (the button's own label when the list creates one kind). A failed load shows `ErrorState`'s default sentence alone, with no error detail; the error boundary shows the same one. A page that needs other words is a different screen, such as `RequestAccessView` for a folder you can't read.
+
 ## A file's icon comes from its name as well as its MIME type
 
 `getFilePresentation` (`packages/lib/src/core/file-presentation.ts`) takes the file name, because a `.vcf`, `.eml` or `.ics` is often stored as `application/octet-stream` and still carries its app's icon and color. It is DOM-free so lib callers such as the palette can use it. `APP_FORMATS` there is the one list the icon, the tile tint and the format badge read.

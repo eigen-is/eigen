@@ -38,7 +38,7 @@ Before applying anything, `runMigrations` refuses a database whose stamp is high
 
 A stamp that is not an integer is refused the same way (503 `unreadable schema stamp`). Only Eigen's migrations write it, and a non-number compares false against every migration, so the database would open with nothing migrated and fail on its first query instead.
 
-A missing stamp row is recreated at 0 by `INSERT OR IGNORE`, and every migration runs again. The `CREATE ... IF NOT EXISTS` steps pass. The first step that can't run twice, such as an `ADD COLUMN` or a `DROP COLUMN`, fails inside its transaction, and the open fails. A database whose migrations can all run twice just opens: collab, `shared.db`, the share registry and `waitlist.db`, each a single v1 of `IF NOT EXISTS` steps.
+A missing stamp row is recreated at 0 by `INSERT OR IGNORE`, and every migration runs again. The `CREATE ... IF NOT EXISTS` steps pass. The first step that can't run twice, such as an `ADD COLUMN` or a `DROP COLUMN`, fails inside its transaction, and the open fails. A database whose migrations can all run twice just opens: collab, the share registry and `waitlist.db`, each a single v1 of `IF NOT EXISTS` steps, and `shared.db`, whose v1 and v2 are such steps too.
 
 ## The dirty watermark moves only after `onSync` returns
 

@@ -1,5 +1,6 @@
-// Calendar's sidebar: the Create event button, the month and week shortcuts, and the calendar lists (the user's
-// own, those shared with them, and their teams'), each with a checkbox that shows or hides its events.
+// Calendar's sidebar: the Create event button, the month and week shortcuts, the link to Drive's Recent files,
+// and the calendar lists (the user's own, those shared with them, and their teams'), each with a checkbox that
+// shows or hides its events.
 
 import { useNavigate } from '@tanstack/react-router';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
@@ -19,7 +20,14 @@ import {
 import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { ICS_ACCEPT, isIcsFile } from '@workspace/lib/types/drive';
-import { KebabTrigger, SidebarBody, SidebarItem, SidebarSection, TooltipButton } from '@workspace/ui';
+import {
+    KebabTrigger,
+    RecentFilesSidebarItem,
+    SidebarBody,
+    SidebarItem,
+    SidebarSection,
+    TooltipButton,
+} from '@workspace/ui';
 import { MenuSections } from '@workspace/ui/components/context-menu';
 import { FileImportPicker, ProgressDialog } from '@workspace/ui/components/drive';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
@@ -218,6 +226,12 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                         condensed={condensed}
                     />
                 </SidebarSection>
+
+                {!isGuest && (
+                    <SidebarSection condensed={condensed}>
+                        <RecentFilesSidebarItem condensed={condensed} />
+                    </SidebarSection>
+                )}
 
                 <div className="app-gutter-bleed overflow-auto flex-1">
                     <SidebarSection

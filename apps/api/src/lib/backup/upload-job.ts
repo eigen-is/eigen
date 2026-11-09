@@ -4,6 +4,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { serverBackupNotUploadedTag } from '@workspace/lib/notification/tags';
 import type { BackupJob, ServerArchiveUpload } from '@workspace/lib/types/backup';
 import { orgOwnerId } from '@workspace/lib/types/owner';
 import { canUploadServerArchive, isCompleteArchive, parseServerArchiveName } from '@workspace/lib/validation';
@@ -85,7 +86,9 @@ async function uploadAndRecord(archivePath: string, signal: AbortSignal): Promis
     } catch (error) {
         const reason = signal.aborted ? UPLOAD_STOPPED : describeError(error);
         upload = { state: 'failed', at: new Date(), key, error: reason };
-        alertOwner('Server backup not uploaded', `${name}: ${reason}`, `server-backup-upload-${name}`).catch(() => {});
+        alertOwner('Server backup not uploaded', `${name}: ${reason}`, serverBackupNotUploadedTag(name)).catch(
+            () => {},
+        );
     }
     await recordUpload(archivePath, upload);
     return upload;

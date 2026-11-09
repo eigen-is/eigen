@@ -1,9 +1,13 @@
+// The migrations of a home's shared.db, which holds what the home keeps about other owners' paths, such as the paths
+// shared with its user and the paths its user lately opened or was notified about. A Drive opens it when its home
+// loads.
+
 import type { DatabaseConfig } from '../core/managed-database';
 import * as schema from './sharedschema';
 
 export const SHARED_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'shared',
-    currentVersion: 1,
+    currentVersion: 2,
     schema,
     migrations: [
         {
@@ -26,6 +30,19 @@ export const SHARED_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     details TEXT,
                     createdAt INTEGER DEFAULT (unixepoch()),
                     updatedAt INTEGER DEFAULT (unixepoch())
+                );
+            `),
+        },
+        {
+            version: 2,
+            up: (db) =>
+                db.exec(`
+                CREATE TABLE IF NOT EXISTS recent_paths (
+                    ownerId TEXT NOT NULL,
+                    mountId TEXT NOT NULL,
+                    pathId TEXT NOT NULL,
+                    lastActivityAt INTEGER NOT NULL,
+                    PRIMARY KEY (ownerId, mountId, pathId)
                 );
             `),
         },

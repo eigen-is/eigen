@@ -12,6 +12,10 @@ Three things surprise people: the tag is both the row's identity and the source 
 
 `UserHome` and `GuestHome` create a `NotificationCenter` over `eigen.notifications/notifications.db` in the home folder. A `TeamHome` has none, because no one signs in as a team. So `sendToHome` hands a notification addressed to a team id to each member's own home, skipping the actor, through `TeamHome.membersToNotify`. The team's `notifyMembers` setting (missing means on) turns that off, and then the notification is dropped. On a team home `home.notifications` answers 404, so code that may run there calls `home.notify`, which drops the notice where there is no notification center. Every new user joins the default team ([ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md#every-new-user-joins-the-default-team)), so a notification sent to it reaches nearly everyone. Only an access request on a team-owned path is addressed to a team: every other producer resolves its recipients to users first. The routes (`apps/api/src/routes/notification.ts`) are self-only.
 
+## A notification about a path puts it in Recent
+
+`Home.notify` writes the row, then reads the path the tag names with `parseNotificationPath` and moves it to the top of the recipient's Recent files (`Drive.touchRecent`, [STORAGE.md § A notification about a path adds it too](STORAGE.md#a-notification-about-a-path-adds-it-too)). A comment, mention or assignment names its container, a chat message the chat, and a burst of file events the folder. Mail, calendar, admin alerts and unshares name no path. The Recent row is separate from the bell row, so dismissing the notification leaves the path in Recent. A failed Recent write is logged with a `recent:` prefix and never fails the notification, because some producers, such as an assignment, await the delivery.
+
 ## Notifications and domain events are separate broadcasts
 
 A cross-user event does two things. `persist()` writes the row and broadcasts `notification:created`, which `handleNotificationSSEvent()` turns into the toast and a refreshed bell. The producer's own `home.broadcast(domainEvent)` invalidates the domain's query caches. Toasts come only from the notification handler, and domain SSE handlers never toast, so one event never shows twice. Read, read-all and dismiss broadcast `notification:changed`, which refetches the bell without a toast.
@@ -29,14 +33,16 @@ The tag also carries the ids the link is built from, so each producer's tag deci
 | `calendar-invite`, `-updated`, `-cancelled` | `lib/calendar/invitations.ts` | `calendar-invite:{eventId}:{startTime}`, shared by all three, so one occurrence is one row |
 | `mail` | `Mail` (`lib/mail/mail-domain.ts`) | `mail:new`, a constant, so all incoming mail folds into one row |
 | `mention-chat`, `mention-comment`, `chat-message`, `comment-reply` | `ChatRoom.postMessage` | built in `core/notification/tags.ts` ([the tags name the thread](#chat-and-comment-tags-name-the-thread)) |
-| `assigned` | the assignee route in `routes/collab.ts` | built in `core/notification/tags.ts` |
+| `assigned` | `propagateAssignment` (`lib/drive/assignment-propagation.ts`), from `Drive.assignComment` | built in `core/notification/tags.ts` |
 | `access-request` | `propagateAccessRequest` (`lib/drive/access-request-propagation.ts`) | `access-request:{ownerId}:{mountId}:{pathId}:{email}` |
 | `file-event` | `FileHistory.notifyWatchers` | `file-event:{ownerId}:{mountId}:{pathId}`; burst events tag the parent folder ([FILE-HISTORY.md](FILE-HISTORY.md#notifications-coalesce-per-file-and-bursts-per-folder)) |
-| `admin-alert` | `alertUser` and `alertOwner` (`lib/user/alert-owner.ts`): backup verify to the admin who started it (`lib/backup/jobs.ts`), whole-server backup (`lib/backup/server-job.ts`, `upload-job.ts`, `server-archives.ts`) and mail queue (`routes/internal.ts`) to the owner | `backup-verify-{ownerId}`, `server-backup-{archive}` and `server-backup-upload-{archive}` (`interrupted` for the boot's alert), `mail-queue-backlog` |
+| `admin-alert` | `alertUser` and `alertOwner` (`lib/user/alert-owner.ts`): backup verify to the admin who started it (`lib/backup/jobs.ts`), whole-server backup (`lib/backup/server-job.ts`, `upload-job.ts`, `server-archives.ts`) and mail queue (`routes/internal.ts`) to the owner | `backup-verify-{ownerId}`, `server-backup-{archive}`, `server-backup-warnings-{archive}` and `server-backup-upload-{archive}` (`interrupted` for the boot's alert), `mail-queue-backlog` |
+
+Every tag in the table is built in `packages/lib/src/core/notification/tags.ts` (imported by the API as `@workspace/lib/notification/tags`), and every tag a reader reads back is parsed there, so no producer or reader spells one by hand.
 
 An unshare carries no tag, because the reader has lost access and there is nothing to link to. For the same reason `isClickableNotification` leaves both unshare types out, so their rows are not links.
 
-A producer can also read its own row: `Mail` calls `markReadByTag('mail:new')` once the inbox holds no unread mail, so the bell stops announcing mail the user has already read.
+A producer can also read its own row: `Mail` calls `markReadByTag(NEW_MAIL_TAG)` once the inbox holds no unread mail, so the bell stops announcing mail the user has already read.
 
 ## A coalesced persist skips the toast, not the row
 
@@ -48,7 +54,7 @@ With `coalesce: true`, `persist()` reads the row with the same tag first. If tha
 
 ## Chat and comment tags name the thread
 
-The five chat, comment and assignment tags are built and parsed in one module, `packages/lib/src/core/notification/tags.ts` (imported by the API as `@workspace/lib/notification/tags`). A standalone chat is tagged with its own path. A comment thread is tagged with the container it comments on plus the thread's chat name, so the notification links to the document and still names the thread inside it. A mention adds the mentioned email, so each person's mention is their own row.
+The five chat, comment and assignment tags are built and parsed in `tags.ts` too. A standalone chat is tagged with its own path. A comment thread is tagged with the container it comments on plus the thread's chat name, so the notification links to the document and still names the thread inside it. A mention adds the mentioned email, so each person's mention is their own row.
 
 `chatThreadKey` is what a reader compares on. `useAutoMarkChatRead` (`packages/lib/src/core/chat/hooks/use-chat-unread.ts`) marks exactly the open thread's rows read, which is why a comment card passes the container's path id with its chat name rather than the thread's own id. `useUnreadChatIds` uses the tag's path id, so a comment's unread dot sits on the document. `useUnreadCommentChatNames` keeps the chat name for one document, so inside it the card itself carries a dot, in the comment sidebar and on a Stickies board. The dot follows the notifications, not a per-user read marker: a member who never posted in the thread, isn't the owner and wasn't mentioned or assigned gets no row, so no dot. An assignment has the comment shape, so it clears with the card's other rows when the card opens. Only the assignee ever gets that row, so whoever clears it is the assignee. The three hooks read the bell's list, which holds every unread row however old ([The bell counts always and lists on open](#the-bell-counts-always-and-lists-on-open)), so a chat buried under newer rows still shows its dot and still clears when opened.
 

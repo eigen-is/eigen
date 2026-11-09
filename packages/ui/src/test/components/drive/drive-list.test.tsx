@@ -1,6 +1,7 @@
 // The phone's View options menu lists the sorts and the layouts as choices, each current one checked, the sort's
-// direction an arrow beside it.
+// direction an arrow beside it. A listing with a sort of its own gets the pick, and the preference stays as it was.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
+import type { ComponentProps } from 'react';
 import { installHappyDom } from '../../happy-dom';
 import { checkRows, clickRow, menuRows } from '../../menu-rows';
 import { renderInDocument } from '../../render-in-document';
@@ -35,8 +36,8 @@ const { DriveViewControls } = await import('../../../components/drive/drive-list
 let unmount = async () => {};
 afterEach(() => unmount());
 
-async function open() {
-    ({ unmount } = await renderInDocument(createElement(DriveViewControls)));
+async function open(props: ComponentProps<typeof DriveViewControls> = {}) {
+    ({ unmount } = await renderInDocument(createElement(DriveViewControls, props)));
     await act(async () => {
         document
             .querySelector('button[aria-label="View options"]')
@@ -60,6 +61,11 @@ test('the sort and the layout in use are checked, the sort with its direction', 
     expect(modified?.querySelector('.lucide-arrow-down')).not.toBeNull();
 });
 
+test('a listing that shows another date names the date sort after it', async () => {
+    await open({ dateLabel: 'Trashed' });
+    expect(menuRows()).toEqual(['Sort by', 'Name', 'Trashed', 'Size', '—', 'List', 'Grid']);
+});
+
 test('picking the current sort flips its direction, and a layout sets it', async () => {
     await open();
     await clickRow('Modified');
@@ -68,4 +74,18 @@ test('picking the current sort flips its direction, and a layout sets it', async
     await open();
     await clickRow('List');
     expect(setMode.mock.calls).toEqual([['list']]);
+});
+
+test('a sort of its own is checked, and a pick goes to its caller instead of the preference', async () => {
+    setSort.mockClear();
+    const onChange = mock((_sort: { key: string; dir: string }) => {});
+    await open({ sort: { value: { key: 'name', dir: 'asc' }, onChange } });
+    expect(checkRows().slice(0, 3)).toEqual([
+        ['Name', 'true'],
+        ['Modified', 'false'],
+        ['Size', 'false'],
+    ]);
+    await clickRow('Name');
+    expect(onChange.mock.calls).toEqual([[{ key: 'name', dir: 'desc' }]]);
+    expect(setSort).not.toHaveBeenCalled();
 });
