@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
-import type { JsonStore } from '../../lib/core';
+import { JsonStore } from '../../lib/core';
 import type { Drive } from '../../lib/drive';
 import type { HomeSettings } from '../../lib/home/home';
 import { Home } from '../../lib/home/home';
@@ -15,13 +15,12 @@ import { TEST_DATA_DIR } from '../test-env';
 // only AFTER drive.init() finished (the allSettled-before-teardown invariant: a regression back to
 // Promise.all would tear down while the peer is still mid-init).
 class LeakProbeHome extends Home {
+    public override readonly settings = new JsonStore<HomeSettings>(this.fs, 'settings.json', {});
     private driveInitCompleted = false;
     public driveInitCompletedWhenDestructRan: boolean | undefined;
 
     public constructor(driveInitGate: Promise<void>) {
         super({ id: 'leak-probe' } as User, join(TEST_DATA_DIR, 'leak-probe'));
-
-        this.settings = { load: async () => {} } as unknown as JsonStore<HomeSettings>;
 
         this._drive = {
             init: async () => {
@@ -44,17 +43,18 @@ class LeakProbeHome extends Home {
 
 // P2 batch review: settings.load() runs BEFORE the subsystem allSettled block — its throw must take
 // the same failure path (shutdown + waiter rejection) instead of stranding queued init() callers.
+class CorruptSettingsStore extends JsonStore<HomeSettings> {
+    public override async load(): Promise<void> {
+        throw new Error('settings corrupt');
+    }
+}
+
 class CorruptSettingsHome extends Home {
+    public override readonly settings = new CorruptSettingsStore(this.fs, 'settings.json', {});
     public driveDestructRan = false;
 
     public constructor() {
         super({ id: 'corrupt-settings-probe' } as User, join(TEST_DATA_DIR, 'corrupt-settings-probe'));
-
-        this.settings = {
-            load: async () => {
-                throw new Error('settings corrupt');
-            },
-        } as unknown as JsonStore<HomeSettings>;
 
         this._drive = {
             init: async () => {},
