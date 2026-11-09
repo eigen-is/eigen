@@ -163,6 +163,21 @@ describe('two files that define one TZID', () => {
         expect(blocks).toBe(2);
     });
 
+    test('an import of two calendar objects reads each by its own definition', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        const stream = [
+            zoned('tokyo', zone(CUSTOM, '+0900'), QUOTED),
+            zoned('amsterdam', zone(CUSTOM, '+0100'), QUOTED),
+        ];
+
+        await harness.instance.importEvents(calendarId, new TextEncoder().encode(stream.join('\r\n')));
+
+        const start = async (uid: string) => (await harness.instance.getEventsByUid(uid))[0].startTime.toISOString();
+        expect(await start('tokyo')).toBe('2026-11-10T01:00:00.000Z');
+        expect(await start('amsterdam')).toBe('2026-11-10T09:00:00.000Z');
+    });
+
     test('keeps each time when the name needs quoting and escaping', async () => {
         const name = '(UTC+01:00) Amsterdam, Berlin';
         const { start } = await roundTrip({

@@ -45,28 +45,32 @@ export async function importEvents(
         throw new ApiError(400, NOT_A_CALENDAR_FILE);
     }
 
-    // Grouped by UID first: a file may spell a master in one VCALENDAR object and its overrides in the next.
-    const series = new Map<string, { master: ICAL.Component | null; overrides: ICAL.Component[] }>();
-    const zones = new Map<string, ICAL.Component>();
+    // Grouped by UID first: a file may spell a master in one VCALENDAR object and its overrides in the next. A TZID
+    // names the zone its own object defines, so each series takes its zones from the objects its VEVENTs came in.
+    const series = new Map<
+        string,
+        { master: ICAL.Component | null; overrides: ICAL.Component[]; zones: Map<string, ICAL.Component> }
+    >();
     let vevents = 0;
     for (const root of roots) {
-        const rootZones = root.getAllSubcomponents('vtimezone');
+        const defined = new Map<string, ICAL.Component>();
+        for (const vtimezone of root.getAllSubcomponents('vtimezone')) {
+            const tzid = String(vtimezone.getFirstPropertyValue('tzid') ?? '');
+            if (tzid && !defined.has(tzid)) defined.set(tzid, vtimezone);
+        }
         const rootEvents = root.getAllSubcomponents('vevent');
         // Detached all at once, because adding a component to a new parent removes it from the old one per item.
         root.removeAllSubcomponents();
-        for (const vtimezone of rootZones) {
-            const tzid = String(vtimezone.getFirstPropertyValue('tzid') ?? '');
-            if (tzid && !zones.has(tzid)) zones.set(tzid, vtimezone);
-        }
         for (const vevent of rootEvents) {
             vevents++;
             if (!uidOf(vevent)) vevent.updatePropertyWithValue('uid', crypto.randomUUID());
             const uid = uidOf(vevent);
-            const group = series.get(uid) ?? { master: null, overrides: [] };
+            const group = series.get(uid) ?? { master: null, overrides: [], zones: new Map<string, ICAL.Component>() };
             series.set(uid, group);
             // A second master of one UID is a malformed series, which the put seam refuses as one.
             if (group.master || vevent.getFirstProperty('recurrence-id')) group.overrides.push(vevent);
             else group.master = vevent;
+            referencedZones(vevent, defined, group.zones);
         }
     }
 
@@ -99,15 +103,8 @@ export async function importEvents(
             const importedOrganizer = dropScheduling(group.master);
             for (const override of group.overrides) dropScheduling(override);
 
-            const tzids = new Set<string>();
-            referencedTzids(group.master, tzids);
-            for (const override of group.overrides) referencedTzids(override, tzids);
-
             const resource = newVCalendar();
-            for (const tzid of tzids) {
-                const vtimezone = zones.get(tzid);
-                if (vtimezone) resource.addSubcomponent(vtimezone);
-            }
+            for (const vtimezone of group.zones.values()) resource.addSubcomponent(vtimezone);
             resource.addSubcomponent(group.master);
             for (const override of group.overrides) resource.addSubcomponent(override);
 
@@ -157,13 +154,18 @@ function takeProperties(vevent: ICAL.Component, name: string): ICAL.Property[] {
 }
 
 // A zone can hang on any property and inside a subcomponent — a VALARM's absolute TRIGGER names one too.
-function referencedTzids(component: ICAL.Component, into: Set<string>): void {
+function referencedZones(
+    component: ICAL.Component,
+    defined: ReadonlyMap<string, ICAL.Component>,
+    into: Map<string, ICAL.Component>,
+): void {
     for (const prop of component.getAllProperties()) {
         const raw = prop.getParameter('tzid');
-        const tzid = Array.isArray(raw) ? raw[0] : raw;
-        if (tzid) into.add(String(tzid));
+        const tzid = String((Array.isArray(raw) ? raw[0] : raw) ?? '');
+        const zone = defined.get(tzid);
+        if (zone && !into.has(tzid)) into.set(tzid, zone);
     }
-    for (const sub of component.getAllSubcomponents()) referencedTzids(sub, into);
+    for (const sub of component.getAllSubcomponents()) referencedZones(sub, defined, into);
 }
 
 // --- Export ---
