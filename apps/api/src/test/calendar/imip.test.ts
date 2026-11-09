@@ -16,6 +16,7 @@ import { verifyImipSender } from '../../lib/mail/imip-auth';
 import { storedEvents } from '../calendar-test-helpers';
 import { basicAuth } from '../dav-test-helpers';
 import { restoreEnvAfterEach } from '../env-test-helpers';
+import { vcal } from '../ics-test-helpers';
 import { app, assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
 
 // Inbound iMIP acts only on a message our verifying MTA authenticated. These helpers stand in for
@@ -459,6 +460,48 @@ describe('iMIP Inbound Processing (integration)', () => {
         const externalEvent = findOrFail(events, (e) => e.title === 'External Lunch');
         expect(externalEvent.uid).toBe('external-invite-uid-1@external.com');
         expect(externalEvent.data?.organizer?.email).toBe('organizer@external.com');
+    });
+
+    test('a REQUEST whose rule names no frequency lands as one event', async () => {
+        const ics = vcal([
+            'METHOD:REQUEST',
+            'BEGIN:VEVENT',
+            'UID:no-frequency@external.com',
+            'SUMMARY:Rule without a frequency',
+            'DTSTART:20260422T120000Z',
+            'DTEND:20260422T130000Z',
+            'RRULE:COUNT=3;BYDAY=WE',
+            'ORGANIZER:mailto:organizer@external.com',
+            `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${ctx.alice.user.email}`,
+            'END:VEVENT',
+        ]);
+        const email = [
+            'From: organizer@external.com',
+            arHeaderLine('organizer@external.com'),
+            `To: ${ctx.alice.user.email}`,
+            'Subject: Invitation',
+            'MIME-Version: 1.0',
+            'Content-Type: text/calendar; method=REQUEST; charset=utf-8',
+            '',
+            ics,
+        ].join('\r\n');
+
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/mail/deliver/${ctx.alice.user.email}`, {
+            method: 'POST',
+            body: new TextEncoder().encode(email).buffer,
+        });
+        expect(res.status).toBe(200);
+
+        const from = Math.floor(new Date('2026-04-01').getTime() / 1000);
+        const to = Math.floor(new Date('2026-05-31').getTime() / 1000);
+        const eventsRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/event-range/${from}/${to}`,
+        );
+        const events = await assertJson<CalendarEventOccurrence[]>(eventsRes);
+        expect(events.filter((e) => e.uid === 'no-frequency@external.com').map((e) => e.occurrenceDate)).toEqual([
+            '2026-04-22',
+        ]);
     });
 
     test('delivering email with METHOD:CANCEL removes calendar event', async () => {

@@ -413,14 +413,16 @@ function readResource(resource: ICAL.Component, triesRule: boolean): ReadResult 
 
             // An override is one occurrence, whatever it says about repeats.
             const recurrenceId = vevent.getFirstProperty('recurrence-id');
-            const rruleProp = recurrenceId ? null : vevent.getFirstPropertyValue('rrule');
-            const rruleRaw = rruleProp ? rruleProp.toString() : null;
-            // A rule too costly to expand degrades to a single event rather than costing the whole invite or PUT.
+            const rule = recurrenceId ? null : vevent.getFirstPropertyValue('rrule');
+            const rruleRaw = rule ? rule.toString() : null;
+            // A rule too costly to expand, or with no frequency to expand by, degrades to a single event rather than
+            // costing the whole invite or PUT.
             const stripped =
                 !!rruleRaw &&
-                (untried
-                    ? !isExpandableRrule(rruleRaw, startTime)
-                    : isSubDailyRrule(rruleRaw) || isOutOfRangeRecurrenceStart(startTime));
+                (!(rule instanceof ICAL.Recur && rule.freq) ||
+                    (untried
+                        ? !isExpandableRrule(rruleRaw, startTime)
+                        : isSubDailyRrule(rruleRaw) || isOutOfRangeRecurrenceStart(startTime)));
             if (rruleRaw) untried = false;
             const rrule = stripped ? null : rruleRaw;
             if (stripped || vevent.hasProperty('rdate')) hasUnindexedRecurrence = true;
