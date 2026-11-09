@@ -142,6 +142,8 @@ export const SheetOverlay: React.FC = () => {
         [setContext],
     );
 
+    useEffect(() => () => debouncedShowLinkCard.cancel(), [debouncedShowLinkCard]);
+
     const overShowLinkCard = useCallback(
         (ctx: Context, globalCache: GlobalCache, e: MouseEvent, cellArea: HTMLDivElement) => {
             const rc = getCellRowColumn(ctx, e, cellArea);
