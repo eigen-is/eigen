@@ -2,6 +2,7 @@
 // It tries sharp first, then a HEIC decode, then the preview exiftool finds embedded in the file, or for a video a
 // frame ffmpeg grabs. The main thread runs one Worker per image under a semaphore and terminates it at its timeout.
 
+/// <reference path="./heic-convert.d.ts" />
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
