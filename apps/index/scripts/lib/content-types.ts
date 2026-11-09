@@ -53,6 +53,11 @@ export type ContentManifest = { articles: ArticleMeta[] };
 // The per-article generated body file.
 export type ArticleBody = { html: string; mediaGrids: MediaGridData[] };
 
+// The changelog body, plus one entry per release for the page's table of contents. The date is a short
+// day and month such as "3 Nov", and Unreleased has none.
+export type ChangelogVersion = { id: string; version: string; date?: string };
+export type ChangelogBody = ArticleBody & { versions: ChangelogVersion[] };
+
 // The generated open-source license list (one entry per package), written by build-licenses.ts.
 export type LicensePackage = { name: string; version: string; license: string; url: string };
 
