@@ -75,8 +75,6 @@ Eigen creates the standard six (`STANDARD_MAILBOXES`) when it first creates the 
 
 For each folder outside the six, a listing starts a background reconcile, at most once a minute per folder, and the sync's SSE events carry the counts. A listing never waits for it. The throttle exists because every burst of mail SSE events re-lists the mailboxes, and each reconcile takes the lock user mutations need.
 
-A row can outlive its file for a moment, when a mail client renames or removes the file before the next sync. A read of the message then answers 404, since the file a row names is gone either way.
-
 `listMessages` waits for the sync only while the mailbox has no rows, so a first open shows content. Otherwise it answers from the index at once and syncs in the background ([MAIL.md § The list pages by keyset](MAIL.md#the-list-pages-by-keyset-and-patches-its-own-mutations)).
 
 ## Every file is staged in tmp/ first
