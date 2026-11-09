@@ -308,14 +308,15 @@ export class Mail {
         // No row means an IMAP client replaced this draft under another id. This save writes the old id again, and the
         // user sees two drafts with neither lost.
         if (existingId && this.store.getSummary(existingId)) {
-            const keepSet = options.keepAttachmentIndexes ? new Set(options.keepAttachmentIndexes) : null;
+            const keep = options.keepAttachments && [...options.keepAttachments];
             for (const a of await this.store.getAttachments(existingId)) {
-                if (keepSet && !keepSet.has(a.index)) continue;
-                attachments.push({
-                    filename: mailAttachmentName(a, a.index),
-                    content: Buffer.from(a.content),
-                    contentType: a.contentType,
-                });
+                const filename = mailAttachmentName(a, a.index);
+                if (keep) {
+                    const named = keep.findIndex((k) => k.filename === filename && k.size === a.size);
+                    if (named < 0) continue;
+                    keep.splice(named, 1);
+                }
+                attachments.push({ filename, content: Buffer.from(a.content), contentType: a.contentType });
             }
         }
         for (const tempId of options.tempAttachmentIds ?? []) {

@@ -10,6 +10,8 @@ import { assertJson, authedRequest, getTestContext, putDraft, uploadDraftAttachm
 
 const isWindows = process.platform === 'win32';
 
+const named = (parts: EmailDraft['attachments']) => parts.map((a) => ({ filename: a.filename ?? '', size: a.size }));
+
 describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
@@ -143,10 +145,6 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
     });
 
     test('simulates client: attach → save → edit body → save again keeps attachment', async () => {
-        // Reproduces the bug where the client (post-keepAttachmentIndexes fix) lost the attachment
-        // on the second save because state.attachments[0].index was never populated from the
-        // server response. The fix: server's returned EmailDraft is used to rebuild client state
-        // with fresh indexes. This test simulates that flow end-to-end over HTTP.
         const file = new File(['keep-bytes'], 'keep.txt', { type: 'text/plain' });
         const uploaded = await uploadDraftAttachment(ctx.alice.user.sessionToken, ctx.alice.user.id, file);
 
@@ -166,7 +164,6 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         );
         expect(first.attachments.length).toBe(1);
 
-        // Client would now map server attachments[0] to { index: 0 }. Next save sends [0].
         const second = await putDraft(
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
@@ -177,7 +174,7 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
                 text: 'v2 edited',
                 html: '<p>v2 edited</p>',
             },
-            { keepAttachmentIndexes: [0] },
+            { keepAttachments: named(first.attachments) },
         );
         expect(second.attachments.length).toBe(1);
         expect(second.attachments[0].filename).toBe('keep.txt');
@@ -300,7 +297,7 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
                 text: 'v2',
                 html: '<p>v2</p>',
             },
-            { keepAttachmentIndexes: [0] },
+            { keepAttachments: named(first.attachments) },
         );
         expect(second.attachments.length).toBe(1);
         expect(second.attachments[0].filename).toBe('bodyonly.txt');
@@ -338,12 +335,11 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         );
         expect(first.attachments.length).toBe(2);
 
-        // The draft has parts at 0 and 1. Keeping [1, 2] drops alpha.
         const second = await putDraft(
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
             { id: first.id, subject: 'Stale keep list', to: first.to, text: 'v2', html: '<p>v2</p>' },
-            { keepAttachmentIndexes: [1, 2] },
+            { keepAttachments: [...named(first.attachments.slice(1)), { filename: 'gone.txt', size: 4 }] },
         );
         expect(second.attachments.map((a) => a.filename)).toEqual(['beta.txt']);
     });
@@ -369,7 +365,7 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
             token,
             ownerId,
             { id: first.id, subject: 'Invite draft updated', to: first.to, text: 'v1', html: '<p>v1</p>' },
-            { keepAttachmentIndexes: [0, 1] },
+            { keepAttachments: named(first.attachments) },
         );
         expect(second.attachments.map((a) => a.filename)).toEqual(['invite.ics', 'agenda.txt']);
         expect(second.subject).toBe('Invite draft updated');
@@ -403,16 +399,16 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
             token,
             ownerId,
             { id: first.id, subject: 'Drop the invite', to: first.to, text: 'v2', html: '<p>v2</p>' },
-            { keepAttachmentIndexes: [1] },
+            { keepAttachments: named(first.attachments.slice(1)) },
         );
         expect(second.attachments.map((a) => a.filename)).toEqual(['notes.pdf']);
 
-        // The rebuild renumbered the survivor to 0; the next save must not bring the invite back.
+        // The next save must not bring the invite back.
         const third = await putDraft(
             token,
             ownerId,
             { id: first.id, subject: 'Drop the invite', to: first.to, text: 'v3', html: '<p>v3</p>' },
-            { keepAttachmentIndexes: [0] },
+            { keepAttachments: named(second.attachments) },
         );
         expect(third.attachments.map((a) => a.filename)).toEqual(['notes.pdf']);
 
@@ -475,13 +471,12 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         );
         expect(first.attachments.map((a) => a.index)).toEqual([0, 1, 2]);
 
-        // Body-only save with every chip kept: the save hands each part back under the number
-        // the parser gave it rather than under its position in the answer.
+        // Body-only save with every chip kept: the save hands each part back under the number the parser gave it.
         const second = await putDraft(
             token,
             ownerId,
             { id: first.id, subject: 'Index drift', to: first.to, text: 'v2', html: '<p>v2</p>' },
-            { keepAttachmentIndexes: [0, 1, 2] },
+            { keepAttachments: named(first.attachments) },
         );
         expect(second.attachments.map((a) => [a.filename, a.index])).toEqual([
             ['doc.txt', 0],
@@ -489,12 +484,12 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
             ['report.pdf', 2],
         ]);
 
-        // The user removes doc.txt, so the keep list is the two surviving chips' own indexes.
+        // The user removes doc.txt, so the keep list names the two surviving chips.
         const third = await putDraft(
             token,
             ownerId,
             { id: first.id, subject: 'Index drift', to: first.to, text: 'v3', html: '<p>v3</p>' },
-            { keepAttachmentIndexes: [1, 2] },
+            { keepAttachments: named(first.attachments.slice(1)) },
         );
         expect(third.attachments.map((a) => a.filename)).toEqual(['invite.ics', 'report.pdf']);
 
@@ -534,7 +529,7 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
                 text: 'final body',
                 html: '<p>final body</p>',
             },
-            { keepAttachmentIndexes: [0] },
+            { keepAttachments: named(first.attachments) },
         );
 
         // Send — should compose full EML with latest body + attachment
@@ -560,7 +555,7 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         expect(found?.hasAttachments).toBe(true);
     });
 
-    test('keepAttachmentIndexes drops attachments the user removed', async () => {
+    test('the keep list drops attachments the user removed', async () => {
         const a = new File(['a-bytes'], 'a.txt', { type: 'text/plain' });
         const b = new File(['b-bytes'], 'b.txt', { type: 'text/plain' });
         const uploadA = await uploadDraftAttachment(ctx.alice.user.sessionToken, ctx.alice.user.id, a);
@@ -582,7 +577,7 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         );
         expect(first.attachments.length).toBe(2);
 
-        // User removes the second attachment in the UI, then auto-save fires with only index 0 kept.
+        // User removes the second attachment in the UI, then auto-save fires with only the first kept.
         const second = await putDraft(
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
@@ -593,7 +588,7 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
                 text: 'both',
                 html: '<p>both</p>',
             },
-            { keepAttachmentIndexes: [0] },
+            { keepAttachments: named(first.attachments.slice(0, 1)) },
         );
         expect(second.attachments.length).toBe(1);
         expect(second.attachments[0].filename).toBe('a.txt');
@@ -609,9 +604,66 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
                 text: 'none',
                 html: '<p>none</p>',
             },
-            { keepAttachmentIndexes: [] },
+            { keepAttachments: [] },
         );
         expect(third.attachments.length).toBe(0);
+    });
+
+    describe('a keep list names parts by filename and size', () => {
+        const fields = {
+            subject: 'Kept twice',
+            to: { value: [{ address: 'bob@test.eigen.is', name: 'Bob' }], text: 'Bob' },
+            text: 'x',
+            html: '<p>x</p>',
+        };
+        const stage = async (name: string, body: string) =>
+            (
+                await uploadDraftAttachment(
+                    ctx.alice.user.sessionToken,
+                    ctx.alice.user.id,
+                    new File([body], name, { type: 'text/plain' }),
+                )
+            ).tempId;
+        const save = (mail: Partial<EmailDraft>, options: Parameters<typeof putDraft>[3]) =>
+            putDraft(ctx.alice.user.sessionToken, ctx.alice.user.id, { ...fields, ...mail }, options);
+
+        // A closing save can race an in-flight one, so the same list can reach the server twice.
+        test('the same list sent again keeps the same parts', async () => {
+            const first = await save(
+                {},
+                { tempAttachmentIds: [await stage('a.txt', 'aaa'), await stage('b.txt', 'bb')] },
+            );
+            const keep = named(first.attachments.slice(1));
+
+            const once = await save({ id: first.id }, { keepAttachments: keep });
+            expect(once.attachments.map((a) => a.filename)).toEqual(['b.txt']);
+            const twice = await save({ id: first.id }, { keepAttachments: keep });
+            expect(twice.attachments.map((a) => a.filename)).toEqual(['b.txt']);
+        });
+
+        test('two identical files are kept as many times as the list names them', async () => {
+            const first = await save(
+                {},
+                { tempAttachmentIds: [await stage('same.txt', 'same'), await stage('same.txt', 'same')] },
+            );
+            expect(first.attachments.length).toBe(2);
+
+            const both = await save({ id: first.id }, { keepAttachments: named(first.attachments) });
+            expect(both.attachments.length).toBe(2);
+            const one = await save({ id: first.id }, { keepAttachments: named(first.attachments.slice(1)) });
+            expect(one.attachments.length).toBe(1);
+            const again = await save({ id: first.id }, { keepAttachments: named(first.attachments.slice(1)) });
+            expect(again.attachments.length).toBe(1);
+        });
+
+        test('a part of the same name but another size is another part', async () => {
+            const first = await save(
+                {},
+                { tempAttachmentIds: [await stage('v.txt', 'long one'), await stage('v.txt', 'short')] },
+            );
+            const kept = await save({ id: first.id }, { keepAttachments: named(first.attachments.slice(1)) });
+            expect(kept.attachments.map((a) => a.size)).toEqual([5]);
+        });
     });
 
     test('cleanupStaleDraftTemps removes old files and keeps fresh ones', async () => {

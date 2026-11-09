@@ -82,7 +82,7 @@ An IMAP client that edits a draft saves a new message and removes the old, and t
 
 A save's and a send's answer name each part and its size and carry none of its bytes, as a read does: `messageSend` needs the bytes to send, so they are blanked at the public answers. As JSON the bytes of a 25 MiB part are 89 MiB, about 900 ms on the event loop, and the browser's query cache would keep them.
 
-`Attachment.index` is the part's raw position in the parsed message, so the keep list names raw parts and nothing renumbers. An `.ics` part is an ordinary attachment to the composer and the draft save, which never ask a part's type.
+The keep list names a part by its filename and size, the identity `mergeServerAttachments` already gives a chip. A position would change once a save drops a part, so a closing save racing an in-flight one would drop the next part too. Two identical files are as many parts as the list names them, and which of them stays doesn't matter. An `.ics` part is an ordinary attachment to the composer and the draft save, which never ask a part's type.
 
 The client chooses a draft's id, and that id names a file. So the domain answers 400 to an id `isSafePathSegment` refuses. It never maps one onto a safe name, because two mapped ids would collide on one file.
 

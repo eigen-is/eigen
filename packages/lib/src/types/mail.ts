@@ -34,8 +34,7 @@ export type Attachment = {
     contentType: string;
     filename?: string | undefined;
     content: Uint8Array;
-    // Raw position in the message's part list. Every part route, keep list and chip addresses a part
-    // by it, so a payload that leaves parts out (a draft save's answer) still names each one exactly.
+    // Raw position in the message's part list. Every part route addresses a part by it.
     index: number;
     // Byte length of content; the detail payload blanks content, so the compose UI reads this instead.
     size: number;
@@ -155,7 +154,8 @@ export type DraftInput = Pick<NewDraft, 'to' | 'cc' | 'bcc' | 'subject' | 'text'
 // Sent with a draft save: staged uploads to embed and parsed attachments to keep.
 export type DraftUpdateOptions = {
     tempAttachmentIds?: string[];
-    keepAttachmentIndexes?: number[];
+    // The parts that stay, by name and size, so a list sent twice keeps the same parts. Left out, every part stays.
+    keepAttachments?: Pick<AttachmentMeta, 'filename' | 'size'>[];
 };
 
 export type DraftAttachmentUpload = {
@@ -173,8 +173,6 @@ export type AttachmentMeta = {
     filename: string;
     size: number;
     contentType: string;
-    // The part's index as the server gave it — what the keep list and the download URL address.
-    index?: number;
     // Blob URL for local image thumbnails — not sent to the server.
     localUrl?: string;
 };

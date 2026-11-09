@@ -127,13 +127,11 @@ export function initFields(
             subject: email.subject ? String(email.subject) : '',
             body: email.html || email.text || '',
             bodyText: email.text || '',
-            // Each chip keeps the index the server gave the part, never its position in this list.
             attachments: (email.attachments || []).map((a) => ({
                 key: `saved-${a.index}-${a.filename ?? ''}-${a.size}`,
                 filename: mailAttachmentName(a, a.index),
                 size: a.size,
                 contentType: a.contentType,
-                index: a.index,
             })),
             driveReferences: email.driveReferences ?? [],
             inReplyTo: email.inReplyTo,
@@ -181,7 +179,7 @@ function isDirty(state: DraftState): boolean {
 }
 
 function fingerprintFields(f: DraftFields): string {
-    const attachments = f.attachments.map((a) => `${a.key}:${a.tempId ?? ''}:${a.index ?? ''}`).join('|');
+    const attachments = f.attachments.map((a) => `${a.key}:${a.tempId ?? ''}`).join('|');
     const refs = f.driveReferences.map((r) => r.id).join(',');
     return JSON.stringify({
         to: f.to,
@@ -217,12 +215,11 @@ function fieldsToDraft(f: DraftFields, user: AuthUser | null | undefined): NewDr
 
 export function buildSaveOptions(fields: DraftFields): DraftUpdateOptions {
     const tempIds = fields.attachments.map((a) => a.tempId).filter((id): id is string => !!id);
-    const keepIdx = fields.attachments.map((a) => a.index).filter((i): i is number => typeof i === 'number');
+    const kept = fields.attachments.filter((a) => !a.tempId).map(({ filename, size }) => ({ filename, size }));
     return {
         tempAttachmentIds: tempIds.length ? tempIds : undefined,
-        // Always send the keep list when the draft has an id — an empty array means "user removed
-        // all original attachments", which we must respect.
-        keepAttachmentIndexes: fields.id ? keepIdx : undefined,
+        // An empty list is the user removing every part, so a draft with an id always sends one.
+        keepAttachments: fields.id ? kept : undefined,
     };
 }
 
@@ -241,7 +238,6 @@ export function mergeServerAttachments(
             filename,
             size: a.size,
             contentType: a.contentType,
-            index: a.index,
             localUrl: prevMatch?.localUrl,
         };
     });

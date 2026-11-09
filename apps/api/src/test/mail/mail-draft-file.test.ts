@@ -297,7 +297,7 @@ describe.skipIf(isWindows)('Mail — a draft file is the only copy of the draft'
 
         const saved = await home.mail.messageHandleDraft(
             { id: old.id, subject: 'Open here', to, text: 'typed since', html: '<p>typed since</p>' },
-            { keepAttachmentIndexes: [0] },
+            { keepAttachments: [{ filename: 'none.txt', size: 1 }] },
         );
         expect(saved.id).toBe(old.id);
 
@@ -430,7 +430,12 @@ describe.skipIf(isWindows)('Mail — a draft file is the only copy of the draft'
 
         const saved = await save(
             { id: draftId, subject: 'Nameless part', to, text: 'body', html: '<p>body</p>' },
-            { keepAttachmentIndexes: fetched.attachments.map((a) => a.index) },
+            {
+                keepAttachments: fetched.attachments.map((a) => ({
+                    filename: mailAttachmentName(a, a.index),
+                    size: a.size,
+                })),
+            },
         );
         expect(saved.attachments.map((a) => a.filename)).toEqual([
             mailAttachmentName(fetched.attachments[0], fetched.attachments[0].index),
