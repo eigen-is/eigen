@@ -68,8 +68,15 @@ export async function resolveNotificationLink(
             return getMailAppUrl(mailId ? `box/inbox?mailId=${encodeURIComponent(mailId)}` : 'box/inbox');
         }
 
-        case 'access-request':
-            return resolveAccessRequestLink(tag);
+        case 'access-request': {
+            const parsed = parseAccessRequestTag(tag);
+            if (!parsed) return null;
+            const path = await fetchDrivePath(parsed);
+            if (!path) return null;
+            return getDriveAppUrl(
+                `fs/${parsed.ownerId}/${parsed.mountId}/${path.parentId ?? path.id}?sharePathId=${parsed.pathId}&shareEmail=${encodeURIComponent(parsed.email)}`,
+            );
+        }
 
         case 'file-event': {
             const parsed = parsePathTag('file-event', tag);
@@ -95,17 +102,6 @@ async function resolveDriveLink(parsed: ChatNotificationThread | null): Promise<
     const path = await fetchDrivePath(parsed);
     if (!path) return getDriveAppUrl();
     return getDriveItemUrl(path, { chat: parsed.chatName }) ?? getDriveShareUrl(path);
-}
-
-async function resolveAccessRequestLink(tag: string): Promise<string | null> {
-    const parsed = parseAccessRequestTag(tag);
-    if (!parsed) return null;
-    const path = await fetchDrivePath(parsed);
-    if (!path) return null;
-    const parentId = path.parentId || path.id;
-    return getDriveAppUrl(
-        `fs/${parsed.ownerId}/${parsed.mountId}/${parentId}?sharePathId=${parsed.pathId}&shareEmail=${encodeURIComponent(parsed.email)}`,
-    );
 }
 
 async function fetchDrivePath(path: NotificationPath): Promise<DrivePath | null> {
