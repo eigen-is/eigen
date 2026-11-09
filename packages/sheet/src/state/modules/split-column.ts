@@ -1,109 +1,45 @@
-// Split text to columns: the separator pattern built from the dialog's choices, the preview of the split
-// selected column, and the write that spreads each cell's parts over the columns to its right.
+// Split text to columns: the separator pattern built from the dialog's choices, the preview of the split selected
+// column, and the write that spreads each cell's parts over the columns to its right. The parts replace what those
+// cells held, a formula included, and the formulas that read them recompute.
 
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import { getCellValue, setCellValue } from './cell';
 
-// Generate 2D array
-export function getNullData(rlen: number, clen: number) {
-    const arr = [];
-    for (let r = 0; r < rlen; r += 1) {
-        const rowArr = [];
-
-        for (let c = 0; c < clen; c += 1) {
-            rowArr.push('');
-        }
-        arr.push(rowArr);
-    }
-    return arr;
-}
-
-// Batch update data to table
 export function updateMoreCell(r: number, c: number, dataMatrix: string[][], ctx: Context) {
     if (ctx.allowEdit === false) return;
     const flowdata = getFlowdata(ctx);
     for (let i = 0; i < dataMatrix.length; i += 1) {
         for (let j = 0; j < dataMatrix[i].length; j += 1) {
-            const v = dataMatrix[i][j];
-            setCellValue(ctx, r + i, c + j, flowdata, v);
+            setCellValue(ctx, r + i, c + j, flowdata, dataMatrix[i][j]);
         }
     }
 }
 
-// Build the split-regex source from the user's checkbox/text-input selection.
-// Order matters: each separator appends to the alternation; "splitsimple" wraps
-// the result with `[...]+` and must be applied last.
 export function getRegStr(selected: ReadonlySet<string>, otherValue: string) {
-    let regStr = '';
-    let mark = 0;
-    const append = (token: string, separator = '|') => {
-        if (mark > 0) regStr += separator;
-        regStr += token;
-        mark += 1;
-    };
-    if (selected.has('Tab')) {
-        regStr += '\\t';
-        mark += 1;
-    }
-    if (selected.has('semicolon')) {
-        append(';');
-    }
-    if (selected.has('comma')) {
-        append(',');
-    }
-    if (selected.has('space')) {
-        append('\\s');
-    }
-    if (selected.has('other') && otherValue !== '') {
-        append(otherValue);
-    }
-    if (selected.has('splitsimple')) {
-        regStr = `[${regStr}]+`;
-    }
-    return regStr;
+    const separators: string[] = [];
+    if (selected.has('Tab')) separators.push('\\t');
+    if (selected.has('semicolon')) separators.push(';');
+    if (selected.has('comma')) separators.push(',');
+    if (selected.has('space')) separators.push('\\s');
+    if (selected.has('other') && otherValue !== '') separators.push(otherValue);
+    const regStr = separators.join('|');
+    return selected.has('splitsimple') ? `[${regStr}]+` : regStr;
 }
 
-// Get split data
+// One row of pieces per selected cell, the short rows padded to the widest. With no pattern, each cell is one piece.
 export function getDataArr(regStr: string, ctx: Context) {
-    let arr: string[][] = [];
-    if (!ctx.selections?.length) return arr;
-    const r1 = ctx.selections[0].row[0];
-    const r2 = ctx.selections[0].row[1];
-    const c = ctx.selections[0].column[0];
+    const selection = ctx.selections?.[0];
     const data = getFlowdata(ctx);
-    if (!data) return arr;
-    if (regStr !== null && regStr !== '') {
-        const reg = new RegExp(regStr, 'g');
-        const dataArr = [];
-        for (let r = r1; r <= r2; r += 1) {
-            const value = getCellValue(r, c, data, 'm') ?? getCellValue(r, c, data);
-            dataArr.push(String(value ?? '').split(reg));
-        }
-        const rlen = dataArr.length;
-        let clen = 0;
-        for (let i = 0; i < rlen; i += 1) {
-            if (dataArr[i].length > clen) {
-                clen = dataArr[i].length;
-            }
-        }
-        arr = getNullData(rlen, clen);
-        for (let i = 0; i < arr.length; i += 1) {
-            for (let j = 0; j < arr[0].length; j += 1) {
-                if (dataArr[i][j] != null) {
-                    arr[i][j] = dataArr[i][j];
-                }
-            }
-        }
-    } else {
-        for (let r = r1; r <= r2; r += 1) {
-            const rowArr = [];
-            const value = getCellValue(r, c, data, 'm') ?? getCellValue(r, c, data);
-
-            rowArr.push(value == null ? '' : String(value));
-
-            arr.push(rowArr);
-        }
+    if (!selection || !data) return [];
+    const [r1, r2] = selection.row;
+    const c = selection.column[0];
+    const reg = regStr === '' ? null : new RegExp(regStr, 'g');
+    const rows: string[][] = [];
+    for (let r = r1; r <= r2; r += 1) {
+        const text = String(getCellValue(r, c, data, 'm') ?? getCellValue(r, c, data) ?? '');
+        rows.push(reg ? text.split(reg) : [text]);
     }
-    return arr;
+    const width = Math.max(...rows.map((row) => row.length));
+    return rows.map((row) => Array.from({ length: width }, (_, j) => row[j] ?? ''));
 }

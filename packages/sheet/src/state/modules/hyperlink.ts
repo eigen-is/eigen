@@ -1,6 +1,7 @@
 // A cell's link: saving and removing it, the card that shows it, and following it to a web page, a sheet or a range.
 // The link card and the grid's mouse handlers call it, for example to find the cell under the mouse. A link to a
-// sheet names that sheet, and following it finds the sheet by name.
+// sheet names that sheet, and following it finds the sheet by name. Saving new text writes over the cell, so the
+// formulas that read it recompute.
 
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import { cloneDeep, omit, set } from 'es-toolkit/compat';
@@ -23,10 +24,10 @@ export function getCellRowColumn(ctx: Context, e: MouseEvent, cellArea: HTMLDivE
     let r = rowLocation(y, ctx.visibledatarow)[2];
     let c = colLocation(x, ctx.visibledatacolumn)[2];
 
-    const margeset = mergeBorder(ctx, flowdata, r, c);
-    if (margeset) {
-        [, , r] = margeset.row;
-        [, , c] = margeset.column;
+    const merged = mergeBorder(ctx, flowdata, r, c);
+    if (merged) {
+        [, , r] = merged.row;
+        [, , c] = merged.column;
     }
 
     return { r, c };
@@ -51,24 +52,22 @@ export function saveHyperlink(
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     const flowdata = getFlowdata(ctx);
     if (sheetIndex != null && flowdata != null && linkType && linkAddress) {
-        let cell = flowdata[r][c];
-        if (cell == null) cell = {};
+        const cell = (flowdata[r][c] ??= {});
         set(ctx.sheets[sheetIndex], ['hyperlink', `${r}_${c}`], {
             linkType,
             linkAddress,
         });
         cell.fc = 'rgb(0, 0, 255)';
         cell.un = 1;
-        // The link's text written plain replaces the cell's value and a rich cell's runs; the text the card showed,
-        // left as it was, keeps the cell as it was, a number or runs included.
+        cell.hl = { r, c, id: ctx.currentSheetId };
+        // New text replaces the cell's value, its formula and a rich cell's runs, as in Excel; the text the card
+        // showed, left as it was, keeps the cell as it was.
         const text = linkText || linkAddress;
         if (`${cellValue(cell) ?? ''}` !== text) {
             dropRuns(cell);
             cell.v = text;
             cell.m = text;
         }
-        cell.hl = { r, c, id: ctx.currentSheetId };
-        flowdata[r][c] = cell;
         ctx.linkCard = undefined;
     }
 }
@@ -106,8 +105,6 @@ export function showLinkCard(ctx: Context, r: number, c: number, isEditing = fal
         (link != null && (!ctx.linkCard?.isEditing || isMouseDown)) ||
         ctx.linkCard?.sheetId !== ctx.currentSheetId
     ) {
-        const col_pre = c - 1 === -1 ? 0 : ctx.visibledatacolumn[c - 1];
-        const row = ctx.visibledatarow[r];
         ctx.linkCard = {
             sheetId: ctx.currentSheetId,
             r,
@@ -117,8 +114,8 @@ export function showLinkCard(ctx: Context, r: number, c: number, isEditing = fal
             originType: link?.linkType || 'webpage',
             originAddress: link?.linkAddress || '',
             position: {
-                cellLeft: col_pre,
-                cellBottom: row,
+                cellLeft: c === 0 ? 0 : ctx.visibledatacolumn[c - 1],
+                cellBottom: ctx.visibledatarow[r],
             },
             isEditing,
         };
@@ -143,9 +140,9 @@ export function goToLink(ctx: Context, r: number, c: number, linkType: string, l
         const sheetId = range.sheetId || ctx.currentSheetId;
         changeSheet(ctx, sheetId);
         if (ctx.currentSheetId !== sheetId) return;
-        const row_pre = range.row[0] - 1 === -1 ? 0 : ctx.visibledatarow[range.row[0] - 1];
-        const col_pre = range.column[0] - 1 === -1 ? 0 : ctx.visibledatacolumn[range.column[0] - 1];
-        ctx.scrollRequest = { left: col_pre, top: row_pre };
+        const top = range.row[0] === 0 ? 0 : ctx.visibledatarow[range.row[0] - 1];
+        const left = range.column[0] === 0 ? 0 : ctx.visibledatacolumn[range.column[0] - 1];
+        ctx.scrollRequest = { left, top };
         ctx.selections = normalizeSelection(ctx, [range]);
     }
     ctx.linkCard = undefined;
@@ -157,10 +154,7 @@ const HOST_WITH_SPACE = /^[^/?#]*:\/*[^/?#]*\s/;
 export function isLinkValid(linkType: string, linkAddress: string) {
     if (!linkAddress) return { isValid: false, tooltip: '' };
     if (linkType === 'webpage') {
-        // Valid means "navigation would open it": the same resolveWebLink gate
-        // goToLink uses, plus a structural parse — one fact, one place. Chrome's
-        // parser escapes a space in the host name instead of refusing it, so a
-        // space before the path is refused here by hand.
+        // Valid means goToLink would open it. Chrome's parser escapes a space in the host name instead of refusing it.
         const address = resolveWebLink(linkAddress);
         if (address == null || !URL.canParse(address) || HOST_WITH_SPACE.test(address)) {
             return { isValid: false, tooltip: 'Please enter a valid link' };
