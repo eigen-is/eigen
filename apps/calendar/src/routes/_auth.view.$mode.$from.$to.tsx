@@ -3,7 +3,6 @@
 // day opens the new-event dialog for that day.
 
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useAuth } from '@workspace/lib/auth';
 import type { ViewMode } from '@workspace/lib/calendar';
 import {
     getMonthRange,
@@ -31,8 +30,8 @@ function CalendarView() {
     const { mode, from: fromStr, to: toStr } = Route.useParams();
     const { eventId } = Route.useSearch();
     const navigate = useNavigate();
-    const { user } = useAuth();
-    const ownerId = user?.id || '';
+    const { user } = Route.useRouteContext();
+    const ownerId = user.id;
 
     const viewMode: ViewMode = mode === 'week' ? 'week' : 'month';
     const from = Number(fromStr);
