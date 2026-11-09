@@ -142,12 +142,27 @@ export function SheetEditor({
         // failed load shows default cells that anchor nothing, so every comment would read as deleted.
         ready: sheets.length > 0 && !loadFailed,
     });
-    const { allComments, cards, createCard, assignComment, members, assignedCount, setOpenCardId, isCardDeleted } =
-        lifecycle;
+    const {
+        allComments,
+        cards,
+        createCard,
+        assignComment,
+        members,
+        assignedCount,
+        setOpenCardId,
+        openChat: openLifecycleChat,
+        isCardDeleted,
+    } = lifecycle;
     // The filter lives here, so it survives closing and opening the panel.
     const commentFilter = useCommentFilter();
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
     const commentHover = useCommentHover();
+
+    const openCard = (cardId: string) => {
+        const cell = activeComments.firstCells.get(cardId);
+        if (cell) workbookRef.current?.revealSearchMatch(cell);
+        setOpenCardId(cardId);
+    };
 
     const deleteCard = useCallback((cardId: string) => {
         if (workbookRef.current) stripCommentCard(workbookRef.current, cardId);
@@ -450,8 +465,11 @@ export function SheetEditor({
                             activeComments={activeComments}
                             isCardDeleted={isCardDeleted}
                             commentContextMenu={commentContextMenu}
-                            onOpenCard={setOpenCardId}
-                            onOpenChat={lifecycle.openChat}
+                            // The mobile pane hides the workbook, so a jump would go unseen there.
+                            onOpenCard={isMobile ? setOpenCardId : openCard}
+                            onOpenChat={
+                                isMobile ? openLifecycleChat : (chatName) => openLifecycleChat(chatName, openCard)
+                            }
                         />
                     )}
                     {/* The comment and activity panels take the place of the properties panel, as in Slides. A

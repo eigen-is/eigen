@@ -1,8 +1,10 @@
-// The sheet editor's side of a comment: the grid's hover report drives the hover card, and a card opened from the hover
-// opens where the pointer already is. The grid, the pane and the card render as probes that keep their props, since
-// they are tested where they live.
+// The sheet editor's side of a comment: the grid's hover report drives the hover card, a card opened from the hover
+// opens where the pointer already is, and one opened from the pane first jumps to its cell, except on a phone, where the
+// pane hides the grid. The grid, the pane and the card render as probes that keep their props, since they are tested
+// where they live.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { CommentHoverTarget } from '@workspace/lib/types/comments';
+import type { Sheet } from '@workspace/sheet';
 import { drivePath } from '@workspace/ui/test/drive-path';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -12,12 +14,22 @@ installHappyDom();
 
 type Props = Record<string, unknown>;
 type GridProps = {
+    ref: { current: unknown };
+    toolbarRightItems: ReactNode;
+    onChange: (sheets: readonly Sheet[], shown: string) => void;
     hooks: { onCommentHover: (target: CommentHoverTarget | null) => void };
 };
 type HoverCardProps = Props & { onOpenCard: (cardId: string) => void };
+type PanelProps = { onOpenCard: (cardId: string) => void; onOpenChat: (chatName: string) => boolean };
 
-const seen: { grid?: GridProps; hoverCard?: HoverCardProps } = {};
+const seen: {
+    grid?: GridProps;
+    hoverCard?: HoverCardProps;
+    panel?: PanelProps;
+    toggleComments?: () => void;
+} = {};
 const opened: unknown[] = [];
+const workbook = { revealSearchMatch: (cell: unknown) => opened.push(['reveal', cell]) };
 const cards = { c1: { id: 'c1', title: 'One', description: '', chatName: 'chat-1' } };
 const entries: never[] = [];
 const hover = { target: null, show: mock(), hide: mock(), enterCard: mock(), leaveCard: mock(), dismiss: mock() };
@@ -82,13 +94,17 @@ mock.module('@workspace/sheet', () => ({
     ...realSheet,
     Workbook: (props: GridProps) => {
         seen.grid = props;
-        return null;
+        props.ref.current = workbook;
+        return props.toolbarRightItems;
     },
 }));
 mock.module('@workspace/ui', () => ({
     ...realUi,
     CollabDocumentGate: Children,
-    DocumentShareCluster: Nothing,
+    DocumentShareCluster: ({ onToggleCommentPanel }: { onToggleCommentPanel: () => void }) => {
+        seen.toggleComments = onToggleCommentPanel;
+        return null;
+    },
     FileDropOverlay: Nothing,
     UnsyncedEditsGuard: Nothing,
     useLayout: () => layout,
@@ -100,7 +116,10 @@ mock.module('@workspace/ui/components/comments', () => ({
         return null;
     },
     CommentLifecycleDialogs: Nothing,
-    PanelColumn: Nothing,
+    PanelColumn: (props: PanelProps) => {
+        seen.panel = props;
+        return null;
+    },
 }));
 mock.module('@workspace/ui/components/search/doc-search-provider', () => ({
     ...realSearch,
@@ -123,10 +142,17 @@ afterAll(() => {
     mock.module('@workspace/ui/components/cards', () => realCards);
 });
 
-const { createElement } = await import('react');
+const { act, createElement } = await import('react');
 const { SheetEditor } = await import('../../../components/sheets/editor');
 
 const path = drivePath({ id: 'x1', mountId: 'm1', name: 'Book.eigensheet', mimeType: 'application/eigensheet' });
+
+// The card sits on the second tab, which is not the open one.
+const FIRST_CELL = { sheetId: 's2', r: 1, c: 1 };
+const tabs: Sheet[] = [
+    { id: 's1', name: 'One', order: 0, data: [[null]] },
+    { id: 's2', name: 'Two', order: 1, data: [[null], [null, { commentCardIds: ['c1'] }]] },
+];
 
 let unmount = async () => {};
 afterEach(() => unmount());
@@ -148,9 +174,14 @@ async function renderEditor() {
             onAccessDialogOpen: () => {},
         }),
     ));
-    const { grid, hoverCard } = seen;
-    if (!grid || !hoverCard) throw new Error('the editor did not render');
-    return { grid, hoverCard };
+    const { grid, hoverCard, toggleComments } = seen;
+    if (!grid || !hoverCard || !toggleComments) throw new Error('the editor did not render');
+    await act(async () => {
+        grid.onChange(tabs, 's1');
+        toggleComments();
+    });
+    if (!seen.hoverCard || !seen.panel) throw new Error('the pane did not open');
+    return { grid, hoverCard: seen.hoverCard, panel: seen.panel };
 }
 
 test('a report from the grid shows the hover card on that cell, and none hides it', async () => {
@@ -169,8 +200,43 @@ test('the hover card floats beside the cell and reads the cards the pane reads',
     expect(hoverCard.entries).toBe(entries);
 });
 
-test('a click on the hover card opens the card', async () => {
+test('a click on the hover card opens the card and moves nothing', async () => {
     const { hoverCard } = await renderEditor();
     hoverCard.onOpenCard('c1');
     expect(opened).toEqual([['open', 'c1']]);
+});
+
+test("a click on a pane row jumps to the card's first cell, then opens the card", async () => {
+    const { panel } = await renderEditor();
+    panel.onOpenCard('c1');
+    expect(opened).toEqual([
+        ['reveal', FIRST_CELL],
+        ['open', 'c1'],
+    ]);
+});
+
+test("a comment named by its chat, such as an activity row's, jumps too", async () => {
+    const { panel } = await renderEditor();
+    panel.onOpenChat('chat-1');
+    expect(opened).toEqual([
+        ['reveal', FIRST_CELL],
+        ['open', 'c1'],
+    ]);
+});
+
+test('a card on no cell opens with nowhere to jump', async () => {
+    const { panel } = await renderEditor();
+    panel.onOpenCard('c9');
+    expect(opened).toEqual([['open', 'c9']]);
+});
+
+test('on a phone, where the pane hides the grid, a row and a chat name only open the card', async () => {
+    layout.isMobile = true;
+    const { panel } = await renderEditor();
+    panel.onOpenCard('c1');
+    panel.onOpenChat('chat-1');
+    expect(opened).toEqual([
+        ['open', 'c1'],
+        ['open', 'c1'],
+    ]);
 });
