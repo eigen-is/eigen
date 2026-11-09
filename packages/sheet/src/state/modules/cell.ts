@@ -24,7 +24,7 @@ import type { Cell, CellMatrix, FormulaDependency } from '../../engine/types';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
-import type { Range, RangeOrWholeAxis, Selection } from '../types';
+import type { RangeOrWholeAxis, Selection } from '../types';
 import { getSheetIndex, rgbToHex } from '../utils';
 import { checkCF, getComputeMap } from './condition-format';
 import { describeValidationRule, inputPassesRule } from './data-validation';
@@ -90,50 +90,13 @@ export function normalizedAttr(data: CellMatrix, r: number, c: number, attr: key
     return normalizedCellAttr(cell, attr);
 }
 
-// Polymorphic accessor: returns Cell, row, column, full matrix, or a single attr value depending on which of r/c are
-// nil.
-// biome-ignore lint/suspicious/noExplicitAny: per-overload result varies (Cell | row | col | matrix | Cell[attr]); tightening forces casts at every call site
-export function getCellValue(r: number, c: number, data: CellMatrix, attr?: keyof Cell): any {
-    if (!attr) {
-        attr = 'v';
-    }
-
-    let d_value: Cell | (Cell | null)[] | null | undefined;
-
-    if (!isNil(r) && !isNil(c)) {
-        d_value = data[r][c];
-    } else if (!isNil(r)) {
-        d_value = data[r];
-    } else if (!isNil(c)) {
-        const newData = data[0].map((_col, i) => {
-            return data.map((row) => {
-                return row[i];
-            });
-        });
-        d_value = newData[c];
-    } else {
-        return data;
-    }
-
-    // biome-ignore lint/suspicious/noExplicitAny: same return-type union as the function
-    let retv: any = d_value;
-
-    if (isPlainObject(d_value)) {
-        const d = d_value as Cell;
-        retv = d[attr];
-
-        if (d?.ct && d.ct.t === 'd') {
-            retv = d.m;
-        } else if (attr === 'v' || attr === 'm') {
-            retv = richText(d) ?? retv;
-        }
-    }
-
-    if (retv === undefined) {
-        retv = null;
-    }
-
-    return retv;
+// A cell's formula, or the value or display text a reader takes as text: a date reads as the date it shows, and a rich
+// cell as its runs. Null when the cell has none.
+export function getCellValue(r: number, c: number, data: CellMatrix, attr: 'v' | 'm' | 'f' = 'v') {
+    const cell = data[r][c];
+    if (!cell) return null;
+    if (attr === 'f') return cell.f ?? null;
+    return (cell.ct?.t === 'd' ? cell.m : (richText(cell) ?? cell[attr])) ?? null;
 }
 
 // `v` is a scalar, a Cell-like patch ({v, f, ct, …}) or null.
@@ -201,10 +164,10 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
 
     const text = value.toString();
 
-    if (text.substr(0, 1) === "'") {
-        cell.m = text.substr(1);
+    if (text.startsWith("'")) {
+        cell.m = text.slice(1);
         cell.ct = { fa: '@', t: 's' };
-        cell.v = text.substr(1);
+        cell.v = text.slice(1);
         cell.qp = 1;
     } else if (cell.qp === 1) {
         cell.m = text;
@@ -219,7 +182,7 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
         cell.ct = { fa: 'General', t: 'b' };
         cell.v = false;
     } else if (
-        text.substr(-1) === '%' &&
+        text.endsWith('%') &&
         isRealNum(text.substring(0, text.length - 1)) &&
         (isNil(cell.ct?.fa) || cell.ct?.fa !== '@')
     ) {
@@ -286,9 +249,8 @@ function writeFormulaResult(cell: Cell, value: Cell['v']) {
     ct.t = formulaResultType(ct.fa, value);
 }
 
-export function getRealCellValue(r: number, c: number, data: CellMatrix, attr?: keyof Cell) {
-    const value = getCellValue(r, c, data, 'm');
-    return isNil(value) ? getCellValue(r, c, data, attr) : value;
+export function getRealCellValue(r: number, c: number, data: CellMatrix) {
+    return getCellValue(r, c, data, 'm') ?? getCellValue(r, c, data);
 }
 
 // A number stored as text (qp === 1) that still reads as a number. One predicate for the painter's corner mark and the
@@ -587,15 +549,14 @@ export function updateCell(
         }
     }
 
-    const d = flowdata;
     if (curv && isPlainObject(curv)) {
         if (!isCurInline) {
             if (isFormula(value)) {
                 const computed = computeFormula(ctx, value);
-                curv = cloneDeep(d?.[r]?.[c] || {});
+                curv = cloneDeep(flowdata[r][c] || {});
                 [curv.v, curv.f] = computed;
             } else {
-                curv = cloneDeep(d?.[r]?.[c] || {});
+                curv = cloneDeep(flowdata[r][c] || {});
                 curv.v = value;
 
                 delete curv.f;
@@ -616,10 +577,10 @@ export function updateCell(
         value = { v, f };
     }
 
-    setCellValue(ctx, r, c, d, value);
+    setCellValue(ctx, r, c, flowdata, value);
     cancelNormalSelected(ctx);
 
-    const written = d[r][c];
+    const written = flowdata[r][c];
     if (written && ((cellWrapsText(written) && written.v) || isInlineStringCell(written))) {
         growRowToFit(ctx, (sheet.config ??= {}), written, r, c);
     }
@@ -627,54 +588,10 @@ export function updateCell(
     recomputeCells(ctx, [{ r, c, id: ctx.currentSheetId }]);
 }
 
-export function getOrigincell(ctx: Context, r: number, c: number, i: string) {
-    const data = getFlowdata(ctx, i);
-    if (isNil(r) || isNil(c)) {
-        return null;
-    }
-
-    if (!data?.[r]?.[c]) {
-        return null;
-    }
-    return data[r][c];
-}
-
 export function getcellFormula(ctx: Context, r: number, c: number, i: string, data?: CellMatrix) {
-    let cell: Cell | null;
     // `data` is a fast path for the current sheet. A cell of another sheet may name a row it lacks.
-    if (isNil(data) || isNil(data[r])) {
-        cell = getOrigincell(ctx, r, c, i);
-    } else {
-        cell = data[r][c];
-    }
-
-    if (isNil(cell)) {
-        return null;
-    }
-
-    return cell.f;
-}
-
-export function getRange(ctx: Context) {
-    const result: Range = cloneDeep(ctx.selections ?? []).map(({ row, column }) => ({ row, column }));
-    return result;
-}
-
-export function getFlattenedRange(ctx: Context, range?: Range) {
-    range = range || getRange(ctx);
-
-    const result: { r: number; c: number }[] = [];
-
-    for (const ele of range) {
-        const rs = ele.row;
-        const cs = ele.column;
-        for (let r = rs[0]; r <= rs[1]; r += 1) {
-            for (let c = cs[0]; c <= cs[1]; c += 1) {
-                result.push({ r, c });
-            }
-        }
-    }
-    return result;
+    const row = data?.[r] ?? getFlowdata(ctx, i)?.[r];
+    return row?.[c]?.f ?? null;
 }
 
 function isWholeColumnRef(range: RangeOrWholeAxis): range is { row: [null, null]; column: number[] } {
@@ -736,9 +653,14 @@ export function getRangeByTxt(ctx: Context, txt: string) {
 // or off.
 export function isAllSelectedCellsInStatus(ctx: Context, attr: RunStyleKey, status: unknown) {
     const flowdata = getFlowdata(ctx);
-    return getFlattenedRange(ctx).every(({ r, c }) => {
-        const cell = flowdata?.[r]?.[c];
-        return !isNil(cell) && cell[attr] === status;
+    return (ctx.selections ?? []).every(({ row, column }) => {
+        for (let r = row[0]; r <= row[1]; r += 1) {
+            for (let c = column[0]; c <= column[1]; c += 1) {
+                const cell = flowdata?.[r]?.[c];
+                if (isNil(cell) || cell[attr] !== status) return false;
+            }
+        }
+        return true;
     });
 }
 

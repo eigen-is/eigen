@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
+import { updateCell } from '../../../state/modules/cell';
 import { openCellEditor } from '../../../state/modules/cell-editor';
 import { contextFactory } from '../factories/context';
 
@@ -114,4 +115,31 @@ test('an opener that brings its text replaces an open edit', () => {
     openCellEditor(ctx, 0, 0, { html: '=SUM(', caret: 5 });
     expect(input.textContent).toBe('=SUM(');
     expect(textBeforeCaret()).toBe('=SUM(');
+});
+
+// A date-formatted cell shows its date, but the editor opens on what the person wrote.
+const DATED: Cell = { f: '=DATE(2026,1,B1)', v: 46026, m: '04/01/2026', ct: { fa: 'dd/MM/yyyy', t: 'd' } };
+
+test('a formula formatted as a date opens as its formula', () => {
+    openCellEditor(contextWith(DATED), 0, 0, { caret: 'end' });
+    expect(input.textContent).toBe('=DATE(2026,1,B1)');
+});
+
+test('an edit of a formula formatted as a date keeps the formula and the format', () => {
+    const ctx = contextWith(DATED);
+    const data = ctx.sheets[0].data;
+    if (!data) throw new Error('no data');
+    data[0][1] = { v: 7, m: '7', ct: { fa: 'General', t: 'n' } };
+    openCellEditor(ctx, 0, 0, { caret: 'end' });
+    input.innerText = '=DATE(2026,2,B1)';
+    updateCell(ctx, 0, 0, input);
+    expect(data[0][0]?.f).toBe('=DATE(2026,2,B1)');
+    expect(data[0][0]?.m).toBe('07/02/2026');
+    expect(data[0][0]?.ct).toEqual({ fa: 'dd/MM/yyyy', t: 'd' });
+});
+
+test('a date with no formula still opens as the date it shows', () => {
+    const date = { v: 46026, m: '04/01/2026', ct: { fa: 'dd/MM/yyyy', t: 'd' } };
+    openCellEditor(contextWith(date), 0, 0, { caret: 'end' });
+    expect(input.textContent).toBe('04/01/2026');
 });
