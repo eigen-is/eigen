@@ -65,7 +65,7 @@ import { sealed } from '@workspace/ui/components/properties-panel';
 import { cn } from '@workspace/ui/lib/utils';
 import { ImageIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { isTypingTarget } from '../../hooks/is-typing-target';
 import { useDialogOpen, useMenuOpen } from '../../hooks/use-dialog-open';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
@@ -1526,35 +1526,14 @@ export function CanvasEditor({
                     commentedElements.map(({ id, cardId, color, corner }) => {
                         const { left, top } = boxToStyle(corner);
                         return (
-                            <button
+                            <CommentMark
                                 key={id}
-                                type="button"
-                                // -translate-x-full hangs the triangle inside the box, off the exact corner.
-                                className="pointer-events-auto absolute -translate-x-full"
+                                cardId={cardId}
+                                color={color}
                                 style={{ left, top }}
-                                // The container captures the pointer on pointerdown, so no click lands here. The mark
-                                // opens from the pointer event and keeps the press off the canvas.
-                                onPointerEnter={(e) =>
-                                    onCommentHover?.({ cardId, rect: e.currentTarget.getBoundingClientRect() })
-                                }
-                                onPointerLeave={() => onCommentHover?.(null)}
-                                onPointerDown={(e) => {
-                                    e.stopPropagation();
-                                    e.preventDefault();
-                                    onCommentHover?.(null);
-                                    onOpenCard(cardId);
-                                }}
-                                // The pointerdown above swallows the click it would become, so the keyboard needs its
-                                // own opener. preventDefault keeps Enter and Space from making a second one.
-                                onKeyDown={(e) => {
-                                    if (e.key !== 'Enter' && e.key !== ' ') return;
-                                    e.preventDefault();
-                                    onOpenCard(cardId);
-                                }}
-                                aria-label="Open comment"
-                            >
-                                <CommentIndicator color={color} className="block" />
-                            </button>
+                                onOpenCard={onOpenCard}
+                                onCommentHover={onCommentHover}
+                            />
                         );
                     })}
                 {/* Round vertex handles: over the box for a line of three or more points, and the only chrome for one
@@ -1664,5 +1643,62 @@ export function CanvasEditor({
                 </div>
             )}
         </div>
+    );
+}
+
+// An element's comment, in the canvas' chrome. A mark that unmounts under the pointer gets no pointer leave, such as on
+// a peer's delete or a slide change, so its unmount reports that instead.
+function CommentMark({
+    cardId,
+    color,
+    style,
+    onOpenCard,
+    onCommentHover,
+}: {
+    cardId: string;
+    color: string | undefined;
+    style: React.CSSProperties;
+    onOpenCard: (cardId: string) => void;
+    onCommentHover: CanvasEditorProps['onCommentHover'];
+}) {
+    const pointerOnMark = useRef(false);
+    const reportGone = useEffectEvent(() => {
+        if (pointerOnMark.current) onCommentHover?.(null);
+    });
+    useEffect(() => () => reportGone(), []);
+
+    return (
+        <button
+            type="button"
+            // -translate-x-full hangs the triangle inside the box, off the exact corner.
+            className="pointer-events-auto absolute -translate-x-full"
+            style={style}
+            onPointerEnter={(e) => {
+                pointerOnMark.current = true;
+                onCommentHover?.({ cardId, rect: e.currentTarget.getBoundingClientRect() });
+            }}
+            onPointerLeave={() => {
+                pointerOnMark.current = false;
+                onCommentHover?.(null);
+            }}
+            // The container captures the pointer on pointerdown, so no click lands here. The mark opens from the
+            // pointer event and keeps the press off the canvas.
+            onPointerDown={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                onCommentHover?.(null);
+                onOpenCard(cardId);
+            }}
+            // The pointerdown above swallows the click it would become, so the keyboard needs its own opener.
+            // preventDefault keeps Enter and Space from making a second one.
+            onKeyDown={(e) => {
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                e.preventDefault();
+                onOpenCard(cardId);
+            }}
+            aria-label="Open comment"
+        >
+            <CommentIndicator color={color} className="block" />
+        </button>
     );
 }

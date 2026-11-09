@@ -229,6 +229,19 @@ test('the pointer leaving a mark reports null', async () => {
     expect(log).toEqual([{ cardId: 'card-1', rect: RECT }, null]);
 });
 
+test('a mark that goes under the pointer reports null, as no pointer leave comes', async () => {
+    const log = await renderCanvas();
+    await send(theMark(), 'pointerover');
+    await act(async () => doc.getMap('elements').delete('box'));
+    expect(log).toEqual([{ cardId: 'card-1', rect: RECT }, null]);
+});
+
+test('a mark that goes elsewhere leaves the hover alone', async () => {
+    const log = await renderCanvas();
+    await act(async () => doc.getMap('elements').delete('box'));
+    expect(log).toEqual([]);
+});
+
 test('a press reports null before it opens the thread', async () => {
     const log = await renderCanvas();
     await send(theMark(), 'pointerdown');
@@ -275,6 +288,14 @@ test('leaving the mark closes the card after the grace', async () => {
     await wait(350);
     await send(mark, 'pointerout');
     await wait(200);
+    expect(hoverCard()).toBeNull();
+});
+
+test('a mark that goes within the pause opens no card', async () => {
+    await renderShell();
+    await send(theMark(), 'pointerover');
+    await act(async () => doc.getMap('elements').delete('box'));
+    await wait(350);
     expect(hoverCard()).toBeNull();
 });
 
