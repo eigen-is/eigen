@@ -1,16 +1,19 @@
+// The search shapes the API and the apps share: the sources one search request can cover, what it
+// answers, and a hit from the help center's static index that the command palette also shows.
+
 import type { DrivePath } from './drive';
 import type { EmailSummary } from './mail';
 
-export type SearchSource = 'mail' | 'file';
+export const SEARCH_SOURCES = ['mail', 'file'] as const;
+
+export type SearchSource = (typeof SEARCH_SOURCES)[number];
 
 export type SearchResponse = {
     mail: EmailSummary[];
     file: DrivePath[];
 };
 
-// A help-center search hit from the index app's static Pagefind index. `excerpt` is
-// trusted build-time HTML with <mark> match highlights; `url` is an absolute /support
-// path. Shared by the command palette's help source and the index app's SupportSearch.
+// `excerpt` is trusted build-time HTML with <mark> match highlights; `url` is an absolute /support path.
 export type HelpSearchDoc = {
     url: string;
     excerpt: string;

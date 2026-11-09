@@ -3,16 +3,15 @@
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { SearchResponse, SearchSource } from '@workspace/lib/types/search';
+import { SEARCH_SOURCES } from '@workspace/lib/types/search';
 import { Elysia, t } from 'elysia';
 import { requireNonGuest, requireSelf } from '../lib/auth/access';
 import { aggregateFileSearch } from '../lib/drive/aggregate';
 import { getHome } from '../lib/home';
 import { betterAuth } from './auth';
 
-const SOURCE_VALUES: readonly SearchSource[] = ['mail', 'file'];
-
 function isSource(value: string): value is SearchSource {
-    return SOURCE_VALUES.some((source) => source === value);
+    return SEARCH_SOURCES.some((source) => source === value);
 }
 
 export const searchRouter = new Elysia({ name: 'search' })
@@ -36,8 +35,8 @@ export const searchRouter = new Elysia({ name: 'search' })
             // Pass user-typed names through verbatim; Mail.search() case-folds the standard ones.
             const mailboxes = query.mailbox
                 ?.split(',')
-                .map((m) => m.trim())
-                .filter((m) => m.length > 0);
+                .map((mailbox) => mailbox.trim())
+                .filter((mailbox) => mailbox.length > 0);
             const mail = searchMail
                 ? home.mail.search({
                       q: query.q,
