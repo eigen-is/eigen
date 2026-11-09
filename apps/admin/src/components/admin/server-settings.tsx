@@ -141,12 +141,9 @@ export function ServerSettingsPage() {
     const relayHost = status?.relayHost;
     const mailOff = !mailEnabled && relayHost === null;
     const senderAddressInvalid = current.mail.senderAddress !== '' && !validateEmailAddress(current.mail.senderAddress);
-    // Written as "not at least" so an emptied field, which reads as NaN, also keeps Save disabled.
-    const homeDataTooSmall = !(current.quotas.homeDataMaxMB >= QUOTA_MIN_MB);
-    const mountTooSmall = !(current.quotas.defaultMountMaxSizeMB >= QUOTA_MIN_MB);
-    const uploadOutOfRange = !(
-        current.quotas.maxUploadSizeMB >= 1 && current.quotas.maxUploadSizeMB <= UPLOAD_CAP_MAX_MB
-    );
+    const homeDataTooSmall = current.quotas.homeDataMaxMB < QUOTA_MIN_MB;
+    const mountTooSmall = current.quotas.defaultMountMaxSizeMB < QUOTA_MIN_MB;
+    const uploadOutOfRange = current.quotas.maxUploadSizeMB < 1 || current.quotas.maxUploadSizeMB > UPLOAD_CAP_MAX_MB;
     const savedDestination = settings.backups.upload.s3;
     const backupSecretSaved =
         savedDestination.accessKeyId !== '' && keepsSavedSecret(current.backups.upload.s3, savedDestination);
