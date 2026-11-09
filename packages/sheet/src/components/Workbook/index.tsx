@@ -47,6 +47,7 @@ import {
     COPY_ACTION_TABLE_MARKER,
     defaultContext,
     deleteActiveObject,
+    deriveView,
     filterPatch,
     firstVisibleSheetId,
     getFlowdata,
@@ -182,8 +183,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         const contextRef = useRef(context);
         const getContext = useCallback(() => contextRef.current, []);
         const commit = useCallback((next: Context) => {
-            contextRef.current = next;
-            setContext(next);
+            const viewed = deriveView(contextRef.current, next);
+            contextRef.current = viewed;
+            setContext(viewed);
         }, []);
 
         // The formula map is built off the interaction path, so the first edit on a large workbook doesn't wait seconds
@@ -556,8 +558,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             [getContext, setContextWithProduce, handleUndo, handleRedo],
         );
 
-        const i = getSheetIndex(context, context.currentSheetId);
-        if (i == null) return null;
+        if (getSheetIndex(context, context.currentSheetId) == null) return null;
 
         return (
             <WorkbookContext.Provider value={providerValue}>
@@ -602,7 +603,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             />
                             <FxEditor />
                         </div>
-                        <Sheet sheet={context.sheets[i]} />
+                        <Sheet />
                         <SheetTab />
                         <FilterMenu />
                     </div>

@@ -11,6 +11,7 @@ import { WorkbookContext } from '../../context';
 import type { Freezen } from '../../state';
 import {
     computeRowHeaderRegions,
+    freezeOf,
     getFrozenHandleTop,
     handleRowFreezeHandleMouseDown,
     handleRowHeaderMouseDown,
@@ -149,7 +150,7 @@ export const RowHeader: React.FC = () => {
     // The header splits into the body's panes on its own axis: a frozen band that stays put and a main band that
     // scrolls. Each band's clip cuts the highlights at the freeze boundary.
     const headerWidth = SHEET_ROW_HEADER_WIDTH - 1.5;
-    const freeze = refs.globalCache.freezen?.[context.currentSheetId];
+    const freeze = freezeOf(context);
     const rowFreeze: Freezen | undefined = freeze?.horizontal ? { horizontal: freeze.horizontal } : undefined;
     const regions = computeRowHeaderRegions(rowFreeze, headerWidth, context.cellmainHeight);
     const hoverRegion = overlayRegionForCell(regions, rowFreeze, hoverLocation.row_index, 0);

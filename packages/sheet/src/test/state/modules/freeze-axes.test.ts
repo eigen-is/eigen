@@ -4,7 +4,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Context } from '../../../state/context';
 import { defaultContext } from '../../../state/context';
-import { getFrozenHandleLeft, getFrozenHandleTop, initFreeze } from '../../../state/modules/freeze';
+import { freezeOf, getFrozenHandleLeft, getFrozenHandleTop } from '../../../state/modules/freeze';
 import type { GlobalCache, Sheet } from '../../../state/types';
 
 type FrozenType = NonNullable<Sheet['frozen']>['type'];
@@ -50,10 +50,9 @@ function frozenContext(frozen: Sheet['frozen']): { ctx: Context; cache: GlobalCa
 describe('the axes a frozen pane freezes', () => {
     for (const [type, { rows, columns }] of AXES) {
         test(`'${type}' freezes ${rows ? 'rows' : 'no rows'} and ${columns ? 'columns' : 'no columns'}`, () => {
-            const { ctx, cache } = frozenContext({ type, range: { row_focus: 1, column_focus: 2 } });
-            initFreeze(ctx, cache, 's1');
-            expect(cache.freezen?.s1?.horizontal !== undefined).toBe(rows);
-            expect(cache.freezen?.s1?.vertical !== undefined).toBe(columns);
+            const { ctx } = frozenContext({ type, range: { row_focus: 1, column_focus: 2 } });
+            expect(freezeOf(ctx)?.horizontal !== undefined).toBe(rows);
+            expect(freezeOf(ctx)?.vertical !== undefined).toBe(columns);
             // A handle sits after the last frozen row or column, and at the scroll edge on an axis that isn't frozen.
             expect(getFrozenHandleTop(ctx)).toBe(rows ? 40 + 5 : 5);
             expect(getFrozenHandleLeft(ctx)).toBe(columns ? 210 - 2 + 7 : 7);
@@ -61,9 +60,8 @@ describe('the axes a frozen pane freezes', () => {
     }
 
     test('a sheet without a frozen pane freezes neither axis', () => {
-        const { ctx, cache } = frozenContext(undefined);
-        initFreeze(ctx, cache, 's1');
-        expect(cache.freezen?.s1).toBeUndefined();
+        const { ctx } = frozenContext(undefined);
+        expect(freezeOf(ctx)).toBeUndefined();
         expect(getFrozenHandleTop(ctx)).toBe(5);
         expect(getFrozenHandleLeft(ctx)).toBe(7);
     });

@@ -18,7 +18,7 @@ import { openCellEditor } from '../modules/cell-editor';
 import { cellFocus, checkboxChange, getCellDataValidation } from '../modules/data-validation';
 import { fillFromEdge } from '../modules/drop-cell';
 import { handleFormulaInput } from '../modules/formula-editor';
-import { moveHighlightCell, moveHighlightRange, selectAll } from '../modules/selection';
+import { moveHighlightCell, moveHighlightRange, normalizeSelection, selectAll } from '../modules/selection';
 import { handleBold, handleItalic, handleUnderline } from '../modules/toolbar';
 import type { Selection } from '../types';
 import { getSheetIndex } from '../utils';
@@ -47,14 +47,7 @@ export const SHEET_HOTKEYS = {
 function commitEdit(ctx: Context, cellInput: HTMLDivElement) {
     const [r, c] = ctx.editingCellPosition;
     updateCell(ctx, r, c, cellInput);
-    ctx.selections = [
-        {
-            row: [r, r],
-            column: [c, c],
-            row_focus: r,
-            column_focus: c,
-        },
-    ];
+    ctx.selections = normalizeSelection(ctx, [{ row: [r, r], column: [c, c], row_focus: r, column_focus: c }]);
 }
 
 // Whether a key changes an editor's text, or only moves or commands: Backspace, Space and Delete do, and so does a

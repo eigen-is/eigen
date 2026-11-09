@@ -1,33 +1,25 @@
-// The frozen panes as the grid shows them. initFreeze turns a sheet's frozen pane into the pane bounds that the canvas,
-// the overlays and the scroll read, and the helpers here place the overlay panes and the headers' freeze handles.
-// The sheet view calls initFreeze, for example when the sheet or its sizes change, and callers such as the headers and
-// the drag handlers use the rest.
+// The frozen panes as the grid shows them. freezeOf reads the current sheet's frozen pane as the pane bounds that the
+// canvas, the overlays and the mouse handlers use, on the geometry of the same context, and the helpers here place the
+// overlay panes and the headers' freeze handles.
 
 import { freezesColumns, freezesRows } from '@workspace/lib/sheets';
-import type { Context, Freezen, GlobalCache } from '..';
+import type { Context, Freezen } from '..';
 import { colLocationByIndex, getSheetIndex, rowLocationByIndex } from '..';
 
-export function initFreeze(ctx: Context, cache: GlobalCache, sheetId: string) {
-    const idx = getSheetIndex(ctx, sheetId);
-    if (idx == null) return;
-    const { frozen } = ctx.sheets[idx];
-
-    if (frozen == null) {
-        delete cache.freezen;
-        return;
-    }
+export function freezeOf(ctx: Context): Freezen | undefined {
+    const idx = getSheetIndex(ctx, ctx.currentSheetId);
+    const frozen = idx == null ? undefined : ctx.sheets[idx].frozen;
+    if (frozen == null) return undefined;
 
     const freezen: Freezen = {};
     const range = frozen.range ?? { row_focus: 0, column_focus: 0 };
 
-    // The panes are measured from the top-left of the sheet, scrolled to 0.
     if (freezesRows(frozen)) {
         const row = Math.max(range.row_focus, 0);
         freezen.horizontal = {
             freezenhorizontaldata: {
                 pos: ctx.visibledatarow[row],
                 boundary: row + 1,
-                scroll: 0,
             },
         };
     }
@@ -37,13 +29,11 @@ export function initFreeze(ctx: Context, cache: GlobalCache, sheetId: string) {
             freezenverticaldata: {
                 pos: ctx.visibledatacolumn[column],
                 boundary: column + 1,
-                scroll: 0,
             },
         };
     }
 
-    cache.freezen ??= {};
-    cache.freezen[ctx.currentSheetId] = freezen;
+    return freezen;
 }
 
 // One pane of the overlays: a fixed rect inside the cell area whose content follows the scroll on its free axes. A
@@ -68,8 +58,8 @@ export function computeOverlayRegions(
 ): OverlayRegionSpec[] {
     const hData = freeze?.horizontal?.freezenhorizontaldata;
     const vData = freeze?.vertical?.freezenverticaldata;
-    const bandH = hData ? hData.pos - hData.scroll : 0;
-    const bandW = vData ? vData.pos - vData.scroll : 0;
+    const bandH = hData?.pos ?? 0;
+    const bandW = vData?.pos ?? 0;
 
     if (!hData && !vData) {
         return [
@@ -107,7 +97,7 @@ export function computeOverlayRegions(
             height: bandH,
             clip: true,
             fixedLeft: null,
-            fixedTop: hData.scroll,
+            fixedTop: 0,
         });
     }
     if (vData) {
@@ -118,7 +108,7 @@ export function computeOverlayRegions(
             width: bandW,
             height: viewHeight - bandH,
             clip: true,
-            fixedLeft: vData.scroll,
+            fixedLeft: 0,
             fixedTop: null,
         });
     }
@@ -130,8 +120,8 @@ export function computeOverlayRegions(
             width: bandW,
             height: bandH,
             clip: true,
-            fixedLeft: vData.scroll,
-            fixedTop: hData.scroll,
+            fixedLeft: 0,
+            fixedTop: 0,
         });
     }
     return regions;
@@ -181,20 +171,21 @@ export function overlayRegionForCell(
 
 // A selection drag whose far end has gone behind a frozen band scrolls back to the start, so the cells it reaches show.
 // The main pane starts at the band's width plus the scroll, and a far end past that is in view.
-export function scrollToFrozenRowCol(ctx: Context, freeze: Freezen | undefined) {
+export function scrollToFrozenRowCol(ctx: Context) {
     const selection = ctx.selections?.at(-1);
     if (!selection) return;
 
     const column = farEnd(selection.column, selection.column_focus);
     const row = farEnd(selection.row, selection.row_focus);
+    const freeze = freezeOf(ctx);
     const columns = freeze?.vertical?.freezenverticaldata;
     const rows = freeze?.horizontal?.freezenhorizontaldata;
 
     const request: { left?: number; top?: number } = {};
-    if (columns && column != null && ctx.visibledatacolumn[column] <= columns.pos - columns.scroll + ctx.scrollLeft) {
+    if (columns && column != null && ctx.visibledatacolumn[column] <= columns.pos + ctx.scrollLeft) {
         request.left = 0;
     }
-    if (rows && row != null && ctx.visibledatarow[row] <= rows.pos - rows.scroll + ctx.scrollTop) {
+    if (rows && row != null && ctx.visibledatarow[row] <= rows.pos + ctx.scrollTop) {
         request.top = 0;
     }
     if (request.left != null || request.top != null) ctx.scrollRequest = request;

@@ -16,6 +16,7 @@ import type { LinkCardProps, ViewportPoint } from '../../state';
 import {
     changeSheet,
     computeOverlayRegions,
+    freezeOf,
     isLinkValid,
     normalizeSelection,
     overlayAnchorToViewport,
@@ -59,7 +60,7 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
         const area = refs.cellArea.current;
         if (!area) return undefined;
         const { left: areaLeft, top: areaTop } = area.getBoundingClientRect();
-        const freeze = refs.globalCache.freezen?.[context.currentSheetId];
+        const freeze = freezeOf(context);
         const regions = computeOverlayRegions(freeze, context.cellmainWidth, context.cellmainHeight);
         const { fixedLeft, fixedTop } = overlayRegionForCell(regions, freeze, r, c);
         return overlayAnchorToViewport(

@@ -54,7 +54,7 @@ export function getFilterButtonAtPosition(ctx: Context, x: number, y: number) {
 }
 
 // The current sheet's filter range as border and button rects, in sheet coordinates. Every canvas pass and every
-// mouse move reads them, so they are built once, when the range or the grid geometry changes.
+// mouse move reads them, so deriveView builds them once, when the range or the grid geometry changes.
 export function createFilterOptions(ctx: Context) {
     delete ctx.filterOptions;
     if (ctx.allowEdit === false) return;
@@ -104,7 +104,6 @@ export function createFilterOptions(ctx: Context) {
 export function clearFilter(ctx: Context) {
     if (ctx.allowEdit === false) return;
     const sheet = getSheet(ctx);
-    ctx.filterOptions = undefined;
     ctx.filterContextMenu = undefined;
     // Delete in place: a fresh object would replace the whole rowhidden map on the wire.
     const rowhidden = sheet.config?.rowhidden;
@@ -156,7 +155,6 @@ export function createFilter(ctx: Context) {
     }
 
     sheet.filterRange = cloneDeep(filterSave?.[0] || ctx.selections?.[0]);
-    createFilterOptions(ctx);
 }
 
 export type FilterDate = {

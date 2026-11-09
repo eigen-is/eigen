@@ -136,7 +136,7 @@ function frameLayers(ctx: Context, scroll: ScrollPos, freeze: Freezen | undefine
             follows: true,
         },
     ];
-    if (cols) colBands.push({ at: SHEET_ROW_HEADER_WIDTH, size: cols.pos, sheet: cols.scroll, follows: false });
+    if (cols) colBands.push({ at: SHEET_ROW_HEADER_WIDTH, size: cols.pos, sheet: 0, follows: false });
     const rowBands = [
         {
             at: SHEET_COLUMN_HEADER_HEIGHT + frozenHeight,
@@ -145,7 +145,7 @@ function frameLayers(ctx: Context, scroll: ScrollPos, freeze: Freezen | undefine
             follows: true,
         },
     ];
-    if (rows) rowBands.push({ at: SHEET_COLUMN_HEADER_HEIGHT, size: rows.pos, sheet: rows.scroll, follows: false });
+    if (rows) rowBands.push({ at: SHEET_COLUMN_HEADER_HEIGHT, size: rows.pos, sheet: 0, follows: false });
 
     const layers: Layer[] = [];
     for (const col of colBands) {
@@ -191,7 +191,7 @@ function frameLayers(ctx: Context, scroll: ScrollPos, freeze: Freezen | undefine
 function frozenSize(freeze: Freezen | undefined) {
     const rows = freeze?.horizontal?.freezenhorizontaldata;
     const cols = freeze?.vertical?.freezenverticaldata;
-    return { frozenWidth: cols ? cols.pos - cols.scroll : 0, frozenHeight: rows ? rows.pos - rows.scroll : 0 };
+    return { frozenWidth: cols?.pos ?? 0, frozenHeight: rows?.pos ?? 0 };
 }
 
 // Paints the part of a layer that falls in `part`, a box inside the layer's own, in CSS pixels.

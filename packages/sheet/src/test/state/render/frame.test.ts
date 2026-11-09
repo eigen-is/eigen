@@ -10,7 +10,7 @@ import { workbookContextFactory } from '../factories/context';
 
 const overlaps = (a: Box, b: Box) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
 
-const frozenAt = (pos: number): FreezenAxisData => ({ pos, boundary: 1, scroll: 0 });
+const frozenAt = (pos: number): FreezenAxisData => ({ pos, boundary: 1 });
 
 const FREEZES: [string, Freezen | undefined][] = [
     ['no freeze', undefined],

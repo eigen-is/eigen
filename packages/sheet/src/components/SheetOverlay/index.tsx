@@ -20,7 +20,7 @@ import { useDialog } from '../../hooks/useDialog';
 import type { Context, GlobalCache } from '../../state';
 import {
     computeOverlayRegions,
-    createFilterOptions,
+    freezeOf,
     getCellHyperlink,
     getCellRowColumn,
     getFlowdata,
@@ -259,20 +259,6 @@ export const SheetOverlay: React.FC = () => {
         if (req.top != null) el.scrollTop = req.top;
     }, [context.scrollRequest, refs.cellArea]);
 
-    const sheetIndex = getSheetIndex(context, context.currentSheetId);
-    const sheetFilterRange = sheetIndex == null ? undefined : context.sheets[sheetIndex].filterRange;
-    // biome-ignore lint/correctness/useExhaustiveDependencies: deps are intentional triggers — body reads `draftCtx` so biome can't see the connection
-    useEffect(() => {
-        setContext((draftCtx) => createFilterOptions(draftCtx));
-    }, [
-        context.visibledatarow,
-        context.visibledatacolumn,
-        setContext,
-        context.currentSheetId,
-        context.allowEdit,
-        sheetFilterRange,
-    ]);
-
     // The filter dropdown is position:fixed, so it detaches from its column icon once the grid scrolls.
     useEffect(() => {
         if (!context.filterContextMenu) return;
@@ -333,7 +319,7 @@ export const SheetOverlay: React.FC = () => {
 
     // One overlay region per frozen pane. Passive visuals render into every region, and its clip shows its portion.
     // A stateful singleton renders into the one region that holds its anchor cell.
-    const freeze = refs.globalCache.freezen?.[context.currentSheetId];
+    const freeze = freezeOf(context);
     const regions = computeOverlayRegions(freeze, context.cellmainWidth, context.cellmainHeight);
     const lastSel = context.selections?.at(-1);
     const focusRegion = overlayRegionForCell(regions, freeze, lastSel?.row_focus ?? 0, lastSel?.column_focus ?? 0);

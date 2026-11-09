@@ -22,6 +22,7 @@ import { carriedLines, carryCells, landedCell, moveCells, movedLines } from '../
 import { getQKBorder, setCellValue } from '../modules/cell';
 import { computeFormula } from '../modules/formula-exec';
 import { cellsIn, jfrefreshgrid, recomputeCells } from '../modules/refresh';
+import { normalizeSelection } from '../modules/selection';
 import { hasPartMC, PART_MERGE_REFUSAL } from '../modules/validation';
 import { getSheetIndex } from '../utils';
 import { SHEET_HOTKEYS } from './keyboard';
@@ -54,6 +55,7 @@ export function handlePaste(ctx: Context, clipboardData: PastedData, onImageFile
         if (text.startsWith('=')) pasteFormula(ctx, text);
         else if (text) pasteText(ctx, text);
     }
+    normalizeSelection(ctx, ctx.selections);
 }
 
 // A menu row has no paste event, so it reads the clipboard itself and hands the paste what a ⌘V would have had. Where

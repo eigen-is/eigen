@@ -15,6 +15,7 @@ import {
     colLocation,
     colLocationByIndex,
     computeColumnHeaderRegions,
+    freezeOf,
     getFrozenHandleLeft,
     handleColFreezeHandleMouseDown,
     handleColSizeHandleMouseDown,
@@ -164,7 +165,7 @@ export const ColumnHeader: React.FC = () => {
     // The header splits into the body's panes on its own axis: a frozen band that stays put and a main band that
     // scrolls. Each band's clip cuts the highlights at the freeze boundary.
     const headerHeight = SHEET_COLUMN_HEADER_HEIGHT - 1.5;
-    const freeze = refs.globalCache.freezen?.[context.currentSheetId];
+    const freeze = freezeOf(context);
     const colFreeze: Freezen | undefined = freeze?.vertical ? { vertical: freeze.vertical } : undefined;
     const regions = computeColumnHeaderRegions(colFreeze, context.cellmainWidth, headerHeight);
     const hoverRegion = overlayRegionForCell(regions, colFreeze, 0, hoverLocation.col_index);

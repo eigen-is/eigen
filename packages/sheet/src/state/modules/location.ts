@@ -6,6 +6,7 @@
 import { sortedIndex } from 'es-toolkit/compat';
 import type { Context } from '../context';
 import type { OverlayRegionSpec } from './freeze';
+import { freezeOf } from './freeze';
 
 // viewX and viewY are relative to the cell area's top left; x and y are the sheet place under the pointer.
 // In a frozen pane x and y don't follow the scroll, and a point over a header or past the grid lies outside the area.
@@ -31,18 +32,18 @@ export function sheetPoint(
     const { left, top, width, height } = cellArea.getBoundingClientRect();
     const viewX = e.clientX - left;
     const viewY = e.clientY - top;
-    const freeze = ctx.getRefs().globalCache.freezen?.[ctx.currentSheetId];
+    const freeze = freezeOf(ctx);
     const cols = freeze?.vertical?.freezenverticaldata;
     const rows = freeze?.horizontal?.freezenhorizontaldata;
-    const inCols = cols != null && viewX < cols.pos - cols.scroll;
-    const inRows = rows != null && viewY < rows.pos - rows.scroll;
+    const inCols = cols != null && viewX < cols.pos;
+    const inRows = rows != null && viewY < rows.pos;
     return {
         viewX,
         viewY,
         width,
         height,
-        x: viewX + (inCols ? cols.scroll : cellArea.scrollLeft),
-        y: viewY + (inRows ? rows.scroll : cellArea.scrollTop),
+        x: viewX + (inCols ? 0 : cellArea.scrollLeft),
+        y: viewY + (inRows ? 0 : cellArea.scrollTop),
         inside: viewX >= 0 && viewY >= 0 && viewX < width && viewY < height,
         pane: inRows && inCols ? 'corner' : inRows ? 'rows' : inCols ? 'cols' : 'main',
     };
