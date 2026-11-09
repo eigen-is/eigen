@@ -43,7 +43,7 @@ These two serve only the search extract, and both are cheap. `readStickiesConten
 
 `readSheetsFromDoc` decodes `state.snapshot`, replays the pending op batches through the engine's `replaySheetsOps`, and materializes each sheet's dense `data` matrix, which the renderers and the cross-sheet resolver read. The editor replays the same way, and the op rules are in [SHEETS.md](SHEETS.md#an-edit-is-an-op-in-a-yarray). A document with no snapshot reads as the default sheets (`decodeOrDefault`), the base the editor recorded its first ops against, so a workbook nobody edited exports as one blank sheet.
 
-Only the export read recalcs, and only a workbook nobody computed ([SHEETS.md § The editor computes on write](SHEETS.md#the-editor-computes-on-write-the-server-only-what-nobody-computed)). A recalc that throws falls back to the replayed values and reports `recalcError`, so an export never fails on it.
+Only the export read recalcs, and only a workbook nobody computed ([SHEETS.md § The editor computes on write](SHEETS.md#the-editor-computes-on-write-the-server-only-what-nobody-computed)). The replay itself recomputes what a sheet, row or column op affects, on every read ([SHEETS.md](SHEETS.md#a-sheet-row-or-column-op-recomputes-on-every-reader)). A recalc that throws falls back to the replayed values and reports `recalcError`, so an export never fails on it.
 
 ## The references reader names the parts a state uses
 
