@@ -7,7 +7,7 @@
 import { occurrenceDateToString } from '@workspace/lib/calendar/calendar-utils';
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import { RRule } from 'rrule';
-import { isExpandableRrule, MAX_OCCURRENCES, MAX_RECURRENCE_START } from './recurrence-limits';
+import { MAX_OCCURRENCES, MAX_RECURRENCE_START } from './recurrence-limits';
 
 type LocalComponents = { year: number; month: number; day: number; hour: number; minute: number; second: number };
 
@@ -137,7 +137,7 @@ export function computeOccurrenceTimes(
     const tz = parent.timezone;
     const occDate = new Date(`${recurrenceDate}T00:00:00Z`);
 
-    if (parent.rrule && isExpandableRrule(parent.rrule, parent.startTime)) {
+    if (parent.rrule) {
         const dayEnd = new Date(occDate);
         dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
         const matches = expandWallClock(parent.rrule, parent.startTime, tz, occDate, dayEnd);

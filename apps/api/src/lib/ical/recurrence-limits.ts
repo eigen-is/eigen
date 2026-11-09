@@ -1,7 +1,7 @@
 // What a repeat rule may ask of an expansion. rrule walks a rule step by step from DTSTART to the window, so the cost
 // follows the numbers a rule states, not its size in the file. A rule past these limits stays in the stored bytes and its
-// event stays, without its repeats. The iCalendar reader, the REST boundary and the range reads ask here, before anything
-// walks.
+// event stays, without its repeats. The REST boundary and the iCalendar reader ask here before a row is stored, and the
+// expansion takes its bounds from here.
 
 import type { Options } from 'rrule';
 import { RRule } from 'rrule';

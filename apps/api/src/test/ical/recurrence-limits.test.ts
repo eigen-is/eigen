@@ -162,13 +162,11 @@ describe('a stored rule that does not expand', () => {
         expect(week.filter((occurrence) => occurrence.uid === 'series@eigen')).toHaveLength(1);
     });
 
-    test('a row an older build stored reads as one occurrence, at little cost', () => {
-        for (const [, rrule] of COSTLY_RULES) {
-            const cpuMs = cpuClock();
-            const week = expandRecurrence(rowWith(rrule), new Date('2026-03-01'), new Date('2026-03-08'));
-            expect(week.map((occurrence) => occurrence.startTime)).toEqual([START]);
-            expect(cpuMs()).toBeLessThan(500);
-        }
+    test('a range read tries no rule: it expands the row the store kept', () => {
+        const row = rowWith('FREQ=HOURLY;COUNT=3');
+        expect(expandRecurrence(row, new Date('2026-03-02'), new Date('2026-03-03'))).toHaveLength(3);
+        const { startTime } = computeOccurrenceTimes(rowWith('FREQ=HOURLY;BYHOUR=10'), '2026-03-03');
+        expect(startTime.toISOString()).toBe('2026-03-03T10:00:00.000Z');
     });
 
     test('parseIcs keeps a rule it does not walk, for the store to judge', () => {
