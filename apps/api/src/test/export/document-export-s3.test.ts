@@ -2,12 +2,12 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { getHome } from '../../lib/home';
 import { openZip } from '../../lib/ooxml/zip';
 import type { FakeS3Mount } from '../fault-storage-helpers';
 import { createFakeS3Mount, removeFakeS3Mount } from '../fault-storage-helpers';
 import { buildGoldenDocJson, GOLDEN_MEDIA_NAME, seedDocumentMedia, seedEigendoc } from '../fixtures/golden-documents';
+import { weasyPrintPython } from '../pdf-test-helpers';
 import { authedRequest, getTestContext, TEST_PNG_BYTES } from '../setup';
 
 // A doc export whose embedded image comes over Bun's real S3 client from a fake S3.
@@ -67,7 +67,7 @@ describe('Eigendoc export from an S3 mount', () => {
     }, 120_000);
 });
 
-const pdfSuite = (await isWeasyPrintAvailable()) ? describe : describe.skip;
+const pdfSuite = weasyPrintPython ? describe : describe.skip;
 
 pdfSuite('Eigendoc PDF export from an S3 mount', () => {
     test('a pdf export draws the image from the bucket', async () => {

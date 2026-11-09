@@ -97,16 +97,6 @@ export function normalizeLabelName(name: string): string {
     return name.normalize('NFC').trim().toLowerCase();
 }
 
-// FNV-1a over the normalized key, so a label name renders the same color across books and sessions.
-export function labelColorFor(nameKey: string): string {
-    let hash = 0x811c9dc5;
-    for (let i = 0; i < nameKey.length; i++) {
-        hash ^= nameKey.charCodeAt(i);
-        hash = Math.imul(hash, 0x01000193);
-    }
-    return EIGEN_ACCENT_COLORS[(hash >>> 0) % EIGEN_ACCENT_COLORS.length].value;
-}
-
 // The columns a card write carries; the ctag is stamped inside the write transaction.
 export type CardRowInput = Omit<typeof schema.contacts.$inferInsert, 'cardCtag'>;
 
@@ -157,6 +147,16 @@ export function indexCard(tx: Tx, row: CardRowInput, categories: string[], ctag:
     // A card at this uri is alive, so one written over a deleted name drops its stale removal.
     tx.delete(schema.contactTombstones).where(eq(schema.contactTombstones.uri, row.uri)).run();
     return createdLabelIds;
+}
+
+// FNV-1a over the normalized key, so a label name renders the same color across books and sessions.
+function labelColorFor(nameKey: string): string {
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < nameKey.length; i++) {
+        hash ^= nameKey.charCodeAt(i);
+        hash = Math.imul(hash, 0x01000193);
+    }
+    return EIGEN_ACCENT_COLORS[(hash >>> 0) % EIGEN_ACCENT_COLORS.length].value;
 }
 
 // The pure half of a card write: bytes in, the projection they decide out. `avatar` is the cache URL the

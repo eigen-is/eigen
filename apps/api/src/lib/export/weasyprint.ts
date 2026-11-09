@@ -5,8 +5,7 @@
 import { Semaphore } from '../../utils/semaphore';
 import { ApiError } from '../core/errors';
 import { isEnoent } from '../core/local-filesystem';
-import { TOO_LARGE_TO_EXPORT } from '../document/transform/run-transform';
-import { BUSY_MESSAGE, limitedCommand } from '../document/transform/runner';
+import { BUSY_MESSAGE, limitedCommand, TOO_LARGE_TO_EXPORT } from '../document/transform/runner';
 import renderScript from './weasyprint-render.py' with { type: 'file' };
 
 // The largest @page side an export asks WeasyPrint for: 200 inches, the PDF page limit. A page sized from
@@ -66,15 +65,6 @@ async function probeWeasyPrint(): Promise<WeasyPrintProbe> {
 }
 
 const weasyPrint = (): Promise<WeasyPrintProbe> => (cachedProbe ??= probeWeasyPrint());
-
-export async function isWeasyPrintAvailable(): Promise<boolean> {
-    return (await weasyPrintPython()) !== null;
-}
-
-// The interpreter renders run under, for a test that runs its own Python beside WeasyPrint.
-export async function weasyPrintPython(): Promise<string | null> {
-    return (await weasyPrint()).python;
-}
 
 // A cached interpreter can vanish, as a Homebrew upgrade removes the old Cellar path, so a spawn that finds none probes
 // once more. The script's fetcher opens only data: URIs, so nothing in the HTML makes WeasyPrint fetch from the API host.

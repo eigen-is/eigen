@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fontFaceCss, slicesFor } from '@workspace/lib/constants/font-slices';
-import { weasyPrintPython } from '../../lib/export/weasyprint';
+import { weasyPrintPython } from '../pdf-test-helpers';
 
 // An export embeds only the slices its text needs, each a file of one family that draws some of its characters. Per
 // line one family: Chinese and Korean from several slices, with a space between words, Inter regular and bold from two,
@@ -33,7 +33,7 @@ type PrintedGlyph = {
 
 // The Python renders run under, when it has fontTools, which WeasyPrint needs and printed-glyphs.py reads fonts with.
 async function fontToolsPython(): Promise<string | null> {
-    const python = await weasyPrintPython();
+    const python = weasyPrintPython;
     if (python === null) return null;
     const proc = Bun.spawn([python, '-I', '-c', 'import fontTools'], { stdout: 'ignore', stderr: 'ignore' });
     return (await proc.exited) === 0 ? python : null;

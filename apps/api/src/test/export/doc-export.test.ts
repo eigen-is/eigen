@@ -28,7 +28,6 @@ import { renderDocHtml } from '../../lib/export/doc/render';
 import { MAX_BAND_BLOCKS, MAX_BAND_TEXT, MAX_PAGE_NOTES, renderEigendocExport } from '../../lib/export/doc/transform';
 import * as mathSvg from '../../lib/export/math-svg';
 import { sanitizeExportHtml } from '../../lib/export/sanitize';
-import { weasyPrintPython } from '../../lib/export/weasyprint';
 import renderScript from '../../lib/export/weasyprint-render.py' with { type: 'file' };
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
 import { EMU_PER_POINT, EMU_PER_PX } from '../../lib/ooxml/ooxml';
@@ -38,6 +37,7 @@ import * as thumbnailTimeout from '../../lib/shared/thumbnail-timeout';
 import { sampleChartParts } from '../fixtures/chart-parts';
 import { embeddedSliceFiles, sliceFileOf } from '../fixtures/font-slices';
 import { corpusEquations, equation, seedBand, seedEigendoc } from '../fixtures/golden-documents';
+import { weasyPrintPython } from '../pdf-test-helpers';
 
 function seededDoc(json: JSONContent = { type: 'doc', content: [paragraph('Hello')] }): Y.Doc {
     const doc = new Y.Doc();
@@ -1715,7 +1715,7 @@ describe('doc export — ordered lists', () => {
     });
 });
 
-const python = await weasyPrintPython();
+const python = weasyPrintPython;
 
 // What a script prints last, once it has run to its end.
 const SCRIPT_END = '<script end>';
