@@ -355,6 +355,9 @@ describe('SEQUENCE', () => {
         const resource = parseResource(KITCHEN_SINK);
         patchEvent(resource, null, { title: 'Renamed sink', location: 'Room 9' }, CTX);
         expect(Number(masterOf(resource).getFirstPropertyValue('sequence'))).toBe(2);
+
+        patchEvent(resource, null, { description: null }, CTX);
+        expect(Number(masterOf(resource).getFirstPropertyValue('sequence'))).toBe(2);
     });
 
     // An attendee copy mirrors the organizer's revision instead of computing one: the RFC 5546 replay
@@ -387,6 +390,60 @@ describe('SEQUENCE', () => {
         );
         expect(Number(masterOf(resource).getFirstPropertyValue('sequence'))).toBe(3);
         expect(String(masterOf(resource).getFirstPropertyValue('created'))).toBe('2025-12-01T09:00:00Z');
+    });
+});
+
+describe('clearing a field', () => {
+    const series = (...extra: string[]) => parseResource(vcal(VTZ_AMS, clientSeries(...extra)));
+    const FILLED = ['DESCRIPTION:Agenda', 'LOCATION:Room 9', 'URL:https://example.com/a', 'X-EIGEN-COLOR:#ff0000'];
+
+    test.each([
+        ['description', { description: null }],
+        ['location', { location: null }],
+        ['url', { data: { url: '' } }],
+        ['x-eigen-color', { data: { color: '' } }],
+    ])('clearing only %s counts as a change and touches the revision', (name, patch) => {
+        const resource = series(...FILLED);
+
+        expect(patchEvent(resource, null, patch, CTX)).toBe(true);
+
+        const master = masterOf(resource);
+        expect(master.getFirstProperty(name)).toBeNull();
+        expect(String(master.getFirstPropertyValue('last-modified'))).toBe('2026-06-01T10:00:00Z');
+        expect(String(master.getFirstPropertyValue('dtstamp'))).toBe('2026-06-01T10:00:00Z');
+    });
+
+    test('a guest copy mirrors the organizer sequence alongside a cleared field', () => {
+        const resource = series(...FILLED);
+        const guest = { ...CTX, actorIsOrganizer: false };
+
+        expect(patchEvent(resource, null, { location: null, sequence: 3 }, guest)).toBe(true);
+
+        expect(masterOf(resource).getFirstProperty('location')).toBeNull();
+        expect(String(masterOf(resource).getFirstPropertyValue('last-modified'))).toBe('2026-06-01T10:00:00Z');
+    });
+
+    test('dropping a DURATION that sat beside a DTEND counts as a change', () => {
+        const resource = series('DURATION:PT1H');
+        const startTime = new Date('2026-04-15T10:00:00Z');
+
+        expect(patchEvent(resource, null, { startTime }, CTX)).toBe(true);
+
+        expect(masterOf(resource).getFirstProperty('duration')).toBeNull();
+        expect(masterOf(resource).getFirstProperty('last-modified')).not.toBeNull();
+    });
+
+    test('clearing what is already absent, or restating a value, changes nothing', () => {
+        const absent = series();
+        const before = serializeResource(absent);
+        const patch = { description: null, location: '', data: { url: '', color: '' } };
+        expect(patchEvent(absent, null, patch, CTX)).toBe(false);
+        expect(serializeResource(absent)).toBe(before);
+
+        const filled = series(...FILLED);
+        const restated = { description: 'Agenda', location: 'Room 9', sequence: 3 };
+        expect(patchEvent(filled, null, restated, CTX)).toBe(false);
+        expect(masterOf(filled).getFirstProperty('last-modified')).toBeNull();
     });
 });
 

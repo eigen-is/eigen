@@ -219,16 +219,16 @@ function setProperty(comp: ICAL.Component, prop: ICAL.Property): boolean {
     return true;
 }
 
-function setOptionalText(comp: ICAL.Component, name: string, value: string | null | undefined): boolean {
-    if (value === undefined) return false;
-    if (!value) return comp.removeAllProperties(name);
-    return setProperty(comp, textProperty(name, value));
+// ical.js types removeAllProperties as a boolean, but it returns nothing.
+function clearProperty(comp: ICAL.Component, name: string): boolean {
+    const present = comp.hasProperty(name);
+    comp.removeAllProperties(name);
+    return present;
 }
 
-function setOptionalRaw(comp: ICAL.Component, name: string, value: string | null | undefined): boolean {
+function setOptional(comp: ICAL.Component, name: string, value?: string | null, build = textProperty): boolean {
     if (value === undefined) return false;
-    if (!value) return comp.removeAllProperties(name);
-    return setProperty(comp, rawProperty(name, value));
+    return value ? setProperty(comp, build(name, value)) : clearProperty(comp, name);
 }
 
 function masterVEvent(resource: ICAL.Component): ICAL.Component | null {
@@ -551,7 +551,7 @@ function followMaster(resource: ICAL.Component, master: ICAL.Component, patch: E
         if (vevent === master || uidOf(vevent) !== uid || !vevent.getFirstProperty('recurrence-id')) continue;
         for (const [name, before, after] of fields) {
             if (String(vevent.getFirstPropertyValue(name) ?? '') !== before) continue;
-            changed = setOptionalText(vevent, name, after) || changed;
+            changed = setOptional(vevent, name, after) || changed;
         }
     }
     return changed;
@@ -577,8 +577,8 @@ export function patchEvent(
     let scheduling = false;
 
     if (patch.title !== undefined) changed = setProperty(vevent, textProperty('summary', patch.title)) || changed;
-    changed = setOptionalText(vevent, 'description', patch.description) || changed;
-    changed = setOptionalText(vevent, 'location', patch.location) || changed;
+    changed = setOptional(vevent, 'description', patch.description) || changed;
+    changed = setOptional(vevent, 'location', patch.location) || changed;
 
     if (patch.status !== undefined) {
         const moved = setProperty(vevent, textProperty('status', patch.status.toUpperCase()));
@@ -603,7 +603,7 @@ export function patchEvent(
             changed = setProperty(vevent, written) || changed;
         }
         // RFC 5545 §3.6.1: a VEVENT states its length as a DTEND or as a DURATION, never both.
-        if (vevent.getFirstProperty('dtend')) changed = vevent.removeAllProperties('duration') || changed;
+        if (vevent.getFirstProperty('dtend')) changed = clearProperty(vevent, 'duration') || changed;
         // Re-spelling the same instants in another zone is a byte change, not a reason to mail the guests.
         scheduling = scheduling || whenChanged;
         syncVTimezones(resource);
@@ -619,8 +619,8 @@ export function patchEvent(
 
     const data = patch.data;
     if (data) {
-        changed = setOptionalRaw(vevent, 'url', data.url) || changed;
-        changed = setOptionalRaw(vevent, EIGEN.color, data.color) || changed;
+        changed = setOptional(vevent, 'url', data.url, rawProperty) || changed;
+        changed = setOptional(vevent, EIGEN.color, data.color, rawProperty) || changed;
         if (data.organizer) {
             changed =
                 setProperty(vevent, addressProperty('organizer', data.organizer.email, data.organizer.name)) || changed;
