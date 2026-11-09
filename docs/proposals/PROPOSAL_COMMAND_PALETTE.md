@@ -51,10 +51,10 @@ Each is additive and small — richer results per the "arrives for free" design;
 
 ## 3. Per-user recents
 
-Waits for [PROPOSAL_HOME_RECENTS.md](PROPOSAL_HOME_RECENTS.md), which is still a proposal with no code behind it. No frontend-local placeholder gets built in the meantime (decided — don't ship what we'll replace). When `home.recents` lands:
+Waits for [PROPOSAL_HOME_RECENTS.md](PROPOSAL_HOME_RECENTS.md), which is still a proposal with no code behind it, and which builds the Drive Recent page first. No frontend-local placeholder gets built in the meantime (decided — don't ship what we'll replace). Once that page's data exists:
 
-- A `recents` provider feeds the empty state, replacing/augmenting the curated static Suggested list with per-user ranked recency.
-- Action ranking gains its recency boost.
+- A Recent files section joins the empty state beside the curated Suggested list. That proposal's palette section has the details.
+- Action ranking's recency boost is not covered: it needs per-command usage, which the recent files table doesn't hold (open question 4 below).
 
 ## 4. Content-aware input
 
