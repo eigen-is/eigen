@@ -40,3 +40,14 @@ export type ActiveComments = {
 };
 
 export type DocumentPanel = 'comments' | 'activity';
+
+export type CommentHoverTarget = { cardId: string; rect: DOMRect };
+
+export type CommentHover = {
+    target: CommentHoverTarget | null;
+    show: (cardId: string, rect: DOMRect) => void;
+    hide: () => void;
+    enterCard: () => void;
+    leaveCard: () => void;
+    dismiss: () => void;
+};
