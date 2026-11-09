@@ -116,7 +116,6 @@ An agent can't do this; it needs a person with Excel or Google Sheets. It's a do
 
 Verified, user-visible, bounded.
 
-- [ ] **After a row or column delete from a header menu**, the name box is blank and the status bar keeps the old sum. Both read the selection, which the delete leaves unset.
 - [ ] **A formula cell without `ct` keeps a cut's source after undo then redo**: `authored` in `state/modules/history.ts` reads the redone cut as a peer's change. An xlsx import can write such a cell.
 - [ ] **A wrapped cell can still store a row height measured in a fallback face**: the cell editor and the formula bar load the cell's own font for the typed text (`loadCellFont`, `state/modules/text.ts`), so a rich-text run in another family is measured in the system's font when the commit writes `cfg.rowlen`, and so is any text whose slice is still on its way. Fix: load each run's font with its text, and heal the stored height when a slice arrives after the commit. **S–M**
 

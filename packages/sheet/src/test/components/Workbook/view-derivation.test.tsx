@@ -109,6 +109,22 @@ test("a peer's row insert moves the selection's box in the render that moves its
     expect(boxes[0].top).toBe(`${13 * ROW_HEIGHT}px`);
 });
 
+// The selection a peer's delete takes whole goes, and what reads it goes with it.
+test("a peer's delete of the selected row clears the header highlights and the status bar", async () => {
+    const { container, workbook, select } = await mountWorkbook();
+    const highlights = (name: string) => container.querySelectorAll(`.sheet-${name}-header-selected`).length;
+    await select(10);
+    expect(container.textContent).toContain('Count: 1');
+    expect(highlights('col')).toBeGreaterThan(0);
+    expect(highlights('row')).toBeGreaterThan(0);
+    await act(async () => {
+        workbook().applyOp([{ op: 'deleteRowCol', id: 'one', path: [], value: { type: 'row', start: 10, end: 10 } }]);
+    });
+    expect(container.textContent).not.toContain('Count:');
+    expect(highlights('col')).toBe(0);
+    expect(highlights('row')).toBe(0);
+});
+
 test("a peer's freeze splits the overlay into its panes in its own render", async () => {
     const { workbook, boxes } = await mountWorkbook();
     boxes.length = 0;

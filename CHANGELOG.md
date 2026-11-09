@@ -49,6 +49,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Fills in Sheets** — a block dragged up or left lands in step with its source, and a date series counts by the date, not the text it shows
 - **Frozen panes in Sheets** — a press in a frozen cell that moves a pixel no longer throws the view back to the start
 - **Frozen panes and selection while others edit in Sheets** — a row someone inserts or a freeze someone sets moves your selection and panes at once
+- **Deleting frozen rows in Sheets** — deleting every frozen row or column ends the freeze on that side, for everyone, instead of pinning a row that was never frozen. Undo brings it back
+- **Deleting rows and columns in Sheets** — your selection lands on the row or column that took the deleted one's place, so the name box, the status bar and the arrow keys keep working. If someone else deletes what you selected, the header highlight and the count clear
 - **Comments in Sheets** — **Clear formatting** keeps a cell's link and comment, and **Delete comment** in a cell's menu asks first
 - **Array formulas in Sheets** — a formula such as `SUMPRODUCT(A1:A3*B1:B3)`, which Sheets can't calculate yet, keeps the number it has when you edit around it, instead of turning into 0. Typed new, it shows `#CALC!`
 - **Drafts in Mail** — a save that fails, or a crash during one, no longer loses the draft. An attached email stays an attachment, and removing an attachment never takes another with it

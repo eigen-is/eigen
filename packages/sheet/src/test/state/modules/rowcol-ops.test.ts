@@ -10,13 +10,14 @@ import { replaySheetsOps, withMaterializedData } from '../../../engine';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
 import type { Cell, ShiftedSheet } from '../../../engine/types';
 import type { Context } from '../../../state/context';
+import { freezeOf } from '../../../state/modules/freeze';
 import { undoEntry } from '../../../state/modules/history';
 import { saveHyperlink } from '../../../state/modules/hyperlink';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import type { Op } from '../../../state/types';
 import type { PatchOptions } from '../../../state/utils/patch';
 import { filterPatch, patchToOp } from '../../../state/utils/patch';
-import { author, join, receive } from '../factories/collab';
+import { author, join, receive, tab, tabEdit, tabReceive, tabRedo, tabUndo } from '../factories/collab';
 import { contextFactory } from '../factories/context';
 import { cellLinks } from '../factories/links';
 
@@ -502,6 +503,76 @@ describe("a row op sent with a peer's freeze or filter", () => {
         });
         for (const sheet of race(() => {}, { insertRowColOp: rows }, base)) {
             expect(sheet.frozen).toEqual({ type: 'both', range: { row_focus: 3, column_focus: 1 } });
+        }
+    });
+});
+
+// A row or column that was never frozen must not stay pinned once the frozen ones are gone, on the author's tab, a
+// peer's tab and a joiner alike.
+describe('a delete of the whole frozen band', () => {
+    const paneOf = (frozen: LibSheet['frozen']) =>
+        produce(richContext(), (ctx: Context) => {
+            ctx.sheets[0].frozen = frozen;
+        });
+    const pane = (type: NonNullable<LibSheet['frozen']>['type'], row_focus: number, column_focus: number) => ({
+        type,
+        range: { row_focus, column_focus },
+    });
+    const rows = (start: number, end: number) => ({ type: 'row', start, end, id: 'id_1' }) as const;
+    const columns = (start: number, end: number) => ({ type: 'column', start, end, id: 'id_1' }) as const;
+
+    test.each([
+        ['the rows of a row pane', pane('rangeRow', 1, 0), rows(0, 1), undefined],
+        ['the columns of a column pane', pane('rangeColumn', 0, 1), columns(0, 1), undefined],
+        ['more rows than the band', pane('rangeRow', 1, 0), rows(0, 2), undefined],
+        ['the rows of a pane on both axes', pane('rangeBoth', 1, 1), rows(0, 1), pane('rangeColumn', 0, 1)],
+        ['the columns of a pane on both axes', pane('rangeBoth', 1, 1), columns(0, 1), pane('rangeRow', 1, 0)],
+        ['the rows of a bare pane on both axes', pane('both', 1, 1), rows(0, 1), pane('rangeColumn', 0, 1)],
+        ['the columns of a bare column pane', pane('column', 0, 1), columns(0, 1), undefined],
+    ] as const)('%s leaves what is left of the pane on every reader', (_, frozen, deleted, after) => {
+        for (const sheet of race(() => {}, { deleteRowColOp: deleted }, paneOf(frozen))) {
+            expect(sheet.frozen).toEqual(after);
+        }
+    });
+
+    test('a delete that leaves part of the band keeps the pane', () => {
+        for (const sheet of race(() => {}, { deleteRowColOp: rows(0, 0) }, paneOf(pane('rangeRow', 1, 0)))) {
+            expect(sheet.frozen).toEqual(pane('rangeRow', 0, 0));
+        }
+    });
+
+    test('the second of two deletes unfreezes both tabs, which pin nothing', () => {
+        const base = paneOf(pane('rangeRow', 1, 0));
+        const [a, b] = [tab(base), tab(base)];
+        const remove = () => tabEdit(b, (ctx) => deleteRowCol(ctx, rows(0, 0)), { deleteRowColOp: rows(0, 0) });
+        const batches = [remove(), remove()];
+        for (const batch of batches) tabReceive(a, batch);
+        for (const { ctx } of [a, b]) {
+            expect(ctx.sheets[0].frozen).toBeUndefined();
+            expect(freezeOf(ctx)).toBeUndefined();
+        }
+        expect(join(base, batches)[0].frozen).toBeUndefined();
+    });
+
+    test.each([
+        ['row', pane('rangeRow', 1, 0), rows(0, 1)],
+        ['column', pane('rangeColumn', 0, 1), columns(0, 1)],
+        ['both', pane('rangeBoth', 1, 1), rows(0, 1)],
+    ] as const)('its undo brings a %s pane back on every reader, and its redo takes it again', (_, frozen, deleted) => {
+        const base = paneOf(frozen);
+        const [writer, peer] = [tab(base), tab(base)];
+        const removed = tabEdit(writer, (ctx) => deleteRowCol(ctx, deleted), { deleteRowColOp: deleted });
+        tabReceive(peer, removed);
+        const left = peer.ctx.sheets[0].frozen;
+        const undone = tabUndo(writer);
+        tabReceive(peer, undone);
+        for (const sheet of [writer.ctx.sheets[0], peer.ctx.sheets[0], join(base, [removed, undone])[0]]) {
+            expect(sheet.frozen).toEqual(frozen);
+        }
+        const redone = tabRedo(writer);
+        tabReceive(peer, redone);
+        for (const sheet of [writer.ctx.sheets[0], peer.ctx.sheets[0], join(base, [removed, undone, redone])[0]]) {
+            expect(sheet.frozen).toEqual(left);
         }
     });
 });
