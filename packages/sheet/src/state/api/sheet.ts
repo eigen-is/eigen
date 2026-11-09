@@ -57,9 +57,6 @@ export function copySheet(ctx: Context, sheetId: string) {
     );
     addSheet(ctx, copyId, sheetName, sheetData);
     setSheetOrder(ctx, { [copyId]: order });
-    // A formula map built before the copy, such as while the browser was idle after a load, lacks the copy's formulas.
-    // A peer's add reads them into the map once its batch applied; here the next edit builds the map again.
-    ctx.formulaCache.formulaCellInfoMap = null;
 }
 
 // Sets the given sheets' orders and renumbers every sheet from 0, so the tab strip and the sheet list agree.

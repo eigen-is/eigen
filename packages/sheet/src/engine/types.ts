@@ -2,7 +2,6 @@
 // sheet settings and filter criteria, and the engine's own types for formulas, their dependencies and the parser.
 
 import type { Sheet, SheetConfig } from '@workspace/lib/sheets';
-import type { DependencyIndex } from './dependency-index';
 import type { CellCoordinate } from './parser/helper/cell';
 
 // Sheet data shapes (Cell, CellMatrix, SingleRange, ConditionalFormatRule, …) live
@@ -119,7 +118,7 @@ export type FormulaCellInfo = {
 };
 
 export type FormulaCellInfoMap = {
-    [rxcxix: string]: FormulaCellInfo;
+    [key: string]: FormulaCellInfo;
 };
 
 export type CellResolver = {
@@ -133,13 +132,6 @@ export type EvaluationResult = {
     value: Cell['v'];
     // The error is an operator applied to an array, which this build can't evaluate.
     arrayOperation?: boolean;
-};
-
-export type FormulaEngineState = {
-    formulaCellInfoMap: FormulaCellInfoMap | null;
-    // Reverse lookup cell → formulas reading it; mirrors formulaCellInfoMap
-    // and must reset with it.
-    dependencyIndex: DependencyIndex;
 };
 
 // Scalar value that can appear in a formula expression or as a cell value, an error a cell holds included.

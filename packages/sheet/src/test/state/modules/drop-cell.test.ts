@@ -12,7 +12,7 @@ import { parseCellInput } from '../../../engine/format';
 import type { Context } from '../../../state/context';
 import { setCellValue } from '../../../state/modules/cell';
 import { fillFromEdge, onDropCellSelectEnd, updateDropCell } from '../../../state/modules/drop-cell';
-import { execFunctionGroup, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
+import { execFunctionGroup, warmFormulaGraph } from '../../../state/modules/formula-exec';
 import { normalizeSelection } from '../../../state/modules/selection';
 import { validationAt } from '../../../state/modules/validation-rules';
 import type { Cell, DataValidationRule, SingleRange } from '../../../state/types';
@@ -433,7 +433,7 @@ describe('a filled formula', () => {
             for (let r = 0; r < 3; r += 1) d[r][0] = { v: r + 1, m: `${r + 1}` };
             d[0][1] = { f: '=A1*2', v: 2, m: '2' };
         }, src);
-        warmFormulaCellInfoMap(ctx);
+        warmFormulaGraph(ctx);
 
         autoFillCell(ctx, src, { row: [1, 2], column: [1, 1] }, 'down');
         setCellValue(ctx, 2, 0, ctx.sheets[0].data, 10);

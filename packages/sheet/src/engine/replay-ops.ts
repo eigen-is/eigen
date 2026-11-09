@@ -12,6 +12,8 @@ import { enablePatches, Immer } from 'immer';
 import { isSheetName, sheetNameKey } from './a1-notation';
 import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
+import { FormulaEngine } from './formula-engine';
+import { FormulaGraph } from './formula-graph';
 import { namesSheet } from './formula-shift';
 import type { RecalcBudgets, RecomputeSeeds } from './recalc';
 import { recomputeAfter } from './recalc';
@@ -45,6 +47,8 @@ export function replaySheetsOps(
     // Every base sheet carries its config collections before the first op, so the config patches the editor writes
     // resolve here as they do in the editor.
     let result = sheets.map(withNormalizedSheet);
+    // Built at the first batch that recomputes, and kept until a batch renames, adds or deletes a sheet.
+    let graph: FormulaGraph | null = null;
     for (const batch of opBatches) {
         // One bad batch must never make the whole workbook unreadable. It rolls back and the replay goes on with the
         // next batch. The same batch is skipped on every replay.
@@ -64,22 +68,34 @@ export function replaySheetsOps(
                     }
                     const added = withNormalizedSheet(op.value);
                     result = [...result, dataOpIds?.has(op.value.id) ? withMaterializedData(added) : added];
+                    graph = null;
                 } else if (op.op === 'deleteSheet' && op.id) {
                     result = applySheetDelete(result, op.id);
+                    graph = null;
                 } else if (isRowColOp(op)) {
+                    const move = rowColOf(op);
                     result = applyRowColOp(result, op);
+                    graph = withinBudget(() => graph?.shift(result, move) ?? null);
                 } else if (op.op === 'renameSheet') {
                     result = applySheetRename(result, renameSheetOf(op));
+                    graph = null;
                 }
             }
             const normalOps = batch.filter((op) => op.op === 'add' || op.op === 'remove' || op.op === 'replace');
             const [patches] = opToPatchOnSheets(result, normalOps);
             result = immer.applyPatches(result, patches);
+            if (patches.length > 0) graph = withinBudget(() => graph?.followPatches(result, patches) ?? null);
             const seeds = seedsOf(batch);
-            if (seeds) result = recomputeAfter(result.map(withMaterializedData), seeds, { budgets });
+            if (seeds) {
+                const materialized = result.map(withMaterializedData);
+                graph ??= withinBudget(() => new FormulaGraph(materialized, budgets));
+                const engine = new FormulaEngine({ maxCellsRead: budgets.maxCellsRead });
+                result = graph ? recomputeAfter(materialized, seeds, graph, engine) : materialized;
+            }
         } catch (e) {
             onDropped(e);
             result = preBatch;
+            graph = null;
         }
     }
     return result.map(withSyncedCelldataIfData);
@@ -130,9 +146,23 @@ export function seedsOf(ops: readonly Op[]): RecomputeSeeds | null {
 
 // A row or column op's result on plain sheets. An insert past the sheet's size limit throws RowColError.
 export function applyRowColOp<S extends ShiftedSheet>(sheets: S[], op: Op): S[] {
-    return op.op === 'insertRowCol'
-        ? applySheetsInsertRowCol(sheets, insertRowColOf(op))
-        : applySheetsDeleteRowCol(sheets, deleteRowColOf(op));
+    const move = rowColOf(op);
+    return 'index' in move ? applySheetsInsertRowCol(sheets, move) : applySheetsDeleteRowCol(sheets, move);
+}
+
+function rowColOf(op: Op): InsertRowColOp | DeleteRowColOp {
+    return op.op === 'insertRowCol' ? insertRowColOf(op) : deleteRowColOf(op);
+}
+
+// The graph, or null once it passed a budget. The replay goes on without it: the batch's values stay as they were, and
+// its ops stand.
+function withinBudget(step: () => FormulaGraph | null): FormulaGraph | null {
+    try {
+        return step();
+    } catch (e) {
+        if (e instanceof RangeError) return null;
+        throw e;
+    }
 }
 
 // A stored sheet keeps its cells as the `celldata` list, but a cell op writes `data[r][c]`. So a sheet gets the dense

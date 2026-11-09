@@ -1,12 +1,11 @@
-import { describe, expect, it, spyOn } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import type { Patch } from 'immer';
-import { dependencySlots } from '../../../engine/dependency-index';
+import { applyPatches, produce } from 'immer';
+import { extractDependencies, FormulaGraph } from '../../../engine/formula-graph';
 import { sheetFinder } from '../../../engine/parser/helper/cell';
-import { extractDependencies } from '../../../engine/recalc';
 import type { Cell, FormulaDependency } from '../../../engine/types';
 import type { Context } from '../../../state/context';
-import { setFormulaCellInfo } from '../../../state/modules/formula-cache';
-import { getcellrange, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
+import { getcellrange, warmFormulaGraph } from '../../../state/modules/formula-exec';
 import type { Op } from '../../../state/types';
 import { join, receive } from '../factories/collab';
 import { contextFactory } from '../factories/context';
@@ -27,6 +26,10 @@ function makeCtx(): Context {
 
 const cell = (ctx: Context, r: number, c: number) => ctx.sheets[0].data![r][c];
 
+// Where the graph holds a formula, or null when it is unbuilt.
+const formulaCells = (ctx: Context) =>
+    ctx.formulaCache.graph && Object.values(ctx.formulaCache.graph.formulas).map(({ id, r, c }) => [id, r, c]);
+
 // A paste replaces whole cells, so the history of its undo and redo carries whole-cell patches, and the map has to
 // follow them either way.
 // A peer's op or a file can write anything into a cell, and the formula map reads every `f` it finds.
@@ -37,17 +40,17 @@ describe('a formula that is no text', () => {
         const ctx = makeCtx();
         const data: unknown[][] = ctx.sheets[0].data ?? [];
         data[1][0] = { f, v: 1 };
-        const map = warmFormulaCellInfoMap(ctx);
-        expect(Object.keys(map)).toEqual(['r0c1iid_1']);
+        warmFormulaGraph(ctx);
+        expect(formulaCells(ctx)).toEqual([['id_1', 0, 1]]);
         const [next] = edit(ctx, typed(0, 0, '7'));
         expect(cell(next, 0, 1)?.v).toBe(14);
     });
 
     it.each(forged)('a peer writing an f of %p leaves the map as it was', (f) => {
         const ctx = makeCtx();
-        warmFormulaCellInfoMap(ctx);
+        warmFormulaGraph(ctx);
         const next = receive(ctx, [{ op: 'replace', id: 'id_1', path: ['data', 2, 0], value: { f, v: 1 } }]);
-        expect(Object.keys(next.formulaCache.formulaCellInfoMap ?? {})).toEqual(['r0c1iid_1']);
+        expect(formulaCells(next)).toEqual([['id_1', 0, 1]]);
         const stored: unknown = next.sheets[0].data?.[2][0];
         expect(stored).toEqual({ f, v: 1 });
     });
@@ -76,17 +79,17 @@ describe('a formula that is no text', () => {
 
     it('a peer turning a formula into no text takes it out of the map', () => {
         const ctx = makeCtx();
-        warmFormulaCellInfoMap(ctx);
+        warmFormulaGraph(ctx);
         const next = receive(ctx, [{ op: 'replace', id: 'id_1', path: ['data', 0, 1, 'f'], value: 5 }]);
-        expect(next.formulaCache.formulaCellInfoMap).toEqual({});
-        expect(next.formulaCache.dependencyIndex.dependentsOf('id_1', 0, 0)).toEqual([]);
+        expect(formulaCells(next)).toEqual([]);
+        expect(warmFormulaGraph(next).affected(next.sheets, [{ id: 'id_1', r: 0, c: 0 }])).toEqual([]);
     });
 });
 
-describe('updateFormulaCache — whole-cell patches', () => {
+describe('followPatches — whole-cell patches', () => {
     it('undoing a formula pasted over a value drops it from the map', () => {
         const base = makeCtx();
-        warmFormulaCellInfoMap(base);
+        warmFormulaGraph(base);
         const [pasted, history] = edit(base, pasteInternal([0, 1], [0, 2]));
         expect(cell(pasted, 0, 2)?.f).toBe('=B1*2');
 
@@ -120,15 +123,15 @@ describe('updateFormulaCache — whole-cell patches', () => {
 });
 
 // A paste past the last row appends whole rows, and their undo shrinks the matrix.
-describe('updateFormulaCache — a paste that grows the grid', () => {
+describe('followPatches — a paste that grows the grid', () => {
     it('undoing it drops the new rows from the map', () => {
         const base = makeCtx();
-        warmFormulaCellInfoMap(base);
+        warmFormulaGraph(base);
         const [pasted, history] = edit(base, pasteInternal([0, 1], [6, 1]));
         expect(cell(pasted, 6, 1)?.f).toBe('=A7*2');
 
         let ctx = undo(pasted, history);
-        expect(ctx.formulaCache.formulaCellInfoMap?.r6c1iid_1).toBeUndefined();
+        expect(ctx.formulaCache.graph?.formulaAt('id_1', 6, 1)).toBeUndefined();
         [ctx] = edit(ctx, typed(0, 0, '9'));
 
         expect(cell(ctx, 0, 1)?.v).toBe(18);
@@ -136,19 +139,21 @@ describe('updateFormulaCache — a paste that grows the grid', () => {
     });
 
     // Immer shrinks an array through its length, so only a peer's hand-made op drops a row this way.
-    it('a batch that removes a row builds the map again', () => {
+    it('a batch that removes a row reads its sheet again', () => {
         const ctx = makeCtx();
-        warmFormulaCellInfoMap(ctx);
+        ctx.sheets[0].data![1][3] = { f: '=A2', v: 0, m: '0' };
+        warmFormulaGraph(ctx);
         const patches: Patch[] = [{ op: 'remove', path: ['sheets', 0, 'data', 0] }];
-        ctx.formulaCache.updateFormulaCache(ctx, patches);
-        expect(ctx.formulaCache.formulaCellInfoMap).toBeNull();
+        const next = produce(ctx, (draft) => applyPatches(draft, patches));
+        next.formulaCache.followPatches(next, patches);
+        expect(formulaCells(next)).toEqual([['id_1', 0, 3]]);
     });
 
     it("redoing it tracks the new rows' formulas", () => {
         const [pasted, history] = edit(makeCtx(), pasteInternal([0, 1], [6, 1]));
         let ctx = undo(pasted, history);
-        ctx.formulaCache.formulaCellInfoMap = null;
-        warmFormulaCellInfoMap(ctx);
+        ctx.formulaCache.forgetGraph();
+        warmFormulaGraph(ctx);
 
         ctx = redo(ctx, history);
         [ctx] = edit(ctx, typed(6, 0, '4'));
@@ -161,16 +166,16 @@ describe('updateFormulaCache — a paste that grows the grid', () => {
         const data = ctx.sheets[0].data ?? [];
         data[0][3] = { f: '=SUM(A:A)', v: 5, m: '5' };
         data[1][5] = { f: '=SUM(1:1)', v: 23, m: '23' };
-        warmFormulaCellInfoMap(ctx);
+        warmFormulaGraph(ctx);
         return ctx;
     };
 
-    it('keeps the formula map it has, so a paste costs no rebuild', () => {
+    it('keeps the formula graph it has, so a paste costs no rebuild', () => {
         const ctx = withWholeSums(makeCtx());
-        const map = ctx.formulaCache.formulaCellInfoMap;
+        const graph = ctx.formulaCache.graph;
         const [pasted] = edit(ctx, pasteInternal([0, 2], [7, 7]));
         expect(pasted.sheets[0].data).toHaveLength(8);
-        expect(pasted.formulaCache.formulaCellInfoMap).toBe(map);
+        expect(pasted.formulaCache.graph).toBe(graph);
     });
 
     it('a whole column reads the rows it added, and a whole row the columns', () => {
@@ -185,10 +190,10 @@ describe('updateFormulaCache — a paste that grows the grid', () => {
     it('redoing it, as a peer applies it, extends a whole column', () => {
         const [pasted, history] = edit(withWholeSums(makeCtx()), pasteInternal([0, 2], [7, 7]));
         let ctx = undo(pasted, history);
-        const map = warmFormulaCellInfoMap(ctx);
+        const graph = warmFormulaGraph(ctx);
 
         ctx = redo(ctx, history);
-        expect(ctx.formulaCache.formulaCellInfoMap).toBe(map);
+        expect(ctx.formulaCache.graph).toBe(graph);
         [ctx] = edit(ctx, typed(7, 0, '100'));
 
         expect(cell(ctx, 0, 3)?.v).toBe(105);
@@ -212,14 +217,11 @@ describe('setFormulaCellInfo — lookups into whole columns', () => {
                 },
             ],
         }) as Context;
-        warmFormulaCellInfoMap(ctx);
-        const set = spyOn(ctx.formulaCache.dependencyIndex, 'set');
+        expect(() => new FormulaGraph(ctx.sheets, { maxDependencySlots: 1 })).toThrow(RangeError);
+        const graph = new FormulaGraph(ctx.sheets, { maxDependencySlots: 2 });
 
-        setFormulaCellInfo(ctx, { r: 0, c: 1, id: 'r' });
-
-        const [[, deps]] = set.mock.calls;
-        expect(dependencySlots(deps)).toBe(2);
-        expect(ctx.formulaCache.dependencyIndex.dependentsOf('d', 6_399, 0)).toEqual(['r0c1ir']);
+        const [reader] = graph.affected(ctx.sheets, [{ id: 'd', r: 6_399, c: 0 }]);
+        expect(reader).toMatchObject({ id: 'r', r: 0, c: 1 });
     });
 });
 
@@ -268,7 +270,7 @@ describe('setFormulaCellInfo — a reference to a sheet with no matrix', () => {
                 { name: 'Fresh', id: 'f', order: 1, celldata: [{ r: 0, c: 0, v: { v: 1 } }] },
             ],
         }) as Context;
-        warmFormulaCellInfoMap(base);
+        warmFormulaGraph(base);
         let [ctx] = edit(base, typed(0, 0, '=Fresh!A1+SUM(Fresh!B:B)'));
 
         [ctx] = edit(ctx, (draft) => {

@@ -4,7 +4,6 @@
 // Every range read is clamped to the sheet's grid and counted against maxCellsRead. It also says when this build can't
 // evaluate a formula's own text, which a recompute takes as no answer.
 
-import { DependencyIndex } from './dependency-index';
 import { cellValue } from './format';
 import { inlineNames } from './formula-shift';
 import { matrixWidth } from './formula-utils';
@@ -28,7 +27,6 @@ import type {
     CellResolver,
     CompiledFormula,
     EvaluationResult,
-    FormulaEngineState,
     FormulaValue,
     RangeCell,
 } from './types';
@@ -53,7 +51,6 @@ const NAME_RE = /^[\p{L}_\\][\p{L}\p{N}_.\\?]*$/u;
 const FUNCTION_CALL_RE = /(?<![\p{L}\p{N}_.])([\p{L}_][\p{L}\p{N}_.]*)\s*\(/gu;
 
 export class FormulaEngine {
-    public state: FormulaEngineState;
     private parser: Parser;
     // Each sheet's width, by sheet id, for the resolver in `widthsOf`. A resolver hands out the same matrices for as
     // long as it is used, so their widths hold as long, and a range read needn't scan every row of its sheet.
@@ -65,11 +62,6 @@ export class FormulaEngine {
 
     public constructor({ maxCellsRead = Number.POSITIVE_INFINITY } = {}) {
         this.maxCellsRead = maxCellsRead;
-        this.state = {
-            formulaCellInfoMap: null,
-            dependencyIndex: new DependencyIndex(),
-        };
-
         this.parser = new Parser();
     }
 

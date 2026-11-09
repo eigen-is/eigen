@@ -65,7 +65,7 @@ import {
     sheetChartClipboardItem,
     stepNewestEntry,
     undoEntry,
-    warmFormulaCellInfoMapOnIdle,
+    warmFormulaGraphOnIdle,
 } from '../../state';
 import { consumePendingCopy } from '../../state/modules/clipboard';
 import { FilterMenu } from '../ContextMenu/FilterMenu';
@@ -190,7 +190,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
         // The formula map is built off the interaction path, so the first edit on a large workbook doesn't wait seconds
         // for it.
-        useEffect(() => warmFormulaCellInfoMapOnIdle(getContext), [getContext]);
+        useEffect(() => warmFormulaGraphOnIdle(getContext), [getContext]);
 
         const setContextWithProduce = useCallback(
             (recipe: (ctx: Context) => void, options: SetContextOptions = {}) => {

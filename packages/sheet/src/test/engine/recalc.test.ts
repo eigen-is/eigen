@@ -2,10 +2,18 @@ import { describe, expect, test } from 'bun:test';
 import type { Cell, Sheet } from '@workspace/lib/sheets';
 import { createArrayResolver } from '../../engine/cell-resolver';
 import { FormulaEngine } from '../../engine/formula-engine';
+import { extractDependencies, FormulaGraph } from '../../engine/formula-graph';
 import { sheetFinder } from '../../engine/parser/helper/cell';
-import { extractDependencies, recalcSheets, recomputeAfter } from '../../engine/recalc';
+import type { RecalcBudgets, RecomputeSeeds } from '../../engine/recalc';
+import { recalcSheets, recomputeAfter } from '../../engine/recalc';
 
 // ── Builders ────────────────────────────────────────────────────────────────
+
+// A recompute over a graph built for it, as the replay's first one is.
+function recompute<S extends Sheet>(sheets: S[], seeds: RecomputeSeeds, budgets: RecalcBudgets = {}): S[] {
+    const graph = new FormulaGraph(sheets, budgets);
+    return recomputeAfter(sheets, seeds, graph, new FormulaEngine({ maxCellsRead: budgets.maxCellsRead }));
+}
 
 function num(v: number): Cell {
     return { v, m: String(v), ct: { fa: 'General', t: 'n' } };
@@ -185,7 +193,7 @@ describe('engine/recalc — recalcSheets', () => {
         const sheets = [
             sheet('s1', 'Sheet1', [[formula('=FILTER(1,2)', { v: 7, m: '7', ct: { fa: 'General', t: 'n' } })]]),
         ];
-        const out = recomputeAfter(sheets, everyFormula);
+        const out = recompute(sheets, everyFormula);
         expect(out[0].data![0][0]?.v).toBe(7);
         expect(out[0].data![0][0]?.m).toBe('7');
         expect(out[0].data![0][0]?.ct?.t).not.toBe('e');
@@ -197,7 +205,7 @@ describe('engine/recalc — recalcSheets', () => {
                 [null, formula('=FILTER(1,2)', { v: 7, m: '7', ct: { fa: 'General', t: 'n' } }), formula('=B1+1')],
             ]),
         ];
-        const out = recomputeAfter(sheets, everyFormula);
+        const out = recompute(sheets, everyFormula);
         expect(out[0].data![0][1]?.v).toBe(7);
         expect(out[0].data![0][2]?.v).toBe(8);
     });
@@ -211,7 +219,7 @@ describe('engine/recalc — recalcSheets', () => {
                 [num(3), formula('=B1+1')],
             ]),
         ];
-        const out = recomputeAfter(sheets, everyFormula);
+        const out = recompute(sheets, everyFormula);
         expect(out[0].data![0][1]?.v).toBe(2);
         expect(out[0].data![1][1]?.v).toBe(1);
         // A cell that reads it sees the cached value, not the fallback.
@@ -228,7 +236,7 @@ describe('engine/recalc — recalcSheets', () => {
             sheet('s2', 'Sheet2', [[num(10)]]),
             sheet('s3', 'Sheet 3', [[num(2)]]),
         ];
-        const out = recomputeAfter(sheets, everyFormula);
+        const out = recompute(sheets, everyFormula);
         expect(out[0].data![0][1]?.v).toBe('FILTER( Rate');
         expect(out[0].data![1][1]?.v).toBe(13);
     });
@@ -236,7 +244,7 @@ describe('engine/recalc — recalcSheets', () => {
     // Excel never evaluates the branch IF skips, so the engine computes what Excel did.
     test('a function the engine lacks in a branch IF skips recalculates past a stale cached value', () => {
         const sheets = [sheet('s1', 'Sheet1', [[num(1), formula('=IF(A1>0,A1+1,FILTER(A1:A3,TRUE))', num(5))]])];
-        const out = recomputeAfter(sheets, everyFormula);
+        const out = recompute(sheets, everyFormula);
         expect(out[0].data![0][1]?.v).toBe(2);
     });
 
@@ -251,7 +259,7 @@ describe('engine/recalc — recalcSheets', () => {
                 [num(3), formula('=IFERROR(Sheet1!Discount,7)', num(5)), formula('=B1*100')],
             ]),
         ];
-        const out = recomputeAfter(sheets, everyFormula);
+        const out = recompute(sheets, everyFormula);
         expect(out[0].data![0][1]?.v).toBe(0.21);
         expect(out[0].data![1][1]?.v).toBe(3.6);
         expect(out[0].data![2][1]?.v).toBe(5);
@@ -323,7 +331,7 @@ describe('engine/recalc — recalcSheets', () => {
                 [formula('=OFFSET(B1,0,1)', str('')), formula('=A1', error('#N/A'))],
             ]),
         ];
-        const values = recomputeAfter(sheets, everyFormula)[0].data!.map((row) => row.map((cell) => cell?.v));
+        const values = recompute(sheets, everyFormula)[0].data!.map((row) => row.map((cell) => cell?.v));
         expect(values).toEqual([
             ['#N/A', '#VALUE!'],
             ['', '#N/A'],
@@ -333,7 +341,7 @@ describe('engine/recalc — recalcSheets', () => {
     // Only an error string is an error: a cached text that starts with # is a value the guard keeps.
     test('a cached text that starts with # is kept over a function the engine lacks', () => {
         const sheets = [sheet('s1', 'Sheet1', [[num(1), formula('=FILTER(A1:A2,A1:A2>0)', str('#tag'))]])];
-        expect(recomputeAfter(sheets, everyFormula)[0].data![0][1]?.v).toBe('#tag');
+        expect(recompute(sheets, everyFormula)[0].data![0][1]?.v).toBe('#tag');
     });
 
     test('imported VLOOKUP with a lower-case FALSE resolves against the looked-up sheet', () => {
@@ -364,7 +372,7 @@ describe('engine/recalc — recalcSheets', () => {
                 [str('b'), num(5), num(50), formula('=XLOOKUP("b",A1:A2,B1:C2)', num(2))],
             ]),
         ];
-        const out = recomputeAfter(sheets, everyFormula);
+        const out = recompute(sheets, everyFormula);
         expect(out[0].data![0][3]?.v).toBe(5);
         // A row-wide return is a spill anchor, which holds the row's first value.
         expect(out[0].data![1][3]?.v).toBe(5);
@@ -410,7 +418,7 @@ describe('engine/recalc — recalcSheets', () => {
                 ],
             ]),
         ];
-        const [one, two, three, four, five] = recomputeAfter(sheets, everyFormula)[0].data![0];
+        const [one, two, three, four, five] = recompute(sheets, everyFormula)[0].data![0];
         expect(one).toMatchObject({ v: '005', ct: { fa: '0.00', t: 'g' } });
         expect(two).toMatchObject({ v: 4, m: '4.00', ct: { fa: '0.00', t: 'n' } });
         expect(three).toMatchObject({ v: true, ct: { fa: 'General', t: 'b' } });
@@ -584,7 +592,7 @@ describe('engine/recalc — recalcSheets', () => {
                 [num(2), null],
             ]),
         ];
-        expect(recomputeAfter(cached, everyFormula, { budgets: { maxCellsRead: 1 } })[0].data![0][1]?.v).toBe(9);
+        expect(recompute(cached, everyFormula, { maxCellsRead: 1 })[0].data![0][1]?.v).toBe(9);
         const out = recalcSheets(sheets, { maxCellsRead: 5 });
         expect([out[0].data![0][1]?.v, out[0].data![1][1]?.v]).toEqual([6, 3]);
     });

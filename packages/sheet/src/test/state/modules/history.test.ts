@@ -15,7 +15,7 @@ import type { Cell, ShiftedSheet } from '../../../engine/types';
 import { copySheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { applyDataValidation } from '../../../state/modules/data-validation';
-import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
+import { warmFormulaGraph } from '../../../state/modules/formula-exec';
 import type { RowColMove } from '../../../state/modules/history-shift';
 import { deleteMove, insertMove, shiftEntries } from '../../../state/modules/history-shift';
 import { saveHyperlink } from '../../../state/modules/hyperlink';
@@ -800,8 +800,8 @@ describe("a formula is its cell's `f`, nothing else", () => {
     test('a row written past the end leaves holes in the matrix, and the map still builds', () => {
         const t = tab(workbook());
         tabReceive(t, [{ op: 'replace', id: ONE, path: ['data', 50], value: [{ f: '=1+1', v: 2, m: '2' }] }]);
-        t.ctx.formulaCache.formulaCellInfoMap = null;
-        expect(warmFormulaCellInfoMap(t.ctx)[`r50c0i${ONE}`]?.formula).toBe('=1+1');
+        t.ctx.formulaCache.forgetGraph();
+        expect(warmFormulaGraph(t.ctx).formulaAt(ONE, 50, 0)?.formula).toBe('=1+1');
     });
 
     test('a stored op on the old recalc list fails no batch, and leaves no list on the sheet', () => {

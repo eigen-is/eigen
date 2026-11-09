@@ -14,6 +14,7 @@ import { getFlowdata, getSheetConfig } from '../context';
 import type { Selection, Sheet } from '../types';
 import { deleteMarker, insertMarker } from '../utils';
 import { cancelNormalSelected } from './cell';
+import { snapshotContext } from './formula-cache';
 import { recomputeAfterOps } from './formula-exec';
 import type { RowColMove } from './history-shift';
 import { deleteMove, insertMove } from './history-shift';
@@ -32,8 +33,7 @@ export function insertRowCol(
     const { type, index, count, direction } = op;
 
     writeBackSheets(ctx, applySheetsInsertRowCol(ctx.sheets, op));
-
-    ctx.formulaCache.formulaCellInfoMap = null;
+    ctx.formulaCache.graph?.shift(snapshotContext(ctx).sheets, op);
     if (fromBatch) return;
     followView(ctx, insertMove(op));
     const data = getFlowdata(ctx, op.id);
@@ -57,8 +57,7 @@ export function deleteRowCol(
 ) {
     if (!fromBatch && ctx.allowEdit === false) return;
     writeBackSheets(ctx, applySheetsDeleteRowCol(ctx.sheets, op));
-
-    ctx.formulaCache.formulaCellInfoMap = null;
+    ctx.formulaCache.graph?.shift(snapshotContext(ctx).sheets, op);
     if (fromBatch) return;
     followView(ctx, deleteMove(op));
     recomputeAfterOps(ctx, [deleteMarker(op)]);

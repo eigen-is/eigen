@@ -192,7 +192,7 @@ function patchStep(ctx: Context, apply: Patch[], written: Patch[]): Step {
     const patches = withoutComputedValues(ctx, kept);
     if (patches.length === 0) return { ctx, ops: [] };
     const restored = produce(applyPatches(ctx, patches), settleCurrentSheet);
-    restored.formulaCache.updateFormulaCache(restored, patches);
+    restored.formulaCache.followPatches(restored, patches);
     const [next, recalculated] = produceWithPatches(restored, (draft: Context) => recalculate(draft, patches));
     return { ctx: next, ops: patchToOp(next, [...patches, ...filterPatch(recalculated)]) };
 }

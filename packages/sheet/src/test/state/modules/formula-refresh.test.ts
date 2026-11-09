@@ -53,7 +53,7 @@ describe('a delete with formulas on several sheets', () => {
 
         // The other sheet's formula must still be resolved against *its own*
         // data, not silently dropped.
-        expect(ctx.formulaCache.formulaCellInfoMap?.['r10c4iid_2']).toBeDefined();
+        expect(ctx.formulaCache.graph?.formulaAt('id_2', 10, 4)).toBeDefined();
     });
 });
 

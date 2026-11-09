@@ -49,7 +49,7 @@ import {
     settleCurrentSheet,
     shiftEntries,
     updateFloatingBox,
-    warmFormulaCellInfoMapOnIdle,
+    warmFormulaGraphOnIdle,
 } from '../../state';
 
 type Stacks = Pick<GlobalCache, 'undoList' | 'redoList' | 'cutByPeer'>;
@@ -134,7 +134,7 @@ export function generateAPIs(
                 { noHistory: true },
             );
             if (lost) getContext().getRefs().cellInput.current?.blur();
-            warmFormulaCellInfoMapOnIdle(getContext);
+            warmFormulaGraphOnIdle(getContext);
             setStacksAfterPeer(history, [], []);
             return accepted;
         },

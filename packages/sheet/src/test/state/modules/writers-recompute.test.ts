@@ -4,7 +4,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Context } from '../../../state/context';
 import { updateCell } from '../../../state/modules/cell';
-import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
+import { warmFormulaGraph } from '../../../state/modules/formula-exec';
 import { saveHyperlink } from '../../../state/modules/hyperlink';
 import { mergeCells } from '../../../state/modules/merge';
 import { getDataArr, getRegStr, updateMoreCell } from '../../../state/modules/split-column';
@@ -19,11 +19,14 @@ function rowTab(row: (Cell | null)[]) {
             sheets: [{ name: 'One', id: 'id_1', order: 0, data: [row] }],
         }) as Context,
     );
-    warmFormulaCellInfoMap(t.ctx);
+    warmFormulaGraph(t.ctx);
     return t;
 }
 
-const formulasAt = (ctx: Context) => Object.keys(ctx.formulaCache.formulaCellInfoMap ?? {}).sort();
+const formulasAt = (ctx: Context) =>
+    Object.values(ctx.formulaCache.graph?.formulas ?? {})
+        .map(({ r, c, id }) => `r${r}c${c}i${id}`)
+        .sort();
 const valuesOf = (ctx: Context) => ctx.sheets[0].data?.[0].map((cell) => cell?.v);
 const formulaAt = (ctx: Context, c: number) => ctx.sheets[0].data?.[0][c]?.f;
 

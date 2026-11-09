@@ -51,6 +51,5 @@ export { copySheetName, legalSheetNames, renameSheetTexts } from './sheet-name';
 export type {
     CellResolver,
     EvaluationResult,
-    FormulaEngineState,
 } from './types';
 export { valueIsError } from './validation';
