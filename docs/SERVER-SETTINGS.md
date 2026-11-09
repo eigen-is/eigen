@@ -78,7 +78,7 @@ Admins keep what the Users, Guests and team pages need. They read `GET /settings
 
 ## An admin password reset revokes every way in
 
-`PUT /settings/user/:userId/password` calls `resetUserPassword()` (`apps/api/src/lib/user/reset-password.ts`), the same path as `./eigen reset-password`. It signs the user out everywhere, closes their collab sockets and revokes their app passwords, since those open IMAP, CalDAV and WebDAV without the password. An open IMAP session stays up until it drops, because Dovecot checks the password only at login, and so does the user's event stream. It refuses a guest, who signs in with a code, and it refuses the owner unless the owner resets their own. better-auth's own `/admin/set-user-password` revokes nothing, so it is in `disabledPaths` (`apps/api/src/lib/auth/auth.ts`).
+`PUT /settings/user/:userId/password` calls `resetUserPassword()` (`apps/api/src/lib/user/reset-password.ts`), the same path as `./eigen reset-password`. It signs the user out everywhere, which closes their collab sockets and event streams within 15 s, and revokes their app passwords, since those open IMAP, CalDAV and WebDAV without the password. An open IMAP session stays up until it drops, because Dovecot checks the password only at login. It refuses a guest, who signs in with a code, and it refuses the owner unless the owner resets their own. better-auth's own `/admin/set-user-password` revokes nothing, so it is in `disabledPaths` (`apps/api/src/lib/auth/auth.ts`).
 
 ## The Users page sizes homes without booting them
 

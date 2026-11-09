@@ -24,7 +24,7 @@ A public link is view-only. Viewing covers what users ask for: "have a look at t
 | Guest limits | `requireNonGuest()` on the ACL, chat invite, access-check, request-access and email-collaborators routes; `protocol-auth.ts` refuses guests | A visitor can't share onward, ask for access, mail collaborators, or use WebDAV, CalDAV or IMAP |
 | ACL check | `canFromAncestors` and `matchesACL` in `apps/api/src/lib/drive/acl.ts` | An email entry on a folder covers everything below it |
 | Read-only collab | The collab route checks write on every frame | A reader's edits never land. Comment writes are gated on write too ([COMMENTS.md](../COMMENTS.md)) |
-| Revoke | `enforceReadAccess` on every open document, called on every saved ACL change | Removing the entry closes the visitor's open collab sockets at once |
+| Revoke | `checkAccess` on each socket's 15 s keepalive | Removing the entry closes the visitor's open collab sockets within 15 s |
 | Guest shell | `useIsGuest` in `packages/lib/src/core/auth/hooks/use-is-guest.ts`, read by `topbar.tsx` and `app-sidebar.tsx` | The place where a narrower frontend is already decided |
 | Guest sweep | `cleanupInactiveGuests` in `apps/api/src/lib/auth/guest-cleanup.ts` | Deletes inactive guests. It must skip link accounts, see below |
 | Share dialog | `DriveAccessListEdit` in `packages/ui/src/components/drive/drive-access-list-edit.tsx` | The **General access** block, where a link section fits |

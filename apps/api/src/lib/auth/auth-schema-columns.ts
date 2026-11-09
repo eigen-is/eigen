@@ -1,13 +1,15 @@
-// Gives users3.db the columns better-auth expects. That database has no versioned migrations: setup creates its
-// tables once, so a column its tables lack is added here, at boot, before better-auth reads the database. A new auth
-// column goes here, in the schema and in setup's DDL together.
+// Gives users3.db the columns better-auth expects and the indexes Eigen's own reads need. That database has no
+// versioned migrations: setup creates its tables once, so a column its tables lack is added here, at boot, before
+// better-auth reads the database. A new auth column goes here, in the schema and in setup's DDL together. Setup runs
+// this too, so an index lives here alone.
 
 import type { Database } from 'bun:sqlite';
 
 export function ensureAuthSchemaColumns(db: Database): void {
+    const columnsOf = (table: string) => db.query<{ name: string }, []>(`PRAGMA table_info("${table}")`).all();
     // A table that does not exist yet is skipped, because setup's CREATE TABLE has every column.
     const missing = (table: string, column: string): boolean => {
-        const columns = db.query<{ name: string }, []>(`PRAGMA table_info("${table}")`).all();
+        const columns = columnsOf(table);
         return columns.length > 0 && !columns.some((existing) => existing.name === column);
     };
     if (missing('user', 'last_login_at')) {
@@ -36,5 +38,11 @@ export function ensureAuthSchemaColumns(db: Database): void {
         db.run(`ALTER TABLE "two_factor" ADD COLUMN "verified" integer`);
         db.run(`ALTER TABLE "two_factor" ADD COLUMN "failed_verification_count" integer`);
         db.run(`ALTER TABLE "two_factor" ADD COLUMN "locked_until" integer`);
+    }
+    // A user's memberships are read on every collab frame and every keepalive.
+    for (const table of ['member', 'team_member']) {
+        if (columnsOf(table).length > 0) {
+            db.run(`CREATE INDEX IF NOT EXISTS "${table}_user_id_idx" ON "${table}" ("user_id")`);
+        }
     }
 }

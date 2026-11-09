@@ -97,7 +97,7 @@ export type TestContext = {
 
 let context: TestContext | null = null;
 
-function extractSessionToken(headers: Headers): string {
+export function extractSessionToken(headers: Headers): string {
     const setCookie = headers.get('set-cookie') || '';
     const match = setCookie.match(/better-auth\.session_token=([^;]+)/);
     if (!match) {
@@ -187,6 +187,14 @@ export async function signsIn(email: string, password: string): Promise<boolean>
     } catch {
         return false;
     }
+}
+
+export async function sessionIdOf(sessionToken: string): Promise<string> {
+    const session = await auth.api.getSession({
+        headers: new Headers({ cookie: `better-auth.session_token=${sessionToken}` }),
+    });
+    if (!session) throw new Error('the token has no session');
+    return session.session.id;
 }
 
 export async function hasSession(sessionToken: string): Promise<boolean> {
