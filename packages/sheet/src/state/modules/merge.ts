@@ -1,5 +1,6 @@
-// Merging and unmerging cells: mergeCells writes or removes the merge records in a sheet's config and the
-// mc marks on the cells they cover, for merge all, merge by row or column, and unmerge.
+// Merging and unmerging cells: mergeCells writes or removes the merge records in a sheet's config and the mc marks on
+// the cells they cover, for merge all, merge by row or column, and unmerge. A merge keeps its first filled cell, so the
+// cells it covers lose their values and formulas, and the formulas that read them recompute.
 
 import { cloneDeep } from 'es-toolkit/compat';
 import { cellValue } from '../../engine/format';
@@ -7,39 +8,7 @@ import { isRealNull } from '../../engine/validation';
 import type { Context } from '../context';
 import type { Cell, CellMatrix, MergeCell, Range } from '../types';
 import { getSheetIndex } from '../utils';
-
-// Restore the cells covered by merges intersecting the range: the anchor cell's
-// content is stashed in `fv` and re-applied, the other members are cleared.
-function unmergeRange(d: CellMatrix, merge: Record<string, MergeCell>, r1: number, r2: number, c1: number, c2: number) {
-    const fv: Record<string, Cell> = {};
-
-    for (let r = r1; r <= r2; r += 1) {
-        for (let c = c1; c <= c2; c += 1) {
-            const cell = d[r][c];
-
-            if (cell != null && cell.mc != null) {
-                const mc_r = cell.mc.r;
-                const mc_c = cell.mc.c;
-
-                if ('rs' in cell.mc) {
-                    delete cell.mc;
-                    delete merge[`${mc_r}_${mc_c}`];
-
-                    fv[`${mc_r}_${mc_c}`] = cloneDeep(cell) || {};
-                } else {
-                    const cell_clone = cloneDeep(fv[`${mc_r}_${mc_c}`]);
-
-                    delete cell_clone.v;
-                    delete cell_clone.m;
-                    delete cell_clone.ct;
-                    delete cell_clone.f;
-
-                    d[r][c] = cell_clone;
-                }
-            }
-        }
-    }
-}
+import { cellsIn, recomputeCells } from './refresh';
 
 export function mergeCells(ctx: Context, sheetId: string, ranges: Range, type: string) {
     const idx = getSheetIndex(ctx, sheetId);
@@ -50,160 +19,64 @@ export function mergeCells(ctx: Context, sheetId: string, ranges: Range, type: s
     // A sheet that is not loaded has no cells to merge.
     if (!d) return;
 
-    const cfg = (sheet.config ??= {});
-    if (cfg.merge == null) {
-        cfg.merge = {};
+    const merge = ((sheet.config ??= {}).merge ??= {});
+    const unmerge =
+        type === 'merge-cancel' || ranges.some((range) => cellsIn(range, sheetId).some(({ r, c }) => d[r][c]?.mc));
+
+    for (const { row, column } of ranges) {
+        const [r1, r2] = row;
+        const [c1, c2] = column;
+        if (r1 === r2 && c1 === c2) continue;
+
+        if (unmerge) {
+            unmergeRange(d, merge, r1, r2, c1, c2);
+        } else if (type === 'merge-all') {
+            mergeBlock(d, merge, r1, r2, c1, c2);
+        } else if (type === 'merge-vertical') {
+            for (let c = c1; c <= c2; c += 1) mergeBlock(d, merge, r1, r2, c, c);
+        } else if (type === 'merge-horizontal') {
+            for (let r = r1; r <= r2; r += 1) mergeBlock(d, merge, r, r, c1, c2);
+        }
     }
 
-    if (type === 'merge-cancel') {
-        for (let i = 0; i < ranges.length; i += 1) {
-            const range = ranges[i];
-            const r1 = range.row[0];
-            const r2 = range.row[1];
-            const c1 = range.column[0];
-            const c2 = range.column[1];
+    recomputeCells(
+        ctx,
+        ranges.flatMap((range) => cellsIn(range, sheetId)),
+    );
+}
 
-            if (r1 === r2 && c1 === c2) {
-                continue;
-            }
+// The cells a merge covered take the format of its first cell and none of its content.
+function unmergeRange(d: CellMatrix, merge: Record<string, MergeCell>, r1: number, r2: number, c1: number, c2: number) {
+    const firstCells: Record<string, Cell> = {};
 
-            unmergeRange(d, cfg.merge, r1, r2, c1, c2);
-        }
-    } else {
-        let isHasMc = false; // Whether the selection contains merged cells
+    for (let r = r1; r <= r2; r += 1) {
+        for (let c = c1; c <= c2; c += 1) {
+            const cell = d[r][c];
+            if (cell?.mc == null) continue;
 
-        for (let i = 0; i < ranges.length; i += 1) {
-            const range = ranges[i];
-            const r1 = range.row[0];
-            const r2 = range.row[1];
-            const c1 = range.column[0];
-            const c2 = range.column[1];
-
-            for (let r = r1; r <= r2; r += 1) {
-                for (let c = c1; c <= c2; c += 1) {
-                    const cell = d[r][c];
-
-                    if (cell?.mc) {
-                        isHasMc = true;
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (isHasMc) {
-            // Selection has merged cells (all selections will unmerge)
-            for (let i = 0; i < ranges.length; i += 1) {
-                const range = ranges[i];
-                const r1 = range.row[0];
-                const r2 = range.row[1];
-                const c1 = range.column[0];
-                const c2 = range.column[1];
-
-                if (r1 === r2 && c1 === c2) {
-                    continue;
-                }
-
-                unmergeRange(d, cfg.merge, r1, r2, c1, c2);
-            }
-        } else {
-            for (let i = 0; i < ranges.length; i += 1) {
-                const range = ranges[i];
-                const r1 = range.row[0];
-                const r2 = range.row[1];
-                const c1 = range.column[0];
-                const c2 = range.column[1];
-
-                if (r1 === r2 && c1 === c2) {
-                    continue;
-                }
-
-                if (type === 'merge-all') {
-                    let fv = {};
-                    let isfirst = false;
-
-                    for (let r = r1; r <= r2; r += 1) {
-                        for (let c = c1; c <= c2; c += 1) {
-                            const cell = d[r][c];
-
-                            if (cell != null && (!isRealNull(cellValue(cell)) || cell.f != null) && !isfirst) {
-                                fv = cloneDeep(cell) || {};
-                                isfirst = true;
-                            }
-
-                            d[r][c] = { mc: { r: r1, c: c1 } };
-                        }
-                    }
-
-                    d[r1][c1] = fv;
-                    const a = d[r1][c1];
-                    if (!a) return;
-                    a.mc = { r: r1, c: c1, rs: r2 - r1 + 1, cs: c2 - c1 + 1 };
-
-                    cfg.merge[`${r1}_${c1}`] = {
-                        r: r1,
-                        c: c1,
-                        rs: r2 - r1 + 1,
-                        cs: c2 - c1 + 1,
-                    };
-                } else if (type === 'merge-vertical') {
-                    for (let c = c1; c <= c2; c += 1) {
-                        let fv = {};
-                        let isfirst = false;
-
-                        for (let r = r1; r <= r2; r += 1) {
-                            const cell = d[r][c];
-
-                            if (cell != null && (!isRealNull(cellValue(cell)) || cell.f != null) && !isfirst) {
-                                fv = cloneDeep(cell) || {};
-                                isfirst = true;
-                            }
-
-                            d[r][c] = { mc: { r: r1, c } };
-                        }
-
-                        d[r1][c] = fv;
-                        const a = d[r1][c];
-                        if (!a) return;
-                        a.mc = { r: r1, c, rs: r2 - r1 + 1, cs: 1 };
-
-                        cfg.merge[`${r1}_${c}`] = {
-                            r: r1,
-                            c,
-                            rs: r2 - r1 + 1,
-                            cs: 1,
-                        };
-                    }
-                } else if (type === 'merge-horizontal') {
-                    for (let r = r1; r <= r2; r += 1) {
-                        let fv = {};
-                        let isfirst = false;
-
-                        for (let c = c1; c <= c2; c += 1) {
-                            const cell = d[r][c];
-
-                            if (cell != null && (!isRealNull(cellValue(cell)) || cell.f != null) && !isfirst) {
-                                fv = cloneDeep(cell) || {};
-                                isfirst = true;
-                            }
-
-                            d[r][c] = { mc: { r, c: c1 } };
-                        }
-
-                        d[r][c1] = fv;
-                        const a = d[r][c1];
-                        if (!a) return;
-                        a.mc = { r, c: c1, rs: 1, cs: c2 - c1 + 1 };
-
-                        cfg.merge[`${r}_${c1}`] = {
-                            r,
-                            c: c1,
-                            rs: 1,
-                            cs: c2 - c1 + 1,
-                        };
-                    }
-                }
+            const key = `${cell.mc.r}_${cell.mc.c}`;
+            if ('rs' in cell.mc) {
+                delete cell.mc;
+                delete merge[key];
+                firstCells[key] = cloneDeep(cell);
+            } else {
+                const { v: _v, m: _m, ct: _ct, f: _f, ...format } = cloneDeep(firstCells[key]);
+                d[r][c] = format;
             }
         }
     }
+}
+
+function mergeBlock(d: CellMatrix, merge: Record<string, MergeCell>, r1: number, r2: number, c1: number, c2: number) {
+    let kept: Cell | undefined;
+    for (let r = r1; r <= r2; r += 1) {
+        for (let c = c1; c <= c2; c += 1) {
+            const cell = d[r][c];
+            if (!kept && cell != null && (!isRealNull(cellValue(cell)) || cell.f != null)) kept = cloneDeep(cell);
+            d[r][c] = { mc: { r: r1, c: c1 } };
+        }
+    }
+    const span = { r: r1, c: c1, rs: r2 - r1 + 1, cs: c2 - c1 + 1 };
+    d[r1][c1] = { ...kept, mc: span };
+    merge[`${r1}_${c1}`] = { ...span };
 }
