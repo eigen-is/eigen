@@ -1,6 +1,7 @@
-// A cell's value as text: what the grid shows, how General aligns it, and the type and format that typed input
-// infers, such as "25%" read as 0.25 in a percent format. Its callers include the grid, recalc and the xlsx
-// import. The number format itself is lib's numberDisplay, which a chart's ticks share, passed on from here.
+// A cell's value as text: what the grid shows, how General aligns it, the type and format that typed input infers,
+// such as "25%" read as 0.25 in a percent format, and the type and display a formula's result writes. Its callers
+// include the grid, recalc and the xlsx import. The number format itself is lib's numberDisplay, which a chart's ticks
+// share, passed on from here.
 
 import { numberDisplay } from '@workspace/lib/charts';
 import numeral from 'numeral';
@@ -14,8 +15,9 @@ export function booleanDisplay(value: boolean): string {
     return value ? 'TRUE' : 'FALSE';
 }
 
-// Excel's General alignment, for a cell without its own, as the editor and the HTML export draw it: numbers and dates right, booleans and errors centred, text
-// left. A snapshot may hold an error with a text type, as the xlsx import once stored one, so its value decides too.
+// Excel's General alignment, for a cell without its own, as the editor and the HTML export draw it: numbers and dates
+// right, booleans and errors centred, text left. A snapshot may hold an error with a text type, as the xlsx import once
+// stored one, so its value decides too.
 export function generalAlign(cell: Cell | null | undefined): '0' | '1' | '2' {
     const value = cell?.v;
     if (typeof value === 'number') return '2';
@@ -44,7 +46,7 @@ export function valueText(value: FormulaArg | Date): string {
 
 // The value type a formula's result gives its cell, in the format a person chose. A number in a date format is a date,
 // and a text format holds every result but an error as text.
-export function formulaResultType(fa: CellType['fa'], value: Cell['v']): CellType['t'] {
+function formulaResultType(fa: CellType['fa'], value: Cell['v']): CellType['t'] {
     if (typeof value === 'string' && valueIsError(value)) return 'e';
     if (fa === '@') return 's';
     if (typeof value === 'number') return fa != null && is_date(fa) ? 'd' : 'n';

@@ -1,6 +1,7 @@
 // Computes stored formula values with no DOM, so every reader lands on the same ones. recalcSheets computes what an
 // imported workbook holds no value or an error for and trusts the rest, which is Excel's. recomputeAfter runs on every
-// reader after a batch with a sheet, row or column op, seeded with what the op can affect, such as the lines it opened or closed.
+// reader after a batch with a sheet, row or column op, seeded with what the op can affect, such as the lines it opened
+// or closed.
 // affectedFormulas and evaluateFormulas are the walk and the pass they share with the editor's recompute of an edit.
 // extractDependencies, the walk that finds the cells a formula reads, builds the editor's formula map too.
 
@@ -28,7 +29,7 @@ type CellAt = Pick<FormulaCellInfo, 'r' | 'c' | 'id'>;
 
 type FormulaGraph = { formulaCellInfoMap: FormulaCellInfoMap; dependencyIndex: DependencyIndex };
 
-export type FormulaResult = CellAt & { formula: string; result: EvaluationResult };
+type FormulaResult = CellAt & { formula: string; result: EvaluationResult };
 
 // What bounds an untrusted workbook's formulas. Past any of them a pass throws before the work. Without them there is
 // no bound.

@@ -14,7 +14,7 @@ import { carriedLines, carryCells } from './carry';
 import { getDataBySelectionNoCopy, mergeBorder, mergeMoveMain } from './cell';
 import { hasPartMC } from './validation';
 
-export function scrollToHighlightCell(ctx: Context, r: number, c: number) {
+function scrollToHighlightCell(ctx: Context, r: number, c: number) {
     const { scrollLeft, scrollTop } = ctx;
     const winH = ctx.cellmainHeight;
     const winW = ctx.cellmainWidth;
@@ -288,7 +288,7 @@ export function pasteHandlerOfPaintModel(
     });
 }
 
-export function rowHasMerged(ctx: Context, r: number, c1: number, c2: number) {
+function rowHasMerged(ctx: Context, r: number, c1: number, c2: number) {
     let hasMerged = false;
     const flowData = getFlowdata(ctx);
     if (isNil(flowData) || isNil(flowData[r])) return false;
@@ -303,7 +303,7 @@ export function rowHasMerged(ctx: Context, r: number, c1: number, c2: number) {
     return hasMerged;
 }
 
-export function colHasMerged(ctx: Context, c: number, r1: number, r2: number) {
+function colHasMerged(ctx: Context, c: number, r1: number, r2: number) {
     let hasMerged = false;
     const flowData = getFlowdata(ctx);
     if (isNil(flowData)) return false;
@@ -318,7 +318,7 @@ export function colHasMerged(ctx: Context, c: number, r1: number, r2: number) {
     return hasMerged;
 }
 
-export function getRowMerge(ctx: Context, rIndex: number, c1: number, c2: number) {
+function getRowMerge(ctx: Context, rIndex: number, c1: number, c2: number) {
     const flowData = getFlowdata(ctx);
     if (isNil(flowData)) return [null, null];
     const merge = getSheetConfig(ctx)?.merge;
@@ -368,7 +368,7 @@ export function getRowMerge(ctx: Context, rIndex: number, c1: number, c2: number
     return [str, end];
 }
 
-export function getColMerge(ctx: Context, cIndex: number, r1: number, r2: number) {
+function getColMerge(ctx: Context, cIndex: number, r1: number, r2: number) {
     const flowData = getFlowdata(ctx);
     if (isNil(flowData)) {
         return [null, null];
