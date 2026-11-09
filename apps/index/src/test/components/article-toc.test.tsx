@@ -46,6 +46,7 @@ describe('ArticleToc', () => {
         async function setup(tops: number[], scroll: { scrollTop: number; scrollHeight: number }) {
             const scroller = document.createElement('div');
             scroller.dataset.scroller = '';
+            scroller.style.overflowY = 'auto';
             const ids = tops.map((_, i) => `h${i}`);
             tops.forEach((top, i) => {
                 const heading = document.createElement('h2');
@@ -64,8 +65,13 @@ describe('ArticleToc', () => {
             return { scrolled, active };
         }
 
-        test('starts with nothing active', async () => {
-            const { active } = await setup([100, 2000, 3000], { scrollTop: 0, scrollHeight: 4000 });
+        test('marks the row of the page position after mount, before any scroll', async () => {
+            const { active } = await setup([-500, 250, 400], { scrollTop: 500, scrollHeight: 4000 });
+            expect(active()).toBe('#h1');
+        });
+
+        test('marks nothing after mount while every heading is below the top third', async () => {
+            const { active } = await setup([1000, 2000, 3000], { scrollTop: 0, scrollHeight: 4000 });
             expect(active()).toBeUndefined();
         });
 
