@@ -74,8 +74,6 @@
     "apps/api/src/lib/mount/mount.ts": 2,
     "apps/api/src/lib/notification-center/notification-center.ts": 2,
     "apps/api/src/lib/setup/setup.ts": 1,
-    "apps/api/src/lib/versioning/retention.ts": 1,
-    "apps/api/src/routes/demo.ts": 1,
     "apps/drive/src/routes/__root.tsx": 1,
     "apps/drive/src/routes/_auth.mime.$mimeType.tsx": 1,
     "apps/drive/src/routes/_auth.shared.$to.tsx": 1,

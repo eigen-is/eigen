@@ -14,9 +14,8 @@ import { WindowLimiter } from '../lib/core/window-limiter';
 // client IP, which Caddy sets in X-Real-IP, so the key isn't spoofable.
 const entryLimiter = new WindowLimiter(60 * 1000, 10);
 
-// The /p/ prefix is eigen's PUBLIC API surface — intentionally unauthenticated. Do NOT add
-// `auth: true` / `.use(betterAuth)` (see routes/public.ts). The route is registered at startup;
-// isDemo() is the runtime gate, so on real instances it 404s and is inert.
+// The /p/ prefix is the public API, so this route takes no session. Every server registers it, and
+// it answers 404 unless the server is a demo.
 export const demoRouter = new Elysia({ name: 'demo' }).get('/p/demo/enter', async ({ set, request, server }) => {
     if (!isDemo()) throw new ApiError(404, 'Not found');
 
@@ -28,12 +27,11 @@ export const demoRouter = new Elysia({ name: 'demo' }).get('/p/demo/enter', asyn
     if (!orgId) throw new ApiError(503, 'Demo not available');
 
     const pool = getDemoPersonaPool(orgId);
-    if (pool.length === 0) throw new ApiError(503, 'Demo not available');
-
-    const persona = pool[Math.floor(Math.random() * pool.length)]!;
+    const persona = pool[Math.floor(Math.random() * pool.length)];
+    if (!persona) throw new ApiError(503, 'Demo not available');
     const response = await signInWithScopedPassword('demo', persona.id, persona.email);
 
-    // getSetCookie keeps multiple Set-Cookie headers distinct (get() would comma-join them).
+    // getSetCookie keeps each Set-Cookie header apart, where get() would join them with commas.
     const cookies = response.headers.getSetCookie();
     if (cookies.length > 0) set.headers['set-cookie'] = cookies;
     set.status = 302;
