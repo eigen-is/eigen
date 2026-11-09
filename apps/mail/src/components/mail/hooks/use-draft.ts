@@ -46,14 +46,13 @@ type DraftState = {
 
 type Action =
     | { type: 'set-field'; field: DraftEditableField; value: string }
-    | { type: 'set-id'; id: string }
     | { type: 'add-attachment'; meta: AttachmentMeta }
     | { type: 'add-prefill-attachment'; meta: AttachmentMeta }
     | { type: 'remove-attachment'; index: number }
     | { type: 'add-drive-ref'; ref: AttachmentReference }
     | { type: 'remove-drive-ref'; id: string }
     | { type: 'sync-editor'; html: string; text: string }
-    | { type: 'save-completed'; sentFields: DraftFields; serverAttachments: Attachment[] };
+    | { type: 'save-completed'; sentFields: DraftFields; saved: EmailDraft };
 
 type UseDraftOptions = {
     email: EmailDraft | null;
@@ -78,63 +77,48 @@ export function useDraft({
         savedState(initFields(email, prefillTo, prefillDraft, signatureHtml)),
     );
 
-    // Non-reactive control flow: the in-flight save promise (for serialization) and a kill switch
-    // for the send/delete path.
     const inFlightRef = useRef<Promise<EmailDraft> | null>(null);
     const disabledRef = useRef(false);
 
-    // For code that runs after an `await`, where the captured closure may be stale: the timer, the unmount, the send flush.
-    const latestRef = useRef({ state, user, onSave });
-    latestRef.current = { state, user, onSave };
+    // For code that runs after an `await`, where the captured closure may be stale: the timer, the closing save, the send flush.
+    const latestRef = useRef({ state, user, onSave, onDraftIdAssigned });
+    latestRef.current = { state, user, onSave, onDraftIdAssigned };
 
-    const runSave = async (): Promise<EmailDraft | null> => {
-        if (disabledRef.current) return null;
-        // Serialize: if a save is already in flight, wait for it before starting a new one. This
-        // also lets the send path flush any racing auto-save.
-        if (inFlightRef.current) {
-            await inFlightRef.current.catch(() => {});
-            if (disabledRef.current) return null;
-        }
-        // Read latest fields here, not from closure — the timer that called us may have been
-        // queued at an earlier render.
+    const runSave = async (): Promise<void> => {
+        // One save at a time, because each needs the answer before it: the draft's id and the uploads it embedded.
+        while (inFlightRef.current) await inFlightRef.current.catch(() => {});
+        if (disabledRef.current) return;
         const { state: s, user: u, onSave: cb } = latestRef.current;
-        const fields = s.fields;
-        const draft = fieldsToDraft(fields, u);
-        const promise = cb(draft, buildSaveOptions(fields));
+        if (!isSaveable(s.fields) || !isDirty(s)) return;
+        const promise = cb(fieldsToDraft(s.fields, u), buildSaveOptions(s.fields));
         inFlightRef.current = promise;
         try {
-            const result = await promise;
-            dispatch({ type: 'save-completed', sentFields: fields, serverAttachments: result.attachments });
-            if (!fields.id) {
-                dispatch({ type: 'set-id', id: result.id });
-                onDraftIdAssigned?.(result.id);
-            }
-            return result;
+            const saved = await promise;
+            const completed: Action = { type: 'save-completed', sentFields: s.fields, saved };
+            // A closed composer's dispatch does nothing, and its closing save still reads this answer.
+            latestRef.current.state = draftReducer(latestRef.current.state, completed);
+            dispatch(completed);
+            if (!s.fields.id) latestRef.current.onDraftIdAssigned?.(saved.id);
         } catch (error) {
             // The message left Drafts, say through a send in another tab: every later save gets the same answer.
             if (error instanceof AppError && error.status === 409) disabledRef.current = true;
             throw error;
         } finally {
-            if (inFlightRef.current === promise) inFlightRef.current = null;
+            inFlightRef.current = null;
         }
     };
 
     // Saves a short while after the fields drift from the saved fingerprint. Any newer state resets the timer.
     useEffect(() => {
-        if (disabledRef.current) return;
-        if (!isSaveable(state.fields)) return;
-        if (!isDirty(state)) return;
         const timer = setTimeout(() => void runSave().catch(rethrowUntoasted), AUTO_SAVE_DEBOUNCE_MS);
         return () => clearTimeout(timer);
     }, [state]);
 
-    // Closing the composer saves what the debounce has not reached yet.
+    // Closing the composer saves what the debounce has not reached yet, and its id must not reopen the composer.
     useEffect(() => {
         return () => {
-            if (disabledRef.current) return;
-            const { state: s, user: u, onSave: cb } = latestRef.current;
-            if (!isSaveable(s.fields) || !isDirty(s)) return;
-            cb(fieldsToDraft(s.fields, u), buildSaveOptions(s.fields)).catch(rethrowUntoasted);
+            latestRef.current.onDraftIdAssigned = undefined;
+            runSave().catch(rethrowUntoasted);
         };
     }, []);
 
@@ -169,20 +153,11 @@ export function useDraft({
             disabledRef.current = false;
         },
 
-        // Flushes any pending save and splices in the server's id, since the first save's dispatch may not have rendered yet.
         // Saves stay enabled: the caller disables them only once it commits to sending.
         flushAndGetDraft: async (): Promise<NewDraft> => {
-            let result: EmailDraft | null = null;
-            if (isDirty(state)) {
-                result = await runSave();
-            } else if (inFlightRef.current) {
-                await inFlightRef.current.catch(() => {});
-            }
-            // Read latest after the awaits — user may have edited during the in-flight save.
+            await runSave();
             const { state: s, user: u } = latestRef.current;
-            const draft = fieldsToDraft(s.fields, u);
-            if (!draft.id && result?.id) draft.id = result.id;
-            return draft;
+            return fieldsToDraft(s.fields, u);
         },
     };
 }
@@ -345,9 +320,9 @@ function buildSaveOptions(fields: DraftFields): DraftUpdateOptions {
 // Edits made while the save was in flight: `serverActual` is what the server has now, with local keys kept so chips don't
 // remount, and `localNext` is the user's intent. Drift between the two re-triggers the auto-save.
 function mergeServerAttachments(
-    local: AttachmentMeta[],
-    sent: AttachmentMeta[],
-    parsed: Attachment[],
+    local: readonly AttachmentMeta[],
+    sent: readonly AttachmentMeta[],
+    parsed: readonly Attachment[],
 ): { serverActual: AttachmentMeta[]; localNext: AttachmentMeta[] } {
     const serverActual = parsed.map((a) => {
         const filename = mailAttachmentName(a, a.index);
@@ -378,8 +353,6 @@ function draftReducer(state: DraftState, action: Action): DraftState {
     switch (action.type) {
         case 'set-field':
             return { ...state, fields: { ...state.fields, [action.field]: action.value } };
-        case 'set-id':
-            return { ...state, fields: { ...state.fields, id: action.id } };
         case 'add-attachment':
             return {
                 ...state,
@@ -425,14 +398,14 @@ function draftReducer(state: DraftState, action: Action): DraftState {
             const { serverActual, localNext } = mergeServerAttachments(
                 state.fields.attachments,
                 action.sentFields.attachments,
-                action.serverAttachments,
+                action.saved.attachments,
             );
             // What the server has: the fields we sent and its post-parse attachment list. An edit made during the save diffs against
             // this and saves again.
             const serverHas = { ...action.sentFields, attachments: serverActual };
             return {
                 ...state,
-                fields: { ...state.fields, attachments: localNext },
+                fields: { ...state.fields, id: action.saved.id, attachments: localNext },
                 lastSavedFingerprint: fingerprintFields(serverHas),
             };
         }

@@ -211,6 +211,85 @@ describe('a save the server refuses', () => {
     }, 10_000);
 });
 
+describe('closing the composer while a save is in flight', () => {
+    // Holds each answer until the test lets it go, so the closing save has a save to wait for.
+    function heldSaves() {
+        const saves: { draft: NewDraft; options?: DraftUpdateOptions; answer: (parts: Attachment[]) => void }[] = [];
+        const onSave = (draft: NewDraft, options?: DraftUpdateOptions) =>
+            new Promise<EmailDraft>((resolve) => {
+                saves.push({ draft, options, answer: (parts) => resolve(savedDraft(parts)) });
+            });
+        const answer = (index: number, parts: Attachment[] = []) =>
+            act(async () => {
+                saves[index].answer(parts);
+                await Bun.sleep(0);
+            });
+        return { saves, onSave, answer };
+    }
+
+    test('the closing save waits, and names the upload the save before it embedded as a part to keep', async () => {
+        const { saves, onSave, answer } = heldSaves();
+        const { run } = await openDraft({ email: savedDraft([]), onSave });
+        await run((d) => d.addAttachment(uploading('new.pdf')));
+        await run((d) => void d.flushAndGetDraft());
+        await run((d) => d.setField('subject', 'Typed during the save'));
+        await unmount();
+        expect(saves.length).toBe(1);
+        expect(saves[0].options?.tempAttachmentIds).toEqual(['t1']);
+
+        await answer(0, [att('new.pdf', 'application/pdf', 0)]);
+
+        expect(saves.length).toBe(2);
+        expect(saves[1].draft.subject).toBe('Typed during the save');
+        expect(saves[1].options?.tempAttachmentIds).toBeUndefined();
+        expect(saves[1].options?.keepAttachments).toEqual([{ filename: 'new.pdf', size: 10 }]);
+    });
+
+    test('a first save still in flight gives the closing save its id, and the closed composer stays closed', async () => {
+        const { saves, onSave, answer } = heldSaves();
+        const assigned: string[] = [];
+        const { run } = await openDraft({ onSave, onDraftIdAssigned: (id) => assigned.push(id) });
+        await run((d) => d.setField('subject', 'First'));
+        await run((d) => void d.flushAndGetDraft());
+        await run((d) => d.setField('subject', 'Typed during the save'));
+        await unmount();
+        expect(saves.map((s) => s.draft.id)).toEqual([undefined]);
+
+        await answer(0);
+
+        expect(saves.map((s) => s.draft.id)).toEqual([undefined, 'draft-1']);
+        expect(assigned).toEqual([]);
+    });
+
+    test('with nothing typed since the save in flight, closing saves nothing more', async () => {
+        const { saves, onSave, answer } = heldSaves();
+        const { run } = await openDraft({ onSave });
+        await run((d) => d.setField('subject', 'First'));
+        await run((d) => void d.flushAndGetDraft());
+        await unmount();
+
+        await answer(0);
+
+        expect(saves.length).toBe(1);
+    });
+
+    test('a send flush and the closing save both waiting go one after the other', async () => {
+        const { saves, onSave, answer } = heldSaves();
+        const { run } = await openDraft({ email: savedDraft([]), onSave });
+        await run((d) => d.setField('subject', 'First'));
+        await run((d) => void d.flushAndGetDraft());
+        await run((d) => d.setField('subject', 'Typed during the save'));
+        await run((d) => void d.flushAndGetDraft());
+        await unmount();
+
+        await answer(0);
+        expect(saves.length).toBe(2);
+
+        await answer(1);
+        expect(saves.length).toBe(2);
+    });
+});
+
 describe('a forward carries the parts of the message it forwards', () => {
     const forward: NewDraft = { subject: 'FW: Lunch', html: '<p>quoted</p>', text: 'quoted' };
     const part = (tempId: string, filename: string): AttachmentMeta => ({
