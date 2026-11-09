@@ -11,11 +11,6 @@ const BLOCK_START = '<!--eigen-refs:';
 const COMMENT_END = '-->';
 const BLOCK_END = '<!--/eigen-refs-->';
 
-function beforeBodyEnd(html: string, block: string): string {
-    const replaced = html.replace(/<\/body>/i, () => `${block}</body>`);
-    return replaced !== html ? replaced : html + block;
-}
-
 export function appendReferenceLinks(html: string, refs: AttachmentReference[], recipientEmail?: string): string {
     return beforeBodyEnd(html, renderAttachmentPills(refs, recipientEmail));
 }
@@ -30,12 +25,16 @@ export function appendDraftReferences(html: string, refs: AttachmentReference[])
 // An IMAP client or a mail moved into Drafts can write this block. Anything but a whole, valid one leaves the HTML as it
 // is, so its pills stay plain links. Ours comes last, after anything a body quotes, and no scan here can backtrack.
 export function cutDraftReferences(html: string): { html: string; driveReferences: AttachmentReference[] } {
+    const uncut = { html, driveReferences: [] };
     const start = html.lastIndexOf(BLOCK_START);
+    if (start < 0) return uncut;
     const dataStart = start + BLOCK_START.length;
-    const dataEnd = start < 0 ? -1 : html.indexOf(COMMENT_END, dataStart);
-    const end = dataEnd < 0 ? -1 : html.indexOf(BLOCK_END, dataEnd);
-    const driveReferences = end < 0 ? null : decodeReferences(html.slice(dataStart, dataEnd));
-    if (!driveReferences) return { html, driveReferences: [] };
+    const dataEnd = html.indexOf(COMMENT_END, dataStart);
+    if (dataEnd < 0) return uncut;
+    const end = html.indexOf(BLOCK_END, dataEnd);
+    if (end < 0) return uncut;
+    const driveReferences = decodeReferences(html.slice(dataStart, dataEnd));
+    if (!driveReferences) return uncut;
     return { html: html.slice(0, start) + html.slice(end + BLOCK_END.length), driveReferences };
 }
 
@@ -49,4 +48,9 @@ function decodeReferences(data: string): AttachmentReference[] | null {
     return Array.isArray(refs) && refs.length <= MAX_SEND_REFERENCES && refs.every(isAttachmentReferenceShape)
         ? refs
         : null;
+}
+
+function beforeBodyEnd(html: string, block: string): string {
+    const replaced = html.replace(/<\/body>/i, () => `${block}</body>`);
+    return replaced !== html ? replaced : html + block;
 }

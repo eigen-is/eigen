@@ -15,7 +15,7 @@ The sections go from the files up: how a message is written and named, how folde
 
 ## The files are the truth because Dovecot writes them too
 
-Dovecot moves, renames and deletes messages behind the API's back, so only a diff of the directories against the index sees its work. That diff, and the watchers that start it, are what mail has and contacts and calendar don't: only the API writes their databases. `mail.db` holds parsed metadata and flags for fast queries, and every row can be rebuilt by scanning the `.eml`s. That holds for a draft too, whose file is its only copy ([MAIL.md § A draft's `.eml` is its only copy](MAIL.md#a-drafts-eml-is-its-only-copy)).
+Dovecot moves, renames and deletes messages behind the API's back, so only a diff of the directories against the index sees its work. That diff, and the watchers that start it, are what mail has and contacts and calendar don't: only the API writes their databases. `mail.db` holds parsed metadata and flags for fast queries, and every row can be rebuilt by scanning the `.eml`s. That holds for a draft too, whose file is its only copy. A client's edit of a draft is a new message under a new id, and what the composer holding the old one then does is in [MAIL.md § A draft's `.eml` is its only copy](MAIL.md#a-drafts-eml-is-its-only-copy).
 
 **The file lands before the index row, always.** A crash between the two leaves the index behind the disk, and the next `reconcileMailbox` repairs it.
 
@@ -74,6 +74,8 @@ Eigen creates the standard six (`STANDARD_MAILBOXES`) when it first creates the 
 `mailboxesList` returns the standard six first, then every other `.Folder` sorted by name, each with `total` and `unread` from the index. It skips a directory whose name fails validation: Dovecot accepts names this store can't address, and one of them must not break the listing. That folder stays reachable over IMAP. It also skips a directory that canonicalizes onto a standard mailbox (`.archive`, `.INBOX`), since that is the standard mailbox under another spelling.
 
 For each folder outside the six, a listing starts a background reconcile, at most once a minute per folder, and the sync's SSE events carry the counts. A listing never waits for it. The throttle exists because every burst of mail SSE events re-lists the mailboxes, and each reconcile takes the lock user mutations need.
+
+A row can outlive its file for a moment, when a mail client renames or removes the file before the next sync. A read of the message then answers 404, since the file a row names is gone either way.
 
 `listMessages` waits for the sync only while the mailbox has no rows, so a first open shows content. Otherwise it answers from the index at once and syncs in the background ([MAIL.md § The list pages by keyset](MAIL.md#the-list-pages-by-keyset-and-patches-its-own-mutations)).
 

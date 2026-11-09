@@ -1,7 +1,6 @@
 // The composer's state for one draft and its auto-save. A save fires a short while after the fields
 // drift from what the server has, and once more when the composer closes. The prefill of a reply or
-// forward counts as saved, so a draft only reaches Drafts once the user changes something. The field
-// conversions and the attachment reconcile are exported for their own tests.
+// forward counts as saved, so a draft only reaches Drafts once the user changes something.
 
 import { AppError, rethrowUntoasted } from '@workspace/lib/api-error';
 import type { AuthUser } from '@workspace/lib/auth';
@@ -111,7 +110,7 @@ function plainSignature(sig: string | undefined): string {
         .trim();
 }
 
-export function initFields(
+function initFields(
     email: EmailDraft | null,
     prefillTo?: string,
     prefillDraft?: NewDraft,
@@ -213,7 +212,7 @@ function fieldsToDraft(f: DraftFields, user: AuthUser | null | undefined): NewDr
     };
 }
 
-export function buildSaveOptions(fields: DraftFields): DraftUpdateOptions {
+function buildSaveOptions(fields: DraftFields): DraftUpdateOptions {
     const tempIds = fields.attachments.map((a) => a.tempId).filter((id): id is string => !!id);
     const kept = fields.attachments.filter((a) => !a.tempId).map(({ filename, size }) => ({ filename, size }));
     return {
@@ -225,7 +224,7 @@ export function buildSaveOptions(fields: DraftFields): DraftUpdateOptions {
 
 // Edits made while the save was in flight: `serverActual` is what the server has now, with local keys kept so chips don't
 // remount, and `localNext` is the user's intent. Drift between the two re-triggers the auto-save.
-export function mergeServerAttachments(
+function mergeServerAttachments(
     local: AttachmentMeta[],
     sent: AttachmentMeta[],
     parsed: Attachment[],

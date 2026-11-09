@@ -62,7 +62,7 @@ A notification goes out only for mail that arrives, coalesced on the `mail:new` 
 
 ## A draft's `.eml` is its only copy
 
-Every save, an auto-save included, rebuilds the whole `.eml`. So nothing beside the file has to be merged on a read, and a mail client always sees what the composer last saved. The request is the whole draft: a field it leaves out is cleared, and only the attachments live on the server alone, named by the keep list. A save takes about 27 ms at 5 MiB and 100 ms at 25 MiB, and blocks the event loop for about 40 ms at worst. How a save survives a crash: [IMAP.md § The files are the truth](IMAP.md#the-files-are-the-truth-because-dovecot-writes-them-too).
+Every save, an auto-save included, rebuilds the whole `.eml`. So nothing beside the file has to be merged on a read, and each save reaches a mail client as a new message ([IMAP.md § A filename carries the id, the size and the flags](IMAP.md#a-filename-carries-the-id-the-size-and-the-flags)). The request is the whole draft: a field it leaves out is cleared, and only the attachments live on the server alone, named by the keep list. A save takes about 27 ms at 5 MiB and 100 ms at 25 MiB, and blocks the event loop for about 40 ms at worst. How a save survives a crash: [IMAP.md § The files are the truth](IMAP.md#the-files-are-the-truth-because-dovecot-writes-them-too). A second tab's save overwrites the first.
 
 The file holds what never goes out too. The Bcc stays because `createEmlContent` sets `keepBcc` on the node it compiles. An outgoing message is built by the mailer from its fields, so the Bcc stays off the wire, and the Sent copy, being the moved draft, keeps it, as a mail client's Sent folder does. The message a reply answers is an `X-Eigen-Replied-To` header. It can't be derived from `In-Reply-To`, because the index has no Message-ID column to find the original by.
 
@@ -76,9 +76,18 @@ The JSON is the `AttachmentReference[]`, in base64url because a file name may ho
 
 Only the read of a message with the draft flag takes the block out, in `cutDraftReferences` (`reference-links.ts`), which hands the clean HTML and the references to the composer. An IMAP client or a mail moved into Drafts can write this block, so the read treats it as input: it searches with `indexOf`, never a regex that could backtrack, checks the type of every field of every reference and the `MAX_SEND_REFERENCES` cap, and takes the last block, since a body may quote another. Anything else, malformed, over the cap or with no markers, leaves the HTML as it is with no references and no throw, so the pills stay plain links. A field's value is not checked, so `buildReferenceUrl` encodes each segment of a link. The read runs before the sanitize, which drops comments, and a draft reads sanitized like any message. The Sent copy keeps the comment, which is invisible, and reads with its pills.
 
-A send builds its copies from the clean HTML with fresh pills, so the marker never leaves. An empty text part is written as one space, because the composer library would leave it out and the parser would then derive the text from the HTML, pills included.
+A send from Eigen builds its copies from the clean HTML with fresh pills, so the marker never leaves that way. An IMAP client's own send carries the comment to its recipients, because the client sends the HTML it was given. An empty text part is written as one space, because the composer library would leave it out and the parser would then derive the text from the HTML, pills included.
 
-An IMAP client that edits a draft saves a new message and removes the old, and the composer's next auto-save writes the old id again. The user sees two drafts and neither is lost. So a save naming an id with no row neither throws nor loses text (`mail-draft-file.test.ts`).
+An IMAP client that edits a draft saves a new message and removes the old, and the row under the old id goes. What happens next depends on how the composer holding that draft was opened:
+
+- Not opened from Drafts, such as a reply or a new message still in its compose session: the next auto-save writes the old id again. So there are two drafts and neither's text is lost. The Eigen copy keeps its references but not its attachments, whose bytes went with the old file, and the client's copy keeps both.
+- Opened from Drafts and left idle: the pane says the message is gone, and one draft remains.
+
+So a save naming an id with no row neither throws nor loses text (`mail-draft-file.test.ts`).
+
+A save naming a message that is no longer a draft answers 409, under the same lock as the write, so a stale tab can't pull a sent message back into Drafts and a replayed send can't mail twice. A draft in Trash still saves and lands in Drafts, because the composer opens one. The composer stops saving after a 409, so a tab left open after a send toasts once.
+
+A part is always written as an attachment, in the draft's file and in an outgoing mail. The composer library marks a `message/*` part inline by default, and the parser draws an inline message into the body, its inner Bcc included.
 
 A save's and a send's answer name each part and its size and carry none of its bytes, as a read does: `messageSend` needs the bytes to send, so they are blanked at the public answers. As JSON the bytes of a 25 MiB part are 89 MiB, about 900 ms on the event loop, and the browser's query cache would keep them.
 

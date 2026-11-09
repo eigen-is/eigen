@@ -59,8 +59,8 @@ export function attachmentTooLarge(maxSize: number): ApiError {
     return new ApiError(413, `Attachment exceeds ${Math.floor(maxSize / (1024 * 1024))}MB limit`);
 }
 
-// An answer to the browser names a part and its size. The bytes come from the part's own route: as JSON they are about
-// 3.5 times their size, and the browser's query cache keeps the answer.
+// An answer to the browser names a part and its size. The bytes come from the part's own route, because the browser's
+// query cache keeps the answer.
 function blankAttachmentBytes<T extends Pick<Email, 'attachments'>>(email: T): T {
     for (const a of email.attachments) a.content = Buffer.alloc(0);
     return email;
