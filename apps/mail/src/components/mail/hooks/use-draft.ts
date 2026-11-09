@@ -44,8 +44,6 @@ type DraftState = {
     lastSavedFingerprint: string;
 };
 
-type SaveFn = (draft: NewDraft, options?: DraftUpdateOptions) => Promise<EmailDraft | null | undefined>;
-
 type Action =
     | { type: 'set-field'; field: DraftEditableField; value: string }
     | { type: 'set-id'; id: string }
@@ -63,7 +61,7 @@ type UseDraftOptions = {
     // A reply's or forward's quoted body, subject and recipients. They count as saved, so no save fires until an edit.
     prefillDraft?: NewDraft;
     signatureHtml?: string;
-    onSave?: SaveFn;
+    onSave: (draft: NewDraft, options?: DraftUpdateOptions) => Promise<EmailDraft>;
     onDraftIdAssigned?: (id: string) => void;
 };
 
@@ -123,10 +121,10 @@ function initFields(
             to: addressObjectToString(email.to),
             cc: addressObjectToString(email.cc),
             bcc: addressObjectToString(email.bcc),
-            subject: email.subject ? String(email.subject) : '',
+            subject: email.subject,
             body: email.html || email.text || '',
             bodyText: email.text || '',
-            attachments: (email.attachments || []).map((a) => ({
+            attachments: email.attachments.map((a) => ({
                 key: `saved-${a.index}-${a.filename ?? ''}-${a.size}`,
                 filename: mailAttachmentName(a, a.index),
                 size: a.size,
@@ -323,14 +321,12 @@ function isSaveable(f: DraftFields): boolean {
     return !!(f.to.trim() || f.subject.trim() || f.cc.trim() || f.bcc.trim() || f.bodyText.trim());
 }
 
-const noopSave: SaveFn = () => Promise.resolve(null);
-
 export function useDraft({
     email,
     prefillTo,
     prefillDraft,
     signatureHtml,
-    onSave = noopSave,
+    onSave,
     onDraftIdAssigned,
 }: UseDraftOptions) {
     const { user } = useAuth();
@@ -340,14 +336,14 @@ export function useDraft({
 
     // Non-reactive control flow: the in-flight save promise (for serialization) and a kill switch
     // for the send/delete path.
-    const inFlightRef = useRef<Promise<EmailDraft | null | undefined> | null>(null);
+    const inFlightRef = useRef<Promise<EmailDraft> | null>(null);
     const disabledRef = useRef(false);
 
     // For code that runs after an `await`, where the captured closure may be stale: the timer, the unmount, the send flush.
     const latestRef = useRef({ state, user, onSave });
     latestRef.current = { state, user, onSave };
 
-    const runSave = async (): Promise<EmailDraft | null | undefined> => {
+    const runSave = async (): Promise<EmailDraft | null> => {
         if (disabledRef.current) return null;
         // Serialize: if a save is already in flight, wait for it before starting a new one. This
         // also lets the send path flush any racing auto-save.
@@ -364,16 +360,10 @@ export function useDraft({
         inFlightRef.current = promise;
         try {
             const result = await promise;
-            if (result) {
-                dispatch({
-                    type: 'save-completed',
-                    sentFields: fields,
-                    serverAttachments: result.attachments ?? [],
-                });
-                if (!fields.id && result.id) {
-                    dispatch({ type: 'set-id', id: result.id });
-                    onDraftIdAssigned?.(result.id);
-                }
+            dispatch({ type: 'save-completed', sentFields: fields, serverAttachments: result.attachments });
+            if (!fields.id) {
+                dispatch({ type: 'set-id', id: result.id });
+                onDraftIdAssigned?.(result.id);
             }
             return result;
         } catch (error) {
@@ -415,8 +405,7 @@ export function useDraft({
 
     return {
         state: state.fields,
-        setField: <K extends DraftEditableField>(field: K, value: string) =>
-            dispatch({ type: 'set-field', field, value }),
+        setField: (field: DraftEditableField, value: string) => dispatch({ type: 'set-field', field, value }),
         addAttachment: (meta: AttachmentMeta) => dispatch({ type: 'add-attachment', meta }),
         addPrefillAttachment: (meta: AttachmentMeta) => dispatch({ type: 'add-prefill-attachment', meta }),
         removeAttachment: (index: number) => dispatch({ type: 'remove-attachment', index }),
@@ -439,7 +428,7 @@ export function useDraft({
         // Flushes any pending save and splices in the server's id, since the first save's dispatch may not have rendered yet.
         // Saves stay enabled: the caller disables them only once it commits to sending.
         flushAndGetDraft: async (): Promise<NewDraft> => {
-            let result: EmailDraft | null | undefined = null;
+            let result: EmailDraft | null = null;
             if (isDirty(state)) {
                 result = await runSave();
             } else if (inFlightRef.current) {

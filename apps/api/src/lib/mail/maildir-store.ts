@@ -331,7 +331,6 @@ export class MaildirStore {
 
             applyFlagsFromFilename(parsed, filename);
             parsed.filename = filename;
-            parsed.mailbox = MAILBOX_DRAFTS;
             this.db.insertEmails([parsed]);
             this.indexBytes += parsed.size - (replaced?.size ?? 0);
             // The old file goes last, so a crash leaves the draft twice and never not at all. A sync keeps the newer.
@@ -379,22 +378,25 @@ export class MaildirStore {
             if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
 
             const newFlagStr = rebuildFlagsSuffix(email.filename, changes);
-            const uniqueWithSize = email.filename.split(':')[0];
-            const newFilename = `${uniqueWithSize}:2,${newFlagStr}`;
+            const newFilename = `${email.filename.split(':')[0]}:2,${newFlagStr}`;
 
             if (newFilename !== email.filename) {
                 const cur = path.join(this.mailboxDir(email.mailbox), PATHS.MAIL.CUR);
                 await this.storage.renameDurable(path.join(cur, email.filename), path.join(cur, newFilename));
             }
 
-            // The row mirrors the filename's letters, so no flag can be written to one and not the other.
-            const flags = parseFlagsFromFilename(newFilename);
-            this.db.updateFlags(
-                messageId,
-                { isRead: flags.seen, isFlagged: flags.flagged, isDraft: flags.draft, isReplied: flags.replied },
-                newFilename,
-            );
+            this.updateRowFlags(messageId, newFilename);
         });
+    }
+
+    // The row mirrors the filename's letters, so no flag can be written to one and not the other.
+    private updateRowFlags(messageId: string, filename: string): void {
+        const flags = parseFlagsFromFilename(filename);
+        this.db.updateFlags(
+            messageId,
+            { isRead: flags.seen, isFlagged: flags.flagged, isDraft: flags.draft, isReplied: flags.replied },
+            filename,
+        );
     }
 
     // -- Sync --
@@ -487,17 +489,7 @@ export class MaildirStore {
         for (const [id, record] of dbById) {
             const diskFilename = diskFiles.get(id);
             if (diskFilename && diskFilename !== record.filename) {
-                const flags = parseFlagsFromFilename(diskFilename);
-                this.db.updateFlags(
-                    id,
-                    {
-                        isRead: flags.seen,
-                        isFlagged: flags.flagged,
-                        isDraft: flags.draft,
-                        isReplied: flags.replied,
-                    },
-                    diskFilename,
-                );
+                this.updateRowFlags(id, diskFilename);
                 this.events.flagsChanged(id, mailbox);
             }
         }

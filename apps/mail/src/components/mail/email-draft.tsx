@@ -4,7 +4,7 @@
 // documents the mail links with recipients who cannot open them yet.
 
 import { useHotkey } from '@tanstack/react-hotkeys';
-import { wasToasted } from '@workspace/lib/api-error';
+import { rethrowUntoasted } from '@workspace/lib/api-error';
 import { useAuth } from '@workspace/lib/auth';
 import { MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
 import { checkPathAccess } from '@workspace/lib/drive';
@@ -99,7 +99,7 @@ type EmailDraftProps = {
     initialDriveAttachments?: DrivePath[];
     signatureHtml?: string;
     sendDraft: (mail: NewDraft, grantAccessRefIds?: string[]) => Promise<unknown>;
-    onAutoSave?: (mail: NewDraft, options?: DraftUpdateOptions) => Promise<EmailDraftType | null | undefined>;
+    onAutoSave: (mail: NewDraft, options?: DraftUpdateOptions) => Promise<EmailDraftType>;
     onDraftIdAssigned?: (id: string) => void;
     // A forward's parts stay in history state until a saved draft holds them all, so a reload before
     // then attaches them again.
@@ -392,11 +392,7 @@ export function EmailDraft({
         }
         // A rejected send was toasted by its hook and the draft stays open; the dialog entry points
         // need the rejection to stay open, so only this one swallows it.
-        try {
-            await sendWithFreshDraft();
-        } catch (error) {
-            if (!wasToasted(error)) throw error;
-        }
+        await sendWithFreshDraft().catch(rethrowUntoasted);
     };
 
     // A modifier combo fires even while an input or editor is focused, and the body editor's submitOnModEnter keeps HardBreak
@@ -550,8 +546,7 @@ export function EmailDraft({
                 onConfirm={sendWithFreshDraft}
             />
             {shareState && (
-                // Conditionally mounted so the copy can't flash to empty during an exit animation —
-                // the whole dialog leaves the tree the instant it closes (drive-access-dialog idiom).
+                // Conditionally mounted so the copy can't flash to empty during an exit animation.
                 <ShareAndSendDialog
                     open
                     onOpenChange={(open) => {

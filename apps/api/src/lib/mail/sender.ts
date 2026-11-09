@@ -10,7 +10,7 @@ import { canonicalizeRecipients } from './recipients';
 
 // `from` is the draft's From, which every draft save pins to the account, else the account's; the mailer decides whether it goes out as that address.
 export function draftToOutboundMail(draft: EmailDraft, fallbackEmail: string): OutboundMail {
-    const fromValue = draft.from?.value?.[0];
+    const fromValue = draft.from?.value[0];
 
     // Flatten groups, dedupe and validate once, then split back into the three fields.
     const to: { name: string; address: string }[] = [];
@@ -26,10 +26,10 @@ export function draftToOutboundMail(draft: EmailDraft, fallbackEmail: string): O
             ? { name: fromValue.name || '', address: fromValue.address }
             : { name: '', address: fallbackEmail },
         to,
-        subject: draft.subject || '',
+        subject: draft.subject,
         text: draft.text || '',
-        // Pin the wire Message-ID to the value the Sent EML carries (mailfile.ts), so a reply to
-        // our sent mail threads against a header the recipient actually saw.
+        // Pin the wire Message-ID to the value the Sent copy carries, so a reply to our sent mail threads against a
+        // header the recipient actually saw.
         messageId: buildMessageId(draft.id),
     };
 
