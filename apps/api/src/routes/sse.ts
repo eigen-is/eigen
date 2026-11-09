@@ -8,13 +8,13 @@ import { betterAuth } from './auth';
 
 export const sseRouter = new Elysia({ name: 'sse' }).use(betterAuth).get(
     '/sse/:ownerId/events',
-    async ({ params, user, set }) => {
+    async ({ params, user, session, set }) => {
         requireSelf(params.ownerId, user.id);
         const home = await getHome(user.id);
         // A reverse proxy such as nginx buffers a response by default, and would hold the events until
         // the stream closes. This header turns that off.
         set.headers['X-Accel-Buffering'] = 'no';
-        return sse(createSSEStream(home));
+        return sse(createSSEStream(home, session.id));
     },
     { auth: true },
 );

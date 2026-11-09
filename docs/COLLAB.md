@@ -68,7 +68,7 @@ The price is up to 15 s. Until the tick a socket that lost read still receives e
 
 Each check reads straight from the databases, with no cache. Each socket's timer starts when it opens, so the checks spread by themselves, with no jitter and no batching. Measured on an M1 Pro dev Mac that other test runs shared, with 20,000 users and 1,200 open sockets: one check took about 240 µs, about 1.1 ms on a document 254 folders deep, and a thousand of them run at once 258 ms, which only timers that happened to coincide would do.
 
-A session is one browser, so a socket ends with the session that opened it, and other devices keep theirs. What ends one:
+A session is one browser, so a socket ends with the session that opened it, and other devices keep theirs. The tab's event stream ends the same way ([SSE.md](SSE.md#the-keepalive-keeps-a-proxy-from-closing-the-stream)). What ends one:
 
 | Action | Sessions it ends | The tab |
 |---|---|---|
