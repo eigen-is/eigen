@@ -133,6 +133,8 @@ export type EvaluationResult = {
     value: Cell['v'];
     display: string;
     type: 'number' | 'string' | 'boolean' | 'date' | 'error';
+    // The error is an operator applied to an array, which this build can't evaluate.
+    arrayOperation?: boolean;
 };
 
 export type FormulaEngineState = {
@@ -166,6 +168,7 @@ export type ParseResult = {
     error: string | null;
     // biome-ignore lint/suspicious/noExplicitAny: formula result is dynamic (scalar, array, Date, error) — consumers narrow at use, tightening forces ~70 test casts with no safety gain
     result: any;
+    arrayOperation?: boolean;
 };
 
 export type ParserOptions = {

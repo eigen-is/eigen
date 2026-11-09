@@ -327,7 +327,7 @@ function refOf(token: string, onRef: (ref: string) => string, onName: (token: st
     if (prefix.length > LONGEST_SHEET_PREFIX || !chained.every((leg) => iscelldata(leg))) return token;
     const moved = chained.map((leg) => onRef(prefix + leg));
     if (moved.includes(error.r)) return error.r;
-    return [moved[0], ...moved.slice(1).map((leg) => leg.slice(prefix.length))].join(':');
+    return [moved[0], ...moved.slice(1).map((leg) => leg.slice(leg.lastIndexOf('!') + 1))].join(':');
 }
 
 // Splits on `separator` outside single quotes, which hold sheet names.

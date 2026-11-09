@@ -12,6 +12,7 @@ import { Parser } from './parser';
 import errorParser, {
     ERROR,
     ERROR_NAME,
+    ERROR_NUM,
     ERROR_REF,
     ERROR_VALUE,
     toFormulaError,
@@ -81,10 +82,12 @@ export class FormulaEngine {
     }
 
     // True when the result says nothing because of the formula's own text: a parse failure, a function this build
-    // lacks that the branch taken holds, or a name it can't resolve, whose #NAME? an IFERROR would trap into a fallback
-    // nobody computed. A #NAME? read from another cell is the other cell's. A name Excel reads past its last column
-    // (RhoCO2) is one the engine reads as a cell. A #REF! is an answer whatever else the text holds.
-    public cantEvaluate(formula: string, { value }: EvaluationResult): boolean {
+    // lacks that the branch taken holds, an operator applied to an array, or a name it can't resolve, whose #NAME? an
+    // IFERROR would trap into a fallback nobody computed. A #NAME? read from another cell is the other cell's. A name Excel reads past its last column
+    // (RhoCO2) is one the engine reads as a cell. A result of #REF! is an answer, the one a function this build lacks
+    // hands on included, whatever else the text holds.
+    public cantEvaluate(formula: string, { value, arrayOperation }: EvaluationResult): boolean {
+        if (arrayOperation) return true;
         if (value === errorParser(ERROR_REF)) return false;
         if (value === errorParser(ERROR) && !this.parser.parses(formula.substring(1))) return true;
         if (value === errorParser(ERROR_NAME)) {
@@ -118,7 +121,11 @@ export class FormulaEngine {
         rowOffset = 0,
         colOffset = 0,
     ): EvaluationResult {
-        const { error, result: evaluated } = this.parser.evaluate(compiled, {
+        const {
+            error,
+            result: evaluated,
+            arrayOperation,
+        } = this.parser.evaluate(compiled, {
             rowOffset,
             colOffset,
             readCell: (cell) => this.readCell(cell, sheetId, resolver),
@@ -131,15 +138,18 @@ export class FormulaEngine {
         while (Array.isArray(result)) result = result[0];
         const failure = result instanceof Error ? (errorParser(result.message) ?? errorParser(ERROR)) : error;
         if (failure != null) {
-            return { value: failure, display: failure, type: 'error' };
+            return { value: failure, display: failure, type: 'error', arrayOperation };
         }
 
-        if (result instanceof Date) {
-            // A Date result stores as its Excel serial, as the parser's operators read a Date operand. As a string,
-            // a DATE or EOMONTH cell would turn into text on the xlsx round trip.
-            const serial = dateToSerial(result);
-            return { value: serial, display: String(serial), type: 'date' };
+        // A Date result stores as its Excel serial, as the parser's operators read a Date operand. As a string, a DATE
+        // or EOMONTH cell would turn into text on the xlsx round trip.
+        const serial = result instanceof Date ? dateToSerial(result) : result;
+        // NaN and Infinity survive no JSON, so a tab and a joiner would hold different cells. Excel's word is #NUM!.
+        if (typeof serial === 'number' && !Number.isFinite(serial)) {
+            const overflow = errorParser(ERROR_NUM);
+            return { value: overflow, display: overflow, type: 'error' };
         }
+        if (result instanceof Date) return { value: serial, display: String(serial), type: 'date' };
 
         // Any other non-primitive is stored as its string.
         const value: Cell['v'] =

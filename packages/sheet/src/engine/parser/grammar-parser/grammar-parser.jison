@@ -124,6 +124,7 @@ expression
       $$ = yy.evaluateByOperator('^', [$1, $3]);
     }
   | '-' expression {
+      if (Array.isArray($2)) return UNSUPPORTED_ARRAY_OPERATION;
       var n1 = yy.invertNumber($2);
 
       $$ = n1;
@@ -133,6 +134,7 @@ expression
       }
     }
   | '+' expression {
+      if (Array.isArray($2)) return UNSUPPORTED_ARRAY_OPERATION;
       var n1 = yy.toNumber($2);
 
       $$ = n1;

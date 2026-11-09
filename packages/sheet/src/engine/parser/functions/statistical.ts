@@ -1,5 +1,6 @@
-// The engine's statistical functions over criteria and ranges: MAXIFS and MINIFS, which formulajs 2.9.3 lacks, the
-// error handling of its COUNTIF family, and AGGREGATE's options and references. formula-function.ts registers them.
+// The engine's statistical functions over criteria and ranges: MAXIFS and MINIFS, which formulajs 2.9.3 lacks,
+// AVERAGEIF and AVERAGEIFS, whose formulajs versions answer NaN over a blank, the error handling of its COUNTIF family,
+// and AGGREGATE's options and references. formula-function.ts registers them.
 // An error cell matches a criterion by the text it shows, as `COUNTIF(A1:A9,"#N/A")` counts the #N/A cells in Excel,
 // and so does an error criterion, as `COUNTIF(A1:A9,NA())` does.
 
@@ -8,8 +9,8 @@ import * as formulajs from '@formulajs/formulajs';
 // @ts-expect-error - No types available for @formulajs/formulajs
 import * as criteriaEval from '@formulajs/formulajs/lib/utils/criteria-eval';
 import type { FormulaArg, FormulaOutput, FormulaValue } from '../../types';
-import { ERROR_NOT_AVAILABLE, ERROR_VALUE } from '../error';
-import { toGrid } from '../helper/array';
+import { ERROR_DIV_ZERO, ERROR_NOT_AVAILABLE, ERROR_VALUE } from '../error';
+import { referenceGrid, toGrid } from '../helper/array';
 import type { FunctionArg } from '../omitted';
 import { OMITTED, supplied } from '../omitted';
 
@@ -37,23 +38,27 @@ function criterion(arg: FunctionArg): (value: FormulaValue) => boolean {
         criteriaEval.compute([criteriaEval.createToken(cellText(value), criteriaEval.TOKEN_TYPE_LITERAL), ...tokens]);
 }
 
-// The numbers of the first range whose cells meet every criterion, folded by `pick`; none is 0.
-function extremeIfs(params: FunctionArg[], pick: (a: number, b: number) => number): FormulaOutput {
-    const [range, ...pairs] = params;
+// The numbers of `grid` whose cells meet every criterion of the range and criterion `pairs`. A blank, a text or a
+// boolean is no number, so it counts for nothing, as in Excel.
+function numbersMeeting(grid: FormulaValue[][], pairs: FunctionArg[]): number[] {
     if (pairs.length === 0 || pairs.length % 2 === 1) throw Error(ERROR_NOT_AVAILABLE);
-    const grid = toGrid(supplied(range));
     const tests: [FormulaValue[], (value: FormulaValue) => boolean][] = [];
     for (let i = 0; i < pairs.length; i += 2) {
-        const cells = toGrid(supplied(pairs[i]));
+        const cells = referenceGrid(supplied(pairs[i]));
         if (cells.length !== grid.length || cells[0].length !== grid[0].length) throw Error(ERROR_VALUE);
         tests.push([cells.flat(), criterion(pairs[i + 1])]);
     }
-    let result: number | undefined;
-    for (const [i, value] of grid.flat().entries()) {
-        if (typeof value !== 'number' || !tests.every(([cells, test]) => test(cells[i]))) continue;
-        result = result === undefined ? value : pick(result, value);
-    }
-    return result ?? 0;
+    return grid
+        .flat()
+        .filter(
+            (value, i): value is number => typeof value === 'number' && tests.every(([cells, test]) => test(cells[i])),
+        );
+}
+
+// The matching numbers folded by `pick`; none is 0.
+function extremeIfs([range, ...pairs]: FunctionArg[], pick: (a: number, b: number) => number): FormulaOutput {
+    const numbers = numbersMeeting(referenceGrid(supplied(range)), pairs);
+    return numbers.length === 0 ? 0 : numbers.reduce((a, b) => pick(a, b));
 }
 
 export function maxifs(params: FunctionArg[]): FormulaOutput {
@@ -62,6 +67,24 @@ export function maxifs(params: FunctionArg[]): FormulaOutput {
 
 export function minifs(params: FunctionArg[]): FormulaOutput {
     return extremeIfs(params, Math.min);
+}
+
+function average(numbers: number[]): number {
+    if (numbers.length === 0) throw Error(ERROR_DIV_ZERO);
+    return numbers.reduce((a, b) => a + b, 0) / numbers.length;
+}
+
+export function averageifs([range, ...pairs]: FunctionArg[]): FormulaOutput {
+    return average(numbersMeeting(referenceGrid(supplied(range)), pairs));
+}
+
+// The cells averaged sit where the criteria range's cells sit, whatever the average range's own size, as in Excel.
+export function averageif(params: FunctionArg[]): FormulaOutput {
+    const [range, test, averaged = range] = params;
+    if (params.length < 2) throw Error(ERROR_NOT_AVAILABLE);
+    const source = referenceGrid(supplied(averaged === OMITTED ? range : averaged));
+    const grid = referenceGrid(supplied(range)).map((row, r) => row.map((_, c) => source[r]?.[c]));
+    return average(numbersMeeting(grid, [range, test]));
 }
 
 // AGGREGATE(function, options, ref1, ref2, …) for functions 1–13, AGGREGATE(function, options, array, k) for 14–19:

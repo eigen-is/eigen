@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import type { SheetData } from '../../engine/cell-resolver';
 import { createArrayResolver } from '../../engine/cell-resolver';
+import { createCfFormulaEvaluator, evaluateConditionalFormat } from '../../engine/conditional-format';
 import { FormulaEngine } from '../../engine/formula-engine';
 import { functionCopy } from '../../engine/formula-shift';
 import { isFormula } from '../../engine/formula-utils';
+import type { ConditionalFormatRule } from '../../engine/types';
 
 const sheets: SheetData[] = [
     {
@@ -278,6 +280,204 @@ describe('engine/formula-engine — compiled formula at an offset', () => {
 
 // ─── An error held in a cell ────────────────────────────────────────────────
 
+describe('engine/formula-engine — criteria over blanks', () => {
+    const number = (v: number) => ({ v, m: String(v), ct: { t: 'n', fa: 'General' } });
+    const text = (v: string) => ({ v, m: v, ct: { t: 's', fa: 'General' } });
+    const data = [
+        [number(1), number(10), null],
+        [null, number(20), number(5)],
+        [number(3), null, null],
+        [number(4), text('x'), null],
+    ];
+    const engine = new FormulaEngine();
+    const blanks = createArrayResolver([{ id: 's', name: 'S', data }]);
+    const evaluate = (formula: string) => engine.evaluate(formula, 's', blanks).value;
+
+    test('AVERAGEIF and AVERAGEIFS ignore a blank and text, as Excel does', () => {
+        expect(evaluate('=AVERAGEIF(A1:A4,">1")')).toBe(3.5);
+        expect(evaluate('=AVERAGEIFS(A1:A4,A1:A4,">1")')).toBe(3.5);
+        // A blank in the average range doesn't move the cells after it.
+        expect(evaluate('=AVERAGEIF(A1:A4,">0",B1:B4)')).toBe(10);
+        expect(evaluate('=AVERAGEIFS(B1:B4,A1:A4,">0")')).toBe(10);
+    });
+
+    test('AVERAGEIF with nothing to average is #DIV/0!, as in Excel', () => {
+        expect(evaluate('=AVERAGEIF(A1:A4,">9")')).toBe('#DIV/0!');
+        expect(evaluate('=AVERAGEIFS(A1:A4,A1:A4,">9")')).toBe('#DIV/0!');
+        expect(evaluate('=AVERAGEIF(C3:C4,">0")')).toBe('#DIV/0!');
+    });
+
+    test('AVERAGEIF reads an average range of another size from its top-left, as Excel does', () => {
+        expect(evaluate('=AVERAGEIF(A1:A4,">0",B1)')).toBe(10);
+    });
+
+    test('AVERAGEIFS reads a criteria range along a row too', () => {
+        expect(evaluate('=AVERAGEIFS(A1:B1,A1:B1,">5")')).toBe(10);
+    });
+
+    test('a result that is no finite number reaches no cell', () => {
+        expect(evaluate('=STDEV(5)')).toBe('#NUM!');
+        expect(evaluate('=1e999')).toBe('#NUM!');
+        expect(engine.evaluate('=STDEV(5)', 's', blanks).type).toBe('error');
+    });
+});
+
+describe('engine/formula-engine — an operator over a range', () => {
+    const number = (v: number) => ({ v, m: String(v), ct: { t: 'n', fa: 'General' } });
+    const failed = (v: string) => ({ f: '=X', v, m: v, ct: { t: 'e', fa: 'General' } });
+    const engine = new FormulaEngine();
+    const grid = createArrayResolver([
+        {
+            id: 's',
+            name: 'S',
+            data: [
+                [number(1), number(10), failed('#CALC!')],
+                [number(2), number(20), null],
+                [number(3), number(30), null],
+            ],
+        },
+    ]);
+    const evaluate = (formula: string) => engine.evaluate(formula, 's', grid).value;
+    const cantEvaluate = (formula: string) => engine.cantEvaluate(formula, engine.evaluate(formula, 's', grid));
+
+    test.each([
+        '=SUMPRODUCT(A1:A3*B1:B3)',
+        '=SUMPRODUCT(--(A1:A3>1))',
+        '=SUMPRODUCT(A1:A3*B1:B3)/SUMPRODUCT(A1:A3)',
+        '=SUM(A1:A3*2)',
+        '=SUM(IF(A1:A3>1,A1:A3))',
+        '=-A1:A3',
+        '=+A1:A3',
+        '=(A1:A3)*2',
+        '=A1:A3%',
+        '=A1:A3&"x"',
+        '=A1:A3=1',
+        '=A1:A3>0',
+        '=IF(A1:A3>0,1,0)',
+        '=A1:A1*2',
+        '=INDEX(A1:B3,2,0)*2',
+        '=TRANSPOSE(A1:A3)*2',
+        '=CHOOSE(1,A1:A3,B1:B3)*2',
+    ])('%s is #CALC!, which a recompute takes as no answer', (formula) => {
+        expect(evaluate(formula)).toBe('#CALC!');
+        expect(cantEvaluate(formula)).toBe(true);
+    });
+
+    test('no function traps it, or the answer would read as the one Excel computed', () => {
+        for (const formula of ['=IFERROR(A1:A3*2,5)', '=ISERROR(A1:A3*2)', '=IFNA(A1:A3*2,5)', '=A1+A1:A3*2']) {
+            expect(evaluate(formula)).toBe('#CALC!');
+            expect(cantEvaluate(formula)).toBe(true);
+        }
+    });
+
+    test('a branch not taken may hold it', () => {
+        expect(evaluate('=IF(TRUE,1,A1:A3*2)')).toBe(1);
+        expect(evaluate('=IFERROR(1,A1:A3*2)')).toBe(1);
+    });
+
+    test.each([
+        ['=SUM(A1:A3)*2', 12],
+        ['=A1:A3', 1],
+        ['=SUM(A1:A3)', 6],
+        ['=SUMPRODUCT(A1:A3,B1:B3)', 140],
+        ['=INDEX(A1:B3,2,2)*2', 40],
+        ['=INDEX(A1:A3,2)*2', 4],
+        ['=XLOOKUP(2,A1:A3,B1:B3)*2', 40],
+        ['=VLOOKUP(2,A1:B3,2,0)*2', 40],
+        ['=COUNTIF(A1:A3,">1")*2', 4],
+        ['=ROWS(A1:A3)*2', 6],
+        ['=-SUM(A1:A3)', -6],
+        ['=A1*2', 2],
+    ])('%s still computes', (formula, expected) => {
+        expect(evaluate(formula)).toBe(expected);
+        expect(cantEvaluate(formula)).toBe(false);
+    });
+
+    test('a broken reference beside a range is #REF!', () => {
+        expect(evaluate('=#REF!*A1:A3')).toBe('#REF!');
+        expect(evaluate('=A1:A3*#REF!')).toBe('#REF!');
+        expect(evaluate('=SUMPRODUCT(#REF!*A1:A3)')).toBe('#REF!');
+        expect(cantEvaluate('=#REF!*A1:A3')).toBe(false);
+    });
+
+    test('a #CALC! read from a cell is that cell`s, so a reader stores it and IFERROR traps it', () => {
+        expect(evaluate('=C1+1')).toBe('#CALC!');
+        expect(cantEvaluate('=C1+1')).toBe(false);
+        expect(evaluate('=IFERROR(C1,5)')).toBe(5);
+    });
+});
+
+describe('engine/formula-engine — a formula rule with an operator over a range', () => {
+    const number = (v: number) => ({ v, m: String(v), ct: { t: 'n', fa: 'General' } });
+    const data = [[number(1)], [number(1)], [number(3)]];
+    const styled = (formula: string) => {
+        const engine = new FormulaEngine();
+        const rule: ConditionalFormatRule = {
+            type: 'default',
+            cellrange: [{ row: [0, 2], column: [0, 0] }],
+            format: { cellColor: '#ff0000' },
+            conditionName: 'formula',
+            conditionRange: [],
+            conditionValue: [formula],
+        };
+        const evaluateFormula = createCfFormulaEvaluator(
+            engine,
+            createArrayResolver([{ id: 's', name: 'S', data }]),
+            's',
+        );
+        return Object.keys(evaluateConditionalFormat([rule], data, { evaluateFormula })).sort();
+    };
+
+    test('colors nothing, as the 0 it computed before colored nothing', () => {
+        expect(styled('=SUMPRODUCT(($A$1:$A$3=A1)*1)>1')).toEqual([]);
+        expect(styled('=$A$1:$A$3>0')).toEqual([]);
+    });
+
+    test('a rule whose range goes through a function still colors', () => {
+        expect(styled('=COUNTIF($A$1:$A$3,A1)>1')).toEqual(['0_0', '1_0']);
+        expect(styled('=SUM($A$1:$A$3)*A1>5')).toEqual(['2_0']);
+    });
+});
+
+describe('engine/formula-engine — a range a delete cut to one cell', () => {
+    const number = (v: number) => ({ v, m: String(v), ct: { t: 'n', fa: 'General' } });
+    const failed = { f: '=X', v: '#N/A', m: '#N/A', ct: { t: 'e', fa: 'General' } };
+    const deleted = { f: '=X', v: '#REF!', m: '#REF!', ct: { t: 'e', fa: 'General' } };
+    const engine = new FormulaEngine();
+    const cut = createArrayResolver([{ id: 's', name: 'S', data: [[number(1), number(10), failed, deleted]] }]);
+    const evaluate = (formula: string) => engine.evaluate(formula, 's', cut).value;
+
+    test('ROWS and COLUMNS count one cell, an error it holds too', () => {
+        expect(evaluate('=ROWS(C1)')).toBe(1);
+        expect(evaluate('=COLUMNS(C1)')).toBe(1);
+        expect(evaluate('=ROWS(C1:D1)')).toBe(1);
+    });
+
+    test('ROWS and COLUMNS of a reference a delete broke are #REF!', () => {
+        expect(evaluate('=ROWS(#REF!)')).toBe('#REF!');
+        expect(evaluate('=COLUMNS(#REF!)')).toBe('#REF!');
+    });
+
+    test('the criteria functions read one cell as a range of one', () => {
+        expect(evaluate('=AVERAGEIF(A1,">0")')).toBe(1);
+        expect(evaluate('=AVERAGEIF(A1,">0",B1)')).toBe(10);
+        expect(evaluate('=AVERAGEIFS(A1,A1,">0")')).toBe(1);
+        expect(evaluate('=MAXIFS(A1,A1,">0")')).toBe(1);
+        expect(evaluate('=SUMIF(A1,">0")')).toBe(1);
+        expect(evaluate('=SUMIF(A1,">0",B1)')).toBe(10);
+        expect(evaluate('=SUMIFS(A1,A1,">0")')).toBe(1);
+        expect(evaluate('=COUNTIF(A1,">0")')).toBe(1);
+        expect(evaluate('=COUNTIFS(A1,">0")')).toBe(1);
+    });
+
+    test('one error cell matches a criterion by its text and is no number', () => {
+        expect(evaluate('=COUNTIF(C1,"#N/A")')).toBe(1);
+        expect(evaluate('=SUMIF(C1,"#N/A",A1)')).toBe(1);
+        expect(evaluate('=AVERAGEIF(C1,"#N/A",A1)')).toBe(1);
+        expect(evaluate('=AVERAGEIF(C1,">0")')).toBe('#DIV/0!');
+    });
+});
+
 describe('engine/formula-engine — an error held in a cell', () => {
     const engine = new FormulaEngine();
     // A cell holding an error, as the editor and recalc write one.
@@ -380,9 +580,10 @@ describe('engine/formula-engine — an error held in a cell', () => {
         expect(evaluate('=IFERROR(SUM(A5:B5),0)')).toBe('#NAME?');
     });
 
-    test('an operator hands on the first error in a range operand', () => {
-        expect(evaluate('=C3:C4&"a"')).toBe('#N/A');
-        expect(evaluate('=A2:A4+1')).toBe('#DIV/0!');
+    test('an operator over a range holding an error is no answer either, or an IFERROR would trap it into one', () => {
+        expect(evaluate('=C3:C4&"a"')).toBe('#CALC!');
+        expect(evaluate('=A2:A4+1')).toBe('#CALC!');
+        expect(evaluate('=SUM(IFERROR(A2:A4+1,0))')).toBe('#CALC!');
     });
 
     test('a function hands on the first error in its arguments, ranges included, as Excel does', () => {

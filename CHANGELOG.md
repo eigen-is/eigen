@@ -31,6 +31,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Fixed
 
+- **Comments in Sheets** — **Clear formatting** keeps a cell's comment, and **Delete comment** in a cell's menu asks first
+- **Array formulas in Sheets** — a formula such as `SUMPRODUCT(A1:A3*B1:B3)`, which Sheets can't calculate yet, keeps the number it has when you edit around it, instead of turning into 0. Typed new, it shows `#CALC!`
 - **Merged cells in Sheets** — pasting text over a merged cell replaces the merge, and wrapped text in a merged cell no longer makes its row very tall
 - **Restoring in Slides and Vector** — restoring an earlier version of a deck or drawing brings back the comments deleted since, as Docs and Sheets do. Their replies stay as they are now
 - **Version history in other tabs** — after a restore or a Delete history, another tab open on the same document shows the new list of versions at once

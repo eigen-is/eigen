@@ -384,6 +384,17 @@ describe('replaySheetsOps', () => {
         expect(result[0].name).toBe('after');
     });
 
+    test('addSheet with a config that is no map adds nothing, as the tab adds nothing', () => {
+        for (const config of [5, 'x', true, []]) {
+            const value = { id: 's2', name: 'B', config };
+            const ops: Op[][] = [[{ op: 'addSheet', id: 's2', path: [], value }]];
+            expect(replaySheetsOps([baseSheet('s1', 'A')], ops).map(({ id }) => id)).toEqual(['s1']);
+        }
+        const value = { id: 's2', name: 'B', config: null };
+        const ops: Op[][] = [[{ op: 'addSheet', id: 's2', path: [], value }]];
+        expect(replaySheetsOps([baseSheet('s1', 'A')], ops).map(({ id }) => id)).toEqual(['s1', 's2']);
+    });
+
     test('addSheet mid-replay with a celldata-only value is materialized for later data ops', () => {
         // copySheet emits addSheet values carrying celldata only (data is
         // deleted, row/column absent when the source sheet had none). A later

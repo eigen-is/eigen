@@ -26,7 +26,7 @@ export type ChartPanelState = {
 export type Hooks = {
     afterSelectionChange?: (sheetId: string, selection: Selection) => void;
     onAddComment?: (row: number, column: number) => void;
-    onDeleteComment?: (row: number, column: number) => void;
+    onDeleteComment?: (cardId: string) => void;
     commentLifecycle?: ReturnType<typeof useCommentLifecycle>;
     getCommentInfo?: (row: number, column: number) => CommentInfo | null;
     onInsertImage?: () => void;

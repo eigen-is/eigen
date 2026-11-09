@@ -2,7 +2,7 @@
 // parse table and actions are the source of the formula grammar. The .jison grammar beside it is the readable copy,
 // and an edit here is made there too. Its parse turns a formula into a thunk, so one parse serves many evaluations.
 
-import { ERROR_VALUE } from "../error";
+import { ERROR_VALUE, UNSUPPORTED_ARRAY_OPERATION } from "../error";
 import { OMITTED } from "../omitted";
 
 const simpleSheetName = "[A-Za-z0-9_\u00C0-\u02AF]+";
@@ -964,6 +964,9 @@ export class Parser {
                     const value = run(operand);
                     if (value instanceof Error) {
                         return value;
+                    }
+                    if (Array.isArray(value)) {
+                        return UNSUPPORTED_ARRAY_OPERATION;
                     }
                     const n1 = sign(value);
                     if (n1 !== undefined && isNaN(n1)) {

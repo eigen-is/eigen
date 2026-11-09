@@ -358,7 +358,70 @@ describe('a row op`s undo', () => {
     });
 });
 
+describe('an operator over a range', () => {
+    const start = () =>
+        book({
+            cells: [
+                [n(1), n(10), f('=SUMPRODUCT(A1:A3*B1:B3)', 777), f('=C1+1', 778), f('=SUM(A1:A3)', 6)],
+                [n(2), n(20), null, null, null],
+                [n(3), n(30), null, null, null],
+            ],
+        });
+
+    test('keeps its stored number on a row insert, and a reader reads that', () => {
+        const op = insertRow(1);
+        const t = tab(start());
+        tabEdit(t, (d) => insertRowCol(d, op), { insertRowColOp: op });
+        expect(at(t.ctx.sheets, 's1', 0, 2)?.f).toBe('=SUMPRODUCT(A1:A4*B1:B4)');
+        expect(at(t.ctx.sheets, 's1', 0, 2)?.v).toBe(777);
+        expect(at(t.ctx.sheets, 's1', 0, 3)?.v).toBe(778);
+        expect(at(t.ctx.sheets, 's1', 0, 4)?.f).toBe('=SUM(A1:A4)');
+        const replayed = replaySheetsOps(
+            [{ id: 's1', name: 'One', order: 0, data: start().sheets[0].data }],
+            [[{ op: 'insertRowCol', id: 's1', path: [], value: op }]],
+        );
+        expect(at(replayed, 's1', 0, 2)?.v).toBe(777);
+    });
+
+    test('keeps its stored number on an edit of what it reads', () => {
+        const t = tab(start());
+        warmFormulaCellInfoMap(t.ctx);
+        tabEdit(t, (d) => {
+            updateCell(d, 0, 0, null, 5);
+        });
+        expect(at(t.ctx.sheets, 's1', 0, 2)?.v).toBe(777);
+        expect(at(t.ctx.sheets, 's1', 0, 3)?.v).toBe(778);
+        expect(at(t.ctx.sheets, 's1', 0, 4)?.v).toBe(10);
+    });
+
+    test('typed, with no number to keep, it shows #CALC!', () => {
+        const t = tab(start());
+        tabEdit(t, (d) => {
+            updateCell(d, 1, 3, null, '=SUMPRODUCT(A1:A3*B1:B3)');
+        });
+        const cell = at(t.ctx.sheets, 's1', 1, 3);
+        expect(cell?.v).toBe('#CALC!');
+        expect(cell?.m).toBe('#CALC!');
+        expect(cell?.ct?.t).toBe('e');
+    });
+});
+
 describe('what a recompute keeps', () => {
+    test('an AVERAGEIF over the blank row an insert opened ignores it, on the replay', () => {
+        const sheets: Sheet[] = [
+            {
+                id: 's1',
+                name: 'One',
+                order: 0,
+                data: [[n(1), f('=AVERAGEIF(A1:A3,">1")', 2.5)], [n(2)], [n(3)]],
+            },
+        ];
+        const op: Op = { op: 'insertRowCol', id: 's1', path: [], value: insertRow(1) };
+        const [one] = replaySheetsOps(sheets, [[op]]);
+        expect(at([one], 's1', 0, 1)?.f).toBe('=AVERAGEIF(A1:A4,">1")');
+        expect(at([one], 's1', 0, 1)?.v).toBe(2.5);
+    });
+
     test('a formula this build cannot evaluate keeps its stored number, on a row op and on an edit', () => {
         const base = book({
             cells: [
@@ -789,6 +852,18 @@ describe('a formula holding #REF!', () => {
 
     test('beside a name this build cannot read it still shows #REF!', () => {
         expect(removed('=A2+UNKNOWNNAME', 5)?.v).toBe('#REF!');
+    });
+
+    test('inside a function this build lacks it shows #REF!, as Excel does', () => {
+        expect(removed('=_xlfn.NEWFN(A2)', 5)?.v).toBe('#REF!');
+        expect(removed('=FILTER(A2,1)', 5)?.v).toBe('#REF!');
+        expect(removed('=SUM(FILTER(A2,1))', 5)?.v).toBe('#REF!');
+        expect(removed('=IFERROR(FILTER(A2,1),7)', 5)?.v).toBe(7);
+        expect(removed('=IF(TRUE,1,FILTER(A2,1))', 5)?.v).toBe(1);
+    });
+
+    test('a function this build lacks with no #REF! in hand keeps the number', () => {
+        expect(removed('=FILTER(A1,1)', 5)?.v).toBe(5);
     });
 });
 
