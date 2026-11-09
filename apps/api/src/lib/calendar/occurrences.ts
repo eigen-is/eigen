@@ -11,13 +11,8 @@ import { toEvent } from './mappers';
 import { expandRecurrence } from './recurrence';
 import * as schema from './schema';
 
-// 5 years bounds rrule iteration against a year-9999 span; clamp rather than reject so a wide CalDAV sync still gets bounded data.
-const MAX_RANGE_SPAN_MS = 5 * 366 * 24 * 60 * 60 * 1000;
-
-function clampRangeEnd(from: Date, to: Date): Date {
-    const maxEnd = from.getTime() + MAX_RANGE_SPAN_MS;
-    return to.getTime() > maxEnd ? new Date(maxEnd) : to;
-}
+// Bounds one series' expansion against a year-9999 span. Cut rather than refused, so a wide CalDAV sync still gets data.
+const MAX_EXPANSION_MS = 5 * 366 * 24 * 60 * 60 * 1000;
 
 export async function getEventsInRange(
     calendar: Calendar,
@@ -25,10 +20,8 @@ export async function getEventsInRange(
     to: Date,
     calendarId?: string,
 ): Promise<CalendarEventOccurrence[]> {
-    const clampedTo = clampRangeEnd(from, to);
-
     const scoped = calendarId ? [eq(schema.events.calendarId, calendarId)] : [];
-    const overlaps = and(lte(schema.events.startTime, clampedTo), gte(schema.events.endTime, from));
+    const overlaps = and(lte(schema.events.startTime, to), gte(schema.events.endTime, from));
 
     const nonRecurring = calendar
         .joinedEvents()
@@ -40,7 +33,7 @@ export async function getEventsInRange(
     const isMasterInWindow = and(
         sql`${schema.events.rrule} IS NOT NULL`,
         isNull(schema.events.parentEventId),
-        lte(schema.events.startTime, clampedTo),
+        lte(schema.events.startTime, to),
     );
     const recurring = calendar
         .joinedEvents()
@@ -81,14 +74,16 @@ export async function getEventsInRange(
 
     for (const event of recurring) {
         const replaced = replacedByParent.get(event.id);
-        for (const occurrence of expandRecurrence(event, from, clampedTo)) {
+        const start = event.startTime > from ? event.startTime : from;
+        const end = new Date(Math.min(to.getTime(), start.getTime() + MAX_EXPANSION_MS));
+        for (const occurrence of expandRecurrence(event, start, end)) {
             if (!replaced?.has(occurrence.occurrenceDate)) results.push(occurrence);
         }
     }
 
     for (const exception of exceptions) {
         if (exception.status === 'cancelled') continue;
-        if (exception.startTime > clampedTo || exception.endTime < from) continue;
+        if (exception.startTime > to || exception.endTime < from) continue;
         // The stored key, not the moved startTime: the FE round-trips occurrenceDate into scope='this' RSVPs.
         if (exception.recurrenceDate) results.push({ ...exception, occurrenceDate: exception.recurrenceDate });
     }

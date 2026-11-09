@@ -1017,7 +1017,7 @@ describe('CalDAV round-trip fidelity', () => {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        title: 'Design review (web)',
+                        title: 'Design review (web, again)',
                         data: { ...occ.data, attendees: occ.data?.attendees },
                     }),
                 },
@@ -1187,7 +1187,8 @@ describe('CalDAV round-trip fidelity', () => {
             // The organizer deleting cancels for the guests: that mail is the control this fan-out does owe,
             // and a decline REPLY beside it would mean the row was read as someone else's invitation.
             await eventually(
-                async () => spy.mock.calls.some((c) => c[0].subject === 'Canceled: Design review (web)') || undefined,
+                async () =>
+                    spy.mock.calls.some((c) => c[0].subject === 'Canceled: Design review (web, again)') || undefined,
                 'the cancellation mail to the guests', // pre-fix: 'Declined: …' instead
             );
             expect(spy.mock.calls.map((c) => c[0].subject).some((s) => s.startsWith('Declined:'))).toBe(false);

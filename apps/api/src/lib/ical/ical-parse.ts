@@ -178,30 +178,29 @@ export function sequenceOf(vevent: ICAL.Component): number {
     return Number.isFinite(raw) ? raw : 0;
 }
 
-function projectAttendees(vevent: ICAL.Component): Attendee[] {
-    const statusMap: Record<string, Attendee['status']> = {
-        'NEEDS-ACTION': 'pending',
-        ACCEPTED: 'accepted',
-        DECLINED: 'declined',
-        TENTATIVE: 'tentative',
-    };
-    const roleMap: Record<string, Attendee['role']> = {
-        'REQ-PARTICIPANT': 'required',
-        'OPT-PARTICIPANT': 'optional',
-    };
+const ATTENDEE_STATUS: Record<string, Attendee['status']> = {
+    'NEEDS-ACTION': 'pending',
+    ACCEPTED: 'accepted',
+    DECLINED: 'declined',
+    TENTATIVE: 'tentative',
+};
 
-    return vevent.getAllProperties('attendee').map((prop) => {
-        const email = calAddress(prop.getFirstValue());
-        const cn = prop.getFirstParameter('cn') || email;
-        const partstat = (prop.getFirstParameter('partstat') || 'NEEDS-ACTION').toUpperCase();
-        const role = (prop.getFirstParameter('role') || 'REQ-PARTICIPANT').toUpperCase();
-        return {
-            email,
-            name: cn !== email ? cn : undefined,
-            status: statusMap[partstat] || 'pending',
-            role: roleMap[role] || 'required',
-        };
-    });
+const ATTENDEE_ROLE: Record<string, Attendee['role']> = {
+    'REQ-PARTICIPANT': 'required',
+    'OPT-PARTICIPANT': 'optional',
+};
+
+export function projectAttendee(prop: ICAL.Property): Attendee {
+    const email = calAddress(prop.getFirstValue());
+    const cn = prop.getFirstParameter('cn') || email;
+    const partstat = (prop.getFirstParameter('partstat') || 'NEEDS-ACTION').toUpperCase();
+    const role = (prop.getFirstParameter('role') || 'REQ-PARTICIPANT').toUpperCase();
+    return {
+        email,
+        name: cn !== email ? cn : undefined,
+        status: ATTENDEE_STATUS[partstat] || 'pending',
+        role: ATTENDEE_ROLE[role] || 'required',
+    };
 }
 
 export function projectReminders(vevent: ICAL.Component): Reminder[] {
@@ -447,7 +446,7 @@ function readResource(resource: ICAL.Component, triesRule: boolean): ReadResult 
                 }
             }
 
-            const attendees = projectAttendees(vevent);
+            const attendees = vevent.getAllProperties('attendee').map(projectAttendee);
             const reminders = projectReminders(vevent);
 
             const organizerProp = vevent.getFirstProperty('organizer');

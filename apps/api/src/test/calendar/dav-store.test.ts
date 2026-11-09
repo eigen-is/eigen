@@ -371,3 +371,71 @@ describe('an override names its parent', () => {
         expect(await harness.instance.listResources(calendarId)).toHaveLength(1);
     });
 });
+
+describe('a query window wider than one expansion', () => {
+    const CAREER = [new Date('2010-01-01T00:00:00Z'), new Date('2040-01-01T00:00:00Z')] as const;
+    const at = (uid: string, start: string, extra: string[] = []) =>
+        vcal([
+            'BEGIN:VEVENT',
+            `UID:${uid}`,
+            `DTSTART:${start}T100000Z`,
+            `DTEND:${start}T110000Z`,
+            'SUMMARY:Wide',
+            ...extra,
+            'END:VEVENT',
+        ]);
+
+    test('still finds every single event in it', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        await put(harness.instance, calendarId, 'soon.ics', at('soon', '20261110'));
+        await put(harness.instance, calendarId, 'far.ics', at('far', '20350110'));
+
+        const found = await harness.instance.getResourcesInRange(calendarId, ...CAREER);
+
+        expect(found.map((r) => r.uri).sort()).toEqual(['far.ics', 'soon.ics']);
+    });
+
+    test('expands a series from where it starts, and at most five years of it', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        await put(harness.instance, calendarId, 'series.ics', at('series', '20300101', ['RRULE:FREQ=YEARLY']));
+
+        const found = await harness.instance.getEventsInRange(...CAREER, calendarId);
+
+        expect(found.map((e) => e.occurrenceDate)).toEqual([
+            '2030-01-01',
+            '2031-01-01',
+            '2032-01-01',
+            '2033-01-01',
+            '2034-01-01',
+            '2035-01-01',
+        ]);
+    });
+
+    test('still finds an occurrence moved past those five years', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        const body = vcal([
+            'BEGIN:VEVENT',
+            'UID:moved',
+            'DTSTART:20300101T100000Z',
+            'DTEND:20300101T110000Z',
+            'SUMMARY:Wide',
+            'RRULE:FREQ=YEARLY;COUNT=2',
+            'END:VEVENT',
+            'BEGIN:VEVENT',
+            'UID:moved',
+            'RECURRENCE-ID:20310101T100000Z',
+            'DTSTART:20380101T100000Z',
+            'DTEND:20380101T110000Z',
+            'SUMMARY:Wide, moved',
+            'END:VEVENT',
+        ]);
+        await put(harness.instance, calendarId, 'moved.ics', body);
+
+        const found = await harness.instance.getEventsInRange(...CAREER, calendarId);
+
+        expect(found.map((e) => e.startTime.getUTCFullYear())).toEqual([2030, 2038]);
+    });
+});

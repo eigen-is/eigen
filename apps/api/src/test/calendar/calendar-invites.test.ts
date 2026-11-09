@@ -1173,3 +1173,76 @@ describe('A save that changes nothing', () => {
         mail.mockRestore();
     });
 });
+
+describe('A save only its owner sees', () => {
+    const setup = async (title: string, input: { rrule?: string }) => {
+        const ctx = await getTestContext();
+        const owner = ctx.alice.user;
+        const calendar = (await getHome(owner.id)).calendar;
+        const calendarId = findOrFail(await calendar.getCalendars(), (c) => c.isDefault).id;
+        const save = async (id: string, body: object) =>
+            assertJson<CalendarEvent>(
+                await authedRequest(owner.sessionToken, `/calendar/${owner.id}/calendars/${calendarId}/events/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                }),
+            );
+        const mailer = await import('../../lib/mailer/mailer');
+        const mail = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        const mailed = (subject: string) => mail.mock.calls.filter((call) => call[0].subject === subject).length;
+        const event = await assertJson<CalendarEvent>(
+            await authedRequest(owner.sessionToken, `/calendar/${owner.id}/calendars/${calendarId}/events`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title,
+                    startTime: new Date(Date.now() + 3600_000),
+                    endTime: new Date(Date.now() + 7200_000),
+                    allDay: false,
+                    timezone: 'Europe/Amsterdam',
+                    ...input,
+                    data: { attendees: [{ email: 'personal@external.com', status: 'pending', role: 'required' }] },
+                }),
+            }),
+        );
+        await eventually(async () => mailed(`Invitation: ${title}`) || undefined, 'the invitation to reach the guest');
+        return { owner, save, mail, mailed, event };
+    };
+
+    test('a color, a reminder or another spelling of the same instants mails nobody and moves no SEQUENCE', async () => {
+        const { owner, save, mail, mailed, event } = await setup('Mine alone', {});
+        const sse = await collectSSE(owner.id);
+        const data = event.data ?? {};
+
+        const colored = await save(event.id, { data: { ...data, color: '#2563eb' } });
+        const reminded = await save(event.id, {
+            data: { ...data, color: '#2563eb', reminders: [{ type: 'notification', minutes: 10 }] },
+        });
+        const respelled = await save(event.id, { timezone: 'Europe/London' });
+
+        const etags = [event.etag, colored.etag, reminded.etag, respelled.etag];
+        expect(new Set(etags).size).toBe(etags.length);
+        expect(respelled.timezone).toBe('Europe/London');
+        expect(respelled.startTime).toEqual(event.startTime);
+        expect(respelled.sequence).toBe(event.sequence);
+
+        // Absence only counts behind what IS expected: a real edit, made second, takes the very path the saves must not.
+        await save(event.id, { title: 'Really mine' });
+        await eventually(async () => mailed('Updated invitation: Really mine') || undefined, 'the real update');
+
+        expect(mailed('Updated invitation: Mine alone')).toBe(0);
+        expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENT_UPDATED)).toHaveLength(4);
+        sse.stop();
+        mail.mockRestore();
+    });
+
+    test('a repeating event in another zone moves its later occurrences, so the guests hear it', async () => {
+        const { save, mail, mailed, event } = await setup('Weekly zone', { rrule: 'FREQ=WEEKLY' });
+
+        await save(event.id, { timezone: 'America/New_York' });
+
+        await eventually(async () => mailed('Updated invitation: Weekly zone') || undefined, 'the zone update');
+        mail.mockRestore();
+    });
+});
