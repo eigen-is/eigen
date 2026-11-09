@@ -281,7 +281,7 @@ function fillLine(line: readonly (Cell | null | undefined)[], count: number, lon
 // Text counts only among cells with the same words around their number, so its kind is the text without the number.
 function seriesKind(cell: Cell | null | undefined) {
     if (cell?.v == null || cell.f != null) return 'copy';
-    if (cell.ct?.t === 'n') return 'number';
+    if (cell.ct?.t === 'n' && Number.isFinite(Number(cell.v))) return 'number';
     if (cell.ct?.t === 'd') return 'date';
     const number = lastNumber(cell.m);
     return number ? `${number.before}#${number.after}` : 'copy';

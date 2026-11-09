@@ -559,6 +559,15 @@ describe('a fill counts on from what its source holds', () => {
             expected: ['Item 009', 'Item 010', 'Item 011'],
         },
         {
+            name: 'text under a number format counts as text',
+            source: [
+                { v: 'x1', m: 'x1', ct: { fa: '0', t: 'n' } },
+                { v: 'x2', m: 'x2', ct: { fa: '0', t: 'n' } },
+            ],
+            direction: 'down',
+            expected: ['x3', 'x4', 'x5'],
+        },
+        {
             name: 'text past nine grows without a leading zero',
             source: [text('Item 8'), text('Item 9')],
             direction: 'down',
@@ -608,9 +617,9 @@ describe('a fill counts on from what its source holds', () => {
         expect(shown(filled([text('Item 007')], 1, 'right'))).toEqual(['Item 008']);
     });
 
-    it('copies one text ending in a number that a number format left as text', () => {
+    test('counts on from one text ending in a number that a number format left as text', () => {
         const numbered = (v: string): Cell => ({ v, m: v, ct: { fa: '##0.00', t: 'n' } });
-        expect(shown(filled([numbered('x1')], 2, 'down'))).toEqual(['x1', 'x1']);
+        expect(shown(filled([numbered('x1')], 2, 'down'))).toEqual(['x2', 'x3']);
         expect(shown(filled([numbered('12')], 2, 'down'))).toEqual(['12', '12']);
     });
 
