@@ -28,7 +28,7 @@ import {
     CONTAINER_MEDIA_FOLDER,
 } from '../mount/container-dbs';
 import type { User } from '../user';
-import { getUserById } from '../user';
+import { getSessionUser } from '../user';
 import { COLLAB_DB_CONFIG } from './db-config';
 import { DbProvider } from './db-provider';
 
@@ -210,29 +210,15 @@ export class CollabDocument {
         if (this.connections.size === 0) this.scheduleClose();
     }
 
-    // Read is checked when a socket opens and write on every message, so a user who lost read would keep
-    // receiving edits until they disconnect.
-    public async enforceReadAccess(): Promise<void> {
-        // A copy, because unsubscribe changes the map.
-        for (const conn of [...this.connections.keys()]) await this.keepsReadAccess(conn);
-    }
-
-    // Closes the connection of a user who may no longer read, and answers whether the connection is still here.
-    public async keepsReadAccess(conn: ServerWebSocket<unknown>): Promise<boolean> {
-        const opened = this.connections.get(conn);
-        if (!opened) return false;
+    // Closes a connection whose session ended or whose user may no longer read, and answers whether it is still here.
+    public async keepsReadAccess(conn: ServerWebSocket<unknown>, sessionId: string): Promise<boolean> {
+        if (!this.connections.has(conn)) return false;
         // The row, not the user the socket opened with: an ACL entry outlives its user, and matches on the email.
-        const user = await getUserById(opened.id);
+        const user = await getSessionUser(sessionId);
         if (user && (await this.drive.canRead(this.path.mountId, this.path.id, user))) return true;
-        this.closeForLostAccess(conn);
+        conn.close(COLLAB_ACCESS_LOST_CLOSE, COLLAB_ACCESS_LOST_REASON);
+        this.unsubscribe(conn);
         return false;
-    }
-
-    // For a user locked out whatever they may read, such as by a password reset.
-    public closeUserConnections(userId: string): void {
-        for (const [conn, { id }] of [...this.connections]) {
-            if (id === userId) this.closeForLostAccess(conn);
-        }
     }
 
     public handleMessage(conn: ServerWebSocket<unknown>, message: Uint8Array, canWrite: boolean): void {
@@ -312,11 +298,6 @@ export class CollabDocument {
             restoreYjsDoc(this.doc, state, roots);
             restampRestoredSheetsBase(this.path.type, this.doc);
         });
-    }
-
-    private closeForLostAccess(conn: ServerWebSocket<unknown>): void {
-        conn.close(COLLAB_ACCESS_LOST_CLOSE, COLLAB_ACCESS_LOST_REASON);
-        this.unsubscribe(conn);
     }
 
     private dropConnection(conn: ServerWebSocket<unknown>): void {

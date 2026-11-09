@@ -2,8 +2,8 @@
 // team memberships and their org role. Routes, homes and the auth hooks read users through here.
 
 import { parseOwnerId } from '@workspace/lib/types/owner';
-import { and, eq, inArray } from 'drizzle-orm';
-import { member, teamMember, user } from '../../../auth-schema';
+import { and, eq, gt, inArray } from 'drizzle-orm';
+import { member, session, teamMember, user } from '../../../auth-schema';
 import type { auth } from '../auth/auth';
 import { getAuthDrizzleDb } from '../auth/auth';
 import { getServerConfig } from '../config/server-config';
@@ -35,6 +35,18 @@ export async function getUsersByEmails(emails: string[]): Promise<User[]> {
 export async function getUserById(id: string): Promise<User | null> {
     const db = getAuthDrizzleDb();
     return (await db.select().from(user).where(eq(user.id, id)).get()) ?? null;
+}
+
+// A session's user as the row is now, or null once the session is gone or past its expiry.
+export async function getSessionUser(sessionId: string): Promise<User | null> {
+    const db = getAuthDrizzleDb();
+    const row = await db
+        .select({ user })
+        .from(session)
+        .innerJoin(user, eq(user.id, session.userId))
+        .where(and(eq(session.id, sessionId), gt(session.expiresAt, new Date())))
+        .get();
+    return row?.user ?? null;
 }
 
 // Whether the user or team an owner id names still has its row. No other kind of owner is ever deleted.
