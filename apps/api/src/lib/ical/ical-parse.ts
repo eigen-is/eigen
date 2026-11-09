@@ -131,6 +131,11 @@ export function icalTimeToInstant(t: ICAL.Time, tzid: string | null, fallbackTz:
     return new Date(Date.UTC(t.year, t.month - 1, t.day, t.hour, t.minute, t.second));
 }
 
+// An all-day bound is midnight UTC, whatever zone the value names.
+function startOfDay(t: ICAL.Time): Date {
+    return new Date(Date.UTC(t.year, t.month - 1, t.day));
+}
+
 // Expansion keys in wall-clock space, so an exception must key to the same wall-clock date to attach to its instance; `tz` is the series' own zone and matters only for the UTC-Z form.
 export function icalTimeToRecurrenceKey(t: ICAL.Time, tz: string | null): string {
     // RFC 5545 puts a RECURRENCE-ID in the master DTSTART's tz, so converting a TZID value mis-keys a cross-tz move; toJSDate() would read a floating or DATE value in the server's zone.
@@ -378,26 +383,28 @@ function readResource(resource: ICAL.Component): ReadResult {
             const locationRaw = vevent.getFirstPropertyValue('location');
             const location = typeof locationRaw === 'string' ? locationRaw : null;
 
-            const dtstart = vevent.getFirstProperty('dtstart');
             const dtend = vevent.getFirstProperty('dtend');
-            const allDay = event.startDate.isDate;
-            const tzid = propTzid(dtstart);
+            const start = event.startDate;
+            const allDay = start.isDate;
+            const tzid = propTzid(vevent.getFirstProperty('dtstart'));
+            const startTime = allDay ? startOfDay(start) : icalTimeToInstant(start, tzid, null);
 
-            // ICAL.Event.endDate resolves a DTEND or a DURATION (RFC 5545 §3.6.1) and a bare all-day DTSTART, but reads a bare timed DTSTART as zero-length, where a row needs the hour it is drawn as.
-            let startTime: Date;
+            // Never ICAL.Event.endDate: ical.js adds a DURATION month by month, so that read takes as long as the number says.
+            const end = dtend?.getFirstValue();
+            const duration = vevent.getFirstPropertyValue('duration');
             let endTime: Date;
-            if (allDay) {
-                const start = event.startDate;
-                const end = event.endDate;
-                startTime = new Date(Date.UTC(start.year, start.month - 1, start.day));
-                endTime = new Date(Date.UTC(end.year, end.month - 1, end.day));
+            if (end instanceof ICAL.Time) {
+                endTime = allDay ? startOfDay(end) : icalTimeToInstant(end, propTzid(dtend), tzid);
+            } else if (duration instanceof ICAL.Duration) {
+                const seconds = duration.toSeconds();
+                endTime = new Date(
+                    startTime.getTime() + (allDay ? Math.trunc(seconds / 86400) * 86400 : seconds) * 1000,
+                );
             } else {
-                startTime = icalTimeToInstant(event.startDate, tzid, null);
-                endTime =
-                    dtend || vevent.getFirstProperty('duration')
-                        ? icalTimeToInstant(event.endDate, propTzid(dtend), tzid)
-                        : new Date(startTime.getTime() + 3600_000);
+                endTime = new Date(startTime.getTime() + (allDay ? 86400_000 : 3600_000));
             }
+            // Negated so an Invalid Date also counts: a row with an end no DTEND could spell breaks at its next write.
+            if (!(endTime.getUTCFullYear() <= 9999)) throw new Error('Event end out of range');
 
             const rruleProp = vevent.getFirstPropertyValue('rrule');
             const rruleRaw = rruleProp ? rruleProp.toString() : null;
@@ -498,7 +505,7 @@ function readResource(resource: ICAL.Component): ReadResult {
                         let exStartTime: Date;
                         let exEndTime: Date;
                         if (isDateOnly) {
-                            exStartTime = new Date(Date.UTC(exVal.year, exVal.month - 1, exVal.day));
+                            exStartTime = startOfDay(exVal);
                             exEndTime = new Date(exStartTime.getTime() + 86400_000);
                         } else {
                             exStartTime = icalTimeToInstant(exVal, exTzid, tzid);

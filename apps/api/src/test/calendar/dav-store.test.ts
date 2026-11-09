@@ -79,6 +79,23 @@ describe('putResource', () => {
         expect(await harness.instance.listResources(calendarId)).toHaveLength(0);
     });
 
+    test('a DURATION past any date a row can hold is refused and stores nothing', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        const body = vcal([
+            'BEGIN:VEVENT',
+            'UID:far@eigen',
+            'DTSTART:20260401T100000Z',
+            'DURATION:P100000000W',
+            'END:VEVENT',
+        ]);
+
+        const result = await put(harness.instance, calendarId, 'far.ics', body);
+
+        expect(result).toMatchObject({ ok: false, error: 'invalid', reason: 'object' });
+        expect(await harness.instance.listResources(calendarId)).toHaveLength(0);
+    });
+
     test('a resource that ends before it starts is refused, where a zero-length one is stored', async () => {
         const harness = await makeCalendar();
         const calendarId = await defaultCalendarId(harness);

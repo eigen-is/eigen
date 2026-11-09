@@ -128,7 +128,7 @@ An occurrence key is a `YYYY-MM-DD` date. A range read also carries timestamps, 
 
 Each `EXDATE` becomes a synthetic cancelled row. Its id and SEQUENCE come from the `X-EIGEN-EXDATE` stamp beside it, or the master's SEQUENCE when a client wrote the `EXDATE` itself. One occurrence is one row, however many forms name it.
 
-An event ends at its `DTEND`, or at its `DURATION` when it names one, as Apple and Outlook both write. A timed VEVENT with neither is drawn as one hour, an all-day one as one day.
+An event ends at its `DTEND`, or at its `DURATION` when it names one, as Apple and Outlook both write. A timed VEVENT with neither is drawn as one hour, an all-day one as one day. A `DURATION` is added as plain seconds, because ical.js's own `endDate` steps month by month and takes as long as the number says. So a timed `P1D` across a clock change is 24 hours rather than the same wall time next day, an all-day one counts whole days, and an end past year 9999 is a VEVENT the parser can't read, since no `DTEND` could spell it.
 
 ## Expansion is bounded because it walks from DTSTART
 

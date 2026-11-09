@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import ICAL from 'ical.js';
 import { parseIcs, parseResource } from '../../lib/ical';
+import { cpuClock } from '../cpu-time';
 import { vcal } from '../ics-test-helpers';
 
 // A CalDAV resource holds one UID, but a preview and an import feed the parser whole files: a calendar
@@ -266,6 +267,41 @@ describe('parseIcs over an event whose length is a DURATION', () => {
     test('an event with neither keeps the hour and the day a bare DTSTART means', () => {
         expect(only(['DTSTART:20260601T100000Z']).endTime.toISOString()).toBe('2026-06-01T11:00:00.000Z');
         expect(only(['DTSTART;VALUE=DATE:20260601']).endTime.toISOString()).toBe('2026-06-02T00:00:00.000Z');
+    });
+
+    test('a zoned DURATION across a clock change is that much real time', () => {
+        // 25 October 2026, 01:30 Amsterdam is 23:30Z the day before, and the clocks go back at 01:00Z.
+        expect(only(['DTSTART;TZID=Europe/Amsterdam:20261025T013000', 'DURATION:PT3H']).endTime.toISOString()).toBe(
+            '2026-10-25T02:30:00.000Z',
+        );
+    });
+
+    test('an all-day event counts whole days of its DURATION', () => {
+        expect(only(['DTSTART;VALUE=DATE:20260601', 'DURATION:P2W']).endTime.toISOString()).toBe(
+            '2026-06-15T00:00:00.000Z',
+        );
+        expect(only(['DTSTART;VALUE=DATE:20260601', 'DURATION:PT5H']).endTime.toISOString()).toBe(
+            '2026-06-01T00:00:00.000Z',
+        );
+    });
+
+    test('a DURATION of a thousand years is an ordinary end', () => {
+        expect(only(['DTSTART:20260101T000000Z', 'DURATION:P52000W']).endTime.getUTCFullYear()).toBe(3022);
+    });
+
+    test.each([
+        ['no DTEND could spell', 'P1000000W'],
+        ['no Date can hold', 'P1000000000W'],
+        ['no number can hold', `P${'9'.repeat(400)}W`],
+    ])('an end %s is an unreadable event, at no cost', (_name, duration) => {
+        const cpuMs = cpuClock();
+        const { events, skipped } = parseIcs(
+            vcal(['BEGIN:VEVENT', 'UID:far@eigen', 'DTSTART:20260101T000000Z', `DURATION:${duration}`, 'END:VEVENT']),
+        );
+
+        expect(cpuMs()).toBeLessThan(100);
+        expect(events).toEqual([]);
+        expect(skipped).toBe(1);
     });
 });
 
