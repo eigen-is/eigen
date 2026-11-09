@@ -59,6 +59,20 @@ describe('getDriveComparator', () => {
         ]);
     });
 
+    test('two names that differ only in the Eigen extension keep one order, whichever comes in first', () => {
+        const doc = item({ name: 'Plan.eigendoc' });
+        const sheet = item({ name: 'Plan.eigensheets' });
+        for (const input of [
+            [doc, sheet],
+            [sheet, doc],
+        ]) {
+            expect(input.sort(getDriveComparator('name', 'asc')).map((x) => x.name)).toEqual([
+                'Plan.eigendoc',
+                'Plan.eigensheets',
+            ]);
+        }
+    });
+
     test('modified intermixes folders and files by date (Finder-style)', () => {
         const oldFolder = item({ name: 'oldFolder', type: 'folder', updatedAt: new Date(1000) });
         const newFile = item({ name: 'newFile', type: 'file', updatedAt: new Date(9000) });
