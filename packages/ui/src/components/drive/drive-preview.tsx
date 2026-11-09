@@ -248,9 +248,8 @@ const INTRINSIC_PAGE: Record<TextPreviewMode, IntrinsicPage | null> = {
     code: DOC_PAGE,
 };
 
-// Rendered prose takes eigen-prose. A code file takes drive-preview-code, because eigen-prose paints a <pre> as a
-// dark code block, which is wrong for a whole file. A deck and a drawing take none: their page carries its own box
-// and paint.
+// Code takes drive-preview-code, as eigen-prose paints a <pre> as a dark block, wrong for a whole file. A deck and a
+// drawing take none, as their page carries its own box and paint.
 const WRAPPER_CLASS: Record<TextPreviewMode, string> = {
     eigendoc: `eigen-prose tiptap ${DOC_PROSE_CLASS}`,
     eigenslides: '',

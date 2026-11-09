@@ -166,13 +166,15 @@ function AppPasswords() {
     const [name, setName] = useState('');
     const [newKey, setNewKey] = useState<string | null>(null);
 
-    const handleCreate = async () => {
+    const handleCreate = () => {
         if (!name.trim()) return;
-        const result = await createMutation.mutateAsync(name.trim());
-        if (result?.key) {
-            setNewKey(result.key);
-            setName('');
-        }
+        createMutation.mutate(name.trim(), {
+            onSuccess: (result) => {
+                if (!result.key) return;
+                setNewKey(result.key);
+                setName('');
+            },
+        });
     };
 
     return (

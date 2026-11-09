@@ -65,8 +65,8 @@ type MenuParts = Pick<
 >;
 const MenuPartsContext = createContext<MenuParts>(DropdownMenuPrimitive);
 
-// How a menu gives its trigger the focus back as it closes. A menu a pointer opened focuses it without a ring, as a
-// ringed hover-revealed ⋮ stays shown; the keyboard's and every outside press Radix skips are left to Radix.
+// How a menu hands its trigger the focus back on close. After a pointer open it skips the ring, which would keep a
+// hover-revealed ⋮ shown; a keyboard open, or an outside press after which Radix focuses nothing, stays Radix's.
 type TriggerFocus = { trigger: HTMLElement | null; byPointer: boolean; keepsFocusOutside: boolean };
 const NO_TRIGGER_FOCUS: TriggerFocus = { trigger: null, byPointer: false, keepsFocusOutside: false };
 const TriggerFocusContext = createContext<{ state: RefObject<TriggerFocus>; modal: boolean } | null>(null);
@@ -549,7 +549,6 @@ type ChoiceMenuItemsProps<T extends string | number | boolean | null> = {
     onChange: (value: T) => void;
 };
 
-// A choice is a submenu with a check: one row per option, the current one checked.
 function ChoiceMenuItems<T extends string | number | boolean | null>({
     value,
     options,

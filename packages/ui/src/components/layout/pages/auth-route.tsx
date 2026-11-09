@@ -1,6 +1,6 @@
-// The `_auth` route guard most apps share. Its beforeLoad sends a signed-out visitor to /login with a way
-// back, and hands the signed-in user to every child route's context, so a page under `_auth` reads a user
-// that is always there. Apps with no guest surface, such as Mail, also send a guest out to Drive.
+// The `_auth` route guard of every app with a signed-in area. Its beforeLoad sends a signed-out visitor to /login
+// with a way back, and hands the signed-in user to every child route's context, so a page under `_auth` reads a
+// user that is always there. Apps with no guest surface, such as Mail, also send a guest out to Drive.
 
 import { Outlet, redirect } from '@tanstack/react-router';
 import { getDriveAppUrl } from '@workspace/lib/api';

@@ -2,7 +2,7 @@
 // deleting them, and creating, finding and inviting to rooms. Contacts' "start a chat" and the wizards call these
 // too. Every write invalidates the caches it changes.
 
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { skipToken, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { chatApi, openDocument } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
@@ -71,20 +71,21 @@ export function useAllChats(): { chats: DrivePath[]; isLoading: boolean } {
 export function useMessages(ownerId: string, mountId: string, chatId: string | undefined) {
     return useInfiniteQuery({
         queryKey: chatKeys.messages(ownerId, mountId, chatId || ''),
-        queryFn: async ({ pageParam }: { pageParam: string | undefined }): Promise<ChatMessage[]> => {
-            if (!chatId) return [];
-            const query: { before?: string; limit?: number } = { limit: MESSAGE_PAGE_SIZE };
-            if (pageParam) query.before = pageParam;
-            const response = await chatApi({ ownerId })({ mountId })({ chatId }).messages.get({ query });
-            if (response.error) throw new AppError(response);
-            return response.data;
-        },
+        queryFn:
+            chatId && ownerId && mountId
+                ? async ({ pageParam }: { pageParam: string | undefined }): Promise<ChatMessage[]> => {
+                      const query: { before?: string; limit?: number } = { limit: MESSAGE_PAGE_SIZE };
+                      if (pageParam) query.before = pageParam;
+                      const response = await chatApi({ ownerId })({ mountId })({ chatId }).messages.get({ query });
+                      if (response.error) throw new AppError(response);
+                      return response.data;
+                  }
+                : skipToken,
         initialPageParam: undefined as string | undefined,
         getNextPageParam: (lastPage: ChatMessage[]) => {
             if (lastPage.length < MESSAGE_PAGE_SIZE) return undefined;
             return lastPage[0]?.id;
         },
-        enabled: !!chatId && !!ownerId && !!mountId,
         staleTime: STALE_TIME.ONE_MINUTE,
     });
 }
