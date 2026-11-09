@@ -5,15 +5,18 @@
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import { getCellValue, setCellValue } from './cell';
+import { cellsIn, recomputeCells } from './refresh';
 
 export function updateMoreCell(r: number, c: number, dataMatrix: string[][], ctx: Context) {
     if (ctx.allowEdit === false) return;
     const flowdata = getFlowdata(ctx);
     for (let i = 0; i < dataMatrix.length; i += 1) {
         for (let j = 0; j < dataMatrix[i].length; j += 1) {
-            setCellValue(ctx, r + i, c + j, flowdata, dataMatrix[i][j]);
+            setCellValue(ctx, r + i, c + j, flowdata, { v: dataMatrix[i][j] });
         }
     }
+    const written = { row: [r, r + dataMatrix.length - 1], column: [c, c + dataMatrix[0].length - 1] };
+    recomputeCells(ctx, cellsIn(written, ctx.currentSheetId));
 }
 
 export function getRegStr(selected: ReadonlySet<string>, otherValue: string) {

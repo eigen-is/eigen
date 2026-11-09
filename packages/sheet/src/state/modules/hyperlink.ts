@@ -14,6 +14,7 @@ import { getSheetIndex } from '../utils';
 import { mergeBorder } from './cell';
 import { getcellrange } from './formula-exec';
 import { colLocation, rowLocation, sheetPoint } from './location';
+import { recomputeCells } from './refresh';
 import { normalizeSelection } from './selection';
 import { changeSheet } from './sheet';
 
@@ -65,8 +66,10 @@ export function saveHyperlink(
         const text = linkText || linkAddress;
         if (`${cellValue(cell) ?? ''}` !== text) {
             dropRuns(cell);
+            delete cell.f;
             cell.v = text;
             cell.m = text;
+            recomputeCells(ctx, [{ r, c, id: ctx.currentSheetId }]);
         }
         ctx.linkCard = undefined;
     }

@@ -8,7 +8,7 @@ import { isRealNull } from '../../engine/validation';
 import type { Context } from '../context';
 import type { Cell, CellMatrix, MergeCell, Range } from '../types';
 import { getSheetIndex } from '../utils';
-import { cellsIn } from './refresh';
+import { cellsIn, recomputeCells } from './refresh';
 
 export function mergeCells(ctx: Context, sheetId: string, ranges: Range, type: string) {
     const idx = getSheetIndex(ctx, sheetId);
@@ -38,6 +38,11 @@ export function mergeCells(ctx: Context, sheetId: string, ranges: Range, type: s
             for (let r = r1; r <= r2; r += 1) mergeBlock(d, merge, r, r, c1, c2);
         }
     }
+
+    recomputeCells(
+        ctx,
+        ranges.flatMap((range) => cellsIn(range, sheetId)),
+    );
 }
 
 // The cells a merge covered take the format of its first cell and none of its content.
