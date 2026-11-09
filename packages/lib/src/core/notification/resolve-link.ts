@@ -11,14 +11,15 @@ import {
     getMailAppUrl,
 } from '@workspace/lib/api';
 import { getMonthRange } from '@workspace/lib/calendar';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { isChatType, isCollabType } from '@workspace/lib/types/drive';
-import type { ChatNotificationThread, Notification } from '@workspace/lib/types/notification';
+import type { ChatNotificationThread, Notification, NotificationPath } from '@workspace/lib/types/notification';
 import {
     CHAT_NOTIFICATION_TYPES,
     parseAccessRequestTag,
+    parseCalendarInviteTag,
     parseChatNotificationThread,
-    parseFileEventTag,
-    parseShareTag,
+    parsePathTag,
 } from './tags';
 
 export function isClickableNotification(type: string): boolean {
@@ -46,7 +47,7 @@ export async function resolveNotificationLink(
 
     switch (type) {
         case 'share':
-            return resolveDriveLink(parseShareTag(tag));
+            return resolveDriveLink(parsePathTag('share', tag));
 
         case 'calendar-invite':
         case 'calendar-invite-updated':
@@ -71,13 +72,10 @@ export async function resolveNotificationLink(
             return resolveAccessRequestLink(tag);
 
         case 'file-event': {
-            const parsed = parseFileEventTag(tag);
+            const parsed = parsePathTag('file-event', tag);
             if (!parsed) return getDriveAppUrl();
-            const response = await driveApi({ ownerId: parsed.ownerId })({ mountId: parsed.mountId })
-                .path({ pathId: parsed.pathId })
-                .get();
-            if (response.error || !response.data) return getDriveAppUrl();
-            const path = response.data;
+            const path = await fetchDrivePath(parsed);
+            if (!path) return getDriveAppUrl();
             if (isCollabType(path.type) || isChatType(path.type)) {
                 const cardId = details && 'cardId' in details ? details.cardId : undefined;
                 const chatName = details && 'chatName' in details ? details.chatName : undefined;
@@ -94,33 +92,25 @@ export async function resolveNotificationLink(
 
 async function resolveDriveLink(parsed: ChatNotificationThread | null): Promise<string> {
     if (!parsed) return getDriveAppUrl();
-
-    const response = await driveApi({ ownerId: parsed.ownerId })({ mountId: parsed.mountId })
-        .path({ pathId: parsed.pathId })
-        .get();
-    if (response.error || !response.data) return getDriveAppUrl();
-
-    const path = response.data;
+    const path = await fetchDrivePath(parsed);
+    if (!path) return getDriveAppUrl();
     return getDriveItemUrl(path, { chat: parsed.chatName }) ?? getDriveShareUrl(path);
-}
-
-function parseCalendarInviteTag(tag: string): { eventId: string; startTime: number } | null {
-    const parts = tag.split(':');
-    if (parts[0] !== 'calendar-invite' || !parts[1]) return null;
-    return { eventId: parts[1], startTime: Number(parts[2]) || 0 };
 }
 
 async function resolveAccessRequestLink(tag: string): Promise<string | null> {
     const parsed = parseAccessRequestTag(tag);
     if (!parsed) return null;
-
-    const response = await driveApi({ ownerId: parsed.ownerId })({ mountId: parsed.mountId })
-        .path({ pathId: parsed.pathId })
-        .get();
-    if (response.error || !response.data) return null;
-
-    const parentId = response.data.parentId || response.data.id;
+    const path = await fetchDrivePath(parsed);
+    if (!path) return null;
+    const parentId = path.parentId || path.id;
     return getDriveAppUrl(
         `fs/${parsed.ownerId}/${parsed.mountId}/${parentId}?sharePathId=${parsed.pathId}&shareEmail=${encodeURIComponent(parsed.email)}`,
     );
+}
+
+async function fetchDrivePath(path: NotificationPath): Promise<DrivePath | null> {
+    const response = await driveApi({ ownerId: path.ownerId })({ mountId: path.mountId })
+        .path({ pathId: path.pathId })
+        .get();
+    return response.error ? null : response.data;
 }

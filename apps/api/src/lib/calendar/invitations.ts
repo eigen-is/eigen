@@ -4,6 +4,7 @@
 // receiveAttendeeStatus and receiveRsvpForOccurrence. Callers, such as the home relay and inbound mail, use Calendar.
 
 import { heldAttendees, isInvitationFromOthers, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
+import { calendarInviteTag } from '@workspace/lib/notification/tags';
 import type { Attendee, CalendarEvent, EventData } from '@workspace/lib/types/calendar';
 import { externalOwnerId, isExternalOwnerId } from '@workspace/lib/types/owner';
 import { SSEventType } from '@workspace/lib/types/sse';
@@ -602,7 +603,7 @@ function notifyInvitationReceived(calendar: Calendar, parsed: ParsedEvent, link:
         actorEmail: organizer?.email,
         title: actor ? `${actor} invited you` : 'New invitation',
         body: parsed.title,
-        tag: `calendar-invite:${link.organizerEventId}:${parsed.startTime.getTime()}`,
+        tag: calendarInviteTag(link.organizerEventId, parsed.startTime),
         details: { startTime: parsed.startTime.getTime() },
     });
 }
@@ -623,7 +624,7 @@ function notifyInvitationUpdated(
         actorEmail: organizer?.email,
         title: actor ? `${actor} updated an invitation` : 'Invitation updated',
         body: title,
-        tag: `calendar-invite:${organizerEventId}:${startTime.getTime()}`,
+        tag: calendarInviteTag(organizerEventId, startTime),
         details: { startTime: startTime.getTime() },
     });
 }
@@ -680,7 +681,7 @@ function notifyInvitationCancelled(
         actorEmail: organizer?.email,
         title: actor ? `${actor} canceled an invitation` : 'Invitation canceled',
         body: linked.title,
-        tag: `calendar-invite:${organizerEventId}:${startTime.getTime()}`,
+        tag: calendarInviteTag(organizerEventId, startTime),
     });
 }
 

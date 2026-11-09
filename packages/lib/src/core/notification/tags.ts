@@ -1,8 +1,7 @@
-// Builds and parses the tag of every notification about a Drive path. The tag is the row's identity, since a repeat
-// with the same tag refreshes one row, and the bell reads the path its link opens from it. So producers such as a
-// share or a chat post and readers such as the bell's link and a chat's unread dot all spell it here:
-//   share:{ownerId}:{mountId}:{pathId}                     access-request:{ownerId}:{mountId}:{pathId}:{email}
-//   chat-message:{ownerId}:{mountId}:{chatPathId}          comment-reply:{ownerId}:{mountId}:{containerPathId}:{chatName}
+// Builds and parses the tag of every notification. The tag is the row's identity, since a repeat with the same tag
+// refreshes one row, and readers such as the bell's link, a chat's unread dot and Recent read back what it names. So
+// every producer, such as a share, a chat post, an invitation or a backup alert, spells its tag here. A mention's tag
+// starts with `mention:`, while its types are `mention-chat` and `mention-comment`.
 
 import type { ChatNotificationThread, NotificationPath, NotificationType } from '../../types/notification';
 
@@ -43,9 +42,9 @@ export function commentAssignedTag(thread: ChatNotificationThread & { chatName: 
     return `assigned:${thread.ownerId}:${thread.mountId}:${thread.pathId}:${thread.chatName}`;
 }
 
-export function parseShareTag(tag: string): NotificationPath | null {
-    const [kind, ownerId, mountId, pathId] = tag.split(':');
-    if (kind !== 'share' || !ownerId || !mountId || !pathId) return null;
+export function parsePathTag(kind: 'share' | 'file-event', tag: string): NotificationPath | null {
+    const [tagKind, ownerId, mountId, pathId] = tag.split(':');
+    if (tagKind !== kind || !ownerId || !mountId || !pathId) return null;
     return { ownerId, mountId, pathId };
 }
 
@@ -55,25 +54,16 @@ export function parseAccessRequestTag(tag: string): (NotificationPath & { email:
     return { ownerId: parts[1], mountId: parts[2], pathId: parts[3], email: parts.slice(4).join(':') };
 }
 
-export function parseFileEventTag(tag: string): NotificationPath | null {
-    const [kind, ownerId, mountId, pathId] = tag.split(':');
-    if (kind !== 'file-event' || !ownerId || !mountId || !pathId) return null;
-    return { ownerId, mountId, pathId };
-}
-
 // The path a notification is about, such as a comment's container, a chat or a burst's folder.
 export function parseNotificationPath(type: string, tag: string): NotificationPath | null {
     const thread = parseChatNotificationThread(type, tag);
-    if (thread) return { ownerId: thread.ownerId, mountId: thread.mountId, pathId: thread.pathId };
+    if (thread) return thread;
     switch (type) {
         case 'share':
-            return parseShareTag(tag);
-        case 'access-request': {
-            const request = parseAccessRequestTag(tag);
-            return request && { ownerId: request.ownerId, mountId: request.mountId, pathId: request.pathId };
-        }
         case 'file-event':
-            return parseFileEventTag(tag);
+            return parsePathTag(type, tag);
+        case 'access-request':
+            return parseAccessRequestTag(tag);
         default:
             return null;
     }
@@ -91,4 +81,40 @@ export function parseChatNotificationThread(type: string, tag: string): ChatNoti
 // What a notification and an open thread are compared on: one card clears its own notifications, no other's.
 export function chatThreadKey(thread: Pick<ChatNotificationThread, 'pathId' | 'chatName'>): string {
     return thread.chatName ? `${thread.pathId}:${thread.chatName}` : thread.pathId;
+}
+
+export const NEW_MAIL_TAG = 'mail:new';
+
+export function calendarShareTag(calendarId: string, ownerUserId: string): string {
+    return `calendar-share:${calendarId}:${ownerUserId}`;
+}
+
+// The start is part of the identity, so each occurrence of a series has its own row.
+export function calendarInviteTag(organizerEventId: string, startTime: Date): string {
+    return `calendar-invite:${organizerEventId}:${startTime.getTime()}`;
+}
+
+export function parseCalendarInviteTag(tag: string): { eventId: string; startTime: number } | null {
+    const parts = tag.split(':');
+    if (parts[0] !== 'calendar-invite' || !parts[1]) return null;
+    return { eventId: parts[1], startTime: Number(parts[2]) || 0 };
+}
+
+export const MAIL_QUEUE_BACKLOG_TAG = 'mail-queue-backlog';
+
+// The name is the archive's, or what failed before there was one, such as 'schedule'.
+export function serverBackupFailedTag(name: string): string {
+    return `server-backup-${name}`;
+}
+
+export function serverBackupWarningsTag(name: string): string {
+    return `server-backup-warnings-${name}`;
+}
+
+export function serverBackupNotUploadedTag(name: string): string {
+    return `server-backup-upload-${name}`;
+}
+
+export function homeBackupUnverifiedTag(ownerId: string): string {
+    return `backup-verify-${ownerId}`;
 }

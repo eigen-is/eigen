@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2148 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2156 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -1007,7 +1007,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1177)
+## Utilities & constants (1185)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1588,6 +1588,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CUSTOM_MAILBOX_ICON` | `@workspace/lib/mailbox-icons` | packages/lib/src/core/mailbox-icons.ts |
 | `MAILBOX_ICONS` | `@workspace/lib/mailbox-icons` | packages/lib/src/core/mailbox-icons.ts |
 | `accessRequestTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
+| `calendarInviteTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
+| `calendarShareTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `CHAT_NOTIFICATION_TYPES` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `CHAT_TEXT_NOTIFICATION_TYPES` | `@workspace/lib/notification` | packages/lib/src/core/notification/describe.ts |
 | `chatActivityTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
@@ -1597,13 +1599,19 @@ rather than inlining `queryClient.invalidateQueries`.
 | `describeNotification` | `@workspace/lib/notification` | packages/lib/src/core/notification/describe.ts |
 | `fileEventTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `handleNotificationSSEvent` | `@workspace/lib/notification` | packages/lib/src/core/notification/sse-handlers.ts |
+| `homeBackupUnverifiedTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `isClickableNotification` | `@workspace/lib/notification` | packages/lib/src/core/notification/resolve-link.ts |
+| `MAIL_QUEUE_BACKLOG_TAG` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
+| `NEW_MAIL_TAG` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `parseAccessRequestTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
+| `parseCalendarInviteTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `parseChatNotificationThread` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
-| `parseFileEventTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `parseNotificationPath` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
-| `parseShareTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
+| `parsePathTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `resolveNotificationLink` | `@workspace/lib/notification` | packages/lib/src/core/notification/resolve-link.ts |
+| `serverBackupFailedTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
+| `serverBackupNotUploadedTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
+| `serverBackupWarningsTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `shareTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `loadPagefind` | `@workspace/lib/search` | packages/lib/src/core/search/pagefind.ts |
 | `hardenFailure` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-check.ts |

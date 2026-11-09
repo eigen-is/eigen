@@ -5,6 +5,7 @@
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
+import { serverBackupFailedTag, serverBackupWarningsTag } from '@workspace/lib/notification/tags';
 import type {
     BackupJob,
     BackupLevel,
@@ -153,12 +154,12 @@ async function runServerBackup(
         if (warned.length > 0) {
             job.warnings = warned;
             const body = `${warned.length} of ${sidecar.manifest.homes.length} homes have warnings: ${warned.join('; ')}`;
-            alertOwner('Server backup has warnings', body, `server-backup-warnings-${name}`).catch(() => {});
+            alertOwner('Server backup has warnings', body, serverBackupWarningsTag(name)).catch(() => {});
         }
     } catch (error) {
         sidecar.state = 'failed';
         sidecar.error = describeError(error);
-        alertOwner('Server backup failed', sidecar.error, `server-backup-${name}`).catch(() => {});
+        alertOwner('Server backup failed', sidecar.error, serverBackupFailedTag(name)).catch(() => {});
         throw error;
     } finally {
         sidecar.finishedAt = new Date();
