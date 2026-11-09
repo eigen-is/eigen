@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2142 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2143 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -1008,7 +1008,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1170)
+## Utilities & constants (1171)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1741,6 +1741,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `orgOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `parseOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `RESTART_REASONS` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
+| `SEARCH_SOURCES` | `@workspace/lib/types` | packages/lib/src/types/search.ts |
 | `SERVER_STORAGE_TYPES` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `sharedChainHead` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `SSEventType` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
