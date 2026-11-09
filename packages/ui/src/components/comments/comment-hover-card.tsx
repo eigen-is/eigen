@@ -49,6 +49,9 @@ export function CommentHoverCard({
                         // The content has tabIndex -1, so a press would focus it, and a dialog the click opens would
                         // give the focus back to this element, gone by then.
                         onMouseDown={(event) => event.preventDefault()}
+                        // Radix hears Escape on the document's capture phase, so the key closes the card and stops,
+                        // rather than also cancelling an edit or closing the find bar.
+                        onEscapeKeyDown={(event) => event.stopPropagation()}
                         onPointerEnter={enterCard}
                         onPointerLeave={leaveCard}
                     >

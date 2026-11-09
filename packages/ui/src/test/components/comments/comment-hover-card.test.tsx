@@ -165,13 +165,21 @@ test('a press on the card leaves the focus where it is, and the click it becomes
     expect(onOpenCard).toHaveBeenCalledWith('a');
 });
 
-test('Escape closes it through the host', async () => {
+test('Escape closes it through the host, and goes no further', async () => {
     const { dismiss } = await renderCard('a');
+    const editor = document.createElement('div');
+    document.body.append(editor);
+    const heard = mock(() => {});
+    editor.addEventListener('keydown', heard);
+    document.addEventListener('keydown', heard);
     await act(async () => {
-        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     });
+    document.removeEventListener('keydown', heard);
+    editor.remove();
     expect(dismiss).toHaveBeenCalledTimes(1);
     expect(content()).toBeNull();
+    expect(heard).not.toHaveBeenCalled();
 });
 
 test('opening and closing leave the focus in the editor', async () => {
