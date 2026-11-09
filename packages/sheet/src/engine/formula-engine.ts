@@ -48,7 +48,8 @@ function getCellValue(cell: Cell | null | undefined): FormulaValue {
 // A name as Excel spells one: a letter, `_` or `\` first, then letters, digits, `_`, `.`, `\` or `?`.
 const NAME_RE = /^[\p{L}_\\][\p{L}\p{N}_.\\?]*$/u;
 
-const FUNCTION_CALL_RE = /([\p{L}_][\p{L}\p{N}_.]*)\s*\(/gu;
+// The lookbehind starts a match only at a name's first letter. Without it a long name costs its length squared.
+const FUNCTION_CALL_RE = /(?<![\p{L}\p{N}_.])([\p{L}_][\p{L}\p{N}_.]*)\s*\(/gu;
 
 function inferType(value: unknown): EvaluationResult['type'] {
     if (typeof value === 'number') return 'number';

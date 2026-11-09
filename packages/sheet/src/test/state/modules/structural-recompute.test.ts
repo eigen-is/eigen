@@ -715,3 +715,47 @@ describe('an error typed into a formula', () => {
         expect(refs).toEqual(['B2']);
     });
 });
+
+describe('a long formula', () => {
+    test('a forged long name costs what its length does when the engine asks what it lacks', () => {
+        const engine = tab(book({ cells: [[n(1)]] })).ctx.formulaCache.engine;
+        const formula = `=${'a'.repeat(400_000)}&FILTRE(1)&"#REF!"`;
+        const started = performance.now();
+        expect(engine.cantEvaluate(formula, { value: '#NAME?', display: '#NAME?', type: 'error' })).toBe(true);
+        // Quadratic takes minutes at this size and linear a few milliseconds, so no load makes this flake.
+        expect(performance.now() - started).toBeLessThan(10_000);
+    });
+});
+
+describe('a long forged formula', () => {
+    const size = 100_000;
+    const costs = (formula: string) => {
+        const t = tab(book({ cells: [[n(1), f(formula, 9)]] }));
+        const started = performance.now();
+        warmFormulaCellInfoMap(t.ctx);
+        tabEdit(t, (d) => {
+            updateCell(d, 0, 0, null, 5);
+        });
+        removeRow(t, 0);
+        // Quadratic takes minutes at this size and linear milliseconds.
+        expect(performance.now() - started).toBeLessThan(20_000);
+    };
+
+    test.each([
+        ['a name of dots', `=${'a.'.repeat(size)}`],
+        ['dots', `=${'.'.repeat(size)}`],
+        ['open quotes', `=${"'".repeat(size + 1)}`],
+        ['a sheet name before a chain of ranges', `='${'a'.repeat(size)}'!${'A1:'.repeat(size / 3)}A1`],
+    ])('%s costs what its length does', (_, formula) => {
+        costs(formula);
+    });
+
+    test('one past Excel`s limit keeps its number', () => {
+        const t = tab(book({ cells: [[n(1), f(`=A1+${'1+'.repeat(5000)}1`, 9)]] }));
+        warmFormulaCellInfoMap(t.ctx);
+        tabEdit(t, (d) => {
+            updateCell(d, 0, 0, null, 5);
+        });
+        expect(at(t.ctx.sheets, 's1', 0, 1)?.v).toBe(9);
+    });
+});

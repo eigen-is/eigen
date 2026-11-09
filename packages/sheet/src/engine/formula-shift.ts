@@ -8,6 +8,7 @@ import type { Sheet } from '@workspace/lib/sheets';
 import {
     a1RangeRef,
     extractLabel,
+    MAX_SHEET_NAME_LENGTH,
     parseA1Range,
     sheetNameKey,
     sheetRefName,
@@ -20,6 +21,9 @@ import { offsetCoordinate, offsetRange, sortLegs } from './parser/helper/cell';
 import { error } from './validation';
 
 type RefLeg = NonNullable<ReturnType<typeof extractLabel>>;
+
+// A sheet's name with every quote doubled, its two delimiters and its `!`.
+const LONGEST_SHEET_PREFIX = 2 * MAX_SHEET_NAME_LENGTH + 3;
 
 // Shifts every ref in a formula by rowOffset rows and colOffset columns, as a copy or a fill does. The text comes back
 // without its leading `=`.
@@ -310,7 +314,8 @@ function refOf(token: string, onRef: (ref: string) => string, onName: (token: st
     const chained = token.slice(sheetEnd).split(':');
     if (chained.length <= 2) return iscelldata(token) ? onRef(token) : onName(token);
     const prefix = token.slice(0, sheetEnd);
-    if (!chained.every((leg) => iscelldata(leg))) return token;
+    // Each leg reads the prefix, so a forged long one would cost its length squared. No sheet is called that.
+    if (prefix.length > LONGEST_SHEET_PREFIX || !chained.every((leg) => iscelldata(leg))) return token;
     const moved = chained.map((leg) => onRef(prefix + leg));
     if (moved.includes(error.r)) return error.r;
     return [moved[0], ...moved.slice(1).map((leg) => leg.slice(prefix.length))].join(':');
