@@ -2,6 +2,7 @@
 // of file, such as All images, the sharing pages and the team drives. A guest sees only what was shared with them.
 
 import { getDriveAppUrl } from '@workspace/lib/api';
+import type { AuthUser } from '@workspace/lib/auth';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useListTrash, useRootFolder } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
@@ -102,25 +103,24 @@ function GuestAppSidebar({ condensed }: { condensed: boolean }) {
 }
 
 export function AppSidebar({ condensed = false, newButton }: AppSidebarProps) {
+    const { user } = useAuth();
     const isGuest = useIsGuest();
-    if (isGuest) {
+    if (!user || isGuest) {
         return <GuestAppSidebar condensed={condensed} />;
     }
-    return <UserAppSidebar condensed={condensed} newButton={newButton} />;
+    return <UserAppSidebar user={user} condensed={condensed} newButton={newButton} />;
 }
 
 // Split from AppSidebar so its hooks sit under the guest fork without breaking hook order.
-function UserAppSidebar({ condensed = false, newButton }: AppSidebarProps) {
+function UserAppSidebar({ user, condensed, newButton }: { user: AuthUser; condensed: boolean; newButton?: ReactNode }) {
     const { appName } = useLayout();
-    const { user } = useAuth();
 
     const host = currentHostConfig(appName);
     const inDrive = host === null;
-    const userId = user!.id;
-    const { data: personalRoot } = useRootFolder(userId, DEFAULT_MOUNT_ID);
+    const { data: personalRoot } = useRootFolder(user.id, DEFAULT_MOUNT_ID);
 
     // Empty ownerId short-circuits the hook's enabled guard; only fetch trash count in Drive.
-    const { data: trashedItems } = useListTrash(inDrive ? userId : '', DEFAULT_MOUNT_ID);
+    const { data: trashedItems } = useListTrash(inDrive ? user.id : '', DEFAULT_MOUNT_ID);
     const trashCount = trashedItems?.length ?? 0;
 
     const { data: myTeams } = useMyTeams();
