@@ -23,9 +23,9 @@ function app(name: string): Pick<SectionConfig, 'icon' | 'color'> {
     return { icon: entry.icon, color: entry.color };
 }
 
-// Sections without their own app take the index app's own color — the greenish
-// brand used by the help center header and callouts (var(--app-current-color)).
-const INDEX = 'var(--app-current-color)';
+// Sections without their own app take Space's teal, the help center's own color. It names the Space color rather
+// than --app-current-color, because a section page sets that variable to the section's color.
+const INDEX = 'var(--app-space-color)';
 
 // Display order, titles, icons, and colors for help center sections. The `id`
 // matches the folder name under src/data/support/.

@@ -1,3 +1,7 @@
+// The server's settings, such as the storage quotas, the guest and landing page options and the backup
+// schedule, kept in a JSON file in the server's data folder. They load once at startup, and routes and
+// background jobs read them through getServerSettings; the Admin app changes them through the settings route.
+
 import { UPLOAD_CAP_MAX_MB } from '@workspace/lib/constants/mount';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { EMPTY_S3 } from '@workspace/lib/types/mount';
@@ -49,6 +53,7 @@ const settingsStore = new JsonStore<ServerSettings>(serverFs, SERVER_FILES.setti
     },
     landing: {
         links: [],
+        showInstall: false,
     },
     notifications: {
         email: {

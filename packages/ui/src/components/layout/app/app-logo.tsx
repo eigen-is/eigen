@@ -1,3 +1,6 @@
+// The wordmark in the top bar: "eigen" in the text color, then the app's name between a bar and a ket, such as
+// "eigen|mail>". With an empty app name it is the bare "eigen", as on the public landing page.
+
 import { Link } from '@tanstack/react-router';
 import { getDriveAppUrl, getSpaceAppUrl } from '@workspace/lib/api';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
@@ -32,13 +35,15 @@ export function AppLogo({ appName = 'mail', className, logoHref }: AppLogoProps)
                     eigen
                 </a>
             )}
-            <span style={{ color: 'var(--topbar-bracket)' }}>
-                <Bar />
-                <a href={`/${app}`} className="hover:opacity-75 transition-opacity">
-                    {app}
-                </a>
-                <Ket />
-            </span>
+            {app && (
+                <span style={{ color: 'var(--topbar-bracket)' }}>
+                    <Bar />
+                    <a href={`/${app}`} className="hover:opacity-75 transition-opacity">
+                        {app}
+                    </a>
+                    <Ket />
+                </span>
+            )}
         </div>
     );
 }

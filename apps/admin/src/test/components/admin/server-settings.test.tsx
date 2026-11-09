@@ -22,6 +22,7 @@ const SETTINGS: ServerSettings = {
             { title: 'Docs', url: 'https://docs.example.com' },
             { title: ' ', url: 'https://blog.example.com' },
         ],
+        showInstall: false,
     },
     notifications: {
         email: { guestOnAclAdd: true, userOnAclAdd: false, userOnCalendarInvite: true, ownerOnAccessRequest: true },
