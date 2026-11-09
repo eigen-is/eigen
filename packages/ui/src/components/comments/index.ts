@@ -8,6 +8,7 @@ export { CommentIndicator } from './comment-indicator';
 export { CommentLifecycleDialogs } from './comment-lifecycle-dialogs';
 export { CommentLifecycleMenuItems } from './comment-lifecycle-menu-items';
 export { type CommentContextMenuItem, CommentMenuItems } from './comment-menu-items';
+export { CommentNoteCard } from './comment-note-card';
 export { CommentPanel } from './comment-panel';
 export { CommentThread } from './comment-thread';
 export { CreatedByMeta } from './created-by-meta';

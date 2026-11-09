@@ -12,47 +12,9 @@ import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import { MessageSquareOff } from 'lucide-react';
 import { useMemo } from 'react';
-import { useAttachmentMeta } from '../attachment/use-attachment-meta';
-import { NoteCard } from '../notes/note-card';
 import { PropertiesPanel } from '../properties-panel';
 import { FilterSummary } from './comment-filter-summary';
-
-// One row per card, so each card gets its own useAttachmentMeta call: a hook can't run inside the map.
-function PanelCard({
-    card,
-    entry,
-    title,
-    unread,
-    deleted,
-    onClick,
-    onContextMenu,
-}: {
-    card: CommentCard;
-    entry: CommentEntry | undefined;
-    title: string;
-    unread: boolean;
-    deleted: boolean;
-    onClick?: () => void;
-    onContextMenu?: (e: React.MouseEvent) => void;
-}) {
-    const { coverThumbnailUrl, attachmentCount } = useAttachmentMeta(card.attachments);
-    return (
-        <NoteCard
-            title={title}
-            description={card.description}
-            color={card.color}
-            replyCount={entry?.messageCount}
-            unread={unread}
-            resolved={entry?.status === 'resolved'}
-            coverThumbnailUrl={coverThumbnailUrl}
-            attachmentCount={attachmentCount}
-            assigneeEmail={entry?.assignee}
-            deleted={deleted}
-            onClick={onClick}
-            onContextMenu={onContextMenu}
-        />
-    );
-}
+import { CommentNoteCard } from './comment-note-card';
 
 type CommentPanelProps = {
     cards: Readonly<Record<string, CommentCard>>;
@@ -124,7 +86,7 @@ export function CommentPanel({
                             const prefix = titlePrefixes?.get(card.id);
                             const title = card.title || 'Comment';
                             return (
-                                <PanelCard
+                                <CommentNoteCard
                                     key={card.id}
                                     card={card}
                                     entry={entry}
