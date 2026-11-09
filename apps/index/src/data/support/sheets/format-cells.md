@@ -48,7 +48,7 @@ With no words selected, a style applies to the text you type next. Text you past
 
 ## Number format
 
-Number formatting controls how a value is displayed. The stored value does not change.
+Number formatting controls how a value is displayed. The stored value does not change. A formula whose result is text, such as `="005"`, shows that text under any format, and the format applies again when the formula gives a number.
 
 1. Select the cells.
 2. Open **Format → Number** and choose a format:

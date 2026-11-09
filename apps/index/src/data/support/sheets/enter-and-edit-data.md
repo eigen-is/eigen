@@ -19,6 +19,8 @@ You can enter text, numbers, and formulas into any cell in Sheets, then edit or 
 
 To cancel what you have typed before confirming, press **Escape**. The cell returns to its previous contents.
 
+With an input method, such as for Japanese or Chinese, the first **Enter** confirms what you are composing and the cell stays open. Press **Enter** again to confirm the cell.
+
 ## Edit a cell you have already filled in
 
 Select the cell, then do one of the following:

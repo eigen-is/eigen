@@ -81,6 +81,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Excel downloads from Sheets** — a tab named like a cell, such as Q1, gets the quotes Excel expects in formulas, a formula follows a tab the file has to rename, and a fill down from a linked cell no longer makes the download fail
 - **Tab names from a file in Sheets** — an import repairs a tab name Sheets would refuse, such as one past 31 characters, and the formulas naming it follow
 - **Paste past the last row in Sheets** — a paste that adds rows to a workbook full of formulas no longer pauses to read them all again
+- **Dates from a formula in Sheets** — a formula formatted as a date shows its formula in the formula bar and the open cell. Editing the date it showed there used to replace the formula with a typed date
+- **Text from a formula under a number format in Sheets** — a formula that gives the text `005` shows `005` under any number format, as in Excel, and the format applies again when it gives a number
+- **Insert function and autosum in Sheets** — what they put in the cell shows in the formula bar at once, also over a formula you were still typing
+- **Typing with an input method in Sheets** — the Enter that confirms what you compose, such as Japanese or Chinese, leaves the cell open. The next Enter confirms the cell
 - **A tab opened for the first time in Sheets** — arrow keys and typing work at once, on A1, without a click first
 - **Downloading an empty spreadsheet** — a spreadsheet nobody edited downloads with its blank sheet
 - **Downloads that fail** — downloading or printing a document from Docs, Sheets, Slides or Vector that is too big to export says "Export failed: the document is too big, or it used too much memory" instead of "Internal server error"
