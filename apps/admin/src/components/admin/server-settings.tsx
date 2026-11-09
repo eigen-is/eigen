@@ -31,6 +31,7 @@ import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { Separator } from '@workspace/ui/components/separator';
+import { cn } from '@workspace/ui/lib/utils';
 import { Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { ServerBackupSection } from './server-backup-section';
@@ -140,6 +141,12 @@ export function ServerSettingsPage() {
     const relayHost = status?.relayHost;
     const mailOff = !mailEnabled && relayHost === null;
     const senderAddressInvalid = current.mail.senderAddress !== '' && !validateEmailAddress(current.mail.senderAddress);
+    // Written as "not at least" so an emptied field, which reads as NaN, also keeps Save disabled.
+    const homeDataTooSmall = !(current.quotas.homeDataMaxMB >= QUOTA_MIN_MB);
+    const mountTooSmall = !(current.quotas.defaultMountMaxSizeMB >= QUOTA_MIN_MB);
+    const uploadOutOfRange = !(
+        current.quotas.maxUploadSizeMB >= 1 && current.quotas.maxUploadSizeMB <= UPLOAD_CAP_MAX_MB
+    );
     const savedDestination = settings.backups.upload.s3;
     const backupSecretSaved =
         savedDestination.accessKeyId !== '' && keepsSavedSecret(current.backups.upload.s3, savedDestination);
@@ -263,6 +270,7 @@ export function ServerSettingsPage() {
                             value={current.quotas.homeDataMaxMB}
                             onChange={(e) => updateQuota('homeDataMaxMB', e.target.valueAsNumber)}
                         />
+                        {homeDataTooSmall && <p className="text-xs text-destructive">At least {QUOTA_MIN_MB} MB</p>}
                     </div>
                     <div className="space-y-1.5">
                         <Label>Default mount (MB)</Label>
@@ -272,6 +280,7 @@ export function ServerSettingsPage() {
                             value={current.quotas.defaultMountMaxSizeMB}
                             onChange={(e) => updateQuota('defaultMountMaxSizeMB', e.target.valueAsNumber)}
                         />
+                        {mountTooSmall && <p className="text-xs text-destructive">At least {QUOTA_MIN_MB} MB</p>}
                     </div>
                     <div className="space-y-1.5">
                         <Label>Max upload (MB)</Label>
@@ -282,7 +291,7 @@ export function ServerSettingsPage() {
                             value={current.quotas.maxUploadSizeMB}
                             onChange={(e) => updateQuota('maxUploadSizeMB', e.target.valueAsNumber)}
                         />
-                        <p className="text-xs text-muted-foreground">
+                        <p className={cn('text-xs', uploadOutOfRange ? 'text-destructive' : 'text-muted-foreground')}>
                             At most {UPLOAD_CAP_MAX_MB} MB, the largest upload the server takes.
                         </p>
                     </div>
@@ -433,6 +442,9 @@ export function ServerSettingsPage() {
                 disabled={
                     orgName.trim() === '' ||
                     senderAddressInvalid ||
+                    homeDataTooSmall ||
+                    mountTooSmall ||
+                    uploadOutOfRange ||
                     (current.defaults.mount.storageType === 's3' && !isS3ConfigValid(currentS3)) ||
                     (current.backups.upload.enabled && !isS3ConfigValid(current.backups.upload.s3, backupSecretSaved))
                 }

@@ -12,7 +12,6 @@
     "apps/api/src/scripts/demo/content.ts": 8,
     "apps/api/src/scripts/migrate-users.ts": 5,
     "apps/api/src/scripts/seed-test-mail.ts": 2,
-    "apps/calendar/src/routes/_auth.view.$mode.$from.$to.tsx": 1,
     "apps/drive/src/components/editor/markdown-editor.tsx": 4,
     "apps/index/scripts/build-search-index.ts": 2,
     "apps/index/scripts/prerender.tsx": 1,
