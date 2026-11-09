@@ -398,10 +398,10 @@ export class SharedDrive {
         subject: string | null,
         message: string,
         sendCopyToSelf: boolean,
-        sender: { name: string; email: string },
+        _sender: User,
     ): Promise<{ sent: number }> {
         await this.requireWrite(mountId, pathId);
-        return this.drive.emailCollaborators(mountId, pathId, subject, message, sendCopyToSelf, sender);
+        return this.drive.emailCollaborators(mountId, pathId, subject, message, sendCopyToSelf, this.user);
     }
 
     // An invite to a chat inside a document shares the document. So it needs write access to both, and

@@ -256,6 +256,8 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                                 userOnAclAdd: t.Optional(t.Boolean()),
                                 userOnCalendarInvite: t.Optional(t.Boolean()),
                                 ownerOnAccessRequest: t.Optional(t.Boolean()),
+                                guestOnAssign: t.Optional(t.Boolean()),
+                                userOnAssign: t.Optional(t.Boolean()),
                             }),
                         ),
                     }),
@@ -369,7 +371,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
 
     .delete(
         '/settings/user/:userId',
-        async ({ params, user, request }) => {
+        async ({ params, user, request }): Promise<{ success: boolean }> => {
             await requireAdmin(user.id);
             if (params.userId === user.id) {
                 throw new ApiError(400, 'Cannot delete your own account');

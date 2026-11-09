@@ -64,12 +64,14 @@ Each `notifications.email` flag turns one email on or off. The in-app notificati
 
 | Flag | Default | The email goes out when | Why the default |
 |---|---|---|---|
-| `guestOnAclAdd` | on | An address without an account, or a guest, is added to an ACL | The email is the guest's only way in ([GUEST-ACCESS.md](GUEST-ACCESS.md)) |
+| `guestOnAclAdd` | on | An address without an account, or a guest, is added to an ACL | A guest rarely has Eigen open, and one who never signed in has no bell, so the email is how they find out ([GUEST-ACCESS.md](GUEST-ACCESS.md)) |
 | `userOnAclAdd` | off | A registered user is added to an ACL | The bell already tells them |
+| `guestOnAssign` | on | An address without an account, or a guest, is assigned a comment or card, at most once an hour per person and document ([COMMENTS.md](COMMENTS.md#assignment-is-a-members-email-set-by-the-server)) | A guest rarely has Eigen open, and one who never signed in has no bell |
+| `userOnAssign` | off | A registered user is assigned a comment or card, under the same limit | The bell already tells them |
 | `userOnCalendarInvite` | on | An Eigen user is invited to an event | An invitation is time-sensitive, and Google and Outlook mail it too |
 | `ownerOnAccessRequest` | on | Someone asks for access to a path: the user who owns it, or each member of the team that owns it while the team's `notifyMembers` is on | A mail reaches an owner who doesn't have Eigen open |
 
-The ACL flags are read inline in `propagateSharedPathChange` (`apps/api/src/lib/drive/acl-propagation.ts`), the access-request flag in `access-request-propagation.ts` and the invite flag in `invite-propagation.ts`. See [ACL.md](ACL.md).
+The ACL flags are read inline in `propagateSharedPathChange` (`apps/api/src/lib/drive/acl-propagation.ts`), the access-request flag in `access-request-propagation.ts`, the invite flag in `invite-propagation.ts` and the assignment flags in `propagateAssignment` (`assignment-propagation.ts`). See [ACL.md](ACL.md).
 
 ## Settings are the owner's, the pages admins need are theirs too
 

@@ -165,6 +165,8 @@ export type ServerSettings = {
             userOnAclAdd: boolean;
             userOnCalendarInvite: boolean;
             ownerOnAccessRequest: boolean;
+            guestOnAssign: boolean;
+            userOnAssign: boolean;
         };
     };
     mail: {
