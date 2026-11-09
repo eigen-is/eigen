@@ -173,10 +173,12 @@ function isLine(value: unknown, type: 'row' | 'column'): value is number {
 }
 
 // A new sheet needs an id no sheet has yet, because every later op names its sheet by id. Its name follows the
-// sheet-name rule, or a rename's undo could not restore it.
+// sheet-name rule, or a rename's undo could not restore it. Its cells must read as cells on every reader.
 export function isNewSheet(v: unknown, sheets: { id: string }[]): v is Sheet {
     if (!isRecord(v)) return false;
-    const { id, name } = v;
+    const { id, name, data, celldata } = v;
+    if (data != null && !(Array.isArray(data) && data.every((row) => row == null || Array.isArray(row)))) return false;
+    if (celldata != null && !(Array.isArray(celldata) && celldata.every(isRecord))) return false;
     return typeof id === 'string' && typeof name === 'string' && isSheetName(name) && !sheets.some((s) => s.id === id);
 }
 

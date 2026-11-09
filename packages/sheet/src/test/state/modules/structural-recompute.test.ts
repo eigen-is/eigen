@@ -950,3 +950,17 @@ describe('a deleted sheet`s name', () => {
         expect(two?.hyperlink?.['0_0'].linkAddress).toBe('One!A1:B2');
     });
 });
+
+describe('a forged add', () => {
+    test.each([
+        ['a matrix that is no list', { data: { length: 5 } }],
+        ['a row that is no list', { data: [{ length: 1 }] }],
+        ['a cell list that is no list', { celldata: { length: 5 } }],
+    ])('%s: the replay and a tab skip it alike', (_, forged) => {
+        const base = book({ cells: [[n(1)]] });
+        const op: Op = { op: 'addSheet', id: 's9', path: [], value: { name: 'Nine', id: 's9', order: 1, ...forged } };
+        const applied = applyOpBatch(tab(base).ctx, [op]);
+        expect(join(base, [[op]]).map((s) => s.id)).toEqual(['s1']);
+        expect(applied?.ctx.sheets.map((s) => s.id)).toEqual(['s1']);
+    });
+});
