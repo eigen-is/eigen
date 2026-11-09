@@ -15,6 +15,7 @@ import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { Separator } from '@workspace/ui/components/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@workspace/ui/components/table';
 import { Calendar, FolderTree, KeyRound, Mail, Plus, Trash2, UsersRound } from 'lucide-react';
@@ -104,14 +105,11 @@ function AppPasswords() {
                                             {pw.lastRequest ? formatDate(pw.lastRequest) : 'Never'}
                                         </TableCell>
                                         <TableCell>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                            <TooltipButton
+                                                icon={Trash2}
+                                                tooltipText="Delete"
                                                 onClick={() => deleteMutation.mutate(pw.id)}
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
+                                            />
                                         </TableCell>
                                     </TableRow>
                                 ))}
