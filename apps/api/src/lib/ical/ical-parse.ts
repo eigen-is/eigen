@@ -10,7 +10,7 @@ import { IMIP_METHODS } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
 import { isExpandableRrule, isOutOfRangeRecurrenceStart, isSubDailyRrule } from './recurrence-limits';
 import { vtimezoneOffset } from './vtimezone';
-import { localToUtc, recurrenceKey, utcToLocal } from './wall-clock';
+import { localToUtc, recurrenceKey, utcToLocal, wallClockDate } from './wall-clock';
 
 // Lowercase, because ical.js lowercases every name it reads.
 export const EIGEN = {
@@ -429,7 +429,7 @@ function readResource(resource: ICAL.Component, triesRule: boolean): ReadResult 
                 !!rruleRaw &&
                 (!(rule instanceof ICAL.Recur && rule.freq) ||
                     (untried
-                        ? !isExpandableRrule(rruleRaw, startTime)
+                        ? !isExpandableRrule(rruleRaw, tzid ? wallClockDate(startTime, tzid) : startTime)
                         : isSubDailyRrule(rruleRaw) || isOutOfRangeRecurrenceStart(startTime)));
             if (rruleRaw) untried = false;
             const rrule = stripped ? null : rruleRaw;

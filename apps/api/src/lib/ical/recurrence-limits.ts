@@ -47,9 +47,8 @@ function inYear(date: Date, year: number): Date {
     return moved;
 }
 
-// rrule takes no step limit, and a rule with no next date walks to its last year whatever the window. So the rule is
-// tried from a start moved near that year, on DTSTART's weekday and leap phase, where the walk soon ends. A rule rrule
-// refuses counts the same.
+// rrule takes no step limit, and a rule with no next date walks to its last year. So it is tried from a start near that
+// year on DTSTART's weekday and leap phase, in the wall clock the rule steps in; a rule rrule refuses counts the same.
 export function isExpandableRrule(rrule: string, dtstart: Date): boolean {
     if (isOutOfRangeRecurrenceStart(dtstart)) return false;
     try {

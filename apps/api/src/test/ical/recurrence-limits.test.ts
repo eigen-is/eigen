@@ -162,6 +162,37 @@ describe('a stored rule that does not expand', () => {
         expect(week.filter((occurrence) => occurrence.uid === 'series@eigen')).toHaveLength(1);
     });
 
+    // The UTC weekday differs from the wall weekday in both zones, and the rule steps on the wall's.
+    test.each([
+        ['a zone behind UTC, whose Sunday evening is Monday in UTC', 'America/New_York:20261108T200000', null],
+        [
+            'a zone ahead of UTC, whose Monday morning is Sunday in UTC',
+            'Australia/Sydney:20261109T090000',
+            '2026-11-16',
+        ],
+    ])('a zoned rule is tried in its wall clock: %s', async (_name, dtstart, monday) => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        const rrule = 'FREQ=DAILY;INTERVAL=7;BYDAY=MO';
+        const body = vcal([
+            'BEGIN:VEVENT',
+            'UID:zoned@eigen',
+            `DTSTART;TZID=${dtstart}`,
+            'DURATION:PT1H',
+            `RRULE:${rrule}`,
+            'END:VEVENT',
+        ]);
+        expect((await putResource(harness.instance, calendarId, 'zoned.ics', body)).ok).toBe(true);
+
+        expect(storedEvents(harness.instance, calendarId).map((row) => row.rrule)).toEqual([monday && rrule]);
+        const days = await harness.instance.getEventsInRange(
+            new Date('2026-11-12'),
+            new Date('2026-11-19'),
+            calendarId,
+        );
+        expect(days.map((occurrence) => occurrence.occurrenceDate)).toEqual(monday ? [monday] : []);
+    });
+
     test('a range read tries no rule: it expands the row the store kept', () => {
         const row = rowWith('FREQ=HOURLY;COUNT=3');
         expect(expandRecurrence(row, new Date('2026-03-02'), new Date('2026-03-03'))).toHaveLength(3);
