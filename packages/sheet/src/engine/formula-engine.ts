@@ -80,11 +80,12 @@ export class FormulaEngine {
         this.parser = new Parser();
     }
 
-    // True when the result says nothing because of the formula's own text: a parse failure, a function this build lacks
-    // that the branch taken holds, or a name it can't resolve, whose #NAME? an IFERROR would trap into a fallback nobody
-    // computed. A #NAME? read from another cell is the other cell's. A name Excel reads past its last column (RhoCO2)
-    // is one the engine reads as a cell.
+    // True when the result says nothing because of the formula's own text: a parse failure, a function this build
+    // lacks that the branch taken holds, or a name it can't resolve, whose #NAME? an IFERROR would trap into a fallback
+    // nobody computed. A #NAME? read from another cell is the other cell's. A name Excel reads past its last column
+    // (RhoCO2) is one the engine reads as a cell. A #REF! is an answer whatever else the text holds.
     public cantEvaluate(formula: string, { value }: EvaluationResult): boolean {
+        if (value === errorParser(ERROR_REF)) return false;
         if (value === errorParser(ERROR) && !this.parser.parses(formula.substring(1))) return true;
         if (value === errorParser(ERROR_NAME)) {
             const calls = formula.replace(/"(?:[^"]|"")*"/g, '""').matchAll(FUNCTION_CALL_RE);

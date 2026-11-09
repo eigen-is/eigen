@@ -759,3 +759,66 @@ describe('a long forged formula', () => {
         expect(at(t.ctx.sheets, 's1', 0, 1)?.v).toBe(9);
     });
 });
+
+describe('a formula holding #REF!', () => {
+    const removed = (formula: string, stored: number) => {
+        const t = tab(
+            book({
+                cells: [
+                    [n(1), f(formula, stored)],
+                    [n(42), null],
+                ],
+            }),
+        );
+        removeRow(t, 1);
+        return at(t.ctx.sheets, 's1', 0, 1);
+    };
+
+    test('=A2% with row 2 deleted shows #REF!', () => {
+        const cell = removed('=A2%', 0.42);
+        expect(cell?.f).toBe('=#REF!%');
+        expect(cell?.v).toBe('#REF!');
+    });
+
+    test('a range ending at a function, whose first leg broke, shows #REF!', () => {
+        const cell = removed('=SUM(A2:INDEX(A1:A2,1))', 43);
+        expect(cell?.f).toBe('=SUM(#REF!:INDEX(A1,1))');
+        expect(cell?.v).toBe('#REF!');
+    });
+
+    test('beside a name this build cannot read it still shows #REF!', () => {
+        expect(removed('=A2+UNKNOWNNAME', 5)?.v).toBe('#REF!');
+    });
+});
+
+describe('a percent sign', () => {
+    const value = (formula: string) => {
+        const resolver = createArrayResolver([
+            { id: 's1', name: 'One', data: [[n(50), { v: 'a', m: 'a', ct: { fa: 'General', t: 's' } }, null]] },
+        ]);
+        return tab(book({ cells: [[n(1)]] })).ctx.formulaCache.engine.evaluate(formula, 's1', resolver).value;
+    };
+
+    test.each([
+        ['=50%', 0.5],
+        ['=A1%', 0.5],
+        ['=(A1+50)%', 1],
+        ['=SUM(A1,50)%', 1],
+        ['=A1%*2', 1],
+        ['=2*A1%', 1],
+        ['=1+A1%', 1.5],
+        ['=-A1%', -0.5],
+        ['=A1%%', 0.005],
+        ['=2^A1%', Math.SQRT2],
+        ['=A1%&"x"', '0.5x'],
+        ['=SUM(A1%,1%)', 0.51],
+        ['=C1%', 0],
+        ['=57%', 0.57],
+        ['=B1%', '#VALUE!'],
+        ['=#N/A%', '#N/A'],
+    ])('%s', (formula, expected) => {
+        const result = value(formula);
+        if (typeof expected === 'number') expect(result).toBeCloseTo(expected, 10);
+        else expect(result).toBe(expected);
+    });
+});

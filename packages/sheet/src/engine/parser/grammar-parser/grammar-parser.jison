@@ -5,7 +5,8 @@
      bare reference to an empty cell as 0.
    - Its lexer gives back a bare number the RELATIVE_CELL rule matched unless it is a row in a range, such as 1:3.
    - Its parse table is edited by hand. The unary sign also reduces before '^', so -2^2 is (-2)^2 as in Excel, which
-     no precedence order here can say. The states of the empty-argument productions were added by hand too. */
+     no precedence order here can say. The states of the empty-argument productions and of `expression '%'` were added
+     by hand too, the latter in a loop after the table. */
 /* lexical grammar */
 %lex
 SHEET                                                                                           (?:[A-Za-z0-9_\u00C0-\u02AF]+|['](?:(?![']).|[']['])*['])[!]
@@ -149,6 +150,9 @@ expression
   | cell
   | error
   | error error
+  | expression '%' {
+      $$ = yy.evaluateByOperator('/', [$1, 100]);
+    }
 ;
 
 cell

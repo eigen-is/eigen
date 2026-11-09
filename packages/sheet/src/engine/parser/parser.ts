@@ -55,8 +55,10 @@ export class Parser {
         try {
             return this.parseWithinLimit(expression);
         } catch (ex) {
+            // A row delete writes #REF! where a reference stood, which not every place in the grammar takes.
+            const failure = String(expression).includes(errorParser(ERROR_REF)) ? Error(ERROR_REF) : ex;
             return () => {
-                throw ex;
+                throw failure;
             };
         }
     }
