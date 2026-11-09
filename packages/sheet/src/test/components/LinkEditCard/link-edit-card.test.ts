@@ -85,7 +85,7 @@ const pressEscape = () =>
         );
     });
 
-const link = (context: Context) => context.sheets[0].hyperlink?.['0_0'];
+const link = (context: Context) => context.sheets[0].data?.[0][0]?.link;
 
 test('OK saves the link, writes the display text and closes', async () => {
     const dialog = await openCard();
@@ -97,7 +97,7 @@ test('OK saves the link, writes the display text and closes', async () => {
     await dialog.type('Display text', 'Eigen');
     await dialog.type('Link address', 'https://eigen.is');
     await dialog.click('OK');
-    expect(link(dialog.context())).toEqual({ linkType: 'webpage', linkAddress: 'https://eigen.is' });
+    expect(link(dialog.context())).toEqual({ type: 'webpage', address: 'https://eigen.is' });
     expect(dialog.context().sheets[0].data?.[0]?.[0]?.v).toBe('Eigen');
     expect(dialog.context().linkCard).toBeUndefined();
     expect(dialog.dialogs()).toHaveLength(0);
@@ -107,7 +107,7 @@ test('Enter in the address submits', async () => {
     const dialog = await openCard();
     await dialog.type('Link address', 'https://eigen.is');
     await act(async () => pressEnter(dialog.field('Link address')));
-    expect(link(dialog.context())).toEqual({ linkType: 'webpage', linkAddress: 'https://eigen.is' });
+    expect(link(dialog.context())).toEqual({ type: 'webpage', address: 'https://eigen.is' });
     expect(dialog.dialogs()).toHaveLength(0);
 });
 
@@ -274,6 +274,6 @@ describe('the range picker', () => {
         await dialog.click('OK');
         expect(dialog.context().currentSheetId).toBe('id_1');
         await dialog.click('OK');
-        expect(link(dialog.context())).toEqual({ linkType: 'cellrange', linkAddress: 'Sheet2!A1' });
+        expect(link(dialog.context())).toEqual({ type: 'cellrange', address: 'Sheet2!A1' });
     });
 });

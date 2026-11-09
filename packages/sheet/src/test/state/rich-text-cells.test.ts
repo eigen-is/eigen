@@ -132,8 +132,7 @@ describe('readers of a rich cell', () => {
     });
 
     test('the link card shows the text', () => {
-        const ctx = sheetContext([[rich('Docs')]]);
-        ctx.sheets[0].hyperlink = { '0_0': { linkType: 'webpage', linkAddress: 'https://eigen.is' } };
+        const ctx = sheetContext([[{ ...rich('Docs'), link: { type: 'webpage', address: 'https://eigen.is' } }]]);
         showLinkCard(ctx, 0, 0);
         expect(ctx.linkCard?.originText).toBe('Docs');
     });
@@ -208,7 +207,7 @@ describe('writers over a rich cell', () => {
         const cell = ctx.sheets[0].data![0][0];
         expect(cell?.v).toBe(5);
         expect(cell?.ct?.t).toBe('n');
-        expect(cell?.hl).toBeDefined();
+        expect(cell?.link).toBeDefined();
     });
 
     test('removing a link keeps the rich text', () => {
@@ -217,7 +216,7 @@ describe('writers over a rich cell', () => {
         removeHyperlink(ctx, 0, 0);
         const cell = ctx.sheets[0].data![0][0];
         expect(cellValue(cell)).toBe('Docs');
-        expect(cell?.hl).toBeUndefined();
+        expect(cell?.link).toBeUndefined();
         expect(cell?.un).toBeUndefined();
     });
 });

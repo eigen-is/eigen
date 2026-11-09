@@ -7,7 +7,6 @@ import type { Sheet } from '@workspace/lib/sheets';
 import {
     freezesColumns,
     freezesRows,
-    parseCellKey,
     REFERENCE_COLUMN_COUNT,
     REFERENCE_ROW_COUNT,
     SHEET_DEFAULT_DIGIT_WIDTH,
@@ -22,7 +21,7 @@ import type { Relationship } from '../../../ooxml/opc';
 import { uriReference } from '../../../ooxml/opc';
 import { MAX_SHEET_LINKS, pxToColumnWidth } from '../../../ooxml/spreadsheetml';
 import type { GridContext } from './cells';
-import { inGrid, keyOf, sheetGrid } from './cells';
+import { inGrid, sheetGrid } from './cells';
 import { rulesXml } from './rules';
 import { argbOf } from './styles';
 
@@ -143,36 +142,21 @@ function mergesXml(sheet: Sheet): string {
 // location, labeled by the cell's text as Excel and Google label one. A sheet the workbook renamed is named as written;
 // a `sheet` link to a name no sheet holds is a defined name's, as the import reads a location without a cell.
 function linksXml(sheet: Sheet, context: WorksheetContext, relationships: Relationship[]): string {
-    const entries = Object.entries(sheet.hyperlink ?? {});
-    if (entries.length === 0) return '';
-    const linked = new Set(
-        entries.map(([key]) => {
-            const [r, c] = parseCellKey(key);
-            return keyOf(r, c);
-        }),
-    );
-    const shown = new Map<number, string>();
-    for (const { r, c, v } of sheet.celldata ?? []) {
-        const key = keyOf(r, c);
-        if (!v || !linked.has(key)) continue;
-        const text = v.ct?.s ? v.ct.s.map((run) => run.v ?? '').join('') : String(v.m ?? v.v ?? '');
-        shown.set(key, text);
-    }
     const items: string[] = [];
-    for (const [key, { linkType, linkAddress }] of entries) {
-        const [r, c] = parseCellKey(key);
-        if (!inGrid(r, c)) continue;
+    for (const { r, c, v } of sheet.celldata ?? []) {
+        if (!v?.link || !inGrid(r, c)) continue;
+        const { type, address } = v.link;
         const ref = toA1(r, c);
-        const sheetName = linkType === 'sheet' ? context.writtenName(linkAddress) : undefined;
+        const sheetName = type === 'sheet' ? context.writtenName(address) : undefined;
         const location =
-            linkType === 'sheet'
+            type === 'sheet'
                 ? sheetName !== undefined
                     ? `${quoteSheetName(sheetName)}!A1`
-                    : linkAddress
-                : linkType === 'cellrange'
-                  ? cellrangeLocation(linkAddress, context)
+                    : address
+                : type === 'cellrange'
+                  ? cellrangeLocation(address, context)
                   : undefined;
-        const target = linkType === 'webpage' ? resolveWebLink(linkAddress) : null;
+        const target = type === 'webpage' ? resolveWebLink(address) : null;
         // An address no editor opens, a script's among them, or a range that is none.
         if ((location === undefined && target === null) || items.length >= MAX_SHEET_LINKS) {
             context.lost('links-dropped');
@@ -182,9 +166,9 @@ function linksXml(sheet: Sheet, context: WorksheetContext, relationships: Relati
             relationships.push({ type: `${R_NS}/hyperlink`, target: uriReference(target), external: true });
             items.push(`<hyperlink ref="${ref}" r:id="rId${relationships.length}"/>`);
         } else {
-            const display = shown.get(keyOf(r, c)) || linkAddress;
+            const shown = v.ct?.s ? v.ct.s.map((run) => run.v ?? '').join('') : String(v.m ?? v.v ?? '');
             items.push(
-                `<hyperlink ref="${ref}" location="${escapeXml(location ?? '')}" display="${escapeXml(display)}"/>`,
+                `<hyperlink ref="${ref}" location="${escapeXml(location ?? '')}" display="${escapeXml(shown || address)}"/>`,
             );
         }
     }

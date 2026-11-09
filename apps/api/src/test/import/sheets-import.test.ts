@@ -24,6 +24,7 @@ import { importXlsxToSheetsSnapshot } from '../../lib/import/sheets/transform';
 import { parseOoxml } from '../../lib/ooxml/ooxml';
 import { MAX_DECOMPRESSED_BYTES, openZip, writeZip } from '../../lib/ooxml/zip';
 import { getUserById } from '../../lib/user';
+import { cellLinks } from '../fixtures/cell-links';
 import { PIXEL_PNG } from '../fixtures/pptx';
 import { build, deflated } from '../fixtures/raw-zip';
 import { ruleAt, rulesByCell } from '../fixtures/validations';
@@ -1912,7 +1913,7 @@ describe('Sheets xlsx conversion fidelity', () => {
         expect(ruleAt(sheets[0].dataValidations, 4999, 2)).toMatchObject({ value1: 'Yes,No' });
     });
 
-    test('convert imports webpage and mailto hyperlinks with verbatim targets and cell backrefs', async () => {
+    test('convert imports webpage and mailto hyperlinks with verbatim targets on their cells', async () => {
         const sheets = parseXlsx(
             xlsxFixture({
                 parts: [linkRels(1, ['https://jira.example.com/browse/PLATFORMS-1452', 'mailto:erikjan@example.com'])],
@@ -1932,18 +1933,20 @@ describe('Sheets xlsx conversion fidelity', () => {
 
         // Targets import verbatim (incl. mailto:) — fidelity at import; scheme
         // safety is enforced at navigation time by the engine's allowlist.
-        expect(sheets[0].hyperlink).toEqual({
-            '1_1': { linkType: 'webpage', linkAddress: 'https://jira.example.com/browse/PLATFORMS-1452' },
-            '2_1': { linkType: 'webpage', linkAddress: 'mailto:erikjan@example.com' },
+        expect(cellLinks(sheets[0])).toEqual({
+            '1_1': { type: 'webpage', address: 'https://jira.example.com/browse/PLATFORMS-1452' },
+            '2_1': { type: 'webpage', address: 'mailto:erikjan@example.com' },
         });
         const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
-        // The cell keeps its display text; hl is the saveHyperlink backref invariant
-        // (patch.ts's cell-op path keys off it).
+        // The cell keeps its display text and holds its link.
         expect(byCoord.get('1:1')?.v).toBe('PLATFORMS-1452');
         expect(byCoord.get('1:1')?.m).toBe('PLATFORMS-1452');
-        expect(byCoord.get('1:1')?.hl).toEqual({ r: 1, c: 1, id: 'sheet-0' });
-        expect(byCoord.get('2:1')?.hl).toEqual({ r: 2, c: 1, id: 'sheet-0' });
-        expect(byCoord.get('3:1')?.hl).toBeUndefined();
+        expect(byCoord.get('1:1')?.link).toEqual({
+            type: 'webpage',
+            address: 'https://jira.example.com/browse/PLATFORMS-1452',
+        });
+        expect(byCoord.get('2:1')?.link).toEqual({ type: 'webpage', address: 'mailto:erikjan@example.com' });
+        expect(byCoord.get('3:1')?.link).toBeUndefined();
     });
 
     test('convert maps internal #location links onto cellrange and sheet link types', async () => {
@@ -1977,11 +1980,11 @@ describe('Sheets xlsx conversion fidelity', () => {
 
         // cellrange keeps the quoted form (getcellrange resolves quoted names);
         // sheet links strip quotes to match goToLink's name exact-equality.
-        expect(sheets[0].hyperlink).toEqual({
-            '0_0': { linkType: 'cellrange', linkAddress: 'Sheet2!A3' },
-            '1_0': { linkType: 'sheet', linkAddress: 'Sheet2' },
-            '2_0': { linkType: 'cellrange', linkAddress: "'My Sheet'!B2" },
-            '3_0': { linkType: 'sheet', linkAddress: 'My Sheet' },
+        expect(cellLinks(sheets[0])).toEqual({
+            '0_0': { type: 'cellrange', address: 'Sheet2!A3' },
+            '1_0': { type: 'sheet', address: 'Sheet2' },
+            '2_0': { type: 'cellrange', address: "'My Sheet'!B2" },
+            '3_0': { type: 'sheet', address: 'My Sheet' },
         });
     });
 
@@ -2017,18 +2020,18 @@ describe('Sheets xlsx conversion fidelity', () => {
         });
         const sheets = parseXlsx(buffer);
 
-        expect(sheets[0].hyperlink).toEqual({
-            '0_0': { linkType: 'cellrange', linkAddress: 'Sheet2!A1' },
-            '1_0': { linkType: 'cellrange', linkAddress: "'My Sheet'!B2" },
-            '2_0': { linkType: 'cellrange', linkAddress: "'My Sheet'!A1:B2" },
-            '3_0': { linkType: 'cellrange', linkAddress: "'A & B'!C3" },
-            '4_0': { linkType: 'webpage', linkAddress: 'https://example.com' },
-            '6_1': { linkType: 'cellrange', linkAddress: 'Sheet2!D4' },
+        expect(cellLinks(sheets[0])).toEqual({
+            '0_0': { type: 'cellrange', address: 'Sheet2!A1' },
+            '1_0': { type: 'cellrange', address: "'My Sheet'!B2" },
+            '2_0': { type: 'cellrange', address: "'My Sheet'!A1:B2" },
+            '3_0': { type: 'cellrange', address: "'A & B'!C3" },
+            '4_0': { type: 'webpage', address: 'https://example.com' },
+            '6_1': { type: 'cellrange', address: 'Sheet2!D4' },
         });
         const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
-        expect(byCoord.get('0:0')?.hl).toEqual({ r: 0, c: 0, id: 'sheet-0' });
+        expect(byCoord.get('0:0')?.link).toEqual({ type: 'cellrange', address: 'Sheet2!A1' });
         expect(byCoord.get('2:0')?.v).toBe('range tail');
-        expect(byCoord.get('6:1')?.hl).toEqual({ r: 6, c: 1, id: 'sheet-0' });
+        expect(byCoord.get('6:1')?.link).toEqual({ type: 'cellrange', address: 'Sheet2!D4' });
     });
 
     test('convert reads a prefixed hyperlinks block and decodes the references in its locations', async () => {
@@ -2045,8 +2048,8 @@ describe('Sheets xlsx conversion fidelity', () => {
         const sheets = parseXlsx(buffer);
 
         expect(sheets[1].name).toBe('Q1 – "A" & B');
-        expect(sheets[0].hyperlink).toEqual({
-            '0_0': { linkType: 'cellrange', linkAddress: `'Q1 – "A" & B'!C3` },
+        expect(cellLinks(sheets[0])).toEqual({
+            '0_0': { type: 'cellrange', address: `'Q1 – "A" & B'!C3` },
         });
     });
 
@@ -2076,8 +2079,8 @@ describe('Sheets xlsx conversion fidelity', () => {
             ];
 
             const sheets = xlsxToSheets(writeZip(files));
-            expect(sheets.map(({ name, hyperlink }) => ({ name, hyperlink }))).toEqual([
-                { name: 'Q1 – "A" & B', hyperlink: { '1_1': { linkType: 'cellrange', linkAddress: 'Other!A1' } } },
+            expect(sheets.map((sheet) => ({ name: sheet.name, links: cellLinks(sheet) }))).toEqual([
+                { name: 'Q1 – "A" & B', links: { '1_1': { type: 'cellrange', address: 'Other!A1' } } },
             ]);
         }
     });
@@ -2095,9 +2098,9 @@ describe('Sheets xlsx conversion fidelity', () => {
             ],
         });
 
-        const links = xlsxToSheets(bytes)[0].hyperlink ?? {};
+        const links = cellLinks(xlsxToSheets(bytes)[0]);
         expect(Object.keys(links)).toHaveLength(66_530);
-        expect(links['66529_0']).toEqual({ linkType: 'cellrange', linkAddress: "'Sheet 2'!B66530" });
+        expect(links['66529_0']).toEqual({ type: 'cellrange', address: "'Sheet 2'!B66530" });
     });
 
     test('a hyperlinks opener in a comment before the sheet data leaves the real block to be read', async () => {
@@ -2112,8 +2115,8 @@ describe('Sheets xlsx conversion fidelity', () => {
             ],
         });
 
-        expect(xlsxToSheets(bytes)[0].hyperlink).toEqual({
-            '0_0': { linkType: 'cellrange', linkAddress: 'Sheet1!B2' },
+        expect(cellLinks(xlsxToSheets(bytes)[0])).toEqual({
+            '0_0': { type: 'cellrange', address: 'Sheet1!B2' },
         });
     });
 
@@ -2144,15 +2147,15 @@ describe('Sheets xlsx conversion fidelity', () => {
             }),
         );
 
-        expect(sheets[0].hyperlink).toEqual({
-            '8_4': { linkType: 'webpage', linkAddress: 'https://example.com/assets' },
+        expect(cellLinks(sheets[0])).toEqual({
+            '8_4': { type: 'webpage', address: 'https://example.com/assets' },
         });
         const e9 = (sheets[0].celldata ?? []).find((c) => c.r === 8 && c.c === 4);
         expect(e9?.v?.ct?.s?.map((run) => run.v).join('')).toBe('GSV Assets Canva');
-        expect(e9?.v?.hl).toEqual({ r: 8, c: 4, id: 'sheet-0' });
+        expect(e9?.v?.link).toEqual({ type: 'webpage', address: 'https://example.com/assets' });
     });
 
-    test('convert omits the hyperlink field for sheets without links and skips blank targets', async () => {
+    test('convert puts no link on a cell of a sheet without links and skips blank targets', async () => {
         // A whitespace-only target; a webpage entry pointing at ' ' would be navigation garbage.
         const sheets = parseXlsx(
             xlsxFixture({
@@ -2170,10 +2173,10 @@ describe('Sheets xlsx conversion fidelity', () => {
             }),
         );
 
-        expect(sheets[0].hyperlink).toBeUndefined();
+        expect(cellLinks(sheets[0])).toEqual({});
         const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
         expect(byCoord.get('1:0')?.v).toBe('blank target');
-        expect(byCoord.get('1:0')?.hl).toBeUndefined();
+        expect(byCoord.get('1:0')?.link).toBeUndefined();
     });
 });
 

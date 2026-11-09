@@ -27,6 +27,7 @@ import { clipboardWith, pasteCopy } from './factories/clipboard';
 import { author, join, receive } from './factories/collab';
 import { contextFactory, editInPlace, workbookContextFactory } from './factories/context';
 import { gridElements, withGridGeometry } from './factories/grid-dom';
+import { cellLinks } from './factories/links';
 import { validationsByCell } from './factories/validations';
 
 // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
@@ -57,7 +58,7 @@ function rule(r: number, c: number): DataValidationRule {
 }
 
 function link(r: number, c: number) {
-    return { linkType: 'webpage', linkAddress: `https://eigen.is/${r}${c}` };
+    return { type: 'webpage', address: `https://eigen.is/${r}${c}` };
 }
 
 function cellAt(r: number, c: number): Cell {
@@ -76,10 +77,9 @@ function makeCtx({ filtered = false } = {}): Context {
     data[0][3] = { mc: { r: 0, c: 2 } };
     data[2][0] = { ...cellAt(2, 0), mc: { r: 2, c: 0, rs: 2, cs: 1 } };
     data[3][0] = { mc: { r: 2, c: 0 } };
-    for (const [r, c] of MARKED) data[r][c] = { ...cellAt(r, c), hl: { r, c, id: 'id_1' } };
+    for (const [r, c] of MARKED) data[r][c] = { ...cellAt(r, c), link: link(r, c) };
     const borderInfo = Object.fromEntries(MARKED.map(([r, c]) => [`${r}_${c}`, { t: SIDE, l: SIDE }]));
     const dataValidations = validationsByCell(Object.fromEntries(MARKED.map(([r, c]) => [`${r}_${c}`, rule(r, c)])));
-    const hyperlink = Object.fromEntries(MARKED.map(([r, c]) => [`${r}_${c}`, link(r, c)]));
     const ctx = withGridGeometry(
         contextFactory({
             sheets: [
@@ -98,7 +98,6 @@ function makeCtx({ filtered = false } = {}): Context {
                         },
                     },
                     dataValidations,
-                    hyperlink,
                     ...(filtered && {
                         filterRange: { row: [0, 3], column: [0, 3] },
                         filter: {
@@ -170,7 +169,7 @@ function expectCarriedWhole(ctx: Context, { links = true } = {}) {
     for (const [r, c] of MARKED) {
         expect(s.config?.borderInfo?.[key(r + 6, c + 6)]).toEqual({ t: SIDE, l: SIDE });
         expect(validationAt(s.dataValidations, r + 6, c + 6)).toEqual(rule(r, c));
-        expect(s.hyperlink?.[key(r + 6, c + 6)]).toEqual(links ? link(r, c) : undefined);
+        expect(cellLinks(s)[key(r + 6, c + 6)]).toEqual(links ? link(r, c) : undefined);
     }
     // Nothing lands on the cell beside a marked one, as an index one off would.
     for (const [r, c] of [
@@ -180,7 +179,7 @@ function expectCarriedWhole(ctx: Context, { links = true } = {}) {
     ]) {
         expect(s.config?.borderInfo?.[key(r, c)]).toBeUndefined();
         expect(validationAt(s.dataValidations, r, c)).toBeUndefined();
-        expect(s.hyperlink?.[key(r, c)]).toBeUndefined();
+        expect(cellLinks(s)[key(r, c)]).toBeUndefined();
     }
     expect(s.config?.merge?.[key(6, 8)]).toEqual({ r: 6, c: 8, rs: 1, cs: 2 });
     expect(s.config?.merge?.[key(8, 6)]).toEqual({ r: 8, c: 6, rs: 2, cs: 1 });
@@ -212,7 +211,7 @@ function expectSourceCleared(ctx: Context) {
     for (const [r, c] of MARKED) {
         expect(s.config?.borderInfo?.[key(r, c)]).toBeUndefined();
         expect(validationAt(s.dataValidations, r, c)).toBeUndefined();
-        expect(s.hyperlink?.[key(r, c)]).toBeUndefined();
+        expect(cellLinks(s)[key(r, c)]).toBeUndefined();
     }
     expect(s.config?.merge?.[key(0, 2)]).toBeUndefined();
     expect(s.config?.merge?.[key(2, 0)]).toBeUndefined();
@@ -264,7 +263,7 @@ describe('a range with a hidden row and column inside it', () => {
             ctx.selections = destination();
             if (ctx.painterSource) pasteHandlerOfPaintModel(ctx, ctx.painterSource);
         });
-        expect(next.sheets[1].data?.[7][7]?.hl).toBeUndefined();
+        expect(next.sheets[1].data?.[7][7]?.link).toBeUndefined();
         const joined = join(base, [ops]).find((s) => s.id === 'id_2');
         expect(joined?.data?.[7][7]?.bg).toBe('#110000');
     });
@@ -294,9 +293,9 @@ describe('a range with a row an active filter hides', () => {
         expect(validationAt(s.dataValidations, 7, 8)).toEqual(rule(2, 2));
         expect(validationAt(s.dataValidations, 7, 7)).toBeUndefined();
         expect(validationAt(s.dataValidations, 8, 8)).toBeUndefined();
-        expect(s.hyperlink?.[key(6, 6)]).toEqual(links ? link(0, 0) : undefined);
-        expect(s.hyperlink?.[key(7, 8)]).toEqual(links ? link(2, 2) : undefined);
-        expect(s.hyperlink?.[key(7, 7)]).toBeUndefined();
+        expect(cellLinks(s)[key(6, 6)]).toEqual(links ? link(0, 0) : undefined);
+        expect(cellLinks(s)[key(7, 8)]).toEqual(links ? link(2, 2) : undefined);
+        expect(cellLinks(s)[key(7, 7)]).toBeUndefined();
         expect(s.config?.merge?.[key(6, 8)]).toEqual({ r: 6, c: 8, rs: 1, cs: 2 });
         expect(s.config?.merge?.[key(7, 6)]).toEqual({ r: 7, c: 6, rs: 2, cs: 1 });
         expect(s.data?.[8][6]?.mc).toEqual({ r: 7, c: 6 });
@@ -475,7 +474,7 @@ describe('a paste of the clipboard in the same tab', () => {
         handleCopy(ctx);
         pasteFromClipboard(ctx);
         expect(validationAt(sheet(ctx).dataValidations, 6, 6)).toEqual(rule(0, 0));
-        expect(sheet(ctx).hyperlink?.[key(6, 6)]).toEqual(link(0, 0));
+        expect(cellLinks(sheet(ctx))[key(6, 6)]).toEqual(link(0, 0));
     });
 
     test('takes the copy state for a cut', () => {
@@ -497,22 +496,21 @@ describe('a paste over cells with a rule and a link of their own', () => {
             [11, 11],
         ]) {
             (s.dataValidations ??= {})[key(r, c)] = { ranges: [{ row: [r, r], column: [c, c] }], rule: rule(r, c) };
-            (s.hyperlink ??= {})[key(r, c)] = link(r, c);
+            if (s.data) s.data[r][c] = { ...s.data[r][c], link: link(r, c) };
         }
         return ctx;
     }
 
-    // A write of a whole map would undo a peer's concurrent rule or link on another cell.
-    const wholeMapWrites = (ops: Op[]) =>
-        ops.filter((op) => op.path.length === 1 && ['dataValidations', 'hyperlink'].includes(String(op.path[0])));
+    // A write of a whole map would undo a peer's concurrent rule on another cell.
+    const wholeMapWrites = (ops: Op[]) => ops.filter((op) => op.path.length === 1 && op.path[0] === 'dataValidations');
 
     test("a copy takes the source cell's lack of both, and writes only the cells it lands on", () => {
         const { next, ops } = author(makeOwnCtx(), (ctx) => paste(ctx, false));
         const s = sheet(next);
         expect(validationAt(s.dataValidations, 6, 7)).toBeUndefined();
-        expect(s.hyperlink?.[key(6, 7)]).toBeUndefined();
+        expect(cellLinks(s)[key(6, 7)]).toBeUndefined();
         expect(validationAt(s.dataValidations, 11, 11)).toEqual(rule(11, 11));
-        expect(s.hyperlink?.[key(11, 11)]).toEqual(link(11, 11));
+        expect(cellLinks(s)[key(11, 11)]).toEqual(link(11, 11));
         expect(wholeMapWrites(ops)).toEqual([]);
     });
 
@@ -520,7 +518,7 @@ describe('a paste over cells with a rule and a link of their own', () => {
         const { next, ops } = author(makeOwnCtx(), paint);
         const s = sheet(next);
         expect(validationAt(s.dataValidations, 6, 7)).toBeUndefined();
-        expect(s.hyperlink?.[key(6, 7)]).toEqual(link(6, 7));
+        expect(cellLinks(s)[key(6, 7)]).toEqual(link(6, 7));
         expect(validationAt(s.dataValidations, 11, 11)).toEqual(rule(11, 11));
         expect(wholeMapWrites(ops)).toEqual([]);
     });

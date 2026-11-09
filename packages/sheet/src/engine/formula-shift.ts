@@ -4,7 +4,7 @@
 // character walker finds the refs and the names for all of them. It reads only plain sheets, so the editor and the
 // server share it, for example in the op replay and the recalc.
 
-import type { Sheet } from '@workspace/lib/sheets';
+import type { Cell, Sheet } from '@workspace/lib/sheets';
 import {
     a1RangeRef,
     extractLabel,
@@ -79,35 +79,11 @@ function rewriteSheetRefs(txt: string, rewrite: (ref: string, sheetEnd: number) 
 // The sheet with `rewrite` run over the formula text in its cells and formula rules.
 // A sheet whose text stays comes back as the same object, and an untouched row keeps its object.
 export function rewriteSheetFormulas<S extends Sheet>(sheet: S, rewrite: (txt: string) => string): S {
-    let next = sheet;
-    if (sheet.data) {
-        let data: typeof sheet.data | null = null;
-        for (let r = 0; r < sheet.data.length; r += 1) {
-            const row = sheet.data[r];
-            if (!row) continue;
-            for (let c = 0; c < row.length; c += 1) {
-                const cell = row[c];
-                if (!isFormula(cell?.f)) continue;
-                const f = rewrite(cell.f);
-                if (f === cell.f) continue;
-                data ??= [...sheet.data];
-                if (data[r] === row) data[r] = [...row];
-                data[r][c] = { ...cell, f };
-            }
-        }
-        if (data) next = { ...next, data };
-    } else if (sheet.celldata) {
-        let celldata: typeof sheet.celldata | null = null;
-        for (let i = 0; i < sheet.celldata.length; i += 1) {
-            const entry = sheet.celldata[i];
-            if (!isFormula(entry.v?.f)) continue;
-            const f = rewrite(entry.v.f);
-            if (f === entry.v.f) continue;
-            celldata ??= [...sheet.celldata];
-            celldata[i] = { ...entry, v: { ...entry.v, f } };
-        }
-        if (celldata) next = { ...next, celldata };
-    }
+    const next = mapSheetCells(sheet, (cell) => {
+        if (!isFormula(cell.f)) return cell;
+        const f = rewrite(cell.f);
+        return f === cell.f ? cell : { ...cell, f };
+    });
 
     const rules = sheet.conditionalFormatRules;
     if (!rules) return next;
@@ -122,6 +98,39 @@ export function rewriteSheetFormulas<S extends Sheet>(sheet: S, rewrite: (txt: s
         newRules[i] = { ...rule, conditionValue: [rewritten] };
     }
     return newRules ? { ...next, conditionalFormatRules: newRules } : next;
+}
+
+// The sheet with `rewrite` run over its cells, in the matrix or, on a sheet stored without one, the list. A cell that
+// comes back as the same object costs no copy, and a sheet with no changed cell comes back as itself.
+export function mapSheetCells<S extends Sheet>(sheet: S, rewrite: (cell: Cell) => Cell): S {
+    if (sheet.data) {
+        let data: typeof sheet.data | null = null;
+        for (let r = 0; r < sheet.data.length; r += 1) {
+            const row = sheet.data[r];
+            if (!row) continue;
+            for (let c = 0; c < row.length; c += 1) {
+                const cell = row[c];
+                if (!cell) continue;
+                const next = rewrite(cell);
+                if (next === cell) continue;
+                data ??= [...sheet.data];
+                if (data[r] === row) data[r] = [...row];
+                data[r][c] = next;
+            }
+        }
+        return data ? { ...sheet, data } : sheet;
+    }
+    if (!sheet.celldata) return sheet;
+    let celldata: typeof sheet.celldata | null = null;
+    for (let i = 0; i < sheet.celldata.length; i += 1) {
+        const entry = sheet.celldata[i];
+        if (!entry.v) continue;
+        const v = rewrite(entry.v);
+        if (v === entry.v) continue;
+        celldata ??= [...sheet.celldata];
+        celldata[i] = { ...entry, v };
+    }
+    return celldata ? { ...sheet, celldata } : sheet;
 }
 
 // Replaces each defined name in a formula with the text `resolve` gives for it, since the engine has no names.

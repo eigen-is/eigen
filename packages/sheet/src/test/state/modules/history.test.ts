@@ -29,6 +29,7 @@ import type { Tab } from '../factories/collab';
 import { author, join, tab, tabEdit, tabReceive, tabRedo, tabUndo } from '../factories/collab';
 import { workbookContextFactory } from '../factories/context';
 import { typed } from '../factories/edit-cycle';
+import { cellLinks } from '../factories/links';
 
 const ONE = 's1';
 const TWO = 's2';
@@ -138,7 +139,6 @@ const stored = (sheets: ShiftedSheet[]) =>
         column: s.column,
         cells: cells(s),
         config: s.config,
-        hyperlink: s.hyperlink ?? {},
         dataValidations: s.dataValidations ?? {},
         conditionalFormatRules: s.conditionalFormatRules,
         frozen: s.frozen,
@@ -331,7 +331,7 @@ describe("undo after a peer's row op keeps a field its entry wrote", () => {
         s.edit(s.a, (ctx) => saveHyperlink(ctx, 4, 1, 'link', 'webpage', 'https://eigen.is'));
         s.edit(s.b, ...insertRows(2, 2));
         s.undo(s.a);
-        expect(s.a.ctx.sheets[0].hyperlink ?? {}).toEqual({});
+        expect(cellLinks(s.a.ctx.sheets[0])).toEqual({});
         expectAgree(s);
     });
 });
@@ -435,7 +435,8 @@ describe('working alone', () => {
         return produce(base, (ctx: Context) => {
             const [one, two] = ctx.sheets;
             one.config = { ...one.config, merge: { '7_0': merge }, rowlen: { 4: 40 } };
-            one.hyperlink = { '4_0': { linkType: 'webpage', linkAddress: 'https://eigen.is' } };
+            if (one.data)
+                one.data[4][0] = { ...one.data[4][0], link: { type: 'webpage', address: 'https://eigen.is' } };
             one.dataValidations = {
                 a: {
                     ranges: [{ row: [3, 5], column: [0, 0] }],
@@ -620,10 +621,8 @@ test("an edit to a linked cell after a peer's row insert keeps its link everywhe
         const row = ctx.sheets[0].data?.[6];
         if (row) row[1] = { ...row[1], bl: 1 };
     });
-    expect(s.a.ctx.sheets[0].hyperlink).toStrictEqual({
-        '6_1': { linkType: 'webpage', linkAddress: 'https://eigen.is' },
-    });
-    expect(s.b.ctx.sheets[0].hyperlink).toStrictEqual(s.a.ctx.sheets[0].hyperlink);
+    expect(cellLinks(s.a.ctx.sheets[0])).toStrictEqual({ '6_1': { type: 'webpage', address: 'https://eigen.is' } });
+    expect(cellLinks(s.b.ctx.sheets[0])).toStrictEqual(cellLinks(s.a.ctx.sheets[0]));
 });
 
 describe('undo skips a cell a peer changed since, by what was written into it', () => {
@@ -856,14 +855,15 @@ describe('a structural undo or redo applies exactly what it sends', () => {
     test("undoing your row delete brings back the deleted rows' height and link", () => {
         const base = produce(workbook({ B5: text('link') }), (ctx: Context) => {
             ctx.sheets[0].config = { ...ctx.sheets[0].config, rowlen: { 4: 40 } };
-            ctx.sheets[0].hyperlink = { '4_1': { linkType: 'webpage', linkAddress: 'https://eigen.is' } };
+            const row = ctx.sheets[0].data?.[4];
+            if (row) row[1] = { ...row[1], link: { type: 'webpage', address: 'https://eigen.is' } };
         });
         const s = session(base);
         s.edit(s.a, ...deleteRows(4, 5));
         s.undo(s.a);
         for (const sheets of [s.a.ctx.sheets, s.b.ctx.sheets, s.joiner()]) {
             expect(sheets[0].config?.rowlen).toEqual({ 4: 40 });
-            expect(sheets[0].hyperlink).toEqual(base.sheets[0].hyperlink);
+            expect(cellLinks(sheets[0])).toEqual(cellLinks(base.sheets[0]));
         }
         expectAgree(s);
     });
@@ -1098,8 +1098,8 @@ describe('shiftEntries', () => {
         [
             'a link moves',
             rows(2, 2),
-            replace(at('hyperlink', '5_1'), { linkType: 'webpage' }),
-            replace(at('hyperlink', '7_1'), { linkType: 'webpage' }),
+            replace(at('data', 5, 1, 'link'), { type: 'webpage' }),
+            replace(at('data', 7, 1, 'link'), { type: 'webpage' }),
         ],
         [
             "a validation rule's ranges move, the one an insert is inside grows",
@@ -1145,18 +1145,6 @@ describe('shiftEntries', () => {
             rows(2, 2),
             replace(at('data', 5), [{ v: 1 }]),
             replace(at('data', 7), [{ v: 1 }]),
-        ],
-        [
-            "a sheet's whole link map moves",
-            rows(2, 2),
-            replace(at('hyperlink'), { '5_1': { linkType: 'webpage' } }),
-            replace(at('hyperlink'), { '7_1': { linkType: 'webpage' } }),
-        ],
-        [
-            'a whole link map that loses a link to a delete drops the entry',
-            deletedRows(2, 3),
-            replace(at('hyperlink'), { '3_1': { linkType: 'webpage' } }),
-            null,
         ],
         ['a conditional format drops the entry', rows(2, 2), replace(at('conditionalFormatRules', 0), {}), null],
         ['a whole row drops the entry on a column insert', columns(2, 2), replace(at('data', 5), []), null],

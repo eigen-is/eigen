@@ -3,6 +3,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
+import { cellLinks } from '../factories/links';
 
 installHappyDom();
 
@@ -196,11 +197,13 @@ describe('a tab rename rewrites the text that names the tab', () => {
                         rule: { type: 'dropdown', type2: '', value1: 'One,Two', value2: '' },
                     },
                 },
-                hyperlink: {
-                    '0_0': { linkType: 'sheet', linkAddress: 'One' },
-                    '0_1': { linkType: 'cellrange', linkAddress: 'One!A1:B2' },
-                    '0_2': { linkType: 'webpage', linkAddress: 'One' },
-                },
+                data: [
+                    [
+                        { link: { type: 'sheet', address: 'One' } },
+                        { link: { type: 'cellrange', address: 'One!A1:B2' } },
+                        { link: { type: 'webpage', address: 'One' } },
+                    ],
+                ],
                 charts: { c1: chart },
             },
         );
@@ -210,10 +213,10 @@ describe('a tab rename rewrites the text that names the tab', () => {
         expect(rule.type === 'default' && rule.conditionValue).toEqual(["='Q1 plan'!A1>0"]);
         expect(sheet.dataValidations?.list.rule.value1).toBe("'Q1 plan'!$A$1:$A$3");
         expect(sheet.dataValidations?.items.rule.value1).toBe('One,Two');
-        expect(sheet.hyperlink).toEqual({
-            '0_0': { linkType: 'sheet', linkAddress: 'Q1 plan' },
-            '0_1': { linkType: 'cellrange', linkAddress: "'Q1 plan'!A1:B2" },
-            '0_2': { linkType: 'webpage', linkAddress: 'One' },
+        expect(cellLinks(sheet)).toEqual({
+            '0_0': { type: 'sheet', address: 'Q1 plan' },
+            '0_1': { type: 'cellrange', address: "'Q1 plan'!A1:B2" },
+            '0_2': { type: 'webpage', address: 'One' },
         });
         expect(getcellrange(t.ctx, "'Q1 plan'!A1")?.sheetId).toBe('id_1');
         expect(sheet.charts?.c1).toEqual(chart);
@@ -473,13 +476,9 @@ describe('a rename after a fill down from a linked cell', () => {
 
     test('the fill ships the link of the cell it fills, with its value', () => {
         const { t, log } = linkedAndFilled();
-        expect(t.ctx.sheets[0].data?.[1][0]?.hl).toBeDefined();
-        const links = log[1].filter(({ path }) => path[0] === 'hyperlink');
-        expect(links.length).toBeGreaterThan(0);
-        for (const { path, value } of links) {
-            expect(path).toEqual(['hyperlink', '1_0']);
-            expect(value).toEqual({ linkType: 'webpage', linkAddress: 'https://example.com' });
-        }
+        const link = { type: 'webpage', address: 'https://example.com' };
+        expect(t.ctx.sheets[0].data?.[1][0]?.link).toEqual(link);
+        expect(log[1].find(({ path }) => path.join() === 'data,1,0')?.value?.link).toEqual(link);
     });
 
     test('the peer and the joiner take the rename', () => {
@@ -490,17 +489,19 @@ describe('a rename after a fill down from a linked cell', () => {
         tabReceive(peer, rename);
         for (const sheets of [t.ctx.sheets, peer.ctx.sheets, join(base, [...log, rename])]) {
             expect(sheets[0].name).toBe('Renamed');
-            expect(Object.keys(sheets[0].hyperlink ?? {})).toEqual(['0_0', '1_0']);
+            expect(Object.keys(cellLinks(sheets[0]))).toEqual(['0_0', '1_0']);
         }
     });
 
     test.each([
-        ['a link with no value', ['hyperlink', '1_0'], undefined],
-        ['a link that is null', ['hyperlink', '1_0'], null],
-        ['a link of the wrong shape', ['hyperlink', '1_0'], 'https://example.com'],
-        ['a link with no address', ['hyperlink', '1_0'], { linkType: 'cellrange' }],
-        ['a whole map holding a hole', ['hyperlink'], { '1_0': null }],
-        ['a write into a link', ['hyperlink', '0_0', 'linkAddress'], 5],
+        ['a link with no value', ['data', 1, 0, 'link'], undefined],
+        ['a link that is null', ['data', 1, 0, 'link'], null],
+        ['a link of the wrong shape', ['data', 1, 0, 'link'], 'https://example.com'],
+        ['a link with no address', ['data', 1, 0, 'link'], { type: 'cellrange' }],
+        ['an address that is no text', ['data', 1, 0, 'link'], { type: 'cellrange', address: 5 }],
+        ['a whole cell holding a bad link', ['data', 1, 0], { v: 'x', m: 'x', link: null }],
+        ['a whole row holding a bad link', ['data', 1], [{ link: { type: 'webpage' } }]],
+        ['a write into a link', ['data', 0, 0, 'link', 'address'], 5],
     ])('%s from a peer is dropped, so a later rename still applies', (_, path, value) => {
         const { t, base, log } = linkedAndFilled();
         const forged: Op[] = [{ op: 'replace', id: 'id_1', path, value }];
@@ -508,9 +509,9 @@ describe('a rename after a fill down from a linked cell', () => {
         const rename = renameFirst(t, 'Renamed');
         const joined = join(base, [...log, forged, rename]);
         expect(joined[0].name).toBe('Renamed');
-        const link = { linkType: 'webpage', linkAddress: 'https://example.com' };
-        expect(joined[0].hyperlink).toEqual({ '0_0': link, '1_0': link });
-        expect(t.ctx.sheets[0].hyperlink).toEqual(joined[0].hyperlink);
+        const link = { type: 'webpage', address: 'https://example.com' };
+        expect(cellLinks(joined[0])).toEqual({ '0_0': link, '1_0': link });
+        expect(cellLinks(t.ctx.sheets[0])).toEqual(cellLinks(joined[0]));
     });
 });
 

@@ -41,9 +41,12 @@ export type Cell = CellStyle & {
     // negative = clockwise / "down"), or 'vertical' for stacked top-to-bottom characters.
     // Matches Excel/OOXML's textRotation. Undefined or 0 = no rotation.
     rt?: number | 'vertical';
-    hl?: { r: number; c: number; id: string };
+    link?: CellLink;
     commentCardIds?: string[];
 };
+
+// A link belongs to its cell, so whatever moves the cell moves it. `type` is webpage, sheet or cellrange.
+export type CellLink = { type: string; address: string };
 
 export type CellMatrix = (Cell | null)[][];
 
@@ -243,10 +246,6 @@ export type Sheet = {
     // The data-validation rules by id, each over its ranges. Materialized like the config collections, so a new rule
     // or a changed one is written under its own id and two peers editing different rules don't overwrite each other.
     dataValidations?: Record<string, SheetValidation>;
-    // Hyperlinks keyed "r_c" (0-based). The editor's `saveHyperlink` and the xlsx importer write them, and the link
-    // card and `goToLink` read them. The linked cell carries the `hl` backref. `linkType` is webpage, sheet or
-    // cellrange.
-    hyperlink?: Record<string, { linkType: string; linkAddress: string }>;
     // Floating images and charts by id. Materialized like the config collections, because each object is
     // written as its own key and a first write to a missing map would ship the whole map.
     images?: Record<string, SheetImage>;

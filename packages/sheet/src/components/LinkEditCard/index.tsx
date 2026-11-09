@@ -74,7 +74,7 @@ export function LinkEditCard(link: LinkCardProps) {
                 type="button"
                 className="mr-1.5 cursor-pointer whitespace-nowrap hover:text-primary"
                 onClick={() => {
-                    setContext((draftCtx) => goToLink(draftCtx, r, c, linkType, linkAddress));
+                    setContext((draftCtx) => goToLink(draftCtx, r, c));
                 }}
             >
                 {linkType === 'webpage' ? 'Open link' : replaceHtml(GO_TO_FRAME, { linkAddress })}

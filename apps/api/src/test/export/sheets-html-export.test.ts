@@ -166,14 +166,24 @@ describe('Sheets HTML export — class-based styles', () => {
         const sheet: Sheet = {
             ...makeSheet(
                 [
-                    { r: 0, c: 0, v: { v: 'styled', ff: 'Georgia', fc: '#ff0000', bg: '#0000ff', bl: 1 } },
+                    {
+                        r: 0,
+                        c: 0,
+                        v: {
+                            v: 'styled',
+                            ff: 'Georgia',
+                            fc: '#ff0000',
+                            bg: '#0000ff',
+                            bl: 1,
+                            link: { type: 'webpage', address: 'https://example.com' },
+                        },
+                    },
                     { r: 0, c: 1, v: { v: 'rotated', rt: 45 } },
                     { r: 1, c: 0, v: { v: 10, ct: { t: 'n', fa: 'General' } } },
                     { r: 1, c: 1, v: { v: 20, ct: { t: 'n', fa: 'General' } } },
                 ],
                 [{ type: 'dataBar', cellrange: [{ row: [1, 1], column: [0, 1] }], format: ['#638ec6'] }],
             ),
-            hyperlink: { '0_0': { linkType: 'webpage', linkAddress: 'https://example.com' } },
         };
         const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
         expect(out.html).not.toContain('style="');
@@ -924,16 +934,18 @@ describe('Sheets HTML export — cell styling', () => {
 
 describe('Sheets HTML export — hyperlinks', () => {
     test('webpage hyperlinks render as anchors with the href attribute-escaped', () => {
-        const sheet: Sheet = {
-            ...makeSheet([
-                { r: 0, c: 0, v: { v: 'Jira ticket', m: 'Jira ticket' } },
-                { r: 0, c: 1, v: { v: 'scheme-less' } },
-            ]),
-            hyperlink: {
-                '0_0': { linkType: 'webpage', linkAddress: 'https://example.com/browse?a=1&b=2' },
-                '0_1': { linkType: 'webpage', linkAddress: 'example.com' },
+        const sheet = makeSheet([
+            {
+                r: 0,
+                c: 0,
+                v: {
+                    v: 'Jira ticket',
+                    m: 'Jira ticket',
+                    link: { type: 'webpage', address: 'https://example.com/browse?a=1&b=2' },
+                },
             },
-        };
+            { r: 0, c: 1, v: { v: 'scheme-less', link: { type: 'webpage', address: 'example.com' } } },
+        ]);
         const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
         expect(out.html).toContain(
             '<a href="https://example.com/browse?a=1&amp;b=2" target="_blank" rel="noopener noreferrer">Jira ticket</a>',
@@ -944,20 +956,23 @@ describe('Sheets HTML export — hyperlinks', () => {
         );
     });
 
+    test("a peer's address can't break out of the href", () => {
+        const address = 'https://x/"><script>alert(1)</script>';
+        const out = renderSheetsHtml(
+            [makeSheet([{ r: 0, c: 0, v: { v: 'x', link: { type: 'webpage', address } } }])],
+            NO_MEDIA,
+            'screen',
+        );
+        expect(out.html).not.toContain('<script>alert');
+    });
+
     test('blocked schemes and internal links stay plain text', () => {
-        const sheet: Sheet = {
-            ...makeSheet([
-                { r: 0, c: 0, v: { v: 'click me' } },
-                { r: 0, c: 1, v: { v: 'go to sheet' } },
-                { r: 0, c: 2, v: { v: 'go to range' } },
-            ]),
-            hyperlink: {
-                '0_0': { linkType: 'webpage', linkAddress: 'javascript:alert(1)' },
-                // Internal links have no meaningful target in standalone HTML.
-                '0_1': { linkType: 'sheet', linkAddress: 'Sheet2' },
-                '0_2': { linkType: 'cellrange', linkAddress: 'Sheet2!B2' },
-            },
-        };
+        const sheet = makeSheet([
+            { r: 0, c: 0, v: { v: 'click me', link: { type: 'webpage', address: 'javascript:alert(1)' } } },
+            // Internal links have no meaningful target in standalone HTML.
+            { r: 0, c: 1, v: { v: 'go to sheet', link: { type: 'sheet', address: 'Sheet2' } } },
+            { r: 0, c: 2, v: { v: 'go to range', link: { type: 'cellrange', address: 'Sheet2!B2' } } },
+        ]);
         const out = renderSheetsHtml([sheet], NO_MEDIA, 'screen');
         expect(out.html).not.toContain('<a ');
         expect(out.html).not.toContain('javascript:');

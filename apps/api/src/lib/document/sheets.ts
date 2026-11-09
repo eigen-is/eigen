@@ -118,9 +118,6 @@ export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string, current: She
     const added = imported.map((source, i): Op => {
         const { id, name } = fresh[i];
         const sheet = renameSheetTexts(source, findImported, renames);
-        for (const { v } of sheet.celldata ?? []) {
-            if (v?.hl) v.hl.id = id;
-        }
         const charts = Object.fromEntries(
             Object.entries(sheet.charts ?? {}).map(([key, chart]) => [
                 key,

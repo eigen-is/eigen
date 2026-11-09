@@ -16,6 +16,7 @@ import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import { pasteCopy, pasteText } from '../factories/clipboard';
 import { contextFactory, editInPlace } from '../factories/context';
 import { edit, typed } from '../factories/edit-cycle';
+import { cellLinks } from '../factories/links';
 
 // Explicit selection builders. selectionFactory takes (row, column, ...) as
 // [start, end] pairs; hand-writing those inline is error-prone, so name the two
@@ -654,25 +655,23 @@ describe('pasted formulas and the dependency map', () => {
 });
 
 describe('hyperlinks travel with an internal paste', () => {
-    const link = { linkType: 'webpage', linkAddress: 'https://eigen.is' };
+    const link = { type: 'webpage', address: 'https://eigen.is' };
     function linkedCtx() {
-        const ctx = makeCtx(6, 6, (d) => {
-            d[0][0] = { v: 'site', m: 'site', hl: { r: 0, c: 0, id: 'id_1' } };
+        return makeCtx(6, 6, (d) => {
+            d[0][0] = { v: 'site', m: 'site', link };
         });
-        ctx.sheets[0].hyperlink = { '0_0': link };
-        return ctx;
     }
 
     it('a copied link lands on the pasted cell', () => {
         const ctx = linkedCtx();
         copyThenPaste(ctx, single(0, 0), single(2, 2));
-        expect(ctx.sheets[0].hyperlink?.['2_2']).toEqual(link);
+        expect(cellLinks(ctx.sheets[0])['2_2']).toEqual(link);
     });
 
     it('a cut link lands on the pasted cell and leaves the vacated one', () => {
         const ctx = linkedCtx();
         copyThenPaste(ctx, single(0, 0), single(2, 2), { cut: true });
-        expect(ctx.sheets[0].hyperlink?.['2_2']).toEqual(link);
-        expect(ctx.sheets[0].hyperlink?.['0_0']).toBeUndefined();
+        expect(cellLinks(ctx.sheets[0])['2_2']).toEqual(link);
+        expect(cellLinks(ctx.sheets[0])['0_0']).toBeUndefined();
     });
 });

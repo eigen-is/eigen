@@ -12,6 +12,7 @@ import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
 import { parseOoxml, SML_NS } from '../../lib/ooxml/ooxml';
 import { openZip } from '../../lib/ooxml/zip';
 import { cpuClock } from '../cpu-time';
+import { cellLinks } from '../fixtures/cell-links';
 import { seedDocumentMedia } from '../fixtures/golden-documents';
 import { writeSheetsToYjs } from '../fixtures/heavy-sheets';
 import { ruleAt, rulesByCell, validationsByCell } from '../fixtures/validations';
@@ -1174,30 +1175,40 @@ describe('Sheets xlsx export — hyperlinks', () => {
                 id: 'fixture-17',
                 name: 'Sheet1',
                 celldata: [
-                    { r: 0, c: 0, v: { v: 'Jira ticket', m: 'Jira ticket' } },
-                    { r: 1, c: 0, v: { v: 'Mail Erik' } },
-                    { r: 2, c: 0, v: { v: 'scheme-less' } },
+                    {
+                        r: 0,
+                        c: 0,
+                        v: {
+                            v: 'Jira ticket',
+                            m: 'Jira ticket',
+                            link: { type: 'webpage', address: 'https://jira.example.com/browse/PLATFORMS-1452' },
+                        },
+                    },
+                    {
+                        r: 1,
+                        c: 0,
+                        v: { v: 'Mail Erik', link: { type: 'webpage', address: 'mailto:erikjan@example.com' } },
+                    },
+                    { r: 2, c: 0, v: { v: 'scheme-less', link: { type: 'webpage', address: 'example.com/page' } } },
                 ],
-                hyperlink: {
-                    '0_0': { linkType: 'webpage', linkAddress: 'https://jira.example.com/browse/PLATFORMS-1452' },
-                    '1_0': { linkType: 'webpage', linkAddress: 'mailto:erikjan@example.com' },
-                    '2_0': { linkType: 'webpage', linkAddress: 'example.com/page' },
-                },
             },
         ];
         const buffer = exportXlsx(sheets);
         const rels = readZipEntry(buffer, 'xl/worksheets/_rels/sheet1.xml.rels');
         expect(rels).toContain('Target="mailto:erikjan@example.com" TargetMode="External"');
 
-        // Full importer round-trip: linkType/linkAddress and the hl backref restored. Scheme-less addresses export the
+        // Full importer round-trip: the links restored on their cells. Scheme-less addresses export the
         // resolved form FE navigation would open.
         const rt = xlsxToSheets(buffer);
-        expect(rt[0].hyperlink).toEqual({
-            '0_0': { linkType: 'webpage', linkAddress: 'https://jira.example.com/browse/PLATFORMS-1452' },
-            '1_0': { linkType: 'webpage', linkAddress: 'mailto:erikjan@example.com' },
-            '2_0': { linkType: 'webpage', linkAddress: 'https://example.com/page' },
+        expect(cellLinks(rt[0])).toEqual({
+            '0_0': { type: 'webpage', address: 'https://jira.example.com/browse/PLATFORMS-1452' },
+            '1_0': { type: 'webpage', address: 'mailto:erikjan@example.com' },
+            '2_0': { type: 'webpage', address: 'https://example.com/page' },
         });
-        expect(cellAt(rt[0], 0, 0)).toMatchObject({ v: 'Jira ticket', hl: { r: 0, c: 0, id: 'sheet-0' } });
+        expect(cellAt(rt[0], 0, 0)).toMatchObject({
+            v: 'Jira ticket',
+            link: { type: 'webpage', address: 'https://jira.example.com/browse/PLATFORMS-1452' },
+        });
     });
 
     test('blocked schemes export as plain text with no link written', async () => {
@@ -1205,8 +1216,9 @@ describe('Sheets xlsx export — hyperlinks', () => {
             {
                 id: 'fixture-16',
                 name: 'Sheet1',
-                celldata: [{ r: 0, c: 0, v: { v: 'click me' } }],
-                hyperlink: { '0_0': { linkType: 'webpage', linkAddress: 'javascript:alert(1)' } },
+                celldata: [
+                    { r: 0, c: 0, v: { v: 'click me', link: { type: 'webpage', address: 'javascript:alert(1)' } } },
+                ],
             },
         ];
         const buffer = exportXlsx(sheets);
@@ -1215,7 +1227,7 @@ describe('Sheets xlsx export — hyperlinks', () => {
         expect(openZip(buffer).names()).not.toContain('xl/worksheets/_rels/sheet1.xml.rels');
 
         const rt = xlsxToSheets(buffer);
-        expect(rt[0].hyperlink).toBeUndefined();
+        expect(cellLinks(rt[0])).toEqual({});
         expect(cellAt(rt[0], 0, 0)?.v).toBe('click me');
     });
 
@@ -1225,15 +1237,18 @@ describe('Sheets xlsx export — hyperlinks', () => {
                 id: 'fixture-15',
                 name: 'Sheet1',
                 celldata: [
-                    { r: 0, c: 0, v: { v: 'go to data', m: 'go to data' } },
-                    { r: 1, c: 0, v: { v: 'quoted name' } },
-                    { r: 2, c: 0, v: { v: 'R&D "stuff"', m: 'R&D "stuff"' } },
+                    {
+                        r: 0,
+                        c: 0,
+                        v: { v: 'go to data', m: 'go to data', link: { type: 'sheet', address: 'My Sheet' } },
+                    },
+                    { r: 1, c: 0, v: { v: 'quoted name', link: { type: 'sheet', address: "It's" } } },
+                    {
+                        r: 2,
+                        c: 0,
+                        v: { v: 'R&D "stuff"', m: 'R&D "stuff"', link: { type: 'sheet', address: 'My Sheet' } },
+                    },
                 ],
-                hyperlink: {
-                    '0_0': { linkType: 'sheet', linkAddress: 'My Sheet' },
-                    '1_0': { linkType: 'sheet', linkAddress: "It's" },
-                    '2_0': { linkType: 'sheet', linkAddress: 'My Sheet' },
-                },
             },
             { id: 'fixture-14', name: 'My Sheet', celldata: [] },
             { id: 'fixture-13', name: "It's", celldata: [] },
@@ -1249,12 +1264,15 @@ describe('Sheets xlsx export — hyperlinks', () => {
 
         // Sheet links re-import as cellrange@A1, a documented drift.
         const rt = xlsxToSheets(buffer);
-        expect(rt[0].hyperlink).toEqual({
-            '0_0': { linkType: 'cellrange', linkAddress: "'My Sheet'!A1" },
-            '1_0': { linkType: 'cellrange', linkAddress: "'It''s'!A1" },
-            '2_0': { linkType: 'cellrange', linkAddress: "'My Sheet'!A1" },
+        expect(cellLinks(rt[0])).toEqual({
+            '0_0': { type: 'cellrange', address: "'My Sheet'!A1" },
+            '1_0': { type: 'cellrange', address: "'It''s'!A1" },
+            '2_0': { type: 'cellrange', address: "'My Sheet'!A1" },
         });
-        expect(cellAt(rt[0], 0, 0)).toMatchObject({ v: 'go to data', hl: { r: 0, c: 0, id: 'sheet-0' } });
+        expect(cellAt(rt[0], 0, 0)).toMatchObject({
+            v: 'go to data',
+            link: { type: 'cellrange', address: "'My Sheet'!A1" },
+        });
     });
 
     test('exports cellrange links with their whole range; a bare ref gains its own sheet', async () => {
@@ -1263,15 +1281,10 @@ describe('Sheets xlsx export — hyperlinks', () => {
                 id: 'fixture-12',
                 name: 'Sheet1',
                 celldata: [
-                    { r: 0, c: 0, v: { v: 'range' } },
-                    { r: 1, c: 0, v: { v: 'bare' } },
-                    { r: 2, c: 0, v: { v: 'quoted' } },
+                    { r: 0, c: 0, v: { v: 'range', link: { type: 'cellrange', address: 'Sheet2!B2:C3' } } },
+                    { r: 1, c: 0, v: { v: 'bare', link: { type: 'cellrange', address: 'D4' } } },
+                    { r: 2, c: 0, v: { v: 'quoted', link: { type: 'cellrange', address: "'Sheet 2'!A1" } } },
                 ],
-                hyperlink: {
-                    '0_0': { linkType: 'cellrange', linkAddress: 'Sheet2!B2:C3' },
-                    '1_0': { linkType: 'cellrange', linkAddress: 'D4' },
-                    '2_0': { linkType: 'cellrange', linkAddress: "'Sheet 2'!A1" },
-                },
             },
             { id: 'fixture-11', name: 'Sheet2', celldata: [] },
             { id: 'fixture-10', name: 'Sheet 2', celldata: [] },
@@ -1282,10 +1295,10 @@ describe('Sheets xlsx export — hyperlinks', () => {
         expect(xml).toContain('location="&apos;Sheet1&apos;!D4"');
         expect(xml).toContain('location="&apos;Sheet 2&apos;!A1"');
 
-        expect(xlsxToSheets(buffer)[0].hyperlink).toEqual({
-            '0_0': { linkType: 'cellrange', linkAddress: 'Sheet2!B2:C3' },
-            '1_0': { linkType: 'cellrange', linkAddress: "'Sheet1'!D4" },
-            '2_0': { linkType: 'cellrange', linkAddress: "'Sheet 2'!A1" },
+        expect(cellLinks(xlsxToSheets(buffer)[0])).toEqual({
+            '0_0': { type: 'cellrange', address: 'Sheet2!B2:C3' },
+            '1_0': { type: 'cellrange', address: "'Sheet1'!D4" },
+            '2_0': { type: 'cellrange', address: "'Sheet 2'!A1" },
         });
     });
 
@@ -1294,17 +1307,16 @@ describe('Sheets xlsx export — hyperlinks', () => {
             {
                 id: 'fixture-9',
                 name: 'Sheet1',
-                celldata: [],
-                hyperlink: {
-                    '0_0': { linkType: 'sheet', linkAddress: 'History' },
-                    '1_0': { linkType: 'cellrange', linkAddress: 'History!B2' },
-                },
+                celldata: [
+                    { r: 0, c: 0, v: { link: { type: 'sheet', address: 'History' } } },
+                    { r: 1, c: 0, v: { link: { type: 'cellrange', address: 'History!B2' } } },
+                ],
             },
             { id: 'fixture-8', name: 'History', celldata: [] },
         ];
-        expect((await roundTrip(sheets))[0].hyperlink).toEqual({
-            '0_0': { linkType: 'cellrange', linkAddress: "'History (2)'!A1" },
-            '1_0': { linkType: 'cellrange', linkAddress: "'History (2)'!B2" },
+        expect(cellLinks((await roundTrip(sheets))[0])).toEqual({
+            '0_0': { type: 'cellrange', address: "'History (2)'!A1" },
+            '1_0': { type: 'cellrange', address: "'History (2)'!B2" },
         });
     });
 
@@ -1313,13 +1325,18 @@ describe('Sheets xlsx export — hyperlinks', () => {
             {
                 id: 'fixture-7',
                 name: 'Sheet1',
-                celldata: [{ r: 0, c: 0, v: { f: '=SUM(B1:B3)', v: 6 } }],
-                hyperlink: { '0_0': { linkType: 'webpage', linkAddress: 'https://example.com' } },
+                celldata: [
+                    {
+                        r: 0,
+                        c: 0,
+                        v: { f: '=SUM(B1:B3)', v: 6, link: { type: 'webpage', address: 'https://example.com' } },
+                    },
+                ],
             },
         ];
         const [sheet] = await roundTrip(sheets);
         expect(cellAt(sheet, 0, 0)).toMatchObject({ f: '=SUM(B1:B3)', v: 6 });
-        expect(sheet.hyperlink).toEqual({ '0_0': { linkType: 'webpage', linkAddress: 'https://example.com' } });
+        expect(cellLinks(sheet)).toEqual({ '0_0': { type: 'webpage', address: 'https://example.com' } });
     });
 
     test('a link on a cell without a value is written on the empty cell', async () => {
@@ -1327,13 +1344,12 @@ describe('Sheets xlsx export — hyperlinks', () => {
             {
                 id: 'fixture-6',
                 name: 'Sheet1',
-                celldata: [],
-                hyperlink: { '1_1': { linkType: 'webpage', linkAddress: 'https://example.com/docs' } },
+                celldata: [{ r: 1, c: 1, v: { link: { type: 'webpage', address: 'https://example.com/docs' } } }],
             },
         ];
         const [sheet] = await roundTrip(sheets);
-        expect(sheet.hyperlink).toEqual({ '1_1': { linkType: 'webpage', linkAddress: 'https://example.com/docs' } });
-        expect(cellAt(sheet, 1, 1)).toEqual({ hl: { r: 1, c: 1, id: 'sheet-0' } });
+        expect(cellLinks(sheet)).toEqual({ '1_1': { type: 'webpage', address: 'https://example.com/docs' } });
+        expect(cellAt(sheet, 1, 1)).toEqual({ link: { type: 'webpage', address: 'https://example.com/docs' } });
     });
 
     test('keeps ct.s rich text runs on a linked cell', async () => {
@@ -1354,18 +1370,18 @@ describe('Sheets xlsx export — hyperlinks', () => {
                                     { v: 'docs', fc: '#0000FF' },
                                 ],
                             },
+                            link: { type: 'webpage', address: 'https://example.com/docs' },
                         },
                     },
                 ],
-                hyperlink: { '0_0': { linkType: 'webpage', linkAddress: 'https://example.com/docs' } },
             },
         ];
         const [sheet] = await roundTrip(sheets);
-        expect(sheet.hyperlink).toEqual({ '0_0': { linkType: 'webpage', linkAddress: 'https://example.com/docs' } });
+        expect(cellLinks(sheet)).toEqual({ '0_0': { type: 'webpage', address: 'https://example.com/docs' } });
         const a1 = cellAt(sheet, 0, 0);
         expect(a1?.ct?.s?.map((run) => run.v).join('')).toBe('Eigen docs');
         expect(a1?.ct?.s?.[1]).toMatchObject({ fc: '#0000FF' });
-        expect(a1?.hl).toEqual({ r: 0, c: 0, id: 'sheet-0' });
+        expect(a1?.link).toEqual({ type: 'webpage', address: 'https://example.com/docs' });
     });
 });
 

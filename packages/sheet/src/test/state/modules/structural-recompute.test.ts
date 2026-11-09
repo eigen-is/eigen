@@ -16,6 +16,7 @@ import { addSheet, deleteSheet, renameSheet } from '../../../state/modules/sheet
 import type { Op, Sheet } from '../../../state/types';
 import { join, tab, tabEdit, tabReceive, tabRedo, tabUndo } from '../factories/collab';
 import { contextFactory, selectionFactory } from '../factories/context';
+import { cellLinks } from '../factories/links';
 
 const n = (v: number) => ({ v, m: `${v}`, ct: { fa: 'General', t: 'n' } });
 const f = (formula: string, v: number | string) => ({ f: formula, v, m: `${v}`, ct: { fa: 'General', t: 'n' } });
@@ -923,7 +924,10 @@ describe('a function with a one-letter name', () => {
 
 describe('a deleted sheet`s name', () => {
     test('a list source and a link naming it break as a formula does', () => {
-        const base = book({ cells: [[n(10)]] }, { name: 'Two', cells: [[f('=One!A1', 10), n(1)]] });
+        const toRange = { ...f('=One!A1', 10), link: { type: 'cellrange', address: 'One!A1:B2' } };
+        const toSheet = { ...n(1), link: { type: 'sheet', address: 'One' } };
+        const toPage = { ...n(2), link: { type: 'webpage', address: 'One' } };
+        const base = book({ cells: [[n(10)]] }, { name: 'Two', cells: [[toRange, toSheet, toPage]] });
         const withTexts = produce(base, (d: Context) => {
             d.sheets[1].dataValidations = {
                 list: {
@@ -935,19 +939,23 @@ describe('a deleted sheet`s name', () => {
                     rule: { type: 'dropdown', type2: '', value1: 'One,Two', value2: '' },
                 },
             } as never;
-            d.sheets[1].hyperlink = { '0_0': { linkType: 'cellrange', linkAddress: 'One!A1:B2' } } as never;
         });
         const t = tab(withTexts);
         const batch = tabEdit(t, (d) => deleteSheet(d, 's1'), { deleteSheetOp: { id: 's1' } });
         for (const [two] of [t.ctx.sheets, join(withTexts, [batch])]) {
             expect(two.dataValidations?.list.rule.value1).toBe('#REF!');
             expect(two.dataValidations?.plain.rule.value1).toBe('One,Two');
-            expect(two.hyperlink?.['0_0'].linkAddress).toBe('#REF!');
+            expect(cellLinks(two)).toEqual({
+                '0_0': { type: 'cellrange', address: '#REF!' },
+                '0_1': { type: 'sheet', address: '#REF!' },
+                '0_2': toPage.link,
+            });
         }
         tabUndo(t);
         const two = t.ctx.sheets.find((sheet) => sheet.id === 's2');
         expect(two?.dataValidations?.list.rule.value1).toBe('One!$A$1:$A$3');
-        expect(two?.hyperlink?.['0_0'].linkAddress).toBe('One!A1:B2');
+        expect(at(t.ctx.sheets, 's2', 0, 0)?.link).toEqual(toRange.link);
+        expect(at(t.ctx.sheets, 's2', 0, 1)?.link).toEqual(toSheet.link);
     });
 });
 

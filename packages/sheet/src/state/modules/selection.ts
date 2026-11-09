@@ -255,44 +255,38 @@ export function pasteHandlerOfPaintModel(
         }
     }
 
-    carryCells(
-        ctx,
-        lines,
-        tiles,
-        ({ source, r, c }) => {
-            // The destination keeps its value and takes the source's formats.
-            const value = cloneDeep(source);
-            const cell = flowdata[r][c] ?? {};
-            if (cell.ct?.t === 'inlineStr' && value) {
-                delete value.ct;
-            } else {
-                for (const item of PAINTED_FORMATS) Reflect.deleteProperty(cell, item);
-            }
-            if (value == null) return cell;
+    carryCells(ctx, lines, tiles, ({ source, r, c }) => {
+        // The destination keeps its value and takes the source's formats.
+        const value = cloneDeep(source);
+        const cell = flowdata[r][c] ?? {};
+        if (cell.ct?.t === 'inlineStr' && value) {
+            delete value.ct;
+        } else {
+            for (const item of PAINTED_FORMATS) Reflect.deleteProperty(cell, item);
+        }
+        if (value == null) return cell;
 
-            // The value and the link stay the destination's, so the link marker stays behind with them.
-            delete value.v;
-            delete value.m;
-            delete value.f;
-            delete value.hl;
-            if (value.ct?.t === 'inlineStr') {
-                delete value.ct;
-            }
+        // The value and the link stay the destination's.
+        delete value.v;
+        delete value.m;
+        delete value.f;
+        delete value.link;
+        if (value.ct?.t === 'inlineStr') {
+            delete value.ct;
+        }
 
-            Object.assign(cell, value);
-            if (cell.ct?.t === 'inlineStr' && cell.ct.s) {
-                for (const item of cell.ct.s) {
-                    Object.assign(item, value);
-                }
+        Object.assign(cell, value);
+        if (cell.ct?.t === 'inlineStr' && cell.ct.s) {
+            for (const item of cell.ct.s) {
+                Object.assign(item, value);
             }
-            if (cell.v != null && value.ct?.fa != null) {
-                // The painted number format changes what the kept value shows.
-                cell.m = numberDisplay(cell.v, value.ct.fa);
-            }
-            return cell;
-        },
-        { links: false },
-    );
+        }
+        if (cell.v != null && value.ct?.fa != null) {
+            // The painted number format changes what the kept value shows.
+            cell.m = numberDisplay(cell.v, value.ct.fa);
+        }
+        return cell;
+    });
 }
 
 export function rowHasMerged(ctx: Context, r: number, c1: number, c2: number) {
@@ -1010,22 +1004,18 @@ export function deleteSelectedCellText(ctx: Context): FormulaCell[] {
             }
         }
 
-        const hyperlinkMap = ctx.sheets[sheetIndex].hyperlink;
         for (const { row, column } of selection) {
             for (let r = row[0]; r <= row[1]; r += 1) {
                 data[r] ??= [];
                 for (let c = column[0]; c <= column[1]; c += 1) {
-                    if (hyperlinkMap?.[`${r}_${c}`]) {
-                        delete hyperlinkMap[`${r}_${c}`];
-                    }
                     // Delete leaves a cell its format, as Excel and Google Sheets do. The value, the formula, a rich
                     // cell's runs and a link go, and the link's blue underline goes with the link, as removeHyperlink
                     // does. A formatted cell with no contents is left alone, so it writes nothing.
                     const cell = data[r][c];
                     if (!cell) continue;
-                    const { v, m, f, qp, hl, ct, ...format } = cell;
-                    if (v == null && m == null && f == null && qp == null && hl == null && ct?.s == null) continue;
-                    if (hl) {
+                    const { v, m, f, qp, link, ct, ...format } = cell;
+                    if (v == null && m == null && f == null && qp == null && link == null && ct?.s == null) continue;
+                    if (link) {
                         delete format.fc;
                         delete format.un;
                     }

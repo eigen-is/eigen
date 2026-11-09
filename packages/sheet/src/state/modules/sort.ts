@@ -58,8 +58,7 @@ export function sortDataRange(
     // Cells are read from a plain view, because a read through an immer draft makes a child draft of each cell.
     const snapshot = snapshotContext(ctx);
     const plain = getSheet(snapshot);
-    const sheet = getSheet(ctx);
-    const { data } = sheet;
+    const { data } = getSheet(ctx);
     const before = plain.data;
     if (!before || !data) return;
     const [startColumn, endColumn] = column;
@@ -84,10 +83,6 @@ export function sortDataRange(
         for (let c = startColumn; c <= endColumn; c += 1) {
             const cell = landedCell(ctx, before[sr][c], r - sr, 0, resolver);
             if (!isEqual(cell, before[r][c])) data[r][c] = cell;
-            const key = `${r}_${c}`;
-            const link = plain.hyperlink?.[`${sr}_${c}`];
-            if (link) (sheet.hyperlink ??= {})[key] = link;
-            else if (plain.hyperlink?.[key]) delete sheet.hyperlink?.[key];
         }
     }
 

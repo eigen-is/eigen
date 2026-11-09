@@ -18,16 +18,17 @@ import { pasteCopy } from './factories/clipboard';
 import type { Tab } from './factories/collab';
 import { join, tab, tabEdit, tabReceive, tabRedo, tabUndo } from './factories/collab';
 import { workbookContextFactory } from './factories/context';
+import { cellLinks } from './factories/links';
 
 const ONE = 's1';
 const TWO = 's2';
 const SIDE = { style: 1, color: '#000' };
-const LINK = { linkType: 'webpage', linkAddress: 'https://eigen.is/' };
+const LINK = { type: 'webpage', address: 'https://eigen.is/' };
 
 const text = (v: string): Cell => ({ v, m: v, ct: { fa: 'General', t: 's' } });
 const number = (v: number): Cell => ({ v, m: `${v}`, ct: { fa: 'General', t: 'n' } });
 const calculated = (f: string, v: number): Cell => ({ ...number(v), f });
-const linked = (v: string, r: number, c: number): Cell => ({ ...text(v), hl: { r, c, id: ONE } });
+const linked = (v: string): Cell => ({ ...text(v), link: LINK });
 const range = (r1: number, r2: number, c1: number, c2: number) => ({ row: [r1, r2], column: [c1, c2] });
 const select = (r1: number, r2: number, c1: number, c2: number) => [
     { ...range(r1, r2, c1, c2), row_focus: r1, column_focus: c1 },
@@ -114,8 +115,8 @@ function expectEveryoneAgrees(s: Session, check: (sheet: Sheet) => void) {
     }
 }
 
-function sideTables({ config, hyperlink, dataValidations, conditionalFormatRules, data }: Sheet) {
-    return { borderInfo: config?.borderInfo, hyperlink, dataValidations, conditionalFormatRules, data };
+function sideTables({ config, dataValidations, conditionalFormatRules, data }: Sheet) {
+    return { borderInfo: config?.borderInfo, dataValidations, conditionalFormatRules, data };
 }
 
 function expectUndoRestores(s: Session, edit: () => void) {
@@ -134,13 +135,12 @@ describe('a sort moves what a cell holds, and leaves the rest where it is', () =
     const rows = (sheet: Partial<Sheet> = {}) =>
         session(
             (d) => {
-                d[0][0] = linked('b', 0, 0);
+                d[0][0] = linked('b');
                 d[1][0] = text('c');
                 d[2][0] = { ...text('a'), bg: '#ffff00' };
             },
             {
                 config: { borderInfo: { '2_0': { t: SIDE } } },
-                hyperlink: { '0_0': LINK },
                 dataValidations: { v: { ranges: [range(1, 1, 0, 0)], rule: dropdown('c') } },
                 ...sheet,
             },
@@ -153,7 +153,7 @@ describe('a sort moves what a cell holds, and leaves the rest where it is', () =
         expectEveryoneAgrees(s, (sheet) => {
             expect([0, 1, 2].map((r) => shown(sheet, r, 0))).toEqual(['a', 'b', 'c']);
             expect(sheet.data?.[0][0]?.bg).toBe('#ffff00');
-            expect(sheet.hyperlink).toEqual({ '1_0': LINK });
+            expect(cellLinks(sheet)).toEqual({ '1_0': LINK });
             expect(sheet.config?.borderInfo).toEqual({ '2_0': { t: SIDE } });
             expect(sheet.dataValidations?.v.ranges).toEqual([range(1, 1, 0, 0)]);
         });
@@ -169,7 +169,7 @@ describe('a sort moves what a cell holds, and leaves the rest where it is', () =
             conditionalFormatRules: [greater([range(1, 1, 0, 0)]), formula([range(0, 2, 0, 0)], '=$B1>0')],
         });
         const ops = s.edit(s.a, sort);
-        expect(ops.filter((op) => op.path[0] !== 'data' && op.path[0] !== 'hyperlink')).toEqual([]);
+        expect(ops.filter((op) => op.path[0] !== 'data')).toEqual([]);
         expectEveryoneAgrees(s, (sheet) => {
             expect(sheet.conditionalFormatRules?.[0].cellrange).toEqual([range(1, 1, 0, 0)]);
         });
@@ -323,11 +323,10 @@ describe('a table of formulas moves', () => {
     test('a cut that lands on itself changes nothing', () => {
         const s = session(
             (d) => {
-                d[0][0] = number(1);
+                d[0][0] = { ...number(1), link: LINK };
                 d[0][1] = calculated('=A1', 1);
             },
             {
-                hyperlink: { '0_0': LINK },
                 config: { borderInfo: { '0_0': { t: SIDE } } },
                 dataValidations: { v: { ranges: [range(0, 0, 0, 0)], rule: dropdown('v') } },
                 conditionalFormatRules: [greater([range(0, 0, 0, 0)])],
@@ -583,12 +582,11 @@ describe('a source with a rule extends it', () => {
 
 describe('a tab, a peer and a joiner agree through a whole session', () => {
     // What anyone can see of a sheet: its cells' formulas, values and formats, and the side tables.
-    const seen = ({ data, config, hyperlink, dataValidations, conditionalFormatRules }: Sheet) => ({
+    const seen = ({ data, config, dataValidations, conditionalFormatRules }: Sheet) => ({
         cells: data?.map((row) =>
-            row.map((cell) => (cell ? { f: cell.f, v: cell.v, bg: cell.bg, t: cell.ct?.t } : null)),
+            row.map((cell) => (cell ? { f: cell.f, v: cell.v, bg: cell.bg, t: cell.ct?.t, link: cell.link } : null)),
         ),
         borderInfo: config?.borderInfo,
-        hyperlink,
         dataValidations,
         conditionalFormatRules,
     });
@@ -598,7 +596,7 @@ describe('a tab, a peer and a joiner agree through a whole session', () => {
             (d) => {
                 d[0][0] = calculated('=B1*2', 6);
                 d[0][1] = { ...number(3), bg: '#ffff00' };
-                d[0][2] = linked('three', 0, 2);
+                d[0][2] = linked('three');
                 d[1][0] = calculated('=B2*2', 2);
                 d[1][1] = number(1);
                 d[1][2] = text('one');
@@ -609,7 +607,6 @@ describe('a tab, a peer and a joiner agree through a whole session', () => {
             },
             {
                 config: { borderInfo: { '0_1': { t: SIDE } } },
-                hyperlink: { '0_2': LINK },
                 dataValidations: { v: { ranges: [range(0, 5, 2, 2)], rule: dropdown('v') } },
                 conditionalFormatRules: [formula([range(0, 5, 1, 1)], '=B1>1')],
             },
@@ -648,7 +645,7 @@ describe('a tab, a peer and a joiner agree through a whole session', () => {
         }
         const sheet = s.a.ctx.sheets[0];
         expect(sheet.data?.[0][0]).toMatchObject({ f: '=B1*2', v: 2 });
-        expect(sheet.hyperlink?.['2_2']).toEqual(LINK);
+        expect(cellLinks(sheet)['2_2']).toEqual(LINK);
         expect(sheet.config?.borderInfo?.['0_1']).toEqual({ t: SIDE });
         expect(sheet.conditionalFormatRules?.[0].cellrange).toEqual([range(0, 0, 1, 1), range(2, 5, 1, 1)]);
     });
@@ -664,44 +661,37 @@ describe('a fill lands through the carry', () => {
 
     test('copies a link onto every filled cell, and an undo takes them away', () => {
         const seeded = () =>
-            session(
-                (d) => {
-                    d[0][0] = linked('site', 0, 0);
-                },
-                { hyperlink: { '0_0': LINK } },
-            );
+            session((d) => {
+                d[0][0] = linked('site');
+            });
         const s = seeded();
         s.edit(s.a, fillDown([0, 0], [1, 2]));
         expectEveryoneAgrees(s, (sheet) => {
-            expect(sheet.hyperlink).toEqual({ '0_0': LINK, '1_0': LINK, '2_0': LINK });
+            expect(cellLinks(sheet)).toEqual({ '0_0': LINK, '1_0': LINK, '2_0': LINK });
         });
         const u = seeded();
         expectUndoRestores(u, () => u.edit(u.a, fillDown([0, 0], [1, 2])));
     });
 
     test('takes the link of a cell it overwrites from a source without one', () => {
-        const s = session(
-            (d) => {
-                d[0][0] = text('plain');
-                d[1][0] = linked('old', 1, 0);
-            },
-            { hyperlink: { '1_0': LINK } },
-        );
+        const s = session((d) => {
+            d[0][0] = text('plain');
+            d[1][0] = linked('old');
+        });
         s.edit(s.a, fillDown([0, 0], [1, 1]));
         expectEveryoneAgrees(s, (sheet) => {
-            expect(sheet.hyperlink).toEqual({});
+            expect(cellLinks(sheet)).toEqual({});
         });
     });
 
     test('a hidden row keeps its cell, its link, and takes no rule', () => {
         const s = session(
             (d) => {
-                d[0][0] = linked('site', 0, 0);
+                d[0][0] = linked('site');
                 d[2][0] = text('hidden');
             },
             {
                 config: { rowhidden: { 2: 0 } },
-                hyperlink: { '0_0': LINK },
                 dataValidations: { v: { ranges: [range(0, 0, 0, 0)], rule: dropdown('v') } },
                 conditionalFormatRules: [greater([range(0, 0, 0, 0)])],
             },
@@ -709,7 +699,7 @@ describe('a fill lands through the carry', () => {
         s.edit(s.a, fillDown([0, 0], [1, 3]));
         expectEveryoneAgrees(s, (sheet) => {
             expect(shown(sheet, 2, 0)).toBe('hidden');
-            expect(sheet.hyperlink).toEqual({ '0_0': LINK, '1_0': LINK, '3_0': LINK });
+            expect(cellLinks(sheet)).toEqual({ '0_0': LINK, '1_0': LINK, '3_0': LINK });
             expect(validationAt(sheet.dataValidations, 2, 0)).toBeUndefined();
             expect(validationAt(sheet.dataValidations, 3, 0)).toEqual(dropdown('v'));
             expect(sheet.conditionalFormatRules?.[0].cellrange).toEqual([range(0, 1, 0, 0), range(3, 3, 0, 0)]);
@@ -794,11 +784,10 @@ describe('a fill lands through the carry', () => {
     test('a fill up lands each link and rule by the source cell it repeats', () => {
         const s = session(
             (d) => {
-                d[4][0] = linked('site', 4, 0);
+                d[4][0] = linked('site');
                 d[5][0] = text('plain');
             },
             {
-                hyperlink: { '4_0': LINK },
                 conditionalFormatRules: [greater([range(4, 4, 0, 0)])],
             },
         );
@@ -807,7 +796,7 @@ describe('a fill lands through the carry', () => {
             updateDropCell(ctx, range(4, 5, 0, 0), range(0, 3, 0, 0), 'up');
         });
         expectEveryoneAgrees(s, (sheet) => {
-            expect(Object.keys(sheet.hyperlink ?? {}).sort()).toEqual(['0_0', '2_0', '4_0']);
+            expect(Object.keys(cellLinks(sheet)).sort()).toEqual(['0_0', '2_0', '4_0']);
             expect(sheet.conditionalFormatRules?.[0].cellrange).toEqual([
                 range(4, 4, 0, 0),
                 range(0, 0, 0, 0),

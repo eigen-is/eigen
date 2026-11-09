@@ -18,6 +18,7 @@ import { sheetsHtmlDocument } from '../../lib/export/sheets/render';
 import { getHome } from '../../lib/home/get-home';
 import { importIntoDocument } from '../../lib/import/import-document';
 import type { Mount } from '../../lib/mount';
+import { cellLinks } from '../fixtures/cell-links';
 import { writeSheetsToYjs } from '../fixtures/heavy-sheets';
 import { readPersistedDoc } from '../fixtures/transform-results';
 import { rowsXml, xlsxFixture } from '../fixtures/xlsx';
@@ -776,7 +777,8 @@ describe('document/sheets — appendSheetsToYjs', () => {
             order: 1,
             celldata: [
                 { r: 0, c: 0, v: { f: '=Data!A1*2', v: 10, m: '10' } },
-                { r: 1, c: 0, v: { v: 'Go', m: 'Go', hl: { r: 1, c: 0, id: 'sheet-1' } } },
+                { r: 1, c: 0, v: { v: 'Go', m: 'Go', link: { type: 'sheet', address: 'Data' } } },
+                { r: 1, c: 1, v: { link: { type: 'cellrange', address: 'Data!B2' } } },
             ],
             config: {},
             conditionalFormatRules: [
@@ -794,10 +796,6 @@ describe('document/sheets — appendSheetsToYjs', () => {
                     ranges: [{ row: [2, 2], column: [0, 0] }],
                     rule: { type: 'dropdown', type2: '', value1: 'Data!A1:A3', value2: '' },
                 },
-            },
-            hyperlink: {
-                '1_0': { linkType: 'sheet', linkAddress: 'Data' },
-                '1_1': { linkType: 'cellrange', linkAddress: 'Data!B2' },
             },
             charts: {
                 c1: { id: 'c1', index: 'a0', x: 0, y: 0, width: 300, height: 200, ...newSheetChartSpecParts(spec) },
@@ -864,13 +862,12 @@ describe('document/sheets — appendSheetsToYjs', () => {
         const cell = (r: number, c: number) => summary.celldata?.find((e) => e.r === r && e.c === c)?.v;
 
         expect(cell(0, 0)?.f).toBe("='Data(Copy)'!A1*2");
-        expect(cell(1, 0)?.hl?.id).toBe(summary.id);
         const rule = summary.conditionalFormatRules?.[0];
         expect(rule?.type === 'default' && rule.conditionValue).toEqual(["=A1>'Data(Copy)'!A1"]);
         expect(summary.dataValidations?.['v1']?.rule.value1).toBe("'Data(Copy)'!A1:A3");
-        expect(summary.hyperlink).toEqual({
-            '1_0': { linkType: 'sheet', linkAddress: 'Data(Copy)' },
-            '1_1': { linkType: 'cellrange', linkAddress: "'Data(Copy)'!B2" },
+        expect(cellLinks(summary)).toEqual({
+            '1_0': { type: 'sheet', address: 'Data(Copy)' },
+            '1_1': { type: 'cellrange', address: "'Data(Copy)'!B2" },
         });
         const stored = summary.charts?.['c1'];
         const chart = stored ? readChartSpec(stored).spec : null;
@@ -887,10 +884,10 @@ describe('document/sheets — appendSheetsToYjs', () => {
 
     test('a link to a renamed sheet that spells its name in another case follows the new name', () => {
         const doc = workbook();
-        const link = { linkType: 'sheet', linkAddress: 'DATA' };
-        append(doc, encodeSheetsSnapshot([{ ...file[0], hyperlink: { '0_1': link } }], { computed: true }));
+        const celldata = [...(file[0].celldata ?? []), { r: 0, c: 1, v: { link: { type: 'sheet', address: 'DATA' } } }];
+        append(doc, encodeSheetsSnapshot([{ ...file[0], celldata }], { computed: true }));
         const { sheets } = readSheetsFromDoc(doc, { recalc: false });
-        expect(sheets[1].hyperlink).toEqual({ '0_1': { linkType: 'sheet', linkAddress: 'Data(Copy)' } });
+        expect(cellLinks(sheets[1])).toEqual({ '0_1': { type: 'sheet', address: 'Data(Copy)' } });
     });
 
     test('a workbook never compacted takes the file beside the default sheet the editor opens on', () => {
