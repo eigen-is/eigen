@@ -17,59 +17,6 @@ import { getUserByEmail, isGuest } from '../user';
 import { composeCancelEmail, composeInviteEmail, composeInviteRequest } from './imip';
 import { buildCalendarEvent } from './sse-events';
 
-// The revision its receiver orders the removal against; undefined for a message about the whole series.
-function occurrenceRevision(
-    event: CalendarEvent,
-    recurrenceDate: string | null,
-): { recurrenceDate: string; sequence: number; dtstamp: Date } | undefined {
-    return recurrenceDate ? { recurrenceDate, sequence: event.sequence, dtstamp: event.updatedAt } : undefined;
-}
-
-// Runs right after the invitation that files the series. Each exception is its own message, so the guest's ordering
-// guard judges it against its own occurrence, of which their fresh copy holds no revision.
-async function sendSeriesExceptions(
-    targetUserId: string,
-    organizerHome: Home,
-    organizerEventId: string,
-    exceptions: readonly CalendarEvent[],
-    series: CalendarEvent,
-): Promise<void> {
-    for (const exception of exceptions) {
-        if (!exception.recurrenceDate) continue;
-        const occurrence = occurrenceRevision(exception, exception.recurrenceDate);
-        if (exception.status === 'cancelled') {
-            await sendToHome(targetUserId, {
-                type: 'calendar:invitation-removal',
-                orgEventId: organizerEventId,
-                orgUserId: organizerHome.user.id,
-                occurrence,
-            });
-            continue;
-        }
-        await sendToHome(targetUserId, {
-            type: 'calendar:invitation-update',
-            orgEventId: organizerEventId,
-            orgUserId: organizerHome.user.id,
-            payload: {
-                recurrenceDate: exception.recurrenceDate,
-                title: exception.title,
-                description: exception.description,
-                location: exception.location,
-                startTime: exception.startTime,
-                endTime: exception.endTime,
-                allDay: exception.allDay,
-                rrule: null,
-                timezone: exception.timezone,
-                status: exception.status,
-                sequence: exception.sequence,
-                dtstamp: exception.updatedAt,
-                // The organizer's list for that occurrence, so an answer the guest already gave to it stands.
-                attendees: heldAttendees(exception, series),
-            },
-        });
-    }
-}
-
 // `series` set means `event` is one occurrence, and the messages name the series id plus the occurrence key.
 // The series' `exceptions` go to every added guest and every external update, or a guest's copy shows them unmoved.
 export async function propagateInvitation(
@@ -247,4 +194,57 @@ export async function propagateCancellation(
 // master it hangs on.
 export function answeredOccurrence(event: CalendarEvent): string | undefined {
     return event.parentEventId ? undefined : (event.recurrenceDate ?? undefined);
+}
+
+// Runs right after the invitation that files the series. Each exception is its own message, so the guest's ordering
+// guard judges it against its own occurrence, of which their fresh copy holds no revision.
+async function sendSeriesExceptions(
+    targetUserId: string,
+    organizerHome: Home,
+    organizerEventId: string,
+    exceptions: readonly CalendarEvent[],
+    series: CalendarEvent,
+): Promise<void> {
+    for (const exception of exceptions) {
+        if (!exception.recurrenceDate) continue;
+        const occurrence = occurrenceRevision(exception, exception.recurrenceDate);
+        if (exception.status === 'cancelled') {
+            await sendToHome(targetUserId, {
+                type: 'calendar:invitation-removal',
+                orgEventId: organizerEventId,
+                orgUserId: organizerHome.user.id,
+                occurrence,
+            });
+            continue;
+        }
+        await sendToHome(targetUserId, {
+            type: 'calendar:invitation-update',
+            orgEventId: organizerEventId,
+            orgUserId: organizerHome.user.id,
+            payload: {
+                recurrenceDate: exception.recurrenceDate,
+                title: exception.title,
+                description: exception.description,
+                location: exception.location,
+                startTime: exception.startTime,
+                endTime: exception.endTime,
+                allDay: exception.allDay,
+                rrule: null,
+                timezone: exception.timezone,
+                status: exception.status,
+                sequence: exception.sequence,
+                dtstamp: exception.updatedAt,
+                // The organizer's list for that occurrence, so an answer the guest already gave to it stands.
+                attendees: heldAttendees(exception, series),
+            },
+        });
+    }
+}
+
+// The revision its receiver orders the removal against; undefined for a message about the whole series.
+function occurrenceRevision(
+    event: CalendarEvent,
+    recurrenceDate: string | null,
+): { recurrenceDate: string; sequence: number; dtstamp: Date } | undefined {
+    return recurrenceDate ? { recurrenceDate, sequence: event.sequence, dtstamp: event.updatedAt } : undefined;
 }

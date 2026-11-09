@@ -19,62 +19,6 @@ type Organizer = NonNullable<EventData['organizer']>;
 // Above this a body is a mailed calendar export, not a scheduling message, and it does not get to write a Home once per VEVENT.
 export const IMIP_MAX_EVENTS = 50;
 
-// Invitation mail has no viewer, so an event with no stored zone renders in UTC and says so instead of borrowing the server's.
-function buildEventWhen(event: CalendarEvent): string {
-    const timezone = normalizeTimezone(event.timezone);
-    const when = formatEventWhen(event.startTime, event.endTime, event.allDay, timezone, 'UTC');
-    return timezone || event.allDay ? when : `${when} (UTC)`;
-}
-
-function buildEventSummary(event: CalendarEvent): string {
-    const when = buildEventWhen(event);
-    const lines: string[] = [];
-    lines.push(`What: ${event.title}`);
-    lines.push(`When: ${when}`);
-    if (event.location) lines.push(`Where: ${event.location}`);
-    if (event.description) lines.push(`Description: ${event.description}`);
-    return lines.join('\n');
-}
-
-function buildSection(label: string, value: string): string {
-    return `<div style="margin-bottom:16px">
-      <div style="font-weight:600;font-size:13px;color:${EMAIL_MUTED};margin-bottom:4px">${label}</div>
-      <div style="font-size:14px;color:${EMAIL_TEXT}">${value}</div>
-    </div>`;
-}
-
-function buildEventBodyHtml(event: CalendarEvent): string {
-    const sections: string[] = [];
-    sections.push(buildSection('When', escapeHtml(buildEventWhen(event))));
-    if (event.location) sections.push(buildSection('Where', escapeHtml(event.location)));
-    if (event.description)
-        sections.push(buildSection('Description', escapeHtml(event.description).replace(/\n/g, '<br>')));
-    return sections.join('\n');
-}
-
-function buildEventHtml(event: CalendarEvent, footerLine: string, banner?: string): string {
-    return renderEigenEmail({
-        title: event.title,
-        bodyHtml: buildEventBodyHtml(event),
-        banner,
-        footerLine,
-    });
-}
-
-function withOrganizer(event: CalendarEvent, organizer: Organizer): CalendarEvent {
-    return { ...event, data: { ...event.data, organizer } };
-}
-
-// `series` lets the body name the occurrence it replaces (RECURRENCE-ID) instead of reading as a message about the whole series; a master's `exceptions` ride beside it.
-function icalEvent(
-    event: CalendarEvent,
-    method: 'REQUEST' | 'REPLY' | 'CANCEL',
-    series?: CalendarEvent,
-    exceptions?: readonly CalendarEvent[],
-): OutboundICalEvent {
-    return { method, content: serializeEventForImip(event, method, series, exceptions) };
-}
-
 // The calendar file of one save's invitation mails. Nothing in it differs per guest, and its size is guests × exceptions,
 // so a save builds it once.
 export function composeInviteRequest(
@@ -293,4 +237,60 @@ export async function processInboundImip(
             }
         }
     }
+}
+
+function withOrganizer(event: CalendarEvent, organizer: Organizer): CalendarEvent {
+    return { ...event, data: { ...event.data, organizer } };
+}
+
+// `series` lets the body name the occurrence it replaces (RECURRENCE-ID) instead of reading as a message about the whole series; a master's `exceptions` ride beside it.
+function icalEvent(
+    event: CalendarEvent,
+    method: 'REQUEST' | 'REPLY' | 'CANCEL',
+    series?: CalendarEvent,
+    exceptions?: readonly CalendarEvent[],
+): OutboundICalEvent {
+    return { method, content: serializeEventForImip(event, method, series, exceptions) };
+}
+
+function buildEventSummary(event: CalendarEvent): string {
+    const when = buildEventWhen(event);
+    const lines: string[] = [];
+    lines.push(`What: ${event.title}`);
+    lines.push(`When: ${when}`);
+    if (event.location) lines.push(`Where: ${event.location}`);
+    if (event.description) lines.push(`Description: ${event.description}`);
+    return lines.join('\n');
+}
+
+// Invitation mail has no viewer, so an event with no stored zone renders in UTC and says so instead of borrowing the server's.
+function buildEventWhen(event: CalendarEvent): string {
+    const timezone = normalizeTimezone(event.timezone);
+    const when = formatEventWhen(event.startTime, event.endTime, event.allDay, timezone, 'UTC');
+    return timezone || event.allDay ? when : `${when} (UTC)`;
+}
+
+function buildEventHtml(event: CalendarEvent, footerLine: string, banner?: string): string {
+    return renderEigenEmail({
+        title: event.title,
+        bodyHtml: buildEventBodyHtml(event),
+        banner,
+        footerLine,
+    });
+}
+
+function buildEventBodyHtml(event: CalendarEvent): string {
+    const sections: string[] = [];
+    sections.push(buildSection('When', escapeHtml(buildEventWhen(event))));
+    if (event.location) sections.push(buildSection('Where', escapeHtml(event.location)));
+    if (event.description)
+        sections.push(buildSection('Description', escapeHtml(event.description).replace(/\n/g, '<br>')));
+    return sections.join('\n');
+}
+
+function buildSection(label: string, value: string): string {
+    return `<div style="margin-bottom:16px">
+      <div style="font-weight:600;font-size:13px;color:${EMAIL_MUTED};margin-bottom:4px">${label}</div>
+      <div style="font-size:14px;color:${EMAIL_TEXT}">${value}</div>
+    </div>`;
 }
