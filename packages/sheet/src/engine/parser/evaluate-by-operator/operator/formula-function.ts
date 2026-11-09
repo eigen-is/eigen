@@ -10,7 +10,7 @@ import { ERROR_NAME, ERROR_NUM, ERROR_VALUE } from '../../error';
 import { errorType, iserr, iserror } from '../../functions/information';
 import { iferror, ifs, switchValue } from '../../functions/logical';
 import { columns, index, rows, xlookup, xmatch } from '../../functions/lookup';
-import { aggregate, errorsAsText, maxifs, minifs } from '../../functions/statistical';
+import { aggregate, averageif, averageifs, errorsAsText, maxifs, minifs } from '../../functions/statistical';
 import { concatenate, textjoin } from '../../functions/text';
 import { toNumber } from '../../helper/number';
 import type { FunctionArg } from '../../omitted';
@@ -177,8 +177,6 @@ const OVERRIDES: Record<string, (params: FormulaArg[]) => FormulaOutput | undefi
     COUNTIFS: byText(formulajs.COUNTIFS),
     SUMIF: byText(formulajs.SUMIF),
     SUMIFS: byText(formulajs.SUMIFS),
-    AVERAGEIF: byText(formulajs.AVERAGEIF),
-    AVERAGEIFS: byText(formulajs.AVERAGEIFS),
 
     'CEILING.MATH': withSignificance(formulajs.CEILING.MATH),
     'CEILING.PRECISE': withSignificance(formulajs.CEILING.PRECISE),
@@ -195,6 +193,8 @@ const OVERRIDES: Record<string, (params: FormulaArg[]) => FormulaOutput | undefi
 // of `undefined` is a blank, not a fall-through, and an empty argument arrives as OMITTED, for each to read as Excel
 // reads that parameter.
 const FUNCTIONS: Record<string, (params: FunctionArg[]) => FormulaOutput> = {
+    AVERAGEIF: averageif,
+    AVERAGEIFS: averageifs,
     COLUMNS: columns,
     'ERROR.TYPE': errorType,
     IFERROR: iferror,

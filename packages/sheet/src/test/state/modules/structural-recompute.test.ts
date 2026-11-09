@@ -359,6 +359,21 @@ describe('a row op`s undo', () => {
 });
 
 describe('what a recompute keeps', () => {
+    test('an AVERAGEIF over the blank row an insert opened ignores it, on the replay', () => {
+        const sheets: Sheet[] = [
+            {
+                id: 's1',
+                name: 'One',
+                order: 0,
+                data: [[n(1), f('=AVERAGEIF(A1:A3,">1")', 2.5)], [n(2)], [n(3)]],
+            },
+        ];
+        const op: Op = { op: 'insertRowCol', id: 's1', path: [], value: insertRow(1) };
+        const [one] = replaySheetsOps(sheets, [[op]]);
+        expect(at([one], 's1', 0, 1)?.f).toBe('=AVERAGEIF(A1:A4,">1")');
+        expect(at([one], 's1', 0, 1)?.v).toBe(2.5);
+    });
+
     test('a formula this build cannot evaluate keeps its stored number, on a row op and on an edit', () => {
         const base = book({
             cells: [

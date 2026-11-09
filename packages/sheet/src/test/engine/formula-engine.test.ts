@@ -278,6 +278,48 @@ describe('engine/formula-engine — compiled formula at an offset', () => {
 
 // ─── An error held in a cell ────────────────────────────────────────────────
 
+describe('engine/formula-engine — criteria over blanks', () => {
+    const number = (v: number) => ({ v, m: String(v), ct: { t: 'n', fa: 'General' } });
+    const text = (v: string) => ({ v, m: v, ct: { t: 's', fa: 'General' } });
+    const data = [
+        [number(1), number(10), null],
+        [null, number(20), number(5)],
+        [number(3), null, null],
+        [number(4), text('x'), null],
+    ];
+    const engine = new FormulaEngine();
+    const blanks = createArrayResolver([{ id: 's', name: 'S', data }]);
+    const evaluate = (formula: string) => engine.evaluate(formula, 's', blanks).value;
+
+    test('AVERAGEIF and AVERAGEIFS ignore a blank and text, as Excel does', () => {
+        expect(evaluate('=AVERAGEIF(A1:A4,">1")')).toBe(3.5);
+        expect(evaluate('=AVERAGEIFS(A1:A4,A1:A4,">1")')).toBe(3.5);
+        // A blank in the average range doesn't move the cells after it.
+        expect(evaluate('=AVERAGEIF(A1:A4,">0",B1:B4)')).toBe(10);
+        expect(evaluate('=AVERAGEIFS(B1:B4,A1:A4,">0")')).toBe(10);
+    });
+
+    test('AVERAGEIF with nothing to average is #DIV/0!, as in Excel', () => {
+        expect(evaluate('=AVERAGEIF(A1:A4,">9")')).toBe('#DIV/0!');
+        expect(evaluate('=AVERAGEIFS(A1:A4,A1:A4,">9")')).toBe('#DIV/0!');
+        expect(evaluate('=AVERAGEIF(C3:C4,">0")')).toBe('#DIV/0!');
+    });
+
+    test('AVERAGEIF reads an average range of another size from its top-left, as Excel does', () => {
+        expect(evaluate('=AVERAGEIF(A1:A4,">0",B1)')).toBe(10);
+    });
+
+    test('AVERAGEIFS reads a criteria range along a row too', () => {
+        expect(evaluate('=AVERAGEIFS(A1:B1,A1:B1,">5")')).toBe(10);
+    });
+
+    test('a result that is no finite number reaches no cell', () => {
+        expect(evaluate('=STDEV(5)')).toBe('#NUM!');
+        expect(evaluate('=1e999')).toBe('#NUM!');
+        expect(engine.evaluate('=STDEV(5)', 's', blanks).type).toBe('error');
+    });
+});
+
 describe('engine/formula-engine — an error held in a cell', () => {
     const engine = new FormulaEngine();
     // A cell holding an error, as the editor and recalc write one.

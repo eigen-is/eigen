@@ -12,6 +12,7 @@ import { Parser } from './parser';
 import errorParser, {
     ERROR,
     ERROR_NAME,
+    ERROR_NUM,
     ERROR_REF,
     ERROR_VALUE,
     toFormulaError,
@@ -134,12 +135,15 @@ export class FormulaEngine {
             return { value: failure, display: failure, type: 'error' };
         }
 
-        if (result instanceof Date) {
-            // A Date result stores as its Excel serial, as the parser's operators read a Date operand. As a string,
-            // a DATE or EOMONTH cell would turn into text on the xlsx round trip.
-            const serial = dateToSerial(result);
-            return { value: serial, display: String(serial), type: 'date' };
+        // A Date result stores as its Excel serial, as the parser's operators read a Date operand. As a string, a DATE
+        // or EOMONTH cell would turn into text on the xlsx round trip.
+        const serial = result instanceof Date ? dateToSerial(result) : result;
+        // NaN and Infinity survive no JSON, so a tab and a joiner would hold different cells. Excel's word is #NUM!.
+        if (typeof serial === 'number' && !Number.isFinite(serial)) {
+            const overflow = errorParser(ERROR_NUM);
+            return { value: overflow, display: overflow, type: 'error' };
         }
+        if (result instanceof Date) return { value: serial, display: String(serial), type: 'date' };
 
         // Any other non-primitive is stored as its string.
         const value: Cell['v'] =
