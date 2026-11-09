@@ -4,7 +4,7 @@
 
 import type { FormulaArg, FormulaOutput, FormulaValue } from '../../types';
 import { ERROR_NOT_AVAILABLE, ERROR_REF, ERROR_VALUE } from '../error';
-import { toGrid } from '../helper/array';
+import { referenceGrid, toGrid } from '../helper/array';
 import { dateToSerial, toNumber } from '../helper/number';
 import type { FunctionArg } from '../omitted';
 import { OMITTED, supplied } from '../omitted';
@@ -115,12 +115,12 @@ function search(lookup: FormulaValue, values: FormulaValue[], matchMode: number,
 // A row delete cuts `A1:A2` to `A1`, so one cell answers as the range of one it was.
 export function rows(params: FunctionArg[]): FormulaOutput {
     if (params.length < 1) throw Error(ERROR_NOT_AVAILABLE);
-    return toGrid(supplied(params[0])).length;
+    return referenceGrid(supplied(params[0])).length;
 }
 
 export function columns(params: FunctionArg[]): FormulaOutput {
     if (params.length < 1) throw Error(ERROR_NOT_AVAILABLE);
-    return toGrid(supplied(params[0]))[0].length;
+    return referenceGrid(supplied(params[0]))[0].length;
 }
 
 export function xmatch(params: FunctionArg[]): FormulaOutput {

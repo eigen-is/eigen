@@ -12,6 +12,7 @@ import { iferror, ifs, switchValue } from '../../functions/logical';
 import { columns, index, rows, xlookup, xmatch } from '../../functions/lookup';
 import { aggregate, averageif, averageifs, errorsAsText, maxifs, minifs } from '../../functions/statistical';
 import { concatenate, textjoin } from '../../functions/text';
+import { referenceGrid } from '../../helper/array';
 import { toNumber } from '../../helper/number';
 import type { FunctionArg } from '../../omitted';
 import { OMITTED } from '../../omitted';
@@ -116,9 +117,11 @@ function withSignificance(method: FormulajsMethod) {
     return (params: FormulaArg[]) => (params.length === 1 ? method(params[0], 1) : undefined);
 }
 
-// formulajs's COUNTIF family, with each error cell as the text it shows, which a criterion such as "#N/A" matches.
-function byText(method: FormulajsMethod) {
-    return (params: FormulaArg[]) => method(...params.map(errorsAsText));
+// formulajs's COUNTIF family, with each error cell as the text it shows, which a criterion such as "#N/A" matches. It
+// answers 0 over a range a delete cut to one cell, so `isRange`'s arguments reach it as rows of cells.
+function byText(method: FormulajsMethod, isRange: (position: number) => boolean) {
+    return (params: FormulaArg[]) =>
+        method(...params.map((param, i) => errorsAsText(isRange(i) ? referenceGrid(param) : param)));
 }
 
 // formulajs reads a start_num below 1 as 1, where Excel's is #VALUE!, an empty one too.
@@ -173,10 +176,10 @@ const OVERRIDES: Record<string, (params: FormulaArg[]) => FormulaOutput | undefi
     INDEX: index,
 
     AGGREGATE: aggregate,
-    COUNTIF: byText(formulajs.COUNTIF),
-    COUNTIFS: byText(formulajs.COUNTIFS),
-    SUMIF: byText(formulajs.SUMIF),
-    SUMIFS: byText(formulajs.SUMIFS),
+    COUNTIF: byText(formulajs.COUNTIF, (i) => i === 0),
+    COUNTIFS: byText(formulajs.COUNTIFS, (i) => i % 2 === 0),
+    SUMIF: byText(formulajs.SUMIF, (i) => i !== 1),
+    SUMIFS: byText(formulajs.SUMIFS, (i) => i === 0 || i % 2 === 1),
 
     'CEILING.MATH': withSignificance(formulajs.CEILING.MATH),
     'CEILING.PRECISE': withSignificance(formulajs.CEILING.PRECISE),

@@ -10,7 +10,7 @@ import * as formulajs from '@formulajs/formulajs';
 import * as criteriaEval from '@formulajs/formulajs/lib/utils/criteria-eval';
 import type { FormulaArg, FormulaOutput, FormulaValue } from '../../types';
 import { ERROR_DIV_ZERO, ERROR_NOT_AVAILABLE, ERROR_VALUE } from '../error';
-import { toGrid } from '../helper/array';
+import { referenceGrid, toGrid } from '../helper/array';
 import type { FunctionArg } from '../omitted';
 import { OMITTED, supplied } from '../omitted';
 
@@ -44,7 +44,7 @@ function numbersMeeting(grid: FormulaValue[][], pairs: FunctionArg[]): number[] 
     if (pairs.length === 0 || pairs.length % 2 === 1) throw Error(ERROR_NOT_AVAILABLE);
     const tests: [FormulaValue[], (value: FormulaValue) => boolean][] = [];
     for (let i = 0; i < pairs.length; i += 2) {
-        const cells = toGrid(supplied(pairs[i]));
+        const cells = referenceGrid(supplied(pairs[i]));
         if (cells.length !== grid.length || cells[0].length !== grid[0].length) throw Error(ERROR_VALUE);
         tests.push([cells.flat(), criterion(pairs[i + 1])]);
     }
@@ -57,7 +57,7 @@ function numbersMeeting(grid: FormulaValue[][], pairs: FunctionArg[]): number[] 
 
 // The matching numbers folded by `pick`; none is 0.
 function extremeIfs([range, ...pairs]: FunctionArg[], pick: (a: number, b: number) => number): FormulaOutput {
-    const numbers = numbersMeeting(toGrid(supplied(range)), pairs);
+    const numbers = numbersMeeting(referenceGrid(supplied(range)), pairs);
     return numbers.length === 0 ? 0 : numbers.reduce((a, b) => pick(a, b));
 }
 
@@ -75,15 +75,15 @@ function average(numbers: number[]): number {
 }
 
 export function averageifs([range, ...pairs]: FunctionArg[]): FormulaOutput {
-    return average(numbersMeeting(toGrid(supplied(range)), pairs));
+    return average(numbersMeeting(referenceGrid(supplied(range)), pairs));
 }
 
 // The cells averaged sit where the criteria range's cells sit, whatever the average range's own size, as in Excel.
 export function averageif(params: FunctionArg[]): FormulaOutput {
     const [range, test, averaged = range] = params;
     if (params.length < 2) throw Error(ERROR_NOT_AVAILABLE);
-    const source = toGrid(supplied(averaged === OMITTED ? range : averaged));
-    const grid = toGrid(supplied(range)).map((row, r) => row.map((_, c) => source[r]?.[c]));
+    const source = referenceGrid(supplied(averaged === OMITTED ? range : averaged));
+    const grid = referenceGrid(supplied(range)).map((row, r) => row.map((_, c) => source[r]?.[c]));
     return average(numbersMeeting(grid, [range, test]));
 }
 

@@ -320,6 +320,45 @@ describe('engine/formula-engine — criteria over blanks', () => {
     });
 });
 
+describe('engine/formula-engine — a range a delete cut to one cell', () => {
+    const number = (v: number) => ({ v, m: String(v), ct: { t: 'n', fa: 'General' } });
+    const failed = { f: '=X', v: '#N/A', m: '#N/A', ct: { t: 'e', fa: 'General' } };
+    const deleted = { f: '=X', v: '#REF!', m: '#REF!', ct: { t: 'e', fa: 'General' } };
+    const engine = new FormulaEngine();
+    const cut = createArrayResolver([{ id: 's', name: 'S', data: [[number(1), number(10), failed, deleted]] }]);
+    const evaluate = (formula: string) => engine.evaluate(formula, 's', cut).value;
+
+    test('ROWS and COLUMNS count one cell, an error it holds too', () => {
+        expect(evaluate('=ROWS(C1)')).toBe(1);
+        expect(evaluate('=COLUMNS(C1)')).toBe(1);
+        expect(evaluate('=ROWS(C1:D1)')).toBe(1);
+    });
+
+    test('ROWS and COLUMNS of a reference a delete broke are #REF!', () => {
+        expect(evaluate('=ROWS(#REF!)')).toBe('#REF!');
+        expect(evaluate('=COLUMNS(#REF!)')).toBe('#REF!');
+    });
+
+    test('the criteria functions read one cell as a range of one', () => {
+        expect(evaluate('=AVERAGEIF(A1,">0")')).toBe(1);
+        expect(evaluate('=AVERAGEIF(A1,">0",B1)')).toBe(10);
+        expect(evaluate('=AVERAGEIFS(A1,A1,">0")')).toBe(1);
+        expect(evaluate('=MAXIFS(A1,A1,">0")')).toBe(1);
+        expect(evaluate('=SUMIF(A1,">0")')).toBe(1);
+        expect(evaluate('=SUMIF(A1,">0",B1)')).toBe(10);
+        expect(evaluate('=SUMIFS(A1,A1,">0")')).toBe(1);
+        expect(evaluate('=COUNTIF(A1,">0")')).toBe(1);
+        expect(evaluate('=COUNTIFS(A1,">0")')).toBe(1);
+    });
+
+    test('one error cell matches a criterion by its text and is no number', () => {
+        expect(evaluate('=COUNTIF(C1,"#N/A")')).toBe(1);
+        expect(evaluate('=SUMIF(C1,"#N/A",A1)')).toBe(1);
+        expect(evaluate('=AVERAGEIF(C1,"#N/A",A1)')).toBe(1);
+        expect(evaluate('=AVERAGEIF(C1,">0")')).toBe('#DIV/0!');
+    });
+});
+
 describe('engine/formula-engine — an error held in a cell', () => {
     const engine = new FormulaEngine();
     // A cell holding an error, as the editor and recalc write one.
