@@ -159,7 +159,7 @@ describe('deriveView', () => {
         expect(next.selections?.[0]).toMatchObject({ row: [3, 3], top: 3 * HEIGHT });
     });
 
-    test('no selection comes back after a row delete dropped it', () => {
+    test('no selection comes back after an overtaken replay dropped it', () => {
         const next = commit(workbook(), (draft) => {
             draft.selections = undefined;
             cells(draft).pop();

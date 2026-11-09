@@ -720,3 +720,80 @@ test('a row insert on Data moves =Data!A1 and leaves =data!A1 alone', () => {
         expect(other.data?.[0]?.[1]?.f).toBe('=Data!A2+data!A1');
     }
 });
+
+// An undo sends the row op a peer would, so it lands the selection by the same rule, on the tab and on its peer.
+describe('undo and redo of a row op land the selection', () => {
+    const rowOf = ({ ctx }: { ctx: Context }) => ctx.selections?.[0].row;
+    const selected = (r: number) =>
+        produce(richContext(), (draft: Context) => {
+            draft.currentSheetId = 'id_1';
+            draft.selections = [{ row: [r, r], column: [1, 1], row_focus: r, column_focus: 1 }];
+        });
+    const inserted = (index: number, direction: 'lefttop' | 'rightbottom') =>
+        ({ type: 'row', index, count: 1, direction, id: 'id_1' }) as const;
+
+    test('the undo of my insert stays on its row, and the redo keeps the cell it found', () => {
+        const base = selected(1);
+        const [mine, peer] = [tab(base), tab(base)];
+        const op = inserted(2, 'lefttop');
+        tabReceive(
+            peer,
+            tabEdit(mine, (ctx) => insertRowCol(ctx, op), { insertRowColOp: op }),
+        );
+        expect(rowOf(mine)).toEqual([2, 2]);
+        tabReceive(peer, tabUndo(mine));
+        expect(rowOf(mine)).toEqual([2, 2]);
+        expect(mine.ctx.selections?.[0].column).toEqual([0, 3]);
+        tabReceive(peer, tabRedo(mine));
+        expect(rowOf(mine)).toEqual([3, 3]);
+        expect(rowOf(peer)).toEqual([1, 1]);
+    });
+
+    test('the undo of my insert below the last row clamps to the grid', () => {
+        const mine = tab(selected(3));
+        const op = inserted(3, 'rightbottom');
+        tabEdit(mine, (ctx) => insertRowCol(ctx, op), { insertRowColOp: op });
+        expect(rowOf(mine)).toEqual([4, 4]);
+        tabUndo(mine);
+        expect(rowOf(mine)).toEqual([3, 3]);
+    });
+
+    test('a peer on the row my undo takes lands too', () => {
+        const base = selected(0);
+        const [mine, peer] = [tab(base), tab(base)];
+        const op = inserted(2, 'lefttop');
+        tabReceive(
+            peer,
+            tabEdit(mine, (ctx) => insertRowCol(ctx, op), { insertRowColOp: op }),
+        );
+        peer.ctx = produce(peer.ctx, (draft: Context) => {
+            draft.selections = [{ row: [2, 2], column: [1, 1], row_focus: 2, column_focus: 1 }];
+        });
+        tabReceive(peer, tabUndo(mine));
+        expect(rowOf(peer)).toEqual([2, 2]);
+    });
+
+    test('delete, undo, a click on the restored row and redo keep a selection', () => {
+        const mine = tab(selected(1));
+        const op = { type: 'row', start: 1, end: 1, id: 'id_1' } as const;
+        tabEdit(mine, (ctx) => deleteRowCol(ctx, op), { deleteRowColOp: op });
+        expect(rowOf(mine)).toEqual([1, 1]);
+        tabUndo(mine);
+        mine.ctx = produce(mine.ctx, (draft: Context) => {
+            draft.selections = [{ row: [1, 1], column: [1, 1], row_focus: 1, column_focus: 1 }];
+        });
+        tabRedo(mine);
+        expect(rowOf(mine)).toEqual([1, 1]);
+    });
+
+    test('my own delete with the cell editor open on a row below moves the editor with its cell', () => {
+        const base = produce(selected(3), (draft: Context) => {
+            draft.editingCellPosition = [3, 1];
+        });
+        const mine = tab(base);
+        const op = { type: 'row', start: 1, end: 1, id: 'id_1' } as const;
+        tabEdit(mine, (ctx) => deleteRowCol(ctx, op), { deleteRowColOp: op });
+        expect(mine.ctx.editingCellPosition).toEqual([2, 1]);
+        expect(rowOf(mine)).toEqual([2, 2]);
+    });
+});

@@ -2,7 +2,7 @@
 // rename or a paste that grew the grid, and with them everything older (dropStructuralEntries). A row or column op then
 // moves what is left, the cell and field entries: shiftEntries moves their paths and values as the op moves the live
 // sheets, so an undo lands where its cell now is. The Workbook's applyOp runs both, and a RowColMove also moves the
-// open editor along an op.
+// open editor and the selection along an op.
 
 import type { MergeCell, SheetChart } from '@workspace/lib/sheets';
 import type { Patch } from 'immer';
@@ -29,6 +29,8 @@ import type { History, Sheet } from '../types';
 export type RowColMove = {
     id: string;
     type: 'row' | 'column';
+    // The first line the op adds or deletes.
+    at: number;
     // Where an index ends up, or null for a row or column the op deletes.
     to: (index: number) => number | null;
     formula: (
@@ -50,6 +52,7 @@ export function insertMove(op: InsertRowColOp): RowColMove {
     return {
         id,
         type,
+        at,
         to: (i) => (i < at ? i : i + count),
         formula: (text, name, onTargetSheet, findSheet) =>
             functionStrChange(text, 'add', axisName(type), direction, index, count, name, onTargetSheet, findSheet),
@@ -66,6 +69,7 @@ export function deleteMove(op: DeleteRowColOp): RowColMove {
     return {
         id,
         type,
+        at: start,
         to: (i) => (i < start ? i : i > end ? i - count : null),
         formula: (text, name, onTargetSheet, findSheet) =>
             functionStrChange(text, 'del', axisName(type), null, start, count, name, onTargetSheet, findSheet),

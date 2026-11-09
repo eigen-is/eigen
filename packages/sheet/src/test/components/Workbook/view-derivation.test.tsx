@@ -20,7 +20,10 @@ function sheets(): Sheet[] {
             order: 0,
             row: 30,
             column: 6,
-            celldata: [{ r: 10, c: 0, v: { v: 2, m: '2', ct: { fa: 'General', t: 'n' } } }],
+            celldata: [
+                { r: 10, c: 0, v: { v: 2, m: '2', ct: { fa: 'General', t: 'n' } } },
+                { r: 11, c: 0, v: { v: 3, m: '3', ct: { fa: 'General', t: 'n' } } },
+            ],
             config: {},
         },
         { id: 'two', name: 'Two', order: 1, row: 30, column: 6, celldata: [], config: {}, defaultRowHeight: 40 },
@@ -109,20 +112,39 @@ test("a peer's row insert moves the selection's box in the render that moves its
     expect(boxes[0].top).toBe(`${13 * ROW_HEIGHT}px`);
 });
 
-// The selection a peer's delete takes whole goes, and what reads it goes with it.
-test("a peer's delete of the selected row clears the header highlights and the status bar", async () => {
-    const { container, workbook, select } = await mountWorkbook();
-    const highlights = (name: string) => container.querySelectorAll(`.sheet-${name}-header-selected`).length;
+const highlightCount = (container: HTMLElement, name: string) =>
+    container.querySelectorAll(`.sheet-${name}-header-selected`).length;
+
+test("a peer's delete of the selected row keeps the box, the header highlights and the status bar on it", async () => {
+    const { container, workbook, boxes, select } = await mountWorkbook();
     await select(10);
-    expect(container.textContent).toContain('Count: 1');
-    expect(highlights('col')).toBeGreaterThan(0);
-    expect(highlights('row')).toBeGreaterThan(0);
+    boxes.length = 0;
     await act(async () => {
         workbook().applyOp([{ op: 'deleteRowCol', id: 'one', path: [], value: { type: 'row', start: 10, end: 10 } }]);
     });
+    expect(boxes[0].top).toBe(`${10 * ROW_HEIGHT}px`);
+    expect(container.textContent).toContain('Count: 1');
+    expect(highlightCount(container, 'col')).toBeGreaterThan(0);
+    expect(highlightCount(container, 'row')).toBeGreaterThan(0);
+});
+
+// A batch that lands ahead of a row op the tab applied leaves the tab unable to tell where the selection went.
+test('a replay that loses the selection clears the header highlights and the status bar', async () => {
+    const { container, workbook, select } = await mountWorkbook();
+    const base = workbook().getAllSheets();
+    await select(10);
+    const applied = [insertRows(3)];
+    await act(async () => {
+        workbook().applyOp(applied);
+    });
+    expect(container.textContent).toContain('Count: 1');
+    const late = [insertRows(1)];
+    await act(async () => {
+        workbook().replayOps(base, [late, applied], new Set([late]));
+    });
     expect(container.textContent).not.toContain('Count:');
-    expect(highlights('col')).toBe(0);
-    expect(highlights('row')).toBe(0);
+    expect(highlightCount(container, 'col')).toBe(0);
+    expect(highlightCount(container, 'row')).toBe(0);
 });
 
 test("a peer's freeze splits the overlay into its panes in its own render", async () => {
