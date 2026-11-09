@@ -551,6 +551,14 @@ describe('engine/formula-shift — renameSheetRefs', () => {
         expect(renameSheetRefs('Data!$A$1:$A$5', sheets, renames)).toBe("'Data(Copy)'!$A$1:$A$5");
     });
 
+    test('a chained range keeps every leg whatever the new name is long', () => {
+        const two = sheetFinder([{ name: 'Two' }]);
+        const renamedTo = (name: string) => renameSheetRefs('=SUM(Two!A1:A2:A3)', two, new Map([['Two', name]]));
+        expect(renamedTo('Z')).toBe('=SUM(Z!A1:A2:A3)');
+        expect(renamedTo('Zebra')).toBe('=SUM(Zebra!A1:A2:A3)');
+        expect(renamedTo('My sheet')).toBe("=SUM('My sheet'!A1:A2:A3)");
+    });
+
     test('a ref spelling the name in another case is renamed too, as Excel reads it', () => {
         expect(renameSheetRefs("=data!A1+'MY DATA'!B2", sheets, renames)).toBe("='Data(Copy)'!A1+Totals!B2");
     });
