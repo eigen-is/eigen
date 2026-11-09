@@ -1,6 +1,7 @@
 // The rectangles drawn over the grid in each pane region, such as the selection, the focus box, formula
 // ranges, find matches and peers' cursors, plus the selection's move band and fill handle, whose
-// press starts a cell move or a fill drag.
+// press starts a cell move or a fill drag. Each pane renders them once in content coordinates, and its
+// overflow clip shows its part. The state layer moves some of them itself, such as the move preview.
 
 import { PresenceLabel } from '@workspace/ui/components/collab';
 import type React from 'react';
@@ -12,13 +13,6 @@ type Props = {
     containerRef: React.RefObject<HTMLDivElement | null>;
 };
 
-// The passive rectangle visuals (selection boxes, focus box, formula-range
-// selects/highlights, search highlights, presence, copy/move/extend
-// indicators), rendered once per overlay pane region in pure content
-// coordinates — each region's overflow clip shows exactly its portion, which
-// replaces the old per-element fix*StyleOverflowInFreeze clamps. Elements the
-// state layer positions imperatively (move/extend previews, the formula range
-// select) are written per-copy via querySelectorAll.
 export function OverlayVisuals({ containerRef }: Props) {
     const { context, setContext, refs } = useContext(WorkbookContext);
 
@@ -195,7 +189,7 @@ export function OverlayVisuals({ containerRef }: Props) {
                     ))}
                 </div>
             )}
-            {context.presences?.map((presence, index) => {
+            {context.presences?.map((presence) => {
                 if (presence.sheetId !== context.currentSheetId) {
                     return null;
                 }
@@ -223,7 +217,7 @@ export function OverlayVisuals({ containerRef }: Props) {
 
                 return (
                     <div
-                        key={presence?.userId || index}
+                        key={presence.clientId}
                         className="sheet-presence-selection eigen-selection-ring eigen-selection-ring-peer"
                         // React's CSSProperties has no custom properties, so the --peer-color entry needs the cast.
                         style={

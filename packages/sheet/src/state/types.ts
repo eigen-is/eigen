@@ -77,6 +77,8 @@ export type RangeOrWholeAxis =
     | { row: number[]; column: [null, null] };
 
 export type Presence = {
+    // The awareness client, one per window, so one user's two windows are two rows.
+    clientId: number;
     sheetId: string;
     username: string;
     userId?: string;

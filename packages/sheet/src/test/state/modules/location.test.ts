@@ -123,6 +123,14 @@ describe('the link card', () => {
     test('over a frozen column of a scrolled sheet reads the frozen cell, not the one scrolled under it', () => {
         expect(getCellRowColumn(grid(FROZEN), at(30, 50), cellAreaAt(148, 400))).toEqual({ r: 22, c: 0 });
     });
+
+    test('past the last column or below the last row reads no cell, not the last one', () => {
+        const end = cellAreaAt(40 * COLUMN - WIDTH, 40 * ROW - HEIGHT + 100);
+        expect(getCellRowColumn(grid(), at(WIDTH - 5, HEIGHT - 105), end)).toEqual({ r: 39, c: 39 });
+        expect(getCellRowColumn(grid(), at(WIDTH - 5, HEIGHT - 95), end)).toBeUndefined();
+        const wide = cellAreaAt(40 * COLUMN - WIDTH + 100);
+        expect(getCellRowColumn(grid(), at(WIDTH - 95, 5), wide)).toBeUndefined();
+    });
 });
 
 describe('a formula range drag', () => {

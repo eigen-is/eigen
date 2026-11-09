@@ -150,6 +150,31 @@ describe('no comment', () => {
         expect(hoverAt(ctx, 5, 5)).toBeNull();
     });
 
+    test('past the last column or below the last row, where the grid draws no cell', () => {
+        const ctx = grid([[39, 39]]);
+        expect(hoverAt(ctx, 700 - 5, 500 - 105, cellArea(40 * COLUMN - 700, 40 * ROW - 400))).not.toBeNull();
+        expect(hoverAt(ctx, 700 - 5, 500 - 95, cellArea(40 * COLUMN - 700, 40 * ROW - 400))).toBeNull();
+        expect(hoverAt(ctx, 700 - 95, 500 - 105, cellArea(40 * COLUMN - 600, 40 * ROW - 400))).toBeNull();
+    });
+
+    test('on a cell whose link card is open, which the comment card would cover', () => {
+        const ctx = grid([[0, 0]]);
+        ctx.linkCard = {
+            sheetId: ctx.currentSheetId,
+            r: 0,
+            c: 0,
+            rc: '0_0',
+            originText: 'Site',
+            originType: 'webpage',
+            originAddress: 'https://example.com',
+            position: { cellLeft: 0, cellBottom: ROW },
+            isEditing: false,
+        };
+        expect(hoverAt(ctx, 5, 5)).toBeNull();
+        ctx.linkCard = { ...ctx.linkCard, r: 1, rc: '1_0' };
+        expect(hoverAt(ctx, 5, 5)).not.toBeNull();
+    });
+
     test('while a cell is being edited', () => {
         const ctx = grid([[0, 0]]);
         ctx.editingCellPosition = [5, 5];

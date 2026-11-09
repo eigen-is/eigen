@@ -1,7 +1,8 @@
 // When a comment's hover card shows, for a host whose editor reports "pointer over this card at this rect" or "pointer
 // left", as often as a mouse-move fires. A pause before opening lets a quick pass go by, and a grace before closing
-// lets the pointer reach the card. The rect is measured once and floating-ui tracks no scroll for a virtual anchor, so
-// a wheel or a scroll closes the card rather than leaving it behind. The host hands the result to CommentHoverCard.
+// lets a quick pointer reach the card. CommentHoverCard holds it, through enterCard, while the pointer is on the card
+// or on its way there. The rect is measured once and floating-ui tracks no scroll for a virtual anchor, so a wheel or
+// a scroll closes the card rather than leaving it behind. The host hands the result to CommentHoverCard.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CommentHover, CommentHoverTarget } from '../../../types/comments';
@@ -53,6 +54,8 @@ export function useCommentHover(): CommentHover {
             }
             const { cardId } = reported;
             if (isCoarsePointer || cardId === pendingCardRef.current) return;
+            // A report comes from the pointer over a mark, so it is no longer on, or on its way to, a card.
+            pointerOnCardRef.current = false;
             clearTimer();
             if (cardId === openCardRef.current) return;
             const open = () => {

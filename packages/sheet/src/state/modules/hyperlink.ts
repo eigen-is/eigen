@@ -17,10 +17,12 @@ import { recomputeCells } from './refresh';
 import { normalizeSelection } from './selection';
 import { changeSheet } from './sheet';
 
+// The cell under the pointer, or none in the blank margin a scroll to the end shows past the last row or column.
 export function getCellRowColumn(ctx: Context, e: MouseEvent, cellArea: HTMLDivElement) {
     const flowdata = getFlowdata(ctx);
     if (flowdata == null) return undefined;
     const { x, y } = sheetPoint(ctx, e, cellArea);
+    if (x > (ctx.visibledatacolumn.at(-1) ?? 0) || y > (ctx.visibledatarow.at(-1) ?? 0)) return undefined;
     let r = rowLocation(y, ctx.visibledatarow)[2];
     let c = colLocation(x, ctx.visibledatacolumn)[2];
 

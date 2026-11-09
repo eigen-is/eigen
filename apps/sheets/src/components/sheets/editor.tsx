@@ -158,9 +158,11 @@ export function SheetEditor({
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
     const commentHover = useCommentHover();
 
+    // A pane row takes the focus from the grid, and the thread hands it back to whatever held it as it closes.
     const openCard = (cardId: string) => {
         const cell = activeComments.firstCells.get(cardId);
         if (cell) workbookRef.current?.revealSearchMatch(cell);
+        workbookRef.current?.focusGrid();
         setOpenCardId(cardId);
     };
 
