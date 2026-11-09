@@ -18,7 +18,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { user } from '../../../auth-schema';
 import { getAuthDrizzleDb } from '../../lib/auth/auth';
 import { ensureAuthSchemaColumns } from '../../lib/auth/auth-schema-columns';
-import { getUserHomePath } from '../../lib/config/paths';
+import { getServerDataPath, getUserHomePath, SERVER_DATABASES } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getMaxUploadSize, getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { atHome } from '../../lib/home/get-home';
@@ -854,6 +854,32 @@ describe('lastLoginAt', () => {
         ensureAuthSchemaColumns(db); // idempotent
         const cols = db.query<{ name: string }, []>(`PRAGMA table_info(user)`).all();
         expect(cols.some((c) => c.name === 'last_login_at')).toBe(true);
+    });
+
+    test('a fresh setup and ensureAuthSchemaColumns on an older db both index the membership rows by user', () => {
+        const older = new Database(':memory:');
+        older.run(`CREATE TABLE "member" ("id" text PRIMARY KEY NOT NULL, "user_id" text NOT NULL)`);
+        older.run(`CREATE TABLE "team_member" ("id" text PRIMARY KEY NOT NULL, "user_id" text NOT NULL)`);
+        ensureAuthSchemaColumns(older);
+        ensureAuthSchemaColumns(older); // idempotent
+
+        // A connection of its own, because a statement left on the server's handle would lock out its writers.
+        const fresh = new Database(getServerDataPath(SERVER_DATABASES.users), { readonly: true });
+        for (const db of [older, fresh]) {
+            for (const table of ['member', 'team_member']) {
+                const plan = db
+                    .query<{ detail: string }, []>(`EXPLAIN QUERY PLAN SELECT * FROM "${table}" WHERE "user_id" = 'u1'`)
+                    .all();
+                expect(plan.map((step) => step.detail).join()).toContain(`USING INDEX ${table}_user_id_idx`);
+            }
+        }
+        fresh.close();
+    });
+
+    test('ensureAuthSchemaColumns skips the indexes of tables setup has not made yet', () => {
+        const empty = new Database(':memory:');
+        ensureAuthSchemaColumns(empty);
+        expect(empty.query(`SELECT name FROM sqlite_master`).all()).toEqual([]);
     });
 
     test('ensureAuthSchemaColumns adds the better-auth 1.7 columns and seeds member_count', () => {

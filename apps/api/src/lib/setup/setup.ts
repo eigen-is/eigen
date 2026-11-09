@@ -9,6 +9,7 @@ import type { S3Config } from '@workspace/lib/types/mount';
 import type { ServerStorageType, SetupResult, SetupStatus } from '@workspace/lib/types/settings';
 import { validateEmailAddress, validateUsername } from '@workspace/lib/validation';
 import { auth } from '../auth/auth';
+import { ensureAuthSchemaColumns } from '../auth/auth-schema-columns';
 import { getServerDataPath, SERVER_DATABASES } from '../config/paths';
 import { getMailDomain, isSetupRequired, updateServerConfig } from '../config/server-config';
 import { updateServerSettings } from '../config/server-settings';
@@ -18,225 +19,6 @@ import { storedSender } from '../mailer/mailer';
 import { findDefaultTeamId } from '../org';
 import { checkS3Connection } from '../storage/s3-storage';
 import { clearSetupToken } from './setup-token';
-
-async function resetAuthDatabase(): Promise<void> {
-    const dbPath = getServerDataPath(SERVER_DATABASES.users);
-    const dataDir = dirname(dbPath);
-
-    if (!existsSync(dataDir)) {
-        mkdirSync(dataDir, { recursive: true });
-    }
-
-    const db = new Database(dbPath);
-
-    await db.run(`CREATE TABLE IF NOT EXISTS "user" (
-        "id" text PRIMARY KEY NOT NULL,
-        "name" text NOT NULL,
-        "email" text NOT NULL UNIQUE,
-        "email_verified" integer NOT NULL,
-        "image" text,
-        "created_at" integer NOT NULL,
-        "updated_at" integer NOT NULL,
-        "two_factor_enabled" integer,
-        "role" text,
-        "banned" integer,
-        "ban_reason" text,
-        "ban_expires" integer,
-        "last_login_at" integer
-    )`);
-
-    await db.run(`CREATE TABLE IF NOT EXISTS "session" (
-        "id" text PRIMARY KEY NOT NULL,
-        "expires_at" integer NOT NULL,
-        "token" text NOT NULL UNIQUE,
-        "created_at" integer NOT NULL,
-        "updated_at" integer NOT NULL,
-        "ip_address" text,
-        "user_agent" text,
-        "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
-        "impersonated_by" text,
-        "active_organization_id" text,
-        "active_team_id" text
-    )`);
-
-    await db.run(`CREATE TABLE IF NOT EXISTS "account" (
-        "id" text PRIMARY KEY NOT NULL,
-        "account_id" text NOT NULL,
-        "provider_id" text NOT NULL,
-        "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
-        "access_token" text,
-        "refresh_token" text,
-        "id_token" text,
-        "access_token_expires_at" integer,
-        "refresh_token_expires_at" integer,
-        "scope" text,
-        "password" text,
-        "created_at" integer NOT NULL,
-        "updated_at" integer NOT NULL
-    )`);
-
-    await db.run(`CREATE TABLE IF NOT EXISTS "verification" (
-        "id" text PRIMARY KEY NOT NULL,
-        "identifier" text NOT NULL,
-        "value" text NOT NULL,
-        "expires_at" integer NOT NULL,
-        "created_at" integer,
-        "updated_at" integer
-    )`);
-
-    await db.run(`CREATE TABLE IF NOT EXISTS "two_factor" (
-        "id" text PRIMARY KEY NOT NULL,
-        "secret" text NOT NULL,
-        "backup_codes" text NOT NULL,
-        "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
-        "verified" integer,
-        "failed_verification_count" integer,
-        "locked_until" integer
-    )`);
-
-    await db.run(`CREATE TABLE IF NOT EXISTS "organization" (
-        "id" text PRIMARY KEY NOT NULL,
-        "name" text NOT NULL,
-        "slug" text UNIQUE,
-        "logo" text,
-        "created_at" integer NOT NULL,
-        "metadata" text
-    )`);
-
-    await db.run(`CREATE TABLE IF NOT EXISTS "member" (
-        "id" text PRIMARY KEY NOT NULL,
-        "organization_id" text NOT NULL REFERENCES "organization"("id") ON DELETE CASCADE,
-        "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
-        "role" text NOT NULL,
-        "created_at" integer NOT NULL
-    )`);
-
-    await db.run(`CREATE TABLE IF NOT EXISTS "invitation" (
-        "id" text PRIMARY KEY NOT NULL,
-        "organization_id" text NOT NULL REFERENCES "organization"("id") ON DELETE CASCADE,
-        "email" text NOT NULL,
-        "role" text,
-        "status" text NOT NULL,
-        "expires_at" integer NOT NULL,
-        "inviter_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
-        "team_id" text,
-        "created_at" integer
-    )`);
-
-    await db.run(`CREATE TABLE IF NOT EXISTS "team" (
-        "id" text PRIMARY KEY NOT NULL,
-        "name" text NOT NULL,
-        "organization_id" text NOT NULL REFERENCES "organization"("id") ON DELETE CASCADE,
-        "created_at" integer NOT NULL,
-        "updated_at" integer,
-        "member_count" integer NOT NULL DEFAULT 0
-    )`);
-
-    await db.run(`CREATE TABLE IF NOT EXISTS "team_member" (
-        "id" text PRIMARY KEY NOT NULL,
-        "team_id" text NOT NULL REFERENCES "team"("id") ON DELETE CASCADE,
-        "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
-        "created_at" integer,
-        "membership_key" text UNIQUE
-    )`);
-
-    await db.run(`CREATE TABLE IF NOT EXISTS "apikey"
-                  (
-                      "id"
-                      text
-                      PRIMARY
-                      KEY
-                      NOT
-                      NULL,
-                      "config_id"
-                      text
-                      NOT
-                      NULL,
-                      "name"
-                      text,
-                      "start"
-                      text,
-                      "reference_id"
-                      text
-                      NOT
-                      NULL,
-                      "prefix"
-                      text,
-                      "key"
-                      text
-                      NOT
-                      NULL,
-                      "refill_interval"
-                      integer,
-                      "refill_amount"
-                      integer,
-                      "last_refill_at"
-                      integer,
-                      "enabled"
-                      integer,
-                      "rate_limit_enabled"
-                      integer,
-                      "rate_limit_time_window"
-                      integer,
-                      "rate_limit_max"
-                      integer,
-                      "request_count"
-                      integer,
-                      "remaining"
-                      integer,
-                      "last_request"
-                      integer,
-                      "expires_at"
-                      integer,
-                      "created_at"
-                      integer
-                      NOT
-                      NULL,
-                      "updated_at"
-                      integer
-                      NOT
-                      NULL,
-                      "permissions"
-                      text,
-                      "metadata"
-                      text
-                  )`);
-
-    // completeSetup() — the only caller — runs only while setup is incomplete, so rows
-    // here are normally orphans from an earlier attempt that failed partway, and
-    // clearing them lets a retry succeed instead of colliding with the admin email's
-    // UNIQUE constraint. But setupCompleted lives in config.json, a separate file: were
-    // that lost or reset while users3.db survived, these rows would be real data — so
-    // snapshot the database first. Clearing is then always recoverable, never destructive.
-    const { n: existingUsers } = db.query<{ n: number }, []>('SELECT count(*) AS n FROM "user"').get()!;
-    if (existingUsers > 0) {
-        const backupPath = getServerDataPath(buildSetupCopyName(new Date()));
-        // Its password hashes and sessions are for the API's user alone, as in users3.db.
-        writeFileSync(backupPath, db.serialize(), { mode: 0o600 });
-        console.warn(
-            `[setup] users3.db already held ${existingUsers} user(s); backed up to ${backupPath} before clearing`,
-        );
-    }
-
-    // Children before parents so the deletes hold regardless of FK enforcement.
-    for (const table of [
-        'team_member',
-        'team',
-        'member',
-        'invitation',
-        'session',
-        'account',
-        'two_factor',
-        'apikey',
-        'verification',
-        'user',
-        'organization',
-    ]) {
-        await db.run(`DELETE FROM "${table}"`);
-    }
-
-    db.close();
-}
 
 export type SetupInput = {
     orgName: string;
@@ -293,7 +75,7 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
             input.orgName,
         );
 
-        await resetAuthDatabase();
+        resetAuthDatabase();
 
         // better-auth's errors (a duplicate email, a bad slug) reach the wizard as 400s with their own message.
         let user: Awaited<ReturnType<typeof auth.api.createUser>>;
@@ -326,9 +108,7 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
             mail: mailSender,
         });
 
-        // setupCompleted flips here — written last so a failure in any step above leaves
-        // setup re-runnable: isSetupRequired() stays true and resetAuthDatabase() clears
-        // the partial state on the next attempt.
+        // Written last, so a failure in any step above leaves setup re-runnable.
         await updateServerConfig({
             orgName: input.orgName,
             orgId: org.id,
@@ -343,4 +123,184 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
     } finally {
         setupRunning = false;
     }
+}
+
+function resetAuthDatabase(): void {
+    const dbPath = getServerDataPath(SERVER_DATABASES.users);
+    const dataDir = dirname(dbPath);
+
+    if (!existsSync(dataDir)) {
+        mkdirSync(dataDir, { recursive: true });
+    }
+
+    const db = new Database(dbPath);
+
+    db.run(`CREATE TABLE IF NOT EXISTS "user" (
+        "id" text PRIMARY KEY NOT NULL,
+        "name" text NOT NULL,
+        "email" text NOT NULL UNIQUE,
+        "email_verified" integer NOT NULL,
+        "image" text,
+        "created_at" integer NOT NULL,
+        "updated_at" integer NOT NULL,
+        "two_factor_enabled" integer,
+        "role" text,
+        "banned" integer,
+        "ban_reason" text,
+        "ban_expires" integer,
+        "last_login_at" integer
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS "session" (
+        "id" text PRIMARY KEY NOT NULL,
+        "expires_at" integer NOT NULL,
+        "token" text NOT NULL UNIQUE,
+        "created_at" integer NOT NULL,
+        "updated_at" integer NOT NULL,
+        "ip_address" text,
+        "user_agent" text,
+        "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+        "impersonated_by" text,
+        "active_organization_id" text,
+        "active_team_id" text
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS "account" (
+        "id" text PRIMARY KEY NOT NULL,
+        "account_id" text NOT NULL,
+        "provider_id" text NOT NULL,
+        "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+        "access_token" text,
+        "refresh_token" text,
+        "id_token" text,
+        "access_token_expires_at" integer,
+        "refresh_token_expires_at" integer,
+        "scope" text,
+        "password" text,
+        "created_at" integer NOT NULL,
+        "updated_at" integer NOT NULL
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS "verification" (
+        "id" text PRIMARY KEY NOT NULL,
+        "identifier" text NOT NULL,
+        "value" text NOT NULL,
+        "expires_at" integer NOT NULL,
+        "created_at" integer,
+        "updated_at" integer
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS "two_factor" (
+        "id" text PRIMARY KEY NOT NULL,
+        "secret" text NOT NULL,
+        "backup_codes" text NOT NULL,
+        "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+        "verified" integer,
+        "failed_verification_count" integer,
+        "locked_until" integer
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS "organization" (
+        "id" text PRIMARY KEY NOT NULL,
+        "name" text NOT NULL,
+        "slug" text UNIQUE,
+        "logo" text,
+        "created_at" integer NOT NULL,
+        "metadata" text
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS "member" (
+        "id" text PRIMARY KEY NOT NULL,
+        "organization_id" text NOT NULL REFERENCES "organization"("id") ON DELETE CASCADE,
+        "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+        "role" text NOT NULL,
+        "created_at" integer NOT NULL
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS "invitation" (
+        "id" text PRIMARY KEY NOT NULL,
+        "organization_id" text NOT NULL REFERENCES "organization"("id") ON DELETE CASCADE,
+        "email" text NOT NULL,
+        "role" text,
+        "status" text NOT NULL,
+        "expires_at" integer NOT NULL,
+        "inviter_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+        "team_id" text,
+        "created_at" integer
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS "team" (
+        "id" text PRIMARY KEY NOT NULL,
+        "name" text NOT NULL,
+        "organization_id" text NOT NULL REFERENCES "organization"("id") ON DELETE CASCADE,
+        "created_at" integer NOT NULL,
+        "updated_at" integer,
+        "member_count" integer NOT NULL DEFAULT 0
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS "team_member" (
+        "id" text PRIMARY KEY NOT NULL,
+        "team_id" text NOT NULL REFERENCES "team"("id") ON DELETE CASCADE,
+        "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+        "created_at" integer,
+        "membership_key" text UNIQUE
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS "apikey" (
+        "id" text PRIMARY KEY NOT NULL,
+        "config_id" text NOT NULL,
+        "name" text,
+        "start" text,
+        "reference_id" text NOT NULL,
+        "prefix" text,
+        "key" text NOT NULL,
+        "refill_interval" integer,
+        "refill_amount" integer,
+        "last_refill_at" integer,
+        "enabled" integer,
+        "rate_limit_enabled" integer,
+        "rate_limit_time_window" integer,
+        "rate_limit_max" integer,
+        "request_count" integer,
+        "remaining" integer,
+        "last_request" integer,
+        "expires_at" integer,
+        "created_at" integer NOT NULL,
+        "updated_at" integer NOT NULL,
+        "permissions" text,
+        "metadata" text
+    )`);
+
+    ensureAuthSchemaColumns(db);
+
+    // Rows here are normally what a failed attempt left, but setupCompleted lives in another file: if that file was
+    // lost while users3.db survived, they are real accounts, so the wipe keeps a copy first.
+    const { n: existingUsers } = db.query<{ n: number }, []>('SELECT count(*) AS n FROM "user"').get()!;
+    if (existingUsers > 0) {
+        const backupPath = getServerDataPath(buildSetupCopyName(new Date()));
+        // Its password hashes and sessions are for the API's user alone, as in users3.db.
+        writeFileSync(backupPath, db.serialize(), { mode: 0o600 });
+        console.warn(
+            `[setup] users3.db already held ${existingUsers} user(s); backed up to ${backupPath} before clearing`,
+        );
+    }
+
+    // Children before parents so the deletes hold regardless of FK enforcement.
+    for (const table of [
+        'team_member',
+        'team',
+        'member',
+        'invitation',
+        'session',
+        'account',
+        'two_factor',
+        'apikey',
+        'verification',
+        'user',
+        'organization',
+    ]) {
+        db.run(`DELETE FROM "${table}"`);
+    }
+
+    db.close();
 }
