@@ -69,6 +69,7 @@ export function ServerSettingsPage() {
         },
         landing: {
             links: draft.landing?.links ?? settings.landing.links,
+            showInstall: draft.landing?.showInstall ?? settings.landing.showInstall,
         },
         backups: {
             schedule: { ...settings.backups.schedule, ...draft.backups?.schedule },
@@ -99,10 +100,12 @@ export function ServerSettingsPage() {
         setDraft((prev) => ({ ...prev, mail: { ...prev.mail, ...patch } }));
     };
 
-    const updateLinks = (links: LandingLink[]) => {
+    const updateLanding = (patch: Partial<ServerSettings['landing']>) => {
         setDirty(true);
-        setDraft((prev) => ({ ...prev, landing: { links } }));
+        setDraft((prev) => ({ ...prev, landing: { ...prev.landing, ...patch } }));
     };
+
+    const updateLinks = (links: LandingLink[]) => updateLanding({ links });
 
     // The draft keeps only the half of the backup settings the owner changed. The server checks the bucket only when a
     // save carries the upload half, so a change to the schedule alone skips that check.
@@ -141,7 +144,9 @@ export function ServerSettingsPage() {
             await updateS3Config.mutateAsync(s3Draft);
         if (dirty) {
             const saved = await updateSettings.mutateAsync(
-                draft.landing ? { ...draft, landing: { links: normalizeLinks(draft.landing.links ?? []) } } : draft,
+                draft.landing?.links
+                    ? { ...draft, landing: { ...draft.landing, links: normalizeLinks(draft.landing.links) } }
+                    : draft,
             );
             // A new backup bucket brings a one-time notice to keep its keys off this server. A bucket that lacks
             // something, such as versioning, warns on every save of the upload settings, even when it stayed the same.
@@ -373,9 +378,15 @@ export function ServerSettingsPage() {
 
             <SettingsSection
                 title="Landing page"
-                description="Optional extra buttons on the public landing page. Each button links to a URL."
+                description="Extra buttons and the install line on the public landing page."
             >
                 <div className="space-y-3">
+                    <SwitchRow
+                        label="Show install section"
+                        description="Adds the install instructions to the public landing page."
+                        checked={current.landing.showInstall}
+                        onChange={(v) => updateLanding({ showInstall: v })}
+                    />
                     {current.landing.links.map((link, i) => (
                         <div key={i} className="flex items-center gap-2">
                             <Input

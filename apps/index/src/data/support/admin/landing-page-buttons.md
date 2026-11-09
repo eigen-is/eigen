@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, settings, landing, links]
 related: [admin/server-settings, admin/waitlist]
 order: 85
-updated: 2026-11-02
+updated: 2026-11-09
 ---
 
 The landing page is what visitors see at the address of your server before they sign in. You can add your own buttons to it, each with a title you choose and a web address it opens. People use them for a status page, a handbook, or the organization's main website.
@@ -40,6 +40,10 @@ Clicking one opens the address in the same tab, so the visitor leaves the landin
 Visitors who are already signed in never see the landing page. Eigen sends them straight to their workspace, so these buttons are for people who have not signed in yet.
 
 </div>
+
+## Show the install command
+
+Above the buttons in **Landing page**, the **Show install section** switch adds a line to the landing page with the command that installs Eigen and a button to copy it. It is off by default, so turn it on only if you want visitors to install Eigen from your page. Click **Save** to apply it.
 
 ## Change or remove a button
 

@@ -245,6 +245,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                                 { maxItems: 20 },
                             ),
                         ),
+                        showInstall: t.Optional(t.Boolean()),
                     }),
                 ),
                 notifications: t.Optional(

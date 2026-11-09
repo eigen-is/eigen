@@ -1,10 +1,12 @@
+// A blog post's page. It finds the post and its body, and hands them with the older and the newer post to the page
+// that draws them. The prerender has the body inlined, so the first client render matches the server's.
+
 import { createFileRoute, useParams } from '@tanstack/react-router';
-import { Column, ColumnLayout, useLayout } from '@workspace/ui';
+import { useLayout } from '@workspace/ui';
 import { useEffect } from 'react';
-import { ArticleBreadcrumb } from '../components/article-breadcrumb';
 import { BlogPost } from '../components/blog-post';
 import { useArticleBody } from '../content/use-article-body';
-import { getBlogPost } from '../data/blog-posts';
+import { getAllBlogPosts, getBlogPost } from '../data/blog-posts';
 
 export const Route = createFileRoute('/blog/$id')({
     component: BlogPostComponent,
@@ -42,23 +44,8 @@ function BlogPostComponent() {
         return <div className="p-8 text-muted-foreground">Loading…</div>;
     }
 
-    return (
-        <ColumnLayout>
-            <Column
-                id="post"
-                width="flex"
-                toolbar={
-                    <div className="mx-auto w-full max-w-[70ch]">
-                        <ArticleBreadcrumb trail={[{ label: 'Blog', to: '/blog' }, { label: post.title }]} />
-                    </div>
-                }
-            >
-                <div className="h-full overflow-y-auto">
-                    <div className="mx-auto w-full max-w-[70ch] px-6 py-10">
-                        <BlogPost post={post} body={body} />
-                    </div>
-                </div>
-            </Column>
-        </ColumnLayout>
-    );
+    // The posts run newest first, so the newer one stands before this post and the older one after.
+    const posts = getAllBlogPosts();
+    const index = posts.indexOf(post);
+    return <BlogPost post={post} body={body} newer={posts[index - 1]} older={posts[index + 1]} />;
 }

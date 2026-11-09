@@ -1,6 +1,7 @@
-// The settings the org owner changes for the whole server, such as quotas, storage defaults and which emails go out. They
-// live in one JSON file under the server's data folder, read once at import, and any part of the API reads them
-// through getServerSettings. A value the file doesn't hold has its default here.
+// The server's settings, such as the storage quotas, the guest and landing page options and which emails go out,
+// kept in a JSON file in the server's data folder. They load once at startup, and routes and background jobs read
+// them through getServerSettings; the org owner changes them through the settings route. A value the file doesn't
+// hold has its default here.
 
 import type { S3Config } from '@workspace/lib/types/mount';
 import { EMPTY_S3 } from '@workspace/lib/types/mount';
@@ -50,6 +51,7 @@ const settingsStore = new JsonStore<ServerSettings>(serverFs, SERVER_FILES.setti
     },
     landing: {
         links: [],
+        showInstall: false,
     },
     notifications: {
         email: {

@@ -1,3 +1,6 @@
+// The search box on the help center's front page. It searches the prebuilt full-text index as you type and lists the
+// best matches in a dropdown under the box. The index is built from the same articles as the pages.
+
 import { loadPagefind } from '@workspace/lib/search';
 import type { HelpSearchDoc } from '@workspace/lib/types/search';
 import { Input } from '@workspace/ui/components/input';
@@ -6,9 +9,6 @@ import { useEffect, useRef, useState } from 'react';
 
 const MAX_RESULTS = 6;
 
-// Experiment: client-side full-text search over the help center, powered by the
-// prebuilt Pagefind index (loadPagefind is shared with the command palette's help
-// source). Shown on the /support landing under the hero heading.
 export function SupportSearch() {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<HelpSearchDoc[]>([]);
@@ -43,14 +43,14 @@ export function SupportSearch() {
     useEffect(() => {
         if (!open) return;
         const onClick = (e: MouseEvent) => {
-            if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+            if (e.target instanceof Node && !containerRef.current?.contains(e.target)) setOpen(false);
         };
         document.addEventListener('mousedown', onClick);
         return () => document.removeEventListener('mousedown', onClick);
     }, [open]);
 
     return (
-        <div ref={containerRef} className="relative mx-auto max-w-xl">
+        <div ref={containerRef} className="relative">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
             <Input
                 type="search"

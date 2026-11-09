@@ -157,6 +157,7 @@ export type ServerSettings = {
     };
     landing: {
         links: LandingLink[];
+        showInstall: boolean;
     };
     notifications: {
         email: {
