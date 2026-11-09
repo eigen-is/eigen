@@ -7,7 +7,6 @@ import {
     CHART_MAX_SIDE,
     FLAT_CHART_LOOK,
     MAX_CHART_SPEC_BYTES,
-    MAX_CHART_SPEC_DEPTH,
     newChartSpecParts,
     sampleChartSpec,
 } from '../../../../charts';
@@ -16,6 +15,9 @@ import type { ChartLook } from '../../../../types/chart';
 import { CHART_SPEC_PART_KEYS } from '../../../../types/chart';
 import { serializeFill } from '../../../../vector/fill';
 import { installHappyDom } from '../../../happy-dom';
+
+// Mirrors the parser's nesting limit.
+const MAX_CHART_SPEC_DEPTH = 32;
 
 // generateHTML serializes through `document`, createDocument parses with DOMParser.
 installHappyDom();

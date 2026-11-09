@@ -1,11 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import { elbowRoute } from '../../vector/elbow-route';
+import { arrowRoute } from '../../vector/elbow-route';
 import { solidFill } from '../../vector/fill';
 import type { Bounds, Point } from '../../vector/geometry';
 import { textualDefaults, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
-import type { VectorArrowElement, VectorRectangleElement, VectorShapeElement } from '../../vector/types';
+import type { VectorArrowElement, VectorElement, VectorRectangleElement, VectorShapeElement } from '../../vector/types';
 import { DEFAULT_ELEMENT_PROPS, DEFAULT_SHAPE_TEXT_PROPS, serializeBinding } from '../../vector/types';
 import { byIdOf, textBox } from './element-factories';
+
+const route = (arrow: VectorArrowElement, byId: Map<string, VectorElement>): Point[] => arrowRoute(arrow, byId) ?? [];
 
 // Spread-only so the ellipse case doesn't trip the excess-property check on `corners`.
 const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
@@ -70,7 +72,7 @@ const isOrthogonal = (route: Point[]): boolean => {
 
 const strictlyInside = (p: Point, b: Bounds): boolean => p.x > b.minX && p.x < b.maxX && p.y > b.minY && p.y < b.maxY;
 
-describe('elbowRoute', () => {
+describe('elbow route', () => {
     test('is deterministic — the same arrow + shapes route identically every call', () => {
         const a = shapeEl({ id: 'A', type: 'rectangle', x: 0, y: 0, width: 100, height: 100 });
         const b = shapeEl({ id: 'B', type: 'rectangle', x: 200, y: 200, width: 100, height: 100 });
@@ -80,7 +82,7 @@ describe('elbowRoute', () => {
             endBinding: bind(b, [0.5, 0]),
         });
         const byId = byIdOf(a, b, arrow);
-        expect(elbowRoute(arrow, byId)).toEqual(elbowRoute(arrow, byId));
+        expect(route(arrow, byId)).toEqual(route(arrow, byId));
     });
 
     test('a two-rect route is all right angles, bends at least once, and clears both shape interiors', () => {
@@ -91,15 +93,15 @@ describe('elbowRoute', () => {
             startBinding: bind(a, [1, 0.5]),
             endBinding: bind(b, [0.5, 0]),
         });
-        const route = elbowRoute(arrow, byIdOf(a, b, arrow));
+        const pts = route(arrow, byIdOf(a, b, arrow));
 
-        expect(isOrthogonal(route)).toBe(true);
-        expect(route.length).toBeGreaterThanOrEqual(3); // a snake, not a straight line
+        expect(isOrthogonal(pts)).toBe(true);
+        expect(pts.length).toBeGreaterThanOrEqual(3); // a snake, not a straight line
         // The arrow's local frame equals scene here (x/y 0, angle 0), so the raw shape AABBs are these.
         const aabbA: Bounds = { minX: 0, minY: 0, maxX: 100, maxY: 100 };
         const aabbB: Bounds = { minX: 200, minY: 200, maxX: 300, maxY: 300 };
-        for (let i = 1; i < route.length; i++) {
-            const mid = { x: (route[i - 1].x + route[i].x) / 2, y: (route[i - 1].y + route[i].y) / 2 };
+        for (let i = 1; i < pts.length; i++) {
+            const mid = { x: (pts[i - 1].x + pts[i].x) / 2, y: (pts[i - 1].y + pts[i].y) / 2 };
             expect(strictlyInside(mid, aabbA)).toBe(false);
             expect(strictlyInside(mid, aabbB)).toBe(false);
         }
@@ -117,28 +119,28 @@ describe('elbowRoute', () => {
             startBinding: bind(a, [1, 0.5]),
             endBinding: bind(rect, [0.5, 0]),
         });
-        const route = elbowRoute(arrow, byIdOf(a, text, arrow));
-        expect(route).toEqual(elbowRoute(arrow, byIdOf(a, rect, arrow)));
-        expect(isOrthogonal(route)).toBe(true);
+        const pts = route(arrow, byIdOf(a, text, arrow));
+        expect(pts).toEqual(route(arrow, byIdOf(a, rect, arrow)));
+        expect(isOrthogonal(pts)).toBe(true);
         const aabb: Bounds = { minX: 200, minY: 200, maxX: 300, maxY: 300 };
-        for (let i = 1; i < route.length; i++) {
-            const mid = { x: (route[i - 1].x + route[i].x) / 2, y: (route[i - 1].y + route[i].y) / 2 };
+        for (let i = 1; i < pts.length; i++) {
+            const mid = { x: (pts[i - 1].x + pts[i].x) / 2, y: (pts[i - 1].y + pts[i].y) / 2 };
             expect(strictlyInside(mid, aabb)).toBe(false);
         }
     });
 
     test('an unbound elbow snakes: right-angled with a bend when the endpoints are diagonal', () => {
         const arrow = arrowEl({ points: '[[0,0],[100,80]]' });
-        const route = elbowRoute(arrow, byIdOf(arrow));
-        expect(isOrthogonal(route)).toBe(true);
-        expect(route.length).toBeGreaterThanOrEqual(3);
-        expect(route[0]).toEqual({ x: 0, y: 0 });
-        expect(route[route.length - 1]).toEqual({ x: 100, y: 80 });
+        const pts = route(arrow, byIdOf(arrow));
+        expect(isOrthogonal(pts)).toBe(true);
+        expect(pts.length).toBeGreaterThanOrEqual(3);
+        expect(pts[0]).toEqual({ x: 0, y: 0 });
+        expect(pts[pts.length - 1]).toEqual({ x: 100, y: 80 });
     });
 
     test('an unbound elbow collapses to a straight segment when the endpoints already align', () => {
         const arrow = arrowEl({ points: '[[0,0],[100,0]]' });
-        expect(elbowRoute(arrow, byIdOf(arrow))).toEqual([
+        expect(route(arrow, byIdOf(arrow))).toEqual([
             { x: 0, y: 0 },
             { x: 100, y: 0 },
         ]);
@@ -146,7 +148,7 @@ describe('elbowRoute', () => {
 
     test('a degenerate arrow (< 2 points) passes through untouched', () => {
         const arrow = arrowEl({ points: '[[5,5]]' });
-        expect(elbowRoute(arrow, byIdOf(arrow))).toEqual([{ x: 5, y: 5 }]);
+        expect(route(arrow, byIdOf(arrow))).toEqual([{ x: 5, y: 5 }]);
     });
 });
 
@@ -158,12 +160,12 @@ describe('elbowRoute', () => {
 // CAVEAT: these expected tuples are CAPTURED FROM OUR PORT of that pipeline, not from an independent
 // Excalidraw run — so they pin against regression, not against the source. The real check that the port
 // matches Excalidraw is line-level review of elbow-route.ts / elbow-heading.ts against the reference files.
-describe('elbowRoute — exact parity with Excalidraw', () => {
+describe('elbow route — exact parity with Excalidraw', () => {
     const asPairs = (route: Point[]): [number, number][] => route.map((p) => [p.x, p.y]);
 
     test('a fully-unbound Z bends at the ±2-box midline, not the endpoint stub', () => {
         const arrow = arrowEl({ points: '[[0,0],[10,200]]' });
-        expect(asPairs(elbowRoute(arrow, byIdOf(arrow)))).toEqual([
+        expect(asPairs(route(arrow, byIdOf(arrow)))).toEqual([
             [0, 0],
             [0, 100],
             [10, 100],
@@ -176,7 +178,7 @@ describe('elbowRoute — exact parity with Excalidraw', () => {
         // the ×2 UP cone of the wide box claims it, so the first segment goes UP.
         const r = shapeEl({ id: 'R', type: 'rectangle', x: 0, y: 0, width: 200, height: 100 });
         const arrow = arrowEl({ points: '[[160,10],[400,400]]', startBinding: bind(r, [0.8, 0.1]) });
-        expect(asPairs(elbowRoute(arrow, byIdOf(r, arrow)))).toEqual([
+        expect(asPairs(route(arrow, byIdOf(r, arrow)))).toEqual([
             [160, 10],
             [160, -42],
             [400, -42],
@@ -194,7 +196,7 @@ describe('elbowRoute — exact parity with Excalidraw', () => {
             startBinding: bind(a, [1.06, 0.5]),
             endBinding: bind(b, [-0.06, 0.5]),
         });
-        expect(asPairs(elbowRoute(arrow, byIdOf(a, b, arrow)))).toEqual([
+        expect(asPairs(route(arrow, byIdOf(a, b, arrow)))).toEqual([
             [106, 50],
             [148, 50],
             [148, 70],
@@ -207,7 +209,7 @@ describe('elbowRoute — exact parity with Excalidraw', () => {
     test('rotated rect, diamond sector, and ellipse each match Excalidraw exactly', () => {
         const rotated = shapeEl({ id: 'D', type: 'rectangle', x: 0, y: 0, width: 100, height: 100, angle: 30 });
         const rArrow = arrowEl({ points: '[[120,50],[400,400]]', startBinding: bind(rotated, [1, 0.5]) });
-        expect(asPairs(elbowRoute(rArrow, byIdOf(rotated, rArrow)))).toEqual([
+        expect(asPairs(route(rArrow, byIdOf(rotated, rArrow)))).toEqual([
             [120, 50],
             [400, 50],
             [400, 400],
@@ -215,7 +217,7 @@ describe('elbowRoute — exact parity with Excalidraw', () => {
 
         const diamond = shapeEl({ id: 'DI', type: 'diamond', x: 0, y: 0, width: 120, height: 80 });
         const dArrow = arrowEl({ points: '[[60,-6],[400,400]]', startBinding: bind(diamond, [0.5, -0.075]) });
-        expect(asPairs(elbowRoute(dArrow, byIdOf(diamond, dArrow)))).toEqual([
+        expect(asPairs(route(dArrow, byIdOf(diamond, dArrow)))).toEqual([
             [60, -6],
             [60, -42],
             [400, -42],
@@ -224,7 +226,7 @@ describe('elbowRoute — exact parity with Excalidraw', () => {
 
         const ellipse = shapeEl({ id: 'EL', type: 'ellipse', x: 0, y: 0, width: 100, height: 100 });
         const eArrow = arrowEl({ points: '[[106,50],[300,300]]', startBinding: bind(ellipse, [1.06, 0.5]) });
-        expect(asPairs(elbowRoute(eArrow, byIdOf(ellipse, eArrow)))).toEqual([
+        expect(asPairs(route(eArrow, byIdOf(ellipse, eArrow)))).toEqual([
             [106, 50],
             [300, 50],
             [300, 300],
@@ -236,7 +238,7 @@ describe('elbowRoute — exact parity with Excalidraw', () => {
 // last point EXACTLY (arrow-local frame), for bound and unbound ends alike, so the endpoint dot (rendered at
 // points[0]/points[last]) and the shaft's first/last vertex are one value — never offset from each other. The
 // stored points are the truth; the route is derived from them and never rewrites them.
-describe('elbowRoute — route endpoints equal the stored endpoints exactly', () => {
+describe('elbow route — route endpoints equal the stored endpoints exactly', () => {
     const firstLast = (points: string): [Point, Point] => {
         const pts = JSON.parse(points) as [number, number][];
         return [
@@ -247,10 +249,10 @@ describe('elbowRoute — route endpoints equal the stored endpoints exactly', ()
 
     test('unbound elbow with a nonzero arrow origin', () => {
         const arrow = arrowEl({ points: '[[0,0],[100,80]]', x: 37, y: -19 });
-        const route = elbowRoute(arrow, byIdOf(arrow));
+        const pts = route(arrow, byIdOf(arrow));
         const [first, last] = firstLast(arrow.points);
-        expect(route[0]).toEqual(first);
-        expect(route[route.length - 1]).toEqual(last);
+        expect(pts[0]).toEqual(first);
+        expect(pts[pts.length - 1]).toEqual(last);
     });
 
     test('bound both ends — route starts/ends on the stored points, not the fixedPoint', () => {
@@ -264,18 +266,18 @@ describe('elbowRoute — route endpoints equal the stored endpoints exactly', ()
             startBinding: bind(a, [1, 0.5]),
             endBinding: bind(b, [0.5, 0]),
         });
-        const route = elbowRoute(arrow, byIdOf(a, b, arrow));
+        const pts = route(arrow, byIdOf(a, b, arrow));
         const [first, last] = firstLast(arrow.points);
-        expect(route[0]).toEqual(first);
-        expect(route[route.length - 1]).toEqual(last);
+        expect(pts[0]).toEqual(first);
+        expect(pts[pts.length - 1]).toEqual(last);
     });
 
     test('bound start on a ROTATED shape (the reported case) still starts on the stored point', () => {
         const rotated = shapeEl({ id: 'D', type: 'rectangle', x: 0, y: 0, width: 120, height: 60, angle: 37 });
         const arrow = arrowEl({ points: '[[140,44],[400,300]]', x: 24, y: 55, startBinding: bind(rotated, [1, 0.5]) });
-        const route = elbowRoute(arrow, byIdOf(rotated, arrow));
+        const pts = route(arrow, byIdOf(rotated, arrow));
         const [first, last] = firstLast(arrow.points);
-        expect(route[0]).toEqual(first);
-        expect(route[route.length - 1]).toEqual(last);
+        expect(pts[0]).toEqual(first);
+        expect(pts[pts.length - 1]).toEqual(last);
     });
 });

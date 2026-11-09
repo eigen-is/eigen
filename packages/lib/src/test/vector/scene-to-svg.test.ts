@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { solidFill } from '../../vector/fill';
 import { eigenMediaHref } from '../../vector/media-refs';
 import { readElementFromFields } from '../../vector/read-vector';
-import { elementToSvg, sceneToSvg } from '../../vector/scene-to-svg';
+import { sceneToSvg } from '../../vector/scene-to-svg';
 import type {
     VectorElement,
     VectorImageElement,
@@ -11,7 +11,7 @@ import type {
     VectorScene,
 } from '../../vector/types';
 import { DEFAULT_ELEMENT_PROPS } from '../../vector/types';
-import { path, scene, shape, textBox } from './element-factories';
+import { elementSvg, path, scene, shape, textBox } from './element-factories';
 
 // Freedraw/line/arrow rows carry the paint + roughjs fields the shared defaults no longer hold.
 const LINEAR_PAINT = { fill: solidFill('transparent'), roughness: 1 } as const;
@@ -603,20 +603,20 @@ describe('freedraw pen pressure', () => {
         '<g transform="translate(0 0)"><path d="M 1.01 -1.52 Q 1.01 -1.52 5.17 1.38 9.33 4.28 15.13 3.74 20.93 3.19 28.11 7.1 35.28 11 47.51 8.78 59.75 6.56 59.99 6.56 60.22 6.56 60.45 6.63 60.67 6.71 60.86 6.85 61.05 6.99 61.18 7.18 61.32 7.38 61.38 7.6 61.45 7.83 61.44 8.07 61.43 8.3 61.34 8.52 61.26 8.74 61.1 8.92 60.95 9.1 60.75 9.23 60.55 9.35 60.32 9.4 60.09 9.46 59.86 9.43 59.62 9.41 59.41 9.31 59.19 9.21 59.02 9.05 58.85 8.89 58.73 8.68 58.62 8.48 58.58 8.25 58.54 8.01 58.58 7.78 58.61 7.55 58.72 7.34 58.83 7.13 59 6.96 59.17 6.8 59.38 6.7 59.6 6.6 59.83 6.57 60.07 6.54 60.3 6.59 60.53 6.64 60.73 6.76 60.93 6.88 61.09 7.06 61.24 7.24 61.33 7.46 61.42 7.67 61.44 7.91 61.45 8.15 61.39 8.37 61.33 8.6 61.2 8.8 61.07 8.99 60.88 9.14 60.69 9.28 60.47 9.36 60.25 9.44 60.25 9.44 60.25 9.44 47.25 11.58 34.25 13.73 27.57 10.01 20.9 6.29 14.41 6.75 7.92 7.22 3.45 4.37 -1.01 1.52 -1.18 1.38 -1.35 1.23 -1.48 1.05 -1.6 0.88 -1.69 0.67 -1.77 0.47 -1.8 0.25 -1.83 0.03 -1.8 -0.19 -1.78 -0.41 -1.71 -0.62 -1.63 -0.82 -1.51 -1.01 -1.39 -1.19 -1.22 -1.34 -1.06 -1.49 -0.87 -1.59 -0.68 -1.7 -0.46 -1.75 -0.25 -1.81 -0.03 -1.81 0.19 -1.82 0.41 -1.77 0.62 -1.72 0.82 -1.62 1.01 -1.52 1.01 -1.52 L 1.01 -1.52 Z" fill="#1e1e1e" stroke="none"/></g>';
 
     test('BC pin — a freedraw with NO pressure fields renders exactly as today (simulate)', () => {
-        expect(elementToSvg(freedraw({}))).toBe(NO_PRESSURE_PIN);
+        expect(elementSvg(freedraw({}))).toBe(NO_PRESSURE_PIN);
     });
 
     test('real per-point pressures render a different, deterministic path', () => {
         const withPressure = freedraw({ pressures: '[0.1,0.9,0.2,0.8,0.3]', simulatePressure: false });
-        const out = elementToSvg(withPressure);
+        const out = elementSvg(withPressure);
         // Real pressures with simulatePressure:false must diverge from the simulate output…
         expect(out).not.toBe(NO_PRESSURE_PIN);
         // …and the same element renders identically twice (deterministic getStroke input).
-        expect(out).toBe(elementToSvg(freedraw({ pressures: '[0.1,0.9,0.2,0.8,0.3]', simulatePressure: false })));
+        expect(out).toBe(elementSvg(freedraw({ pressures: '[0.1,0.9,0.2,0.8,0.3]', simulatePressure: false })));
     });
 
     test('simulatePressure:true ignores stored pressures (BC — same as no pressures)', () => {
-        expect(elementToSvg(freedraw({ pressures: '[0.1,0.9,0.2,0.8,0.3]', simulatePressure: true }))).toBe(
+        expect(elementSvg(freedraw({ pressures: '[0.1,0.9,0.2,0.8,0.3]', simulatePressure: true }))).toBe(
             NO_PRESSURE_PIN,
         );
     });
@@ -655,7 +655,7 @@ describe('linear preserveVertices at cartoon roughness', () => {
         const near = (v: [number, number]) =>
             verts.find((s) => Math.abs(s[0] - v[0]) < 1e-9 && Math.abs(s[1] - v[1]) < 1e-9);
         for (const seed of [1, 2, 7, 42, 99]) {
-            const d = elementToSvg(lineAt(seed)).match(/ d="([^"]+)"/)?.[1];
+            const d = elementSvg(lineAt(seed)).match(/ d="([^"]+)"/)?.[1];
             expect(d).toBeDefined();
             // Each roughjs stroke pass is a subpath; strip the command letters and read its first (move) and
             // last (segment-end) coordinate pair — both are on-curve vertices, exact when preserveVertices holds.
@@ -681,13 +681,13 @@ describe('gradient fills', () => {
     const hachured = '{"type":"gradient","from":"#ff0000","to":"#0000ff","angle":45,"style":"hachure"}';
 
     test('a solid-styled gradient shape emits one element-scoped linearGradient and points fill at it', () => {
-        const svg = elementToSvg(goldenShape({ id: 'g1', type: 'rectangle', fill: gradient }));
+        const svg = elementSvg(goldenShape({ id: 'g1', type: 'rectangle', fill: gradient }));
         expect(svg).toContain('<linearGradient id="fill-g1"');
         expect(svg).toContain('fill="url(#fill-g1)"');
     });
 
     test('a hachure gradient paints the sketch STROKES with the same gradient', () => {
-        const svg = elementToSvg(goldenShape({ id: 'g2', type: 'rectangle', fill: hachured }));
+        const svg = elementSvg(goldenShape({ id: 'g2', type: 'rectangle', fill: hachured }));
         expect(svg).toContain('<linearGradient id="fill-g2"');
         expect(svg).toContain('stroke="url(#fill-g2)"');
     });
@@ -704,7 +704,7 @@ describe('gradient fills', () => {
     });
 
     test('a closed line fills with its own gradient too', () => {
-        const svg = elementToSvg({
+        const svg = elementSvg({
             ...DEFAULT_ELEMENT_PROPS,
             ...LINEAR_PAINT,
             id: 'gl',
@@ -727,18 +727,18 @@ describe('gradient fills', () => {
     });
 
     test('a hostile element id cannot escape the id attribute', () => {
-        const svg = elementToSvg(goldenShape({ id: '"><script>', type: 'rectangle', fill: gradient }));
+        const svg = elementSvg(goldenShape({ id: '"><script>', type: 'rectangle', fill: gradient }));
         expect(svg).not.toContain('<script>');
     });
 
     test('a transparent fill emits no defs', () => {
-        expect(elementToSvg(goldenShape({ id: 'g3', type: 'rectangle' }))).not.toContain('linearGradient');
+        expect(elementSvg(goldenShape({ id: 'g3', type: 'rectangle' }))).not.toContain('linearGradient');
     });
 
     // A transparent end reads as transparent BLACK in both renderers, which paints a dark band across
     // the middle of the shape. It is emitted as the other end's color at stop-opacity 0 instead.
     test('a gradient fading to transparent emits no black stop', () => {
-        const svg = elementToSvg(
+        const svg = elementSvg(
             goldenShape({
                 id: 'g4',
                 type: 'rectangle',

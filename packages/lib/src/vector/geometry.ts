@@ -152,11 +152,11 @@ export const LINEAR_HIT_SCREEN_FACTOR = 0.85;
 
 // How near a pointer must come to grab an element, in screen pixels, as Excalidraw's
 // DEFAULT_COLLISION_THRESHOLD. A host divides it by the zoom, so the reach looks the same at every zoom.
-export const HIT_THRESHOLD_SCREEN = 8;
+const HIT_THRESHOLD_SCREEN = 8;
 
 // A finger or a stylus can't point as precisely as a mouse, so a coarse pointer grabs from further away.
 // Excalidraw has no such factor. It is our own addition for touch.
-export const COARSE_HIT_SLOP_MULTIPLIER = 1.75;
+const COARSE_HIT_SLOP_MULTIPLIER = 1.75;
 
 // The grab reach in screen pixels for the current pointer. Hover, the hit test and the eraser all read it, so
 // they can't disagree. A caller still divides it by the zoom.
@@ -226,7 +226,7 @@ export function normalizeLinear(
 
 // Scales points on each axis to fit a new size. They scale about 0, 0, the corner of their bounds, so no point
 // goes negative. An axis whose old size is 0 has nothing to scale from, so it stays as it is.
-export function rescalePoints(
+function rescalePoints(
     points: Point[],
     oldSize: { width: number; height: number },
     newSize: { width: number; height: number },
@@ -393,7 +393,7 @@ export function arrowLabelCenter(el: VectorArrowElement, route?: Point[]): Point
 // `fromCenter` grows the box from its center. `mode` names the handle, such as 'resize-se'. The angle passes
 // through unchanged, and a turned box goes through resizeRotatedRect. The caller passes `minSize`, because a
 // slide deck and a zoomable canvas need a different smallest size.
-export function applyResize(
+function applyResize(
     mode: string,
     dx: number,
     dy: number,

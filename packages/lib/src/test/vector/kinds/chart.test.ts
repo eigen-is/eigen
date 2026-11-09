@@ -15,10 +15,9 @@ import { parseFill, serializeFill, TRANSPARENT_FILL } from '../../../vector/fill
 import { ELEMENT_FIELDS, ELEMENT_KINDS, SLIDES_STYLE_DEFAULTS, VECTOR_STYLE_DEFAULTS } from '../../../vector/kinds';
 import { svgTextLine } from '../../../vector/kinds/render-utils';
 import { readElementFromFields } from '../../../vector/read-vector';
-import { elementToSvg } from '../../../vector/scene-to-svg';
 import type { VectorChartElement, VectorElement } from '../../../vector/types';
 import { DEFAULT_ELEMENT_PROPS, prop } from '../../../vector/types';
-import { chart, textBox } from '../element-factories';
+import { chart, elementSvg, textBox } from '../element-factories';
 
 const specOf = (over: Partial<ChartSpec> = {}, type: ChartType = 'column'): ChartSpec => ({
     ...sampleChartSpec(type),
@@ -188,7 +187,7 @@ describe('chart painter', () => {
         const out = layoutOf(el, sampleChartSpec('column', 'Excalifont'));
         const svg = svgOf(el);
         expect(out.shapes.filter((shape) => shape.type === 'rectangle').length).toBeGreaterThan(4);
-        for (const shape of out.shapes) expect([shape.id, svg.includes(elementToSvg(shape))]).toEqual([shape.id, true]);
+        for (const shape of out.shapes) expect([shape.id, svg.includes(elementSvg(shape))]).toEqual([shape.id, true]);
     });
 
     test('the labels are SVG text, one per layout label', () => {
@@ -241,7 +240,7 @@ describe('chart painter', () => {
         const svg = svgOf(el);
         expect(svg).toContain('opacity="0.2"');
         expect(svg).not.toContain('opacity="0.4"');
-        expect(elementToSvg(el).split('opacity="0.4"')).toHaveLength(2);
+        expect(elementSvg(el).split('opacity="0.4"')).toHaveLength(2);
     });
 
     test('the fill style hatches the bars and the slices', () => {
@@ -255,7 +254,7 @@ describe('chart painter', () => {
             const svg = svgOf(el);
             for (const mark of marks) {
                 expect('fill' in mark && parseFill(mark.fill).style).toBe('hachure');
-                expect(svg).toContain(elementToSvg(mark));
+                expect(svg).toContain(elementSvg(mark));
             }
             // a hachure fill is drawn as stroked sketch lines in the mark's color, never a filled path
             expect(svg).toContain(`stroke="${chartColor(0)}" stroke-width="1" fill="none"`);

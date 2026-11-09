@@ -44,15 +44,7 @@ export function arrowRoute(el: VectorElement, byId?: Map<string, VectorElement>)
 // it. Excalidraw keeps its stored points in step with the dock. Here boundEndpoint writes the dock into the stored
 // points, so the router only reads them. The only obstacles are the bound shapes. An arrow with fewer than two
 // points comes back as it is.
-// `origPoints` holds, per end, the scene point before it docked. It only decides whether the end is near enough to
-// its shape for the cone test, and it defaults to the stored endpoint, which is the dock at rest. While an endpoint
-// is dragged, passing the raw cursor keeps the exit side with the cursor and not with the dock gliding along the
-// outline, as in Excalidraw.
-export function elbowRoute(
-    arrow: VectorArrowElement,
-    byId: Map<string, VectorElement>,
-    origPoints?: { start?: Point; end?: Point },
-): Point[] {
+function elbowRoute(arrow: VectorArrowElement, byId: Map<string, VectorElement>): Point[] {
     const pts = parsePoints(arrow.points);
     if (pts.length < 2) return pts;
 
@@ -66,8 +58,6 @@ export function elbowRoute(
             endGlobal,
             startArrowhead: arrow.startArrowhead !== 'none',
             endArrowhead: arrow.endArrowhead !== 'none',
-            origStart: origPoints?.start ?? startGlobal,
-            origEnd: origPoints?.end ?? endGlobal,
         },
         !!arrow.startBinding,
     );
@@ -91,14 +81,7 @@ export function elbowRoutingContext(arrow: VectorArrowElement, byId: Map<string,
     const pts = parsePoints(arrow.points);
     const startGlobal = linearLocalToScene(arrow, pts[0]);
     const endGlobal = linearLocalToScene(arrow, pts[pts.length - 1]);
-    const { startHeading, endHeading } = endpointHeadings(
-        startShape,
-        endShape,
-        startGlobal,
-        endGlobal,
-        startGlobal,
-        endGlobal,
-    );
+    const { startHeading, endHeading } = endpointHeadings(startShape, endShape, startGlobal, endGlobal);
     const positive = (h: Heading): boolean =>
         headingIsHorizontal(h) ? compareHeading(h, HEADING_RIGHT) : compareHeading(h, HEADING_DOWN);
     return {
@@ -118,9 +101,6 @@ type RouteInputs = {
     endGlobal: Point;
     startArrowhead: boolean;
     endArrowhead: boolean;
-    // The scene point of each end before it docked, which is the stored endpoint at rest.
-    origStart: Point;
-    origEnd: Point;
 };
 
 // A dongle is where the route leaves an end's obstacle box: the endpoint moved along its heading onto the edge of
@@ -140,16 +120,9 @@ type ElbowArrowData = {
 
 // The headings, obstacle boxes and dongles of one route, as the at-rest branch of Excalidraw's getElbowArrowData.
 function getElbowArrowData(input: RouteInputs, startBinding: boolean): ElbowArrowData {
-    const { startShape, endShape, startGlobal, endGlobal, startArrowhead, endArrowhead, origStart, origEnd } = input;
+    const { startShape, endShape, startGlobal, endGlobal, startArrowhead, endArrowhead } = input;
 
-    const { startHeading, endHeading } = endpointHeadings(
-        startShape,
-        endShape,
-        startGlobal,
-        endGlobal,
-        origStart,
-        origEnd,
-    );
+    const { startHeading, endHeading } = endpointHeadings(startShape, endShape, startGlobal, endGlobal);
 
     const startPointBounds = pointBounds(startGlobal);
     const endPointBounds = pointBounds(endGlobal);
@@ -221,25 +194,21 @@ function getElbowArrowData(input: RouteInputs, startBinding: boolean): ElbowArro
 }
 
 // The heading each end leaves by, as the heading part of Excalidraw's getElbowArrowData. For a bound end, the cone
-// box is its shape grown on every side by the endpoint's distance to the outline. The cone runs from the docked
-// endpoint, but the distance check uses the point before it docked, so a dock gliding along the outline during a
-// drag doesn't flip the exit side. An unbound end points at the other end. The router and elbowRoutingContext
-// both read their headings here.
+// box is its shape grown on every side by the endpoint's distance to the outline. An unbound end points at the other
+// end. The router and elbowRoutingContext both read their headings here.
 function endpointHeadings(
     startShape: VectorBindableElement | null,
     endShape: VectorBindableElement | null,
     startGlobal: Point,
     endGlobal: Point,
-    origStart: Point,
-    origEnd: Point,
 ): { startHeading: Heading; endHeading: Heading } {
     const startConeAABB = startShape
         ? aabbForElement(startShape, fill4(distanceToElement(startShape, startGlobal)))
         : null;
     const endConeAABB = endShape ? aabbForElement(endShape, fill4(distanceToElement(endShape, endGlobal))) : null;
     return {
-        startHeading: getHeadingForElbowArrowSnap(startGlobal, endGlobal, startShape, startConeAABB, origStart),
-        endHeading: getHeadingForElbowArrowSnap(endGlobal, startGlobal, endShape, endConeAABB, origEnd),
+        startHeading: getHeadingForElbowArrowSnap(startGlobal, endGlobal, startShape, startConeAABB),
+        endHeading: getHeadingForElbowArrowSnap(endGlobal, startGlobal, endShape, endConeAABB),
     };
 }
 
