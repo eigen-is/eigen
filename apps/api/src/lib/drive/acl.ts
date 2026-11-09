@@ -15,19 +15,19 @@ export function grantsPublicRead(visibility: DriveVisibility): boolean {
 
 // Whether the path, or a folder above it, is in the trash. A path in the trash is the owner's alone until
 // it is restored. Its ACL and visibility stay, so the restore gives everyone their access back.
-export function isTrashedChain(ancestors: DrivePath[]): boolean {
+export function isTrashedChain(ancestors: readonly DrivePath[]): boolean {
     return ancestors.some((path) => path.trashedAt);
 }
 
 // Whether a folder above the path is a document, so the path is one of its parts. The chain ends with the path itself.
-export function isInsideDocument(chain: DrivePath[]): boolean {
+export function isInsideDocument(chain: readonly DrivePath[]): boolean {
     return chain.slice(0, -1).some((crumb) => isDocumentType(crumb.type));
 }
 
 // Ownership, team membership, public visibility or an ACL entry on the path or any ancestor. Only the
 // first two count in the trash.
 function canFromAncestors(
-    ancestors: DrivePath[],
+    ancestors: readonly DrivePath[],
     user: User,
     memberships: Memberships,
     permission: 'read' | 'write',
@@ -51,16 +51,16 @@ function canFromAncestors(
     return false;
 }
 
-export function canReadFromAncestors(ancestors: DrivePath[], user: User, memberships: Memberships): boolean {
+export function canReadFromAncestors(ancestors: readonly DrivePath[], user: User, memberships: Memberships): boolean {
     return canFromAncestors(ancestors, user, memberships, 'read');
 }
 
-export function canWriteFromAncestors(ancestors: DrivePath[], user: User, memberships: Memberships): boolean {
+export function canWriteFromAncestors(ancestors: readonly DrivePath[], user: User, memberships: Memberships): boolean {
     return canFromAncestors(ancestors, user, memberships, 'write');
 }
 
 export function matchesACL(
-    acl: DriveACL[],
+    acl: readonly DriveACL[],
     user: User,
     memberships: Memberships,
     permission: 'read' | 'write',
@@ -84,7 +84,7 @@ export function matchesACL(
 // added entry goes in, and one for an id that is there already replaces it, which is how a permission
 // changes. The merge runs on the server, so two people who share at once keep each other's entries. A
 // whole ACL built from an old copy in a tab would drop them.
-export function mergeACLDelta(current: DriveACL[] | null, delta: DriveACLDelta): DriveACL[] {
+export function mergeACLDelta(current: readonly DriveACL[] | null, delta: DriveACLDelta): DriveACL[] {
     const removed = new Set((delta.remove ?? []).map(canonicalACLId));
     const merged = (current ?? []).filter((entry) => !removed.has(canonicalACLId(entry.id)));
     for (const entry of delta.add ?? []) {
@@ -104,7 +104,7 @@ export function canonicalACLId(id: string): string {
     return validateEmailAddress(id) ? id.toLowerCase() : id;
 }
 
-export function normalizeACL(acl: DriveACL[] | null): DriveACL[] | null {
+export function normalizeACL(acl: readonly DriveACL[] | null): DriveACL[] | null {
     if (!acl || acl.length === 0) {
         return null;
     }
@@ -113,16 +113,16 @@ export function normalizeACL(acl: DriveACL[] | null): DriveACL[] | null {
 }
 
 // The innermost collab container in a root-first chain, or null for a chat on its own.
-export function findContainerFromAncestors(ancestors: DrivePath[]): DrivePath | null {
+export function findContainerFromAncestors(ancestors: readonly DrivePath[]): DrivePath | null {
     return ancestors.findLast((path) => isCollabType(path.type)) ?? null;
 }
 
 // Splits an ACL into the entries worth storing and the ones an ancestor's ACL (or team
 // ownership of the drive) already grants.
 export function filterRedundantACL(
-    acl: DriveACL[],
+    acl: readonly DriveACL[],
     path: DrivePath,
-    ancestors: DrivePath[],
+    ancestors: readonly DrivePath[],
 ): { filtered: DriveACL[]; removed: DriveACL[] } {
     const inherited = new Map<string, { read: boolean; write: boolean }>();
 

@@ -3,12 +3,11 @@
 // because access goes through getSharedDrive. A save is guarded by the etag the read gave, and answers a conflict when
 // the file changed since.
 
-import type { EditorSaveResult } from '@workspace/lib/types/drive';
+import type { EditorSaveResult, FileEditorContent } from '@workspace/lib/types/drive';
 import { Elysia, t } from 'elysia';
 import { getSharedDrive } from '../lib/drive';
-import { isInsideDocument } from '../lib/drive/acl';
 import { getEditableContent, saveEditableContent } from '../lib/drive/inline-edit';
-import { recordOpened } from '../lib/drive/recent';
+import { recordOpenedUnlessInDocument } from '../lib/drive/recent';
 import { betterAuth } from './auth';
 
 export const editorRouter = new Elysia({ name: 'editor' })
@@ -16,17 +15,11 @@ export const editorRouter = new Elysia({ name: 'editor' })
 
     .get(
         '/editor/:ownerId/:mountId/:pathId/content',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<FileEditorContent> => {
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             const content = await getEditableContent(mount, path);
-            // A part of a document, such as a chat's attachment, opens with its document.
-            mount
-                .getBreadcrumb(path.id)
-                .then((chain) => {
-                    if (!isInsideDocument(chain)) recordOpened(user, path);
-                })
-                .catch((err) => console.error(`recent: checking ${path.id} for ${user.id} failed:`, err));
+            recordOpenedUnlessInDocument(user, mount, path);
             return content;
         },
         { auth: true },

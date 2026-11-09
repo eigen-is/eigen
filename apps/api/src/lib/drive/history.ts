@@ -153,7 +153,7 @@ export class FileHistory {
 
         return {
             direct: !!direct,
-            ...(ancestor ? { viaAncestor: { pathId: ancestor.pathId, name: ancestor.name } } : {}),
+            ...(ancestor ? { viaAncestor: ancestor } : {}),
         };
     }
 
@@ -167,7 +167,7 @@ export class FileHistory {
     }
 
     // The watchers of the roots and of every folder above them, without the actor.
-    public collectWatcherIds(rootPathIds: string[], excludeUserId: string): string[] {
+    public collectWatcherIds(rootPathIds: readonly string[], excludeUserId: string): string[] {
         const rootList = sql.join(
             rootPathIds.map((id) => sql`${id}`),
             sql`, `,
@@ -188,7 +188,7 @@ export class FileHistory {
     // A watcher who can no longer read the path is skipped. verifyAncestors is read before a change that rewrites the
     // chain, such as a trash, which moves the path to the mount root.
     public async notifyWatchers(
-        watcherIds: string[],
+        watcherIds: readonly string[],
         opts: {
             eventType: FileEventType;
             actor: User;
@@ -196,8 +196,8 @@ export class FileHistory {
             pathType: DrivePathType;
             details?: FileEvent['details'];
             tagPathId: string;
-            verifyAncestors: DrivePath[];
-            excludeEmails?: Set<string>;
+            verifyAncestors: readonly DrivePath[];
+            excludeEmails?: ReadonlySet<string>;
         },
     ): Promise<void> {
         // The body is stored, so the names of the teams in a sharing change are resolved now. The change has landed by
@@ -260,18 +260,18 @@ export class FileHistory {
         actor: User;
         path: DrivePath;
         // The folders whose chains are walked, such as both of a move's parents.
-        chainRootIds: (string | null)[];
+        chainRootIds: readonly (string | null)[];
         // A burst, such as an upload, is tagged with its folder, so many uploads fold into one row.
         burst?: boolean;
-        excludeEmails?: Set<string>;
+        excludeEmails?: ReadonlySet<string>;
         details?: FileEvent['details'];
         // A function runs only when there are watchers, which is rare, so most changes walk no breadcrumbs.
-        verifyAncestors: DrivePath[] | (() => Promise<DrivePath[]>);
+        verifyAncestors: readonly DrivePath[] | (() => Promise<readonly DrivePath[]>);
     }): Promise<void> {
         // A change to a path in the trash notifies nobody, and the trash itself still does.
         if (opts.path.trashedAt && opts.eventType !== 'trashed') return;
         if (this.isContainerInternal(opts.path.id)) return;
-        const chainRoots = opts.chainRootIds.filter((id): id is string => id !== null);
+        const chainRoots = opts.chainRootIds.filter((id) => id !== null);
         const watcherIds = this.collectWatcherIds([opts.path.id, ...chainRoots], opts.actor.id);
         if (watcherIds.length === 0) return;
         await this.notifyWatchers(watcherIds, {

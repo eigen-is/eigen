@@ -65,9 +65,14 @@ export async function aggregateRecents(user: User): Promise<RecentPath[]> {
 }
 
 async function pullRecents(user: User, memberships: Memberships, rows: readonly RecentRow[]): Promise<RecentPath[]> {
-    const rowsOf = Map.groupBy(rows, (row) => row.ownerId);
-    const lists = await pullFromEach([...rowsOf.keys()], (ownerId) =>
-        pullRecentPaths(ownerId, user, memberships, rowsOf.get(ownerId) ?? []),
+    const owners = [...new Set(rows.map((row) => row.ownerId))];
+    const lists = await pullFromEach(owners, (ownerId) =>
+        pullRecentPaths(
+            ownerId,
+            user,
+            memberships,
+            rows.filter((row) => row.ownerId === ownerId),
+        ),
     );
     return lists.flat();
 }

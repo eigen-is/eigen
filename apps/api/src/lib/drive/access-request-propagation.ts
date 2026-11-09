@@ -10,6 +10,7 @@ import { WindowLimiter } from '../core/window-limiter';
 import { pullDrivePath, pullTeamMembersToNotify, sendToHome } from '../home/home-relay';
 import { composeAccessRequestEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
+import type { User } from '../user';
 import { getUserById } from '../user';
 
 // One mail per requester, path and recipient an hour: the notification folds a repeat on its tag, a mail
@@ -20,14 +21,13 @@ export async function propagateAccessRequest(
     ownerId: string,
     mountId: string,
     pathId: string,
-    requester: { name: string; email: string },
+    requester: User,
     message: string | null,
 ): Promise<void> {
     // The owner's Home is foreign to the caller, so its reads/writes go through the relay seam.
     const path = await pullDrivePath(ownerId, mountId, pathId);
     if (!path || path.trashedAt) return;
     const tag = accessRequestTag({ ownerId, mountId, pathId }, requester.email);
-    const requesterName = requester.name || requester.email;
     // Detached, so the answer doesn't wait on the team's size or tell whether the path exists.
     (async () => {
         await sendToHome(ownerId, {
@@ -35,7 +35,7 @@ export async function propagateAccessRequest(
             notification: {
                 type: 'access-request',
                 tag,
-                title: `${requesterName} requested access`,
+                title: `${requester.name || requester.email} requested access`,
                 body: stripEigenExtension(path.name),
                 actorEmail: requester.email,
                 details: { message: message ?? undefined, pathType: path.type },
@@ -51,9 +51,7 @@ export async function propagateAccessRequest(
         for (const recipient of recipients) {
             const key = `${tag}:${recipient.id}`;
             if (!mailWindow.take(key)) continue;
-            const sent = await sendMail(
-                composeAccessRequestEmail(path, recipient, { name: requesterName, email: requester.email }, message),
-            );
+            const sent = await sendMail(composeAccessRequestEmail(path, recipient, requester, message));
             // The hit holds back clicks while the mail is in flight; a failed send releases it so the next one retries.
             if (!sent) mailWindow.release(key);
         }
