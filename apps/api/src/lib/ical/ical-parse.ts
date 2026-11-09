@@ -9,6 +9,7 @@ import type { Attendee, EventData, ImipMethod, Reminder } from '@workspace/lib/t
 import { IMIP_METHODS } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
 import { isExpandableRrule, isOutOfRangeRecurrenceStart, isSubDailyRrule } from './recurrence-limits';
+import { vtimezoneOffset } from './vtimezone';
 import { localToUtc, recurrenceKey, utcToLocal } from './wall-clock';
 
 // Lowercase, because ical.js lowercases every name it reads.
@@ -122,13 +123,14 @@ export function calAddress(raw: unknown): string {
 }
 
 // A valid IANA TZID resolves through Intl, the path the builder takes, so identical bytes name one instant and a
-// repeated hour takes its first pass. A floating time maps via Date.UTC, never the server's zone.
+// repeated hour takes its first pass. A zone only the file defines is read by Eigen, never by ical.js, and a floating
+// time maps via Date.UTC, never the server's zone.
 export function icalTimeToInstant(t: ICAL.Time, tzid: string | null, fallbackTz: string | null): Date {
     if (t.zone === ICAL.Timezone.utcTimezone) return t.toJSDate();
     const zone = tzid ?? (t.zone === ICAL.Timezone.localTimezone ? fallbackTz : null);
     if (zone) return localToUtc(zone, t.year, t.month, t.day, t.hour, t.minute, t.second);
-    if (t.zone !== ICAL.Timezone.localTimezone) return t.toJSDate();
-    return new Date(Date.UTC(t.year, t.month - 1, t.day, t.hour, t.minute, t.second));
+    const wall = Date.UTC(t.year, t.month - 1, t.day, t.hour, t.minute, t.second);
+    return new Date(t.zone?.component ? wall - vtimezoneOffset(t.zone.component, wall) * 1000 : wall);
 }
 
 // An all-day bound is midnight UTC, whatever zone the value names.
@@ -217,8 +219,9 @@ export function readStamp(vevent: ICAL.Component, name: EigenName): string | nul
 }
 
 export function readTimestamp(vevent: ICAL.Component, name: string): Date | null {
-    const value = vevent.getFirstPropertyValue(name);
-    return value instanceof ICAL.Time ? value.toJSDate() : null;
+    const prop = vevent.getFirstProperty(name);
+    const value = prop?.getFirstValue();
+    return value instanceof ICAL.Time ? icalTimeToInstant(value, propTzid(prop), null) : null;
 }
 
 // Anything not in DTSTAMP's own form reads as absent, so a stamp a stranger wrote cannot produce an Invalid Date.

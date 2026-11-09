@@ -1,12 +1,20 @@
-// RFC 5545 §3.6.5 — build a VTIMEZONE from Intl offset data so serialized TZIDs carry a definition.
+// A VTIMEZONE both ways. buildVTimezone writes one from Intl offset data for a zone Eigen names, so a strict parser
+// doesn't read its wall times as floating (RFC 5545 §3.6.5); the iCalendar writer adds it to a resource.
+// vtimezoneOffset reads the offset a file's own zone states at a wall time, for a TZID no name resolves, such as
+// Outlook's "Customized Time Zone"; the parser calls it for every such time.
+
+import ICAL from 'ical.js';
 import { utcToLocal } from './wall-clock';
 
 const WEEKDAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
 const DAY_MS = 86_400_000;
+// A zone a person or Outlook writes states a few observances; one with more reads as its standard time.
+const MAX_OBSERVANCES = 16;
 
 const pad = (n: number) => n.toString().padStart(2, '0');
 
 type Transition = { at: number; from: number; to: number };
+type Onset = { at: number; offset: number };
 type WallInfo = {
     year: number;
     monthNum: number;
@@ -166,4 +174,68 @@ export function buildVTimezone(tzid: string, fromYear: number, toYear: number): 
     lines.push('END:VTIMEZONE');
     resultCache.set(key, lines);
     return lines;
+}
+
+// ical.js walks a zone's observance rules from their DTSTART, however far back that is, so a zone only the file
+// defines is read here instead: the observance whose latest onset by this wall time came last gives the offset.
+export function vtimezoneOffset(vtimezone: ICAL.Component, wall: number): number {
+    const observances = vtimezone.getAllSubcomponents();
+    const head = observances.slice(0, MAX_OBSERVANCES);
+    const standard = head.find((observance) => observance.name === 'standard') ?? head[0];
+    const fixed = (standard && offsetSeconds(standard, 'tzoffsetto')) ?? 0;
+    if (observances.length > MAX_OBSERVANCES) return fixed;
+    let latest: Onset = { at: -Infinity, offset: fixed };
+    for (const observance of observances) {
+        const onset = latestOnset(observance, wall);
+        if (!onset) return fixed;
+        if (onset.at > latest.at) latest = onset;
+    }
+    return latest.offset;
+}
+
+function offsetSeconds(observance: ICAL.Component, name: string): number | null {
+    const value = observance.getFirstPropertyValue(name);
+    return value instanceof ICAL.UtcOffset ? value.toSeconds() : null;
+}
+
+// In wall-clock milliseconds, at -Infinity before the first onset; null for a rule in no shape a real zone uses.
+function latestOnset(observance: ICAL.Component, wall: number): Onset | null {
+    const start = observance.getFirstPropertyValue('dtstart');
+    const rule = observance.getFirstPropertyValue('rrule');
+    const from = offsetSeconds(observance, 'tzoffsetfrom');
+    const offset = offsetSeconds(observance, 'tzoffsetto');
+    if (!(start instanceof ICAL.Time) || observance.hasProperty('rdate')) return null;
+    if (from === null || offset === null) return null;
+    const timeOfDay = ((start.hour * 60 + start.minute) * 60 + start.second) * 1000;
+    const first = Date.UTC(start.year, start.month - 1, start.day) + timeOfDay;
+    const until =
+        rule instanceof ICAL.Recur && rule.until
+            ? Date.UTC(rule.until.year, rule.until.month - 1, rule.until.day + 1)
+            : Infinity;
+    // A wall time the spring-forward gap skips keeps the offset before it (RFC 5545 §3.3.5).
+    const passed = (at: number) => at >= first && at < until && wall >= at + Math.max(0, offset - from) * 1000;
+    if (!rule) return { at: passed(first) ? first : -Infinity, offset };
+    if (!(rule instanceof ICAL.Recur)) return null;
+    const year = new Date(wall).getUTCFullYear();
+    for (const day of [onsetDay(rule, year), onsetDay(rule, year - 1)]) {
+        if (day === null) return null;
+        if (passed(day + timeOfDay)) return { at: day + timeOfDay, offset };
+    }
+    return { at: -Infinity, offset };
+}
+
+// Midnight of the one day a yearly rule of one BYMONTH and one BYDAY, and optionally BYMONTHDAY, names in a year.
+function onsetDay(rule: ICAL.Recur, year: number): number | null {
+    const { BYMONTH, BYDAY, BYMONTHDAY, ...rest } = rule.parts;
+    const byday = BYDAY?.length === 1 ? /^([+-]?[1-5])?(SU|MO|TU|WE|TH|FR|SA)$/.exec(BYDAY[0]) : null;
+    const month = BYMONTH?.length === 1 ? BYMONTH[0] : 0;
+    if (rule.freq !== 'YEARLY' || rule.interval !== 1 || rule.count || !month || !byday) return null;
+    if (Object.keys(rest).length) return null;
+    const first = 1 + ((WEEKDAYS.indexOf(byday[2]) - new Date(Date.UTC(year, month - 1, 1)).getUTCDay() + 7) % 7);
+    const count = Math.floor((new Date(Date.UTC(year, month, 0)).getUTCDate() - first) / 7) + 1;
+    const days = Array.from({ length: count }, (_, i) => first + 7 * i);
+    const nth = Number(byday[1] ?? 0);
+    const named = nth ? [days.at(nth > 0 ? nth - 1 : nth)] : days;
+    const hits = named.filter((day) => day !== undefined && (!BYMONTHDAY || BYMONTHDAY.includes(day)));
+    return hits.length === 1 ? Date.UTC(year, month - 1, hits[0]) : null;
 }
