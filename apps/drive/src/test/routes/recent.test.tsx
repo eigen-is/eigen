@@ -5,7 +5,7 @@ import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { RecentPath } from '@workspace/lib/types/drive';
 import { drivePath } from '@workspace/ui/test/drive-path';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
-import { clickRow } from '@workspace/ui/test/menu-rows';
+import { clickRow, menuRows } from '@workspace/ui/test/menu-rows';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 const window = installHappyDom();
@@ -134,7 +134,8 @@ test('a column header sorts the page and leaves the preference alone', async () 
 test('the grid’s sort menu sorts the page and leaves the preference alone', async () => {
     preferNameInMode('grid');
     const container = await open();
-    await click(button(container, 'Modified'));
+    await click(button(container, 'Last activity'));
+    expect(menuRows()).toEqual(['Name', 'Last activity', 'Size']);
     await clickRow('Name');
     expect(button(container, 'Name')).toBeDefined();
     expect(preference()).toEqual({ mode: 'grid', sortKey: 'name', sortDir: 'asc' });
@@ -144,6 +145,7 @@ test('the phone’s View options sort the page and leave the preference alone', 
     window.happyDOM.setViewport({ width: 390, height: 844 });
     const container = await open();
     await click(container.querySelector('button[aria-label="View options"]'));
+    expect(menuRows()).toContain('Last activity');
     await clickRow('Name');
     expect(names(container)).toEqual(BY_NAME);
     expect(preference()).toEqual({ mode: 'list', sortKey: 'name', sortDir: 'asc' });

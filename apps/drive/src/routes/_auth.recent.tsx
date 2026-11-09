@@ -5,9 +5,9 @@
 
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
-import { DEFAULT_MOUNT_ID, usePathInfo, useRecentPaths } from '@workspace/lib/drive';
-import type { DrivePath, DriveSearchParams, DriveSort } from '@workspace/lib/types/drive';
-import { EmptyState, LoadingState } from '@workspace/ui';
+import { DEFAULT_MOUNT_ID, usePathInfo, useRecentPaths, validateDriveSearch } from '@workspace/lib/drive';
+import type { DrivePath, DriveSort } from '@workspace/lib/types/drive';
+import { EmptyState } from '@workspace/ui';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
 import { useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';
@@ -15,12 +15,7 @@ import { useMemo, useState } from 'react';
 
 export const Route = createFileRoute('/_auth/recent')({
     component: RecentRoute,
-    validateSearch: (search: Record<string, unknown>): DriveSearchParams => {
-        const pid = typeof search.pid === 'string' ? search.pid : undefined;
-        const uid = typeof search.uid === 'string' ? search.uid : undefined;
-        const mid = typeof search.mid === 'string' ? search.mid : undefined;
-        return { pid, uid, mid };
-    },
+    validateSearch: validateDriveSearch,
 });
 
 function RecentRoute() {
@@ -55,8 +50,6 @@ function RecentRoute() {
         navigate({ to: Route.fullPath, search: { pid: undefined, uid: undefined, mid: undefined } });
     };
 
-    if (isLoading) return <LoadingState />;
-
     return (
         <DriveLayout
             pid={pid}
@@ -64,7 +57,7 @@ function RecentRoute() {
             ownerId={uid || user?.id || ''}
             mountId={mid || DEFAULT_MOUNT_ID}
             folderContents={recentPaths}
-            isLoading={false}
+            isLoading={isLoading}
             error={error}
             onRowSelect={onRowSelect}
             onRowActivate={onRowActivate}
@@ -73,10 +66,8 @@ function RecentRoute() {
             title="Recent files"
             onQuickLook={onQuickLook}
             emptyState={<EmptyState message="Files you open or get notified about will appear here." />}
-            sort={sort}
-            onSortChange={setSort}
-            dateLabel="Last activity"
-            getItemDate={(path) => lastActivity.get(path.id) ?? null}
+            sort={{ value: sort, onChange: setSort }}
+            date={{ label: 'Last activity', of: (path) => lastActivity.get(path.id) ?? null }}
         />
     );
 }

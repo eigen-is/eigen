@@ -108,8 +108,7 @@ export function DriveFilePicker({
                         onConfirm={multiSelect ? undefined : handleConfirm}
                         showNewFolder={false}
                         onSelectionChange={multiSelect ? setMultiSelected : undefined}
-                        sort={sort}
-                        onSortChange={setSort}
+                        sort={{ value: sort, onChange: setSort }}
                         className="h-full"
                     />
                 </div>

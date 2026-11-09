@@ -61,6 +61,11 @@ test('the sort and the layout in use are checked, the sort with its direction', 
     expect(modified?.querySelector('.lucide-arrow-down')).not.toBeNull();
 });
 
+test('a listing that shows another date names the date sort after it', async () => {
+    await open({ dateLabel: 'Trashed' });
+    expect(menuRows()).toEqual(['Sort by', 'Name', 'Trashed', 'Size', '—', 'List', 'Grid']);
+});
+
 test('picking the current sort flips its direction, and a layout sets it', async () => {
     await open();
     await clickRow('Modified');
@@ -73,14 +78,14 @@ test('picking the current sort flips its direction, and a layout sets it', async
 
 test('a sort of its own is checked, and a pick goes to its caller instead of the preference', async () => {
     setSort.mockClear();
-    const onSortChange = mock((_sort: { key: string; dir: string }) => {});
-    await open({ sort: { key: 'name', dir: 'asc' }, onSortChange });
+    const onChange = mock((_sort: { key: string; dir: string }) => {});
+    await open({ sort: { value: { key: 'name', dir: 'asc' }, onChange } });
     expect(checkRows().slice(0, 3)).toEqual([
         ['Name', 'true'],
         ['Modified', 'false'],
         ['Size', 'false'],
     ]);
     await clickRow('Name');
-    expect(onSortChange.mock.calls).toEqual([[{ key: 'name', dir: 'desc' }]]);
+    expect(onChange.mock.calls).toEqual([[{ key: 'name', dir: 'desc' }]]);
     expect(setSort).not.toHaveBeenCalled();
 });
