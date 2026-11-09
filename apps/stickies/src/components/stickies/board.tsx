@@ -15,14 +15,7 @@ import { commentMapName } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_STICKIES } from '@workspace/lib/types/drive';
-import {
-    CollabDocumentGate,
-    ColumnLayout,
-    DeleteDialog,
-    Column as LayoutColumn,
-    UnsyncedEditsGuard,
-    useLayout,
-} from '@workspace/ui';
+import { CollabDocumentGate, ColumnLayout, Column as LayoutColumn, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
 import { useAttachmentMeta } from '@workspace/ui/components/attachment';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
@@ -188,7 +181,6 @@ export function StickiesBoard({
     );
     const [activityPanelOpen, setActivityPanelOpen] = useState(false);
     const cardContextMenu = useContextMenu<CommentContextMenuItem>();
-    const [deleteCardId, setDeleteCardId] = useState<string | null>(null);
 
     const boardScrollRef = useRef<HTMLDivElement>(null);
     const {
@@ -444,29 +436,19 @@ export function StickiesBoard({
                                         />
                                     )}
 
-                                    <DeleteDialog
-                                        open={!!deleteCardId}
-                                        onOpenChange={(open) => !open && setDeleteCardId(null)}
-                                        title="Delete card"
-                                        description="This will permanently delete the card. You can undo this straight after, until you close the board."
-                                        onDelete={() => {
-                                            if (deleteCardId) {
-                                                const removed = cards[deleteCardId];
-                                                deleteCardFromBoard(deleteCardId);
-                                                recordHistory.mutate({
-                                                    eventType: 'sticky-removed',
-                                                    details: { card: removed?.title ?? '', cardId: deleteCardId },
-                                                });
-                                            }
-                                        }}
-                                    />
-
                                     <CommentLifecycleDialogs
                                         lifecycle={lifecycle}
                                         path={path}
                                         canWrite={canWrite}
                                         commentContextMenu={cardContextMenu}
-                                        onDelete={setDeleteCardId}
+                                        onDelete={(cardId) => {
+                                            const removed = cards[cardId];
+                                            deleteCardFromBoard(cardId);
+                                            recordHistory.mutate({
+                                                eventType: 'sticky-removed',
+                                                details: { card: removed?.title ?? '', cardId },
+                                            });
+                                        }}
                                         noun="sticky"
                                         onCardDialogClose={onClearInitialChat}
                                     />

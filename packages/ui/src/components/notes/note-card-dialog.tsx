@@ -13,25 +13,12 @@ import type { ReactNode } from 'react';
 import { useEffect, useRef } from 'react';
 import { useCelebrate } from '../celebrate/use-celebrate';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../dialog';
+import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { Separator } from '../separator';
-import { Tooltip, TooltipContent, TooltipTrigger } from '../tooltip';
 
 function IconAction({ icon: Icon, tooltip, onClick }: { icon?: LucideIcon; tooltip?: string; onClick?: () => void }) {
     if (!Icon || !tooltip || !onClick) return null;
-    return (
-        <Tooltip>
-            <TooltipTrigger asChild>
-                <button
-                    type="button"
-                    onClick={onClick}
-                    className="shrink-0 cursor-pointer opacity-70 hover:opacity-100"
-                >
-                    <Icon className="size-4" />
-                </button>
-            </TooltipTrigger>
-            <TooltipContent>{tooltip}</TooltipContent>
-        </Tooltip>
-    );
+    return <TooltipButton icon={Icon} tooltipText={tooltip} className="h-7 w-7 shrink-0" onClick={onClick} />;
 }
 
 type NoteCardDialogProps = {

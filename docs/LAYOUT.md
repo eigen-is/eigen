@@ -121,6 +121,16 @@ A properties panel has no Delete button. An object's Delete is its menu's last r
 
 `scripts/check-standards.ts` gates it: a `DropdownMenuItem` or `SelectItem` that draws `Trash2` or says Delete, Remove or to trash fails without the variant, and so does one tinted by `text-destructive`, which leaves the icon grey.
 
+## An icon-only button is flat, a button with text has an edge
+
+**An icon-only button is `TooltipButton` as it comes: `ghost`, in the text color, a soft background on hover and its tooltip as its name.** It is 32px in toolbars, dialog footers and panel rows, and 28px in dense rows and properties panels. A row of bordered boxes competes with the one action that has a label, and the icon already says what it does.
+
+A button with text keeps an edge, `outline`, or is filled when it is the main action, so Cancel, Save and Share with team still read as buttons beside flat icons.
+
+An icon that deletes is flat too, and not red. The red is on the Delete of the confirmation it opens (`DeleteDialog`), and on a delete button that has words, which is `variant="destructive"`. A real primary action stays filled, such as chat's Send, and the list and grid switch keeps its edge because it is one control with two options.
+
+`TooltipButton` and `KebabTrigger` take no `outline`, so a bordered icon fails typecheck. A plain `Button` with an icon size can still take one, which review catches.
+
 ## Pink is Eigen's accent color
 
 Pink `#f6339a` (`packages/lib/src/constants/colors.ts`) comes first in `EIGEN_ACCENT_COLORS_SHUFFLED`, the order calendars, labels, chart series and presence hand the accents out in, so what Eigen picks for a user starts in its own color. Rose and fuchsia sit close to it, so they come late ([CHARTS.md](CHARTS.md) has the reasoning).

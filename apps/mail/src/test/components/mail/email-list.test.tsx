@@ -49,10 +49,10 @@ const email = (id: string, subject: string): EmailSummary => ({
 });
 const EMAILS = [email('m1', 'Plans'), email('m2', 'Budget')];
 
-function List({ cursorIndex }: { cursorIndex: number }) {
-    const selection = useListSelection({ items: EMAILS, getId: (e) => e.id });
+function List({ cursorIndex, emails = EMAILS }: { cursorIndex: number; emails?: EmailSummary[] }) {
+    const selection = useListSelection({ items: emails, getId: (e) => e.id });
     return createElement(EmailList, {
-        orderedEmails: EMAILS,
+        orderedEmails: emails,
         selection,
         cursorIndex,
         setCursorIndex: () => {},
@@ -108,4 +108,16 @@ test('the browser’s contextmenu after the key opens no second menu', async () 
     });
     expect(follow.defaultPrevented).toBe(true);
     expect(document.querySelectorAll('[role="menu"]')).toHaveLength(1);
+});
+
+test('an unread message shows the unread dot in the app color, and a read one shows none', async () => {
+    const emails = [{ ...email('m1', 'Plans'), isRead: false }, email('m2', 'Budget')];
+    ({ unmount } = await renderInDocument(
+        createElement(AuthProvider, null, createElement(List, { cursorIndex: 0, emails })),
+    ));
+    const dotIn = (index: number) =>
+        document.querySelector(`[data-index="${index}"] [class*="bg-(--app-current-color)"]`);
+    expect(dotIn(0)?.className).toContain('rounded-full');
+    expect(dotIn(0)?.className).not.toContain('bg-destructive');
+    expect(dotIn(1)).toBeNull();
 });

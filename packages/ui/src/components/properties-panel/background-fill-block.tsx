@@ -1,6 +1,10 @@
+// The Background section of a properties panel: a color, a gradient or an image, or none where the host allows it. An
+// image can be replaced or removed, and the host supplies the picker.
+
 import { DEFAULT_FILL_COLOR } from '@workspace/lib/background';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import { Button } from '@workspace/ui/components/button';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { Tabs, TabsList, TabsTrigger } from '@workspace/ui/components/tabs';
 import { cn } from '@workspace/ui/lib/utils';
 import {
@@ -234,15 +238,12 @@ function ImageBody({
                 <Button variant="outline" size="sm" className="h-7 flex-1 text-xs" onClick={onPick}>
                     Replace
                 </Button>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 w-7"
+                <TooltipButton
+                    icon={Trash2}
+                    tooltipText="Remove image"
+                    className="h-7 w-7 shrink-0"
                     onClick={() => onChange(null)}
-                    aria-label="Remove image"
-                >
-                    <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                />
             </div>
         </>
     );

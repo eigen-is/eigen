@@ -319,6 +319,7 @@ function NavButton({
             onClick={onClick}
             disabled={disabled}
             title={title}
+            aria-label={title}
             className="p-1.5 rounded hover:bg-white/20 disabled:opacity-30 disabled:cursor-default transition-colors"
         >
             {children}
