@@ -192,11 +192,10 @@ function MailHeaderDetails({ header }: { header: HeaderFields }) {
 }
 
 function MailHeader({ header, isSent }: { header: HeaderFields; isSent?: boolean }) {
-    const recipients = [
-        ...collectAddresses(header.to),
-        ...collectAddresses(header.cc),
-        ...collectAddresses(header.bcc),
-    ];
+    const toAndCc = [...collectAddresses(header.to), ...collectAddresses(header.cc)];
+    // A message sent only to Bcc has no To line, and this line is the way to its details.
+    const summaryLabel = toAndCc.length ? 'To' : 'Bcc';
+    const recipients = toAndCc.length ? toAndCc : collectAddresses(header.bcc);
     const primary = isSent ? recipients[0] : addressObjects(header.from)[0]?.value[0];
     const primaryName = primary?.name || primary?.address || 'Unknown';
     const primaryEmail = primary?.address || '';
@@ -221,7 +220,9 @@ function MailHeader({ header, isSent }: { header: HeaderFields; isSent?: boolean
                                     type="button"
                                     className="flex items-center gap-1 min-w-0 hover:text-foreground rounded cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                 >
-                                    <span className="truncate">To: {summaryNames.join(', ')}</span>
+                                    <span className="truncate">
+                                        {summaryLabel}: {summaryNames.join(', ')}
+                                    </span>
                                     <ChevronDown className="h-3 w-3 shrink-0" />
                                 </button>
                             </PopoverTrigger>
