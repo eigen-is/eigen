@@ -596,6 +596,36 @@ describe('stamp trust', () => {
         expect(new Set(stamps.map((stamp) => stamp.getFirstParameter('x-eigen-event-id'))).size).toBe(count);
     });
 
+    test('forty thousand twins of one key read a huge stored VEVENT once, and only the first keeps its id', () => {
+        const twins = 40_000;
+        const stamps = [
+            'X-EIGEN-EVENT-ID:stored-id',
+            'X-EIGEN-CREATED-BY:maker',
+            'X-EIGEN-ORGANIZER-EVENT:org-event',
+            'X-EIGEN-ORGANIZER-USER:org-user',
+            'X-EIGEN-COLOR:#ff0000',
+            'X-EIGEN-IMPORTED-ORGANIZER:boss@example.com',
+        ];
+        const stored = parseResource(
+            vcal(['BEGIN:VEVENT', 'UID:twin@eigen', ...Array<string>(16_000).fill('X-PAD:p'), ...stamps, 'END:VEVENT']),
+        );
+        const twin = ['BEGIN:VEVENT', 'UID:twin@eigen', 'DTSTAMP:20260101T000000Z', 'END:VEVENT'];
+        const incoming = parseResource(vcal(Array.from({ length: twins }, () => twin).flat()));
+
+        const cpuMs = cpuClock();
+        restampResource(incoming, stored);
+        expect(cpuMs()).toBeLessThan(2000);
+
+        const lines = (vevent: ICAL.Component) => vevent.getAllProperties().map((prop) => prop.toICALString());
+        const vevents = incoming.getAllSubcomponents('vevent');
+        expect(lines(vevents[0]).slice(2)).toEqual(stamps);
+        for (const vevent of vevents.slice(1)) {
+            expect(lines(vevent).slice(3)).toEqual(stamps.slice(1));
+        }
+        const ids = vevents.map((vevent) => vevent.getFirstPropertyValue('x-eigen-event-id'));
+        expect(new Set(ids).size).toBe(twins);
+    });
+
     test('a body that stripped every X- line gets its ids and links back', () => {
         const bare = parseResource(serializeResource(buildResource([MASTER, OVERRIDE, EXCLUSION])));
         stripEigenStamps(bare);

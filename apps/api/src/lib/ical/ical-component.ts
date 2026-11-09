@@ -789,12 +789,19 @@ export function restampResource(
 
     const storedVEvents = stored?.getAllSubcomponents('vevent') ?? [];
     const storedZones = seriesTimezones(storedVEvents);
-    const storedByKey = new Map<string, ICAL.Component>();
+    const storedByKey = new Map<string, TrustedStamps & { eventId: string | null; color: string | null }>();
     const storedStamps = new Map<string, ExclusionStamp>();
     for (const vevent of storedVEvents) {
         const uid = uidOf(vevent);
         const key = recurrenceKeyOf(vevent, storedZones.get(uid) ?? null);
-        storedByKey.set(`${uid}|${key ?? ''}`, vevent);
+        storedByKey.set(`${uid}|${key ?? ''}`, {
+            eventId: readStamp(vevent, EIGEN.eventId),
+            createByUserId: readStamp(vevent, EIGEN.createdBy),
+            organizerEventId: readStamp(vevent, EIGEN.organizerEvent),
+            organizerUserId: readStamp(vevent, EIGEN.organizerUser),
+            color: readStamp(vevent, EIGEN.color),
+            importedOrganizer: readStamp(vevent, EIGEN.importedOrganizer),
+        });
         for (const [exKey, stamp] of readExclusionStamps(vevent)) storedStamps.set(`${uid}|${exKey}`, stamp);
     }
 
@@ -813,24 +820,12 @@ export function restampResource(
         const seriesTz = incomingZones.get(uid) ?? null;
         const match = storedByKey.get(`${uid}|${recurrenceKeyOf(vevent, seriesTz) ?? ''}`);
 
-        addStamp(vevent, EIGEN.eventId, claim(match && readStamp(match, EIGEN.eventId)));
-        addStamp(vevent, EIGEN.createdBy, trusted.createByUserId ?? (match && readStamp(match, EIGEN.createdBy)));
-        addStamp(
-            vevent,
-            EIGEN.organizerEvent,
-            trusted.organizerEventId ?? (match && readStamp(match, EIGEN.organizerEvent)),
-        );
-        addStamp(
-            vevent,
-            EIGEN.organizerUser,
-            trusted.organizerUserId ?? (match && readStamp(match, EIGEN.organizerUser)),
-        );
-        addStamp(vevent, EIGEN.color, match && readStamp(match, EIGEN.color));
-        addStamp(
-            vevent,
-            EIGEN.importedOrganizer,
-            trusted.importedOrganizer ?? (match && readStamp(match, EIGEN.importedOrganizer)),
-        );
+        addStamp(vevent, EIGEN.eventId, claim(match?.eventId));
+        addStamp(vevent, EIGEN.createdBy, trusted.createByUserId ?? match?.createByUserId);
+        addStamp(vevent, EIGEN.organizerEvent, trusted.organizerEventId ?? match?.organizerEventId);
+        addStamp(vevent, EIGEN.organizerUser, trusted.organizerUserId ?? match?.organizerUserId);
+        addStamp(vevent, EIGEN.color, match?.color);
+        addStamp(vevent, EIGEN.importedOrganizer, trusted.importedOrganizer ?? match?.importedOrganizer);
 
         // Read once: the scan for SEQUENCE lengthens with every stamp this loop adds.
         const sequence = sequenceOf(vevent);
