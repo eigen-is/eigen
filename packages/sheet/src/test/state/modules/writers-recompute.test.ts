@@ -230,7 +230,7 @@ describe('the split dialog reads its pieces', () => {
         expect(getRegStr(new Set(['Tab', 'semicolon', 'comma', 'space']), '')).toBe('\\t|;|,|\\s');
         expect(getRegStr(new Set(['comma', 'other']), '-')).toBe(',|-');
         expect(getRegStr(new Set(['other']), '')).toBe('');
-        expect(getRegStr(new Set(['comma', 'splitsimple']), '')).toBe('[,]+');
+        expect('a,,b'.split(new RegExp(getRegStr(new Set(['comma', 'splitsimple']), ''), 'g'))).toEqual(['a', 'b']);
     });
 
     test('short rows pad to the widest, and no separator keeps each cell whole', () => {
