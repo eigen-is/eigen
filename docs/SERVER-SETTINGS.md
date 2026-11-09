@@ -85,7 +85,7 @@ Admins keep what the Users, Guests and team pages need. They read `GET /settings
 
 ## The Users page sizes homes without booting them
 
-`GET /settings/users/usage` sizes every user through `pullHomeSize` (`apps/api/src/lib/home/home-relay.ts`), which reads the home's own databases and folders instead of booting the Home. A boot apiece costs seconds. `getAllUsersUsage` (`apps/api/src/lib/user/admin-usage.ts`) still caps the disk work at four homes at once, caches the result for five minutes per exact set of users, and skips a home that fails rather than failing the page. What each number counts is in [QUOTA.md](QUOTA.md#a-cold-read-reports-what-a-live-home-reports).
+`GET /settings/users/usage` sizes every user through `pullHomeSize` (`apps/api/src/lib/home/home-relay.ts`), which reads the home's own databases and folders instead of booting the Home. A boot apiece costs seconds. `getAllUsersUsage` (`apps/api/src/lib/user/admin-users.ts`, beside the queries behind the Users and Guests lists) still caps the disk work at four homes at once, caches the result for five minutes per exact set of users, and skips a home that fails rather than failing the page. What each number counts is in [QUOTA.md](QUOTA.md#a-cold-read-reports-what-a-live-home-reports).
 
 ## The status section is what ./eigen status reports
 
