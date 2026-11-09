@@ -2,7 +2,7 @@
 
 How each part of Eigen works and why, one doc per domain. Where each concept lives in the code, the package boundaries and the pitfalls: [ARCHITECTURE.md](ARCHITECTURE.md). How code is written: [CODE-STANDARDS.md](CODE-STANDARDS.md). Designs not built yet: `proposals/`.
 
-- Drive, storage, mounts, versioning, copy/move: [STORAGE.md](STORAGE.md); soft delete and trash: [SOFT-DELETE.md](SOFT-DELETE.md); file history and watch: [FILE-HISTORY.md](FILE-HISTORY.md)
+- Drive, storage, mounts, versioning, copy/move, Recent files: [STORAGE.md](STORAGE.md); soft delete and trash: [SOFT-DELETE.md](SOFT-DELETE.md); file history and watch: [FILE-HISTORY.md](FILE-HISTORY.md)
 - Databases: [DATABASE.md](DATABASE.md)
 - Sharing and permissions: [ACL.md](ACL.md); guests: [GUEST-ACCESS.md](GUEST-ACCESS.md); organizations and teams: [ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md)
 - Collab documents (Yjs, offline, restore): [COLLAB.md](COLLAB.md)

@@ -7,7 +7,7 @@ tags: [drive, getting-started, files, folders]
 related: [drive/share-a-file, connect/mount-drive-on-your-computer]
 crossSections: [getting-started]
 order: 10
-updated: 2026-11-03
+updated: 2026-11-09
 ---
 
 Drive is where your files live in Eigen. You can upload files from your computer, create documents and spreadsheets without leaving the browser, organize everything into folders, and share any of it with other people. This page is a quick tour of what you can do.
@@ -34,6 +34,7 @@ To look at a file without leaving the list, open its menu (right-click, or the *
 - **Rename** a file or folder from its menu.
 - Browse by type, such as images or docs, to find things faster.
 - Search your files by name from the search bar at the top.
+- Click **Recent files** in the sidebar to find what you opened or were notified about lately, wherever it lives. See [Find files you worked on recently](/support/drive/recent-files).
 
 ## Share your files
 

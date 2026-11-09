@@ -6,6 +6,8 @@ Drive is the file tree under every app. The Drive app shows it, WebDAV serves it
 
 The idea underneath is that the mount's paths table is the tree and the backend holds only bytes. A row gives a file its name, its parent, its type and its sharing. The storage key is derived from the row: the name path on `local`, the id on the other two backends ([§ A mount is a paths table](#a-mount-is-a-paths-table-over-one-of-three-backends)).
 
+Drive's **Recent files** page lists the paths a user lately opened or was notified about, wherever they live. Each user's own home keeps only which path and when, and every load asks each path's owner whether the user may still see it, so a name is always current and a lost file never shows ([§ Recent files stores only which path and when](#recent-files-stores-only-which-path-and-when)).
+
 ## A Home is loaded on demand and dropped when idle
 
 `getHome(ownerId)` (`apps/api/src/lib/home/get-home.ts`) builds the Home on first use and caches it. A Home closes when nothing holds it and its last request is longer ago than its idle time (5 min for a user, 30 for a team). A request is a `getHome`, and the Home keeps its time (`Home.touch`). A hold pauses the closing, and a release only checks the rule again (`Home.closeWhenIdle`): it never starts a fresh idle, so a holder that comes and goes, such as an upload that retries on a failing bucket, never keeps a Home open. So when the last tab closes, its stream lets go, and a Home whose last request is long ago closes at once. A socket's document lingers a minute first and holds the Home meanwhile, so that Home closes when the linger ends. A tab that reconnects calls `getHome`, which is a request. `openHome` is `getHome` without the request, for background work such as a backup, which holds the Home while it captures like any other holder: a Home nobody requested closes when the capture lets go. Reading a part such as `home.drive` is no request either, so code that keeps a Home across long awaits holds it (`withHomeHeld`). Whatever may outlast the idle calls `hold()`: a backup capture, an open event stream ([SSE.md](SSE.md#a-stream-holds-its-home-and-ends-when-it-closes)), a collab socket ([COLLAB.md](COLLAB.md#home-replacement-closes-every-socket)), a collab document while it lingers ([COLLAB.md](COLLAB.md#a-document-lingers-after-the-last-unsubscribe)), a live WebDAV lock ([WEBDAV.md](WEBDAV.md#locks-live-in-memory)), an s3 upload on the wire ([SYNC.md](SYNC.md#an-upload-on-its-way-holds-its-home)) and a long request. A long request is one that switches off the server's idle timeout, such as a Drive copy, convert, export or import, a calendar, contacts or mail import and a WebDAV COPY, or a Drive upload or a WebDAV PUT, whose body streams in. It runs inside `withHomeHeld` (on `Home`, with forwarders on `Drive` and `SharedDrive`), which holds every Home it works in from its access check until it answers, the target Home of a copy into another owner's drive included. An upload or a PUT checks write access first, so a user who may not write never holds another owner's Home. An import from another owner's file holds that owner's Home while it reads the file. Without the hold, a request that outlasts the idle with nothing else touching that Home finds its databases closed under it, a 500. A holder that must stop when the Home closes anyway, such as a stream, passes a callback that the close runs before the parts close. A closing Home refuses a new hold with a 503, because that holder would never hear the close. A team home gets the longer idle (`TEAM_HOME_IDLE_MS` overrides it), because no event stream holds it, only a socket on one of its documents. `evictHome` closes one on purpose (user deletion, backup restore), `shutdownAllHomes` all of them at exit, and while it runs `openHome` refuses every home with a 503, so nothing builds one again during the shutdown.
@@ -27,7 +29,7 @@ A Home serves its own owner. Another owner's data goes through `home-relay.ts` (
 data/home/{userId}/
 ├── settings.json
 ├── mounts/
-│   ├── shared.db           paths others shared into this home (ACL.md)
+│   ├── shared.db           paths others shared into this home (ACL.md), and Recent files
 │   └── {mountId}/          metadata.db, data/, thumbs/, tmp/, staging/ (s3 only)
 ├── eigen.mail/             mail.db, Maildir/
 ├── eigen.contacts/         contacts.db, avatars/
@@ -167,6 +169,68 @@ The copy route and WebDAV COPY send nothing while a deep tree copies, so both li
 The client copies a batch with one route call per item, all at once (`copyEach` in `packages/lib/src/core/drive/hooks/writes.ts`). When only part of it copies, `useCopyPaths` and `useCopyToFolder` throw `PartialCopyError` with the copies that landed and the sources that failed, and a dialog retries only the failed ones. The route gives each copy a free name, so a source sent again would land a second time. `useCopyToMediaFolder`, for a document's or a chat's media, shows that error's toast and returns the copies that landed, so the editor still inserts them. The error's message ends with the first failure's reason. When nothing copies, every hook throws the first server error instead, so the toast says why and a card's Save stops.
 
 A move never crosses mounts. It would change the row's owner, mount and id, and that breaks shares, links and history.
+
+## Recent files stores only which path and when
+
+The list lives in the `recent_paths` table of the user's own `shared.db` (`apps/api/src/lib/drive/sharedschema.ts`, schema version 2 in `db-config.ts`): one row per owner, mount and path, with `lastActivityAt` in seconds. It holds no name, type or reason. A stored name would go stale on a rename and would keep showing a file the user lost access to, so a load reads everything else from the path's owner. `apps/api/src/lib/drive/recent.ts` is the only file that reads or writes the table. `shared.db` is already in every backup, so the table needed no registration. A team home gets the empty table and nothing writes to it. A guest home can collect rows from notifications, and nothing reads them, because the route refuses a guest.
+
+## The server records an open where it already serves one
+
+Two things write a row: an open and a notification ([§ A notification about a path adds it too](#a-notification-about-a-path-adds-it-too)). An open is recorded in the three routes that serve one, once the open has succeeded:
+
+| Open | Route | Recorded |
+|---|---|---|
+| A document in its editor | The collab socket's open (`routes/collab.ts`) | After the subscribe and the read check that follows it |
+| A plain file in the inline editor | `GET /editor/:ownerId/:mountId/:pathId/content` (`routes/editor.ts`) | After `getEditableContent` answers, unless a folder above is a document (`recordOpenedUnlessInDocument`) |
+| A chat | `GET /chat/:ownerId/:mountId/:chatId/messages` (`routes/chat.ts`) | For the first page only, and never for a comment thread's chat (`containerPath`) |
+
+Each calls `recordOpened`, which pushes a `drive:recent-open` message to the user's own home through `sendToHome`, and that home calls `Drive.touchRecent`. The push is fire-and-forget with a catch that logs, so a failed write never fails the open, and it does nothing for a guest. The server records opens because it already serves them: a client report would need a route, a hook in three apps and a body the server has to check. `GET /collab/.../info` records nothing, though every editor reads it, because its query refetches on focus and on someone else's rename or ACL change, so a document nobody looks at would keep moving up. A preview reads other routes and records nothing. Opening a folder records nothing either, because clicking through folders would fill the list with ones the user only passed through.
+
+So the time means "last had it open". A socket that reconnects after sleep, an inline editor that refetches, or a chat that fetches its first page again after a new message moves the path up again. The chat app's index route opens the first chat by itself, so visiting the app counts as opening that chat.
+
+## A notification about a path adds it too
+
+`Home.notify` writes the bell row and then moves the path its tag names to the top of the recipient's list ([NOTIFICATION-CENTER.md § A notification about a path puts it in Recent](NOTIFICATION-CENTER.md#a-notification-about-a-path-puts-it-in-recent)). Without it, a document someone just shared would not appear until the user had opened it, which is the case the page most needs to serve. The two rows are separate, so dismissing the notification leaves the path in the list.
+
+What else reaches the list follows from these two writers, and is accepted:
+
+- An upload, a WebDAV edit or a rename counts only when the user also opens the path or is notified about it.
+- A team file appears only when it involves the user. Nearly everyone is in the default team, so every edit would make the list a feed of the whole company.
+- A colleague editing a document they shared doesn't bring it up unless the user watches it.
+- A file with no editor, such as a PDF or an image, appears only when a notification names it, since a preview records nothing.
+- A folder appears when a notification names it, such as a burst of uploads into a watched folder.
+- The table started empty, with no backfill.
+
+## Each write trims the table to 200 rows
+
+`touchRecent` upserts the row and deletes all but the newest 200 in one transaction. So the table needs no scheduled cleanup, no age limit and, at that size, no index on the time. The page shows at most 100. The other 100 rows are its reserve: when too few of the newest rows are still visible, the load reads those instead ([§ A load asks each owner whether the user may still see the path](#a-load-asks-each-owner-whether-the-user-may-still-see-the-path)). A bulk trash of watched files writes a hidden row per file, because each trash notifies the watcher. Two hundred or more push the older rows out for good, which is accepted.
+
+## A load asks each owner whether the user may still see the path
+
+`GET /drive/:ownerId/recent` (`requireSelf`, `requireNonGuest`) runs `aggregateRecents` (`apps/api/src/lib/drive/aggregate.ts`). It takes the newest 100 rows, groups them by owner, reads the user's team memberships once, and asks every owner at once through `pullFromEach` and `pullRecentPaths` ([SCALABILITY.md § Reads across many homes go through pullFromEach](SCALABILITY.md#reads-across-many-homes-go-through-pullfromeach)). The user's own home is asked the same way. When fewer than 100 rows come back visible, it asks again for the next 100. It merges, sorts by `lastActivityAt` and returns at most 100, each a current `DrivePath` with its `lastActivityAt`.
+
+`Drive.getRecentPathsFor` answers on the owner's side, with one batched `getBreadcrumbs` per mount. It does its own access check and only the relay calls it, so it has no `SharedDrive` wrapper ([ARCHITECTURE.md § Drive Architecture](ARCHITECTURE.md#drive-architecture)). It leaves a row out when:
+
+| Left out | Why |
+|---|---|
+| The owner has no such mount | It is disabled, removed or failed to start. `Drive.getMount` would throw and lose that owner's other rows |
+| The breadcrumb is empty | The path was deleted for good |
+| Its `parentId` is null | It is a mount root, such as Drive home, which would otherwise rank first |
+| `isTrashedChain` | It is in the trash. A trash ends a sharee's access, but the owner and team members can still read it |
+| `isInsideDocument` | It is a part of a document, such as a chat's attachment |
+| `canReadFromAncestors` fails | The user lost access |
+
+## A breadcrumb ends with the path itself
+
+`isInsideDocument` (`apps/api/src/lib/drive/acl.ts`) checks `chain.slice(0, -1)`, because a breadcrumb runs from the mount root down to the path and includes the path. A check of the whole chain would find the document type on the path itself and hide every document and chat from the list. `Drive.refuseInsideDocument` uses the same function for the same reason ([§ A person never trashes, renames or moves a part of a document](#a-person-never-trashes-renames-or-moves-a-part-of-a-document)). The test "a document and a chat, and nothing inside a document" in `apps/api/src/test/drive/recent.test.ts` pins it.
+
+## A read never deletes a Recent row
+
+A row the load leaves out stays in the table. At this level a failed lookup looks the same as a missing file, and a brief error must not wipe someone's history. So a hidden row comes back when the access or the file does, after a new share or a restore, and otherwise falls off through the trim. **Shared with me** is the opposite: it deletes a row on a clean not-found ([ACL.md](ACL.md#a-deleted-owners-rows-leave-at-the-recipients-next-listing)), because its row is the user's only way to find the path.
+
+## The Recent files page reads at most once a minute
+
+`useRecentPaths` (`packages/lib/src/core/drive/hooks/`) has a one-minute stale time and no live updates, because every refetch reads every owner in the list. An open doesn't touch the page's query, so a file just opened shows on the first visit after that minute. The page (`apps/drive/src/routes/_auth.recent.tsx`) is read-only like Watched, since its rows belong to many owners, and a click shows a path's details and activity in the detail panel. It keeps its own sort, starting at Modified newest first under the column label "Last activity", and never writes the shared view preference, which could otherwise open it alphabetically. `RecentFilesSidebarItem` puts the one page directly below Drive in the sidebar of Drive and the document apps, and in Chat's, Calendar's, Mail's and Contacts' sidebars, for a non-guest. One page serves every app, since the list is most useful across types and Chat has no list view of its own.
 
 ## Slow operations log in production too
 
