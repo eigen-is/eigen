@@ -1,9 +1,9 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { ApiError } from '../../lib/core/errors';
-import { drainACLFanOuts } from '../../lib/drive/acl-propagation';
 import { getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
+import { drainHomeDeliveries } from '../../lib/home/home-relay';
 import { driveGet, getTestContext } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
@@ -40,11 +40,11 @@ describe('sharing pushed by a trash, a restore or a rename', () => {
             undefined,
             alice.user,
         );
-        await drainACLFanOuts();
+        await drainHomeDeliveries();
     }
 
     async function inBobsList(pathId: string): Promise<boolean> {
-        await drainACLFanOuts();
+        await drainHomeDeliveries();
         return (await bob.drive.getSharedPathsWithMe()).some((p) => p.id === pathId);
     }
 

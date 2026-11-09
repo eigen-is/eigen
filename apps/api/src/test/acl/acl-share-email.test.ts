@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import type { Notification } from '@workspace/lib/types/notification';
-import { drainACLFanOuts } from '../../lib/drive/acl-propagation';
 import { getHome } from '../../lib/home';
+import { drainHomeDeliveries } from '../../lib/home/home-relay';
 import { assertJson, authedRequest, driveDelete, driveGet, drivePost, drivePut, getTestContext } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
@@ -212,7 +212,7 @@ describe('ACL share email', () => {
 
         const calls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === ctx.bob.user.email));
         expect(calls.length).toBe(0);
-        await drainACLFanOuts();
+        await drainHomeDeliveries();
         spy.mockRestore();
     });
 

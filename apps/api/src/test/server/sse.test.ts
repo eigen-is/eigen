@@ -2,9 +2,9 @@ import { afterEach, beforeAll, describe, expect, jest, spyOn, test } from 'bun:t
 import type { SSEvent, SSEventDrive } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { announceRestart, clearRestartNotice } from '../../lib/config/restart-notice';
-import { drainACLFanOuts } from '../../lib/drive/acl-propagation';
 import { createSSEStream, getHome } from '../../lib/home';
 import { evictHome } from '../../lib/home/get-home';
+import { drainHomeDeliveries } from '../../lib/home/home-relay';
 import { authedRequest, collectSSE, createTestUser, getTestContext, sessionIdOf } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
@@ -162,7 +162,7 @@ describe('SSE', () => {
                 });
 
             // Bob's copy arrives through the async ACL fan-out, not inside the PUT.
-            await drainACLFanOuts();
+            await drainHomeDeliveries();
             bobSSE.stop();
 
             // Bob should receive DRIVE_ACL_UPDATED (not just SHARED/UNSHARED) since the path was already shared

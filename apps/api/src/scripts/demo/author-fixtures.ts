@@ -1,14 +1,8 @@
-// One-off authoring script for the stickies board fixture container. Boots the API in-process
-// against a throwaway data root (as the test harness does), creates a real stickies board through
-// the shipped drive + collab surfaces, then copies its data.db and comments.db bytes into
-// scripts/demo/fixtures/. The seeder byte-copies those into the demo world — legal because eigen-doc
-// containers reference their internals by name, not pathId.
-//
-// The budget sheet, the deck and the drawings are built from content.ts at seed time (the builders
-// beside this script), so they need no fixture bytes at all.
-//
-// Re-run whenever the board content (KANBAN) in content.ts changes:
-//   cd apps/api && bun run src/scripts/demo/author-fixtures.ts
+// Writes the stickies board that the demo seed copies into its world, byte for byte, which works because a document
+// finds its parts by name. It boots the API on a throwaway data root, makes a real board through Drive and collab, and
+// copies out its databases. Run it by hand from apps/api when the board's content changes. The other demo documents
+// are built at seed time, so they need no fixture.
+
 import { cpSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -45,7 +39,7 @@ const setupRes = await app.handle(
 if (!setupRes.ok) throw new Error(`Setup failed (${setupRes.status}): ${await setupRes.text()}`);
 
 const { getHome, shutdownAllHomes } = await import('../../lib/home');
-const { drainACLFanOuts } = await import('../../lib/drive/acl-propagation');
+const { drainHomeDeliveries } = await import('../../lib/home/home-relay');
 
 const { user } = (await setupRes.json()) as { user: { id: string } };
 const home = await getHome(user.id);
@@ -53,9 +47,10 @@ const drive = home.drive;
 const mountId = 'default';
 const root = await drive.getRootFolder(mountId);
 if (!root) throw new Error('Default mount root not found');
+const rootId = root.id;
 
 async function authorContainer(name: string, type: 'stickies', build: (doc: import('yjs').Doc) => void) {
-    const container = await drive.create(mountId, root!.id, name, type, home.user);
+    const container = await drive.create(mountId, rootId, name, type, home.user);
     const collab = await drive.getCollabDocument(mountId, container.id);
     build(collab.doc);
     await drive.flushContainerDb(mountId, container.id);
@@ -66,11 +61,10 @@ await authorContainer(KANBAN.name, 'stickies', (doc) =>
     buildStickiesDoc(doc, KANBAN.columns, KANBAN.cards, personaByRole('production').key),
 );
 
-await drainACLFanOuts();
+await drainHomeDeliveries();
 await shutdownAllHomes();
 
-// Post-shutdown the WAL is checkpointed into each data.db, so the on-disk bytes are complete.
-// Walk the scratch tree and copy each container's data.db + comments.db into the repo fixtures.
+// The shutdown checkpointed each database's WAL, so the bytes on disk are complete.
 const files = readdirSync(scratch, { recursive: true, encoding: 'utf8' });
 function copyContainerDbs(extension: string, destDirName: string) {
     const dest = join(FIXTURES_DIR, destDirName);
