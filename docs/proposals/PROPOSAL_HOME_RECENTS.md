@@ -22,6 +22,7 @@ Accepted edges:
 - A colleague editing a doc they shared with you doesn't bring it up unless you watch it. Default-watch on share, parked in the File History row of [ROADMAP.md](../ROADMAP.md), would change that.
 - The chat app's index route opens your first chat by itself, so visiting the app counts as opening that chat.
 - Trashing many watched files at once writes a row per file, and those rows stay hidden. Two hundred or more would push your older rows out for good.
+- Clicking another row while the preview is open, or paging inside the preview, doesn't count; only the file the preview opened on does. Paging through a folder of photos would otherwise push older files out for good.
 - The table starts empty and fills from first use. There is no backfill.
 
 Non-goals for now: guests, removing one row by hand, a Clear button, per-type Recent pages in the document apps, grouping by day.
@@ -44,6 +45,8 @@ It holds no name, type or reason. A stored name would go stale on a rename and w
 
 A team home gets the empty table with its migration, and nothing writes to it. A guest home can collect rows from notifications, and nothing reads them.
 
+Every Drive home runs this migration at open, and an older archive migrates when it opens. The cost is the same as any `shared.db` migration: the older build's `restore --check-data` refuses the newer schema, so `./eigen rollback` after this update restores the pre-update Full backup and loses what changed since.
+
 ## Writing a row
 
 `recent.ts` in `apps/api/src/lib/drive/` holds the upsert, the trim and the list as functions over `sharedDb`, like `shared-with-me.ts`, behind `Drive.touchRecent` and `Drive.listRecent`.
@@ -55,9 +58,9 @@ POST /drive/:ownerId/recent     requireSelf + requireNonGuest
 body: { fileOwnerId, mountId, pathId }
 ```
 
-`:ownerId` is the caller, so the write stays in the caller's own home and opens nobody else's. The handler only refuses a `fileOwnerId` that `parseOwnerId` doesn't read as a user or a team. It doesn't check access to the file: the read does that for every row, so a row for a file you can't read only uses up a slot in your own list. It opens nothing a request couldn't already open, since `getSharedDrive` opens the home before it checks access.
+`:ownerId` is the caller, so the write stays in the caller's own home and opens nobody else's. Both Recent routes are owner-only, like `/shared/by-me`: `requireSelf`, then `getDrive(user)`. A `SharedDrive` wrapper could never run behind `requireSelf`, so there is none. The body's three ids each have a `maxLength`, since `shared.db` isn't counted in the user's quota and 200 oversized rows must not fill a disk. The handler otherwise only refuses a `fileOwnerId` that `parseOwnerId` doesn't read as a user or a team. It doesn't check access to the file: the read does that for every row, so a row for a file you can't read only uses up a slot in your own list. It opens nothing a request couldn't already open, since `getSharedDrive` opens the home before it checks access.
 
-`useRecordOpened` in `packages/lib/src/core/drive/hooks/` returns `record(path)`. A failed report is dropped silently, because the person did nothing that failed. A guest records nothing. Where the app calls it:
+`useRecordOpened` in `packages/lib/src/core/drive/hooks/` returns `record(path)`. It is a plain Eden call with a `.catch`, not a `useMutation`, because a failed report is dropped silently: the person did nothing that failed, and `onMutationError` would show a toast. A guest records nothing. Where the app calls it:
 
 - `useEigenDocEditorRoute`, the chat route in `apps/chat` and the `_auth.edit` route in `apps/drive`, in an effect keyed on the file's three ids and run once the path has loaded. Keying on the ids matters: `docInfo` refetches, and each refetch must not count as an open.
 - `useDriveListRoute`, when a row opens the preview, and `useDriveQuickLook`.
@@ -66,7 +69,7 @@ body: { fileOwnerId, mountId, pathId }
 
 Not `PreviewProvider` itself: `attachment-chip.tsx` and mail attachments open previews too, and a document's attachment must not use up a slot. Not `GET /collab/.../info` either, even though every editor passes through it. Its query refetches on window focus and on someone else's rename or ACL change (`invalidatePathRenamed`, `invalidateAclUpdated`), so each of those would look like an open.
 
-**A notification** writes in `Home.notify`, after the row persists, when the home has a notification center. It runs in the recipient's own home. A failure there is caught and logged: as in `FileHistory.notifyWatchers`, a notification never fails the change that caused it, and `assignComment` awaits this path directly. The file comes from the tag, through a new `parseNotificationPath(type, tag)` in `packages/lib/src/core/notification/tags.ts`. The share and file-event parsers move there from `resolve-link.ts`, which then imports them, so one module spells every tag. Mail, calendar, admin alerts and unshares have no file, so they write nothing.
+**A notification** writes in `Home.notify`, after the row persists, when the home has a notification center. It runs in the recipient's own home. A failure there is caught and logged: as in `FileHistory.notifyWatchers`, a notification never fails the change that caused it, and `assignComment` awaits this path directly. The file comes from the tag, through a new `parseNotificationPath(type, tag)` in `packages/lib/src/core/notification/tags.ts`. The share, access-request and file-event parsers move there from `resolve-link.ts`, which then imports them. Builders for those three tags join them, replacing the inline strings in `shared-with-me.ts`, `history.ts` and `access-request-propagation.ts`, so one module spells every tag. Mail, calendar, admin alerts and unshares have no file, so they write nothing.
 
 ## Reading the list
 
@@ -76,9 +79,9 @@ GET /drive/:ownerId/recent     requireSelf + requireNonGuest
 
 `aggregateRecents` in `apps/api/src/lib/drive/aggregate.ts`:
 
-1. Take the caller's newest 100 rows and group them by owner, skipping an owner `getOwnerExists` says is gone, so a deleted user's rows don't log an error on each load.
+1. Take the caller's newest 100 rows and group them by owner.
 2. Look up the caller's team memberships once, for the whole load.
-3. Ask each owner through `pullFromEach` and `pullRecentPaths` ([below](#one-helper-for-reads-across-homes)). The caller's own home is asked the same way. An owner whose read fails is logged and adds nothing, and the others still answer.
+3. Ask each owner through `pullFromEach` and `pullRecentPaths` ([below](#one-helper-for-reads-across-homes)). The caller's own home is asked the same way. An owner that is gone is skipped, an owner whose read fails is logged and adds nothing, and the others still answer.
 4. If fewer than 100 rows came back visible, do the same for the remaining rows, at most 100 more. This is what the other 100 stored rows are for: after a bulk trash the page still has older files to show, and in the usual load those owners are never asked.
 5. Merge and sort by `lastActivityAt`, newest first, and return at most 100, each as the current `DrivePath` plus `lastActivityAt`.
 
@@ -89,31 +92,33 @@ GET /drive/:ownerId/recent     requireSelf + requireNonGuest
 | Empty breadcrumb | The file was deleted for good |
 | `canReadFromAncestors` fails | You lost access. The owner, members of the owning team, a direct or parent folder ACL and a public visibility all pass |
 | `isTrashedChain` | It is in the trash. A trash already ends a sharee's access, but the owner and team members can still read it, so they need this check. A restore brings the file back, sharing included |
-| Any ancestor is a document type | It is inside a doc container. `FileHistory` and the comment tags already avoid these, and this is the one check that guarantees it |
+| Any ancestor is a document type | It is inside a doc container. `FileHistory` and the comment tags already avoid these, and this is the one check that guarantees it. A breadcrumb ends with the file itself, so the check reads `slice(0, -1)`, as `refuseInsideDocument` does; otherwise every doc and chat would be dropped |
 | `parentId` is null | A mount root, such as Drive home, which would otherwise rank first |
 
 **A read never deletes a row.** A failed lookup looks the same as a missing file at this level, and a brief error must not wipe someone's history. A hidden row comes back when access or the file does, and otherwise falls off through the 200-row trim.
 
 ## One helper for reads across homes
 
-`aggregateWatches`, `aggregateMimeContents` and `aggregateFileSearch` each ask their homes in one `Promise.all` and swallow a failed read with `.catch(() => [])`, so a home that can't answer looks like a home with nothing to show, and nothing records it. One private helper in `aggregate.ts` replaces those three catches, and `aggregateRecents` uses it too:
+`aggregateWatches`, `aggregateMimeContents` and `aggregateFileSearch` each ask their homes in one `Promise.all` and swallow a failed read with `.catch(() => [])`, so a home that can't answer looks like a home with nothing to show, and nothing records it. One private helper in `aggregate.ts` replaces those three catches, and `aggregateRecents` uses it too. It skips an owner that is gone, because `shared_paths` rows and Recent rows can outlive their owner, and those would otherwise log an error on each load:
 
 ```ts
-// A failed read is logged and leaves that owner out, so the other owners still answer.
-async function pullFromEach<T>(ownerIds: string[], pull: (ownerId: string) => Promise<T>): Promise<T[]> {
+// A gone owner is skipped, and a failed read is logged and leaves that owner out, so the others still answer.
+async function pullFromEach<T>(ownerIds: readonly string[], pull: (ownerId: string) => Promise<T>): Promise<T[]> {
     const results = await Promise.all(
         ownerIds.map((ownerId) =>
-            pull(ownerId).catch((err) => {
-                console.error(`aggregate: reading ${ownerId} failed:`, err);
-                return null;
-            }),
+            getOwnerExists(ownerId)
+                .then((exists) => (exists ? pull(ownerId) : null))
+                .catch((err) => {
+                    console.error(`aggregate: reading ${ownerId} failed:`, err);
+                    return null;
+                }),
         ),
     );
     return results.filter((result) => result !== null);
 }
 ```
 
-It sets no limit on how many reads run at once. Measured under load on 2026-11-09, a closed team home opens in 4 to 8 ms with 9 file descriptors, and a closed user home in 6 to 14 ms with 18. Watched and All docs over 100 closed team homes took 350 to 400 ms, about 320 ms of it CPU, and the longest event-loop gap was 7 to 15 ms. Opens are synchronous, so eight at a time and all at once cost the same CPU and end with the same open files.
+It sets no limit on how many reads run at once. Measured under load on 2026-11-09, a closed team home opens in 4 to 8 ms with 9 file descriptors, and a closed user home in 6 to 14 ms with 18. Watched and All docs over 100 closed team homes took 350 to 400 ms, about 320 ms of it CPU, and the longest event-loop gap was 7 to 15 ms. The database opens, which are most of that CPU, are synchronous, so eight at a time and all at once cost the same CPU and end with the same open files. An open also has small async steps, such as `sweepAtomicTemps` and `JsonStore.load`.
 
 The real cost is homes held open. That run took file descriptors from 37 to 937, and those hundred homes stayed open for their idle time, as any read of them does. That is the job of the LRU cap in [PROPOSAL_FD_BUDGET.md](PROPOSAL_FD_BUDGET.md). Production pins a high file limit in `docker-compose.yml`, and a dev machine at a low `ulimit -n` can run out sooner, as it already can with Watched or a large share. Recent is normally the lighter of the two, because it asks only the owners in your list, while Watched asks every team and everyone who shared with you.
 
@@ -134,14 +139,14 @@ export async function pullRecentPaths(ownerId: string, user: User, memberships: 
 
 ## The page
 
-- **Route:** `apps/drive/src/routes/_auth.recent.tsx`, modeled on `_auth.watched.tsx`, including its `?pid=&uid=&mid=` selection and detail panel, read-only like it (`DRIVE_CAPABILITIES.readOnly`), with `useRecentPaths` in `packages/lib/src/core/drive/hooks/`.
-- **Sidebar:** a row with lucide's `Clock` directly below Drive, in the same section of `UserAppSidebar` (`app-sidebar.tsx`). It uses `to` in Drive and `href: getDriveAppUrl('recent')` in the other apps, as Watched and Trash do. One page serves every app, since Recent is most useful across types and the chat app has no list view of its own. Nothing loads until you open the page.
-- **Order:** the page opens newest first, every time. It keeps its own sort in state, starting at Modified descending, because following the shared view preference could open it alphabetically. `DriveTable` and `DriveBrowser` already take a controlled `sort` and `onSortChange` for the file picker, so a click sorts this page and never writes the preference. `DriveLayout` and `DriveList` pass them through, and `DriveLayout` sorts by them. `DriveViewControls` needs them too, because the grid's sort menu and the phone's `SortMenuItems` write the preference today.
-- **Date:** the list shows `lastActivityAt` under the label "Last activity", the way Trash shows "Trashed". `DriveTable` already takes `dateLabel` and `getItemDate`, and `DriveLayout` passes them through and hands the same date to `getDriveComparator`, as Trash does. `getItemDate` takes a `DrivePath`, so the page looks the date up in a map by path id. The grid shows no date, which is accepted.
-- **Freshness:** no SSE and no live updates, because every refetch reads every owner in the list. `useRecentPaths` has a one-minute `staleTime` and refetches on mount and focus. A report of an open marks the query stale without refetching it, so a row doesn't jump while its preview is open and the next visit is current. A share arriving while you sit on the page still raises its toast, and shows in the list on the next focus.
+- **Route:** `apps/drive/src/routes/_auth.recent.tsx`, modeled on `_auth.watched.tsx`, including its `?pid=&uid=&mid=` selection and detail panel, read-only like it (`DRIVE_CAPABILITIES.readOnly`), with `useRecentPaths` in `packages/lib/src/core/drive/hooks/`. Unlike Watched's owner-less `watchesAll`, its key is `driveKeys.recent(ownerId)`, with an `invalidate*` beside it, because the query keys rule requires the owner.
+- **Sidebar:** a row with lucide's `Clock` directly below Drive, in the same section of `UserAppSidebar` (`app-sidebar.tsx`), which serves Drive and the document apps. It uses `to` in Drive and `href: getDriveAppUrl('recent')` in the other apps, as Watched and Trash do. Chat, mail, calendar and contacts have their own sidebars, and each gets the same link, for non-guests, placed by what that sidebar holds. One page serves every app, since Recent is most useful across types and the chat app has no list view of its own. Nothing loads until you open the page.
+- **Order:** the page opens newest first, every time. It keeps its own sort in state, starting at Modified descending, because following the shared view preference could open it alphabetically. `DriveTable` and `DriveBrowser` already take a controlled `sort` and `onSortChange` for the file picker, so a click sorts this page and never writes the preference. `DriveLayout` and `DriveList` don't have them yet: they gain the props and pass them through, and `DriveLayout` sorts by them. `DriveListToolbar` passes them on to `DriveViewControls`, which needs them because the grid's sort menu and the phone's `SortMenuItems` write the preference today.
+- **Date:** the list shows `lastActivityAt` under the label "Last activity", the way Trash shows "Trashed". `DriveTable` already takes `dateLabel` and `getItemDate`. `DriveLayout` gains them and hands the same date to `getDriveComparator`, as Trash does through `DriveList` with its own sort; the comparator needs a `Date`, so it reads `getItemDate(path) ?? path.updatedAt`. `getItemDate` takes a `DrivePath`, so the page looks the date up in a map by path id. The grid shows no date, which is accepted.
+- **Freshness:** no SSE and no live updates, because every refetch reads every owner in the list. `useRecentPaths` has a one-minute `staleTime`, so a mount or a focus refetches only once the data is a minute old. A report of an open marks the query stale without refetching it, so a row doesn't jump while its preview is open and the next visit is current. A share arriving while you sit on the page still raises its toast, and shows in the list on the first focus after that minute.
 - **Empty state:** "Files you open or get notified about will appear here."
 
-**Each row shows the file's latest activity, as a second step.** "Mark commented · 2h" is what makes this more than a list of files. It needs no stored text: the read takes the file's newest row in `file_events`, using `idx_file_events_path_created`, and renders it with `describeFileEvent`. It reports what last happened, which isn't always why the file is listed: a file you opened today can read "Mark commented" from three weeks ago, so the line carries that event's own time. A file with no events shows no line. This adds a line to `DriveList`, so it lands after the page works.
+**Each row shows the file's latest activity, as a second step.** "Mark commented · 2h" is what makes this more than a list of files. It needs no stored text: the read takes the file's newest row in `file_events`, using `idx_file_events_path_created`, and renders it with `describeFileEvent`. That function prints a principal's id unless it is given `resolveName`, and its lines name no actor, so this step also has to resolve names, as `activity-event-list.tsx` does. It reports what last happened, which isn't always why the file is listed: a file you opened today can read "Mark commented" from three weeks ago, so the line carries that event's own time. A file with no events shows no line. This adds a line to `DriveList`, so it lands after the page works.
 
 ## Build order
 
@@ -154,9 +159,9 @@ Later steps get their own go, below.
 
 ## Tests
 
-`apps/api/src/test/drive/recent.test.ts`: one row after repeated opens, the 200-row trim, a revoked share hidden and back after re-sharing, a trashed file hidden and back after restore, a deleted file, a mount root, a file inside a container, a shared, a team and a public file, a share notification adding a row, a dismissed notification keeping it, a type without a path adding none, a failing write not failing the notification, a guest refused by both routes, a row for a file the user can't read staying hidden, a row on a missing mount leaving that owner's other rows, one failing owner leaving the others and keeping its rows, a deleted owner skipped, only the newest 100 rows asked in the usual load, and the older rows asked when too few are visible.
+`apps/api/src/test/drive/recent.test.ts`: one row after repeated opens, the 200-row trim, a revoked share hidden and back after re-sharing, a trashed file hidden and back after restore, a deleted file, a mount root, a file inside a container hidden while a doc and a chat themselves stay listed, a shared, a team and a public file, a share notification adding a row, a dismissed notification keeping it, a type without a path adding none, a failing write not failing the notification, a guest refused by both routes, a row for a file the user can't read staying hidden, a row on a missing mount leaving that owner's other rows, one failing owner leaving the others and keeping its rows, a deleted owner skipped, only the newest 100 rows asked in the usual load, and the older rows asked when too few are visible.
 
-In `apps/api/src/test/drive/`, through the public `aggregate*` functions since the helper is private: Watched, All docs and file search each log a failed read, leave that owner out and still return the other owners' files.
+In `apps/api/src/test/drive/`, through the public `aggregate*` functions since the helper is private: Watched, All docs and file search each log a failed read, leave that owner out and still return the other owners' files, and Watched skips a deleted owner without logging.
 
 Plus `app-sidebar.test.tsx` for the row in Drive and in an app, a test that sorting Recent leaves the shared preference alone, and a run through the verify-in-browser skill.
 
