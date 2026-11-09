@@ -84,7 +84,8 @@ export class FormulaEngine {
     // True when the result says nothing because of the formula's own text: a parse failure, a function this build
     // lacks that the branch taken holds, or a name it can't resolve, whose #NAME? an IFERROR would trap into a fallback
     // nobody computed. A #NAME? read from another cell is the other cell's. A name Excel reads past its last column
-    // (RhoCO2) is one the engine reads as a cell. A #REF! is an answer whatever else the text holds.
+    // (RhoCO2) is one the engine reads as a cell. A result of #REF! is an answer, the one a function this build lacks
+    // hands on included, whatever else the text holds.
     public cantEvaluate(formula: string, { value }: EvaluationResult): boolean {
         if (value === errorParser(ERROR_REF)) return false;
         if (value === errorParser(ERROR) && !this.parser.parses(formula.substring(1))) return true;

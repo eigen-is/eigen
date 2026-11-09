@@ -5,7 +5,7 @@
 
 import { isExcelFunction } from '@workspace/lib/sheets';
 import type { FormulaArg, FormulaOutput } from '../../types';
-import { ERROR_NAME, firstError, toFormulaError, UNSUPPORTED_FUNCTION } from '../error';
+import errorText, { ERROR_NAME, ERROR_REF, firstError, toFormulaError, UNSUPPORTED_FUNCTION } from '../error';
 import type { FunctionArg } from '../omitted';
 import add from './operator/add';
 import ampersand from './operator/ampersand';
@@ -118,11 +118,16 @@ export function isRegisteredFunction(name: string): boolean {
 // see any error, as in Excel. A real Excel function the engine lacks is UNSUPPORTED_FUNCTION, which every function
 // hands on, IFERROR, IFNA, ISERROR and ERROR.TYPE too, because their answer would read as the one Excel computed.
 // Only a branch IF, CHOOSE, IFS, SWITCH, IFERROR or IFNA doesn't take may hold it, and the function returns the one it
-// takes.
+// takes. A function the engine lacks hands on a #REF! it is given, because that is Excel's answer whatever the function.
 export function callFunction(name: string, params: FunctionArg[] = []): FormulaOutput {
     const upper = name.toUpperCase();
     const callable = availableFunctions[upper];
-    if (!callable) return isExcelFunction(name) ? UNSUPPORTED_FUNCTION : toFormulaError(Error(ERROR_NAME));
+    if (!callable) {
+        if (params.some((p) => p instanceof Error && p.message === errorText(ERROR_REF))) {
+            return toFormulaError(Error(ERROR_REF));
+        }
+        return isExcelFunction(name) ? UNSUPPORTED_FUNCTION : toFormulaError(Error(ERROR_NAME));
+    }
     const isBranch = (i: number) => BRANCHES[upper]?.(i, params.length) ?? false;
     if (params.some((p, i) => p === UNSUPPORTED_FUNCTION && !isBranch(i))) {
         return UNSUPPORTED_FUNCTION;

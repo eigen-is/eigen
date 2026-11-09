@@ -805,6 +805,18 @@ describe('a formula holding #REF!', () => {
     test('beside a name this build cannot read it still shows #REF!', () => {
         expect(removed('=A2+UNKNOWNNAME', 5)?.v).toBe('#REF!');
     });
+
+    test('inside a function this build lacks it shows #REF!, as Excel does', () => {
+        expect(removed('=_xlfn.NEWFN(A2)', 5)?.v).toBe('#REF!');
+        expect(removed('=FILTER(A2,1)', 5)?.v).toBe('#REF!');
+        expect(removed('=SUM(FILTER(A2,1))', 5)?.v).toBe('#REF!');
+        expect(removed('=IFERROR(FILTER(A2,1),7)', 5)?.v).toBe(7);
+        expect(removed('=IF(TRUE,1,FILTER(A2,1))', 5)?.v).toBe(1);
+    });
+
+    test('a function this build lacks with no #REF! in hand keeps the number', () => {
+        expect(removed('=FILTER(A1,1)', 5)?.v).toBe(5);
+    });
 });
 
 describe('a percent sign', () => {
