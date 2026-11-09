@@ -53,6 +53,15 @@ test('a comment on an equation anchors by its attribute and quotes its linear fo
     expect(commentAnchorText(bare, 0, bare.content.size)).toBe('Equation');
 });
 
+test('a comment on a text box alone reads as "Text box", leaving out its own text', () => {
+    const box = {
+        type: 'textBox',
+        content: [{ type: 'paragraph', content: [text('Boxed')] }],
+    };
+    const doc = schema.nodeFromJSON(docOf(box));
+    expect(commentAnchorText(doc, 0, doc.content.size)).toBe('Text box');
+});
+
 test('a comment over a page number quotes its #', () => {
     const doc = schema.nodeFromJSON(docOf(text('Page '), { type: 'pageNumber', attrs: { kind: 'page' } }));
     expect(commentAnchorText(doc, 0, doc.content.size)).toBe('Page #');

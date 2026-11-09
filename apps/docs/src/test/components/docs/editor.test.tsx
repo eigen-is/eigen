@@ -1381,6 +1381,16 @@ function writeTextBox() {
     doc.getXmlFragment('default').insert(0, [paragraph]);
 }
 
+test('a right-click on a text box offers Add comment, which opens the new comment form', async () => {
+    writeTextBox();
+    await render({ ...WRITER, chatFolderId: 'chats' });
+    const box = bodyView()?.querySelector('.figure');
+    if (!box) throw new Error('no text box');
+    await act(async () => box.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
+    await pick('Add comment');
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('New comment');
+});
+
 test('a right-click on a text box offers a writer Cut, Copy and Delete, and Delete takes the box out', async () => {
     writeTextBox();
     await render(WRITER);

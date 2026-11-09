@@ -137,14 +137,14 @@ export function selectCommentAnchor(editor: Editor, cardId: string): void {
 const QUOTE_WORDS: Record<FigureFrameNode, string> = { figure: 'Image', chart: 'Chart', textBox: 'Text box' };
 
 // A comment on an image, a chart or a text box alone has no text to quote, so it reads as the word for that node, such
-// as "Image". A story's text stays out of the quote, because a story takes no comment.
+// as "Image". A story's text stays out of the quote, because a story takes no comment, so a note reads as nothing.
 export function commentAnchorText(doc: Node, from: number, to: number): string {
     return textOutsideStories(
         doc,
         from,
         to,
         ' ',
-        () => '',
+        (story) => (isFigureFrameNode(story.type.name) ? QUOTE_WORDS[story.type.name] : ''),
         (leaf) => {
             if (isFigureFrameNode(leaf.type.name)) return QUOTE_WORDS[leaf.type.name];
             if (leaf.type.name === 'equation') return readEquation(leaf.attrs).text || 'Equation';
