@@ -41,18 +41,28 @@ const RRULE_LAST_YEAR = 9999;
 // 28 years hold every weekday of every date, leap days included.
 const CYCLE_YEARS = 28;
 
+function inYear(date: Date, year: number): Date {
+    const moved = new Date(date);
+    moved.setUTCFullYear(year);
+    return moved;
+}
+
 // rrule takes no step limit, and a rule with no next date walks to its last year whatever the window. So the rule is
-// tried from a start moved near that year by whole cycles, where the walk soon ends. A rule rrule refuses counts the same.
+// tried from a start moved near that year, on DTSTART's weekday and leap phase, where the walk soon ends. A rule rrule
+// refuses counts the same.
 export function isExpandableRrule(rrule: string, dtstart: Date): boolean {
     if (isOutOfRangeRecurrenceStart(dtstart)) return false;
     try {
         const options = RRule.parseString(rrule);
         if (isSubDaily(options)) return false;
-        const years = CYCLE_YEARS * (options.interval ?? 1);
-        const year = dtstart.getUTCFullYear();
-        const cycles = Math.max(0, Math.floor((RRULE_LAST_YEAR - years - year) / CYCLE_YEARS));
-        const start = new Date(dtstart);
-        start.setUTCFullYear(year + cycles * CYCLE_YEARS);
+        const stated = dtstart.getUTCFullYear();
+        let year = Math.max(stated, RRULE_LAST_YEAR - CYCLE_YEARS * (options.interval ?? 1));
+        year -= (year - stated) % 4;
+        let start = inYear(dtstart, year);
+        while (start.getUTCDay() !== dtstart.getUTCDay()) {
+            year -= 4;
+            start = inYear(dtstart, year);
+        }
         return new RRule({ ...options, dtstart: start, count: null, until: null }, true).after(start, true) !== null;
     } catch {
         return false;

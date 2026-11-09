@@ -57,6 +57,8 @@ const REAL_RULES: [string, string, string][] = [
     ['each 29 February on a Monday', 'FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=29;BYDAY=MO', '2044-02-29'],
     ['each 29 February, stepping day by day', 'FREQ=DAILY;BYMONTH=2;BYMONTHDAY=29', '2028-02-29'],
     ['each January, every fifty years', 'FREQ=YEARLY;INTERVAL=50;BYMONTH=1;BYMONTHDAY=1', '2076-01-01'],
+    ['every Monday, stepping seven days', 'FREQ=DAILY;INTERVAL=7;BYDAY=MO', '2026-03-09'],
+    ['every other Monday, stepping fourteen days', 'FREQ=DAILY;INTERVAL=14;BYDAY=MO', '2026-03-16'],
     ['three times', 'FREQ=WEEKLY;COUNT=3', '2026-03-09'],
     ['until a date', 'FREQ=DAILY;UNTIL=20260310T000000Z', '2026-03-05'],
     ['twice a day', 'FREQ=DAILY;BYHOUR=9,17', '2026-03-03'],
@@ -71,7 +73,11 @@ const COSTLY_RULES: [string, string][] = [
     ['a date no year holds', 'FREQ=DAILY;BYMONTH=2;BYMONTHDAY=30'],
     ['a week number no month holds', 'FREQ=DAILY;BYWEEKNO=1;BYMONTH=6'],
     ['a position past the last Monday', 'FREQ=MONTHLY;BYDAY=MO;BYSETPOS=6'],
-    ['a step that misses its one weekday', 'FREQ=DAILY;INTERVAL=7;BYDAY=SU'],
+    ...['SU', 'TU', 'WE', 'TH', 'FR', 'SA'].map((day): [string, string] => [
+        `a step that misses ${day}`,
+        `FREQ=DAILY;INTERVAL=7;BYDAY=${day}`,
+    ]),
+    ['a step that misses every leap day', 'FREQ=YEARLY;INTERVAL=4;BYMONTH=2;BYMONTHDAY=29'],
     ['a position rrule refuses', 'FREQ=MONTHLY;BYDAY=MO;BYSETPOS=0'],
     ['every second of a day in daily words', `FREQ=DAILY;BYHOUR=${hours};BYMINUTE=${minutes};BYSECOND=${minutes}`],
 ];
