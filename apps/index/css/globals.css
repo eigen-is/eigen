@@ -1,6 +1,14 @@
 :root {
     --app-current-color: var(--app-space-color);
     --app-current-color-soft: var(--app-space-color-soft);
+
+    /* The one grid of the public site: a reading column between two gutters, and the wide container the landing
+       blocks and the Support grid sit in. Below 76rem (the wide container plus its 1.5rem padding) the gutters go
+       and the column stands alone. */
+    --site-col: 44rem;
+    --site-gutter: 12rem;
+    --site-gap: 2.5rem;
+    --site-wide: calc(var(--site-col) + 2 * var(--site-gutter) + 2 * var(--site-gap));
 }
 
 .bg-app {
@@ -9,6 +17,41 @@
 
 .text-app {
     color: var(--app-space-color);
+}
+
+.site-wide {
+    width: 100%;
+    max-width: calc(var(--site-wide) + 3rem);
+    margin-inline: auto;
+    padding-inline: 1.5rem;
+}
+
+.site-reading {
+    display: grid;
+    grid-template-columns: minmax(0, var(--site-col));
+    justify-content: center;
+    padding-inline: 1.5rem;
+}
+
+.site-reading-aside {
+    display: none;
+}
+
+@media (min-width: 76rem) {
+    .site-reading {
+        grid-template-columns: var(--site-gutter) minmax(0, var(--site-col)) var(--site-gutter);
+        column-gap: var(--site-gap);
+    }
+
+    .site-reading-aside {
+        display: block;
+        grid-column: 1;
+        grid-row: 1;
+    }
+
+    .site-reading-column {
+        grid-column: 2;
+    }
 }
 
 .eigen-callout {
@@ -23,26 +66,145 @@
     margin: 0;
 }
 
-/* Wikipedia-style hover anchor on headings; clicking it copies a link to the section. */
-.eigen-prose h2,
-.eigen-prose h3 {
-    scroll-margin-top: 5rem;
+/* Rendered articles, posts and the changelog. Everything here sits inside this page class, because .eigen-prose is
+   the shared editor style and its headings, links and code are not ours to change. */
+.site-prose {
+    --doc-font-size: 1rem;
+
+    h2,
+    h3 {
+        position: relative;
+        scroll-margin-top: 3rem;
+    }
+
+    h2 {
+        margin-top: 2.75rem;
+        font-size: 1.5rem;
+    }
+
+    h3 {
+        margin-top: 2rem;
+    }
+
+    h2:focus,
+    h3:focus {
+        outline: none;
+    }
+
+    code {
+        background-color: var(--muted);
+        color: var(--foreground);
+    }
+
+    /* The link icon hangs in the left margin of its heading and shows while the heading is hovered; clicking it
+       copies the link. A touch screen has no hover, so it goes there. */
+    .heading-anchor {
+        position: absolute;
+        top: 50%;
+        left: -1.625rem;
+        display: flex;
+        align-items: center;
+        width: 1.625rem;
+        height: 1.5rem;
+        transform: translateY(-50%);
+        color: var(--foreground);
+        text-decoration: none;
+        opacity: 0;
+        transition: opacity 0.12s ease;
+    }
+
+    h2:hover .heading-anchor,
+    h3:hover .heading-anchor,
+    .heading-anchor:focus-visible {
+        opacity: 1;
+    }
 }
 
-.heading-anchor {
-    display: inline-flex;
-    align-items: center;
-    margin-left: 0.3em;
-    color: var(--muted-foreground);
-    opacity: 0;
-    vertical-align: middle;
-    transition:
-        opacity 0.12s ease,
-        color 0.12s ease;
+.dark .site-prose.eigen-prose:not(.eigen-paper *) code {
+    background-color: var(--muted);
+    color: var(--foreground);
 }
 
-.eigen-prose h2:hover .heading-anchor,
-.eigen-prose h3:hover .heading-anchor,
-.heading-anchor:focus-visible {
-    opacity: 1;
+@media (pointer: coarse) {
+    .site-prose .heading-anchor {
+        display: none;
+    }
+}
+
+/* The first paragraph of a blog post reads larger. */
+.site-lead > div:first-child > p:first-child {
+    font-size: 1.125rem;
+    line-height: 1.6;
+}
+
+/* The changelog: a release is a section with a thin rule above it, its h3 a small label and its entries a bold lead
+   on a line of their own. */
+.site-prose.changelog {
+    --release-text: color-mix(in oklab, var(--foreground) 82%, var(--background));
+
+    .release {
+        padding-top: 1.75rem;
+        border-top: 1px solid var(--border);
+    }
+
+    .release + .release {
+        margin-top: 3.5rem;
+    }
+
+    .release-head {
+        display: flex;
+        align-items: baseline;
+        gap: 0.75rem;
+        margin: 0;
+        font-size: 1.75rem;
+        line-height: 1.2;
+    }
+
+    .release-head time {
+        font-size: 0.9375rem;
+        font-weight: 400;
+        letter-spacing: 0;
+        color: var(--muted-foreground);
+    }
+
+    .release-head .heading-anchor {
+        top: 0.875rem;
+    }
+
+    .release > p {
+        margin-top: 1rem;
+        color: var(--release-text);
+    }
+
+    h3 {
+        margin-top: 2rem;
+        font-size: 0.75rem;
+        line-height: 1rem;
+        font-weight: 500;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+    }
+
+    ul {
+        margin-top: 0.75rem;
+        padding: 0;
+        list-style: none;
+    }
+
+    li {
+        font-size: 0.9375rem;
+        line-height: 1.6;
+        color: var(--release-text);
+    }
+
+    li + li {
+        margin-top: 1rem;
+    }
+
+    .lead {
+        display: block;
+        font-weight: 500;
+        color: var(--foreground);
+    }
 }

@@ -1,13 +1,15 @@
-import { UPLOAD_CAP_MAX_MB } from '@workspace/lib/constants/mount';
+// The server's settings, such as the storage quotas, the guest and landing page options and which emails go out,
+// kept in a JSON file in the server's data folder. They load once at startup, and routes and background jobs read
+// them through getServerSettings; the org owner changes them through the settings route. A value the file doesn't
+// hold has its default here.
+
 import type { S3Config } from '@workspace/lib/types/mount';
 import { EMPTY_S3 } from '@workspace/lib/types/mount';
-import type { ServerSettings, ServerStorageType } from '@workspace/lib/types/settings';
+import type { ServerSettings } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
 import { JsonStore } from '../core/json-store';
 import { LocalFilesystem } from '../core/local-filesystem';
 import { getServerDataPath, SERVER_FILES } from './paths';
-
-export { mapStorageType } from '@workspace/lib/types/settings';
 
 // A server with no backup set up, and what an admin who is not the owner reads of the backup settings.
 export const DEFAULT_BACKUPS: ServerSettings['backups'] = {
@@ -49,6 +51,7 @@ const settingsStore = new JsonStore<ServerSettings>(serverFs, SERVER_FILES.setti
     },
     landing: {
         links: [],
+        showInstall: false,
     },
     notifications: {
         email: {
@@ -56,6 +59,8 @@ const settingsStore = new JsonStore<ServerSettings>(serverFs, SERVER_FILES.setti
             userOnAclAdd: false,
             userOnCalendarInvite: true,
             ownerOnAccessRequest: true,
+            guestOnAssign: true,
+            userOnAssign: false,
         },
     },
     mail: {
@@ -74,13 +79,8 @@ export async function updateServerSettings(update: DeepPartial<ServerSettings>):
     await settingsStore.set(update);
 }
 
-// A cap saved before the settings route bounded it can sit above what any request may carry.
 export function getMaxUploadSize(): number {
-    return Math.min(getServerSettings().quotas.maxUploadSizeMB, UPLOAD_CAP_MAX_MB) * 1024 * 1024;
-}
-
-export function getStorageType(): ServerStorageType {
-    return getServerSettings().defaults.mount.storageType;
+    return getServerSettings().quotas.maxUploadSizeMB * 1024 * 1024;
 }
 
 export function getS3Config(): S3Config | undefined {

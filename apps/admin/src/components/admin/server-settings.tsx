@@ -32,8 +32,6 @@ import { ServerStatusSection } from './server-status-section';
 import { StorageTypePicker } from './storage-type-picker';
 import { SwitchRow } from './switch-row';
 
-type EmailFlag = keyof ServerSettings['notifications']['email'];
-
 export function ServerSettingsPage() {
     const { data: settings, isLoading } = useServerSettings();
     const updateSettings = useUpdateServerSettings();
@@ -71,6 +69,7 @@ export function ServerSettingsPage() {
         },
         landing: {
             links: draft.landing?.links ?? settings.landing.links,
+            showInstall: draft.landing?.showInstall ?? settings.landing.showInstall,
         },
         backups: {
             schedule: { ...settings.backups.schedule, ...draft.backups?.schedule },
@@ -88,7 +87,7 @@ export function ServerSettingsPage() {
         setDraft((prev) => ({ ...prev, quotas: { ...prev.quotas, [key]: value } }));
     };
 
-    const updateEmailFlag = (key: EmailFlag, value: boolean) => {
+    const updateEmailFlag = (key: keyof ServerSettings['notifications']['email'], value: boolean) => {
         setDirty(true);
         setDraft((prev) => ({
             ...prev,
@@ -101,10 +100,12 @@ export function ServerSettingsPage() {
         setDraft((prev) => ({ ...prev, mail: { ...prev.mail, ...patch } }));
     };
 
-    const updateLinks = (links: LandingLink[]) => {
+    const updateLanding = (patch: Partial<ServerSettings['landing']>) => {
         setDirty(true);
-        setDraft((prev) => ({ ...prev, landing: { links } }));
+        setDraft((prev) => ({ ...prev, landing: { ...prev.landing, ...patch } }));
     };
+
+    const updateLinks = (links: LandingLink[]) => updateLanding({ links });
 
     // The draft keeps only the half of the backup settings the owner changed. The server checks the bucket only when a
     // save carries the upload half, so a change to the schedule alone skips that check.
@@ -143,11 +144,12 @@ export function ServerSettingsPage() {
             await updateS3Config.mutateAsync(s3Draft);
         if (dirty) {
             const saved = await updateSettings.mutateAsync(
-                draft.landing ? { ...draft, landing: { links: normalizeLinks(draft.landing.links ?? []) } } : draft,
+                draft.landing?.links
+                    ? { ...draft, landing: { ...draft.landing, links: normalizeLinks(draft.landing.links) } }
+                    : draft,
             );
-            // The notice comes once, when the backup bucket is new: it asks the owner to keep the bucket's keys
-            // somewhere other than this server. The warning comes from the bucket check. That check runs on every
-            // save of the upload settings while the upload is on, even when the bucket stayed the same.
+            // A new backup bucket brings a one-time notice to keep its keys off this server. A bucket that lacks
+            // something, such as versioning, warns on every save of the upload settings, even when it stayed the same.
             if (saved.notice || saved.warning) setBackupNotice({ notice: saved.notice, warning: saved.warning });
         }
         handleReset();
@@ -330,12 +332,12 @@ export function ServerSettingsPage() {
 
             <SettingsSection
                 title="Email notifications"
-                description="Send email when a notification fires. In-app notifications always fire regardless."
+                description="Send email when a notification fires. Anyone with an account gets the in-app notification either way."
             >
                 <div className="space-y-3">
                     <SwitchRow
                         label="Email guests when added to share"
-                        description="Guests have no in-app channel, so without email they have no way to know."
+                        description="A guest rarely has Eigen open, and one who never signed in has no bell, so email is how they find out."
                         checked={current.notifications.email.guestOnAclAdd}
                         onChange={(v) => updateEmailFlag('guestOnAclAdd', v)}
                     />
@@ -344,6 +346,18 @@ export function ServerSettingsPage() {
                         description="In-app notification + bell already fires. Off by default."
                         checked={current.notifications.email.userOnAclAdd}
                         onChange={(v) => updateEmailFlag('userOnAclAdd', v)}
+                    />
+                    <SwitchRow
+                        label="Email guests when assigned a comment or card"
+                        description="A guest rarely has Eigen open, and one who never signed in has no bell."
+                        checked={current.notifications.email.guestOnAssign}
+                        onChange={(v) => updateEmailFlag('guestOnAssign', v)}
+                    />
+                    <SwitchRow
+                        label="Email users when assigned a comment or card"
+                        description="In-app notification + bell already fires. Off by default."
+                        checked={current.notifications.email.userOnAssign}
+                        onChange={(v) => updateEmailFlag('userOnAssign', v)}
                     />
                     <SwitchRow
                         label="Email users for calendar invites"
@@ -364,9 +378,15 @@ export function ServerSettingsPage() {
 
             <SettingsSection
                 title="Landing page"
-                description="Optional extra buttons on the public landing page. Each button links to a URL."
+                description="Extra buttons and the install line on the public landing page."
             >
                 <div className="space-y-3">
+                    <SwitchRow
+                        label="Show install section"
+                        description="Adds the install instructions to the public landing page."
+                        checked={current.landing.showInstall}
+                        onChange={(v) => updateLanding({ showInstall: v })}
+                    />
                     {current.landing.links.map((link, i) => (
                         <div key={i} className="flex items-center gap-2">
                             <Input
@@ -417,8 +437,7 @@ export function ServerSettingsPage() {
     );
 }
 
-// The server refuses an empty title or URL, and a URL that does not start with http:// or https://. A save also trims
-// both fields, drops a row that misses one, lowercases the scheme and puts https:// before a URL that has none.
+// The server refuses an empty title or URL and a URL without http:// or https://, so a save mends what it can first.
 function normalizeLinks(links: readonly LandingLink[]): LandingLink[] {
     return links
         .map((link) => ({ title: link.title.trim(), url: link.url.trim() }))
