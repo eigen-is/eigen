@@ -40,10 +40,7 @@ The API audit's tripwire applies here unchanged: at the third `fix(x)` on one me
 
 ## Bugs found on the way
 
-Each comes from reading or tracing the code, not from running it, unless it says so. Each one gets a red test first.
-
-| Bug | Finding | How sure |
-|---|---|---|
+All of these are fixed; a new one goes to its finding.
 
 ## Shortlist
 
