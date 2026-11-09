@@ -29,20 +29,6 @@ export class FileHistory {
         public readonly mountId: string,
     ) {}
 
-    // What lives inside a document, such as a card's comment thread, gets no rows: the document has its own.
-    private isContainerInternal(pathId: string): boolean {
-        const ancestors = this.db.all<{ type: DrivePathType }>(sql`
-            WITH RECURSIVE chain(id) AS (
-                SELECT ${sql.raw('parentId')} FROM ${paths} WHERE id = ${pathId} AND ${sql.raw('parentId')} IS NOT NULL
-                UNION
-                SELECT p.${sql.raw('parentId')} FROM ${paths} p JOIN chain c ON p.id = c.id
-                WHERE p.${sql.raw('parentId')} IS NOT NULL
-            )
-            SELECT p.type AS type FROM ${paths} p JOIN chain c ON p.id = c.id
-        `);
-        return ancestors.some((ancestor) => isDocumentType(ancestor.type));
-    }
-
     public record(input: FileEventInput, opts?: { dedupeWindowMs?: number }): void {
         if (this.isContainerInternal(input.pathId)) return;
         if (opts?.dedupeWindowMs) {
@@ -76,7 +62,7 @@ export class FileHistory {
             .run();
     }
 
-    // A folder or a document lists the events of everything inside it too, newest first.
+    // A file's own events; a folder's or a document's also those of everything below it. Newest first.
     public list(pathId: string, opts?: { limit?: number }): FileEvent[] {
         const limit = opts?.limit ?? 50;
 
@@ -185,8 +171,8 @@ export class FileHistory {
         return rows.map((row) => row.userId);
     }
 
-    // A watcher who can no longer read the path is skipped. verifyAncestors is read before a change that rewrites the
-    // chain, such as a trash, which moves the path to the mount root.
+    // A watcher whose share was revoked since watching is skipped. verifyAncestors is the chain that justifies the
+    // notification, captured before a change that rewrites it, as a trash moves the item to the mount root.
     public async notifyWatchers(
         watcherIds: readonly string[],
         opts: {
@@ -200,9 +186,9 @@ export class FileHistory {
             excludeEmails?: ReadonlySet<string>;
         },
     ): Promise<void> {
-        // The body is stored, so the names of the teams in a sharing change are resolved now. The change has landed by
-        // now, so a notification that can't be written is logged and never fails it.
-        const details = opts.details;
+        const { details } = opts;
+        // The stored body names teams, so their names are resolved now and not when it renders. The change has landed
+        // by now, so a notification that can't be written is logged and never fails the change.
         const names = await getBatchPublicInfo(aclPrincipalsToResolve(details)).catch((error: unknown) => {
             console.error(`[FileHistory] Failed to notify the watchers of ${opts.tagPathId}:`, error);
             return null;
@@ -234,8 +220,7 @@ export class FileHistory {
                 }
             }),
         );
-        // The deliveries open each watcher's home and share the relay's budget with other fan-outs.
-        // So they run after the change answers, and a busy budget never holds up the change.
+        // The deliveries open each watcher's home, so they run after the change answers.
         sendToUserHomes(
             recipients.filter((id) => id !== null),
             {
@@ -250,9 +235,7 @@ export class FileHistory {
                     details: { secondary: lines.secondary, cardId, chatName, pathType: opts.pathType },
                 },
             },
-        ).catch((error: unknown) => {
-            console.error(`[FileHistory] Failed to notify the watchers of ${opts.tagPathId}:`, error);
-        });
+        );
     }
 
     public async fanOut(opts: {
@@ -265,10 +248,11 @@ export class FileHistory {
         burst?: boolean;
         excludeEmails?: ReadonlySet<string>;
         details?: FileEvent['details'];
-        // A function runs only when there are watchers, which is rare, so most changes walk no breadcrumbs.
+        // A function runs only when there are watchers, which is rare, so most changes walk no breadcrumbs. A change
+        // that rewrites the parent chain, such as a trash or a move, passes the chain it captured before.
         verifyAncestors: readonly DrivePath[] | (() => Promise<readonly DrivePath[]>);
     }): Promise<void> {
-        // A change to a path in the trash notifies nobody, and the trash itself still does.
+        // An item already in trash never fans out. The 'trashed' event passes the item as it was before.
         if (opts.path.trashedAt && opts.eventType !== 'trashed') return;
         if (this.isContainerInternal(opts.path.id)) return;
         const chainRoots = opts.chainRootIds.filter((id) => id !== null);
@@ -304,5 +288,20 @@ export class FileHistory {
                 ) WHERE rn > ${HISTORY_MAX_PER_PATH}
             )
         `);
+    }
+
+    // What sits inside a document, such as a card's comment thread or its media, gets no timeline rows.
+    // The document speaks through its own events.
+    private isContainerInternal(pathId: string): boolean {
+        const ancestors = this.db.all<{ type: DrivePathType }>(sql`
+            WITH RECURSIVE chain(id) AS (
+                SELECT ${sql.raw('parentId')} FROM ${paths} WHERE id = ${pathId} AND ${sql.raw('parentId')} IS NOT NULL
+                UNION
+                SELECT p.${sql.raw('parentId')} FROM ${paths} p JOIN chain c ON p.id = c.id
+                WHERE p.${sql.raw('parentId')} IS NOT NULL
+            )
+            SELECT p.type AS type FROM ${paths} p JOIN chain c ON p.id = c.id
+        `);
+        return ancestors.some((ancestor) => isDocumentType(ancestor.type));
     }
 }

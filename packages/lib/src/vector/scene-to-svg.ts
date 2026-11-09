@@ -61,19 +61,8 @@ export function sceneToSvg(scene: VectorScene, opts: SceneToSvgOptions = {}): st
     return `<svg xmlns="${SVG_NS}" width="${width}" height="${height}" viewBox="${minX} ${minY} ${width} ${height}">${body}</svg>`;
 }
 
-// One element → its own SVG fragment (a `<g>`), the exact per-element code path sceneToSvg
-// runs. The live canvas (packages/ui) reuses this so its per-element nodes are byte-for-byte
-// what previews/embeds/export produce. Every kind renders in its own LOCAL frame; the `<g>` here is
-// what places and rotates it.
-// `byId` lets an elbow arrow resolve its bound shapes to derive its route; omit it (no scene context)
-// and an elbow arrow falls back to its straight stored endpoints.
-export function elementToSvg(
-    el: VectorElement,
-    opts: SceneToSvgOptions = {},
-    byId?: Map<string, VectorElement>,
-): string {
-    // arrowRoute self-guards (not an arrow, or not elbow ⇒ undefined), so no element-type test is needed
-    // here — and none survives anywhere outside kinds/.
+// One element as its own `<g>`. Every kind draws in its own local frame, and the `<g>` places and turns it.
+function elementToSvg(el: VectorElement, opts: SceneToSvgOptions, byId: Map<string, VectorElement>): string {
     const out = ELEMENT_KINDS[el.type].render(el, { resolveMedia: opts.resolveMedia, route: arrowRoute(el, byId) });
     // The backdrop is already in the element's local frame, so it rides in the same <g>, before the text.
     const text = opts.richText?.get(el.id);

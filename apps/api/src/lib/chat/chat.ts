@@ -65,23 +65,23 @@ export class ChatRoom {
     ): Promise<ChatMessage> {
         const { email: authorEmail } = author;
         if (content.startsWith('/') && type === 'message') {
-            const cmd = parseCommand(content);
-            switch (cmd.kind) {
+            const command = parseCommand(content);
+            switch (command.kind) {
                 case 'builtin-emote':
                     type = 'emote';
-                    content = cmd.target ? `$${cmd.emoteKey}:${cmd.target}` : `$${cmd.emoteKey}`;
+                    content = command.target ? `$${command.emoteKey}:${command.target}` : `$${command.emoteKey}`;
                     break;
                 case 'emote':
                     type = 'emote';
-                    content = cmd.content;
+                    content = command.content;
                     break;
                 case 'whisper':
                     type = 'whisper';
-                    whisperTo = cmd.target;
-                    content = cmd.content;
+                    whisperTo = command.target;
+                    content = command.content;
                     break;
                 case 'error':
-                    throw new ApiError(400, cmd.error);
+                    throw new ApiError(400, command.error);
             }
         }
 
@@ -162,14 +162,11 @@ export class ChatRoom {
                 chatName: this.containerPath ? this.path.name : undefined,
             };
             const body = content.length > 100 ? `${content.slice(0, 100)}...` : content;
-            const memberEmails = new Set(members.map((m) => m.email.toLowerCase()));
+            const memberEmails = new Set(members.map((member) => member.email.toLowerCase()));
 
-            // The deliveries open each recipient's home and share the relay's budget with other
-            // fan-outs. So they run after the post answers, and a busy budget never holds up a message.
+            // The deliveries open each recipient's home, so they run after the post answers.
             const notify = (userIds: string[], notification: NotificationPersistInput) => {
-                sendToUserHomes(userIds, { type: 'notification', notification }).catch((error: unknown) => {
-                    console.error('Failed to send the chat notifications:', error);
-                });
+                sendToUserHomes(userIds, { type: 'notification', notification });
             };
             // The message is stored already, so a failed lookup costs only that person's notification.
             // It is logged, and the post still answers.
@@ -309,31 +306,31 @@ export class ChatRoom {
         });
 
         const viewerEmail = userEmail.toLowerCase();
-        return rows.reverse().map((msg) => {
-            if (msg.type === 'whisper') {
-                const isAuthor = msg.authorEmail.toLowerCase() === viewerEmail;
-                const isRecipient = msg.whisperTo?.toLowerCase() === viewerEmail;
-                const targetName = msg.whisperTo || 'someone';
+        return rows.reverse().map((row) => {
+            if (row.type === 'whisper') {
+                const isAuthor = row.authorEmail.toLowerCase() === viewerEmail;
+                const isRecipient = row.whisperTo?.toLowerCase() === viewerEmail;
+                const targetName = row.whisperTo || 'someone';
                 if (isAuthor) {
-                    return { ...msg, content: `whispers to ${targetName}: ${msg.content}` };
+                    return { ...row, content: `whispers to ${targetName}: ${row.content}` };
                 }
                 if (isRecipient) {
-                    return { ...msg, content: `whispers to you: ${msg.content}` };
+                    return { ...row, content: `whispers to you: ${row.content}` };
                 }
                 return {
-                    ...msg,
+                    ...row,
                     content: `whispers to ${targetName}: [a few hushed words]`,
                     whisperTo: null,
                     attachments: null,
                 };
             }
-            if (msg.type === 'emote' && !msg.deletedAt) {
+            if (row.type === 'emote' && !row.deletedAt) {
                 return {
-                    ...msg,
-                    content: formatEmoteForViewer(msg.content, msg.authorEmail, userEmail),
+                    ...row,
+                    content: formatEmoteForViewer(row.content, row.authorEmail, userEmail),
                 };
             }
-            return msg;
+            return row;
         });
     }
 

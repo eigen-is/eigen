@@ -56,7 +56,7 @@ Every Drive home runs this migration at open, and an older archive migrates when
 
 | Open | Where | Recorded after |
 |---|---|---|
-| A document | The collab socket's `open` (`/ws/collab/:ownerId/:mountId/:pathId` in `routes/collab.ts`) | `keepsReadAccess`, the read check after `document.subscribe`. `canRead` passes a trashed doc, and `CollabRegistry.get` refuses it later, on every reconnect |
+| A document | The collab socket's `open` (`/ws/collab/:ownerId/:mountId/:pathId` in `routes/collab.ts`) | `checkAccess`, the session and read check after `document.subscribe`, which the 15-second keepalive repeats and which never records. `canRead` passes a trashed doc, and `CollabRegistry.get` refuses it later, on every reconnect |
 | A plain file in the inline editor | `GET /editor/:ownerId/:mountId/:pathId/content`, which only the inline editor reads | `getEditableContent` returns, since it refuses binaries and oversized files after `resolveFile` |
 | A chat | `GET /chat/:ownerId/:mountId/:chatId/messages`, first page only | `getChat`. A request with `before` is an older page of a chat already open, so it records nothing |
 

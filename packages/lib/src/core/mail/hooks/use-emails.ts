@@ -38,12 +38,8 @@ export function useEmails(mailboxPath: string) {
             return response.data;
         },
         initialPageParam: undefined as { beforeDate: number; beforeId: string } | undefined,
-        // Terminate on an empty page, NOT on a short one: an optimistic move/delete removes a row
-        // from the loaded page (patchEmailInLists), which would drop a full 200-row first page to
-        // 199 — and a `< MAIL_PAGE_SIZE` terminator would then read that as "last page" and freeze
-        // pagination after the very first archive. Keyset stays correct: the oldest remaining row is
-        // always a valid cursor, and the server returns [] once past the end (one cheap trailing
-        // fetch when the user scrolls to the bottom).
+        // Only an empty page ends the list: an optimistic move or delete shortens a full page, which a
+        // short-page check would read as the last one.
         getNextPageParam: (lastPage) => {
             if (lastPage.length === 0) return undefined;
             const oldest = lastPage[lastPage.length - 1];
@@ -253,10 +249,9 @@ export function useOpenWriteEmailTo() {
 type EmailListPatch = ((email: EmailSummary) => EmailSummary) | 'remove';
 type MailMutationContext = { snapshot: [readonly unknown[], InfiniteData<EmailSummary[]> | undefined][] };
 
-// Shared optimistic-mutation plumbing for the four mail mutations (move/delete/read/flag): cancel
-// in-flight list fetches, snapshot every cached list for rollback, patch the row by id, and record
-// the echo to suppress. Returns the rollback context.
-export async function beginOptimisticMailMutation(
+// Every mail mutation patches the cached lists before the server answers: it cancels their fetches,
+// snapshots them for the rollback it returns, patches the row and records the echo to skip.
+async function beginOptimisticMailMutation(
     queryClient: QueryClient,
     ownerId: string,
     messageId: string,
@@ -265,10 +260,8 @@ export async function beginOptimisticMailMutation(
 ): Promise<MailMutationContext> {
     await queryClient.cancelQueries({ queryKey: emailKeys.lists(ownerId) });
     const snapshot = queryClient.getQueriesData<InfiniteData<EmailSummary[]>>({ queryKey: emailKeys.lists(ownerId) });
-    // cancelQueries on a list whose very first fetch was still in flight (no prior data) leaves it
-    // stuck pending forever — TanStack doesn't auto-restart a canceled query with no fallback data.
-    // Kick those back off so a cold-open deep-link (e.g. auto-mark-as-read racing the initial inbox
-    // load) can't strand the list on "No emails found" with no self-heal.
+    // TanStack never restarts a canceled query that had no data yet, so a list still on its first
+    // fetch would stay empty for good.
     for (const [key, data] of snapshot) {
         if (data === undefined) queryClient.refetchQueries({ queryKey: key });
     }
@@ -306,12 +299,9 @@ function patchEmailInLists(queryClient: QueryClient, ownerId: string, messageId:
     });
 }
 
-// The server echoes every mutation back to its originator over SSE, and the SSE handler would then
-// invalidate the list — refetching every loaded page of the infinite query for a change we already
-// patched in optimistically. Each mutation records the echo it expects here; the SSE handler consumes
-// the entry and skips its list refetch. Keyed by `${event}:${messageId}`, short-TTL and consumed once so
-// a genuinely later external change to the same message still refreshes. Module-level: this is a
-// per-tab suppression of our OWN echo, never another client's changes.
+// The server echoes every change back to this tab over SSE, which would refetch every loaded page
+// for a change already patched in. Each entry is consumed once and expires, so a later change by
+// another client to the same message still refreshes.
 const RECENT_MAIL_MUTATION_TTL_MS = 5_000;
 const recentMailMutations = new Map<string, number>();
 

@@ -11,7 +11,6 @@ import type { HomeSizeResponse, UserSettings } from '@workspace/lib/types/settin
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { time } from '../../utils/timing';
 import type { Calendar } from '../calendar/calendar';
-import type { CollabDocument } from '../collab/collab-document';
 import { PATHS } from '../config/paths';
 import type { ResolvedQuotas } from '../config/quota';
 import { resolveUserQuotas } from '../config/quota';
@@ -270,11 +269,6 @@ export class Home {
         for (const listener of this.sseListeners) {
             listener(event);
         }
-    }
-
-    // Uses the field, not the getter: a home without a drive, such as an org's, has no open document to check.
-    public async forEachOpenDocument(visit: (document: CollabDocument) => Promise<void>): Promise<void> {
-        await this._drive?.forEachOpenDocument(visit);
     }
 
     // A team home has no notification center, so a notice to it is dropped. A notice about a path also puts the path

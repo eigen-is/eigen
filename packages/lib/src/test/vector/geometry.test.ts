@@ -12,26 +12,22 @@ import {
     followBindings,
     hitTestElement,
     normalizeFixedPoint,
-    outlinePoint,
     projectFixedPointOntoDiagonal,
     remapBinding,
     shapeAnchorPoints,
 } from '../../vector/binding';
 import { elbowBindPoint } from '../../vector/elbow-heading';
-import { elbowRoute } from '../../vector/elbow-route';
+import { arrowRoute } from '../../vector/elbow-route';
 import { solidFill } from '../../vector/fill';
 import type { Box, Point } from '../../vector/geometry';
 import {
-    applyResize,
     arrowCurveBeziers,
     arrowheadGeometry,
     arrowLabelBox,
     boxCenter,
-    COARSE_HIT_SLOP_MULTIPLIER,
     distanceToPolyline,
     getElementBounds,
     getElementsBounds,
-    HIT_THRESHOLD_SCREEN,
     hitTestBox,
     hitTestDiamond,
     hitTestEllipse,
@@ -42,7 +38,6 @@ import {
     marqueeHits,
     marqueeMode,
     normalizeLinear,
-    rescalePoints,
     resizeLinear,
     resizeRotatedRect,
     rotatePoint,
@@ -325,39 +320,13 @@ describe('normalizeLinear', () => {
     });
 });
 
-describe('rescalePoints', () => {
-    test('scales per axis about the origin point', () => {
-        const scaled = rescalePoints(
-            [
-                { x: 0, y: 0 },
-                { x: 50, y: 20 },
-            ],
-            { width: 50, height: 20 },
-            { width: 100, height: 10 },
-        );
-        expect(scaled).toEqual([
-            { x: 0, y: 0 },
-            { x: 100, y: 10 },
-        ]);
-    });
-
-    test('a degenerate old dimension keeps that axis (nothing to scale from)', () => {
-        const scaled = rescalePoints(
-            [
-                { x: 0, y: 0 },
-                { x: 40, y: 0 },
-            ],
-            { width: 40, height: 0 },
-            { width: 80, height: 30 },
-        );
-        expect(scaled).toEqual([
-            { x: 0, y: 0 },
-            { x: 80, y: 0 },
-        ]);
-    });
-});
-
 describe('resizeLinear', () => {
+    test('a degenerate old dimension keeps that axis (nothing to scale from)', () => {
+        const el = linear({ points: '[[0,0],[40,0]]', width: 40, height: 0 });
+        const r = resizeLinear(el, { x: 0, y: 0, width: 80, height: 30, angle: 0 });
+        expect(r.points).toBe('[[0,0],[80,0]]');
+    });
+
     test('rescales points to the new box per axis and keeps the min corner the origin', () => {
         const el = linear({ points: '[[0,0],[50,20]]', width: 50, height: 20, x: 10, y: 10 });
         const r = resizeLinear(el, { x: 10, y: 10, width: 100, height: 10, angle: 0 });
@@ -462,9 +431,9 @@ const worldCorner = (b: Box, corner: 'nw' | 'ne' | 'se' | 'sw'): Point => {
     return rotatePoint(local, boxCenter(b), b.angle);
 };
 
-describe('applyResize', () => {
+describe('resizeRotatedRect at angle 0', () => {
     test('se corner grows toward the drag, top-left stays pinned', () => {
-        expect(applyResize('resize-se', 10, 10, box({}), { fromCenter: false, keepAspect: false }, 1)).toEqual({
+        expect(resizeRotatedRect('resize-se', 10, 10, box({}), { fromCenter: false, keepAspect: false }, 1)).toEqual({
             x: 0,
             y: 0,
             width: 110,
@@ -474,7 +443,7 @@ describe('applyResize', () => {
     });
 
     test('nw corner grows away from the pinned bottom-right, moving x/y', () => {
-        expect(applyResize('resize-nw', 10, 10, box({}), { fromCenter: false, keepAspect: false }, 1)).toEqual({
+        expect(resizeRotatedRect('resize-nw', 10, 10, box({}), { fromCenter: false, keepAspect: false }, 1)).toEqual({
             x: 10,
             y: 10,
             width: 90,
@@ -486,7 +455,7 @@ describe('applyResize', () => {
     test('aspect-lock: the larger relative delta wins — x dominates, y is derived', () => {
         // 100×50 (ratio 2). dx=40 (0.4 rel) beats dy=5 (0.1 rel) → height follows width.
         expect(
-            applyResize(
+            resizeRotatedRect(
                 'resize-se',
                 40,
                 5,
@@ -499,7 +468,7 @@ describe('applyResize', () => {
 
     test('aspect-lock: the larger relative delta wins — y dominates, x is derived', () => {
         expect(
-            applyResize(
+            resizeRotatedRect(
                 'resize-se',
                 5,
                 40,
@@ -511,38 +480,33 @@ describe('applyResize', () => {
     });
 
     test('from-center: both axes grow symmetrically and the center holds', () => {
-        const next = applyResize('resize-se', 10, 10, box({}), { fromCenter: true, keepAspect: false }, 1);
+        const next = resizeRotatedRect('resize-se', 10, 10, box({}), { fromCenter: true, keepAspect: false }, 1);
         expect(next).toEqual({ x: -10, y: -10, width: 120, height: 80, angle: 0 });
         expect(boxCenter(next)).toEqual(boxCenter(box({})));
     });
 
     test('minSize clamps a shrink instead of flipping through zero', () => {
         // nw drag past the opposite corner: no mirror — both dims pin at minSize=30.
-        expect(applyResize('resize-nw', 200, 200, box({}), { fromCenter: false, keepAspect: false }, 30)).toEqual({
-            x: 70,
-            y: 30,
-            width: 30,
-            height: 30,
-            angle: 0,
-        });
+        expect(resizeRotatedRect('resize-nw', 200, 200, box({}), { fromCenter: false, keepAspect: false }, 30)).toEqual(
+            {
+                x: 70,
+                y: 30,
+                width: 30,
+                height: 30,
+                angle: 0,
+            },
+        );
     });
 
     test('minSize clamp under aspect-lock rescales through one factor, preserving ratio', () => {
         // Collapse a 100×60 (ratio 5/3) below the floor: height pins at 30, width tracks the ratio.
-        const next = applyResize('resize-se', -200, -200, box({}), { fromCenter: false, keepAspect: true }, 30);
+        const next = resizeRotatedRect('resize-se', -200, -200, box({}), { fromCenter: false, keepAspect: true }, 30);
         expect(next).toEqual({ x: 0, y: 0, width: 50, height: 30, angle: 0 });
         expect(next.width / next.height).toBeCloseTo(100 / 60);
     });
 });
 
 describe('resizeRotatedRect', () => {
-    test('at angle 0 it is exactly applyResize', () => {
-        const opts = { fromCenter: false, keepAspect: false };
-        expect(resizeRotatedRect('resize-se', 10, 10, box({}), opts, 1)).toEqual(
-            applyResize('resize-se', 10, 10, box({}), opts, 1),
-        );
-    });
-
     test('rotated resize keeps the opposite (anchor) corner fixed in world space', () => {
         const start = box({ angle: 90 });
         const before = worldCorner(start, 'nw'); // se-handle anchor is nw
@@ -675,6 +639,26 @@ const arrowEl = (over: Partial<VectorArrowElement> & { points: string }): Vector
 const bind = (shape: VectorBindableElement, fixedPoint: [number, number]): string =>
     serializeBinding({ elementId: shape.id, fixedPoint });
 
+// The derived route of an unpinned elbow arrow.
+const routeOf = (arrow: VectorArrowElement, byId: Map<string, VectorElement>): Point[] => arrowRoute(arrow, byId) ?? [];
+
+// Where a straight arrow aimed from `from` at the ratio `fixedPoint` of `shape` docks: the outline point.
+const dockOn = (shape: VectorBindableElement, from: Point, fixedPoint: [number, number]): Point => {
+    const to = anchorToScene(shape, fixedPoint);
+    const arrow = arrowEl({
+        points: serializePoints([
+            { x: 0, y: 0 },
+            { x: to.x - from.x, y: to.y - from.y },
+        ]),
+        x: from.x,
+        y: from.y,
+        width: Math.abs(to.x - from.x),
+        height: Math.abs(to.y - from.y),
+        endBinding: bind(shape, fixedPoint),
+    });
+    return boundEndpoint(arrow, 'end', shape, byIdOf(shape));
+};
+
 describe('bindingGap', () => {
     test('is 5 + half the stroke width', () => {
         expect(bindingGap(shapeEl({ id: 's', type: 'rectangle', strokeWidth: 2 }))).toBe(6);
@@ -727,27 +711,26 @@ describe('normalizeFixedPoint (Excalidraw bind-time bounds)', () => {
     });
 });
 
-describe('outlinePoint', () => {
+describe('docking on the outline', () => {
     const from = { x: -100, y: 30 };
-    const anchor = { x: 50, y: 30 };
 
     test('rectangle: the inflated side nearest `from` (sharp corners, gap = 6)', () => {
         const rect = shapeEl({ id: 's', type: 'rectangle', x: 0, y: 0, width: 100, height: 60, strokeWidth: 2 });
-        const p = outlinePoint(rect, from, anchor, bindingGap(rect));
+        const p = dockOn(rect, from, [0.5, 0.5]);
         expect(p.x).toBeCloseTo(-6);
         expect(p.y).toBeCloseTo(30);
     });
 
     test('ellipse: the radius + gap crossing nearest `from`', () => {
         const ell = shapeEl({ id: 's', type: 'ellipse', x: 0, y: 0, width: 100, height: 60, strokeWidth: 2 });
-        const p = outlinePoint(ell, from, anchor, bindingGap(ell));
+        const p = dockOn(ell, from, [0.5, 0.5]);
         expect(p.x).toBeCloseTo(-6);
         expect(p.y).toBeCloseTo(30);
     });
 
     test('diamond: the inflated edge crossing (a vertical ray hits the bottom vertex)', () => {
         const dia = shapeEl({ id: 's', type: 'diamond', x: 0, y: 0, width: 100, height: 60, strokeWidth: 2 });
-        const p = outlinePoint(dia, { x: 50, y: 200 }, { x: 50, y: 30 }, bindingGap(dia));
+        const p = dockOn(dia, { x: 50, y: 200 }, [0.5, 0.5]);
         // bInf = 30 + gap*hypot(50,30)/50 = 36.997, bottom vertex at (50, 30 + bInf)
         expect(p.x).toBeCloseTo(50);
         expect(p.y).toBeCloseTo(66.997, 2);
@@ -757,8 +740,8 @@ describe('outlinePoint', () => {
         for (const type of ['rectangle', 'ellipse', 'diamond'] as const) {
             const flat = shapeEl({ id: 's', type, x: 0, y: 0, width: 60, height: 60, strokeWidth: 2 });
             const turned = { ...flat, angle: 90 };
-            const a = outlinePoint(flat, { x: -100, y: 30 }, { x: 30, y: 30 }, bindingGap(flat));
-            const b = outlinePoint(turned, { x: -100, y: 30 }, { x: 30, y: 30 }, bindingGap(turned));
+            const a = dockOn(flat, { x: -100, y: 30 }, [0.5, 0.5]);
+            const b = dockOn(turned, { x: -100, y: 30 }, [0.5, 0.5]);
             expect(b.x).toBeCloseTo(a.x);
             expect(b.y).toBeCloseTo(a.y);
         }
@@ -766,34 +749,32 @@ describe('outlinePoint', () => {
 });
 
 describe('docking on the true outline', () => {
-    // 100×100, so `round` collapses the core to a point and the outline IS the inscribed circle (r 50).
+    // 100×100, so `round` collapses the core to a point and the outline IS the inscribed circle (r 50) plus the gap.
     const rounded = (corners: Corners) =>
         shapeEl({ id: 's', type: 'rectangle', x: 0, y: 0, width: 100, height: 100, corners });
+    const gap = bindingGap(rounded('round'));
 
     test('a diagonal ray lands on the corner arc, inside the sharp corner', () => {
-        const sharp = outlinePoint(rounded('straight'), { x: 300, y: 300 }, { x: 50, y: 50 }, 0);
-        const round = outlinePoint(rounded('round'), { x: 300, y: 300 }, { x: 50, y: 50 }, 0);
-        expect(sharp.x).toBeCloseTo(100, 6);
+        const sharp = dockOn(rounded('straight'), { x: 300, y: 300 }, [0.5, 0.5]);
+        const round = dockOn(rounded('round'), { x: 300, y: 300 }, [0.5, 0.5]);
+        expect(sharp.x).toBeCloseTo(100 + gap, 6);
         expect(round.x).toBeLessThan(sharp.x);
-        expect(Math.hypot(round.x - 50, round.y - 50)).toBeCloseTo(50, 6);
+        expect(Math.hypot(round.x - 50, round.y - 50)).toBeCloseTo(50 + gap, 6);
     });
 
-    test('an axis-aligned ray is unchanged by rounding', () => {
-        const sharp = outlinePoint(rounded('straight'), { x: 50, y: -100 }, { x: 50, y: 50 }, 0);
-        const round = outlinePoint(rounded('round'), { x: 50, y: -100 }, { x: 50, y: 50 }, 0);
-        expect(sharp).toEqual({ x: 50, y: 0 });
-        expect(round).toEqual(sharp);
-    });
-
-    test('the binding gap still applies on a rounded shape', () => {
-        const hit = outlinePoint(rounded('round'), { x: 50, y: -100 }, { x: 50, y: 50 }, 8);
-        expect(hit.y).toBeCloseTo(-8, 6);
+    test('an axis-aligned ray is unchanged by rounding, and the gap still applies', () => {
+        const sharp = dockOn(rounded('straight'), { x: 50, y: -100 }, [0.5, 0.5]);
+        const round = dockOn(rounded('round'), { x: 50, y: -100 }, [0.5, 0.5]);
+        expect(sharp.x).toBeCloseTo(50, 6);
+        expect(sharp.y).toBeCloseTo(-gap, 6);
+        expect(round.x).toBeCloseTo(sharp.x, 6);
+        expect(round.y).toBeCloseTo(sharp.y, 6);
     });
 
     test('a rotated rounded shape docks in its own frame', () => {
         const el = { ...rounded('round'), angle: 45 };
-        const hit = outlinePoint(el, { x: 50, y: -200 }, { x: 50, y: 50 }, 0);
-        expect(Math.hypot(hit.x - 50, hit.y - 50)).toBeCloseTo(50, 6);
+        const hit = dockOn(el, { x: 50, y: -200 }, [0.5, 0.5]);
+        expect(Math.hypot(hit.x - 50, hit.y - 50)).toBeCloseTo(50 + gap, 6);
     });
 });
 
@@ -996,10 +977,7 @@ describe('boundEndpoint — curve-exact docking', () => {
     test('a sharp 3-point arrow is untouched by the curve path', () => {
         const sharp = curvedArrow({ roundness: 'sharp' });
         const otherScene = linearLocalToScene(sharp, { x: 10, y: 60 });
-        const anchor = anchorToScene(rect, [0.5, 0.5]);
-        expect(boundEndpoint(sharp, 'end', rect, byIdOf(rect))).toEqual(
-            outlinePoint(rect, otherScene, anchor, bindingGap(rect)),
-        );
+        expect(boundEndpoint(sharp, 'end', rect, byIdOf(rect))).toEqual(dockOn(rect, otherScene, [0.5, 0.5]));
     });
 
     test('short curved arrow keeps the anchor guard (no NaN)', () => {
@@ -1266,7 +1244,7 @@ describe('followBindings — an arrow bound at both ends', () => {
             startBinding: serializeBinding({ elementId: shapeA.id, fixedPoint: startDock.fixedPoint }),
             endBinding: serializeBinding({ elementId: shapeB.id, fixedPoint: endDock.fixedPoint }),
         });
-        const routeBefore = elbowRoute(elbow, atRest);
+        const routeBefore = routeOf(elbow, atRest);
         const settled = applyFollow(elbow, afterMove);
         const [start, end] = endpointsOf(settled);
 
@@ -1274,7 +1252,7 @@ describe('followBindings — an arrow bound at both ends', () => {
         expect(start.y).toBeCloseTo(elbowAnchorScene(movedA, startDock.fixedPoint).y, 1);
         expect(end.x).toBeCloseTo(elbowAnchorScene(shapeB, endDock.fixedPoint).x, 1);
         expect(end.y).toBeCloseTo(elbowAnchorScene(shapeB, endDock.fixedPoint).y, 1);
-        expect(elbowRoute(settled, afterMove)).not.toEqual(routeBefore);
+        expect(routeOf(settled, afterMove)).not.toEqual(routeBefore);
     });
 });
 
@@ -1453,13 +1431,13 @@ describe('hitTestElement — arrow', () => {
     });
 });
 
-// An elbow arrow's visible shape is its DERIVED route (elbowRoute), not the straight 2-point line; the
+// An elbow arrow's visible shape is its DERIVED route (arrowRoute), not the straight 2-point line; the
 // route is passed into hit-testing and bounds so both track the snake. followBindings still moves the two
 // stored endpoints, and a shape move re-routes through it.
 describe('elbow arrows — derived-route consumption', () => {
-    // Unbound diagonal elbow: elbowRoute yields the Z [(0,0),(50,0),(50,80),(100,80)].
+    // Unbound diagonal elbow: arrowRoute yields the Z [(0,0),(50,0),(50,80),(100,80)].
     const elbow = arrowEl({ points: '[[0,0],[100,80]]', elbow: true, width: 100, height: 80 });
-    const route = elbowRoute(elbow, new Map([[elbow.id, elbow]]));
+    const route = routeOf(elbow, new Map([[elbow.id, elbow]]));
 
     test('hitTestElement grabs a routed segment only when the route is supplied', () => {
         // (30,0) sits on the route's first horizontal arm but ~19 units off the straight endpoint line.
@@ -1487,7 +1465,7 @@ describe('elbow arrows — derived-route consumption', () => {
             startBinding: bind(a, [1, 0.5]),
             endBinding: bind(b, [0, 0.5]),
         });
-        const before = elbowRoute(
+        const before = routeOf(
             arrow,
             new Map<string, VectorElement>([
                 [a.id, a],
@@ -1508,7 +1486,7 @@ describe('elbow arrows — derived-route consumption', () => {
         expect(followed).not.toBeNull();
         if (!followed) return;
         const moved: VectorArrowElement = { ...arrow, ...followed };
-        const after = elbowRoute(
+        const after = routeOf(
             moved,
             new Map<string, VectorElement>([
                 [a.id, a],
@@ -1651,11 +1629,11 @@ describe('focusSnapPoint (eigen extension)', () => {
 
 describe('hitThresholdScreen', () => {
     test('a fine pointer grabs at the base screen threshold', () => {
-        expect(hitThresholdScreen(false)).toBe(HIT_THRESHOLD_SCREEN);
+        expect(hitThresholdScreen(false)).toBe(8);
     });
 
     test('a coarse pointer fattens the threshold by the slop multiplier', () => {
-        expect(hitThresholdScreen(true)).toBe(HIT_THRESHOLD_SCREEN * COARSE_HIT_SLOP_MULTIPLIER);
+        expect(hitThresholdScreen(true)).toBe(14);
         expect(hitThresholdScreen(true)).toBeGreaterThan(hitThresholdScreen(false));
     });
 });

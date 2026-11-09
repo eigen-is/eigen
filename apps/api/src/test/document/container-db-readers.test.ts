@@ -50,7 +50,7 @@ describe('container database readers', () => {
 
     test('a new board that nobody reads closes after the idle window', async () => {
         jest.useFakeTimers();
-        const board = await home.drive.create(mountId, rootId, 'created-never-read', 'stickies');
+        const board = await home.drive.create(mountId, rootId, 'created-never-read', 'stickies', home.user);
         const { mount, dataDbId } = await dataDbOf(board.id);
 
         expect(mount.documentDbs.get(dataDbId)?.db).toBeTruthy();
@@ -59,7 +59,7 @@ describe('container database readers', () => {
     });
 
     test('readStickiesContent leaves the board closed after the idle window', async () => {
-        const board = await home.drive.create(mountId, rootId, 'reader-closes-board', 'stickies');
+        const board = await home.drive.create(mountId, rootId, 'reader-closes-board', 'stickies', home.user);
         const { mount, path, dataDbId } = await dataDbOf(board.id);
         jest.useFakeTimers();
 
@@ -89,7 +89,7 @@ describe('container database readers', () => {
     });
 
     test('a reader of an open board does not close the database the board writes to', async () => {
-        const board = await home.drive.create(mountId, rootId, 'reader-open-board', 'stickies');
+        const board = await home.drive.create(mountId, rootId, 'reader-open-board', 'stickies', home.user);
         const { mount, path, dataDbId } = await dataDbOf(board.id);
         // The document arms its own close linger on real timers, so the fake clock below moves only the
         // reader's idle close.

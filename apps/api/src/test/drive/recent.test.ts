@@ -247,18 +247,20 @@ describe('Recent records an open', () => {
         const viewer = await newViewer();
         const doc = await create(alice.user, 'doc');
         await shareWithoutRow(alice.user, doc, viewer);
-        const checked = Promise.withResolvers<void>();
-        const keepsReadAccess = CollabDocument.prototype.keepsReadAccess;
-        spyOn(CollabDocument.prototype, 'keepsReadAccess').mockImplementationOnce(async function (
-            this: CollabDocument,
-            conn,
-        ) {
+        // The share goes while the document loads. The socket's unsubscribe comes after its access check, whether the
+        // check closed it or the test did.
+        const init = CollabDocument.prototype.init;
+        spyOn(CollabDocument.prototype, 'init').mockImplementationOnce(async function (this: CollabDocument) {
             await drivePut(alice.user.sessionToken, doc.ownerId, doc.mountId, `path/${doc.id}/acl`, {
                 remove: [viewer.email],
             });
-            const kept = await keepsReadAccess.call(this, conn);
+            return init.call(this);
+        });
+        const checked = Promise.withResolvers<void>();
+        const unsubscribe = CollabDocument.prototype.unsubscribe;
+        spyOn(CollabDocument.prototype, 'unsubscribe').mockImplementationOnce(function (this: CollabDocument, conn) {
+            unsubscribe.call(this, conn);
             checked.resolve();
-            return kept;
         });
         await openSocket(viewer, doc).catch(() => undefined);
         await checked.promise;

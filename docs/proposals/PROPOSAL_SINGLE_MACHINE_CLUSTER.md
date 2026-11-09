@@ -265,8 +265,8 @@ process inherits the Docker default and hits the fd wall described below. See
 ### The binding resource is file descriptors, not memory
 
 An earlier version of this doc said the idle timeout makes memory self-limiting. That is the wrong
-resource. A warm Home holds ~30 fds (six SQLite WAL triples plus 12 maildir `fs.watch` handles), and
-an fd burst happens in *seconds* — one ACL fan-out to a 26-member team opens 26 Homes at once — while
+resource. A warm user Home holds ~18 fds (six SQLite WAL triples), and
+an fd burst happens in *seconds* — one ACL fan-out to a 26-member team opens 26 Homes in a fraction of a second — while
 the idle window that releases them is minutes long. So fds, not memory, decide how many Homes one
 process can hold, and exhaustion shows up as `SQLITE_IOERR` in whatever subsystem opens the next file.
 Per-process fd limits are therefore a hard input to any cluster sizing here. Accounting and the

@@ -7,7 +7,7 @@ import { parseRgb } from '../constants/colors';
 import { escapeXml } from '../core/xml';
 import { round } from './points';
 
-export type MeasuredTextStyle = {
+type MeasuredTextStyle = {
     // The computed CSS family list, written as it is.
     fontFamily: string;
     fontSize: number;
@@ -24,7 +24,7 @@ export type MeasuredTextStyle = {
 };
 
 // One character's box, as Range.getClientRects reports it, in the box's local frame.
-export type MeasuredChar = { text: string; x: number; y: number; width: number; height: number };
+type MeasuredChar = { text: string; x: number; y: number; width: number; height: number };
 
 // One text node: its characters in reading order, a collapsed one left out, and how far below a character box's top
 // its baseline sits.

@@ -25,8 +25,8 @@ const { replaySheetsOps } = await import('@workspace/sheet/engine');
 type Op = import('@workspace/sheet').Op;
 type Sheet = import('@workspace/sheet').Sheet;
 type WorkbookInstance = import('@workspace/sheet').WorkbookInstance;
-type CollabDocContext = import('@workspace/lib/collab').CollabDocContext;
-type UseCollabDocOptions = import('@workspace/lib/collab').UseCollabDocOptions;
+type UseCollabDocOptions = Parameters<typeof import('@workspace/lib/collab').useCollabDoc>[0];
+type CollabDocContext = Parameters<NonNullable<UseCollabDocOptions['onInit']>>[0];
 
 // The server's copy. While the link is up, each side's updates reach the other at once.
 let peer = new Y.Doc();

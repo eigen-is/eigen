@@ -24,7 +24,7 @@ On a temp-copy backend (`s3`, `local`) the mount downloads the object to a temp 
 
 drizzle's bun-sqlite driver types `.run()` as void, so a write that must count the rows it matched uses `.returning().all()`.
 
-`users3.db` is the one database `ManagedDatabase` does not open. better-auth owns the connection, there are no versioned migrations, and `ensureAuthSchemaColumns` (`apps/api/src/lib/auth/auth-schema-columns.ts`) adds any missing column at boot.
+`users3.db` is the one database `ManagedDatabase` does not open. better-auth owns the connection, there are no versioned migrations, and `ensureAuthSchemaColumns` (`apps/api/src/lib/auth/auth-schema-columns.ts`) adds any missing column at boot. It also makes the indexes on `member.user_id` and `team_member.user_id`, and setup calls it too, so a fresh install has them. A user's memberships are read on every collab frame and every keepalive: that read took 1,952 µs at 20,000 users with a full scan, and 58 µs with the index.
 
 ## A migration runs in its own transaction
 

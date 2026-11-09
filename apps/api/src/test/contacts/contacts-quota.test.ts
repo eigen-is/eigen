@@ -24,14 +24,14 @@ describe('CardDAV quota gate', () => {
         const ctx = await getTestContext();
         const home = await getHome(ctx.bob.user.id);
         const contacts = home.contacts;
-        const originalMaxMB = getServerSettings().quotas.mailAndContactsMaxMB;
+        const originalMaxMB = getServerSettings().quotas.homeDataMaxMB;
 
         const created: string[] = [];
         let deliveredId: string | undefined;
         try {
             // Headroom of at least 1 MB, so the card below fits and the 3 MB message below does not.
             const used = (await home.mail.size()) + (await home.contacts.size());
-            await updateServerSettings({ quotas: { mailAndContactsMaxMB: Math.ceil(used / MB) + 1 } });
+            await updateServerSettings({ quotas: { homeDataMaxMB: Math.ceil(used / MB) + 1 } });
 
             const fits = burstCard(1);
             expect((await contacts.putCard(fits.uri, fits.body, { ifMatch: null, ifNoneMatch: null })).ok).toBe(true);
@@ -61,7 +61,7 @@ describe('CardDAV quota gate', () => {
             });
             expect(await contacts.getCard(over.uri)).toBeNull();
         } finally {
-            await updateServerSettings({ quotas: { mailAndContactsMaxMB: originalMaxMB } });
+            await updateServerSettings({ quotas: { homeDataMaxMB: originalMaxMB } });
             if (deliveredId) await home.mail.messageDelete(deliveredId);
             for (const uri of created) await contacts.deleteCard(uri, { ifMatch: null });
         }
@@ -75,7 +75,7 @@ describe('a refused write derives no avatar cache', () => {
 
     // Below what the home already holds, so the very next card write is refused whatever its size.
     async function fillBudget(home: Awaited<ReturnType<typeof getHome>>): Promise<void> {
-        await updateServerSettings({ quotas: { mailAndContactsMaxMB: Math.floor((await home.dataSize()) / MB) } });
+        await updateServerSettings({ quotas: { homeDataMaxMB: Math.floor((await home.dataSize()) / MB) } });
     }
 
     test('a metered addContact over budget refuses before the staged photo is promoted', async () => {
@@ -83,7 +83,7 @@ describe('a refused write derives no avatar cache', () => {
         const home = await getHome(ctx.bob.user.id);
         const contacts = home.contacts;
         const avatarsDir = avatarsDirOf(join(TEST_DATA_DIR, 'home', ctx.bob.user.id));
-        const originalMaxMB = getServerSettings().quotas.mailAndContactsMaxMB;
+        const originalMaxMB = getServerSettings().quotas.homeDataMaxMB;
 
         try {
             const staged = await contacts.uploadAvatar(new File([TEST_PNG_BYTES], 'avatar.png', { type: 'image/png' }));
@@ -105,7 +105,7 @@ describe('a refused write derives no avatar cache', () => {
             expect(readdirSync(avatarsDir).sort()).toEqual(filesBefore);
             expect(contacts.avatarsBytes).toBe(avatarsBytesBefore);
         } finally {
-            await updateServerSettings({ quotas: { mailAndContactsMaxMB: originalMaxMB } });
+            await updateServerSettings({ quotas: { homeDataMaxMB: originalMaxMB } });
         }
     });
 
@@ -114,7 +114,7 @@ describe('a refused write derives no avatar cache', () => {
         const home = await getHome(ctx.bob.user.id);
         const contacts = home.contacts;
         const avatarsDir = avatarsDirOf(join(TEST_DATA_DIR, 'home', ctx.bob.user.id));
-        const originalMaxMB = getServerSettings().quotas.mailAndContactsMaxMB;
+        const originalMaxMB = getServerSettings().quotas.homeDataMaxMB;
 
         try {
             await fillBudget(home);
@@ -141,7 +141,7 @@ describe('a refused write derives no avatar cache', () => {
             expect(readdirSync(avatarsDir).sort()).toEqual(filesBefore);
             expect(contacts.avatarsBytes).toBe(avatarsBytesBefore);
         } finally {
-            await updateServerSettings({ quotas: { mailAndContactsMaxMB: originalMaxMB } });
+            await updateServerSettings({ quotas: { homeDataMaxMB: originalMaxMB } });
         }
     });
 });

@@ -10,8 +10,8 @@ import { recoverBackupsAfterRestart } from './lib/backup/recovery';
 import { isProduction } from './lib/config/env';
 import { assertMailDomainUnchanged, isSetupRequired } from './lib/config/server-config';
 import { documentTransformRunner } from './lib/document/transform/runner';
-import { drainDeliveriesWithin } from './lib/drive/acl-propagation';
 import { shutdownAllHomes } from './lib/home';
+import { drainDeliveriesWithin } from './lib/home/home-relay';
 import { setShutdownDrainDeadline } from './lib/mount/upload-limits';
 import { registerScheduledJobs } from './lib/scheduler/jobs';
 import { stopAllSchedules } from './lib/scheduler/scheduler';
@@ -62,8 +62,7 @@ async function gracefulShutdown(signal: string) {
     // A running snapshot reads databases shutdownAllHomes is about to close, and a half-done restore would leave a user
     // with no home folder. So the backup jobs settle before the S3 drain time starts counting.
     await drainBackupJobs();
-    // A delivery reopens its recipient's home, so the queued ACL fan-outs and every other delivery
-    // still in flight, such as watcher and chat notifications, finish before the homes close.
+    // A delivery reopens its recipient's home, so every delivery still running finishes before the homes close.
     await drainDeliveriesWithin(SHUTDOWN_DELIVERY_BOUND_MS);
     // Each mount uploads its queue during its close, until this deadline. That runs after the last writes
     // of the close are queued and before metadata.db closes.

@@ -3,10 +3,12 @@ import {
     EIGEN_MEDIA_SCHEME,
     eigenMediaHref,
     listEigenMediaRefs,
-    parseEigenMediaHref,
     rewriteEigenMediaRefs,
     stripEigenMediaRefs,
 } from '../../vector/media-refs';
+
+// The name an href parses to, read the way listEigenMediaRefs does: null when the ref is dropped as unsafe.
+const parseEigenMediaHref = (href: string): string | null => listEigenMediaRefs(href)[0] ?? null;
 
 // A minimal `<image>` fragment as sceneToSvg would emit it — `href="${escapeXml(eigenMediaHref(name))}"`.
 // Since the token is escapeXml-invariant (the whole point of R1), escapeXml is a no-op here and the

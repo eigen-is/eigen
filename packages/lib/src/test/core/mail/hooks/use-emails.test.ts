@@ -1,16 +1,37 @@
 import { describe, expect, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import type { EmailSummary } from '@workspace/lib/types/mail';
-import { SSEventType } from '@workspace/lib/types/sse';
 import { emailKeys } from '../../../../core/mail/hooks/keys';
-import { beginOptimisticMailMutation } from '../../../../core/mail/hooks/use-emails';
+import { renderHook } from '../../../render-hook';
+import { hasKey, installTransferHarness, OWNER } from '../../../transfer-harness';
 
-const OWNER = 'owner-1';
+installTransferHarness();
 
-// Record every queryKey passed to refetchQueries so we can assert which caches
-// beginOptimisticMailMutation revives.
+const { useToggleReadEmail } = await import('../../../../core/mail/hooks/use-emails');
+
+const EMAIL: EmailSummary = {
+    id: 'msg-1',
+    filename: 'msg-1.eml',
+    subject: 'Hello',
+    fromShort: 'Bob',
+    fromAddress: 'bob@example.com',
+    toShort: 'Me',
+    toAddress: 'me@example.com',
+    recipientsAll: 'me@example.com',
+    textShort: '',
+    date: new Date(0),
+    isRead: false,
+    isFlagged: false,
+    isDraft: false,
+    isReplied: false,
+    hasAttachments: false,
+    mailbox: 'inbox',
+    size: 1,
+};
+
+// Records every queryKey passed to refetchQueries, so a test can assert which lists a mutation revives.
 function trackingClient(): { queryClient: QueryClient; refetched: readonly unknown[][] } {
-    const queryClient = new QueryClient();
+    const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
     const refetched: unknown[][] = [];
     const original = queryClient.refetchQueries.bind(queryClient);
     queryClient.refetchQueries = ((filters?: { queryKey?: readonly unknown[] }) => {
@@ -20,11 +41,16 @@ function trackingClient(): { queryClient: QueryClient; refetched: readonly unkno
     return { queryClient, refetched };
 }
 
-function hasKey(keys: readonly unknown[][], expected: readonly unknown[]): boolean {
-    return keys.some((key) => JSON.stringify(key) === JSON.stringify(expected));
+async function markRead(queryClient: QueryClient): Promise<void> {
+    const { act } = await import('react');
+    const { latest, unmount } = await renderHook(() => useToggleReadEmail(), queryClient);
+    await act(async () => {
+        await latest.mutateAsync({ email: EMAIL, isRead: true });
+    });
+    await unmount();
 }
 
-describe('beginOptimisticMailMutation', () => {
+describe('an optimistic mail mutation', () => {
     test('restarts a list query left with no data after cancelQueries — the cold-open first-fetch race', async () => {
         const { queryClient, refetched } = trackingClient();
         const key = emailKeys.list(OWNER, 'inbox');
@@ -40,7 +66,7 @@ describe('beginOptimisticMailMutation', () => {
         });
         await Promise.resolve();
 
-        await beginOptimisticMailMutation(queryClient, OWNER, 'msg-1', 'remove', SSEventType.MAIL_DELETED);
+        await markRead(queryClient);
 
         expect(hasKey(refetched, key)).toBe(true);
     });
@@ -50,7 +76,7 @@ describe('beginOptimisticMailMutation', () => {
         const key = emailKeys.list(OWNER, 'inbox');
         queryClient.setQueryData(key, { pages: [[]], pageParams: [undefined] });
 
-        await beginOptimisticMailMutation(queryClient, OWNER, 'msg-1', 'remove', SSEventType.MAIL_DELETED);
+        await markRead(queryClient);
 
         expect(hasKey(refetched, key)).toBe(false);
     });

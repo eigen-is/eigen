@@ -1,6 +1,5 @@
 // The collab documents that are open in one Drive, such as docs that someone edits right now. It opens
-// each document once, however many people connect, and closes it again. When sharing or a membership
-// changes, it walks the open documents, which close the connections of people who may no longer read.
+// each document once, however many people connect, and closes it again.
 
 import { isCollabType } from '@workspace/lib/types/drive';
 import type { AsyncSingleton } from '../../utils/singleton';
@@ -90,20 +89,6 @@ export class CollabRegistry {
                 const count = this.trashing.get(key) ?? 0;
                 if (count > 1) this.trashing.set(key, count - 1);
                 else this.trashing.delete(key);
-            }
-        }
-    }
-
-    // A document that is still loading has no connections yet, and its load can take as long as a download, so
-    // nothing waits for it. One document that fails must not stop the walk over the others.
-    public async forEachOpenDocument(visit: (document: CollabDocument) => Promise<void>): Promise<void> {
-        for (const [key, getter] of this.documents) {
-            const document = getter.peek();
-            if (!document) continue;
-            try {
-                await visit(document);
-            } catch (error) {
-                console.error(`Failed to check the connections of ${key}:`, error);
             }
         }
     }

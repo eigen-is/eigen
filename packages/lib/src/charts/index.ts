@@ -13,7 +13,6 @@ export {
 } from './defaults';
 export {
     CHART_MESSAGES,
-    chartPointCount,
     isInlineSketchCapped,
     isSketchCapped,
     layoutChart,
@@ -36,7 +35,6 @@ export {
     MAX_CHART_POINTS,
     MAX_CHART_SERIES,
     MAX_CHART_SPEC_BYTES,
-    MAX_CHART_SPEC_DEPTH,
     MAX_CHART_SPEC_ENTRIES,
     newChartSeriesId,
 } from './limits';

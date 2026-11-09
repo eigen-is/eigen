@@ -1,11 +1,11 @@
 // Tells the homes of the people a path is shared with that its sharing changed. It resolves who the
-// ACL names, queues the pushes into their homes in order per path, and sends the share emails. Drive
-// calls it after an ACL change, a rename, a restore or a trash.
+// ACL names, hands the push to the relay, and sends the share emails. Drive calls it after an ACL
+// change, a rename, a restore or a trash.
 
-import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { DriveACL, DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
+import { parseOwnerId, teamOwnerId } from '@workspace/lib/types/owner';
 import { getServerSettings } from '../config/server-settings';
-import { countHomeDeliveries, drainHomeDeliveries, sendToUserHomes } from '../home/home-relay';
+import { sendToUserHomes } from '../home/home-relay';
 import { composeShareEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
 import { addRegistryEntry } from '../share';
@@ -13,14 +13,14 @@ import { getTeamMembers } from '../team';
 import { getUserByEmail, isGuest } from '../user';
 import { canonicalACLId } from './acl';
 
-// 'registered' skips the share email for entries that resolve to a registered user — mirror fan-out,
-// SSE and the in-app notification still fire, and an account-less email keeps the mail as its only
-// invite vehicle. 'all' also skips account-less emails, for internal grants carrying their own invite.
+// 'registered' skips the share email for a registered user, who still hears in the app, and an address
+// without an account keeps the mail as its only invite. 'all' also skips those, for an internal grant
+// that carries its own invite.
 export type ACLPropagationOptions = { suppressShareEmail?: 'registered' | 'all' };
 
 export async function resolveACLUserIds(ownerId: string, acls: DriveACL[]): Promise<Set<string>> {
     const ids = new Set<string>();
-    // Dedupe by id up front — only acl.id drives resolution, and the restore path feeds [...acl, ...acl].
+    // Only acl.id drives resolution, and a restore feeds [...acl, ...acl].
     const uniqueAcls = [...new Map(acls.map((acl) => [acl.id, acl])).values()];
     for (const acl of uniqueAcls) {
         const parsed = parseOwnerId(acl.id);
@@ -33,8 +33,7 @@ export async function resolveACLUserIds(ownerId: string, acls: DriveACL[]): Prom
             }
         } else if (parsed.type === 'team') {
             await addRegistryEntry(ownerId, teamOwnerId(parsed.id));
-            const team = await getTeamMembers(parsed.id);
-            for (const member of team) {
+            for (const member of await getTeamMembers(parsed.id)) {
                 ids.add(member.user.id);
             }
         }
@@ -42,22 +41,21 @@ export async function resolveACLUserIds(ownerId: string, acls: DriveACL[]): Prom
     return ids;
 }
 
-// Canonical ACL diff (all entry types). History details and propagation both derive from this —
-// one source of truth for "who was added/removed". Ids go through canonicalACLId, the same rule
-// normalizeACL stores them under: blanket-lowercasing would emit a team id that resolves to nothing.
+// Ids go through canonicalACLId, the rule normalizeACL stores them under: lowercasing them all would
+// emit a team id that resolves to nothing.
 export function diffACLPrincipals(
     oldACL: DriveACL[] | null,
     newACL: DriveACL[] | null,
 ): { added: string[]; removed: string[] } {
-    const oldIds = new Set((oldACL ?? []).map((e) => canonicalACLId(e.id)));
-    const newIds = new Set((newACL ?? []).map((e) => canonicalACLId(e.id)));
+    const oldIds = new Set((oldACL ?? []).map((entry) => canonicalACLId(entry.id)));
+    const newIds = new Set((newACL ?? []).map((entry) => canonicalACLId(entry.id)));
     return {
-        added: [...newIds].filter((e) => !oldIds.has(e)),
-        removed: [...oldIds].filter((e) => !newIds.has(e)),
+        added: [...newIds].filter((id) => !oldIds.has(id)),
+        removed: [...oldIds].filter((id) => !newIds.has(id)),
     };
 }
 
-// Merge into an effective-member map keyed by lowercased email: most permissive wins.
+// The map is keyed by lowercased email, and the most permissive entry wins.
 export function addEffectiveMember(
     members: Map<string, EffectiveMember>,
     email: string,
@@ -74,71 +72,20 @@ export function addEffectiveMember(
     }
 }
 
-// Resolves ACL entries to individual user emails with permissions.
-// Teams are expanded to their members. Deduplicated by email (most permissive wins).
 export async function resolveACLToEmails(acls: DriveACL[]): Promise<Map<string, EffectiveMember>> {
     const members = new Map<string, EffectiveMember>();
 
     for (const acl of acls) {
         const parsed = parseOwnerId(acl.id);
         if (parsed.type === 'team') {
-            const teamMembers = await getTeamMembers(parsed.id);
-            for (const m of teamMembers) {
-                addEffectiveMember(members, m.user.email, acl.read, acl.write);
+            for (const member of await getTeamMembers(parsed.id)) {
+                addEffectiveMember(members, member.user.email, acl.read, acl.write);
             }
         } else {
             addEffectiveMember(members, acl.id, acl.read, acl.write);
         }
     }
     return members;
-}
-
-// Delivery is derived state (enforcement is always owner-side via SharedDrive/canReadFromAncestors),
-// so the request never waits on per-recipient home opens, which the relay's delivery budget bounds. The
-// per-path chain keeps successive changes to one path ordered per recipient, since an out-of-order
-// add→revoke would resurrect a stale mirror row. In-flight deliveries are lost on a crash. The "Durable
-// home-relay outbox" row of docs/ROADMAP.md closes that.
-const pendingFanOuts = new Map<string, Promise<void>>();
-
-function queueACLFanOut(
-    ids: Set<string>,
-    path: DrivePath,
-    newACL: DriveACL[] | null,
-    actorEmail?: string,
-    actorName?: string,
-): void {
-    if (ids.size === 0) return;
-    const prev = pendingFanOuts.get(path.id) ?? Promise.resolve();
-    const next = prev.then(() =>
-        sendToUserHomes(ids, { type: 'drive:acl-change', path, acl: newACL, actorEmail, actorName }),
-    );
-    pendingFanOuts.set(path.id, next);
-    next.finally(() => {
-        if (pendingFanOuts.get(path.id) === next) {
-            pendingFanOuts.delete(path.id);
-        }
-    });
-}
-
-// Waits for every queued fan-out, also the ones queued while it waits. Tests use it to read what a
-// fan-out wrote, and graceful shutdown runs it before the homes close, because a delivery reopens
-// the recipient's home.
-export async function drainACLFanOuts(): Promise<void> {
-    while (pendingFanOuts.size > 0) {
-        await Promise.allSettled([...pendingFanOuts.values()]);
-    }
-}
-
-// Graceful shutdown waits for the queued ACL fan-outs and every other delivery, up to the bound. A
-// delivery can hang on a home that never opens, such as during a bucket outage. It must not hang the
-// shutdown, or use up the time the mounts need to upload. What is left when the bound is over is lost,
-// as in a crash.
-export async function drainDeliveriesWithin(boundMs: number): Promise<void> {
-    const drained = Promise.all([drainACLFanOuts(), drainHomeDeliveries()]).then(() => true);
-    if (await Promise.race([drained, Bun.sleep(boundMs).then(() => false)])) return;
-    console.warn(
-        `[shutdown] gave up after ${boundMs} ms with ${pendingFanOuts.size} paths with ACL fan-outs and ${countHomeDeliveries()} home deliveries left`,
-    );
 }
 
 export async function propagateSharedPathChange(
@@ -148,30 +95,33 @@ export async function propagateSharedPathChange(
     actor: { name: string; email: string } | null,
     options?: ACLPropagationOptions,
 ): Promise<void> {
-    // Target resolution stays on the awaited path: the registry writes inside are the durable
-    // record for not-yet-registered targets and must survive the request.
-    const ids = await resolveACLUserIds(path.ownerId, [...(oldACL || []), ...(newACL || [])]);
+    // Awaited, because its registry writes are the durable record for targets without an account.
+    const ids = await resolveACLUserIds(path.ownerId, [...(oldACL ?? []), ...(newACL ?? [])]);
 
-    queueACLFanOut(ids, path, newACL, actor?.email, actor?.name);
+    // Delivery is derived state, since the owner's side enforces access, so the request doesn't wait for it.
+    sendToUserHomes(ids, {
+        type: 'drive:acl-change',
+        path,
+        acl: newACL,
+        actorEmail: actor?.email,
+        actorName: actor?.name,
+    });
 
     const suppress = options?.suppressShareEmail;
-    if (actor && newACL && suppress !== 'all') {
-        const addedUserEmails = diffACLPrincipals(oldACL, newACL).added.filter((e) => parseOwnerId(e).type === 'user');
-        if (addedUserEmails.length > 0) {
-            const settings = getServerSettings();
-            for (const email of addedUserEmails) {
-                const target = await getUserByEmail(email);
-                // Suppression only covers users reachable in-app; an account-less email still needs the invite.
-                if (suppress === 'registered' && target) continue;
-                const toGuest = !target || isGuest(target);
-                const enabled = toGuest
-                    ? settings.notifications.email.guestOnAclAdd
-                    : settings.notifications.email.userOnAclAdd;
-                if (!enabled) continue;
-                sendMail(composeShareEmail(path, email, actor)).catch((err) =>
-                    console.error('Failed to send share email:', err),
-                );
-            }
-        }
+    if (!actor || !newACL || suppress === 'all') return;
+    const settings = getServerSettings();
+    for (const email of diffACLPrincipals(oldACL, newACL).added) {
+        if (parseOwnerId(email).type !== 'user') continue;
+        const target = await getUserByEmail(email);
+        // Suppression only covers users reachable in the app; an address without an account still needs the invite.
+        if (suppress === 'registered' && target) continue;
+        const toGuest = !target || isGuest(target);
+        const enabled = toGuest
+            ? settings.notifications.email.guestOnAclAdd
+            : settings.notifications.email.userOnAclAdd;
+        if (!enabled) continue;
+        sendMail(composeShareEmail(path, email, actor)).catch((err) =>
+            console.error('Failed to send share email:', err),
+        );
     }
 }

@@ -3,9 +3,8 @@ import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Notification } from '@workspace/lib/types/notification';
 import { getServerConfig } from '../../lib/config/server-config';
-import { drainDeliveriesWithin } from '../../lib/drive/acl-propagation';
 import * as getHomeModule from '../../lib/home/get-home';
-import { drainHomeDeliveries, sendToHome, sendToUserHomes } from '../../lib/home/home-relay';
+import { drainDeliveriesWithin, drainHomeDeliveries, sendToHome, sendToUserHomes } from '../../lib/home/home-relay';
 import type { TestContext, TestUser } from '../setup';
 import {
     addMember,
@@ -23,9 +22,7 @@ import {
     getTestContext,
 } from '../setup';
 
-// Past the relay's delivery budget, so the fan-out has to queue.
 const MEMBER_COUNT = 20;
-const DELIVERY_BUDGET = 8;
 
 let ctx: TestContext;
 let teamOwner: string;
@@ -41,7 +38,7 @@ beforeAll(async () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ organizationId: orgId }),
     });
-    const teamId = await createTeam(ctx, orgId, 'Relay Budget Team');
+    const teamId = await createTeam(ctx, orgId, 'Relay Team');
     teamOwner = teamOwnerId(teamId);
     await addMember(ctx, teamId, ctx.alice.user.id);
     for (let i = 0; i < MEMBER_COUNT; i++) {
@@ -49,7 +46,7 @@ beforeAll(async () => {
         await addMember(ctx, teamId, member.id);
         members.push(member);
     }
-    await addTeamMount(ctx, teamId, 'Relay Budget Drive');
+    await addTeamMount(ctx, teamId, 'Relay Drive');
     teamMountId = await firstMountId(ctx.alice.user.sessionToken, teamOwner);
 });
 
@@ -90,8 +87,8 @@ async function answersFirst(request: Promise<unknown>): Promise<boolean> {
 }
 
 describe('A notification to a team', () => {
-    test('reaches every member of a team larger than the delivery budget', async () => {
-        const tag = 'relay-budget:team-notification';
+    test('reaches every member of the team', async () => {
+        const tag = 'relay:team-notification';
         await sendToHome(teamOwner, {
             type: 'notification',
             notification: { type: 'admin-alert', title: 'To the whole team', tag },
@@ -108,7 +105,7 @@ describe('A fan-out to many homes', () => {
         mock.restore();
     });
 
-    test('to the watchers of a file opens at most the budget at once, after the write answers', async () => {
+    test('to the watchers of a file opens one home at a time, after the write answers', async () => {
         const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, teamOwner, teamMountId, 'root');
         const file = await driveUpload(
             ctx.alice.user.sessionToken,
@@ -151,18 +148,17 @@ describe('A fan-out to many homes', () => {
                 return rows.length > 0 ? rows : undefined;
             }, `the file event for ${member.email}`);
         }
-        expect(held.peak()).toBeGreaterThan(0);
-        expect(held.peak()).toBeLessThanOrEqual(DELIVERY_BUDGET);
+        expect(held.peak()).toBe(1);
     });
 
-    test('to everyone a chat message mentions opens at most the budget at once, after the post answers', async () => {
+    test('to everyone a chat message mentions runs after the post answers', async () => {
         const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, teamOwner, teamMountId, 'root');
         const chat = await drivePost<DrivePath>(
             ctx.alice.user.sessionToken,
             teamOwner,
             teamMountId,
             `folder/${root.id}/create/chat`,
-            { fileName: 'Relay Budget Chat' },
+            { fileName: 'Relay Chat' },
         );
 
         const held = holdMemberHomes();
@@ -182,17 +178,78 @@ describe('A fan-out to many homes', () => {
                 const rows = await assertJson<Notification[]>(
                     await authedRequest(member.sessionToken, `/notifications/${member.id}`),
                 );
-                return rows.find((row) => row.type === 'mention-chat' && row.title.includes('Relay Budget'));
+                return rows.find((row) => row.type === 'mention-chat' && row.title.includes('Relay Chat'));
             }, `the mention of ${member.email}`);
         }
-        expect(held.peak()).toBeGreaterThan(0);
-        expect(held.peak()).toBeLessThanOrEqual(DELIVERY_BUDGET);
+    });
+
+    test('still reaches the other homes when one delivery fails', async () => {
+        const tag = 'relay:one-fails';
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        const openHome = getHomeModule.getHome;
+        spyOn(getHomeModule, 'getHome').mockImplementation(async (ownerId) => {
+            if (ownerId === members[0].id) throw new Error('This home does not open');
+            return openHome(ownerId);
+        });
+        await sendToUserHomes(
+            members.slice(0, 3).map((member) => member.id),
+            { type: 'notification', notification: { type: 'admin-alert', title: 'One fails', tag } },
+        );
+        const logged = errors.mock.calls.map((call) => String(call[0]));
+        mock.restore();
+
+        expect(logged.some((line) => line.includes(members[0].id))).toBe(true);
+        expect(await notificationsWithTag(members[1], tag)).toHaveLength(1);
+        expect(await notificationsWithTag(members[2], tag)).toHaveLength(1);
+    });
+
+    // An add and a revoke delivered out of order would bring a removed share back.
+    test('of a path waits for the one before it, while another path goes on', async () => {
+        const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, teamOwner, teamMountId, 'root');
+        const change = (path: DrivePath, acl: DrivePath['acl']) => ({ type: 'drive:acl-change' as const, path, acl });
+        const recipient = [members[0].id];
+        const held = holdMemberHomes();
+        try {
+            const add = sendToUserHomes(recipient, change(root, [{ id: members[0].email, read: true, write: false }]));
+            const revoke = sendToUserHomes(recipient, change(root, null));
+            await Bun.sleep(50);
+            expect(held.peak()).toBe(1);
+
+            const other = sendToUserHomes(recipient, change({ ...root, id: crypto.randomUUID() }, null));
+            await Bun.sleep(50);
+            expect(held.peak()).toBe(2);
+            held.release();
+            await Promise.all([add, revoke, other]);
+        } finally {
+            held.release();
+        }
+        const shared = await (await getHomeModule.getHome(members[0].id)).drive.getSharedPathsWithMe();
+        expect(shared.some((path) => path.id === root.id)).toBe(false);
     });
 });
 
 describe('A graceful shutdown', () => {
     afterEach(() => {
         mock.restore();
+    });
+
+    test('waits for a direct send still delivering', async () => {
+        const tag = 'relay-drain:direct';
+        const held = holdMemberHomes();
+        let drainedFirst: boolean;
+        try {
+            sendToHome(members[0].id, {
+                type: 'notification',
+                notification: { type: 'admin-alert', title: 'Direct', tag },
+            }).catch(() => {});
+            drainedFirst = await answersFirst(drainHomeDeliveries());
+        } finally {
+            held.release();
+        }
+        expect(drainedFirst).toBe(false);
+
+        await drainHomeDeliveries();
+        expect(await notificationsWithTag(members[0], tag)).toHaveLength(1);
     });
 
     // A delivery reopens the recipient's home, so the shutdown waits for it before it closes the homes.

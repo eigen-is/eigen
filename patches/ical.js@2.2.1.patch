@@ -1,0 +1,64 @@
+diff --git a/dist/ical.js b/dist/ical.js
+index be2228f64159a784e9c4550cf121c3deb62d608d..52a541834aab65df6e4abe49c85fd57896f2d62c 100644
+--- a/dist/ical.js
++++ b/dist/ical.js
+@@ -2579,9 +2579,9 @@ parse._parseParameters = function(line, start, designSet) {
+       }
+       value = line.slice(valuePos, pos);
+       lastParam = line.indexOf(PARAM_DELIMITER, pos);
+-      let propValuePos = line.indexOf(VALUE_DELIMITER, pos);
+       // if either no next parameter or delimeter in property value, let's stop here
+-      if (lastParam === -1 || (propValuePos !== -1 && lastParam > propValuePos)) {
++      // Patched (Eigen, patches/): ':' only up to the next ';', as a search to the end of the line per parameter is quadratic.
++      if (lastParam === -1 || line.slice(pos, lastParam).includes(VALUE_DELIMITER)) {
+         pos = false;
+       }
+     } else {
+@@ -2589,7 +2589,9 @@ parse._parseParameters = function(line, start, designSet) {
+ 
+       // move to next ";"
+       let nextPos = line.indexOf(PARAM_DELIMITER, valuePos);
+-      let propValuePos = line.indexOf(VALUE_DELIMITER, valuePos);
++      // Patched (Eigen, patches/): as above.
++      let inValue = line.slice(valuePos, nextPos === -1 ? line.length : nextPos).indexOf(VALUE_DELIMITER);
++      let propValuePos = inValue === -1 ? -1 : valuePos + inValue;
+       if (propValuePos !== -1 && nextPos > propValuePos) {
+         // this is a delimiter in the property value, let's stop here
+         nextPos = propValuePos;
+@@ -8456,18 +8458,26 @@ class Component {
+ 
+     // If the time zone is not already cached, hydrate it from the
+     // subcomponents.
+-    const zones = this.getAllSubcomponents('vtimezone');
+-    for (const zone of zones) {
+-      if (zone.getFirstProperty('tzid').getFirstValue() === tzid) {
+-        const hydratedZone = new Timezone({
+-          component: zone,
+-          tzid: tzid,
+-        });
++    // Patched (Eigen, patches/): one scan stands until the subcomponents change in number, as a scan per value is values × siblings.
++    const count = this.jCal[COMPONENT_INDEX].length;
++    if (this._scannedCount !== count) {
++      this._scannedCount = count;
++      this._scannedZones = new Map();
++      for (const zone of this.getAllSubcomponents('vtimezone')) {
++        const id = zone.getFirstProperty('tzid')?.getFirstValue();
++        if (!this._scannedZones.has(id)) this._scannedZones.set(id, zone);
++      }
++    }
++    const zone = this._scannedZones.get(tzid);
++    if (zone) {
++      const hydratedZone = new Timezone({
++        component: zone,
++        tzid: tzid,
++      });
+ 
+-        this._timezoneCache.set(tzid, hydratedZone);
++      this._timezoneCache.set(tzid, hydratedZone);
+ 
+-        return hydratedZone;
+-      }
++      return hydratedZone;
+     }
+ 
+     // Per the standard, we should always have a time zone defined in a file

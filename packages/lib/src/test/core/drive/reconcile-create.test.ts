@@ -1,6 +1,6 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, jest, test } from 'bun:test';
 import { AppError } from '../../../core/api-error';
-import { CreateUnconfirmedError, createWithReconcile } from '../../../core/drive/reconcile-create';
+import { createWithReconcile } from '../../../core/drive/reconcile-create';
 
 type Item = { id: string; name: string };
 
@@ -28,16 +28,34 @@ function pollingList(...listings: (Item[] | Error)[]): { listFolder: () => Promi
 const unavailable = () =>
     new AppError({ error: { status: 503, value: { message: 'Storage unavailable' } }, status: 503 });
 
+const SLOW_STORAGE = 'Storage is responding slowly. The item may still appear in the list automatically.';
+
+// The polls wait seconds apart, so the clock is fake: this one advances it whenever the reconcile is idle.
+async function reconcile(options: Parameters<typeof createWithReconcile<Item>>[0]): Promise<Item> {
+    const run = createWithReconcile(options);
+    let settled = false;
+    run.then(
+        () => (settled = true),
+        () => (settled = true),
+    );
+    while (!settled) {
+        await new Promise((resolve) => setImmediate(resolve));
+        jest.runOnlyPendingTimers();
+    }
+    return run;
+}
+
+beforeEach(() => jest.useFakeTimers());
+afterEach(() => jest.useRealTimers());
+
 describe('createWithReconcile', () => {
     test('returns the match on the first poll without waiting', async () => {
         const { listFolder, calls } = pollingList([], [item('Notes.eigendoc')]);
 
-        const found = await createWithReconcile({
+        const found = await reconcile({
             create: () => Promise.reject(unavailable()),
             listFolder,
             expectedName: 'Notes.eigendoc',
-            // A delay this long would hang the test, so resolving at all proves the first poll never slept.
-            delayMs: 60_000,
         });
 
         expect(found).toEqual(item('Notes.eigendoc'));
@@ -47,11 +65,10 @@ describe('createWithReconcile', () => {
     test('keeps polling until the item lands', async () => {
         const { listFolder, calls } = pollingList([], [], [], [item('Notes.eigendoc')]);
 
-        const found = await createWithReconcile({
+        const found = await reconcile({
             create: () => Promise.reject(unavailable()),
             listFolder,
             expectedName: 'Notes.eigendoc',
-            delayMs: 1,
         });
 
         expect(found).toEqual(item('Notes.eigendoc'));
@@ -62,11 +79,10 @@ describe('createWithReconcile', () => {
         const stored = 'Café.eigendoc'.normalize('NFC');
         const { listFolder } = pollingList([], [item(stored)]);
 
-        const found = await createWithReconcile({
+        const found = await reconcile({
             create: () => Promise.reject(unavailable()),
             listFolder,
             expectedName: 'Café.eigendoc'.normalize('NFD'),
-            delayMs: 1,
         });
 
         expect(found).toEqual(item(stored));
@@ -75,11 +91,10 @@ describe('createWithReconcile', () => {
     test('a failing poll does not abort the remaining polls', async () => {
         const { listFolder, calls } = pollingList([], new Error('listing failed'), [item('Notes.eigendoc')]);
 
-        const found = await createWithReconcile({
+        const found = await reconcile({
             create: () => Promise.reject(unavailable()),
             listFolder,
             expectedName: 'Notes.eigendoc',
-            delayMs: 1,
         });
 
         expect(found).toEqual(item('Notes.eigendoc'));
@@ -89,14 +104,13 @@ describe('createWithReconcile', () => {
     test('ignores a same-name item the snapshot already held', async () => {
         const { listFolder, calls } = pollingList([item('Notes.eigendoc', 'pre-existing')]);
 
-        const error = await createWithReconcile({
+        const error = await reconcile({
             create: () => Promise.reject(unavailable()),
             listFolder,
             expectedName: 'Notes.eigendoc',
-            delayMs: 1,
         }).catch((e: unknown) => e);
 
-        expect(error).toBeInstanceOf(CreateUnconfirmedError);
+        expect(error).toHaveProperty('message', SLOW_STORAGE);
         expect(calls()).toBe(4); // the snapshot plus all 3 polls
     });
 
@@ -107,11 +121,10 @@ describe('createWithReconcile', () => {
             [item('Notes.eigendoc', 'pre-existing'), ours],
         );
 
-        const found = await createWithReconcile({
+        const found = await reconcile({
             create: () => Promise.reject(unavailable()),
             listFolder,
             expectedName: 'Notes.eigendoc',
-            delayMs: 1,
         });
 
         expect(found).toBe(ours);
@@ -121,7 +134,7 @@ describe('createWithReconcile', () => {
         const duplicate = new AppError({ error: { status: 409, value: 'A file with that name exists' }, status: 409 });
         let listings = 0;
 
-        const error = await createWithReconcile({
+        const error = await reconcile({
             create: () => Promise.reject(duplicate),
             listFolder: async () => {
                 listings++;
@@ -142,11 +155,10 @@ describe('createWithReconcile', () => {
         const landed = item('Notes.eigendoc', 'landed');
         const { listFolder } = pollingList([item('Notes.eigendoc', 'pre-existing')], [landed]);
 
-        const created = await createWithReconcile({
+        const created = await reconcile({
             create: () => Promise.reject(timedOut),
             listFolder,
             expectedName: 'Notes.eigendoc',
-            delayMs: 1,
         });
 
         expect(created).toBe(landed);
@@ -156,19 +168,15 @@ describe('createWithReconcile', () => {
         const failure = unavailable();
         const { listFolder, calls } = pollingList([item('Other.eigendoc')]);
 
-        const error = await createWithReconcile({
+        const error = await reconcile({
             create: () => Promise.reject(failure),
             listFolder,
             expectedName: 'Notes.eigendoc',
-            // The 5s production budget would make this case wait 10s.
-            delayMs: 1,
         }).catch((e: unknown) => e);
 
-        if (!(error instanceof CreateUnconfirmedError)) throw error;
+        if (!(error instanceof Error)) throw error;
         expect(error.cause).toBe(failure);
-        expect(error.message).toBe(
-            'Storage is responding slowly. The item may still appear in the list automatically.',
-        );
+        expect(error.message).toBe(SLOW_STORAGE);
         expect(calls()).toBe(4); // the snapshot plus all 3 polls
     });
 
@@ -177,13 +185,13 @@ describe('createWithReconcile', () => {
         const failure = unavailable();
         const { listFolder, calls } = pollingList([item('Notes.eigenchat')]);
 
-        const error = await createWithReconcile({
+        const error = await reconcile({
             create: () => Promise.reject(failure),
             listFolder,
-            delayMs: 1,
         }).catch((e: unknown) => e);
 
-        if (!(error instanceof CreateUnconfirmedError)) throw error;
+        if (!(error instanceof Error)) throw error;
+        expect(error.message).toBe(SLOW_STORAGE);
         expect(error.cause).toBe(failure);
         expect(calls()).toBe(0);
     });
@@ -192,7 +200,7 @@ describe('createWithReconcile', () => {
         const duplicate = new AppError({ error: { status: 409, value: 'A file with that name exists' }, status: 409 });
         const { listFolder, calls } = pollingList([]);
 
-        const error = await createWithReconcile({
+        const error = await reconcile({
             create: () => Promise.reject(duplicate),
             listFolder,
         }).catch((e: unknown) => e);
@@ -204,14 +212,13 @@ describe('createWithReconcile', () => {
     test('a failed snapshot leaves no anchor, so the failure is reported without polling', async () => {
         const { listFolder, calls } = pollingList(new Error('listing failed'), [item('Notes.eigendoc')]);
 
-        const error = await createWithReconcile({
+        const error = await reconcile({
             create: () => Promise.reject(unavailable()),
             listFolder,
             expectedName: 'Notes.eigendoc',
-            delayMs: 1,
         }).catch((e: unknown) => e);
 
-        expect(error).toBeInstanceOf(CreateUnconfirmedError);
+        expect(error).toHaveProperty('message', SLOW_STORAGE);
         expect(calls()).toBe(1);
     });
 });
