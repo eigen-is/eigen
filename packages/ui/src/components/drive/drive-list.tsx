@@ -247,6 +247,7 @@ type DriveListProps = CreateCallbacks & {
     hideShared?: boolean;
     dateLabel?: string;
     getItemDate?: (item: DrivePath) => Date | null;
+    getItemActivity?: (item: DrivePath) => string | null;
     // The rows of a listing with actions of its own, such as Trash, for the items they act on: the
     // rows' menu draws them and the command palette offers them.
     ownActions?: (items: readonly DrivePath[]) => PaletteSelectionAction[];
@@ -275,6 +276,7 @@ export function DriveList({
     hideShared,
     dateLabel,
     getItemDate,
+    getItemActivity,
     ownActions,
     emptyState,
     sort,
@@ -351,6 +353,7 @@ export function DriveList({
                     hideShared={hideShared}
                     dateLabel={dateLabel}
                     getItemDate={getItemDate}
+                    getItemActivity={getItemActivity}
                     ancestorBreadcrumb={breadcrumbPaths ?? []}
                     sort={sort}
                     onSortChange={onSortChange}

@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, mock, spyOn, test } f
 import { shareTag } from '@workspace/lib/notification/tags';
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { eq } from 'drizzle-orm';
 import * as decoding from 'lib0/decoding';
 import { CollabDocument } from '../../lib/collab/collab-document';
 import { getPublicConfig } from '../../lib/config/server-config';
@@ -11,6 +12,7 @@ import { MAX_INLINE_EDIT_SIZE } from '../../lib/drive/inline-edit';
 import { getSharedDatabase } from '../../lib/drive/shared';
 import { recentPaths } from '../../lib/drive/sharedschema';
 import { clearHomeRestoring, getHome, markHomeRestoring } from '../../lib/home/get-home';
+import { fileEvents } from '../../lib/mount/schema';
 import type { TestUser } from '../setup';
 import {
     addMember,
@@ -692,6 +694,98 @@ describe('Recent lists', () => {
             await insertRow(viewer, { ownerId: viewer.id, mountId: root.mountId, id: crypto.randomUUID() }, 1000 - i);
         }
         expect(await listedIds(viewer)).toEqual([older.id]);
+    });
+});
+
+describe("Recent shows each file's latest activity", () => {
+    type ListedEvent = { eventType: string; actorEmail: string; createdAt: string };
+
+    async function latestEvents(user: TestUser): Promise<Map<string, ListedEvent | null>> {
+        const res = await listRecent(user);
+        expect(res.status).toBe(200);
+        const listed: { id: string; latestEvent: ListedEvent | null }[] = await res.json();
+        return new Map(listed.map((path) => [path.id, path.latestEvent]));
+    }
+
+    async function eventsOf(path: DrivePath) {
+        const mount = findOrFail((await getHome(path.ownerId)).drive.getMounts(), (m) => m.id === path.mountId);
+        return {
+            backdateAll: (secondsAgo: number) =>
+                mount.db
+                    .update(fileEvents)
+                    .set({ createdAt: new Date(Date.now() - secondsAgo * 1000) })
+                    .where(eq(fileEvents.pathId, path.id))
+                    .run(),
+            clear: () => mount.db.delete(fileEvents).where(eq(fileEvents.pathId, path.id)).run(),
+            insert: (eventType: 'renamed' | 'edited', secondsAgo: number) =>
+                mount.db
+                    .insert(fileEvents)
+                    .values({
+                        id: crypto.randomUUID(),
+                        pathId: path.id,
+                        eventType,
+                        actorUserId: 'someone',
+                        actorEmail: 'someone@test.eigen.is',
+                        details: eventType === 'renamed' ? { oldName: 'a.txt', newName: 'b.txt' } : null,
+                        createdAt: new Date(Date.now() - secondsAgo * 1000),
+                    })
+                    .run(),
+        };
+    }
+
+    test('a commented document and an edited file, each with its own newest event', async () => {
+        const { alice } = ctx;
+        const viewer = await newViewer();
+        const doc = await create(viewer, 'doc');
+        const thread = await create(viewer, 'chat', await childNamed(viewer, doc, 'chat'));
+        await share(viewer, doc, alice.user.email, true);
+        (await eventsOf(doc)).backdateAll(600);
+        await chatPost(alice.user.sessionToken, viewer.id, thread.mountId, `${thread.id}/messages`, {
+            content: 'A comment',
+        });
+        const file = await uploadText(viewer);
+        (await eventsOf(file)).backdateAll(600);
+        const saved = await authedRequest(
+            viewer.sessionToken,
+            `/editor/${viewer.id}/${file.mountId}/${file.id}/content`,
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: 'edited', force: true }),
+            },
+        );
+        expect(await saved.json()).toMatchObject({ conflict: false });
+        await insertRow(viewer, file, 10);
+
+        const latest = await eventually(async () => {
+            const events = await latestEvents(viewer);
+            return events.get(doc.id)?.eventType === 'commented' ? events : undefined;
+        }, 'the comment');
+        expect(latest.get(doc.id)).toMatchObject({ eventType: 'commented', actorEmail: alice.user.email });
+        expect(latest.get(file.id)).toMatchObject({ eventType: 'edited', actorEmail: viewer.email });
+        const editedAt = new Date(latest.get(file.id)?.createdAt ?? 0).getTime();
+        expect(Math.abs(Date.now() - editedAt)).toBeLessThan(60_000);
+    });
+
+    test('null for a file with no events', async () => {
+        const viewer = await newViewer();
+        const file = await uploadText(viewer);
+        (await eventsOf(file)).clear();
+        await insertRow(viewer, file, 10);
+        const latest = await latestEvents(viewer);
+        expect(latest.has(file.id)).toBe(true);
+        expect(latest.get(file.id)).toBeNull();
+    });
+
+    test('never an older event, whatever order the events were written in', async () => {
+        const viewer = await newViewer();
+        const file = await uploadText(viewer);
+        const events = await eventsOf(file);
+        events.clear();
+        events.insert('edited', 60);
+        events.insert('renamed', 3600);
+        await insertRow(viewer, file, 10);
+        expect((await latestEvents(viewer)).get(file.id)?.eventType).toBe('edited');
     });
 });
 

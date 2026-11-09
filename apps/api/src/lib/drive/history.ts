@@ -1,6 +1,7 @@
 // The file history of one mount: a row for each change to a path, such as an upload, a rename or a
 // share, and the users who watch a path. After a change, the watchers of the path and of the folders
-// above it get a notification. Each Mount builds one, and Drive records changes through it.
+// above it get a notification. Each Mount builds one. Drive records changes through it and reads them
+// back, such as for an Activity panel or the line under a Recent row.
 
 import { fileEventTag } from '@workspace/lib/notification/tags';
 import type { DrivePath, DrivePathType } from '@workspace/lib/types/drive';
@@ -79,43 +80,39 @@ export class FileHistory {
     // A folder or a document lists the events of everything inside it too, newest first.
     public list(pathId: string, opts?: { limit?: number }): FileEvent[] {
         const limit = opts?.limit ?? 50;
-
-        const rows = this.db.all<{
-            id: string;
-            pathId: string;
-            eventType: string;
-            actorUserId: string;
-            actorEmail: string;
-            details: string | null;
-            createdAt: number;
-            pathName: string;
-            pathType: DrivePathType;
-        }>(sql`
+        const rows = this.db.all<FileEventRow>(sql`
             WITH RECURSIVE subtree(id) AS (
                 SELECT id FROM ${paths} WHERE id = ${pathId}
                 UNION ALL
                 SELECT p.id FROM ${paths} p JOIN subtree s ON p.${sql.raw('parentId')} = s.id
             )
-            SELECT e.id, e.pathId, e.eventType, e.actorUserId, e.actorEmail, e.details, e.createdAt,
-                   p.name AS pathName, p.type AS pathType
+            SELECT ${FILE_EVENT_COLUMNS}
             FROM ${fileEvents} e
             JOIN subtree st ON e.pathId = st.id
             JOIN ${paths} p ON p.id = e.pathId
             ORDER BY e.createdAt DESC
             LIMIT ${limit}
         `);
+        return rows.map(toFileEvent);
+    }
 
-        return rows.map((row) => ({
-            id: row.id,
-            pathId: row.pathId,
-            eventType: toFileEventType(row.eventType),
-            actorUserId: row.actorUserId,
-            actorEmail: row.actorEmail,
-            details: row.details != null ? JSON.parse(row.details) : null,
-            createdAt: new Date(row.createdAt * 1000),
-            pathName: row.pathName,
-            pathType: row.pathType,
-        }));
+    // The newest event of each path, its own only, read with one index seek per path. Events in one second are
+    // told apart by the order they were written in.
+    public latestOf(pathIds: readonly string[]): ReadonlyMap<string, FileEvent> {
+        const idList = sql.join(
+            pathIds.map((id) => sql`${id}`),
+            sql`, `,
+        );
+        const rows = this.db.all<FileEventRow>(sql`
+            SELECT ${FILE_EVENT_COLUMNS}
+            FROM ${paths} p
+            JOIN ${fileEvents} e ON e.rowid = (
+                SELECT n.rowid FROM ${fileEvents} n WHERE n.pathId = p.id
+                ORDER BY n.createdAt DESC, n.rowid DESC LIMIT 1
+            )
+            WHERE p.id IN (${idList})
+        `);
+        return new Map(rows.map((row) => [row.pathId, toFileEvent(row)]));
     }
 
     public addWatcher(pathId: string, userId: string): void {
@@ -202,8 +199,8 @@ export class FileHistory {
     ): Promise<void> {
         // The body is stored, so the names of the teams in a sharing change are resolved now. The change has landed by
         // now, so a notification that can't be written is logged and never fails it.
-        const d = opts.details;
-        const names = await getBatchPublicInfo(aclPrincipalsToResolve(d)).catch((error: unknown) => {
+        const details = opts.details;
+        const names = await getBatchPublicInfo(aclPrincipalsToResolve(details)).catch((error: unknown) => {
             console.error(`[FileHistory] Failed to notify the watchers of ${opts.tagPathId}:`, error);
             return null;
         });
@@ -211,15 +208,15 @@ export class FileHistory {
         const lines = describeFileEvent(
             {
                 eventType: opts.eventType,
-                details: d ?? null,
+                details: details ?? null,
                 pathName: opts.itemName,
                 pathType: opts.pathType,
             },
             'container',
             { resolveName: (id) => names[id]?.name },
         );
-        const cardId = d && 'cardId' in d ? d.cardId : undefined;
-        const chatName = d && 'chatName' in d ? d.chatName : undefined;
+        const cardId = details && 'cardId' in details ? details.cardId : undefined;
+        const chatName = details && 'chatName' in details ? details.chatName : undefined;
         // One failed lookup skips only that watcher, because the change has landed already.
         const recipients = await Promise.all(
             watcherIds.map(async (watcherId) => {
@@ -305,4 +302,34 @@ export class FileHistory {
             )
         `);
     }
+}
+
+type FileEventRow = {
+    id: string;
+    pathId: string;
+    eventType: string;
+    actorUserId: string;
+    actorEmail: string;
+    details: string | null;
+    createdAt: number;
+    pathName: string;
+    pathType: DrivePathType;
+};
+
+const FILE_EVENT_COLUMNS = sql.raw(
+    'e.id, e.pathId, e.eventType, e.actorUserId, e.actorEmail, e.details, e.createdAt, p.name AS pathName, p.type AS pathType',
+);
+
+function toFileEvent(row: FileEventRow): FileEvent {
+    return {
+        id: row.id,
+        pathId: row.pathId,
+        eventType: toFileEventType(row.eventType),
+        actorUserId: row.actorUserId,
+        actorEmail: row.actorEmail,
+        details: row.details != null ? JSON.parse(row.details) : null,
+        createdAt: new Date(row.createdAt * 1000),
+        pathName: row.pathName,
+        pathType: row.pathType,
+    };
 }
