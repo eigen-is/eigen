@@ -1,10 +1,8 @@
 // Recent opens newest activity first, whatever the user's view preference says, and shows each row's last
 // activity. A sort picked here, from a column header, the grid's sort menu or the phone's View options, sorts
-// this page only and leaves the preference every other listing follows as it was. Under its name a row says what
-// last happened to the file and when, naming who did it.
+// this page only and leaves the preference every other listing follows as it was.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { RecentPath } from '@workspace/lib/types/drive';
-import type { FileEvent } from '@workspace/lib/types/file-history';
 import { drivePath } from '@workspace/ui/test/drive-path';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { clickRow } from '@workspace/ui/test/menu-rows';
@@ -27,24 +25,6 @@ const recentPath = (name: string, editedDay: number, activityDay: number): Recen
         updatedAt: new Date(Date.UTC(2026, 9, editedDay)),
     }),
     lastActivityAt: new Date(Date.UTC(2026, 9, activityDay)),
-    latestEvent: null,
-});
-
-const MARK = { id: 'mark-id', email: 'mark@test.eigen.is', name: 'Mark Jansen' };
-const event = (
-    path: RecentPath,
-    actor: { id: string; email: string },
-    eventType: 'commented' | 'edited',
-    hoursAgo: number,
-): FileEvent => ({
-    id: crypto.randomUUID(),
-    pathId: path.id,
-    pathName: path.name,
-    pathType: path.type,
-    actorUserId: actor.id,
-    actorEmail: actor.email,
-    createdAt: new Date(Date.now() - hoursAgo * 3600_000),
-    ...(eventType === 'commented' ? { eventType, details: { preview: 'Looks good' } } : { eventType, details: null }),
 });
 
 // The page's data, stubbed: one object per hook, so the effects that depend on them settle.
@@ -58,7 +38,6 @@ const recent: { data: RecentPath[]; isLoading: boolean; error: Error | null } = 
 // Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts the originals back.
 const realAuth = { ...(await import('@workspace/lib/auth')) };
 const realDrive = { ...(await import('@workspace/lib/drive')) };
-const realPublic = { ...(await import('@workspace/lib/public')) };
 mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session, useIsGuest: () => false }));
 mock.module('@workspace/lib/drive', () => ({
     ...realDrive,
@@ -66,16 +45,9 @@ mock.module('@workspace/lib/drive', () => ({
     useListTrash: () => ({ data: [] }),
     useRecentPaths: () => recent,
 }));
-// Only Mark's name is known, as the public lookup would answer.
-mock.module('@workspace/lib/public', () => ({
-    ...realPublic,
-    usePublicUsers: (emails: string[]) =>
-        Object.fromEntries(emails.filter((email) => email === MARK.email).map((email) => [email, MARK])),
-}));
 afterAll(() => {
     mock.module('@workspace/lib/auth', () => realAuth);
     mock.module('@workspace/lib/drive', () => realDrive);
-    mock.module('@workspace/lib/public', () => realPublic);
 });
 
 const { act } = await import('react');
@@ -175,18 +147,6 @@ test('the phone’s View options sort the page and leave the preference alone', 
     await clickRow('Name');
     expect(names(container)).toEqual(BY_NAME);
     expect(preference()).toEqual({ mode: 'list', sortKey: 'name', sortDir: 'asc' });
-});
-
-test('a row says what last happened to its file, by whom and when, and a row without an event says nothing', async () => {
-    const [alpha, bravo, charlie] = recent.data;
-    alpha.latestEvent = event(alpha, MARK, 'commented', 2);
-    bravo.latestEvent = event(bravo, session.user, 'edited', 30);
-    const container = await open();
-    const row = (name: string) =>
-        [...container.querySelectorAll('[role="row"]')].find((r) => r.textContent?.includes(name))?.textContent;
-    expect(row('alpha.txt')).toContain('Mark Jansen commented · 2h ago');
-    expect(row('bravo.txt')).toContain('You edited · 1d ago');
-    expect(row(charlie.name)).not.toContain(' · ');
 });
 
 test('an empty Recent says what will appear', async () => {

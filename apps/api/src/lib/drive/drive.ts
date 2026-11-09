@@ -1171,9 +1171,8 @@ export class Drive {
         return listRecent(this.sharedDb);
     }
 
-    // The paths of this owner that another home's rows name and the user may still see, each with its newest event.
-    // The relay calls it and the check is here, so SharedDrive has no wrapper. It deletes no row, as a failed read
-    // looks like a deleted file.
+    // The paths of this owner that another home's rows name and the user may still see. The relay calls it and the
+    // check is here, so SharedDrive has no wrapper. It deletes no row, as a failed read looks like a deleted file.
     public async getRecentPathsFor(
         user: User,
         memberships: Memberships,
@@ -1184,14 +1183,12 @@ export class Drive {
             const mount = this.mounts.get(mountId);
             if (!mount) continue;
             const chains = await mount.getBreadcrumbs(mountRows.map((row) => row.pathId));
-            const visible = chains.flatMap((chain, i) => {
+            for (const [i, chain] of chains.entries()) {
                 const path = chain.at(-1);
-                if (!path || path.parentId === null || isTrashedChain(chain) || isInsideDocument(chain)) return [];
-                if (!canReadFromAncestors(chain, user, memberships)) return [];
-                return [{ ...path, lastActivityAt: mountRows[i].lastActivityAt }];
-            });
-            const latest = mount.history.latestOf(visible.map((path) => path.id));
-            for (const path of visible) found.push({ ...path, latestEvent: latest.get(path.id) ?? null });
+                if (!path || path.parentId === null || isTrashedChain(chain) || isInsideDocument(chain)) continue;
+                if (!canReadFromAncestors(chain, user, memberships)) continue;
+                found.push({ ...path, lastActivityAt: mountRows[i].lastActivityAt });
+            }
         }
         return found;
     }

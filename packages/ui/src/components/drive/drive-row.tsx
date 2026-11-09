@@ -1,7 +1,6 @@
 // One row of the Drive table: the item's icon and name, with its owner, sharing, size and date in the
-// columns the container is wide enough for, and a ⋮ that opens the row menu. A listing may add a line under
-// the name, such as Recent's latest activity. DriveTable draws one per item and hands it the listing's
-// controller for selection, drag and menus.
+// columns the container is wide enough for, and a ⋮ that opens the row menu. DriveTable draws one per
+// item and hands it the listing's controller for selection, drag and menus.
 
 import { formatDateTime } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
@@ -38,7 +37,6 @@ type DriveRowProps = {
     hideShareClick?: boolean;
     hideActions?: boolean;
     getItemDate?: (item: DrivePath) => Date | null;
-    getItemActivity?: (item: DrivePath) => string | null;
     ancestorBreadcrumb?: DrivePath[];
     unreadPathIds?: ReadonlySet<string>;
 };
@@ -62,8 +60,7 @@ export function DriveRow({
     hideModified = false,
     hideShareClick = false,
     hideActions = false,
-    getItemDate = (path) => path.updatedAt,
-    getItemActivity,
+    getItemDate = (i) => i.updatedAt,
     ancestorBreadcrumb,
     unreadPathIds,
 }: DriveRowProps) {
@@ -78,7 +75,6 @@ export function DriveRow({
     } = controller;
     const presentation = getFilePresentation(item.mimeType, item.type, item.name);
     const itemDate = getItemDate(item);
-    const activity = getItemActivity?.(item);
 
     return (
         <div
@@ -125,10 +121,7 @@ export function DriveRow({
                     })}
                     {unreadPathIds?.has(item.id) && <UnreadDot />}
                 </div>
-                <div className="flex min-w-0 flex-col">
-                    <DriveItemNameLink name={item.name} href={getItemHref?.(item)} />
-                    {activity && <span className="truncate text-xs text-muted-foreground">{activity}</span>}
-                </div>
+                <DriveItemNameLink name={item.name} href={getItemHref?.(item)} />
             </div>
             {!hideOwner && (
                 <div className="hidden @[800px]:flex items-center justify-center px-2 py-1.5">

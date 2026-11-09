@@ -41,8 +41,6 @@ export type DriveLayoutProps = DriveSortProps & {
     // The date the list shows and Modified sorts by, such as Recent's last activity, in place of the last edit.
     dateLabel?: string;
     getItemDate?: (item: DrivePath) => Date | null;
-    // A line under the name of each row of the list, such as Recent's latest activity. The grid shows none.
-    getItemActivity?: (item: DrivePath) => string | null;
 };
 
 export function DriveLayout({
@@ -69,7 +67,6 @@ export function DriveLayout({
     onSortChange,
     dateLabel,
     getItemDate,
-    getItemActivity,
 }: DriveLayoutProps) {
     const { isMobile } = useLayout();
     const actions = useDriveActionRunner({
@@ -123,7 +120,6 @@ export function DriveLayout({
         onSortChange,
         dateLabel,
         getItemDate,
-        getItemActivity,
     };
 
     const listToolbar = (

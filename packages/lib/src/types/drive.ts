@@ -8,7 +8,6 @@ import type { BytesTextPreviewMode } from '../constants/preview';
 import { BAND_ROOTS } from '../docs/eigendoc/bands';
 import { STYLE_ROOT } from '../docs/eigendoc/normal-style';
 import { PAGE_ROOT } from '../docs/eigendoc/page';
-import type { FileEvent } from './file-history';
 
 export type DriveACL = {
     id: string;
@@ -476,9 +475,8 @@ export type DrivePath = {
     updatedAt: Date;
 };
 
-// A path on the Recent page, with the last time its user opened it or was notified about it, and the newest event of
-// its history, which can be older.
-export type RecentPath = DrivePath & { lastActivityAt: Date; latestEvent: FileEvent | null };
+// A path on the Recent page, with the last time its user opened it or was notified about it.
+export type RecentPath = DrivePath & { lastActivityAt: Date };
 
 // The server cuts another owner's chain at the first folder the viewer can't read, so a chain that
 // doesn't start at a mount root starts where the viewer came in, through a share or a public link.
