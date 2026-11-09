@@ -8,7 +8,7 @@ import { normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
 import type { Attendee, EventData, ImipMethod, Reminder } from '@workspace/lib/types/calendar';
 import { IMIP_METHODS } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
-import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from './recurrence-limits';
+import { isExpandableRrule, isOutOfRangeRecurrenceStart, isSubDailyRrule } from './recurrence-limits';
 import { localToUtc, recurrenceKey, utcToLocal } from './wall-clock';
 
 // Lowercase, because ical.js lowercases every name it reads.
@@ -68,13 +68,13 @@ export function parseResource(ics: string): ICAL.Component {
 
 // Bytes a stranger wrote.
 export function parseIcs(ics: string): IcsParseResult {
-    const { method, events, skipped } = readResource(parseResource(ics));
+    const { method, events, skipped } = readResource(parseResource(ics), false);
     return { method, events: events.map((read) => read.event), skipped };
 }
 
 // A resource the store wrote, where the `X-EIGEN-*` lines are Eigen's own.
 export function projectResource(resource: ICAL.Component): ProjectedResource {
-    const { events, skipped, hasUnindexedRecurrence } = readResource(resource);
+    const { events, skipped, hasUnindexedRecurrence } = readResource(resource, true);
     return { events: events.map(stamped), skipped, hasUnindexedRecurrence };
 }
 
@@ -356,7 +356,9 @@ function stamped({ event, stamps }: ReadEvent): StoredEvent {
     };
 }
 
-function readResource(resource: ICAL.Component): ReadResult {
+// `triesRule`: trying a rule walks it, so only a resource about to be stored does, for the one series it holds. A file
+// of many masters is read for a look, and a second master in one resource is refused.
+function readResource(resource: ICAL.Component, triesRule: boolean): ReadResult {
     const method = parseImipMethod(resource.getFirstPropertyValue('method'));
     const vevents = resource.getAllSubcomponents('vevent');
 
@@ -367,6 +369,7 @@ function readResource(resource: ICAL.Component): ReadResult {
     const results: ReadEvent[] = [];
     let skipped = 0;
     let hasUnindexedRecurrence = false;
+    let untried = triesRule;
 
     for (const vevent of vevents) {
         // Every row this VEVENT yields, so a failure halfway through leaves none of it behind.
@@ -406,10 +409,17 @@ function readResource(resource: ICAL.Component): ReadResult {
             // Negated so an Invalid Date also counts: a row with an end no DTEND could spell breaks at its next write.
             if (!(endTime.getUTCFullYear() <= 9999)) throw new Error('Event end out of range');
 
-            const rruleProp = vevent.getFirstPropertyValue('rrule');
+            // An override is one occurrence, whatever it says about repeats.
+            const recurrenceId = vevent.getFirstProperty('recurrence-id');
+            const rruleProp = recurrenceId ? null : vevent.getFirstPropertyValue('rrule');
             const rruleRaw = rruleProp ? rruleProp.toString() : null;
-            // A sub-daily or out-of-range-anchored rule iterates to the query window (DoS) and no real client emits one, so it degrades to a single event rather than costing the whole invite or PUT.
-            const stripped = !!rruleRaw && (isSubDailyRrule(rruleRaw) || isOutOfRangeRecurrenceStart(startTime));
+            // A rule too costly to expand degrades to a single event rather than costing the whole invite or PUT.
+            const stripped =
+                !!rruleRaw &&
+                (untried
+                    ? !isExpandableRrule(rruleRaw, startTime)
+                    : isSubDailyRrule(rruleRaw) || isOutOfRangeRecurrenceStart(startTime));
+            if (rruleRaw) untried = false;
             const rrule = stripped ? null : rruleRaw;
             if (stripped || vevent.hasProperty('rdate')) hasUnindexedRecurrence = true;
 
@@ -420,7 +430,6 @@ function readResource(resource: ICAL.Component): ReadResult {
             const sequence = sequenceOf(vevent);
             const dtstamp = readTimestamp(vevent, 'dtstamp');
 
-            const recurrenceId = vevent.getFirstProperty('recurrence-id');
             let recurrenceDate: string | null = null;
             let recurrenceInstant: Date | null = null;
             if (recurrenceId) {

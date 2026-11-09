@@ -1,26 +1,62 @@
+// What a repeat rule may ask of an expansion. rrule walks a rule step by step from DTSTART to the window, so the cost
+// follows the numbers a rule states, not its size in the file. A rule past these limits stays in the stored bytes and its
+// event stays, without its repeats. The iCalendar reader, the REST boundary and the range reads ask here, before anything
+// walks.
+
+import type { Options } from 'rrule';
 import { RRule } from 'rrule';
 
 const SUB_DAILY_FREQUENCIES = new Set<number>([RRule.HOURLY, RRule.MINUTELY, RRule.SECONDLY]);
 
-// rrule.between walks unit by unit from dtstart to the window: a SECONDLY rule a year out stalls the event loop ~74s, and no client emits sub-daily.
+// RFC 5545's busiest daily example fires 24 times a day. More is a sub-daily rule in daily words.
+const MAX_TIMES_A_DAY = 24;
+
+function isSubDaily(options: Partial<Options>): boolean {
+    const listed = (value: number | number[] | null | undefined) => (Array.isArray(value) ? value.length : 1);
+    return (
+        (options.freq !== undefined && SUB_DAILY_FREQUENCIES.has(options.freq)) ||
+        listed(options.byhour) * listed(options.byminute) * listed(options.bysecond) > MAX_TIMES_A_DAY
+    );
+}
+
 export function isSubDailyRrule(rrule: string): boolean {
-    let freq: number | undefined;
     try {
-        freq = RRule.parseString(rrule).freq;
+        return isSubDaily(RRule.parseString(rrule));
     } catch {
         return false; // an unparseable rule is rejected separately by the caller's own RRule.parseString
     }
-    return freq !== undefined && SUB_DAILY_FREQUENCIES.has(freq);
 }
 
 // The same walk from a pathological dtstart stalls even at DAILY, and the span clamp bounds the window, not the walk to it; DAILY across 1900–2200 is ~110k steps.
 const MIN_RECURRENCE_START = Date.UTC(1900, 0, 1);
-const MAX_RECURRENCE_START = Date.UTC(2200, 0, 1);
+export const MAX_RECURRENCE_START = Date.UTC(2200, 0, 1);
 
 // Negated so an Invalid Date (NaN) also counts as out of range.
 export function isOutOfRangeRecurrenceStart(startTime: Date): boolean {
     const t = startTime.getTime();
     return !(t >= MIN_RECURRENCE_START && t <= MAX_RECURRENCE_START);
+}
+
+const RRULE_LAST_YEAR = 9999;
+// 28 years hold every weekday of every date, leap days included.
+const CYCLE_YEARS = 28;
+
+// rrule takes no step limit, and a rule with no next date walks to its last year whatever the window. So the rule is
+// tried from a start moved near that year by whole cycles, where the walk soon ends. A rule rrule refuses counts the same.
+export function isExpandableRrule(rrule: string, dtstart: Date): boolean {
+    if (isOutOfRangeRecurrenceStart(dtstart)) return false;
+    try {
+        const options = RRule.parseString(rrule);
+        if (isSubDaily(options)) return false;
+        const years = CYCLE_YEARS * (options.interval ?? 1);
+        const year = dtstart.getUTCFullYear();
+        const cycles = Math.max(0, Math.floor((RRULE_LAST_YEAR - years - year) / CYCLE_YEARS));
+        const start = new Date(dtstart);
+        start.setUTCFullYear(year + cycles * CYCLE_YEARS);
+        return new RRule({ ...options, dtstart: start, count: null, until: null }, true).after(start, true) !== null;
+    } catch {
+        return false;
+    }
 }
 
 // Defense in depth under the sub-daily reject and the window clamp, far above any real calendar view.

@@ -1611,6 +1611,29 @@ describe('Calendar', () => {
             }
         });
 
+        test('a create firing more than 24 times a day in daily words returns 400', async () => {
+            const hours = Array.from({ length: 24 }, (_, i) => i).join(',');
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                subDailyBody(`FREQ=DAILY;BYHOUR=${hours};BYMINUTE=0,30`),
+            );
+            expect(res.status).toBe(400);
+        });
+
+        test.each([
+            ['a date no year holds', 'FREQ=DAILY;BYMONTH=2;BYMONTHDAY=30'],
+            ['a position rrule refuses', 'FREQ=MONTHLY;BYDAY=MO;BYSETPOS=0'],
+        ])('a create with %s keeps the event, without its repeats', async (_name, rrule) => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                subDailyBody(rrule),
+            );
+            expect(res.status).toBe(200);
+            expect((await assertJson<{ rrule: string | null }>(res)).rrule).toBeNull();
+        });
+
         test('update event to FREQ=SECONDLY returns 400', async () => {
             const createRes = await authedRequest(
                 ctx.alice.user.sessionToken,

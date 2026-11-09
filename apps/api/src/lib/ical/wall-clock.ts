@@ -7,7 +7,7 @@
 import { occurrenceDateToString } from '@workspace/lib/calendar/calendar-utils';
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import { RRule } from 'rrule';
-import { isOutOfRangeRecurrenceStart, isSubDailyRrule, MAX_OCCURRENCES } from './recurrence-limits';
+import { isExpandableRrule, MAX_OCCURRENCES, MAX_RECURRENCE_START } from './recurrence-limits';
 
 type LocalComponents = { year: number; month: number; day: number; hour: number; minute: number; second: number };
 
@@ -103,6 +103,9 @@ export function expandWallClock(
     from: Date,
     to: Date,
 ): { startTime: Date; occurrenceDate: string }[] {
+    // The walk goes from DTSTART to the window, so a window this far out has no repeats.
+    if (from.getTime() > MAX_RECURRENCE_START) return [];
+
     const rule = new RRule({
         ...RRule.parseString(rrule),
         dtstart: tz ? wallClockDate(dtstart, tz) : dtstart,
@@ -134,8 +137,7 @@ export function computeOccurrenceTimes(
     const tz = parent.timezone;
     const occDate = new Date(`${recurrenceDate}T00:00:00Z`);
 
-    // A sub-daily rule or out-of-range dtstart (untrusted files only) would iterate to the day window and hang.
-    if (parent.rrule && !isSubDailyRrule(parent.rrule) && !isOutOfRangeRecurrenceStart(parent.startTime)) {
+    if (parent.rrule && isExpandableRrule(parent.rrule, parent.startTime)) {
         const dayEnd = new Date(occDate);
         dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
         const matches = expandWallClock(parent.rrule, parent.startTime, tz, occDate, dayEnd);
