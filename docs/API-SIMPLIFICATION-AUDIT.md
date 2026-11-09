@@ -4,7 +4,9 @@
 
 Audited 2026-11-05 at `76071ffda` on `document-lifecycle`. Six reviewers each read one area's code and its git history, and only report accidental complexity, or essential complexity bought for a feature or a precision the owner could drop. Anchors are `apps/api/src/lib/`-relative, except `routes/`, `cli/`, `scripts/`, `test/` and `instance-lock.ts`, which sit directly in `apps/api/src/`, and `eigen`, the launcher at the repo root. Line numbers drift; the function names don't. LOC figures are honest guesses, not measurements. I re-checked a sample of claims against the code (the lease commit run, the transform `settle` order, the sheet-export rates, the test-only calendar methods, the trash map, the two reconciliation functions and the cross-drive sweep); everything else is the reviewer's own verified reading. Treat each finding as a lead to confirm before a fix, not a verdict.
 
-Like ROADMAP and the proposals, this doc holds only open work: strike a finding when it is fixed or ruled out, and delete the doc when it is empty.
+Like ROADMAP and the proposals, this doc holds only open work: strike a finding when it is fixed or ruled out, and delete the doc when it is empty, or sooner, when what is left is not worth doing.
+
+**The list is not a to-do list, the owner's ruling (2026-11-09).** It only serves cleaner, easier code, fewer lines and a safer future, and at some point the code is fine for now. A finding is not built because it is written here. Build what really adds value and fix the bugs found on the way. When the rest doesn't earn its cost, say so, delete this doc and end the run.
 
 ## Patterns
 
