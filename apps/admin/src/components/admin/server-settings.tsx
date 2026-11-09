@@ -140,6 +140,8 @@ export function ServerSettingsPage() {
     const relayHost = status?.relayHost;
     const mailOff = !mailEnabled && relayHost === null;
     const senderAddressInvalid = current.mail.senderAddress !== '' && !validateEmailAddress(current.mail.senderAddress);
+    const homeDataTooSmall = current.quotas.homeDataMaxMB < QUOTA_MIN_MB;
+    const mountTooSmall = current.quotas.defaultMountMaxSizeMB < QUOTA_MIN_MB;
     const savedDestination = settings.backups.upload.s3;
     const backupSecretSaved =
         savedDestination.accessKeyId !== '' && keepsSavedSecret(current.backups.upload.s3, savedDestination);
@@ -263,6 +265,7 @@ export function ServerSettingsPage() {
                             value={current.quotas.homeDataMaxMB}
                             onChange={(e) => updateQuota('homeDataMaxMB', e.target.valueAsNumber)}
                         />
+                        {homeDataTooSmall && <p className="text-xs text-destructive">At least {QUOTA_MIN_MB} MB</p>}
                     </div>
                     <div className="space-y-1.5">
                         <Label>Default mount (MB)</Label>
@@ -272,6 +275,7 @@ export function ServerSettingsPage() {
                             value={current.quotas.defaultMountMaxSizeMB}
                             onChange={(e) => updateQuota('defaultMountMaxSizeMB', e.target.valueAsNumber)}
                         />
+                        {mountTooSmall && <p className="text-xs text-destructive">At least {QUOTA_MIN_MB} MB</p>}
                     </div>
                     <div className="space-y-1.5">
                         <Label>Max upload (MB)</Label>
@@ -433,6 +437,8 @@ export function ServerSettingsPage() {
                 disabled={
                     orgName.trim() === '' ||
                     senderAddressInvalid ||
+                    homeDataTooSmall ||
+                    mountTooSmall ||
                     (current.defaults.mount.storageType === 's3' && !isS3ConfigValid(currentS3)) ||
                     (current.backups.upload.enabled && !isS3ConfigValid(current.backups.upload.s3, backupSecretSaved))
                 }
