@@ -4,13 +4,12 @@
 // formulas that read it recompute.
 
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
-import { cloneDeep, omit, set } from 'es-toolkit/compat';
+import { cloneDeep } from 'es-toolkit/compat';
 import { findSheetByName } from '../../engine/a1-notation';
 import { cellValue, dropRuns } from '../../engine/format';
 import { iscelldata } from '../../engine/formula-utils';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
-import { getSheetIndex } from '../utils';
 import { mergeBorder } from './cell';
 import { getcellrange } from './formula-exec';
 import { colLocation, rowLocation, sheetPoint } from './location';
@@ -35,11 +34,7 @@ export function getCellRowColumn(ctx: Context, e: MouseEvent, cellArea: HTMLDivE
 }
 
 export function getCellHyperlink(ctx: Context, r: number, c: number) {
-    const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
-    if (sheetIndex != null) {
-        return ctx.sheets[sheetIndex].hyperlink?.[`${r}_${c}`];
-    }
-    return undefined;
+    return getFlowdata(ctx)?.[r]?.[c]?.link;
 }
 
 export function saveHyperlink(
@@ -50,17 +45,12 @@ export function saveHyperlink(
     linkType: string,
     linkAddress: string,
 ) {
-    const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     const flowdata = getFlowdata(ctx);
-    if (sheetIndex != null && flowdata != null && linkType && linkAddress) {
+    if (flowdata != null && linkType && linkAddress) {
         const cell = (flowdata[r][c] ??= {});
-        set(ctx.sheets[sheetIndex], ['hyperlink', `${r}_${c}`], {
-            linkType,
-            linkAddress,
-        });
+        cell.link = { type: linkType, address: linkAddress };
         cell.fc = 'rgb(0, 0, 255)';
         cell.un = 1;
-        cell.hl = { r, c, id: ctx.currentSheetId };
         // New text replaces the cell's value, its formula and a rich cell's runs, as in Excel; the text the card
         // showed, left as it was, keeps the cell as it was.
         const text = linkText || linkAddress;
@@ -77,16 +67,11 @@ export function saveHyperlink(
 
 export function removeHyperlink(ctx: Context, r: number, c: number) {
     if (ctx.allowEdit === false) return;
-    const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
-    const flowdata = getFlowdata(ctx);
-    if (flowdata != null && sheetIndex != null) {
-        const hyperlink = omit(ctx.sheets[sheetIndex].hyperlink, `${r}_${c}`);
-        set(ctx.sheets[sheetIndex], 'hyperlink', hyperlink);
-        const cell = flowdata[r][c];
-        if (cell != null) {
-            const { fc: _fc, un: _un, hl: _hl, ...rest } = cell;
-            flowdata[r][c] = rest;
-        }
+    const cell = getFlowdata(ctx)?.[r]?.[c];
+    if (cell) {
+        delete cell.link;
+        delete cell.fc;
+        delete cell.un;
     }
     ctx.linkCard = undefined;
 }
@@ -114,8 +99,8 @@ export function showLinkCard(ctx: Context, r: number, c: number, isEditing = fal
             c,
             rc: `${r}_${c}`,
             originText: `${cellValue(cell) ?? ''}`,
-            originType: link?.linkType || 'webpage',
-            originAddress: link?.linkAddress || '',
+            originType: link?.type || 'webpage',
+            originAddress: link?.address || '',
             position: {
                 cellLeft: c === 0 ? 0 : ctx.visibledatacolumn[c - 1],
                 cellBottom: ctx.visibledatarow[r],
@@ -125,20 +110,17 @@ export function showLinkCard(ctx: Context, r: number, c: number, isEditing = fal
     }
 }
 
-export function goToLink(ctx: Context, r: number, c: number, linkType: string, linkAddress: string) {
-    const currSheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
-    if (currSheetIndex == null) return;
-    if (ctx.sheets[currSheetIndex].hyperlink?.[`${r}_${c}`] == null) {
-        return;
-    }
-    if (linkType === 'webpage') {
-        const address = resolveWebLink(linkAddress);
+export function goToLink(ctx: Context, r: number, c: number) {
+    const link = getCellHyperlink(ctx, r, c);
+    if (link == null) return;
+    if (link.type === 'webpage') {
+        const address = resolveWebLink(link.address);
         if (address != null) window.open(address, '_blank', 'noopener,noreferrer');
-    } else if (linkType === 'sheet') {
-        const sheetId = findSheetByName(ctx.sheets, linkAddress)?.id;
+    } else if (link.type === 'sheet') {
+        const sheetId = findSheetByName(ctx.sheets, link.address)?.id;
         if (sheetId != null) changeSheet(ctx, sheetId);
     } else {
-        const range = cloneDeep(getcellrange(ctx, linkAddress));
+        const range = cloneDeep(getcellrange(ctx, link.address));
         if (range == null) return;
         const sheetId = range.sheetId || ctx.currentSheetId;
         changeSheet(ctx, sheetId);

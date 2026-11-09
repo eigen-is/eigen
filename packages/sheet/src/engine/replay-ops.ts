@@ -7,7 +7,7 @@
 import { isRecord } from '@workspace/lib/guards';
 import type { Op, Sheet } from '@workspace/lib/sheets';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
-import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
+import { opToPatchOnSheets, sheetHoldsNoBadLink } from '@workspace/lib/sheets/yjs-ops';
 import { applyPatches, enablePatches } from 'immer';
 import { isSheetName, sheetNameKey } from './a1-notation';
 import { celldataToData, dataToCelldata } from './celldata';
@@ -174,13 +174,14 @@ function isLine(value: unknown, type: 'row' | 'column'): value is number {
 }
 
 // A new sheet needs an id no sheet has yet, because every later op names its sheet by id. Its name follows the
-// sheet-name rule, or a rename's undo could not restore it. Its cells must read as cells on every reader.
+// sheet-name rule, or a rename's undo could not restore it. Its cells and links must read as such on every reader.
 export function isNewSheet(v: unknown, sheets: { id: string }[]): v is Sheet {
     if (!isRecord(v)) return false;
     const { id, name, data, celldata } = v;
     if (data != null && !(Array.isArray(data) && data.every((row) => row == null || Array.isArray(row)))) return false;
     if (celldata != null && !(Array.isArray(celldata) && celldata.every(isRecord))) return false;
-    return typeof id === 'string' && typeof name === 'string' && isSheetName(name) && !sheets.some((s) => s.id === id);
+    if (typeof id !== 'string' || typeof name !== 'string' || !isSheetName(name)) return false;
+    return !sheets.some((s) => s.id === id) && sheetHoldsNoBadLink(v);
 }
 
 // A row or column op moves the cells after it on its sheet, and it needs the sheet's matrix to apply.

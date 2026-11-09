@@ -30,7 +30,7 @@ export function opToPatchOnSheets(sheets: Sheet[], ops: Op[]): [Patch[], Op[]] {
         const writesMatrixOrRow = op.path.length === 1 || (op.path.length === 2 && typeof op.path[1] === 'number');
         if (op.path[0] === 'data' && kind !== 'remove' && writesMatrixOrRow && !Array.isArray(op.value)) continue;
         if (op.path[0] === 'dataValidations' && !isValidationWrite(op)) continue;
-        if (op.path[0] === 'hyperlink' && !isLinkWrite(op)) continue;
+        if (op.path[0] === 'data' && !isCellWrite(op)) continue;
         const i = sheets.findIndex((s) => s.id === op.id);
         if (i === -1) continue;
         if (op.path[0] === 'dataValidations' && !ruleIds(i, op)) continue;
@@ -47,18 +47,30 @@ function isValidationWrite(op: Op): boolean {
     return op.path.length === 2 && (op.op === 'remove' || isSheetValidation(op.value));
 }
 
-// A rename and the export read every link's type and address, so a write that would leave a link without them is
-// dropped. The editor writes a sheet's links whole or one at a time.
-function isLinkWrite({ op, path, value }: Op): boolean {
-    if (op === 'remove') return path.length <= 2;
-    if (path.length === 1) return isRecord(value) && Object.values(value).every(isLink);
-    return path.length === 2 && isLink(value);
+// A rename and the exports read every link's type and address, so a write that would leave a link without them is
+// dropped. The editor writes a link whole, and a cell, a row or a matrix whole with the links it holds.
+function isCellWrite({ op, path, value }: Op): boolean {
+    if (path[3] === 'link') return path.length === 4 && (op === 'remove' || isLink(value));
+    if (op === 'remove' || path.length > 3) return true;
+    return Array.isArray(value) ? value.flat().every(holdsNoBadLink) : holdsNoBadLink(value);
+}
+
+// A whole sheet a peer adds brings its cells past every cell write, as the matrix or as the stored list.
+export function sheetHoldsNoBadLink({ data, celldata }: Record<string, unknown>): boolean {
+    if (Array.isArray(data) && !data.flat().every(holdsNoBadLink)) return false;
+    return !Array.isArray(celldata) || celldata.every((entry) => !isRecord(entry) || holdsNoBadLink(entry['v']));
+}
+
+function holdsNoBadLink(cell: unknown): boolean {
+    if (!isRecord(cell)) return true;
+    const { link } = cell;
+    return link === undefined || isLink(link);
 }
 
 function isLink(value: unknown): boolean {
     if (!isRecord(value)) return false;
-    const { linkType, linkAddress } = value;
-    return typeof linkType === 'string' && typeof linkAddress === 'string';
+    const { type, address } = value;
+    return typeof type === 'string' && typeof address === 'string';
 }
 
 // Says whether a validation write applies. A `replace` means its writer saw the rule, because immer writes `add` for an

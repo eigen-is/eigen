@@ -6,7 +6,6 @@
 // Workbook keeps the stacks.
 
 import type { MergeCell } from '@workspace/lib/sheets';
-import { parseCellKey } from '@workspace/lib/sheets';
 import { get, isEqual } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import { applyPatches, produce, produceWithPatches } from 'immer';
@@ -76,7 +75,7 @@ function rewrittenByDelete(before: Context, after: Context): Patch[] {
     const recorded: Patch[] = [];
     for (const sheet of after.sheets) {
         const was = getSheet(before, { id: sheet.id });
-        for (const field of ['data', 'conditionalFormatRules', 'dataValidations', 'hyperlink'] as const) {
+        for (const field of ['data', 'conditionalFormatRules', 'dataValidations'] as const) {
             if (was[field] === sheet[field]) continue;
             recorded.push({ op: 'replace', path: ['sheets', sheet.id, field], value: was[field] });
         }
@@ -286,7 +285,7 @@ function authored(cell: Cell | null | undefined) {
 }
 
 // The patches whose targets still hold what the entry wrote there: a target a peer changed since keeps the peer's
-// value, as Google does. A merge and its cells, and a link and its cell, pass or skip together.
+// value, as Google does. A merge and its cells pass or skip together.
 function stillWritten(ctx: Context, apply: Patch[], written: Patch[]): Patch[] {
     const parent = new Map<string, string>();
     const find = (key: string): string => {
@@ -306,8 +305,6 @@ function stillWritten(ctx: Context, apply: Patch[], written: Patch[]): Patch[] {
                     join(key, JSON.stringify(['sheets', sheet, 'data', row, column]));
                 }
             }
-        } else if (field === 'hyperlink' && typeof name === 'string') {
-            join(key, JSON.stringify(['sheets', sheet, 'data', ...parseCellKey(name)]));
         }
     };
     for (const patch of apply) joinUnits(patch, JSON.stringify(unitOf(patch.path)));

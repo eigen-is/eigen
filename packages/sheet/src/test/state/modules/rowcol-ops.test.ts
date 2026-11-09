@@ -18,14 +18,15 @@ import type { PatchOptions } from '../../../state/utils/patch';
 import { filterPatch, patchToOp } from '../../../state/utils/patch';
 import { author, join, receive } from '../factories/collab';
 import { contextFactory } from '../factories/context';
+import { cellLinks } from '../factories/links';
 
 enablePatches();
 
 const INSERT_OP = { type: 'row', index: 1, count: 1, direction: 'lefttop', id: 'id_1' } as const;
 const DELETE_OP = { type: 'row', start: 1, end: 2, id: 'id_1' } as const;
 const SIDE = { style: 1, color: '#000' };
-const LINK = { linkType: 'webpage', linkAddress: 'https://eigen.is' };
-const PEER_LINK = { linkType: 'webpage', linkAddress: 'https://peer.example' };
+const LINK = { type: 'webpage', address: 'https://eigen.is' };
+const PEER_LINK = { type: 'webpage', address: 'https://peer.example' };
 
 function richContext(): Context {
     const cell = (v: number) => ({ v, m: String(v) });
@@ -37,7 +38,12 @@ function richContext(): Context {
                 data: [
                     [cell(1), cell(2), null, null],
                     [cell(3), null, null, null],
-                    [cell(4), { v: 4, m: '4', f: '=A1+A2', ct: { fa: 'General', t: 'n' } }, null, null],
+                    [
+                        { ...cell(4), link: LINK },
+                        { v: 4, m: '4', f: '=A1+A2', ct: { fa: 'General', t: 'n' } },
+                        null,
+                        null,
+                    ],
                     [null, null, { v: 6, mc: { r: 3, c: 2, rs: 1, cs: 2 } }, { mc: { r: 3, c: 2 } }],
                 ],
                 config: {
@@ -46,8 +52,7 @@ function richContext(): Context {
                     merge: { '3_2': { r: 3, c: 2, rs: 1, cs: 2 } },
                     borderInfo: { '1_0': { t: SIDE }, '2_1': { b: SIDE }, '3_3': { l: SIDE } },
                 },
-                // The links and the validation rules ship nothing, so they prove the replay moves them itself.
-                hyperlink: { '2_0': LINK },
+                // The validation rules ship nothing, so they prove the replay moves them itself.
                 dataValidations: {
                     v: {
                         ranges: [{ row: [1, 2], column: [1, 1] }],
@@ -132,7 +137,6 @@ describe('BE replay converges with FE state from the slim ops alone', () => {
         for (const [i, sheet] of replayed.entries()) {
             expect(sheet.data).toEqual(next.sheets[i].data);
             expect(sheet.config ?? {}).toEqual(next.sheets[i].config ?? {});
-            expect(sheet.hyperlink ?? {}).toEqual(next.sheets[i].hyperlink ?? {});
             expect(sheet.dataValidations ?? {}).toEqual(next.sheets[i].dataValidations ?? {});
         }
     }
@@ -542,8 +546,8 @@ describe("a row or column op after a peer's edit of the sheet", () => {
     });
 
     test.each(ops)("%s moves the peer's new link", (_, options, links) => {
-        const link = (ctx: Context) => saveHyperlink(ctx, 3, 1, 'peer', PEER_LINK.linkType, PEER_LINK.linkAddress);
-        for (const sheet of race(link, options)) expect(sheet.hyperlink).toEqual(links);
+        const link = (ctx: Context) => saveHyperlink(ctx, 3, 1, 'peer', PEER_LINK.type, PEER_LINK.address);
+        for (const sheet of race(link, options)) expect(cellLinks(sheet)).toEqual(links);
     });
 });
 

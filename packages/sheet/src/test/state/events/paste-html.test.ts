@@ -833,3 +833,14 @@ describe('paste of no table', () => {
         expect(ctx.sheets[0].data?.[0][0]?.v).toBe('kept');
     });
 });
+
+describe('a table from another program over a linked cell', () => {
+    it('takes the link away, as a paste with no link does', () => {
+        const ctx = makeCtx();
+        const data = ctx.sheets[0].data;
+        if (data) data[0][0] = { v: 'site', m: 'site', link: { type: 'webpage', address: 'https://eigen.is' } };
+        pasteHtml(ctx, '<table><tr><td>plain</td></tr></table>');
+        expect(ctx.sheets[0].data?.[0][0]?.v).toBe('plain');
+        expect(ctx.sheets[0].data?.[0][0]?.link).toBeUndefined();
+    });
+});

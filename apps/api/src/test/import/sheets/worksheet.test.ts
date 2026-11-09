@@ -4,6 +4,7 @@ import { xlsxToSheets } from '../../../lib/import/sheets/from-xlsx';
 import { readWorksheet } from '../../../lib/import/sheets/worksheet';
 import { parseOoxml } from '../../../lib/ooxml/ooxml';
 import type { Relationship } from '../../../lib/ooxml/opc';
+import { cellLinks } from '../../fixtures/cell-links';
 import { sheetXml, xlsxFixture } from '../../fixtures/xlsx';
 
 // A worksheet past its grid: columns, merges, views, the filter's span and the hyperlinks, and the cells merges and
@@ -192,8 +193,8 @@ describe('views and the filter', () => {
 
 describe('hyperlinks', () => {
     const links = (hyperlinks: string, merges = '') => {
-        const { sheet, placed, charged } = read('', `${merges}<hyperlinks>${hyperlinks}</hyperlinks>`);
-        return { links: sheet.hyperlink, placed, charged };
+        const { placed, charged } = read('', `${merges}<hyperlinks>${hyperlinks}</hyperlinks>`);
+        return { links: cellLinks({ celldata: placed }), placed, charged };
     };
 
     test('an external link through the sheet rels, and places in the workbook by location', () => {
@@ -201,24 +202,24 @@ describe('hyperlinks', () => {
             '<hyperlink ref="A1" r:id="rId1"/><hyperlink ref="A2" location="Other!B2"/><hyperlink ref="A3" location="#Other"/><hyperlink ref="A4" location="\'My &amp; sheet\'"/><hyperlink ref="A5" location="\'It\'\'s\'!C3"/>',
         );
         expect(found).toEqual({
-            '0_0': { linkType: 'webpage', linkAddress: 'https://example.com/page' },
-            '1_0': { linkType: 'cellrange', linkAddress: 'Other!B2' },
-            '2_0': { linkType: 'sheet', linkAddress: 'Other' },
-            '3_0': { linkType: 'sheet', linkAddress: 'My & sheet' },
-            '4_0': { linkType: 'cellrange', linkAddress: "'It''s'!C3" },
+            '0_0': { type: 'webpage', address: 'https://example.com/page' },
+            '1_0': { type: 'cellrange', address: 'Other!B2' },
+            '2_0': { type: 'sheet', address: 'Other' },
+            '3_0': { type: 'sheet', address: 'My & sheet' },
+            '4_0': { type: 'cellrange', address: "'It''s'!C3" },
         });
         expect(charged[0]).toEqual([1, 'https://example.com/page'.length]);
     });
 
     test("an external link's location is its fragment; an internal link written with a `#` relationship stays internal", () => {
         expect(links('<hyperlink ref="A1" r:id="rId1" location="section"/>').links).toEqual({
-            '0_0': { linkType: 'webpage', linkAddress: 'https://example.com/page#section' },
+            '0_0': { type: 'webpage', address: 'https://example.com/page#section' },
         });
         expect(
             links('<hyperlink ref="A1" r:id="rId2" location="Other!B2"/><hyperlink ref="A2" r:id="rId2"/>').links,
         ).toEqual({
-            '0_0': { linkType: 'cellrange', linkAddress: 'Other!B2' },
-            '1_0': { linkType: 'cellrange', linkAddress: 'Other!B2' },
+            '0_0': { type: 'cellrange', address: 'Other!B2' },
+            '1_0': { type: 'cellrange', address: 'Other!B2' },
         });
     });
 
@@ -227,7 +228,7 @@ describe('hyperlinks', () => {
             links(
                 '<hyperlink ref="A1" r:id="rId9"/><hyperlink ref="A2" r:id="rId3"/><hyperlink ref="A3" location=""/><hyperlink ref="nonsense" location="Other"/><hyperlink location="Other"/>',
             ).links,
-        ).toBeUndefined();
+        ).toEqual({});
     });
 
     test("a link lands on its ref's first cell, beside a merge there, the later of two on one cell winning", () => {
@@ -235,14 +236,14 @@ describe('hyperlinks', () => {
             '<hyperlink ref="B2:C3" location="Other"/><hyperlink ref="D4" location="Stale"/><hyperlink ref="D4:E4" location="Other"/><hyperlink ref="E5:F5" r:id="rId1"/>',
             '<mergeCells><mergeCell ref="B2:C2"/></mergeCells>',
         );
-        expect(Object.keys(found ?? {})).toEqual(['1_1', '3_3', '4_4']);
+        expect(Object.keys(found)).toEqual(['1_1', '3_3', '4_4']);
         // The link written for the cell alone is not the merge's.
-        expect(found?.['3_3']).toEqual({ linkType: 'sheet', linkAddress: 'Other' });
+        expect(found['3_3']).toEqual({ type: 'sheet', address: 'Other' });
         expect(placed).toEqual([
-            { r: 1, c: 1, v: { mc: { r: 1, c: 1, rs: 1, cs: 2 }, hl: { r: 1, c: 1, id: 'sheet-0' } } },
+            { r: 1, c: 1, v: { mc: { r: 1, c: 1, rs: 1, cs: 2 }, link: { type: 'sheet', address: 'Other' } } },
             { r: 1, c: 2, v: { mc: { r: 1, c: 1 } } },
-            { r: 3, c: 3, v: { hl: { r: 3, c: 3, id: 'sheet-0' } } },
-            { r: 4, c: 4, v: { hl: { r: 4, c: 4, id: 'sheet-0' } } },
+            { r: 3, c: 3, v: { link: { type: 'sheet', address: 'Other' } } },
+            { r: 4, c: 4, v: { link: { type: 'webpage', address: 'https://example.com/page' } } },
         ]);
     });
 });
@@ -270,7 +271,7 @@ describe('in the sheet', () => {
             '2_0': { mc: { r: 0, c: 0 } },
             '0_1': { v: 2, m: '2', ct: { fa: 'General', t: 'n' }, mc: { r: 0, c: 1, rs: 1, cs: 2 } },
             '0_2': { mc: { r: 0, c: 1 } },
-            '4_4': { hl: { r: 4, c: 4, id: 'sheet-0' } },
+            '4_4': { link: { type: 'cellrange', address: 'Sheet1!A1' } },
             // A one-column merge whose row holds no value keeps its anchor.
             '6_6': { mc: { r: 6, c: 6, rs: 2, cs: 1 } },
             '7_6': { mc: { r: 6, c: 6 } },
@@ -280,7 +281,7 @@ describe('in the sheet', () => {
             '0_1': { r: 0, c: 1, rs: 1, cs: 2 },
             '6_6': { r: 6, c: 6, rs: 2, cs: 1 },
         });
-        expect(sheet.hyperlink).toEqual({ '4_4': { linkType: 'cellrange', linkAddress: 'Sheet1!A1' } });
+        expect(cellLinks(sheet)).toEqual({ '4_4': { type: 'cellrange', address: 'Sheet1!A1' } });
     });
 
     // A cell with an external link keeps its value: a number stays a number, a formula its formula.
@@ -290,8 +291,19 @@ describe('in the sheet', () => {
             '<hyperlinks><hyperlink ref="A1" r:id="rId1"/><hyperlink ref="B1" r:id="rId1"/></hyperlinks>',
         );
         expect(sheet.celldata?.map(({ v }) => v)).toEqual([
-            { v: 42, m: '42', ct: { fa: 'General', t: 'n' }, hl: { r: 0, c: 0, id: 'sheet-0' } },
-            { v: 84, m: '84', f: '=A1*2', ct: { fa: 'General', t: 'n' }, hl: { r: 0, c: 1, id: 'sheet-0' } },
+            {
+                v: 42,
+                m: '42',
+                ct: { fa: 'General', t: 'n' },
+                link: { type: 'webpage', address: 'https://example.com/' },
+            },
+            {
+                v: 84,
+                m: '84',
+                f: '=A1*2',
+                ct: { fa: 'General', t: 'n' },
+                link: { type: 'webpage', address: 'https://example.com/' },
+            },
         ]);
     });
 

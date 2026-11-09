@@ -119,7 +119,6 @@ const SHEET_FIELDS = [
     'frozen',
     'showGridLines',
     'filterRange',
-    'hyperlink',
     'dataValidations',
     'conditionalFormatRules',
     'images',
@@ -250,6 +249,7 @@ export function tallySheets(sheets: Sheet[]): Snapshot {
             if (cell.ht !== undefined || cell.vt !== undefined) bump(counts, 'alignment');
             if (cell.tb === '2') bump(counts, 'wrap');
             if (cell.rt) bump(counts, 'rotation');
+            if (cell.link) bump(counts, 'hyperlinks');
             if (cell.ct?.fa && cell.ct.fa !== 'General') bump(counts, 'numberFormats');
             const text = typeof value === 'string' ? value.length : 0;
             bump(counts, 'text', text || runs.reduce((sum, run) => sum + (run.v?.length ?? 0), 0));
@@ -265,7 +265,6 @@ export function tallySheets(sheets: Sheet[]): Snapshot {
         if (sheet.filterRange) bump(counts, 'filters');
         bump(counts, 'conditionalFormats', sheet.conditionalFormatRules?.length ?? 0);
         bump(counts, 'validations', size(sheet.dataValidations));
-        bump(counts, 'hyperlinks', size(sheet.hyperlink));
         bump(counts, 'images', size(sheet.images));
         bump(counts, 'charts', size(sheet.charts));
         const hashes = Object.fromEntries([
@@ -987,7 +986,7 @@ export function diffWorkbooks(a: Sheet[], b: Sheet[], media: RoundtripContext['m
                 const configB = new Map<string, unknown>(Object.entries(sheetB.config ?? {}));
                 for (const key of new Set([...configA.keys(), ...configB.keys()]))
                     keyed(key, sheet, configA.get(key), configB.get(key));
-            } else if (field === 'hyperlink' || field === 'conditionalFormatRules') keyed(field, sheet, x, y);
+            } else if (field === 'conditionalFormatRules') keyed(field, sheet, x, y);
             else if (field === 'dataValidations') {
                 for (const difference of validationDifferences(sheetA.dataValidations, sheetB.dataValidations))
                     note(field, sheet, difference.at, difference.a, difference.b);
@@ -1172,27 +1171,24 @@ export const LISTED: Listed<RoundtripDifference, RoundtripContext>[] = [
         kind: 'web links resolved',
         why: "A web link is written as resolveWebLink makes it, the address the editor opens, and as a relationship's URI, so a bare host gains its https:// and a character a URI can't hold its escape",
         matches: ({ feature, a, b }) =>
-            feature === 'hyperlink' &&
+            feature === 'cell link' &&
             isRecord(a) &&
             isRecord(b) &&
-            a['linkType'] === 'webpage' &&
-            b['linkType'] === 'webpage' &&
-            typeof a['linkAddress'] === 'string' &&
-            b['linkAddress'] === uriReference(resolveWebLink(a['linkAddress']) ?? ''),
+            a['type'] === 'webpage' &&
+            b['type'] === 'webpage' &&
+            typeof a['address'] === 'string' &&
+            b['address'] === uriReference(resolveWebLink(a['address']) ?? ''),
     },
     {
         kind: 'unwritable links dropped',
-        why: "A web link resolveWebLink refuses (a script's address), which the editor never opens, or a cell link to no range (a defined name's Print_Area), which it can't follow, is left out and counted (links-dropped), its cell's backref with it",
-        matches: ({ feature, sheet, at, a, b }, { warnings, a: sheets }) => {
-            if (!warnings.has('links-dropped') || b !== undefined) return false;
-            const links = sheets.find((candidate) => candidate.name === sheet)?.hyperlink ?? {};
-            const key =
-                feature === 'hyperlink' ? at : feature === 'cell hl' && isRecord(a) ? `${a['r']}_${a['c']}` : '';
-            const link = links[key];
-            if (link?.linkType === 'webpage') return resolveWebLink(link.linkAddress) === null;
+        why: "A web link resolveWebLink refuses (a script's address), which the editor never opens, or a cell link to no range (a defined name's Print_Area), which it can't follow, is left out and counted (links-dropped)",
+        matches: ({ feature, a, b }, { warnings }) => {
+            if (!warnings.has('links-dropped') || b !== undefined || feature !== 'cell link') return false;
+            if (!isRecord(a) || typeof a['address'] !== 'string') return false;
+            if (a['type'] === 'webpage') return resolveWebLink(a['address']) === null;
             return (
-                link?.linkType === 'cellrange' &&
-                parseA1Range(link.linkAddress.slice(link.linkAddress.lastIndexOf('!') + 1)) === null
+                a['type'] === 'cellrange' &&
+                parseA1Range(a['address'].slice(a['address'].lastIndexOf('!') + 1)) === null
             );
         },
     },
@@ -1200,15 +1196,15 @@ export const LISTED: Listed<RoundtripDifference, RoundtripContext>[] = [
         kind: 'sheet links as cell links',
         why: "A link to a sheet is written as a location, which names a cell, so it comes back a link to the sheet's A1",
         matches: ({ feature, a, b }) =>
-            feature === 'hyperlink' &&
+            feature === 'cell link' &&
             isRecord(a) &&
             isRecord(b) &&
-            a['linkType'] === 'sheet' &&
-            b['linkType'] === 'cellrange' &&
-            typeof a['linkAddress'] === 'string' &&
-            typeof b['linkAddress'] === 'string' &&
-            b['linkAddress'].endsWith('!A1') &&
-            unquoteSheetName(b['linkAddress'].slice(0, -3)) === a['linkAddress'],
+            a['type'] === 'sheet' &&
+            b['type'] === 'cellrange' &&
+            typeof a['address'] === 'string' &&
+            typeof b['address'] === 'string' &&
+            b['address'].endsWith('!A1') &&
+            unquoteSheetName(b['address'].slice(0, -3)) === a['address'],
     },
     {
         kind: 'list ranges absolute',

@@ -623,7 +623,7 @@ export function handleClearFormat(ctx: Context) {
             for (let c = colSt; c <= colEd; c += 1) {
                 const cell = flowdata[r][c];
                 if (!cell) continue;
-                flowdata[r][c] = pick(cell, 'v', 'm', 'mc', 'f', 'ct');
+                flowdata[r][c] = pick(cell, 'v', 'm', 'mc', 'f', 'ct', 'link');
             }
         }
         clearSides(cfg.borderInfo, rowSt, rowEd, colSt, colEd);

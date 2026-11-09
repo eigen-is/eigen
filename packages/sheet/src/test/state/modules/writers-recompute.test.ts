@@ -142,7 +142,7 @@ describe('a link saved over a formula', () => {
         expect(formulaAt(t.ctx, 0)).toBe('=B1*2');
         expect(formulasAt(t.ctx)).toEqual(['r0c0iid_1', 'r0c2iid_1']);
         expect(valuesOf(t.ctx)).toEqual([4, 2, 4]);
-        expect(t.ctx.sheets[0].hyperlink?.['0_0']).toBeUndefined();
+        expect(t.ctx.sheets[0].data?.[0][0]?.link).toBeUndefined();
     });
 
     test('the text the card showed keeps the formula', () => {
@@ -150,7 +150,7 @@ describe('a link saved over a formula', () => {
         tabEdit(t, save('4'));
         expect(formulaAt(t.ctx, 0)).toBe('=B1*2');
         expect(formulasAt(t.ctx)).toEqual(['r0c0iid_1', 'r0c2iid_1']);
-        expect(t.ctx.sheets[0].hyperlink?.['0_0']?.linkAddress).toBe('https://eigen.is');
+        expect(t.ctx.sheets[0].data?.[0][0]?.link?.address).toBe('https://eigen.is');
         tabEdit(t, (ctx) => updateCell(ctx, 0, 1, null, 3));
         expect(valuesOf(t.ctx)).toEqual([6, 3, 6]);
     });

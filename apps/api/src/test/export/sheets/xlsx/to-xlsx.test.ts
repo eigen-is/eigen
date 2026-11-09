@@ -5,6 +5,7 @@ import { recalcSheets } from '@workspace/sheet/engine';
 import type { TransformWarning } from '../../../../lib/document/transform/protocol';
 import { xlsxToSheets } from '../../../../lib/import/sheets/from-xlsx';
 import { openZip } from '../../../../lib/ooxml/zip';
+import { cellLinks } from '../../../fixtures/cell-links';
 import { validationsByCell } from '../../../fixtures/validations';
 import { exportXlsx } from '../../../fixtures/xlsx';
 
@@ -121,12 +122,11 @@ describe('an xlsx export read back by the import', () => {
                 {
                     id: 'fixture-26',
                     name: 'Index',
-                    celldata: [{ r: 0, c: 0, v: { v: 'table 1' } }],
-                    hyperlink: { '0_0': { linkType: 'sheet', linkAddress: 'tbl1.2' } },
+                    celldata: [{ r: 0, c: 0, v: { v: 'table 1', link: { type: 'sheet', address: 'tbl1.2' } } }],
                 },
             ]),
         );
-        expect(sheet.hyperlink).toEqual({ '0_0': { linkType: 'sheet', linkAddress: 'tbl1.2' } });
+        expect(cellLinks(sheet)).toEqual({ '0_0': { type: 'sheet', address: 'tbl1.2' } });
     });
 
     // The editor follows a link to a sheet's name in another case to that sheet, so the file names the sheet as the
@@ -138,13 +138,9 @@ describe('an xlsx export read back by the import', () => {
                 id: 'fixture-24',
                 name: 'Index',
                 celldata: [
-                    { r: 0, c: 0, v: { v: 'sheet' } },
-                    { r: 1, c: 0, v: { v: 'range' } },
+                    { r: 0, c: 0, v: { v: 'sheet', link: { type: 'sheet', address: 'history' } } },
+                    { r: 1, c: 0, v: { v: 'range', link: { type: 'cellrange', address: 'history!B2' } } },
                 ],
-                hyperlink: {
-                    '0_0': { linkType: 'sheet', linkAddress: 'history' },
-                    '1_0': { linkType: 'cellrange', linkAddress: 'history!B2' },
-                },
             },
         ]);
         const locations = [...entry(bytes, 'xl/worksheets/sheet2.xml').matchAll(/location="([^"]*)"/g)];
@@ -209,8 +205,7 @@ describe('an xlsx export read back by the import', () => {
             {
                 id: 'fixture-14',
                 name: 'Index',
-                celldata: [{ r: 0, c: 0, v: { v: 'go' } }],
-                hyperlink: { '0_0': { linkType: 'cellrange', linkAddress: 'T3.2!A1' } },
+                celldata: [{ r: 0, c: 0, v: { v: 'go', link: { type: 'cellrange', address: 'T3.2!A1' } } }],
             },
         ]);
         expect(entry(bytes, 'xl/worksheets/sheet3.xml')).toContain('location="T3.2!A1"');
@@ -264,19 +259,41 @@ describe('the export keeps what a plain writer loses', () => {
                     id: 'fixture-11',
                     name: 'Sheet1',
                     celldata: [
-                        { r: 0, c: 0, v: { v: 45366, m: '3/15/2024', ct: { fa: 'M/d/yyyy', t: 'd' } } },
-                        { r: 1, c: 0, v: { v: 42, m: '42', ct: { fa: 'General', t: 'n' } } },
+                        {
+                            r: 0,
+                            c: 0,
+                            v: {
+                                v: 45366,
+                                m: '3/15/2024',
+                                ct: { fa: 'M/d/yyyy', t: 'd' },
+                                link: { type: 'webpage', address: 'https://example.com/day' },
+                            },
+                        },
+                        {
+                            r: 1,
+                            c: 0,
+                            v: {
+                                v: 42,
+                                m: '42',
+                                ct: { fa: 'General', t: 'n' },
+                                link: { type: 'cellrange', address: 'B1' },
+                            },
+                        },
                     ],
-                    hyperlink: {
-                        '0_0': { linkType: 'webpage', linkAddress: 'https://example.com/day' },
-                        '1_0': { linkType: 'cellrange', linkAddress: 'B1' },
-                    },
                 },
             ]),
         );
-        expect(cellAt(sheet, 0, 0)).toMatchObject({ v: 45366, ct: { t: 'd' }, hl: { r: 0, c: 0 } });
-        expect(cellAt(sheet, 1, 0)).toMatchObject({ v: 42, ct: { t: 'n' }, hl: { r: 1, c: 0 } });
-        expect(sheet.hyperlink?.['0_0']).toEqual({ linkType: 'webpage', linkAddress: 'https://example.com/day' });
+        expect(cellAt(sheet, 0, 0)).toMatchObject({
+            v: 45366,
+            ct: { t: 'd' },
+            link: { type: 'webpage', address: 'https://example.com/day' },
+        });
+        expect(cellAt(sheet, 1, 0)).toMatchObject({
+            v: 42,
+            ct: { t: 'n' },
+            link: { type: 'cellrange', address: "'Sheet1'!B1" },
+        });
+        expect(cellLinks(sheet)['0_0']).toEqual({ type: 'webpage', address: 'https://example.com/day' });
     });
 
     test('a formula cell keeps its link', async () => {
@@ -285,13 +302,18 @@ describe('the export keeps what a plain writer loses', () => {
                 {
                     id: 'fixture-10',
                     name: 'Sheet1',
-                    celldata: [{ r: 0, c: 0, v: { f: '=SUM(B1:B3)', v: 6 } }],
-                    hyperlink: { '0_0': { linkType: 'webpage', linkAddress: 'https://example.com' } },
+                    celldata: [
+                        {
+                            r: 0,
+                            c: 0,
+                            v: { f: '=SUM(B1:B3)', v: 6, link: { type: 'webpage', address: 'https://example.com' } },
+                        },
+                    ],
                 },
             ]),
         );
         expect(cellAt(sheet, 0, 0)).toMatchObject({ f: '=SUM(B1:B3)', v: 6 });
-        expect(sheet.hyperlink).toEqual({ '0_0': { linkType: 'webpage', linkAddress: 'https://example.com' } });
+        expect(cellLinks(sheet)).toEqual({ '0_0': { type: 'webpage', address: 'https://example.com' } });
     });
 
     test('a range link keeps its range, and a web address with a cell-shaped tail stays one', async () => {
@@ -301,20 +323,16 @@ describe('the export keeps what a plain writer loses', () => {
                     id: 'fixture-9',
                     name: 'Sheet1',
                     celldata: [
-                        { r: 0, c: 0, v: { v: 'range' } },
-                        { r: 1, c: 0, v: { v: 'web' } },
+                        { r: 0, c: 0, v: { v: 'range', link: { type: 'cellrange', address: 'Sheet2!B2:C3' } } },
+                        { r: 1, c: 0, v: { v: 'web', link: { type: 'webpage', address: 'https://example.com/x!B2' } } },
                     ],
-                    hyperlink: {
-                        '0_0': { linkType: 'cellrange', linkAddress: 'Sheet2!B2:C3' },
-                        '1_0': { linkType: 'webpage', linkAddress: 'https://example.com/x!B2' },
-                    },
                 },
                 { id: 'fixture-8', name: 'Sheet2', celldata: [] },
             ]),
         );
-        expect(sheet.hyperlink).toEqual({
-            '0_0': { linkType: 'cellrange', linkAddress: 'Sheet2!B2:C3' },
-            '1_0': { linkType: 'webpage', linkAddress: 'https://example.com/x!B2' },
+        expect(cellLinks(sheet)).toEqual({
+            '0_0': { type: 'cellrange', address: 'Sheet2!B2:C3' },
+            '1_0': { type: 'webpage', address: 'https://example.com/x!B2' },
         });
     });
 
@@ -391,10 +409,9 @@ describe('the export keeps what a plain writer loses', () => {
                 id: 'fixture-3',
                 name: 'Sheet1',
                 celldata: [
-                    { r: 0, c: 0, v: { v: 'a', bl: 1 } },
+                    { r: 0, c: 0, v: { v: 'a', bl: 1, link: { type: 'webpage', address: 'https://example.com' } } },
                     { r: 0, c: 1, v: { v: 2, f: '=1+1' } },
                 ],
-                hyperlink: { '0_0': { linkType: 'webpage', linkAddress: 'https://example.com' } },
                 conditionalFormatRules: [
                     {
                         type: 'default',

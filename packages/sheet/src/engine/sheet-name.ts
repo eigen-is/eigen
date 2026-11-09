@@ -14,7 +14,7 @@ import {
     sheetFinder,
     sheetNameKey,
 } from './a1-notation';
-import { breakSheetRefs, renameSheetRefs, rewriteSheetFormulas } from './formula-shift';
+import { breakSheetRefs, mapSheetCells, renameSheetRefs, rewriteSheetFormulas } from './formula-shift';
 import { iscelldata } from './formula-utils';
 import { error } from './validation';
 
@@ -93,16 +93,14 @@ function rewriteSheetTexts<S extends Sheet>(
         dataValidations[key] = { ...entry, rule: { ...rule, value1 } };
     }
     if (dataValidations) next = { ...next, dataValidations };
-    let hyperlink: Sheet['hyperlink'] | null = null;
-    for (const [key, link] of Object.entries(sheet.hyperlink ?? {})) {
-        let { linkAddress } = link;
-        if (link.linkType === 'cellrange') linkAddress = rewrite(linkAddress);
-        else if (link.linkType === 'sheet') linkAddress = rewriteName(linkAddress);
-        if (linkAddress === link.linkAddress) continue;
-        hyperlink ??= { ...sheet.hyperlink };
-        hyperlink[key] = { ...link, linkAddress };
-    }
-    return hyperlink ? { ...next, hyperlink } : next;
+    return mapSheetCells(next, (cell) => {
+        const { link } = cell;
+        if (!link) return cell;
+        let { address } = link;
+        if (link.type === 'cellrange') address = rewrite(address);
+        else if (link.type === 'sheet') address = rewriteName(address);
+        return address === link.address ? cell : { ...cell, link: { ...link, address } };
+    });
 }
 
 // "Sheet1(Copy)", then "Sheet1(Copy2)", past the highest copy number taken, within the 31 characters a sheet name may

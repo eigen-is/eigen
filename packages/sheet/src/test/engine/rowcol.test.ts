@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { newSheetChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
-import type { Sheet, SheetChart, SheetConfig } from '@workspace/lib/sheets';
+import type { Cell, Sheet, SheetChart, SheetConfig } from '@workspace/lib/sheets';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartSpec, RangeChartData } from '@workspace/lib/types/chart';
 import { createArrayResolver } from '../../engine/cell-resolver';
@@ -9,6 +9,7 @@ import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaul
 import { FormulaEngine } from '../../engine/formula-engine';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol, RowColError } from '../../engine/rowcol';
 import type { EditorSheetConfigExtras, ShiftedSheet, SingleRange } from '../../engine/types';
+import { cellLinks } from '../state/factories/links';
 import type { Span } from './range-oracle';
 import { expectedDelete, expectedInsert, SPANS } from './range-oracle';
 
@@ -18,12 +19,7 @@ type TestSheet = ShiftedSheet & { config?: SheetConfig & EditorSheetConfigExtras
 
 const cell = (v: string | number) => ({ v, m: String(v), ct: { fa: 'General', t: 'g' } });
 
-const makeSheet = (
-    id: string,
-    name: string,
-    data: (ReturnType<typeof cell> | null)[][],
-    extras: Partial<TestSheet> = {},
-): TestSheet => ({
+const makeSheet = (id: string, name: string, data: (Cell | null)[][], extras: Partial<TestSheet> = {}): TestSheet => ({
     id,
     name,
     order: 0,
@@ -629,31 +625,27 @@ const onAxis = (type: 'row' | 'column', span: Span) =>
     type === 'row' ? { row: span, column: OTHER } : { row: OTHER, column: span };
 
 describe('applySheetsInsertRowCol/Delete — links', () => {
-    const link = { linkType: 'webpage', linkAddress: 'https://eigen.is' };
-    const grid = () => [
-        [cell('a'), cell('b')],
-        [cell('c'), cell('d')],
+    const link = { type: 'webpage', address: 'https://eigen.is' };
+    const linkedCell = (v: string): Cell => ({ ...cell(v), link });
+    const linked = () => [
+        makeSheet('s1', 'Sheet1', [
+            [linkedCell('a'), cell('b')],
+            [cell('c'), linkedCell('d')],
+        ]),
     ];
-    const linked = () => [makeSheet('s1', 'Sheet1', grid(), { hyperlink: { '0_0': link, '1_1': link } })];
 
     test('an insert moves the links past it', () => {
         const rows = { type: 'row', index: 1, count: 2, direction: 'lefttop', id: 's1' } as const;
-        expect(applySheetsInsertRowCol(linked(), rows)[0].hyperlink).toEqual({ '0_0': link, '3_1': link });
+        expect(cellLinks(applySheetsInsertRowCol(linked(), rows)[0])).toEqual({ '0_0': link, '3_1': link });
         const columns = { ...rows, type: 'column', index: 0, direction: 'rightbottom' } as const;
-        expect(applySheetsInsertRowCol(linked(), columns)[0].hyperlink).toEqual({ '0_0': link, '1_3': link });
+        expect(cellLinks(applySheetsInsertRowCol(linked(), columns)[0])).toEqual({ '0_0': link, '1_3': link });
     });
 
     test('a delete drops the links it takes and moves the ones past it', () => {
         const rows = { type: 'row', start: 0, end: 0, id: 's1' } as const;
-        expect(applySheetsDeleteRowCol(linked(), rows)[0].hyperlink).toEqual({ '0_1': link });
+        expect(cellLinks(applySheetsDeleteRowCol(linked(), rows)[0])).toEqual({ '0_1': link });
         const columns = { ...rows, type: 'column' } as const;
-        expect(applySheetsDeleteRowCol(linked(), columns)[0].hyperlink).toEqual({ '1_0': link });
-    });
-
-    test('a sheet without links stays without a map', () => {
-        const sheets = [makeSheet('s1', 'Sheet1', grid())];
-        const op = { type: 'row', index: 0, count: 1, direction: 'lefttop', id: 's1' } as const;
-        expect(applySheetsInsertRowCol(sheets, op)[0].hyperlink).toBeUndefined();
+        expect(cellLinks(applySheetsDeleteRowCol(linked(), columns)[0])).toEqual({ '1_0': link });
     });
 });
 

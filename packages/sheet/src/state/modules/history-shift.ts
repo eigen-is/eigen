@@ -106,7 +106,7 @@ function writesListLength({ path }: Patch): boolean {
     return path.at(-1) === 'length' && path.length === unitOf(path).length;
 }
 
-// A cell, a config map's entry, or one link, rule, image or chart: what a peer's write and yours collide on.
+// A cell, a config map's entry, or one rule, image or chart: what a peer's write and yours collide on.
 export function unitOf(path: (string | number)[]) {
     return path.slice(0, path[2] === 'data' || path[2] === 'config' ? 5 : 4);
 }
@@ -162,7 +162,6 @@ class Shifter {
         if (sheet !== this.id) return field === 'data' ? this.otherSheetData(patch, rest.length) : patch;
         if (field === 'data') return this.dataPatch(patch, rest);
         if (field === 'config') return this.configPatch(patch, rest);
-        if (field === 'hyperlink') return this.cellKeyed(patch, rest);
         if (field === 'dataValidations') return this.validations(patch, rest);
         return POSITION_FREE_FIELDS.has(field) ? patch : null;
     }
@@ -261,14 +260,8 @@ class Shifter {
         return (this.move.type === 'row' ? COLUMN_MAPS : ROW_MAPS).has(String(map)) ? patch : null;
     }
 
-    // An "r_c" key at the head of `rest`, such as a border or a link, or a whole map of them, such as a sheet's first
-    // link.
+    // An "r_c" key at the head of `rest`, such as a border.
     private cellKeyed(patch: Patch, [key, ...below]: (string | number)[]): Patch | null {
-        if (key == null) {
-            if (!('value' in patch) || patch.value == null) return patch;
-            const moved = this.move.cellKeyed(patch.value);
-            return Object.keys(moved).length === Object.keys(patch.value).length ? { ...patch, value: moved } : null;
-        }
         if (typeof key !== 'string') return null;
         const [moved] = Object.keys(this.move.cellKeyed({ [key]: true }));
         if (moved == null) return null;

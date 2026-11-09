@@ -1,7 +1,7 @@
-// A carry lands a block of cells somewhere else with what belongs to them: borders, validation rules, links, merges and
+// A carry lands a block of cells somewhere else with what belongs to them: borders, validation rules, merges and
 // conditional formats, each keyed by the source cell it came from. A cell whose source has none of these loses its own,
 // one cell at a time, as in Excel. A paste, a cut, a drag move, the format painter and a fill all land through
-// carryCells, and say what of a source cell lands through its land callback.
+// carryCells, and say what of a source cell, its link among it, lands through its land callback.
 
 import type { ConditionalFormatRule } from '@workspace/lib/sheets';
 import { coalescedRanges, compareValidationIds, rangesOverlap } from '@workspace/lib/sheets';
@@ -91,8 +91,8 @@ export type CarryTile = {
 // One cell a carry lands: the source cell, which land copies before it changes it, and where it lands and came from.
 type LandingCell = { source: Cell | null; r: number; c: number; sr: number; sc: number };
 
-// Lands the carried block on the current sheet once per tile: every cell with its border, validation rule, link,
-// merge and conditional format. land decides what of a source cell lands, so a copy can move a formula and the format
+// Lands the carried block on the current sheet once per tile: every cell with its border, validation rule, merge and
+// conditional format. land decides what of a source cell lands, so a copy can move a formula and the format
 // painter can keep the destination's value. The source is read before anything is written, so a tile over the source
 // reads the cells as they were. A cut then clears them.
 export function carryCells(
@@ -100,7 +100,7 @@ export function carryCells(
     lines: CarriedLines,
     tiles: readonly CarryTile[],
     land: (cell: LandingCell) => Cell | null,
-    { cut = false, links = true }: { cut?: boolean; links?: boolean } = {},
+    { cut = false }: { cut?: boolean } = {},
 ) {
     const { rows, columns } = lines;
     const from = getSheet(ctx, { id: lines.sheetId });
@@ -124,7 +124,6 @@ export function carryCells(
 
     if (cut) {
         const { merge, borderInfo } = from.config ?? {};
-        const { hyperlink } = from;
         for (const r of rows) {
             const row = source[r];
             for (const c of columns) {
@@ -133,7 +132,6 @@ export function carryCells(
                 row[c] = null;
                 const key = `${r}_${c}`;
                 if (borderInfo && read.config?.borderInfo?.[key]) delete borderInfo[key];
-                if (hyperlink && read.hyperlink?.[key]) delete hyperlink[key];
             }
         }
     }
@@ -159,10 +157,6 @@ export function carryCells(
                 const key = `${r}_${c}`;
                 if (borders[sourceKey] || held.config?.borderInfo?.[key])
                     carrySides(borderInfo, r, c, borders[sourceKey]);
-                // A source cell without a link takes the destination's away, as Excel does.
-                const link = read.hyperlink?.[sourceKey];
-                if (links && link) (to.hyperlink ??= {})[key] = link;
-                else if (links && held.hyperlink?.[key]) delete to.hyperlink?.[key];
 
                 const replaced = held.data?.[r]?.[c]?.mc && row[c];
                 if (replaced?.mc) {

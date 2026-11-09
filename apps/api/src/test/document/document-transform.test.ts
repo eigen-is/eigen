@@ -541,9 +541,8 @@ describe('document transform (eigensheets export)', () => {
 // Recorded from the import pipeline (xlsxToSheets + recalcImportedSheets +
 // encodeSheetsSnapshot) over buildImportFixture(), so the Worker and the main
 // thread are proven to emit the same bytes. Regenerate only for an intentional
-// converter or wire-format change (last moved when the import began to trust the values
-// Excel cached).
-const GOLDEN_IMPORT_SNAPSHOT_SHA256 = 'e7d472068d84abd408aab1ca9270945dda32aeab6bcdc18a4690cf95d92bbe76';
+// converter or wire-format change (last moved when a link moved onto its cell).
+const GOLDEN_IMPORT_SNAPSHOT_SHA256 = '905d934e750736c33ea94e6e4393dc9cb2685d8c6ba6883a78357d99692c67aa';
 
 // Small but representative workbook: values, a stale cached formula result the
 // import recalc must correct, styles, a date format, a merge, a column width, a

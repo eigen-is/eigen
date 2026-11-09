@@ -60,7 +60,7 @@ function unmergeRange(d: CellMatrix, merge: Record<string, MergeCell>, r1: numbe
                 delete merge[key];
                 firstCells[key] = cloneDeep(cell);
             } else {
-                const { v: _v, m: _m, ct: _ct, f: _f, ...format } = cloneDeep(firstCells[key]);
+                const { v: _v, m: _m, ct: _ct, f: _f, link: _link, ...format } = cloneDeep(firstCells[key]);
                 d[r][c] = format;
             }
         }

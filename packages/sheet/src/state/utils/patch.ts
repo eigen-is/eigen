@@ -64,15 +64,6 @@ export function patchToOp(ctx: Context, patches: Patch[], options: EntryOptions 
         }
         return op;
     });
-    // A linked cell written whole ships its link. The link sits under the cell's own key: the cell's `hl` keeps the
-    // place the link was made at, which a row or column op does not move.
-    for (const op of [...ops]) {
-        const [field, r, c] = op.path;
-        if (op.op !== 'replace' || op.value?.hl == null || op.path.length !== 3 || field !== 'data') continue;
-        const key = `${r}_${c}`;
-        const link = ctx.sheets.find((s) => s.id === op.id)?.hyperlink?.[key];
-        if (link) ops.push({ id: op.id, op: 'replace', path: ['hyperlink', key], value: link });
-    }
     return ops;
 }
 

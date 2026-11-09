@@ -1,4 +1,4 @@
-// Scheme allowlist for hyperlink navigation. linkAddress comes straight from
+// Scheme allowlist for hyperlink navigation. A link's address comes straight from
 // untrusted xlsx files and flows into window.open: http/https/mailto pass
 // through verbatim, a scheme-less address keeps the legacy https:// prepend
 // (host:port like localhost:3000 counts as scheme-less), and any other scheme
@@ -31,29 +31,29 @@ function openedUrls(): string[] {
     return calls;
 }
 
-function webpageContext(linkAddress: string): Context {
+function webpageContext(address: string): Context {
     const ctx = contextFactory() as Context;
-    ctx.sheets[0].hyperlink = { '0_0': { linkType: 'webpage', linkAddress } };
+    ctx.sheets[0].data = [[{ link: { type: 'webpage', address } }]];
     return ctx;
 }
 
 describe('goToLink scheme allowlist', () => {
     test('opens http/https links verbatim', () => {
         const calls = openedUrls();
-        goToLink(webpageContext('https://example.com/a?b=1'), 0, 0, 'webpage', 'https://example.com/a?b=1');
-        goToLink(webpageContext('http://example.com'), 0, 0, 'webpage', 'http://example.com');
+        goToLink(webpageContext('https://example.com/a?b=1'), 0, 0);
+        goToLink(webpageContext('http://example.com'), 0, 0);
         expect(calls).toEqual(['https://example.com/a?b=1', 'http://example.com']);
     });
 
     test('opens mailto links verbatim, not mangled with an https:// prefix', () => {
         const calls = openedUrls();
-        goToLink(webpageContext('mailto:foo@bar.com'), 0, 0, 'webpage', 'mailto:foo@bar.com');
+        goToLink(webpageContext('mailto:foo@bar.com'), 0, 0);
         expect(calls).toEqual(['mailto:foo@bar.com']);
     });
 
     test('prepends https:// to scheme-less addresses', () => {
         const calls = openedUrls();
-        goToLink(webpageContext('example.com'), 0, 0, 'webpage', 'example.com');
+        goToLink(webpageContext('example.com'), 0, 0);
         expect(calls).toEqual(['https://example.com']);
     });
 
@@ -62,27 +62,27 @@ describe('goToLink scheme allowlist', () => {
         const calls: (string | undefined)[][] = [];
         previousWindow = g.window;
         g.window = { open: (...args: (string | undefined)[]) => void calls.push(args) };
-        goToLink(webpageContext('https://example.com'), 0, 0, 'webpage', 'https://example.com');
+        goToLink(webpageContext('https://example.com'), 0, 0);
         expect(calls).toEqual([['https://example.com', '_blank', 'noopener,noreferrer']]);
     });
 
     test('treats host:port as scheme-less — digits only after the colon is a port, not a scheme', () => {
         const calls = openedUrls();
-        goToLink(webpageContext('example.com:8080/x'), 0, 0, 'webpage', 'example.com:8080/x');
-        goToLink(webpageContext('localhost:3000'), 0, 0, 'webpage', 'localhost:3000');
+        goToLink(webpageContext('example.com:8080/x'), 0, 0);
+        goToLink(webpageContext('localhost:3000'), 0, 0);
         expect(calls).toEqual(['https://example.com:8080/x', 'https://localhost:3000']);
     });
 
     test('javascript:8080 resolves as host:port — a harmless https hostname, not a scheme', () => {
         const calls = openedUrls();
-        goToLink(webpageContext('javascript:8080'), 0, 0, 'webpage', 'javascript:8080');
+        goToLink(webpageContext('javascript:8080'), 0, 0);
         expect(calls).toEqual(['https://javascript:8080']);
     });
 
     test('whitespace/control-char scheme variants get the https:// prepend, never a raw scripting scheme', () => {
         const calls = openedUrls();
-        goToLink(webpageContext(' javascript:alert(1)'), 0, 0, 'webpage', ' javascript:alert(1)');
-        goToLink(webpageContext('java\nscript:alert(1)'), 0, 0, 'webpage', 'java\nscript:alert(1)');
+        goToLink(webpageContext(' javascript:alert(1)'), 0, 0);
+        goToLink(webpageContext('java\nscript:alert(1)'), 0, 0);
         expect(calls).toEqual(['https:// javascript:alert(1)', 'https://java\nscript:alert(1)']);
     });
 
@@ -95,7 +95,7 @@ describe('goToLink scheme allowlist', () => {
             'file:///etc/passwd',
             'vbscript:msgbox(1)',
         ]) {
-            goToLink(webpageContext(address), 0, 0, 'webpage', address);
+            goToLink(webpageContext(address), 0, 0);
         }
         expect(calls).toEqual([]);
     });
@@ -105,13 +105,13 @@ describe('goToLink cell-range links', () => {
     function rangeLinkContext(): Context {
         const ctx = contextFactory({ sheetViewRecord: {} }) as Context;
         ctx.sheets[1].name = 'Other';
-        ctx.sheets[0].hyperlink = { '0_0': { linkType: 'cellrange', linkAddress: 'Other!C3' } };
+        ctx.sheets[0].data = [[{ link: { type: 'cellrange', address: 'Other!C3' } }]];
         return ctx;
     }
 
     test('switches to the target sheet and selects the range there', () => {
         const ctx = rangeLinkContext();
-        goToLink(ctx, 0, 0, 'cellrange', 'Other!C3');
+        goToLink(ctx, 0, 0);
         expect(ctx.currentSheetId).toBe('id_2');
         expect(ctx.selections?.[0]).toMatchObject({ row: [2, 2], column: [2, 2] });
     });
@@ -120,7 +120,7 @@ describe('goToLink cell-range links', () => {
         const ctx = rangeLinkContext();
         ctx.sheets[1].hide = 1;
         const selections = ctx.selections;
-        goToLink(ctx, 0, 0, 'cellrange', 'Other!C3');
+        goToLink(ctx, 0, 0);
         expect(ctx.currentSheetId).toBe('id_1');
         expect(ctx.selections).toBe(selections);
         expect(ctx.scrollRequest).toBeUndefined();

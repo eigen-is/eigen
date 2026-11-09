@@ -197,7 +197,7 @@ function encodeCell(entry: CellWithRowAndCol, styles: StyleTuple[], styleIndex: 
                 (content ??= {})[key] = value;
                 break;
             case 'mc':
-            case 'hl':
+            case 'link':
             case 'spl':
                 (content ??= {})[key] = value;
                 hasExtra = true;

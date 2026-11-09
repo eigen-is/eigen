@@ -1,5 +1,5 @@
 // Inserting and deleting rows and columns on plain sheets, without the DOM: the cells, the config with its merges,
-// borders and row heights, the links, conditional formats, validation rules, frozen pane, filter and size of the sheet
+// borders and row heights, conditional formats, validation rules, frozen pane, filter and size of the sheet
 // the op names, and the formula text and chart ranges on every sheet that point at it. It runs wherever such an op
 // applies, for example in the editor's own insert and in the server's replay of the op log. The shifters for one kind
 // of map are exported for code that moves the same maps, such as the undo stacks.
@@ -343,9 +343,6 @@ export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op:
     newTarget.config = newCfg;
     setSize(newTarget, newData, op.type);
 
-    if (target.hyperlink != null) {
-        newTarget.hyperlink = shiftCellKeyedForInsert(target.hyperlink, op.type, op.index, count, op.direction);
-    }
     if (target.conditionalFormatRules != null) {
         newTarget.conditionalFormatRules = target.conditionalFormatRules.map((cf) => ({
             ...cf,
@@ -412,9 +409,6 @@ export function applySheetsDeleteRowCol<S extends ShiftedSheet>(sheets: S[], op:
     newTarget.config = newCfg;
     setSize(newTarget, newData, op.type);
 
-    if (target.hyperlink != null) {
-        newTarget.hyperlink = shiftCellKeyedForDelete(target.hyperlink, op.type, op.start, op.end);
-    }
     if (target.conditionalFormatRules != null) {
         const rules = [];
         for (const cf of target.conditionalFormatRules) {

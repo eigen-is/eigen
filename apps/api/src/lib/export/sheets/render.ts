@@ -364,8 +364,7 @@ function renderSheet(
 
             // A web link passes the editor's scheme gate. A link into the workbook means nothing in a standalone
             // document, so it stays plain text.
-            const link = sheet.hyperlink?.[`${r}_${c}`];
-            const href = link?.linkType === 'webpage' ? resolveWebLink(link.linkAddress) : null;
+            const href = v?.link?.type === 'webpage' ? resolveWebLink(v.link.address) : null;
             let display = getCellDisplay(v);
             if (href != null) {
                 display = `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${display}</a>`;
