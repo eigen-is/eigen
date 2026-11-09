@@ -8,7 +8,7 @@ import type { MergeCell, SheetChart } from '@workspace/lib/sheets';
 import type { Patch } from 'immer';
 import { sheetFinder } from '../../engine/a1-notation';
 import { mapChartRefs } from '../../engine/chart-data';
-import { functionStrChange } from '../../engine/formula-shift';
+import { functionStrChange, mayShiftOffSheet } from '../../engine/formula-shift';
 import { isFormula } from '../../engine/formula-utils';
 import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
 import {
@@ -135,6 +135,7 @@ class Shifter {
     private readonly name: string;
     private readonly sheets: Sheet[];
     private readonly findSheet: (name: string) => Sheet | undefined;
+    private readonly mayShift: (txt: string) => boolean;
 
     public constructor(move: RowColMove, name: string, sheets: Sheet[]) {
         this.id = move.id;
@@ -142,6 +143,7 @@ class Shifter {
         this.name = name;
         this.sheets = sheets;
         this.findSheet = sheetFinder(sheets);
+        this.mayShift = mayShiftOffSheet(name);
     }
 
     public entry(entry: History): History | null {
@@ -283,6 +285,7 @@ class Shifter {
     }
 
     private formula(f: string, onTargetSheet: boolean): string {
+        if (!onTargetSheet && !this.mayShift(f)) return f;
         return `=${this.move.formula(f.slice(1), this.name, onTargetSheet, this.findSheet)}`;
     }
 
