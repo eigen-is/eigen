@@ -44,6 +44,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Links while others edit in Sheets** — two people adding or removing links at once no longer overwrite each other's or put them a row off
 - **Merge, link and split in Sheets** — formulas reading those cells update, and a link's new text or a split piece replaces a formula instead of the formula's result coming back
 - **More formulas in Sheets** — `=A1%` works, `T` and `N` work, `ROWS` and `COLUMNS` count one cell, `AVERAGEIF` skips blanks instead of going blank, and a result such as `STDEV(5)` shows `#NUM!`
+- **Moving cells in Sheets** — cells dragged to the edge of the view land where you drop them, or on the last row or column you can see, not at the far end of the sheet over what was there
 - **Fills in Sheets** — a block dragged up or left lands in step with its source, and a date series counts by the date, not the text it shows
 - **Frozen panes and selection while others edit in Sheets** — a row someone inserts or a freeze someone sets moves your selection and panes at once
 - **Comments in Sheets** — **Clear formatting** keeps a cell's link and comment, and **Delete comment** in a cell's menu asks first
