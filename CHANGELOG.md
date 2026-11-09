@@ -14,6 +14,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 ### Changed
 
 - **A new look for the public site** — the landing page, Support, the blog and the changelog share one layout, with a footer that shows the version. The apps named on the landing page link to their Support sections
+- **Tile titles** — on the Space home page and the help center's front page, an app's title is in the normal text color. The icon and the stripe keep the app's color
 - **Table of contents in the changelog** — a Versions list beside the changelog jumps to a release, and each entry starts with its bold title
 - **Moving a formula in Sheets** — a formula cut to another tab keeps reading the cells it read, as in Excel: `=A1*2` cut from One to Two becomes `=One!A1*2`, and a cell that moved along with it is still followed
 - **Uploading a backup** — only the owner can upload an archive in the **Backup** section of a user or team in Admin. Other admins still back up, download and restore

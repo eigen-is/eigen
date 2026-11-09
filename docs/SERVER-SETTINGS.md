@@ -51,7 +51,7 @@ The shape is `ServerSettings` in `packages/lib/src/types/settings.ts`, and the d
 | `onboarding` | The waitlist, seeding the owner as a contact, the welcome mail, the waitlist invite mail | `requireWaitlistEnabled` gates every waitlist route; `welcome.ts` skips the welcome mail without hosted mail |
 | `guests` | Whether any address may ask for a sign-in code, and how long an idle guest lives | [GUEST-ACCESS.md](GUEST-ACCESS.md) |
 | `landing.links` | Extra buttons on the public landing page | `GET /p/config`, which is unauthenticated |
-| `landing.showInstall` | Whether the landing page shows the one-line install command. Off by default | `GET /p/config` as `showInstall`, read by `LandingBlocks` in `apps/index` |
+| `landing.showInstall` | Whether the landing page shows the one-line install command. Off by default | `GET /p/config` as `showInstall`, read by `HomeComponent` in `apps/index`, which passes it to `LandingBlocks` |
 | `notifications.email` | Which events also send an email | [The notification flags gate the email only](#the-notification-flags-gate-the-email-only) |
 | `mail` | The system sender, and whether the relay may send as users | [One rule decides who a mail is from](#one-rule-decides-who-a-mail-is-from) |
 | `backups` | The nightly whole-server backup (on, hour in UTC, Full + S3, how many to keep) and the bucket archives go to, with its own count. Its secret reaches no browser | [BACKUP.md § The schedule makes one attempt per UTC day](BACKUP.md#the-schedule-makes-one-attempt-per-utc-day), [§ Upload goes to a bucket of its own](BACKUP.md#upload-goes-to-a-bucket-of-its-own) |

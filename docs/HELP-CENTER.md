@@ -53,7 +53,7 @@ A mismatch makes React throw the prerendered DOM away and render the page again.
 - `useMediaQuery` is `useSyncExternalStore` with a desktop `getServerSnapshot`.
 - The `Toaster` mounts only after hydration.
 - React's auto-emitted `<link rel="preload">` tags are moved into `<head>`, where the browser's React puts them.
-- The landing page's first render is deterministic: the headline starts as `workspace`, and the buttons, the version label, Login and the install line wait for the config and the session.
+- The landing page's first render is deterministic: the headline starts as `workspace`, and the waitlist and link buttons, the install line and the version label wait for the config. The hero Login button is in the static HTML as Login and turns into Enter demo once the config says so.
 
 The comments in `prerender.tsx`, `entry-server.tsx` and `main.tsx` explain each one. Read them before changing the render path.
 
@@ -95,15 +95,15 @@ Every route of `apps/index` wraps its page in the shared `AppShell` with an `app
 
 `components/site-page.tsx` (`SitePage`) is the frame inside it: one scrolling column with the footer after the content, so a short page's footer rests at the bottom. A Support page passes its section's color, which sets `--app-current-color` for the rows and the table of contents. `components/site-footer.tsx` is the one-line footer, drawn by `SitePage` and never by a page: the build's version label linking to the changelog, then Support, Blog, Changelog, GitHub, Sponsor and Licenses. `components/reading-layout.tsx` (`ReadingLayout`) is the grid of a reading page: an optional left gutter and the column, centered. Blog posts, the changelog and the Support section and article pages read in it. The gutter goes below 76rem.
 
-Login is in the shared `Topbar` in `packages/ui`, not in this app. It shows on every signed-out top bar, the login pages included, and reads `demoMode` from `/p/config` to become an Enter demo button. Like the version label and the install line it waits for the session and the config, so it is the one part of the top bar the prerender does not contain. `AuthProvider` starts with `isLoading` true, on the server and in the first client render, so that what waits for the session matches the prerender.
+Login is in the shared `Topbar` in `packages/ui`, not in this app. It shows on every signed-out top bar, the login pages included, and reads `demoMode` from `/p/config` to become an Enter demo button. `LoginButton` waits only for the session, not for the config, so it is the one part of the top bar the prerender does not contain. On a demo server it can first read Login, then Enter demo, when the config arrives. `AuthProvider` starts with `isLoading` true, on the server and in the first client render, so that what waits for the session matches the prerender.
 
 The breadcrumb (`components/article-breadcrumb.tsx`) is the line above a title, such as Support › Sheets over an article or Blog · 14 Sep 2026 over a post. A crumb with a `to` links, and one with an icon is a Support section, drawn in the page's color. The page's own title is never a crumb.
 
-The table of contents (`components/article-toc.tsx`, `ArticleToc`) fills the left gutter. It lists the h2 headings of an article, or the releases of the changelog with their short dates under the label Versions. It sticks while the page scrolls, marks the entry whose heading is in the top third of the screen, and draws nothing for fewer than two entries.
+The table of contents (`components/article-toc.tsx`, `ArticleToc`) fills the left gutter. It lists the h2 headings of an article, or the releases of the changelog with their short dates under the label Versions. It sticks while the page scrolls, marks the entry whose heading is in the top third of the screen, also once on load for a page opened at a `#section`, and draws nothing for fewer than two entries.
 
 ## The changelog is built from CHANGELOG.md
 
-`build-changelog.ts` renders `CHANGELOG.md` with the same Markdown pipeline as the articles. It drops everything before the first version heading, because the page draws its own title, and wraps each release in a section with a head of version and date (`Unreleased` has none). A bullet's bold label becomes a lead that starts the entry, and the text after it starts with a capital letter. It also writes the list of versions that `ArticleToc` shows. Its output is `src/content/.generated/changelog.json`, a `ChangelogBody` that is an article body plus `versions`. The page and the prerender read the same file, so the whole changelog is in the static HTML.
+`build-changelog.ts` renders `CHANGELOG.md` with the same Markdown pipeline as the articles. It drops everything before the first version heading, because the page draws its own title, and wraps each release in a section with a head of version and date (`Unreleased` has none). A bullet's bold label becomes a lead that starts the entry, and the text after it starts with a capital letter and ends with a period when it ends in no punctuation. It also writes the list of versions that `ArticleToc` shows. Its output is `src/content/.generated/changelog.json`, a `ChangelogBody` that is an article body plus `versions`. The page and the prerender read the same file, so the whole changelog is in the static HTML.
 
 ## The blog overview and covers
 
@@ -111,7 +111,7 @@ The overview lists the posts newest first from the build-time manifest, so every
 
 ## The landing page
 
-`routes/index.tsx` is the landing page: the hero (`components/landing-hero.tsx`), the buttons, and three blocks (`components/landing-blocks.tsx`). The headline word cycles through the apps, but the first render is always `workspace` and the timer starts in an effect, so the prerender and the first client render are the same. Each app named in the pitch line links to its Support section for now. The buttons are Login, the waitlist button and the admin's `landing.links`, and the install line under the blocks shows only when `landing.showInstall` is on ([SERVER-SETTINGS.md](SERVER-SETTINGS.md)). Those come from `/p/config` and appear after load. A demo server shows the Enter demo button and a line about the demo instead of the pitch.
+`routes/index.tsx` is the landing page: the hero (`components/landing-hero.tsx`), the buttons, and three blocks (`components/landing-blocks.tsx`). The headline word cycles through the apps, but the first render is always `workspace` and the timer starts in an effect, so the prerender and the first client render are the same. Each app named in the pitch line links to its Support section for now. The buttons are Login, the waitlist button and the admin's `landing.links`, and the install line under the blocks shows only when `landing.showInstall` is on ([SERVER-SETTINGS.md](SERVER-SETTINGS.md)). The Login button is in the static HTML. The rest come from `/p/config` and appear after load. A demo server shows the Enter demo button and a line about the demo instead of the pitch.
 
 ## What comes next
 
