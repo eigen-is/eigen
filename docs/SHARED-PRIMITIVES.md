@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2143 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2145 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -1010,7 +1010,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1169)
+## Utilities & constants (1171)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1626,6 +1626,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `freezesRows` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `isCurrentSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
 | `isExcelFunction` | `@workspace/lib/sheets` | packages/lib/src/sheets/excel-functions.ts |
+| `isStructuralBatch` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `MAX_VALIDATION_RANGES` | `@workspace/lib/sheets` | packages/lib/src/sheets/validations.ts |
 | `MAX_VALIDATIONS` | `@workspace/lib/sheets` | packages/lib/src/sheets/validations.ts |
 | `mergedBorderSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
@@ -1649,6 +1650,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `sheetDefaultRowHeight` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `sheetFloatingBox` | `@workspace/lib/sheets` | packages/lib/src/sheets/floating.ts |
 | `sheetRowsHeight` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
+| `sheetsLogStartsWith` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `sheetsOpLog` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `sheetsStateMap` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `sheetTrackAt` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |

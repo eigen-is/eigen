@@ -17,7 +17,7 @@ import * as Y from 'yjs';
 import { CLOSE_LINGER_MS, CollabDocument, MESSAGE_SYNC } from '../../lib/collab/collab-document';
 import { readYjsStateFromFile } from '../../lib/collab/yjs-loader';
 import { ApiError } from '../../lib/core/errors';
-import { compactSheetsSnapshot } from '../../lib/document/sheets';
+import { compactSheetsSnapshot, readLiveSheets } from '../../lib/document/sheets';
 import type { DocumentTransformRequest, DocumentTransformResponse } from '../../lib/document/transform/protocol';
 import { toTransferableText } from '../../lib/document/transform/protocol';
 import { BUSY_MESSAGE, documentTransformRunner } from '../../lib/document/transform/runner';
@@ -108,6 +108,54 @@ function socketEdit(doc: Y.Doc, batch: Op[]): Uint8Array {
     encoding.writeVarUint(encoder, MESSAGE_SYNC);
     syncProtocol.writeUpdate(encoder, Y.encodeStateAsUpdate(client, before));
     return encoding.toUint8Array(encoder);
+}
+
+// The first sheet's stored cells as [row, column, value].
+function snapshotValues(doc: Y.Doc): [number, number, unknown][] {
+    const snapshot = readSheetsSnapshotJson(doc);
+    if (!snapshot) throw new Error('no snapshot');
+    return (decodeSheetsWorkbook(snapshot).sheets[0].celldata ?? []).map(({ r, c, v }) => [r, c, v?.v]);
+}
+
+// The workbook as a tab opening the doc shows it: the snapshot with every batch left in the log replayed.
+function liveSheets(doc: Y.Doc) {
+    return readLiveSheets(doc).map(({ id, name, order, celldata }) => ({
+        id,
+        name,
+        order,
+        celldata: (celldata ?? []).map(({ r, c, v }) => ({ r, c, f: v?.f, v: v?.v })),
+    }));
+}
+
+// A log of formulas over a column of values, then `count` structural batches, each with a cell edit after it: row
+// inserts and deletes on the formulas' sheet, a rename and a new sheet now and then.
+function structuralLog(count: number): Op[][] {
+    const values = [1, 2, 3, 4, 5, 6].map((v, r) => edit(r, 0, v)[0]);
+    const formulas: Op[] = [
+        { op: 'replace', id: 'sheet-1', path: ['data', 0, 1], value: { f: '=SUM(A1:A6)', v: 21, m: '21' } },
+        { op: 'replace', id: 'sheet-1', path: ['data', 1, 1], value: { f: '=A3*2', v: 6, m: '6' } },
+    ];
+    const log: Op[][] = [[...values, ...formulas]];
+    for (let i = 0; i < count; i++) {
+        if (i % 5 === 2) {
+            log.push([{ op: 'renameSheet', id: 'sheet-1', path: [], value: { name: `Renamed${i}` } }]);
+        } else if (i % 5 === 4) {
+            const value: Sheet = { id: `sheet-x${i}`, name: `Added${i}`, order: i, celldata: [], config: {} };
+            log.push([{ op: 'addSheet', id: value.id, path: [], value }]);
+        } else if (i % 2 === 0) {
+            const value = { type: 'row', index: 1, count: 1, direction: 'lefttop' };
+            log.push([{ op: 'insertRowCol', id: 'sheet-1', path: [], value }]);
+        } else {
+            log.push([{ op: 'deleteRowCol', id: 'sheet-1', path: [], value: { type: 'row', start: 2, end: 2 } }]);
+        }
+        log.push(edit(i % 6, 0, i * 10));
+    }
+    return log;
+}
+
+function structuralIndexes(log: Op[][]): number[] {
+    const patch = new Set(['add', 'remove', 'replace']);
+    return [...log.keys()].filter((i) => log[i].some((op) => !patch.has(op.op)));
 }
 
 describe('CollabDocument compacts a workbook at close', () => {
@@ -387,31 +435,24 @@ describe('CollabDocument compacts a workbook at close', () => {
         }
     }, 30_000);
 
-    test('an update during the version drops the swap, and the document lingers again', async () => {
+    test('an edit during the version stays in the log, and the swap removes only the folded batches', async () => {
         const stub = stubRunner();
         const sheet = await openLingeringSheet('compaction-version-update', [edit(0, 0, 1)]);
         const originalSave = home.drive.saveVersion.bind(home.drive);
-        let saved = () => {};
-        const versionSaved = new Promise<void>((resolve) => (saved = resolve));
         home.drive.saveVersion = async (...args: Parameters<typeof originalSave>) => {
             sheet.ops.push([edit(0, 1, 2)]);
-            const version = await originalSave(...args);
-            saved();
-            return version;
+            return originalSave(...args);
         };
         try {
-            const before = readSheetsSnapshotJson(sheet.doc.doc);
+            const closed = sheet.nextClose();
             lingerOut(sheet.doc);
+            jest.useRealTimers();
             succeed(stub.runs[0]);
-            await versionSaved;
-            await tick();
+            await closed;
 
-            expect(readSheetsSnapshotJson(sheet.doc.doc)).toBe(before);
-            expect(sheet.ops.length).toBe(2);
-            expect(sheet.closes()).toBe(0);
-
-            jest.advanceTimersByTime(CLOSE_LINGER_MS);
-            expect(stub.runs).toHaveLength(2);
+            expect(snapshotValues(sheet.doc.doc)).toEqual([[0, 0, 1]]);
+            expect(sheet.ops.toArray()).toEqual([edit(0, 1, 2)]);
+            expect(sheet.closes()).toBe(1);
         } finally {
             home.drive.saveVersion = originalSave;
             stub.restore();
@@ -510,27 +551,133 @@ describe('CollabDocument compacts a workbook at close', () => {
         }
     });
 
-    test('an update during the run drops the swap, and the document lingers again before the next try', async () => {
+    test('an edit during the run stays in the log, and the swap removes only the folded batches', async () => {
         const stub = stubRunner();
         const sheet = await openLingeringSheet('compaction-update', [edit(0, 0, 1)]);
         try {
-            const before = readSheetsSnapshotJson(sheet.doc.doc);
+            const closed = sheet.nextClose();
             lingerOut(sheet.doc);
-            sheet.ops.push([edit(0, 1, 2)]);
+            // A peer's edit over a socket that came and went during the run.
+            const conn = makeSpyConn();
+            sheet.doc.subscribe(home.user, conn);
+            sheet.doc.handleMessage(conn, socketEdit(sheet.doc.doc, edit(0, 1, 2)), true);
+            sheet.doc.unsubscribe(conn);
+            jest.useRealTimers();
+            succeed(stub.runs[0]);
+            await closed;
+
+            expect(snapshotValues(sheet.doc.doc)).toEqual([[0, 0, 1]]);
+            expect(sheet.ops.toArray()).toEqual([edit(0, 1, 2)]);
+            expect(sheet.closes()).toBe(1);
+        } finally {
+            stub.restore();
+            sheet.restore();
+            sheet.doc.destruct();
+        }
+    });
+
+    test('a batch that lands among the folded ones drops the swap, and the document lingers again', async () => {
+        const stub = stubRunner();
+        const sheet = await openLingeringSheet('compaction-prefix-insert', [edit(0, 0, 1), edit(0, 1, 2)]);
+        try {
+            const before = readSheetsSnapshotJson(sheet.doc.doc);
+            const versionsBefore = (await home.drive.listVersions(mountId, sheet.id)).length;
+            lingerOut(sheet.doc);
+            // An offline tab's batch, written after the first batch it held, lands inside what the run folds.
+            const offline = new Y.Doc();
+            Y.applyUpdate(offline, Y.encodeStateAsUpdate(sheet.doc.doc));
+            const held = Y.encodeStateVector(offline);
+            sheetsOpLog(offline).insert(1, [edit(0, 2, 3)]);
+            Y.applyUpdate(sheet.doc.doc, Y.encodeStateAsUpdate(offline, held));
             succeed(stub.runs[0]);
             await tick();
 
             expect(readSheetsSnapshotJson(sheet.doc.doc)).toBe(before);
-            expect(sheet.ops.length).toBe(2);
+            expect(sheet.ops.toArray()).toEqual([edit(0, 0, 1), edit(0, 2, 3), edit(0, 1, 2)]);
             expect(sheet.closes()).toBe(0);
+            // A stale result takes no version.
+            expect(await home.drive.listVersions(mountId, sheet.id)).toHaveLength(versionsBefore);
 
             const closed = sheet.nextClose();
             jest.advanceTimersByTime(CLOSE_LINGER_MS);
+            jest.useRealTimers();
             expect(stub.runs).toHaveLength(2);
             succeed(stub.runs[1]);
             await closed;
+            expect(snapshotValues(sheet.doc.doc)).toEqual([
+                [0, 0, 1],
+                [0, 1, 2],
+                [0, 2, 3],
+            ]);
             expect(sheet.ops.length).toBe(0);
+        } finally {
+            stub.restore();
+            sheet.restore();
+            sheet.doc.destruct();
+        }
+    });
+
+    test('a new snapshot during the version, such as a replacing import, drops the swap', async () => {
+        const stub = stubRunner();
+        const sheet = await openLingeringSheet('compaction-prefix-replaced', [edit(0, 0, 1)]);
+        const imported = encodeSheetsSnapshot(SHEETS, { computed: true });
+        const originalSave = home.drive.saveVersion.bind(home.drive);
+        let saved = () => {};
+        const versionSaved = new Promise<void>((resolve) => (saved = resolve));
+        home.drive.saveVersion = async (...args: Parameters<typeof originalSave>) => {
+            // A log as long as the one the run folded, but not its batches.
+            writeSheetsSnapshot(sheet.doc.doc, imported, null);
+            sheet.ops.push([edit(0, 1, 2)]);
+            const version = await originalSave(...args);
+            saved();
+            return version;
+        };
+        try {
+            lingerOut(sheet.doc);
+            succeed(stub.runs[0]);
+            await versionSaved;
+            await tick();
+
+            expect(readSheetsSnapshotJson(sheet.doc.doc)).toBe(imported);
+            expect(sheet.ops.toArray()).toEqual([edit(0, 1, 2)]);
+            expect(sheet.closes()).toBe(0);
+        } finally {
+            home.drive.saveVersion = originalSave;
+            stub.restore();
+            sheet.restore();
+            sheet.doc.destruct();
+        }
+    });
+
+    // Each row or column op, and each sheet's add, delete or rename, costs the replay a rewrite and a recompute of the
+    // formulas, so a close folds at most twenty of them and the next close goes on from there.
+    test('a close folds the log up to its 21st structural batch, and the snapshot with the rest reads as the whole log', async () => {
+        const stub = stubRunner();
+        const log = structuralLog(25);
+        const sheet = await openLingeringSheet('compaction-bounded', log, true);
+        try {
+            const whole = liveSheets(sheet.doc.doc);
+            const closed = sheet.nextClose();
+            lingerOut(sheet.doc);
+            jest.useRealTimers();
+            succeed(stub.runs[0]);
+            await closed;
+
+            // The 21st structural batch, the rest of the log after it, and every cheap batch before it.
+            const at = structuralIndexes(log)[20];
+            expect(sheet.ops.toArray()).toEqual(log.slice(at));
+            expect(liveSheets(sheet.doc.doc)).toEqual(whole);
             expect(sheet.closes()).toBe(1);
+
+            // The next close folds the rest.
+            const closedAgain = sheet.nextClose();
+            jest.useFakeTimers();
+            lingerOut(sheet.doc);
+            jest.useRealTimers();
+            succeed(stub.runs[1]);
+            await closedAgain;
+            expect(sheet.ops.length).toBe(0);
+            expect(liveSheets(sheet.doc.doc)).toEqual(whole);
         } finally {
             stub.restore();
             sheet.restore();

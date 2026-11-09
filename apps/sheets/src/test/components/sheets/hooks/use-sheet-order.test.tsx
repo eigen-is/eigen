@@ -427,7 +427,7 @@ function compact(doc: YDoc) {
     const batches = doc.getArray<Op[]>('ops').toArray();
     const stored = decodeSheetsSnapshot(readSheetsSnapshotJson(doc) ?? '');
     const json = encodeSheetsSnapshot(replaySheetsOps(stored, batches), { computed: true });
-    writeSheetsSnapshot(doc, json, readSheetsBase(doc)?.id ?? null);
+    writeSheetsSnapshot(doc, json, { compactedFrom: readSheetsBase(doc)?.id ?? null, folded: batches.length });
 }
 
 test('a batch that lands before what a kept compaction left keeps the grid and ends as the log', async () => {

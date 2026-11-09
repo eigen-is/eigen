@@ -1,8 +1,8 @@
 // The layout of a workbook's Yjs doc: an `ops` log of edit batches, and a `state` map that holds the stored snapshot
 // and the base it starts. Its readers and writers, such as the server's export and compaction, an import or a version
 // restore, reach the doc through these helpers so they agree on that layout. A base is a fresh id stamped with each
-// new snapshot. A compaction names the base it folded the log into, so a tab can tell a compaction of what it already
-// holds from any other new snapshot.
+// new snapshot. A compaction names the base it folded the log's first batches into, so a tab can tell a compaction of
+// what it already holds from any other new snapshot.
 
 import type * as Y from 'yjs';
 import { isRecord } from '../core/guards';
@@ -33,15 +33,25 @@ export function readSheetsBase(doc: Y.Doc): SheetsBase | null {
     return { id: base['id'], compactedFrom: typeof compactedFrom === 'string' ? compactedFrom : null };
 }
 
-// A new snapshot always starts a new base. Only a compaction passes the base it folded; every other writer passes null.
-// The snapshot holds every edit the log held, so the log is emptied in the same transaction. A caller that needs an
-// origin, such as the compaction, wraps the call in a transaction of its own, which this one joins.
-export function writeSheetsSnapshot(doc: Y.Doc, snapshotJson: string, compactedFrom: string | null): void {
+// Whether the log still opens with these very batches, compared as objects: a batch a peer wrote since is a new object,
+// even one equal to a batch here.
+export function sheetsLogStartsWith(doc: Y.Doc, batches: readonly Op[][]): boolean {
+    const head = sheetsOpLog(doc).slice(0, batches.length);
+    return head.length === batches.length && head.every((batch, i) => batch === batches[i]);
+}
+
+// A new snapshot always starts a new base. A compaction passes the base it folded and how many of the log's first
+// batches the snapshot holds; every other writer passes null, and its snapshot replaces the whole log.
+export function writeSheetsSnapshot(
+    doc: Y.Doc,
+    snapshotJson: string,
+    compaction: { compactedFrom: string | null; folded: number } | null,
+): void {
     doc.transact(() => {
         sheetsStateMap(doc).set('snapshot', snapshotJson);
-        stampSheetsBase(doc, compactedFrom);
+        stampSheetsBase(doc, compaction?.compactedFrom ?? null);
         const ops = sheetsOpLog(doc);
-        ops.delete(0, ops.length);
+        ops.delete(0, compaction?.folded ?? ops.length);
     });
 }
 
