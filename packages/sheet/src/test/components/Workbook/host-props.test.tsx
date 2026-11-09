@@ -168,3 +168,17 @@ test("a peer's delete of the last row reports the selection where it landed, for
         ],
     ]);
 });
+
+// A comment pane's jump, whose row took the focus, so the thread it opens gives the focus back to the grid.
+test('focusGrid hands the keys back to the grid', async () => {
+    const { container, workbook, press, seen } = await mountHost();
+    const pane = document.createElement('button');
+    document.body.append(pane);
+    pane.focus();
+    await act(async () => workbook.current?.focusGrid());
+    pane.remove();
+    expect(document.activeElement).toBe(container.querySelector('#sheet-rich-text-editor'));
+    seen.selections.length = 0;
+    await press('ArrowDown');
+    expect(seen.selections.map((selection) => selection.row)).toEqual([[1, 1]]);
+});

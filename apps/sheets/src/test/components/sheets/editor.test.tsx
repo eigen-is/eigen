@@ -1,6 +1,6 @@
 // The sheet editor's side of a comment: the grid's hover report drives the hover card, a card opened from the hover
-// opens where the pointer already is, and one opened from the pane first jumps to its cell, except on a phone, where the
-// pane hides the grid. The grid, the pane and the card render as probes that keep their props, since they are tested
+// opens where the pointer already is, and one opened from the pane first jumps to its cell and gives the grid the keys,
+// except on a phone, where the pane hides the grid. The grid, the pane and the card render as probes that keep their props, since they are tested
 // where they live.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { CommentHoverTarget } from '@workspace/lib/types/comments';
@@ -29,7 +29,10 @@ const seen: {
     toggleComments?: () => void;
 } = {};
 const opened: unknown[] = [];
-const workbook = { revealSearchMatch: (cell: unknown) => opened.push(['reveal', cell]) };
+const workbook = {
+    revealSearchMatch: (cell: unknown) => opened.push(['reveal', cell]),
+    focusGrid: () => opened.push(['focus grid']),
+};
 const cards = { c1: { id: 'c1', title: 'One', description: '', chatName: 'chat-1' } };
 const entries: never[] = [];
 const hover = { target: null, report: mock(), enterCard: mock(), leaveCard: mock(), dismiss: mock() };
@@ -204,28 +207,23 @@ test('a click on the hover card opens the card and moves nothing', async () => {
     expect(opened).toEqual([['open', 'c1']]);
 });
 
-test("a click on a pane row jumps to the card's first cell, then opens the card", async () => {
+// The row took the focus, so the grid takes it back before the thread opens, which hands it back there as it closes.
+test("a click on a pane row jumps to the card's first cell, gives the grid the keys, then opens the card", async () => {
     const { panel } = await renderEditor();
     panel.onOpenCard('c1');
-    expect(opened).toEqual([
-        ['reveal', FIRST_CELL],
-        ['open', 'c1'],
-    ]);
+    expect(opened).toEqual([['reveal', FIRST_CELL], ['focus grid'], ['open', 'c1']]);
 });
 
 test("a comment named by its chat, such as an activity row's, jumps too", async () => {
     const { panel } = await renderEditor();
     panel.onOpenChat('chat-1');
-    expect(opened).toEqual([
-        ['reveal', FIRST_CELL],
-        ['open', 'c1'],
-    ]);
+    expect(opened).toEqual([['reveal', FIRST_CELL], ['focus grid'], ['open', 'c1']]);
 });
 
-test('a card on no cell opens with nowhere to jump', async () => {
+test('a card on no cell opens with nowhere to jump, and the grid still gets the keys', async () => {
     const { panel } = await renderEditor();
     panel.onOpenCard('c9');
-    expect(opened).toEqual([['open', 'c9']]);
+    expect(opened).toEqual([['focus grid'], ['open', 'c9']]);
 });
 
 test('on a phone, where the pane hides the grid, a row and a chat name only open the card', async () => {
