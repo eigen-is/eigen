@@ -971,6 +971,26 @@ describe('timezone fidelity', () => {
     });
     const startOf = (ics: string): string => parseIcs(ics).events[0].startTime.toISOString();
 
+    test('a client zone named UTC gets a VTIMEZONE under that name when the event moves', () => {
+        const resource = parseResource(
+            vcal([
+                'BEGIN:VEVENT',
+                'UID:utc@client',
+                'DTSTAMP:20260101T000000Z',
+                'DTSTART;TZID=UTC:20260601T100000',
+                'DTEND;TZID=UTC:20260601T110000',
+                'END:VEVENT',
+            ]),
+        );
+        const moved = { startTime: new Date('2026-06-02T10:00:00Z'), endTime: new Date('2026-06-02T11:00:00Z') };
+        patchEvent(resource, null, moved, CTX);
+
+        expect(resource.getAllSubcomponents('vtimezone').map((zone) => zone.getFirstPropertyValue('tzid'))).toEqual([
+            'UTC',
+        ]);
+        expect(parseIcs(serializeResource(resource)).events[0].timezone).toBe('UTC');
+    });
+
     test('an ambiguous wall time names the same instant with and without a VTIMEZONE', () => {
         const lines = zoned('20261025T023000', '20261025T033000');
         // RFC 5545 resolves the repeated hour to its first pass, which is what the builder writes.
