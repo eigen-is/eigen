@@ -126,6 +126,13 @@ test('it sits at the rect, and a new target moves it', async () => {
     expect(text()).toContain('Another description');
 });
 
+test('an open card is not a dialog, so a keymap gated on one keeps working', async () => {
+    await renderCard('a');
+    expect(content()).not.toBeNull();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(content()?.getAttribute('role')).toBe('tooltip');
+});
+
 test('a click opens the card and closes the popover', async () => {
     const { onOpenCard, dismiss } = await renderCard('a');
     const frame = content()?.querySelector<HTMLElement>('.cursor-pointer');

@@ -37,6 +37,8 @@ export function CommentHoverCard({
                 <>
                     <PopoverAnchor virtualRef={anchor} />
                     <PopoverContent
+                        // Radix's role="dialog" reads as a modal to useDialogOpen, which turns off a document's keymap.
+                        role="tooltip"
                         side={side}
                         align="start"
                         className="w-[254px] rounded-none border-0 bg-transparent p-0"
