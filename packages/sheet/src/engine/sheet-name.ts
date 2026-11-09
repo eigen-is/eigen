@@ -1,7 +1,7 @@
 // A sheet's name: the one it takes when the workbook already holds its own, such as a copy the tab menu's Duplicate
-// makes or a tab Import… brings, the one it takes in a file that breaks the rule, a rename, which every text naming the
-// sheet follows, and a delete, which breaks every formula naming it. It is DOM-free, so the editor names copies as the
-// API does, and a live tab renames and deletes as the op replay does.
+// makes or a tab Import… brings, the one it takes in a file that breaks the rule, a rename, which every text naming
+// the sheet follows, and a delete, which breaks every text naming it. It is DOM-free, so the editor names copies as
+// the API does, and a live tab renames and deletes as the op replay does.
 
 import type { Sheet } from '@workspace/lib/sheets';
 import { stripNonXmlChars } from '@workspace/lib/xml';
@@ -16,6 +16,7 @@ import {
 } from './a1-notation';
 import { breakSheetRefs, renameSheetRefs, rewriteSheetFormulas } from './formula-shift';
 import { iscelldata } from './formula-utils';
+import { error } from './validation';
 
 export type RenameSheetOp = { id: string; name: string };
 
@@ -40,31 +41,53 @@ export function applySheetRename<S extends Sheet>(sheets: S[], { id, name }: Ren
     return sheets.map((sheet) => renameSheetTexts(sheet.id === id ? { ...sheet, name } : sheet, findSheet, renames));
 }
 
-// The sheets without one, and every formula and formula rule naming it reading #REF!, as a row delete leaves them. A new
-// sheet with the name doesn't heal them.
+// The sheets without one, and every text naming it reading #REF!, as a row delete leaves a formula. A new sheet with
+// the name doesn't heal them.
 export function applySheetDelete<S extends Sheet>(sheets: S[], id: string): S[] {
     const target = sheets.find((sheet) => sheet.id === id);
     if (!target) return sheets;
     const findSheet = sheetFinder(sheets);
     return sheets
         .filter((sheet) => sheet.id !== id)
-        .map((sheet) => rewriteSheetFormulas(sheet, (txt) => breakSheetRefs(txt, findSheet, target.name)));
+        .map((sheet) =>
+            rewriteSheetTexts(
+                sheet,
+                (txt) => breakSheetRefs(txt, findSheet, target.name),
+                (name) => (findSheet(name)?.name === target.name ? error.r : name),
+            ),
+        );
 }
 
-// The sheet with every text that names a renamed sheet pointed at its new name: formulas, formula rules, list sources
-// and links. A chart ref names its sheet by id and needs nothing. Text that stays keeps its object.
+// The sheet with every text that names a renamed sheet pointed at its new name.
 export function renameSheetTexts<S extends Sheet>(
     sheet: S,
     findSheet: (name: string) => { name: string } | undefined,
     renames: ReadonlyMap<string, string>,
 ): S {
-    const rename = (txt: string) => renameSheetRefs(txt, findSheet, renames);
-    let next = rewriteSheetFormulas(sheet, rename);
+    return rewriteSheetTexts(
+        sheet,
+        (txt) => renameSheetRefs(txt, findSheet, renames),
+        (name) => {
+            const target = findSheet(name);
+            return (target && renames.get(target.name)) ?? name;
+        },
+    );
+}
+
+// The sheet with `rewrite` run over every text holding references, such as its formulas, formula rules, list sources
+// and links, and `rewriteName` over a link's bare sheet name. A chart ref names its sheet by id and needs nothing. Text
+// that stays keeps its object.
+function rewriteSheetTexts<S extends Sheet>(
+    sheet: S,
+    rewrite: (txt: string) => string,
+    rewriteName: (name: string) => string,
+): S {
+    let next = rewriteSheetFormulas(sheet, rewrite);
     let dataValidations: Sheet['dataValidations'] | null = null;
     for (const [key, entry] of Object.entries(sheet.dataValidations ?? {})) {
         const { rule } = entry;
         if (rule.type !== 'dropdown' || !iscelldata(rule.value1)) continue;
-        const value1 = rename(rule.value1);
+        const value1 = rewrite(rule.value1);
         if (value1 === rule.value1) continue;
         dataValidations ??= { ...sheet.dataValidations };
         dataValidations[key] = { ...entry, rule: { ...rule, value1 } };
@@ -73,11 +96,8 @@ export function renameSheetTexts<S extends Sheet>(
     let hyperlink: Sheet['hyperlink'] | null = null;
     for (const [key, link] of Object.entries(sheet.hyperlink ?? {})) {
         let { linkAddress } = link;
-        if (link.linkType === 'cellrange') linkAddress = rename(linkAddress);
-        else if (link.linkType === 'sheet') {
-            const target = findSheet(linkAddress);
-            linkAddress = (target && renames.get(target.name)) ?? linkAddress;
-        }
+        if (link.linkType === 'cellrange') linkAddress = rewrite(linkAddress);
+        else if (link.linkType === 'sheet') linkAddress = rewriteName(linkAddress);
         if (linkAddress === link.linkAddress) continue;
         hyperlink ??= { ...sheet.hyperlink };
         hyperlink[key] = { ...link, linkAddress };

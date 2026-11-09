@@ -71,12 +71,12 @@ export function recordEntry(
     };
 }
 
-// What a sheet's delete changed on the sheets it left: the formulas naming it and what reads them.
+// What a sheet's delete changed on the sheets it left: the texts naming it and what reads them.
 function rewrittenByDelete(before: Context, after: Context): Patch[] {
     const recorded: Patch[] = [];
     for (const sheet of after.sheets) {
         const was = getSheet(before, { id: sheet.id });
-        for (const field of ['data', 'conditionalFormatRules'] as const) {
+        for (const field of ['data', 'conditionalFormatRules', 'dataValidations', 'hyperlink'] as const) {
             if (was[field] === sheet[field]) continue;
             recorded.push({ op: 'replace', path: ['sheets', sheet.id, field], value: was[field] });
         }

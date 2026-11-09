@@ -920,3 +920,33 @@ describe('a function with a one-letter name', () => {
         expect(value(formula)).toBe(expected);
     });
 });
+
+describe('a deleted sheet`s name', () => {
+    test('a list source and a link naming it break as a formula does', () => {
+        const base = book({ cells: [[n(10)]] }, { name: 'Two', cells: [[f('=One!A1', 10), n(1)]] });
+        const withTexts = produce(base, (d: Context) => {
+            d.sheets[1].dataValidations = {
+                list: {
+                    ranges: [{ row: [0, 0], column: [1, 1] }],
+                    rule: { type: 'dropdown', type2: '', value1: 'One!$A$1:$A$3', value2: '' },
+                },
+                plain: {
+                    ranges: [{ row: [0, 0], column: [1, 1] }],
+                    rule: { type: 'dropdown', type2: '', value1: 'One,Two', value2: '' },
+                },
+            } as never;
+            d.sheets[1].hyperlink = { '0_0': { linkType: 'cellrange', linkAddress: 'One!A1:B2' } } as never;
+        });
+        const t = tab(withTexts);
+        const batch = tabEdit(t, (d) => deleteSheet(d, 's1'), { deleteSheetOp: { id: 's1' } });
+        for (const [two] of [t.ctx.sheets, join(withTexts, [batch])]) {
+            expect(two.dataValidations?.list.rule.value1).toBe('#REF!');
+            expect(two.dataValidations?.plain.rule.value1).toBe('One,Two');
+            expect(two.hyperlink?.['0_0'].linkAddress).toBe('#REF!');
+        }
+        tabUndo(t);
+        const two = t.ctx.sheets.find((sheet) => sheet.id === 's2');
+        expect(two?.dataValidations?.list.rule.value1).toBe('One!$A$1:$A$3');
+        expect(two?.hyperlink?.['0_0'].linkAddress).toBe('One!A1:B2');
+    });
+});
