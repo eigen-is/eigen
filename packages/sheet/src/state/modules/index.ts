@@ -9,6 +9,7 @@ export * from './cell-glyph';
 export * from './chart';
 export * from './clipboard';
 export * from './color';
+export * from './comment-hover';
 export * from './condition-format';
 export * from './currencies';
 export * from './cursor';

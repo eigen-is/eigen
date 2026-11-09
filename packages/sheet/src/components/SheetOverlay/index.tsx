@@ -20,6 +20,7 @@ import { cellDisplay } from '../../engine/format';
 import { useDialog } from '../../hooks/useDialog';
 import type { Context, GlobalCache } from '../../state';
 import {
+    commentHoverAt,
     computeOverlayRegions,
     freezeOf,
     getCellHyperlink,
@@ -37,7 +38,6 @@ import {
     showLinkCard,
     tryInsertRowCol,
 } from '../../state';
-import { commentHoverAt } from '../../state/modules/comment-hover';
 import { useSheetContextMenu } from '../ContextMenu/useSheetContextMenu';
 import { DropdownList } from '../DataValidation/DropdownList';
 import { ValidationHintCard } from '../DataValidation/HintCard';
