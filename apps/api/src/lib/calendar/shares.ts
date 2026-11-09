@@ -52,8 +52,10 @@ export function receiveShare(
     actorEmail?: string,
     actorName?: string,
 ): void {
-    ensureSharedEntry(calendar, ownerUserId, calendarId, calendarName, permission);
+    const before = ensureSharedEntry(calendar, ownerUserId, calendarId, calendarName, permission);
     calendar.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_SHARED, ownerUserId));
+    // A share PUT resends every grant, so only a new or raised one tells the reader.
+    if (before && PERMISSION_RANK[permission] <= PERMISSION_RANK[before]) return;
     const actor = actorDisplayName(actorName, actorEmail);
     calendar.home.notify({
         type: 'calendar-share',
@@ -86,24 +88,42 @@ export function removeShare(
 }
 
 // The silent half of receiveShare. Reconciliation calls it to bring an entry in line without telling the user again.
+// Answers the permission the entry held before, or null for a new one.
 export function ensureSharedEntry(
     calendar: Calendar,
     ownerUserId: string,
     calendarId: string,
     calendarName: string,
     permission: CalendarShare['permission'],
-): void {
+): CalendarShare['permission'] | null {
     const existing = sharedEntry(calendar, ownerUserId, calendarId);
     if (!existing) {
-        insertSharedCalendar(calendar, ownerUserId, calendarId, calendarName, permission);
-        return;
+        // A new entry takes the next accent color, counted over every calendar this Home shows.
+        const shown =
+            calendar.db.select({ id: schema.calendars.id }).from(schema.calendars).all().length +
+            calendar.db.select({ id: schema.sharedCalendars.id }).from(schema.sharedCalendars).all().length;
+        calendar.db
+            .insert(schema.sharedCalendars)
+            .values({
+                id: crypto.randomUUID(),
+                ownerUserId,
+                calendarId,
+                calendarName,
+                calendarColor: EIGEN_ACCENT_COLORS_SHUFFLED[shown % EIGEN_ACCENT_COLORS_SHUFFLED.length].value,
+                permission,
+                visible: true,
+            })
+            .run();
+        return null;
     }
-    if (existing.calendarName === calendarName && existing.permission === permission) return;
-    calendar.db
-        .update(schema.sharedCalendars)
-        .set({ calendarName, permission, updatedAt: sql`unixepoch()` })
-        .where(eq(schema.sharedCalendars.id, existing.id))
-        .run();
+    if (existing.calendarName !== calendarName || existing.permission !== permission) {
+        calendar.db
+            .update(schema.sharedCalendars)
+            .set({ calendarName, permission, updatedAt: sql`unixepoch()` })
+            .where(eq(schema.sharedCalendars.id, existing.id))
+            .run();
+    }
+    return existing.permission;
 }
 
 export function removeSharedEntriesForOwner(calendar: Calendar, ownerUserId: string): void {
@@ -155,29 +175,4 @@ function sharedEntry(calendar: Calendar, ownerUserId: string, calendarId: string
             and(eq(schema.sharedCalendars.ownerUserId, ownerUserId), eq(schema.sharedCalendars.calendarId, calendarId)),
         )
         .get();
-}
-
-// A new entry takes the next accent color, counted over every calendar this Home shows.
-function insertSharedCalendar(
-    calendar: Calendar,
-    ownerUserId: string,
-    calendarId: string,
-    calendarName: string,
-    permission: CalendarShare['permission'],
-): void {
-    const shown =
-        calendar.db.select({ id: schema.calendars.id }).from(schema.calendars).all().length +
-        calendar.db.select({ id: schema.sharedCalendars.id }).from(schema.sharedCalendars).all().length;
-    calendar.db
-        .insert(schema.sharedCalendars)
-        .values({
-            id: crypto.randomUUID(),
-            ownerUserId,
-            calendarId,
-            calendarName,
-            calendarColor: EIGEN_ACCENT_COLORS_SHUFFLED[shown % EIGEN_ACCENT_COLORS_SHUFFLED.length].value,
-            permission,
-            visible: true,
-        })
-        .run();
 }

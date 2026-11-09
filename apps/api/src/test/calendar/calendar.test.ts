@@ -840,6 +840,41 @@ describe('Calendar', () => {
             expect(shared?.body).toBe('Shared Cal');
         });
 
+        test('a share change tells Bob again only when it raises his access', async () => {
+            const asAlice = (path: string, method: string, body: object) =>
+                authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars${path}`, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+            const cal = await assertJson<CalendarItem>(await asAlice('', 'POST', { name: 'Reshared Cal' }));
+            const share = async (shares: object[]) =>
+                expect((await asAlice(`/${cal.id}`, 'PUT', { shares })).status).toBe(200);
+            const bobsRow = async () =>
+                (
+                    await assertJson<Notification[]>(
+                        await authedRequest(ctx.bob.user.sessionToken, `/notifications/${ctx.bob.user.id}`),
+                    )
+                ).find((n) => n.tag === `calendar-share:${cal.id}:${ctx.alice.user.id}`);
+            const bob = { targetId: ctx.bob.user.email, permission: 'read' };
+
+            await share([bob]);
+            const first = await bobsRow();
+            if (!first) throw new Error('Bob got no share notification');
+            const marked = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/notifications/${ctx.bob.user.id}/${first.id}/read`,
+                { method: 'PATCH' },
+            );
+            expect(marked.status).toBe(200);
+
+            await share([bob, { targetId: ctx.charlie.user.email, permission: 'read' }]);
+            expect((await bobsRow())?.read).toBe(true);
+
+            await share([{ ...bob, permission: 'write' }]);
+            expect((await bobsRow())?.read).toBe(false);
+        });
+
         test('a share notice with no actor names nobody', async () => {
             const bobHome = await getHome(ctx.bob.user.id);
             const calendarId = crypto.randomUUID();
