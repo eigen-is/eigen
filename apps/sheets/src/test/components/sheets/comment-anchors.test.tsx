@@ -43,13 +43,13 @@ afterEach(async () => {
     cleanup = undefined;
 });
 
-async function mountWorkbook(): Promise<WorkbookInstance> {
+async function mountWorkbook(data = sheets()): Promise<WorkbookInstance> {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
     const ref = createRef<WorkbookInstance>();
     await act(async () => {
-        root.render(createElement(Workbook, { ref, data: sheets() }));
+        root.render(createElement(Workbook, { ref, data }));
     });
     cleanup = async () => {
         await act(async () => root.unmount());
@@ -63,6 +63,17 @@ const idsAt = (workbook: WorkbookInstance, sheetId: string, r: number, c: number
     workbook.getFlowdata(sheetId)?.[r]?.[c]?.commentCardIds;
 
 describe('anchoredComments', () => {
+    test('a jump to a card on a hidden tab stays on the open tab', async () => {
+        const [first, second] = sheets();
+        const workbook = await mountWorkbook([first, { ...second, hide: 1 }]);
+        const cell = anchoredComments(workbook.getAllSheets(), 's1').firstCells.get('c3');
+        expect(cell?.sheetId).toBe('s2');
+        await act(async () => {
+            if (cell) workbook.revealSearchMatch(cell);
+        });
+        expect(workbook.getFlowdata()).toBe(workbook.getFlowdata('s1'));
+    });
+
     test('a card anchored only on a tab that is not open is in use, prefixed with its tab', async () => {
         const workbook = await mountWorkbook();
         const active = anchoredComments(workbook.getAllSheets(), 's1');
