@@ -136,7 +136,7 @@ An event ends at its `DTEND`, or at its `DURATION` when it names one, as Apple a
 
 - A sub-daily rule is a 400 at the REST boundary. In a parsed `.ics` it is stripped from the projection, because refusing a whole file or invite over it is worse.
 - A recurring DTSTART must fall between 1900 and 2200.
-- One expansion yields at most `MAX_OCCURRENCES`, and a query window is clamped to five years.
+- One expansion yields at most `MAX_OCCURRENCES` and covers at most five years, from the query's start or the series' own when that is later. Only a series is cut: a single event and a moved occurrence answer for the whole window. So in a wider window, a series whose only occurrences lie past those five years is not found.
 
 A stripped rule stays in the stored bytes. The event draws as one occurrence, and `hasUnindexedRecurrence` makes a CalDAV time-range query return it for every window. An `RDATE` takes the same flag, and a `RANGE=THISANDFUTURE` override degrades to a single-instance edit.
 
