@@ -469,12 +469,20 @@ export function shiftValidations(
 }
 
 // The frozen pane, moved whole: a peer's unfreeze removes `frozen`, and a write into a field that is gone would not
-// apply. A bare type such as 'both' with a range freezes as its range form does, so it moves too.
-function shiftFrozen(frozen: Sheet['frozen'], type: 'row' | 'column', shift: (focus: number) => number) {
+// apply. A bare type such as 'both' with a range freezes as its range form does, so it moves too. A focus below 0 means
+// the op deleted the whole band, so that axis stops freezing, and the pane goes with its last axis.
+function shiftFrozen(
+    frozen: Sheet['frozen'],
+    type: 'row' | 'column',
+    shift: (focus: number) => number,
+): Sheet['frozen'] {
     if (!frozen?.range || !(type === 'row' ? freezesRows(frozen) : freezesColumns(frozen))) return frozen;
     const axis = type === 'row' ? 'row_focus' : 'column_focus';
     const focus = shift(frozen.range[axis]);
-    return focus === frozen.range[axis] ? frozen : { ...frozen, range: { ...frozen.range, [axis]: focus } };
+    if (focus === frozen.range[axis]) return frozen;
+    if (focus >= 0) return { ...frozen, range: { ...frozen.range, [axis]: focus } };
+    if (!(type === 'row' ? freezesColumns(frozen) : freezesRows(frozen))) return undefined;
+    return { type: type === 'row' ? 'rangeColumn' : 'rangeRow', range: { ...frozen.range, [axis]: 0 } };
 }
 
 // The filter moves with the rows: its range, the column each entry sits on and the rows each entry hides. An entry is
