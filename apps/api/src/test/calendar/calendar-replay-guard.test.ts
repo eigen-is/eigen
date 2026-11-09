@@ -194,6 +194,46 @@ describe('inbound message ordering', () => {
         expect((await masterOf(calendar)).title).toBe('Title B');
     });
 
+    test('a newer REQUEST at the same SEQUENCE that only drops the location reaches the guest', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        await calendar.receiveImipRequest(
+            parsedOf(request('Title A', 2, '20260401T100000Z', ['LOCATION:Room 9'])),
+            ORG,
+        );
+        expect((await masterOf(calendar)).location).toBe('Room 9');
+
+        await calendar.receiveImipRequest(parsedOf(request('Title A', 2, '20260401T120000Z')), ORG);
+
+        expect((await masterOf(calendar)).location).toBeNull();
+    });
+
+    test('the relay applies a cleared description at the same SEQUENCE', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        await calendar.receiveInvitation({
+            ...relayPayload('Title A', 2, new Date('2026-04-01T10:00:00Z')),
+            description: 'Agenda',
+        });
+        expect((await masterOf(calendar)).description).toBe('Agenda');
+
+        await calendar.receiveInvitationUpdate('organizer-event', 'organizer-home', {
+            title: 'Title A',
+            description: null,
+            location: null,
+            startTime: new Date('2026-05-01T09:00:00Z'),
+            endTime: new Date('2026-05-01T10:00:00Z'),
+            allDay: false,
+            rrule: 'FREQ=DAILY;COUNT=5',
+            timezone: null,
+            status: 'confirmed',
+            sequence: 2,
+            dtstamp: new Date('2026-04-01T12:00:00Z'),
+        });
+
+        expect((await masterOf(calendar)).description).toBeNull();
+    });
+
     test('an identical redelivery writes nothing', async () => {
         const { calendar, calendarId } = await seeded();
         const before = (await calendar.getCalendarById(calendarId))!.ctag;

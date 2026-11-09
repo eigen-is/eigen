@@ -17,20 +17,19 @@ import type { BunFile, FileSink } from 'bun';
 import { Semaphore } from '../../utils/semaphore';
 import { isMailAppEnabled } from '../config/env';
 import { PATHS } from '../config/paths';
-import { ApiError, isEnoent, isSafePathSegment, LocalFilesystem, STALE_TEMP_MAX_AGE_MS } from '../core';
+import { ApiError, isEnoent, isSafePathSegment, LocalFilesystem } from '../core';
 import type { Home } from '../home';
 import { parseEml, parseEmlBytes, parseEmlForReader } from './mail-parse';
-import type { DraftMeta, MailFlag, MailSearchOptions, MailStoreEvents } from './mail-store';
+import type { MailFlag, MailSearchOptions, MailStoreEvents } from './mail-store';
 import MailDB, { readMailIndexSize } from './maildb';
 import {
     applyFlagsFromFilename,
     buildMaildirFilename,
-    buildRecipientSummary,
     createUniqueMessageId,
+    filenameWithFlags,
     getMailIDfromFileName,
     maildirFolder,
     parseFlagsFromFilename,
-    rebuildFlagsSuffix,
 } from './mailutils';
 
 // The Maildir spec's own age: a `tmp/` file older than this is a crash leftover, never an in-flight write.
@@ -68,17 +67,11 @@ function isValidMailboxPath(mailbox: string): boolean {
         );
 }
 
-// The NFC fold `isSafePathSegment` assumes, so an accented id names one file and not two. Null for a name
-// no Eigen id could have, which a read treats as absent where a write refuses it.
-function foldFileId(id: string): string | null {
-    const name = id.normalize('NFC');
-    return isSafePathSegment(name) ? name : null;
-}
-
-// Refused, never mapped onto a safe name: two mapped ids would collide on one file.
+// Folded to NFC, the rule `isSafePathSegment` assumes, so an accented id names one file and not two. Refused, never
+// mapped onto a safe name: two mapped ids would collide on one file.
 function safeFileId(id: string): string {
-    const name = foldFileId(id);
-    if (!name) throw new ApiError(400, `Invalid mail id: ${id}`);
+    const name = id.normalize('NFC');
+    if (!isSafePathSegment(name)) throw new ApiError(400, `Invalid mail id: ${id}`);
     return name;
 }
 
@@ -117,7 +110,7 @@ export class MaildirStore {
             await this.recountStaged();
             return false;
         }
-        const isNew = !(await this.exists());
+        const isNew = !(await this.storage.dirExists(this.basePath));
         if (isNew) {
             await this.createStandardMailboxes();
         }
@@ -132,7 +125,7 @@ export class MaildirStore {
     public async unwatch(): Promise<void> {
         for (const watcher of this.watchers.values()) watcher.close();
         this.watchers.clear();
-        // A sync still in flight would reach a closed db once the domain flushes drafts.
+        // A sync still in flight would reach the db the domain closes next.
         await Promise.allSettled([...this.reconcilingMailboxes.values()]);
     }
 
@@ -222,7 +215,8 @@ export class MaildirStore {
         for (const name of paths) {
             // Counts come from the index. A folder outside the standard six has no watcher, because each one
             // spends the per-user inotify limit that every home shares. It reconciles here instead.
-            if (!isStandardMailbox(name) && this.reconcileDue(name)) {
+            const lastSync = this.lastReconcileStartedAt.get(name) ?? 0;
+            if (!isStandardMailbox(name) && Date.now() - lastSync >= BACKGROUND_RECONCILE_INTERVAL_MS) {
                 this.reconcileMailbox(name).catch((err) =>
                     console.error('maildir: background mailbox sync failed', err),
                 );
@@ -269,6 +263,7 @@ export class MaildirStore {
             messageId,
             cached.mailbox,
             this.getMessageFile(cached.mailbox, cached.filename),
+            cached.isDraft,
         );
         applyFlagsFromFilename(parsed, cached.filename);
         return { ...parsed, ...cached };
@@ -310,25 +305,35 @@ export class MaildirStore {
         return uniqueId;
     }
 
-    public async saveDraft(raw: string, existingId?: string): Promise<Email> {
+    public async saveDraft(bytes: Buffer, messageId: string): Promise<Email> {
         // Parsed off the lock: these bytes are exactly what parseEml would read back from the delivered file.
-        const messageId = existingId ?? createUniqueMessageId();
-        const bytes = Buffer.from(raw, 'utf-8');
-        const parsed = await parseEmlBytes(messageId, MAILBOX_DRAFTS, bytes, bytes.length);
+        const parsed: Email = parseEmlBytes(messageId, MAILBOX_DRAFTS, bytes);
 
         // The file write and the row stay one step, or a watcher sync ingests the draft first and fires a spurious received.
         return this.storeLock.run(async () => {
-            // Straight into cur/: Eigen placed it there itself, with the flags already in the name.
-            const filename = buildMaildirFilename(messageId, { draft: true, seen: true }, bytes.byteLength);
+            const replaced = this.db.getEmail(messageId);
+            // A stale tab or a replayed send names a message that has left Drafts: saving it would take it out of Sent.
+            if (replaced && !replaced.isDraft) throw new ApiError(409, 'This message is no longer a draft');
+
+            // Straight into cur/: Eigen placed it there itself, with the flags already in the name. Dovecot keys a UID on the
+            // name before the `:`, so the stamp makes every save a new message to IMAP, even one that keeps the byte size.
+            const filename = buildMaildirFilename(
+                `${messageId},M=${crypto.randomUUID()}`,
+                { draft: true, seen: true },
+                bytes.byteLength,
+            );
             await this.deliver(MAILBOX_DRAFTS, PATHS.MAIL.CUR, filename, bytes);
 
             applyFlagsFromFilename(parsed, filename);
             parsed.filename = filename;
-            parsed.mailbox = MAILBOX_DRAFTS;
-            // A full save rewrites the draft under its own id, so the row it replaces is credited back.
-            const replaced = this.db.getEmail(messageId)?.size ?? 0;
-            this.db.addEmail(parsed);
-            this.indexBytes += parsed.size - replaced;
+            this.db.insertEmails([parsed]);
+            this.indexBytes += parsed.size - (replaced?.size ?? 0);
+            // The old file goes last, so a crash leaves the draft twice and never not at all. A sync keeps the newer.
+            if (replaced) {
+                await this.storage.unlinkDurable(
+                    path.join(this.mailboxDir(replaced.mailbox), PATHS.MAIL.CUR, replaced.filename),
+                );
+            }
             return parsed;
         });
     }
@@ -344,7 +349,12 @@ export class MaildirStore {
         });
     }
 
-    public async move(messageId: string, targetMailbox: string): Promise<void> {
+    // Flags change in the same rename, so a save queued on the lock never finds a sent message that is still a draft.
+    public async move(
+        messageId: string,
+        targetMailbox: string,
+        changes: Partial<Record<MailFlag, boolean>> = {},
+    ): Promise<void> {
         return this.storeLock.run(async () => {
             const email = this.db.getEmail(messageId);
             if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
@@ -353,8 +363,14 @@ export class MaildirStore {
                 throw new ApiError(404, `Target mailbox '${targetMailbox}' not found`);
             }
 
-            await this.moveMessage(email.mailbox, email.filename, targetMailbox);
+            // Both ends are indexed here: the old name must not come back after the index says it moved.
+            const filename = filenameWithFlags(email.filename, changes);
+            await this.storage.moveDurable(
+                path.join(this.mailboxDir(email.mailbox), PATHS.MAIL.CUR, email.filename),
+                path.join(this.mailboxDir(targetMailbox), PATHS.MAIL.CUR, filename),
+            );
             this.db.moveEmail(messageId, targetMailbox);
+            this.updateRowFlags(messageId, filename);
         });
     }
 
@@ -363,34 +379,28 @@ export class MaildirStore {
             const email = this.db.getEmail(messageId);
             if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
 
-            const newFlagStr = rebuildFlagsSuffix(email.filename, changes);
-            const uniqueWithSize = email.filename.split(':')[0];
-            const newFilename = `${uniqueWithSize}:2,${newFlagStr}`;
+            const newFilename = filenameWithFlags(email.filename, changes);
 
             if (newFilename !== email.filename) {
-                await this.renameInCur(email.mailbox, email.filename, newFilename);
+                const cur = path.join(this.mailboxDir(email.mailbox), PATHS.MAIL.CUR);
+                await this.storage.renameDurable(path.join(cur, email.filename), path.join(cur, newFilename));
             }
 
-            // The row mirrors the filename's letters, so no flag can be written to one and not the other.
-            const flags = parseFlagsFromFilename(newFilename);
-            this.db.updateFlags(
-                messageId,
-                { isRead: flags.seen, isFlagged: flags.flagged, isDraft: flags.draft, isReplied: flags.replied },
-                newFilename,
-            );
+            this.updateRowFlags(messageId, newFilename);
         });
     }
 
-    public applyDraftMeta(draftId: string, meta: DraftMeta): void {
-        this.db.updateDraftContent(draftId, meta.subject, meta.text, buildRecipientSummary(meta.to, meta.cc));
+    // The row mirrors the filename's letters, so no flag can be written to one and not the other.
+    private updateRowFlags(messageId: string, filename: string): void {
+        const flags = parseFlagsFromFilename(filename);
+        this.db.updateFlags(
+            messageId,
+            { isRead: flags.seen, isFlagged: flags.flagged, isDraft: flags.draft, isReplied: flags.replied },
+            filename,
+        );
     }
 
     // -- Sync --
-
-    private reconcileDue(mailbox: string): boolean {
-        const last = this.lastReconcileStartedAt.get(mailbox);
-        return last === undefined || Date.now() - last >= BACKGROUND_RECONCILE_INTERVAL_MS;
-    }
 
     private async reconcileMailbox(mailbox: string): Promise<void> {
         // A watcher's fire-and-forget sync started during teardown would query a closed db.
@@ -424,10 +434,16 @@ export class MaildirStore {
         await this.moveNewToCur(mailbox);
 
         const diskFiles = new Map<string, string>();
-        for (const fileName of await this.listCurFiles(mailbox)) {
-            if (!fileName.startsWith('.')) {
-                diskFiles.set(getMailIDfromFileName(fileName), fileName);
-            }
+        const curPath = path.join(this.mailboxDir(mailbox), PATHS.MAIL.CUR);
+        const curFiles = (await this.storage.dirExists(curPath)) ? await this.storage.readdir(curPath) : [];
+        for (const fileName of curFiles) {
+            if (fileName.startsWith('.')) continue;
+            const id = getMailIDfromFileName(fileName);
+            const sameId = diskFiles.get(id);
+            diskFiles.set(
+                id,
+                sameId && mailbox === MAILBOX_DRAFTS ? await this.keepNewerDraftFile(sameId, fileName) : fileName,
+            );
         }
 
         const dbRecords = this.db.listReconcileRows(mailbox);
@@ -463,13 +479,6 @@ export class MaildirStore {
             const replaced = this.db.sumSizes(parsed.map((p) => p.id));
             this.db.insertEmails(parsed);
             this.indexBytes += parsed.reduce((sum, p) => sum + p.size, 0) - replaced;
-            // A fast save leaves the .eml stale, so a row rebuilt from it carries the last full save.
-            if (mailbox === MAILBOX_DRAFTS) {
-                for (const p of parsed) {
-                    const meta = await this.readDraftMeta(p.id);
-                    if (meta) this.applyDraftMeta(p.id, meta);
-                }
-            }
             for (const p of parsed) {
                 const delivered = this.deliveries.get(p.id);
                 this.deliveries.delete(p.id);
@@ -481,17 +490,7 @@ export class MaildirStore {
         for (const [id, record] of dbById) {
             const diskFilename = diskFiles.get(id);
             if (diskFilename && diskFilename !== record.filename) {
-                const flags = parseFlagsFromFilename(diskFilename);
-                this.db.updateFlags(
-                    id,
-                    {
-                        isRead: flags.seen,
-                        isFlagged: flags.flagged,
-                        isDraft: flags.draft,
-                        isReplied: flags.replied,
-                    },
-                    diskFilename,
-                );
+                this.updateRowFlags(id, diskFilename);
                 this.events.flagsChanged(id, mailbox);
             }
         }
@@ -506,53 +505,18 @@ export class MaildirStore {
         }
     }
 
-    // -- Draft meta sidecar (lightweight body-only saves) --
-
-    private getDraftMetaDir(): string {
-        return 'draft-meta';
-    }
-
-    // Takes the folded name, so a caller's gate and the sidecar it names can never disagree.
-    private getDraftMetaPath(name: string): string {
-        return path.join(this.getDraftMetaDir(), `${name}.json`);
-    }
-
-    public async writeDraftMeta(draftId: string, meta: DraftMeta): Promise<void> {
-        await this.storage.writeAtomic(this.getDraftMetaPath(safeFileId(draftId)), JSON.stringify(meta));
-    }
-
-    // Null when no sidecar can be read, torn or absent; the caller falls back to the .eml.
-    public async readDraftMeta(draftId: string): Promise<DraftMeta | null> {
-        // Another MDA's filename can hold characters no Eigen id has: no sidecar exists for it, and it must not fail the sync.
-        const name = foldFileId(draftId);
-        if (!name) return null;
-        const metaPath = this.getDraftMetaPath(name);
-        if (!(await this.storage.exists(metaPath))) return null;
-        try {
-            return await this.storage.file(metaPath).json();
-        } catch {
-            // Torn bytes from a crash read as absent, so the caller falls back to the .eml.
-            return null;
-        }
-    }
-
-    public async deleteDraftMeta(draftId: string): Promise<void> {
-        // No sidecar can exist under an id Eigen did not mint.
-        const name = foldFileId(draftId);
-        if (!name) return;
-        const metaPath = this.getDraftMetaPath(name);
-        try {
-            if (await this.storage.exists(metaPath)) {
-                await this.storage.unlink(metaPath);
-            }
-        } catch {}
-    }
-
-    public async listDraftMetaIds(): Promise<string[]> {
-        const dir = this.getDraftMetaDir();
-        if (!(await this.storage.dirExists(dir))) return [];
-        const files = await this.storage.readdir(dir);
-        return files.filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5));
+    // Left behind, the older file could win a later pass over every save after it, and come back after a send or a
+    // delete. A name a rename just retired stats as absent, so its live twin wins.
+    private async keepNewerDraftFile(a: string, b: string): Promise<string> {
+        const cur = path.join(this.mailboxDir(MAILBOX_DRAFTS), PATHS.MAIL.CUR);
+        const modified = (name: string) =>
+            this.storage.stat(path.join(cur, name)).then(
+                (stats) => stats.mtimeMs,
+                () => 0,
+            );
+        const [newer, older] = (await modified(a)) > (await modified(b)) ? [a, b] : [b, a];
+        await this.storage.unlinkDurable(path.join(cur, older));
+        return newer;
     }
 
     // -- Draft temp staging --
@@ -562,9 +526,11 @@ export class MaildirStore {
         filename: string,
         contentType: string,
     ): Promise<DraftAttachmentUpload> {
-        await this.ensureDraftTempDir();
+        if (!(await this.storage.dirExists(DRAFT_ATTACHMENTS_DIR))) {
+            await this.storage.mkdir(DRAFT_ATTACHMENTS_DIR);
+        }
         const tempId = crypto.randomUUID();
-        const writer = this.openDraftTempWriter(tempId);
+        const writer = this.storage.file(this.getDraftTempPath(tempId)).writer({ highWaterMark: 256 * 1024 });
         let size: number;
         try {
             size = await write(writer);
@@ -578,24 +544,13 @@ export class MaildirStore {
         }
         const meta = { filename, size, contentType };
         try {
-            await this.writeDraftTempMeta(tempId, meta);
+            await this.storage.write(this.getDraftTempMetaPath(tempId), JSON.stringify(meta));
         } catch (e) {
             await this.cleanupDraftTemp(tempId);
             throw e;
         }
         await this.recountStaged();
         return { tempId, ...meta };
-    }
-
-    private openDraftTempWriter(tempId: string) {
-        return this.storage.file(this.getDraftTempPath(tempId)).writer({ highWaterMark: 256 * 1024 });
-    }
-
-    private async writeDraftTempMeta(
-        tempId: string,
-        meta: { filename: string; size: number; contentType: string },
-    ): Promise<void> {
-        await this.storage.write(this.getDraftTempMetaPath(tempId), JSON.stringify(meta));
     }
 
     public async readDraftTempFile(
@@ -614,12 +569,6 @@ export class MaildirStore {
             filename: meta.filename,
             contentType: meta.contentType,
         };
-    }
-
-    private async ensureDraftTempDir(): Promise<void> {
-        if (!(await this.storage.dirExists(DRAFT_ATTACHMENTS_DIR))) {
-            await this.storage.mkdir(DRAFT_ATTACHMENTS_DIR);
-        }
     }
 
     private getDraftTempPath(tempId: string): string {
@@ -648,8 +597,6 @@ export class MaildirStore {
 
     public async cleanupStaleDraftTemps(): Promise<void> {
         await this.cleanupStaleMaildirTemps();
-        // The sidecars are written through writeAtomic, and nothing else passes that directory.
-        await this.storage.sweepAtomicTemps(this.getDraftMetaDir(), STALE_TEMP_MAX_AGE_MS);
         if (await this.storage.dirExists(DRAFT_ATTACHMENTS_DIR)) {
             const now = Date.now();
             for (const name of await this.storage.readdir(DRAFT_ATTACHMENTS_DIR)) {
@@ -683,10 +630,6 @@ export class MaildirStore {
     }
 
     // -- Maildir filesystem primitives --
-
-    private async exists(): Promise<boolean> {
-        return this.storage.dirExists(this.basePath);
-    }
 
     private async createStandardMailboxes(): Promise<void> {
         for (const mailbox of STANDARD_MAILBOXES) {
@@ -766,35 +709,15 @@ export class MaildirStore {
         if (moved > 0) await this.storage.syncDir(curPath);
     }
 
-    private async listCurFiles(mailbox: string): Promise<string[]> {
-        const curPath = path.join(this.mailboxDir(mailbox), PATHS.MAIL.CUR);
-        if (!(await this.storage.dirExists(curPath))) return [];
-        return this.storage.readdir(curPath);
-    }
-
     public getMessageFile(mailbox: string, filename: string): BunFile {
         const filePath = path.join(this.mailboxDir(mailbox), PATHS.MAIL.CUR, filename);
         return this.storage.file(filePath);
-    }
-
-    private async moveMessage(fromMailbox: string, fromFilename: string, toMailbox: string): Promise<void> {
-        const srcDir = path.join(this.mailboxDir(fromMailbox), PATHS.MAIL.CUR);
-        const dstPath = path.join(this.mailboxDir(toMailbox), PATHS.MAIL.CUR, fromFilename);
-        // Both ends are indexed here: the old name must not come back after the index says it moved.
-        await this.storage.moveDurable(path.join(srcDir, fromFilename), dstPath);
-    }
-
-    private async renameInCur(mailbox: string, oldFilename: string, newFilename: string): Promise<void> {
-        const curPath = path.join(this.mailboxDir(mailbox), PATHS.MAIL.CUR);
-        await this.storage.renameDurable(path.join(curPath, oldFilename), path.join(curPath, newFilename));
     }
 
     private mailboxDir(mailbox: string): string {
         if (!isValidMailboxPath(mailbox)) throw new ApiError(400, `Invalid mailbox name: ${mailbox}`);
         return maildirFolder(this.basePath, mailbox);
     }
-
-    // -- Private helpers --
 
     private getMailboxInfo(mailboxName: string, allMailboxes: readonly string[]): MaildirMailbox {
         return {

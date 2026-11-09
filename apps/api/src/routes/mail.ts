@@ -206,8 +206,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
             requireSelf(params.ownerId, user.id);
             return await (await getMailClient(user)).messageHandleDraft(body.mail, {
                 tempAttachmentIds: body.tempAttachmentIds,
-                keepAttachmentIndexes: body.keepAttachmentIndexes,
-                forceFullSave: body.forceFullSave,
+                keepAttachments: body.keepAttachments,
             });
         },
         {
@@ -215,8 +214,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
             body: t.Object({
                 mail: MailDraftSchema,
                 tempAttachmentIds: t.Optional(t.Array(t.String())),
-                keepAttachmentIndexes: t.Optional(t.Array(t.Integer())),
-                forceFullSave: t.Optional(t.Boolean()),
+                keepAttachments: t.Optional(t.Array(t.Object({ filename: t.String(), size: t.Integer() }))),
             }),
         },
     )

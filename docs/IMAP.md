@@ -15,9 +15,11 @@ The sections go from the files up: how a message is written and named, how folde
 
 ## The files are the truth because Dovecot writes them too
 
-Dovecot moves, renames and deletes messages behind the API's back, so only a diff of the directories against the index sees its work. That diff, and the watchers that start it, are what mail has and contacts and calendar don't: only the API writes their databases. `mail.db` holds parsed metadata and flags for fast queries, and every row can be rebuilt by scanning the files: the `.eml`s, plus the `draft-meta/` sidecar a fast draft save writes ([MAIL.md § A draft skips the rebuild](MAIL.md#a-draft-skips-the-rebuild-until-its-attachments-change)). The Drafts sync projects the sidecar back over the row it rebuilds from the stale `.eml`. A sidecar that can't be read counts as absent, so one torn file can't fail that sync.
+Dovecot moves, renames and deletes messages behind the API's back, so only a diff of the directories against the index sees its work. That diff, and the watchers that start it, are what mail has and contacts and calendar don't: only the API writes their databases. `mail.db` holds parsed metadata and flags for fast queries, and every row can be rebuilt by scanning the `.eml`s. That holds for a draft too, whose file is its only copy. A client's edit of a draft is a new message under a new id, and what the composer holding the old one then does is in [MAIL.md § A draft's `.eml` is its only copy](MAIL.md#a-drafts-eml-is-its-only-copy).
 
 **The file lands before the index row, always.** A crash between the two leaves the index behind the disk, and the next `reconcileMailbox` repairs it.
+
+**A draft save writes before it deletes.** The new file lands, then the row, then the old file goes, all under `storeLock`, so a save that throws on the way, such as on a staged attachment that is gone, leaves the draft whole. A crash in between leaves two files with one id, which only a draft save can do. The next Drafts sync keeps the newer by modification time and unlinks the other, because the older could otherwise win a later sync over every save after it, or bring back a draft that was deleted or sent. A tie keeps either, which takes a crash and two saves in one clock tick, so at worst the draft loses that last save. Until the next save the row may keep the old subject, preview and size. The byte counter stays right, because it sums the rows.
 
 Every Maildir write fsyncs the staged file and each indexed directory its rename or unlink changes (`lib/core/local-filesystem.ts`). A directory fsync the file system refuses (NFS, some FUSE mounts) is logged once, not thrown: the rename already happened, and a delivery answering 500 makes the MTA send a duplicate. `apps/api/src/test/mail/mail-durability.test.ts` pins each write.
 
@@ -41,11 +43,13 @@ cur/:  {unique},S={size}:2,{flags}
 
 `createUniqueMessageId` builds the unique part as `{time}.M{usec}P{pid}Q{seq}.{host}`. That part alone is the message id: `getMailIDfromFileName` cuts the name at the first `,` or `:`. So a flag change, which renames the file, never changes the id the index and the API use.
 
+A draft save adds a field of its own, `{unique},M={stamp},S={size}:2,DS`, with a fresh stamp each time. Dovecot keys a UID on the name before the `:`. Without the stamp, an edit that keeps the byte size keeps the name, and Dovecot serves new bytes under the UID a client already cached. With it, every save is a new message to IMAP, as a save that changes the size always was, and the id stays. The stamp is a UUID, not a time, because the save removes the old file by name, and two saves of one size in one millisecond would then remove the file just written. So there is no case where the new file has the old name.
+
 ## Flags live in the filename and the index mirrors four
 
 The letters after `:2,` are the truth. The index mirrors `S` (`isRead`), `R` (`isReplied`), `F` (`isFlagged`, the star in the UI) and `D` (`isDraft`) for queries. `T` (trashed) and `P` (passed) are parsed and kept in the name, but not indexed. The letters stay ASCII-sorted, as the spec asks.
 
-Dovecot appends lowercase letters for IMAP keywords and maps them in its `dovecot-keywords` file. `rebuildFlagsSuffix` keeps those letters when Eigen changes a standard flag, so Eigen never strips a keyword a client set.
+Dovecot appends lowercase letters for IMAP keywords and maps them in its `dovecot-keywords` file. `filenameWithFlags` keeps those letters when Eigen changes a standard flag, so Eigen never strips a keyword a client set.
 
 ## The Maildir root is the inbox and a folder is a dot directory
 
@@ -75,7 +79,7 @@ For each folder outside the six, a listing starts a background reconcile, at mos
 
 ## Every file is staged in tmp/ first
 
-`append` writes the bytes to `tmp/`, fsyncs them and renames them into `new/`. It serves every message the store did not write itself: a delivery from Postfix (`POST /mail/deliver/:to`), an import, a copy and the welcome mail. It then reconciles the mailbox, unless the caller passes `skipReconcile`. `saveDraft` stages the same way but renames into `Drafts/cur/` with `D` and `S` set, since Eigen knows the flags. A send moves that draft to Sent and clears `D`.
+`append` writes the bytes to `tmp/`, fsyncs them and renames them into `new/`. It serves every message the store did not write itself: a delivery from Postfix (`POST /mail/deliver/:to`), an import, a copy and the welcome mail. It then reconciles the mailbox, unless the caller passes `skipReconcile`. `saveDraft` stages the same way but renames into `Drafts/cur/` with `D` and `S` set, since Eigen knows the flags. A send moves that draft to Sent and clears `D` in one rename.
 
 ## A sync diffs cur/ against the index
 

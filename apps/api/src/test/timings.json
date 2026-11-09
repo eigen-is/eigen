@@ -269,7 +269,7 @@
     "src/test/mail/mail-calendar-invite.test.ts": 2627,
     "src/test/mail/mail-custom-mailboxes.test.ts": 5822,
     "src/test/mail/mail-disabled.test.ts": 3137,
-    "src/test/mail/mail-draft-sidecar.test.ts": 5621,
+    "src/test/mail/mail-draft-file.test.ts": 5621,
     "src/test/mail/mail-drive-attachments.test.ts": 3407,
     "src/test/mail/mail-durability.test.ts": 2094,
     "src/test/mail/mail-forward.test.ts": 2835,

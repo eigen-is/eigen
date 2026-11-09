@@ -60,10 +60,8 @@ export function useMailActions() {
     // The one message whose remote images the reader shows, until another is loaded.
     const [imagesLoadedFor, setImagesLoadedFor] = useState<string | null>(null);
 
-    // Reverse a specific recorded action with the RAW mutations (never the recording helpers, or the
-    // undo would record itself). The {...email, isRead/isFlagged: !prev} spread defeats each mutation's
-    // own no-op guard so a genuine reversal always fires. Reverses the passed snapshot, not the slot —
-    // so an old toast undoes the action it was shown for even after later actions overwrote the slot.
+    // Reverses the passed snapshot with the raw mutations, or the undo would record itself, so an old toast undoes the action
+    // it was shown for. The {...email, isRead/isFlagged: !prev} spread defeats each mutation's own no-op guard.
     const reverse = async (action: Undoable) => {
         if (action.done) return;
         action.done = true;
@@ -100,9 +98,8 @@ export function useMailActions() {
         await reverse(action);
     };
 
-    // Success toast with an Undo action, fired only for the destructive moves (archive/spam/delete).
-    // Captures the exact `action` snapshot so the button reverses THAT, not the live slot. Clears the
-    // slot only when it's still this same action, so `z` won't double-undo what the toast already did.
+    // For the destructive moves. The button reverses this snapshot, and the slot clears only when it still holds this action,
+    // so `z` won't undo twice.
     const undoToast = (message: string, action: Undoable) => {
         toast.success(message, {
             action: {
@@ -151,11 +148,8 @@ export function useMailActions() {
         navigateToList();
     };
 
-    // Navigate to the compose view with a prefilled draft in history state. No API call —
-    // the composer reads the state at mount, seeds its fingerprint from it, and the first
-    // POST only fires once the user actually edits (triggering the auto-save). The fresh
-    // composeSessionKey remounts any composer that was already open (so clicking Reply
-    // while typing a different message gives a clean composer with the new quoted body).
+    // The composer reads the history state at mount and the first save fires only on an edit. The fresh composeSessionKey
+    // remounts any open composer, so Reply while typing another message gives a clean one.
     const openPrefilledCompose = (prefillDraft: NewDraft, forwardedParts?: FileSubject[]) => {
         navigate({
             to: Route.fullPath,
@@ -165,10 +159,8 @@ export function useMailActions() {
         });
     };
 
-    // After the first auto-save of a fresh compose, add ?mailId=... to the URL so a reload lands
-    // back on the same draft. Keep mode='compose' and the history state, or the EmailDraft remount key
-    // would flip and lose the typing in progress. The forwarded parts stay: that save may have run while
-    // one still uploaded.
+    // Adds ?mailId=... so a reload lands on the same draft. Mode and history state stay, or the EmailDraft remount key would
+    // flip and lose the typing. The forwarded parts stay too: that save may have run while one still uploaded.
     const handleDraftIdAssigned = (id: string) => {
         navigate({
             to: Route.fullPath,
@@ -199,8 +191,7 @@ export function useMailActions() {
         return { needsConfirmation: false as const };
     };
 
-    // The permanent-delete DeleteDialog's action. It navigates on any success. On a failure, `keepFailed` narrows the
-    // dialog to the emails still there, so a retry asks only for those, and the first failure is rethrown. Its mutation
+    // On a failure, `keepFailed` narrows the dialog to the emails still there and the first failure is rethrown. Its mutation
     // already toasted it, so the dialog stays open without a second message, or closes if the server refused it.
     const confirmDeleteEmails = async (pendingEmails: Email[], keepFailed: (failed: Email[]) => void) => {
         const results = await Promise.allSettled(pendingEmails.map((mail) => deleteMail.mutateAsync(mail)));
@@ -218,9 +209,8 @@ export function useMailActions() {
         throw (failures.find((f) => !isRefusal(f.reason)) ?? failures[0]).reason;
     };
 
-    // Fan-out batch: build the success toast, Undo slot and navigation from the FULFILLED results only.
-    // Each mutation reports its own failure via onMutationError, so a partial failure must not claim the
-    // full count nor offer to undo items that never moved; none-succeeded → no toast, no undo, no nav.
+    // Built from the fulfilled results only: each mutation reports its own failure, so a partial failure must not claim the
+    // full count nor offer to undo what never moved.
     const handleDeleteEmailsByIds = async (emailIds: string[]) => {
         const emails = (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
         const trashEmails = emails.filter((e) => e.mailbox === MAILBOX_TRASH);
@@ -298,10 +288,8 @@ export function useMailActions() {
         }
     };
 
-    // Mutation-only variants (no navigateToList) for the open-conversation + cursored-row paths —
-    // the route/shortcuts layer owns where to land after these.
-    // Fire-and-forget (.mutate, not awaited mutateAsync): callers navigate/advance immediately and
-    // must not block on the move/delete round-trip. Errors surface via the mutation's onMutationError.
+    // With no navigation, for the open-conversation and cursored-row paths, whose callers advance at once and must not block
+    // on the round-trip. Errors surface via the mutation's onMutationError.
     const moveEmailByIdOnly = async (emailId: string, mailbox: string) => {
         const email = await getEmailById(emailId);
         if (!email) return;
@@ -323,10 +311,8 @@ export function useMailActions() {
         return { needsConfirmation: false as const };
     };
 
-    // currentIsRead/currentFlagged come from the fresh list summary. The detail from getEmailById can
-    // carry a stale flag (staleTime:Infinity), which would make the mutation's own no-op guard
-    // (isRead === email.isRead) skip a real change — so pre-guard on the fresh value AND overwrite the
-    // detail's field with it before handing off, keeping both guards consistent.
+    // The detail can carry a stale flag (staleTime: Infinity), which would make the mutation's own no-op guard skip a real
+    // change. So this pre-guards on the fresh value and overwrites the detail's field with it.
     const setReadById = async (emailId: string, isRead: boolean, currentIsRead: boolean) => {
         if (currentIsRead === isRead) return;
         const email = await getEmailById(emailId);
@@ -343,10 +329,8 @@ export function useMailActions() {
         lastAction.current = { kind: 'flag', items: [{ emailId, prevIsFlagged: currentFlagged }] };
     };
 
-    // Batch read/flag: fire each mutation, then record ONE Undoable holding every changed item so `z`
-    // reverts all N (a per-item loop would leave the slot holding only the last). Skips items already
-    // at the target — same pre-guard as the single-id versions. The rows are what the mutation wants,
-    // so a select-all fetches nothing.
+    // Records one Undoable holding every changed item, so `z` reverts all of them. The rows are what the mutation wants, so a
+    // select-all fetches nothing.
     const setReadByIds = (rows: EmailSummary[], isRead: boolean) => {
         const undoItems: { emailId: string; prevIsRead: boolean }[] = [];
         for (const row of rows) {
@@ -367,9 +351,7 @@ export function useMailActions() {
         if (undoItems.length > 0) lastAction.current = { kind: 'flag', items: undoItems };
     };
 
-    // Seed RFC 5322 threading from the message being replied to: In-Reply-To points at its
-    // Message-ID, References appends it to whatever chain it already carried. Skipped when the
-    // original has no Message-ID (nothing to thread against).
+    // In-Reply-To points at the original's Message-ID and References appends it to its chain. Skipped when it has none.
     const replyThreadingHeaders = (email: Email): Pick<DraftInput, 'inReplyTo' | 'references'> => {
         if (!email.messageId) return {};
         const prior = email.references ? (Array.isArray(email.references) ? email.references : [email.references]) : [];
@@ -461,12 +443,7 @@ export function useMailActions() {
         handleSendEmail,
         handleToggleMailRead,
         saveDraft: (draft: NewDraft, options: DraftUpdateOptions = {}) =>
-            updateDraft.mutateAsync({
-                draft,
-                tempAttachmentIds: options.tempAttachmentIds,
-                keepAttachmentIndexes: options.keepAttachmentIndexes,
-                forceFullSave: options.forceFullSave,
-            }),
+            updateDraft.mutateAsync({ draft, ...options }),
         handleDraftIdAssigned,
         handleForwardedPartsSaved,
         isSendPending: sendDraftMutation.isPending,

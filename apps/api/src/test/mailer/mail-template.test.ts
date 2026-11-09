@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { renderEigenEmail } from '../../lib/mailer/mail-template';
+import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
+import { buildAttachmentUrl, renderEigenEmail } from '../../lib/mailer/mail-template';
 
 describe('renderEigenEmail', () => {
     test('renders title in an h2', () => {
@@ -69,5 +70,30 @@ describe('renderEigenEmail', () => {
         });
         // The anchor tag should appear exactly once — no nested <a><a>...</a></a>.
         expect(html.match(/<a\s/g)?.length).toBe(1);
+    });
+});
+
+describe('buildAttachmentUrl', () => {
+    const ownerId = '7OEwianTfhULu6iG8wQz4G2dO5G2w0B4';
+    const id = '3f2c9c1e-7a10-4b1f-9d7e-2a1c0b9e8f7a';
+    const ref = (driveType: AttachmentReference['driveType']): AttachmentReference => ({
+        type: 'reference',
+        ownerId,
+        mountId: 'default',
+        id,
+        name: 'x',
+        driveType,
+        mimeType: 'x/y',
+    });
+
+    test('names the owner, mount and id in the app that opens the document', () => {
+        const path = `${ownerId}/default/${id}`;
+        expect(buildAttachmentUrl(ref('doc'))).toEndWith(`/docs/doc/${path}`);
+        expect(buildAttachmentUrl(ref('stickies'))).toEndWith(`/stickies/board/${path}`);
+        expect(buildAttachmentUrl(ref('slides'))).toEndWith(`/slides/slide/${path}`);
+        expect(buildAttachmentUrl(ref('sheets'))).toEndWith(`/sheets/sheet/${path}`);
+        expect(buildAttachmentUrl(ref('vector'))).toEndWith(`/vector/vector/${path}`);
+        expect(buildAttachmentUrl(ref('chat'))).toEndWith(`/chat/${path}`);
+        expect(buildAttachmentUrl(ref('folder'))).toEndWith(`/drive/fs/${path}`);
     });
 });

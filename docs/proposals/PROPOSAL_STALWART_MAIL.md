@@ -298,7 +298,6 @@ the co-deployed Stalwart instance. Dependencies and shape:
 - **The Maildir SQLite cache** (`maildb.ts`) — Stalwart is the cache.
 - **The sync engine** (`Maildir.doSyncMailbox`) — Stalwart is authoritative; no reconciliation
   needed.
-- **The draft fast-path** (`DraftMeta` sidecar) — JMAP can patch fields without an EML rebuild.
 - **The Postfix→`/mail/deliver` bridge** — Stalwart receives mail itself.
 - **The Dovecot container** — Stalwart serves IMAP.
 
@@ -521,8 +520,7 @@ This proposal does **not** propose migrating existing users. If we ship it:
 
 A *future* migration (not in this proposal) would iterate over a user's Maildir, JMAP
 `Email/import` each `.eml` into Stalwart with the right keywords and mailbox role, then flip
-the per-user backend pointer. The Eigen-side draft sidecar wouldn't migrate (drafts get a full
-save first). One-shot, idempotent, in a background job. Out of scope here.
+the per-user backend pointer. One-shot, idempotent, in a background job. Out of scope here.
 
 ## Phased rollout
 

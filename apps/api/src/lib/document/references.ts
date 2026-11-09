@@ -14,7 +14,8 @@ import type { ChatAttachment } from '@workspace/lib/types/chat';
 import type { CommentCard, CommentMapName } from '@workspace/lib/types/comments';
 import { commentMapName } from '@workspace/lib/types/comments';
 import type { DriveCollabType } from '@workspace/lib/types/drive';
-import { DRIVE_TYPE_FILE, DRIVE_TYPE_FOLDER, EIGEN_DOC_TYPE_INFO, EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
+import { EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
+import { isAttachmentReferenceShape } from '@workspace/lib/types/drive-reference';
 import { activeCommentCardIds, readVectorFromDoc } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import { mediaNamesIn, sceneMediaNames } from './media';
@@ -30,9 +31,8 @@ const DOC_FRAGMENTS = Object.entries(EIGEN_DOC_TYPE_INFO.doc.yjsRoots)
 // The field a cell keeps its comment cards in.
 const CELL_ANCHOR = 'commentCardIds' satisfies keyof Cell;
 
-// Only a card in use names its thread and its files, such as a card the content anchors, or on a canvas a card nobody
-// deleted. The rules a client shares live in lib beside it, such as the canvas's and the board's. An attachment that is
-// a Drive reference names a document elsewhere, not a file in media/.
+// Only a card in use names its thread and its files, such as a card the content anchors. An attachment that is a Drive
+// reference names a document elsewhere, not a file in media/.
 export function documentReferences(type: DriveCollabType, doc: Y.Doc): DocumentReferences {
     const cards = readCards(doc, commentMapName(type));
     let media: Set<string>;
@@ -52,10 +52,8 @@ export function documentReferences(type: DriveCollabType, doc: Y.Doc): DocumentR
             break;
         }
         case 'sheets': {
-            // The sheets the snapshot stores and every op still pending, read without a replay: an image or a comment
-            // an op removed stays named until the next compaction. An op that writes one field, such as an upload's
-            // final mediaName or one card id added to a cell's list, holds that field's name only in its path. So each
-            // op is read as the object it writes.
+            // The sheets the snapshot stores and every op still pending, read without a replay. An op that writes one field holds
+            // that field's name only in its path, so each op is read as the object it writes.
             const snapshot = readSheetsSnapshotJson(doc);
             const ops = sheetsOpLog(doc)
                 .toArray()
@@ -87,11 +85,8 @@ export function documentReferences(type: DriveCollabType, doc: Y.Doc): DocumentR
     return { media: [...media].sort(), chat: [...chat].sort() };
 }
 
-// Two card readers exist on purpose. The client's readCards is lenient: it drops a field it cannot read and sanitizes
-// the rest for display. This one is strict about the fields that name a part, so a thread or a file list a peer wrote
-// in a shape the editor never writes throws, rather than silently drop a part it may name. The title and the
-// description name nothing, so they are read as leniently as readCards reads them. So is the deleted mark: one that
-// is no number reads as not deleted, which only keeps more.
+// Stricter than the client's lenient reader about the fields that name a part: a shape no editor writes throws, rather
+// than silently drop a part it may name.
 function readCards(doc: Y.Doc, mapName: CommentMapName): Record<string, CommentCard> {
     const entries = [...getItemMapRoot(doc, mapName)].map(([id, card]): [string, CommentCard] => {
         if (!(card instanceof Y.Map)) throw new Error(`Unreadable comment card ${id}`);
@@ -103,21 +98,9 @@ function readCards(doc: Y.Doc, mapName: CommentMapName): Record<string, CommentC
         if (
             (chatName !== undefined && typeof chatName !== 'string') ||
             !Array.isArray(attachments) ||
-            // An attachment is a file name in media/, or a Drive reference as toAttachmentReference writes it. The
-            // routes check that shape with an Elysia schema, which the transform process that runs this never loads.
+            // An attachment is a file name in media/, or a Drive reference as toAttachmentReference writes it.
             !attachments.every(
-                (item): item is ChatAttachment =>
-                    typeof item === 'string' ||
-                    (isRecord(item) &&
-                        item['type'] === 'reference' &&
-                        typeof item['ownerId'] === 'string' &&
-                        typeof item['mountId'] === 'string' &&
-                        typeof item['id'] === 'string' &&
-                        typeof item['name'] === 'string' &&
-                        typeof item['mimeType'] === 'string' &&
-                        (item['driveType'] === DRIVE_TYPE_FOLDER ||
-                            item['driveType'] === DRIVE_TYPE_FILE ||
-                            EIGEN_DOC_TYPES.some((type) => type === item['driveType']))),
+                (item): item is ChatAttachment => typeof item === 'string' || isAttachmentReferenceShape(item),
             )
         ) {
             throw new Error(`Unreadable comment card ${id}`);

@@ -336,7 +336,7 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
                 token,
                 ownerId,
                 { ...draft, text: 'other', html: '<p>other</p>' },
-                { tempAttachmentIds: [upload.tempId], keepAttachmentIndexes: [] },
+                { tempAttachmentIds: [upload.tempId], keepAttachments: [] },
             );
             expect(resaved.size).toBe(draft.size);
             expect(new Date(resaved.date).getTime()).toBe(new Date(draft.date).getTime());
