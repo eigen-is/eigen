@@ -143,6 +143,20 @@ test('a click opens the card and closes the popover', async () => {
     expect(content()).toBeNull();
 });
 
+test('a press on the card leaves the focus where it is, and the click it becomes still opens the card', async () => {
+    const { onOpenCard } = await renderCard('a');
+    const frame = content()?.querySelector<HTMLElement>('.cursor-pointer');
+    if (!frame) throw new Error('no clickable card');
+    let kept = true;
+    await act(async () => {
+        kept = frame.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+        frame.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+        frame.click();
+    });
+    expect(kept).toBe(false);
+    expect(onOpenCard).toHaveBeenCalledWith('a');
+});
+
 test('Escape closes it through the host', async () => {
     const { dismiss } = await renderCard('a');
     await act(async () => {

@@ -44,6 +44,9 @@ export function CommentHoverCard({
                         className="w-[254px] rounded-none border-0 bg-transparent p-0"
                         onOpenAutoFocus={(event) => event.preventDefault()}
                         onCloseAutoFocus={(event) => event.preventDefault()}
+                        // The content has tabIndex -1, so a press would focus it, and a dialog the click opens would
+                        // give the focus back to this element, gone by then.
+                        onMouseDown={(event) => event.preventDefault()}
                         onPointerEnter={enterCard}
                         onPointerLeave={leaveCard}
                     >
