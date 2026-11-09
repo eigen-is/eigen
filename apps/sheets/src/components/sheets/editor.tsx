@@ -442,10 +442,7 @@ export function SheetEditor({
                                                     : undefined;
                                                 return { card, entry };
                                             },
-                                            onCommentHover: (target) => {
-                                                if (target) commentHover.show(target.cardId, target.rect);
-                                                else commentHover.hide();
-                                            },
+                                            onCommentHover: commentHover.report,
                                         }}
                                     />
                                 )}

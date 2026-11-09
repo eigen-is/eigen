@@ -45,8 +45,7 @@ export type CommentHoverTarget = { cardId: string; rect: DOMRect };
 
 export type CommentHover = {
     target: CommentHoverTarget | null;
-    show: (cardId: string, rect: DOMRect) => void;
-    hide: () => void;
+    report: (reported: CommentHoverTarget | null) => void;
     enterCard: () => void;
     leaveCard: () => void;
     dismiss: () => void;

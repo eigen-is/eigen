@@ -58,7 +58,7 @@ async function renderCard(cardId: string | null, isCardDeleted: (card: CommentCa
         const [target, setTarget] = useState<CommentHoverTarget | null>(cardId ? { cardId, rect: RECT } : null);
         seen.setTarget = setTarget;
         return createElement(CommentHoverCard, {
-            hover: { target, show: () => {}, hide: () => {}, enterCard, leaveCard, dismiss },
+            hover: { target, report: () => {}, enterCard, leaveCard, dismiss },
             cards,
             entries,
             side: 'right',

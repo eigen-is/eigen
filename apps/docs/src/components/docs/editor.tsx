@@ -953,8 +953,8 @@ const TiptapEditor = ({
                                             <div
                                                 className="contents"
                                                 onMouseOver={(e) => reportCommentHover(editor, commentHover, e)}
-                                                onMouseLeave={commentHover.hide}
-                                                onMouseDown={commentHover.hide}
+                                                onMouseLeave={() => commentHover.report(null)}
+                                                onMouseDown={() => commentHover.report(null)}
                                             >
                                                 <EditorContent
                                                     editor={editor}

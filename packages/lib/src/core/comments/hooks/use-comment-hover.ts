@@ -13,8 +13,6 @@ const PAGE_LISTENER = { capture: true, passive: true };
 
 export function useCommentHover(): CommentHover {
     const isCoarsePointer = useIsCoarsePointer();
-    const isCoarsePointerRef = useRef(isCoarsePointer);
-    isCoarsePointerRef.current = isCoarsePointer;
     const [target, setTarget] = useState<CommentHoverTarget | null>(null);
     const pendingCardRef = useRef<string | null>(null);
     const openCardRef = useRef<string | null>(null);
@@ -37,16 +35,31 @@ export function useCommentHover(): CommentHover {
         setTarget(null);
     }, [clearTimer]);
 
-    const show = useCallback(
-        (cardId: string, rect: DOMRect) => {
-            if (isCoarsePointerRef.current || cardId === pendingCardRef.current) return;
+    const hide = useCallback(() => {
+        if (pointerOnCardRef.current) return;
+        if (pendingCardRef.current) {
+            dismiss();
+            return;
+        }
+        // A host repeats "left" on every move, so a repeat must not push the close back.
+        if (openCardRef.current && !timerRef.current) timerRef.current = setTimeout(dismiss, HIDE_DELAY_MS);
+    }, [dismiss]);
+
+    const report = useCallback(
+        (reported: CommentHoverTarget | null) => {
+            if (!reported) {
+                hide();
+                return;
+            }
+            const { cardId } = reported;
+            if (isCoarsePointer || cardId === pendingCardRef.current) return;
             clearTimer();
             if (cardId === openCardRef.current) return;
             const open = () => {
                 timerRef.current = undefined;
                 pendingCardRef.current = null;
                 openCardRef.current = cardId;
-                setTarget({ cardId, rect });
+                setTarget(reported);
             };
             if (openCardRef.current) {
                 open();
@@ -57,18 +70,8 @@ export function useCommentHover(): CommentHover {
             window.addEventListener('scroll', dismiss, PAGE_LISTENER);
             timerRef.current = setTimeout(open, OPEN_DELAY_MS);
         },
-        [clearTimer, dismiss],
+        [clearTimer, dismiss, hide, isCoarsePointer],
     );
-
-    const hide = useCallback(() => {
-        if (pointerOnCardRef.current) return;
-        if (pendingCardRef.current) {
-            dismiss();
-            return;
-        }
-        // A host repeats "left" on every move, so a repeat must not push the close back.
-        if (openCardRef.current && !timerRef.current) timerRef.current = setTimeout(dismiss, HIDE_DELAY_MS);
-    }, [dismiss]);
 
     const enterCard = useCallback(() => {
         pointerOnCardRef.current = true;
@@ -82,5 +85,5 @@ export function useCommentHover(): CommentHover {
 
     useEffect(() => dismiss, [dismiss]);
 
-    return { target, show, hide, enterCard, leaveCard, dismiss };
+    return { target, report, enterCard, leaveCard, dismiss };
 }

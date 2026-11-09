@@ -32,7 +32,7 @@ const opened: unknown[] = [];
 const workbook = { revealSearchMatch: (cell: unknown) => opened.push(['reveal', cell]) };
 const cards = { c1: { id: 'c1', title: 'One', description: '', chatName: 'chat-1' } };
 const entries: never[] = [];
-const hover = { target: null, show: mock(), hide: mock(), enterCard: mock(), leaveCard: mock(), dismiss: mock() };
+const hover = { target: null, report: mock(), enterCard: mock(), leaveCard: mock(), dismiss: mock() };
 const lifecycle = {
     allComments: entries,
     cards,
@@ -159,8 +159,7 @@ afterEach(() => unmount());
 beforeEach(() => {
     layout.isMobile = false;
     opened.length = 0;
-    hover.show.mockClear();
-    hover.hide.mockClear();
+    hover.report.mockClear();
 });
 
 async function renderEditor() {
@@ -188,10 +187,9 @@ test('a report from the grid shows the hover card on that cell, and none hides i
     const { grid } = await renderEditor();
     const rect = new DOMRect(10, 20, 74, 20);
     grid.hooks.onCommentHover({ cardId: 'c1', rect });
-    expect(hover.show).toHaveBeenCalledWith('c1', rect);
-    expect(hover.hide).not.toHaveBeenCalled();
+    expect(hover.report).toHaveBeenLastCalledWith({ cardId: 'c1', rect });
     grid.hooks.onCommentHover(null);
-    expect(hover.hide).toHaveBeenCalledTimes(1);
+    expect(hover.report).toHaveBeenLastCalledWith(null);
 });
 
 test('the hover card floats beside the cell and reads the cards the pane reads', async () => {

@@ -39,7 +39,7 @@ const run = (action: () => void) => act(async () => action());
 // A hook with card `a` open at RECT.
 async function mountOpen() {
     const hover = await mountHover();
-    await run(() => hover().show('a', RECT));
+    await run(() => hover().report({ cardId: 'a', rect: RECT }));
     await advance(300);
     return hover;
 }
@@ -53,9 +53,9 @@ afterEach(async () => {
     dom.happyDOM.settings.navigator.maxTouchPoints = 0;
 });
 
-test('show opens after the pause, at the rect it was given', async () => {
+test('a report opens after the pause, at the rect it was given', async () => {
     const hover = await mountHover();
-    await run(() => hover().show('a', RECT));
+    await run(() => hover().report({ cardId: 'a', rect: RECT }));
     await advance(299);
     expect(hover().target).toBeNull();
     await advance(1);
@@ -63,27 +63,27 @@ test('show opens after the pause, at the rect it was given', async () => {
     expect(hover().target?.rect).toBe(RECT);
 });
 
-test('repeating show for the pending card keeps its timer and its rect', async () => {
+test('repeating the pending card keeps its timer and its rect', async () => {
     const hover = await mountHover();
-    await run(() => hover().show('a', RECT));
+    await run(() => hover().report({ cardId: 'a', rect: RECT }));
     await advance(200);
-    await run(() => hover().show('a', OTHER_RECT));
+    await run(() => hover().report({ cardId: 'a', rect: OTHER_RECT }));
     await advance(100);
     expect(hover().target?.rect).toBe(RECT);
 });
 
-test('repeating show for the open card leaves it where it is', async () => {
+test('repeating the open card leaves it where it is', async () => {
     const hover = await mountOpen();
     const target = hover().target;
-    await run(() => hover().show('a', OTHER_RECT));
+    await run(() => hover().report({ cardId: 'a', rect: OTHER_RECT }));
     expect(hover().target).toBe(target);
 });
 
 test('a different card while one is pending waits its own pause', async () => {
     const hover = await mountHover();
-    await run(() => hover().show('a', RECT));
+    await run(() => hover().report({ cardId: 'a', rect: RECT }));
     await advance(200);
-    await run(() => hover().show('b', OTHER_RECT));
+    await run(() => hover().report({ cardId: 'b', rect: OTHER_RECT }));
     await advance(299);
     expect(hover().target).toBeNull();
     await advance(1);
@@ -92,24 +92,24 @@ test('a different card while one is pending waits its own pause', async () => {
 
 test('a different card while one is open switches at once', async () => {
     const hover = await mountOpen();
-    await run(() => hover().show('b', OTHER_RECT));
+    await run(() => hover().report({ cardId: 'b', rect: OTHER_RECT }));
     expect(hover().target).toEqual({ cardId: 'b', rect: OTHER_RECT });
 });
 
 test('a switch cancels the pending close', async () => {
     const hover = await mountOpen();
-    await run(() => hover().hide());
+    await run(() => hover().report(null));
     await advance(100);
-    await run(() => hover().show('b', OTHER_RECT));
+    await run(() => hover().report({ cardId: 'b', rect: OTHER_RECT }));
     await advance(1000);
     expect(hover().target?.cardId).toBe('b');
 });
 
 test('a quick pass over a mark never opens', async () => {
     const hover = await mountHover();
-    await run(() => hover().show('a', RECT));
+    await run(() => hover().report({ cardId: 'a', rect: RECT }));
     await advance(100);
-    await run(() => hover().hide());
+    await run(() => hover().report(null));
     expect(jest.getTimerCount()).toBe(0);
     await advance(1000);
     expect(hover().target).toBeNull();
@@ -117,32 +117,32 @@ test('a quick pass over a mark never opens', async () => {
 
 test('after a quick pass the same card waits the whole pause again', async () => {
     const hover = await mountHover();
-    await run(() => hover().show('a', RECT));
+    await run(() => hover().report({ cardId: 'a', rect: RECT }));
     await advance(100);
-    await run(() => hover().hide());
-    await run(() => hover().show('a', RECT));
+    await run(() => hover().report(null));
+    await run(() => hover().report({ cardId: 'a', rect: RECT }));
     await advance(299);
     expect(hover().target).toBeNull();
     await advance(1);
     expect(hover().target?.cardId).toBe('a');
 });
 
-test('hide closes after the grace', async () => {
+test('left closes after the grace', async () => {
     const hover = await mountOpen();
-    await run(() => hover().hide());
+    await run(() => hover().report(null));
     await advance(149);
     expect(hover().target?.cardId).toBe('a');
     await advance(1);
     expect(hover().target).toBeNull();
 });
 
-test('a host repeating hide on every move does not push the close back', async () => {
+test('a host repeating left on every move does not push the close back', async () => {
     const hover = await mountOpen();
     for (let at = 0; at < 140; at += 20) {
-        await run(() => hover().hide());
+        await run(() => hover().report(null));
         await advance(20);
     }
-    await run(() => hover().hide());
+    await run(() => hover().report(null));
     await advance(10);
     expect(hover().target).toBeNull();
 });
@@ -150,18 +150,18 @@ test('a host repeating hide on every move does not push the close back', async (
 test('coming back to the open card within the grace keeps it open', async () => {
     const hover = await mountOpen();
     const target = hover().target;
-    await run(() => hover().hide());
+    await run(() => hover().report(null));
     await advance(100);
-    await run(() => hover().show('a', OTHER_RECT));
+    await run(() => hover().report({ cardId: 'a', rect: OTHER_RECT }));
     await advance(1000);
     expect(hover().target).toBe(target);
 });
 
 test('entering the card within the grace keeps it open, however often the host said it left', async () => {
     const hover = await mountOpen();
-    await run(() => hover().hide());
+    await run(() => hover().report(null));
     await advance(50);
-    await run(() => hover().hide());
+    await run(() => hover().report(null));
     await advance(50);
     await run(() => hover().enterCard());
     await advance(1000);
@@ -169,11 +169,11 @@ test('entering the card within the grace keeps it open, however often the host s
 });
 
 // The sheet's document mousemove reports "left the grid" on every frame over the portaled card.
-test('while the pointer is on the card, repeated hide calls do nothing', async () => {
+test('while the pointer is on the card, repeated reports of left do nothing', async () => {
     const hover = await mountOpen();
     await run(() => hover().enterCard());
     for (let frame = 0; frame < 60; frame++) {
-        await run(() => hover().hide());
+        await run(() => hover().report(null));
         await advance(16);
     }
     expect(hover().target?.cardId).toBe('a');
@@ -196,27 +196,27 @@ test('dismiss closes now, and the next card closes as usual', async () => {
     await run(() => hover().dismiss());
     expect(hover().target).toBeNull();
 
-    await run(() => hover().show('a', RECT));
+    await run(() => hover().report({ cardId: 'a', rect: RECT }));
     await advance(299);
     expect(hover().target).toBeNull();
     await advance(1);
     expect(hover().target?.cardId).toBe('a');
-    await run(() => hover().hide());
+    await run(() => hover().report(null));
     await advance(150);
     expect(hover().target).toBeNull();
 });
 
 test('dismiss cancels a pending open and a pending close', async () => {
     const hover = await mountHover();
-    await run(() => hover().show('a', RECT));
+    await run(() => hover().report({ cardId: 'a', rect: RECT }));
     await run(() => hover().dismiss());
     expect(jest.getTimerCount()).toBe(0);
     await advance(1000);
     expect(hover().target).toBeNull();
 
-    await run(() => hover().show('a', RECT));
+    await run(() => hover().report({ cardId: 'a', rect: RECT }));
     await advance(300);
-    await run(() => hover().hide());
+    await run(() => hover().report(null));
     await run(() => hover().dismiss());
     expect(jest.getTimerCount()).toBe(0);
 });
@@ -239,12 +239,12 @@ test('a scroll inside the page closes the open card', async () => {
 
 test('a wheel or a scroll cancels a pending open', async () => {
     const hover = await mountHover();
-    await run(() => hover().show('a', RECT));
+    await run(() => hover().report({ cardId: 'a', rect: RECT }));
     await run(() => window.dispatchEvent(new window.Event('wheel')));
     await advance(1000);
     expect(hover().target).toBeNull();
 
-    await run(() => hover().show('a', RECT));
+    await run(() => hover().report({ cardId: 'a', rect: RECT }));
     await run(() => window.dispatchEvent(new window.Event('scroll')));
     await advance(1000);
     expect(hover().target).toBeNull();
@@ -258,22 +258,22 @@ test('the page is only listened to while a card is pending or open', async () =>
     expect(types(add)).not.toContain('wheel');
     expect(types(add)).not.toContain('scroll');
 
-    await run(() => hover().show('a', RECT));
+    await run(() => hover().report({ cardId: 'a', rect: RECT }));
     expect(types(add)).toContain('wheel');
     expect(types(add)).toContain('scroll');
     expect(types(remove)).not.toContain('wheel');
 
-    await run(() => hover().hide());
+    await run(() => hover().report(null));
     expect(types(remove)).toContain('wheel');
     expect(types(remove)).toContain('scroll');
     add.mockRestore();
     remove.mockRestore();
 });
 
-test('on a coarse pointer show does nothing, since a tap emulates mouse events', async () => {
+test('on a coarse pointer a report does nothing, since a tap emulates mouse events', async () => {
     dom.happyDOM.settings.navigator.maxTouchPoints = 1;
     const hover = await mountHover();
-    await run(() => hover().show('a', RECT));
+    await run(() => hover().report({ cardId: 'a', rect: RECT }));
     expect(jest.getTimerCount()).toBe(0);
     await advance(1000);
     expect(hover().target).toBeNull();
@@ -282,7 +282,7 @@ test('on a coarse pointer show does nothing, since a tap emulates mouse events',
 test('unmounting clears a pending open and stops listening', async () => {
     const remove = spyOn(window, 'removeEventListener');
     const hover = await mountHover();
-    await run(() => hover().show('a', RECT));
+    await run(() => hover().report({ cardId: 'a', rect: RECT }));
     await unmount();
     expect(jest.getTimerCount()).toBe(0);
     expect(remove.mock.calls.map(([type]) => type)).toContain('wheel');
@@ -291,7 +291,7 @@ test('unmounting clears a pending open and stops listening', async () => {
 
 test('unmounting clears a pending close', async () => {
     const hover = await mountOpen();
-    await run(() => hover().hide());
+    await run(() => hover().report(null));
     expect(jest.getTimerCount()).toBe(1);
     await unmount();
     expect(jest.getTimerCount()).toBe(0);
@@ -299,14 +299,13 @@ test('unmounting clears a pending close', async () => {
 
 test('the actions keep their identity across every state', async () => {
     const hover = await mountHover();
-    const { show, hide, enterCard, leaveCard, dismiss } = hover();
-    await run(() => show('a', RECT));
+    const { report, enterCard, leaveCard, dismiss } = hover();
+    await run(() => report({ cardId: 'a', rect: RECT }));
     await advance(300);
     expect(hover().target?.cardId).toBe('a');
-    await run(() => show('b', OTHER_RECT));
+    await run(() => report({ cardId: 'b', rect: OTHER_RECT }));
     await run(() => dismiss());
-    expect(hover().show).toBe(show);
-    expect(hover().hide).toBe(hide);
+    expect(hover().report).toBe(report);
     expect(hover().enterCard).toBe(enterCard);
     expect(hover().leaveCard).toBe(leaveCard);
     expect(hover().dismiss).toBe(dismiss);

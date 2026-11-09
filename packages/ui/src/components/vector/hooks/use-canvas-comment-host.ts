@@ -11,7 +11,7 @@ import {
     useCommentLifecycle,
     useDocumentPanels,
 } from '@workspace/lib/comments';
-import type { CardAttachmentDraft, CardFormPatch, CommentHoverTarget } from '@workspace/lib/types/comments';
+import type { CardAttachmentDraft, CardFormPatch, CommentHover } from '@workspace/lib/types/comments';
 import type { DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
 import type { VectorElement } from '@workspace/lib/vector';
 import { elementForCommentCard, parseIdList, serializeIdList } from '@workspace/lib/vector';
@@ -51,7 +51,7 @@ export type CanvasCommentHost = ReturnType<typeof useDocumentPanels> & {
         assignee?: string | null,
     ) => Promise<void>;
     deleteCard: (cardId: string) => void;
-    onCommentHover: (target: CommentHoverTarget | null) => void;
+    onCommentHover: CommentHover['report'];
     panelProps: Omit<ComponentProps<typeof PanelColumn>, 'activePanel'>;
     hoverCardProps: Omit<ComponentProps<typeof CommentHoverCard>, 'side'>;
 };
@@ -100,7 +100,6 @@ export function useCanvasCommentHost({
     const commentFilter = useCommentFilter();
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
     const hover = useCommentHover();
-    const { show: showHover, hide: hideHover } = hover;
 
     const [addOpen, setAddOpen] = useState(false);
     // The element the pending new comment anchors to. The canvas menu's Comment row sets it. It is null for a card
@@ -152,14 +151,6 @@ export function useCanvasCommentHost({
         [commentAnchorId, createCard, assignComment, doc.elements, doc.updateElementUntracked],
     );
 
-    const onCommentHover = useCallback(
-        (target: CommentHoverTarget | null) => {
-            if (target) showHover(target.cardId, target.rect);
-            else hideHover();
-        },
-        [showHover, hideHover],
-    );
-
     return {
         ...panels,
         assignedCount,
@@ -173,7 +164,7 @@ export function useCanvasCommentHost({
         openCard,
         handleSaveNew,
         deleteCard: doc.deleteCommentCard,
-        onCommentHover,
+        onCommentHover: hover.report,
         panelProps: {
             onClose: panels.closePanels,
             path,

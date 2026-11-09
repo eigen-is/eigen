@@ -70,17 +70,16 @@ export function commentCardIdAt(target: EventTarget | null): string | null {
 }
 
 // From a React handler, as node views stop ProseMirror's events: unlike commentCardIdAt it also finds a corner mark.
-export function reportCommentHover(editor: Editor, { show, hide }: CommentHover, event: React.MouseEvent): void {
+export function reportCommentHover(editor: Editor, { report }: CommentHover, event: React.MouseEvent): void {
     const anchor = event.target instanceof Element ? event.target.closest('[data-comment-id]') : null;
     const cardId = anchor?.getAttribute('data-comment-id');
     if (!anchor || !cardId || event.buttons !== 0) {
-        hide();
+        report(null);
         return;
     }
     const highlightGone =
         anchor.classList.contains('comment-highlight') && editor.storage.comment.resolvedIds.has(cardId);
-    if (highlightGone) hide();
-    else show(cardId, lineUnderPointer(anchor, event));
+    report(highlightGone ? null : { cardId, rect: lineUnderPointer(anchor, event) });
 }
 
 // One rect per line of a wrapped span, so the card opens by the line the pointer is on.
