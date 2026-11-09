@@ -207,6 +207,29 @@ describe('a zone only the file defines', () => {
         ]);
     });
 
+    test('a Lotus Notes zone, whose rule repeats its start time, has summer time', () => {
+        const notes = [
+            ...observance(
+                'STANDARD',
+                '19501105T020000',
+                '-0400',
+                '-0500',
+                'FREQ=YEARLY;BYMINUTE=0;BYHOUR=2;BYDAY=1SU;BYMONTH=11',
+            ),
+            ...observance(
+                'DAYLIGHT',
+                '19500312T020000',
+                '-0500',
+                '-0400',
+                'FREQ=YEARLY;BYMINUTE=0;BYHOUR=2;BYDAY=2SU;BYMONTH=3',
+            ),
+        ];
+        expect(startsOf(notes, '20260601T090000', '20260115T090000')).toEqual([
+            '2026-06-01T13:00:00.000Z',
+            '2026-01-15T14:00:00.000Z',
+        ]);
+    });
+
     test('around the switch an hour the clock skips moves on, and an hour it repeats takes its first pass', () => {
         expect(
             startsOf(

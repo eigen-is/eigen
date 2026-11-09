@@ -206,16 +206,19 @@ function latestOnset(observance: ICAL.Component, wall: number): Onset | null {
     if (!rule) return { at: passed(first) ? first : -Infinity, offset };
     if (!(rule instanceof ICAL.Recur)) return null;
     const year = new Date(wall).getUTCFullYear();
-    for (const day of [onsetDay(rule, year), onsetDay(rule, year - 1)]) {
+    for (const day of [onsetDay(rule, start, year), onsetDay(rule, start, year - 1)]) {
         if (day === null) return null;
         if (passed(day + timeOfDay)) return { at: day + timeOfDay, offset };
     }
     return { at: -Infinity, offset };
 }
 
-// Midnight of the one day a yearly rule of one BYMONTH and one BYDAY, and optionally BYMONTHDAY, names in a year.
-function onsetDay(rule: ICAL.Recur, year: number): number | null {
-    const { BYMONTH, BYDAY, BYMONTHDAY, ...rest } = rule.parts;
+// Midnight of the one day a yearly rule of one BYMONTH and one BYDAY names in a year. A BYMONTHDAY may narrow it, and a
+// BYHOUR, BYMINUTE or BYSECOND may repeat the observance's start time.
+function onsetDay(rule: ICAL.Recur, start: ICAL.Time, year: number): number | null {
+    const { BYMONTH, BYDAY, BYMONTHDAY, BYHOUR, BYMINUTE, BYSECOND, ...rest } = rule.parts;
+    const at = (part: number[] | undefined, value: number) => !part || (part.length === 1 && part[0] === value);
+    if (!at(BYHOUR, start.hour) || !at(BYMINUTE, start.minute) || !at(BYSECOND, start.second)) return null;
     const byday = BYDAY?.length === 1 ? /^([+-]?[1-5])?(SU|MO|TU|WE|TH|FR|SA)$/.exec(BYDAY[0]) : null;
     const month = BYMONTH?.length === 1 ? BYMONTH[0] : 0;
     if (rule.freq !== 'YEARLY' || rule.interval !== 1 || rule.count || !month || !byday) return null;
