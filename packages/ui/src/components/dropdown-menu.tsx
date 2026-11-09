@@ -65,12 +65,8 @@ type MenuParts = Pick<
 >;
 const MenuPartsContext = createContext<MenuParts>(DropdownMenuPrimitive);
 
-// How a menu with its own trigger gives the focus back as it closes. Radix focuses the trigger, and a browser draws a
-// focus ring on it after Escape even when a mouse opened the menu, so a hover-revealed ⋮, such as a calendar's, would
-// stay shown after the pointer left. A menu a pointer opened focuses the trigger itself, without a ring. A menu the
-// keyboard opened leaves it to Radix. Radix focuses no trigger after a right-click outside, or after any press or
-// focus outside a menu that isn't modal, and neither does this. What the trigger's press noted lasts until the menu
-// closes, so a menu its owner opens without a press, or whose trigger was drawn again, leaves the focus to Radix.
+// How a menu gives its trigger the focus back as it closes. A menu a pointer opened focuses it without a ring, as a
+// ringed hover-revealed ⋮ stays shown; the keyboard's and every outside press Radix skips are left to Radix.
 type TriggerFocus = { trigger: HTMLElement | null; byPointer: boolean; keepsFocusOutside: boolean };
 const NO_TRIGGER_FOCUS: TriggerFocus = { trigger: null, byPointer: false, keepsFocusOutside: false };
 const TriggerFocusContext = createContext<{ state: RefObject<TriggerFocus>; modal: boolean } | null>(null);
@@ -87,8 +83,8 @@ function useRowHidden(): boolean {
 
 function subTriggerLabel(children: React.ReactNode): React.ReactNode {
     for (const child of Children.toArray(children)) {
-        if (isValidElement(child) && child.type === DropdownMenuSubTrigger) {
-            return (child.props as { children?: React.ReactNode }).children;
+        if (isValidElement<{ children?: React.ReactNode }>(child) && child.type === DropdownMenuSubTrigger) {
+            return child.props.children;
         }
     }
     return null;
@@ -502,11 +498,8 @@ function DropdownMenuSubContent({
     }, [menu, sub]);
 
     if (menu && sub) {
-        // contents keeps rows flat in the scrolling Content; none hides the whole page (incl. non-item JSX) off-path, while on-path ancestors stay contents so nested pages still show.
-        // className/props are desktop-panel concerns, intentionally dropped: the page inherits the root Content's box + scroll.
-        // Page children mount only once pushed onto the stack — desktop SubContent is
-        // equally lazy (Presence), and heavy pages (color grids) would otherwise mount
-        // hidden on every menu open. Popped pages unmount and drop their local state.
+        // A page's rows sit flat in the root Content's scroll box, so the panel's className is dropped. They mount only
+        // once pushed, as Radix's SubContent does, or a heavy page such as a color grid would mount on every open.
         return (
             <PageContext.Provider value={pageValue}>
                 <div
@@ -556,7 +549,7 @@ type ChoiceMenuItemsProps<T extends string | number | boolean | null> = {
     onChange: (value: T) => void;
 };
 
-// docs/LAYOUT.md § A choice is a submenu with a check: one row per option, the current one checked.
+// A choice is a submenu with a check: one row per option, the current one checked.
 function ChoiceMenuItems<T extends string | number | boolean | null>({
     value,
     options,

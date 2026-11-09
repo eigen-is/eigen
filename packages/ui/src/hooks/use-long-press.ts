@@ -1,17 +1,11 @@
+// A long press on touch opens a row's or card's context menu where the browser sends no `contextmenu`, such as
+// iOS or a `touch-none` drag surface. A still press fires after LONG_PRESS_MS, a move past MOVE_CANCEL_PX
+// cancels it, and mouse and pen keep their right-click. One instance serves a whole list: `bind(item)` gives
+// each row its handlers. Where Chromium also sends a native menu at the same spot, the second open just wins.
+
 import type React from 'react';
 import { useCallback, useEffect, useRef } from 'react';
 
-// Long-press opens the singleton context menus on touch surfaces where the browser
-// never synthesises a `contextmenu` (WebKit/iOS, or anywhere `touch-none` suppresses
-// native synthesis). Touch only: mouse and pen keep their native right-click behavior.
-// A stationary press for LONG_PRESS_MS fires; any move past MOVE_CANCEL_PX (scroll/drag)
-// cancels it. On Chromium a stationary press may ALSO synthesise a native contextmenu that
-// the surface routes to the same menu at (near-)identical coords — a harmless double-fire,
-// last write wins; the hook stays deliberately minimal and adds no cross-handler guard.
-//
-// One instance serves many rows: `bind(item)` returns the spreadable handlers for a given
-// row/card and stashes its item on pointerdown, so the fire knows which one to open without
-// an external per-row ref (mail/slides map rows inline; the drive views hoist one instance).
 const LONG_PRESS_MS = 500;
 const MOVE_CANCEL_PX = 10;
 
@@ -23,7 +17,6 @@ export function useLongPress<T>(
     const disabled = opts?.disabled ?? false;
     const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const start = useRef<{ x: number; y: number } | null>(null);
-    const pressed = useRef<{ item: T } | null>(null);
     const fired = useRef(false);
 
     const cancel = useCallback(() => {
@@ -34,39 +27,30 @@ export function useLongPress<T>(
         start.current = null;
     }, []);
 
-    // A mid-press disable (e.g. the row/card losing write access) must drop the pending timer.
+    // A disable mid-press, such as losing write access, drops the pending timer.
     useEffect(() => {
         if (disabled) cancel();
     }, [disabled, cancel]);
 
-    // Cancel a pending timer when the component HOSTING this hook unmounts. For the list-level
-    // instances (drive-table, drive-grid, email-list, slide-panel, SheetOverlay) that host is the
-    // whole list, so this covers the list going away — not one row: a single row removed mid-press
-    // (data refresh, a collaborator's delete) inside the 500 ms window is an accepted narrow race.
-    // Its bound handlers vanish with its DOM but the armed timer still fires, opening the menu for a
-    // now-stale item whose actions fail gracefully. Per-row hosts (stickies) get true per-row teardown.
+    // The host's unmount drops the timer. For a list-level instance a row removed mid-press still fires, for a
+    // stale item whose actions fail harmlessly.
     useEffect(() => cancel, [cancel]);
 
     const bind = useCallback(
         (item: T) => ({
             onPointerDown: (e: React.PointerEvent) => {
-                // Runs for every pointer type: cancel a still-pending timer so a second finger on a
-                // shared list-level instance can't orphan the first (pointerup/cancel would then never
-                // reach it), and clear a leftover fired flag so it can't swallow a later click — the
-                // native contextmenu can eat the compat click that would otherwise reset it. Arming
-                // stays touch-only.
+                // Every pointer type clears a second finger's pending timer and a leftover fired flag, which a
+                // native contextmenu can leave by eating the click that resets it.
                 cancel();
                 fired.current = false;
                 if (disabled || e.pointerType !== 'touch') return;
                 const x = e.clientX;
                 const y = e.clientY;
                 start.current = { x, y };
-                pressed.current = { item };
                 timer.current = setTimeout(() => {
                     timer.current = null;
-                    // Fire at the press-start coords: a move past MOVE_CANCEL_PX has already canceled,
-                    // so the drift from finger jitter is sub-threshold and imperceptible.
-                    fired.current = onLongPress(pressed.current!.item, x, y) !== false;
+                    // At the press's start: any drift is under MOVE_CANCEL_PX, or the press was canceled.
+                    fired.current = onLongPress(item, x, y) !== false;
                 }, LONG_PRESS_MS);
             },
             onPointerMove: (e: React.PointerEvent) => {
@@ -77,8 +61,7 @@ export function useLongPress<T>(
             },
             onPointerUp: cancel,
             onPointerCancel: cancel,
-            // Swallow the click that a fired long-press leaves behind, so it can't also
-            // activate the row/card underneath. Capture phase, so it beats the element's onClick.
+            // Swallows the click a fired press leaves behind, in the capture phase so it beats the row's onClick.
             onClickCapture: (e: React.MouseEvent) => {
                 if (!fired.current) return;
                 e.preventDefault();

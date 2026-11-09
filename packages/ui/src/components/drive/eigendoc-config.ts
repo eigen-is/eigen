@@ -26,8 +26,10 @@ export type EigenDocAppConfig = {
     appUrl: (() => string) | null;
 };
 
-// In sidebar order, not the registry's. Chat has no list of its own, since the chat app opens one
-// conversation, so Drive hosts All chats.
+// In sidebar order, not the registry's.
+const EIGEN_DOC_NAV_ORDER: readonly EigenDocType[] = ['doc', 'stickies', 'chat', 'slides', 'sheets', 'vector'];
+
+// Chat has no list of its own, since the chat app opens one conversation, so Drive hosts All chats.
 const EIGEN_DOC_APP_URLS: Record<EigenDocType, (() => string) | null> = {
     doc: getDocsAppUrl,
     stickies: getStickiesAppUrl,
@@ -52,10 +54,8 @@ function buildConfig(type: EigenDocType): EigenDocAppConfig {
     };
 }
 
-// Every type in nav order, for surfaces that list them all (the shared sidebar's filters).
-export const EIGEN_DOC_APP_CONFIGS: ReadonlyArray<EigenDocAppConfig> = Object.keys(EIGEN_DOC_APP_URLS).map((type) =>
-    buildConfig(type as EigenDocType),
-);
+// Every type in nav order, for surfaces that list them all, such as the shared sidebar's filters.
+export const EIGEN_DOC_APP_CONFIGS: readonly EigenDocAppConfig[] = EIGEN_DOC_NAV_ORDER.map(buildConfig);
 
 export const DOCS_CONFIG: EigenDocAppConfig = buildConfig('doc');
 export const STICKIES_CONFIG: EigenDocAppConfig = buildConfig('stickies');
@@ -63,8 +63,8 @@ export const SLIDES_CONFIG: EigenDocAppConfig = buildConfig('slides');
 export const SHEETS_CONFIG: EigenDocAppConfig = buildConfig('sheets');
 export const VECTOR_CONFIG: EigenDocAppConfig = buildConfig('vector');
 
-// "Docs shared by me" — the sidebar row and the shared page's title must read alike, so
-// both build the phrase here. Without a plural (Drive's own rows) → "Shared by me".
+// "Docs shared by me": the sidebar row and the shared page's title must read alike. Drive's own rows pass no
+// plural and read "Shared by me".
 export function eigenDocSharedTitle(direction: 'by' | 'with', labelPlural?: string): string {
     return labelPlural ? `${labelPlural} shared ${direction} me` : `Shared ${direction} me`;
 }
