@@ -19,8 +19,9 @@ export function getSyntheticOrgUser(ownerId: string): User {
 }
 
 export class OrgHome extends Home {
+    public override readonly settings = new JsonStore<HomeSettings>(this.fs, PATHS.SETTINGS, {});
+
     public constructor(syntheticUser: User, onClosed?: () => void) {
         super(syntheticUser, getOrgHomePath(parseOwnerId(syntheticUser.id).id), onClosed);
-        this.settings = new JsonStore<HomeSettings>(this.fs, PATHS.SETTINGS, {});
     }
 }

@@ -1,3 +1,7 @@
+// Decides which saved versions of a document's data.db a prune deletes. A version stays while it is the newest of its
+// hour, day, week or month among the most recent ones that hold a version, so recent work keeps a dense trail and older
+// work a thin one. The snapshot step calls it after each new version.
+
 import { parseSnapshotTimestamp } from './timestamp';
 
 export const HOUR_MS = 3_600_000;
@@ -9,9 +13,6 @@ export type RetentionBucket = { intervalMs: number; count: number };
 export type RetentionPolicy = { buckets: RetentionBucket[] };
 export type SnapshotEntry = { id: string; name: string };
 
-// ≤47 snapshots: hourly for the last 24 edited hours, then daily (7), weekly (4),
-// monthly (12). Granularity tracks editing time, not wall-clock, so a file worked on
-// in bursts keeps an hourly trail of its actual sessions.
 export const DEFAULT_RETENTION: RetentionPolicy = {
     buckets: [
         { intervalMs: HOUR_MS, count: 24 },
@@ -21,14 +22,7 @@ export const DEFAULT_RETENTION: RetentionPolicy = {
     ],
 };
 
-// Keep the newest snapshot in each of the `count` most recent buckets per tier,
-// where a bucket is floor(timestamp / intervalMs). Buckets are keyed by the
-// snapshot's own time, so they never shift: "newest per bucket" stays stable under
-// the incremental pruning snapshotContainerDataDb runs after every snapshot, and a
-// completed hour's representative is locked in instead of being displaced by the next
-// edit. (The borg/restic keep-hourly/daily/… model, anchored to the most recent
-// snapshots rather than wall-clock now. See scripts/version-retention-sim.ts.)
-export function selectSnapshotsToPrune<T extends SnapshotEntry>(items: T[], policy: RetentionPolicy): T[] {
+export function selectSnapshotsToPrune<T extends SnapshotEntry>(items: readonly T[], policy: RetentionPolicy): T[] {
     const parsed = items
         .map((item) => ({ item, ts: parseSnapshotTimestamp(item.name)?.getTime() }))
         .filter((x): x is { item: T; ts: number } => x.ts !== undefined);
@@ -41,9 +35,8 @@ export function selectSnapshotsToPrune<T extends SnapshotEntry>(items: T[], poli
             const existing = newestPerBucket.get(bucket);
             if (!existing || p.ts > existing.ts) newestPerBucket.set(bucket, p);
         }
-        for (const bucket of [...newestPerBucket.keys()].sort((a, b) => b - a).slice(0, count)) {
-            kept.add(newestPerBucket.get(bucket)!.item);
-        }
+        const newestBuckets = [...newestPerBucket].sort(([a], [b]) => b - a).slice(0, count);
+        for (const [, { item }] of newestBuckets) kept.add(item);
     }
 
     return parsed.filter((p) => !kept.has(p.item)).map((p) => p.item);

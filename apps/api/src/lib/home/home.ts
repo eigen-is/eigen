@@ -2,7 +2,7 @@
 // or the smaller set a team has. Every request reaches that data through getHome(ownerId), which
 // builds the Home on first use. It closes itself, databases included, once nothing holds it, such as
 // an open tab, and its last request is a few idle minutes ago. This base class owns that lifecycle.
-// Each kind of home decides which parts it has.
+// Each kind of home decides which parts it has and what its settings hold.
 
 import * as path from 'node:path';
 import { parseNotificationPath } from '@workspace/lib/notification/tags';
@@ -25,11 +25,11 @@ import type { User } from '../user';
 
 export type HomeSettings = Pick<UserSettings, 'mounts'>;
 
-export class Home {
+export abstract class Home {
     public readonly user: User;
     public readonly homeDir: string;
     public readonly fs: LocalFilesystem;
-    public settings!: JsonStore<HomeSettings>;
+    public abstract readonly settings: JsonStore<HomeSettings>;
 
     // Which parts exist depends on the kind of home. A part the home doesn't have stays undefined,
     // and its getter answers 404.
