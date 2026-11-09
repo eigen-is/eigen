@@ -414,3 +414,46 @@ describe('parseResource refuses what no calendar file is', () => {
         expect(() => parseResource('')).toThrow(ICAL.parse.ParserError);
     });
 });
+
+describe('parseIcs over zone spellings', () => {
+    const named = (uid: string, tzid: string) => [
+        'BEGIN:VEVENT',
+        `UID:${uid}`,
+        `DTSTART;TZID=${tzid}:20260601T100000`,
+        'END:VEVENT',
+    ];
+    const zone = 'America/Argentina/ComodRivadavia';
+    const letters = [...zone].flatMap((char, index) => (/[a-z]/i.test(char) ? [index] : []));
+    const spelled = (n: number) => {
+        const chars = [...zone.toLowerCase()];
+        letters.slice(0, 20).forEach((index, bit) => {
+            if ((n >> bit) & 1) chars[index] = chars[index].toUpperCase();
+        });
+        return chars.join('');
+    };
+
+    test("a zone in another case is stored in Intl's spelling at the same instant", () => {
+        const [first, second] = parseIcs(vcal(named('a', 'EUROPE/amsterdam'), named('b', 'Europe/Amsterdam'))).events;
+
+        expect(first.timezone).toBe('Europe/Amsterdam');
+        expect(first.startTime).toEqual(second.startTime);
+    });
+
+    test('a Windows zone takes its table row', () => {
+        expect(parseIcs(vcal(named('a', 'W. Europe Standard Time'))).events[0].timezone).toBe('Europe/Berlin');
+    });
+
+    test('a zone nobody knows stores none', () => {
+        expect(parseIcs(vcal(named('a', 'Not/A_Zone'))).events[0].timezone).toBeNull();
+    });
+
+    test('many spellings of one zone cost one formatter', () => {
+        const body = vcal(Array.from({ length: 13_000 }, (_, i) => named('a', spelled(i))).flat());
+
+        const cpuMs = cpuClock();
+        const { events } = parseIcs(body);
+
+        expect(cpuMs()).toBeLessThan(2000);
+        expect(new Set(events.map((event) => event.timezone))).toEqual(new Set([zone]));
+    });
+});

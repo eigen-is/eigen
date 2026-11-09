@@ -106,7 +106,7 @@ A VEVENT the parser can't read is skipped and counted rather than failing the fi
 
 ## A time resolves through Intl before the file's own VTIMEZONE
 
-A valid IANA TZID resolves through `Intl` even when the file defines a VTIMEZONE for it. That is the path the builder computes its wall times with, so identical bytes name one instant, and a repeated hour resolves to its first pass. A UTC value is exact.
+A valid IANA TZID resolves through `Intl` even when the file defines a VTIMEZONE for it. That is the path the builder computes its wall times with, so identical bytes name one instant, and a repeated hour resolves to its first pass. A UTC value is exact. `Intl` reads a zone in any case, and `normalizeTimezone` answers with `Intl`'s own spelling, so the stored `timezone` holds one spelling per zone and the formatters kept per zone stop at the zone count. The bytes keep what the client wrote, and a TZID in another spelling gets no generated VTIMEZONE.
 
 A TZID `Intl` doesn't know goes through `propTzid` (`ical-parse.ts`). It tries the Windows zone table first, because Outlook writes names like `W. Europe Standard Time` (`normalizeTimezone`, over the CLDR rows in `packages/lib/src/core/calendar/windows-zones.ts`). Then it tries the `X-LIC-LOCATION` of the file's VTIMEZONE, where libical writes the IANA name beside a TZID no standard knows. When neither resolves, the stored `timezone` is `null`, and the file's own VTIMEZONE still gives the parser its instants. A floating time maps its wall components through `Date.UTC`, never through the server's zone.
 

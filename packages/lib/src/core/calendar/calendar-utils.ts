@@ -99,7 +99,8 @@ export function viewerTimeZone(): string {
 }
 
 // Intl knows no Windows zone name, and dropping one expands an Outlook series in UTC, breaking its wall time at the next
-// DST change.
+// DST change. Intl reads a zone in any case, so one spelling per zone leaves here and a server's formatters stop at the
+// zone count.
 const ZONE_ANSWERS = new Map<string, string | null>();
 const MAX_ZONE_ANSWERS = 64;
 
@@ -109,11 +110,9 @@ export function normalizeTimezone(timezone: string | null | undefined): string |
     const remembered = ZONE_ANSWERS.get(timezone);
     if (remembered !== undefined) return remembered;
 
-    const candidate = WINDOWS_ZONES.get(timezone) ?? timezone;
     let answer: string | null;
     try {
-        dateFormatter({ timeZone: candidate });
-        answer = candidate;
+        answer = dateFormatter({ timeZone: WINDOWS_ZONES.get(timezone) ?? timezone }).resolvedOptions().timeZone;
     } catch {
         answer = null;
     }
