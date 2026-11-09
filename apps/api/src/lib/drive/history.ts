@@ -2,6 +2,7 @@
 // share, and the users who watch a path. After a change, the watchers of the path and of the folders
 // above it get a notification. Each Mount builds one, and Drive records changes through it.
 
+import { fileEventTag } from '@workspace/lib/notification/tags';
 import type { DrivePath, DrivePathType } from '@workspace/lib/types/drive';
 import { isDocumentType } from '@workspace/lib/types/drive';
 import type { FileEvent, FileEventInput, FileEventType, PathWatchStatus } from '@workspace/lib/types/file-history';
@@ -16,20 +17,19 @@ import type { User } from '../user';
 import { getMemberships, getUserById } from '../user';
 import { canReadFromAncestors } from './acl';
 
-// Per-path caps, no age cap: a quiet file keeps its whole story. 'edited' rows are the noise
-// and get trimmed first, so creation/share/assign rows survive a busy document.
+// Caps per path and none on age, so a quiet file keeps its whole story. Edits are trimmed first, so a busy
+// document keeps its other rows.
 const HISTORY_MAX_EDITED_PER_PATH = 100;
 const HISTORY_MAX_PER_PATH = 500;
 
 export class FileHistory {
     public constructor(
-        private db: BunSQLiteDatabase<typeof schema>,
+        private readonly db: BunSQLiteDatabase<typeof schema>,
         public readonly ownerId: string,
         public readonly mountId: string,
     ) {}
 
-    // Entities inside an eigendoc/chat container (per-card comment threads, attachment media)
-    // are scaffolding, never timeline rows — the container speaks through its own events.
+    // What lives inside a document, such as a card's comment thread, gets no rows: the document has its own.
     private isContainerInternal(pathId: string): boolean {
         const ancestors = this.db.all<{ type: DrivePathType }>(sql`
             WITH RECURSIVE chain(id) AS (
@@ -76,8 +76,7 @@ export class FileHistory {
             .run();
     }
 
-    // File: direct events. Folder/container: events on the path and every descendant
-    // (recursive CTE downward), newest first.
+    // A folder or a document lists the events of everything inside it too, newest first.
     public list(pathId: string, opts?: { limit?: number }): FileEvent[] {
         const limit = opts?.limit ?? 50;
 
@@ -137,7 +136,6 @@ export class FileHistory {
             .where(and(eq(pathWatchers.pathId, pathId), eq(pathWatchers.userId, userId)))
             .get();
 
-        // Nearest watched ancestor: walk the parentId chain upward, excluding the path itself
         const [ancestor] = this.db.all<{ pathId: string; name: string }>(sql`
             WITH RECURSIVE chain(id, depth) AS (
                 SELECT ${sql.raw('parentId')}, 1 FROM ${paths} WHERE id = ${pathId} AND ${sql.raw('parentId')} IS NOT NULL
@@ -168,8 +166,7 @@ export class FileHistory {
             .map((r) => r.pathId);
     }
 
-    // Watchers on the root paths and on every ancestor of each root (one inclusive
-    // upward CTE seeded with all roots), deduped, with the acting user removed.
+    // The watchers of the roots and of every folder above them, without the actor.
     public collectWatcherIds(rootPathIds: string[], excludeUserId: string): string[] {
         const rootList = sql.join(
             rootPathIds.map((id) => sql`${id}`),
@@ -188,10 +185,8 @@ export class FileHistory {
         return rows.map((row) => row.userId);
     }
 
-    // Per-watcher delivery with ACL re-verification: a watcher whose share was
-    // revoked since watching is silently skipped. verifyAncestors is the chain
-    // that justifies the notification — callers capture it BEFORE mutations that
-    // rewrite the parent chain (trash re-parents to the mount root).
+    // A watcher who can no longer read the path is skipped. verifyAncestors is read before a change that rewrites the
+    // chain, such as a trash, which moves the path to the mount root.
     public async notifyWatchers(
         watcherIds: string[],
         opts: {
@@ -200,18 +195,14 @@ export class FileHistory {
             itemName: string;
             pathType: DrivePathType;
             details?: FileEvent['details'];
-            tagPathId: string; // the path the tag points at (parent for burst events)
+            tagPathId: string;
             verifyAncestors: DrivePath[];
             excludeEmails?: Set<string>;
         },
     ): Promise<void> {
-        // Compose the row once through the shared phrasing layer (the same the activity panel
-        // renders with): title = actor + action, body = primary content, details = link/secondary.
-        // The body is persisted, so the team names an acl-changed row shows are resolved here
-        // rather than at render time; describeFileEvent prints every other principal id verbatim.
+        // The body is stored, so the names of the teams in a sharing change are resolved now. The change has landed by
+        // now, so a notification that can't be written is logged and never fails it.
         const d = opts.details;
-        // The change has landed by now. A notification that can't be written is logged, and never
-        // fails the change.
         const names = await getBatchPublicInfo(aclPrincipalsToResolve(d)).catch((error: unknown) => {
             console.error(`[FileHistory] Failed to notify the watchers of ${opts.tagPathId}:`, error);
             return null;
@@ -220,7 +211,7 @@ export class FileHistory {
         const lines = describeFileEvent(
             {
                 eventType: opts.eventType,
-                details: opts.details ?? null,
+                details: d ?? null,
                 pathName: opts.itemName,
                 pathType: opts.pathType,
             },
@@ -254,7 +245,7 @@ export class FileHistory {
                     actorEmail: opts.actor.email,
                     title: `${opts.actor.name} ${lines.action}`,
                     body: lines.primary,
-                    tag: `file-event:${this.ownerId}:${this.mountId}:${opts.tagPathId}`,
+                    tag: fileEventTag({ ownerId: this.ownerId, mountId: this.mountId, pathId: opts.tagPathId }),
                     coalesce: true,
                     details: { secondary: lines.secondary, cardId, chatName, pathType: opts.pathType },
                 },
@@ -267,18 +258,17 @@ export class FileHistory {
     public async fanOut(opts: {
         eventType: FileEventType;
         actor: User;
-        path: DrivePath; // affected item (pre-mutation shape where relevant)
-        chainRootIds: (string | null)[]; // parent chains to walk (e.g. [parentId]; moved: both)
-        burst?: boolean; // created/uploaded/copied: tag on the parent folder
+        path: DrivePath;
+        // The folders whose chains are walked, such as both of a move's parents.
+        chainRootIds: (string | null)[];
+        // A burst, such as an upload, is tagged with its folder, so many uploads fold into one row.
+        burst?: boolean;
         excludeEmails?: Set<string>;
-        details?: FileEvent['details']; // event details → notification body/secondary/links
-        // Thunks resolve only when there are watchers — zero watchers (the common
-        // case) costs zero breadcrumb walks. Mutations that rewrite the parent
-        // chain (trash/move) pass pre-captured arrays instead.
+        details?: FileEvent['details'];
+        // A function runs only when there are watchers, which is rare, so most changes walk no breadcrumbs.
         verifyAncestors: DrivePath[] | (() => Promise<DrivePath[]>);
     }): Promise<void> {
-        // Events on items already in trash never fan out ('trashed' itself passes
-        // the pre-trash snapshot, whose trashedAt is still null).
+        // A change to a path in the trash notifies nobody, and the trash itself still does.
         if (opts.path.trashedAt && opts.eventType !== 'trashed') return;
         if (this.isContainerInternal(opts.path.id)) return;
         const chainRoots = opts.chainRootIds.filter((id): id is string => id !== null);

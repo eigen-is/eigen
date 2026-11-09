@@ -1,10 +1,11 @@
-import type { ChatNotificationThread, NotificationType } from '../../types/notification';
+// Builds and parses the tag of every notification about a Drive path. The tag is the row's identity, since a repeat
+// with the same tag refreshes one row, and the bell reads the path its link opens from it. So producers such as a
+// share or a chat post and readers such as the bell's link and a chat's unread dot all spell it here:
+//   share:{ownerId}:{mountId}:{pathId}                     access-request:{ownerId}:{mountId}:{pathId}:{email}
+//   chat-message:{ownerId}:{mountId}:{chatPathId}          comment-reply:{ownerId}:{mountId}:{containerPathId}:{chatName}
 
-// The tag is the row's identity (persist() upserts on it) and what a reader matches back to a thread, so
-// every producer and reader spells it here. A comment thread names its container, then the chat name:
-//   chat-message:{ownerId}:{mountId}:{chatPathId}        comment-reply:{ownerId}:{mountId}:{containerPathId}:{chatName}
-//   mention:{ownerId}:{mountId}:{chatPathId}:{email}     mention:{ownerId}:{mountId}:{containerPathId}:{chatName}:{email}
-//   assigned:{ownerId}:{mountId}:{containerPathId}:{chatName}
+import type { ChatNotificationThread, NotificationPath, NotificationType } from '../../types/notification';
+
 export const CHAT_NOTIFICATION_TYPES: readonly NotificationType[] = [
     'chat-message',
     'mention-chat',
@@ -14,6 +15,18 @@ export const CHAT_NOTIFICATION_TYPES: readonly NotificationType[] = [
 ];
 
 const COMMENT_NOTIFICATION_TYPES: readonly NotificationType[] = ['comment-reply', 'mention-comment', 'assigned'];
+
+export function shareTag(path: NotificationPath): string {
+    return `share:${path.ownerId}:${path.mountId}:${path.pathId}`;
+}
+
+export function accessRequestTag(path: NotificationPath, email: string): string {
+    return `access-request:${path.ownerId}:${path.mountId}:${path.pathId}:${email}`;
+}
+
+export function fileEventTag(path: NotificationPath): string {
+    return `file-event:${path.ownerId}:${path.mountId}:${path.pathId}`;
+}
 
 export function chatActivityTag(thread: ChatNotificationThread): string {
     const target = `${thread.ownerId}:${thread.mountId}:${thread.pathId}`;
@@ -28,6 +41,24 @@ export function chatMentionTag(thread: ChatNotificationThread, email: string): s
 // Only the assignee ever receives the row, so opening the card is the assignee opening it.
 export function commentAssignedTag(thread: ChatNotificationThread & { chatName: string }): string {
     return `assigned:${thread.ownerId}:${thread.mountId}:${thread.pathId}:${thread.chatName}`;
+}
+
+export function parseShareTag(tag: string): NotificationPath | null {
+    const [kind, ownerId, mountId, pathId] = tag.split(':');
+    if (kind !== 'share' || !ownerId || !mountId || !pathId) return null;
+    return { ownerId, mountId, pathId };
+}
+
+export function parseAccessRequestTag(tag: string): (NotificationPath & { email: string }) | null {
+    const parts = tag.split(':');
+    if (parts[0] !== 'access-request' || !parts[1] || !parts[2] || !parts[3] || !parts[4]) return null;
+    return { ownerId: parts[1], mountId: parts[2], pathId: parts[3], email: parts.slice(4).join(':') };
+}
+
+export function parseFileEventTag(tag: string): NotificationPath | null {
+    const [kind, ownerId, mountId, pathId] = tag.split(':');
+    if (kind !== 'file-event' || !ownerId || !mountId || !pathId) return null;
+    return { ownerId, mountId, pathId };
 }
 
 // The type decides the shape: only a comment tag carries a chat name, and a mention's email follows it.

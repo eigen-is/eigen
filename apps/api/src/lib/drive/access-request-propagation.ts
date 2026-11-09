@@ -2,6 +2,7 @@
 // and, if the server settings allow it, an email (to every member for a team). A person who clicks again and again
 // does not send a second email within the hour.
 
+import { accessRequestTag } from '@workspace/lib/notification/tags';
 import { parseOwnerId } from '@workspace/lib/types';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { getServerSettings } from '../config/server-settings';
@@ -25,7 +26,7 @@ export async function propagateAccessRequest(
     // The owner's Home is foreign to the caller, so its reads/writes go through the relay seam.
     const path = await pullDrivePath(ownerId, mountId, pathId);
     if (!path || path.trashedAt) return;
-    const tag = `access-request:${ownerId}:${mountId}:${pathId}:${requester.email}`;
+    const tag = accessRequestTag({ ownerId, mountId, pathId }, requester.email);
     const requesterName = requester.name || requester.email;
     // Detached, so the answer doesn't wait on the team's size or tell whether the path exists.
     (async () => {

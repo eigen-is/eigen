@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2139 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2147 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -553,7 +553,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (447)
+## Types (449)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -736,6 +736,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `NewDraft` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `Notification` | `@workspace/lib/types` | packages/lib/src/types/notification.ts |
 | `NotificationDetails` | `@workspace/lib/types` | packages/lib/src/types/notification.ts |
+| `NotificationPath` | `@workspace/lib/types` | packages/lib/src/types/notification.ts |
 | `NotificationPersistInput` | `@workspace/lib/types` | packages/lib/src/types/notification.ts |
 | `NotificationType` | `@workspace/lib/types` | packages/lib/src/types/notification.ts |
 | `OrgMember` | `@workspace/lib/types` | packages/lib/src/types/admin.ts |
@@ -745,6 +746,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ParsedOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `PathWatchStatus` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `PublicUser` | `@workspace/lib/types` | packages/lib/src/types/public.ts |
+| `RecentPath` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `RecipientSummary` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `Reminder` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `RestartNoticeState` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
@@ -1005,7 +1007,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1170)
+## Utilities & constants (1176)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1585,6 +1587,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `stripRemoteRefs` | `@workspace/lib/mail` | packages/lib/src/core/mail/remote-content.ts |
 | `CUSTOM_MAILBOX_ICON` | `@workspace/lib/mailbox-icons` | packages/lib/src/core/mailbox-icons.ts |
 | `MAILBOX_ICONS` | `@workspace/lib/mailbox-icons` | packages/lib/src/core/mailbox-icons.ts |
+| `accessRequestTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `CHAT_NOTIFICATION_TYPES` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `CHAT_TEXT_NOTIFICATION_TYPES` | `@workspace/lib/notification` | packages/lib/src/core/notification/describe.ts |
 | `chatActivityTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
@@ -1592,10 +1595,15 @@ rather than inlining `queryClient.invalidateQueries`.
 | `chatThreadKey` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `commentAssignedTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `describeNotification` | `@workspace/lib/notification` | packages/lib/src/core/notification/describe.ts |
+| `fileEventTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `handleNotificationSSEvent` | `@workspace/lib/notification` | packages/lib/src/core/notification/sse-handlers.ts |
 | `isClickableNotification` | `@workspace/lib/notification` | packages/lib/src/core/notification/resolve-link.ts |
+| `parseAccessRequestTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `parseChatNotificationThread` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
+| `parseFileEventTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
+| `parseShareTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `resolveNotificationLink` | `@workspace/lib/notification` | packages/lib/src/core/notification/resolve-link.ts |
+| `shareTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `loadPagefind` | `@workspace/lib/search` | packages/lib/src/core/search/pagefind.ts |
 | `hardenFailure` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-check.ts |
 | `BORDER_SIDE_CSS` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |

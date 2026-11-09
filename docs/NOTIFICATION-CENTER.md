@@ -34,6 +34,8 @@ The tag also carries the ids the link is built from, so each producer's tag deci
 | `file-event` | `FileHistory.notifyWatchers` | `file-event:{ownerId}:{mountId}:{pathId}`; burst events tag the parent folder ([FILE-HISTORY.md](FILE-HISTORY.md#notifications-coalesce-per-file-and-bursts-per-folder)) |
 | `admin-alert` | `alertUser` and `alertOwner` (`lib/user/alert-owner.ts`): backup verify to the admin who started it (`lib/backup/jobs.ts`), whole-server backup (`lib/backup/server-job.ts`, `upload-job.ts`, `server-archives.ts`) and mail queue (`routes/internal.ts`) to the owner | `backup-verify-{ownerId}`, `server-backup-{archive}` and `server-backup-upload-{archive}` (`interrupted` for the boot's alert), `mail-queue-backlog` |
 
+Every tag that names a Drive path, the share, access-request and file-event tags as well as the chat ones, is built and parsed in `packages/lib/src/core/notification/tags.ts` (imported by the API as `@workspace/lib/notification/tags`), so no producer or reader spells one by hand.
+
 An unshare carries no tag, because the reader has lost access and there is nothing to link to. For the same reason `isClickableNotification` leaves both unshare types out, so their rows are not links.
 
 A producer can also read its own row: `Mail` calls `markReadByTag('mail:new')` once the inbox holds no unread mail, so the bell stops announcing mail the user has already read.
@@ -48,7 +50,7 @@ With `coalesce: true`, `persist()` reads the row with the same tag first. If tha
 
 ## Chat and comment tags name the thread
 
-The five chat, comment and assignment tags are built and parsed in one module, `packages/lib/src/core/notification/tags.ts` (imported by the API as `@workspace/lib/notification/tags`). A standalone chat is tagged with its own path. A comment thread is tagged with the container it comments on plus the thread's chat name, so the notification links to the document and still names the thread inside it. A mention adds the mentioned email, so each person's mention is their own row.
+The five chat, comment and assignment tags are built and parsed in `tags.ts` too. A standalone chat is tagged with its own path. A comment thread is tagged with the container it comments on plus the thread's chat name, so the notification links to the document and still names the thread inside it. A mention adds the mentioned email, so each person's mention is their own row.
 
 `chatThreadKey` is what a reader compares on. `useAutoMarkChatRead` (`packages/lib/src/core/chat/hooks/use-chat-unread.ts`) marks exactly the open thread's rows read, which is why a comment card passes the container's path id with its chat name rather than the thread's own id. `useUnreadChatIds` uses the tag's path id, so a comment's unread dot sits on the document. `useUnreadCommentChatNames` keeps the chat name for one document, so inside it the card itself carries a dot, in the comment sidebar and on a Stickies board. The dot follows the notifications, not a per-user read marker: a member who never posted in the thread, isn't the owner and wasn't mentioned or assigned gets no row, so no dot. An assignment has the comment shape, so it clears with the card's other rows when the card opens. Only the assignee ever gets that row, so whoever clears it is the assignee. The three hooks read the bell's list, which holds every unread row however old ([The bell counts always and lists on open](#the-bell-counts-always-and-lists-on-open)), so a chat buried under newer rows still shows its dot and still clears when opened.
 

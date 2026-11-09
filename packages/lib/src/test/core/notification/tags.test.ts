@@ -1,10 +1,16 @@
 import { describe, expect, test } from 'bun:test';
 import {
+    accessRequestTag,
     chatActivityTag,
     chatMentionTag,
     chatThreadKey,
     commentAssignedTag,
+    fileEventTag,
+    parseAccessRequestTag,
     parseChatNotificationThread,
+    parseFileEventTag,
+    parseShareTag,
+    shareTag,
 } from '../../../core/notification/tags';
 
 const CHAT = { ownerId: 'owner-1', mountId: 'mount-1', pathId: 'chat-1' };
@@ -64,5 +70,27 @@ describe('chat notification tags', () => {
         const thread = parseChatNotificationThread('comment-reply', chatActivityTag(COMMENT));
         expect(thread && chatThreadKey(thread)).toBe(chatThreadKey(COMMENT));
         expect(thread && chatThreadKey(thread)).not.toBe(chatThreadKey({ pathId: 'chat-1' }));
+    });
+});
+
+const PATH = { ownerId: 'owner-1', mountId: 'mount-1', pathId: 'file-1' };
+
+describe('file notification tags', () => {
+    test('a share, an access request and a file event parse back to the path they were built from', () => {
+        expect(shareTag(PATH)).toBe('share:owner-1:mount-1:file-1');
+        expect(parseShareTag(shareTag(PATH))).toEqual(PATH);
+        expect(accessRequestTag(PATH, 'bob@eigen.is')).toBe('access-request:owner-1:mount-1:file-1:bob@eigen.is');
+        expect(parseAccessRequestTag(accessRequestTag(PATH, 'bob@eigen.is'))).toEqual({
+            ...PATH,
+            email: 'bob@eigen.is',
+        });
+        expect(fileEventTag(PATH)).toBe('file-event:owner-1:mount-1:file-1');
+        expect(parseFileEventTag(fileEventTag(PATH))).toEqual(PATH);
+    });
+
+    test('a tag of another kind parses to nothing', () => {
+        expect(parseShareTag(fileEventTag(PATH))).toBeNull();
+        expect(parseAccessRequestTag(shareTag(PATH))).toBeNull();
+        expect(parseFileEventTag(shareTag(PATH))).toBeNull();
     });
 });
