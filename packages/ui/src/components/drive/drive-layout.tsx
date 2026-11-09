@@ -130,6 +130,7 @@ export function DriveLayout({
             onUploadFile={actions.onUploadFile}
             onCreateEigenDoc={actions.onCreateEigenDoc}
             sort={sort}
+            dateLabel={date?.label}
         />
     );
 

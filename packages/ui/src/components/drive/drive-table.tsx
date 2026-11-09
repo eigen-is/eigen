@@ -20,6 +20,13 @@ import { useDriveItemController } from './use-drive-item-controller';
 // The direction a field starts in when a pick switches to it.
 const DEFAULT_DIR: Record<DriveSortKey, DriveSortDir> = { name: 'asc', modified: 'desc', size: 'desc' };
 
+const SORT_LABELS: Record<DriveSortKey, string> = { name: 'Name', modified: 'Modified', size: 'Size' };
+
+// The label of a sort field in a column header or a sort menu. The date field takes the listing's own label.
+export function driveSortLabel(key: DriveSortKey, dateLabel?: string): string {
+    return key === 'modified' && dateLabel ? dateLabel : SORT_LABELS[key];
+}
+
 // The sort of a listing that keeps its own, such as a picker or the Recent page: a pick calls onChange and
 // never writes the shared view preference.
 export type DriveSortControl = { value: DriveSort; onChange: (sort: DriveSort) => void };
@@ -188,7 +195,7 @@ export function DriveTable({
             {!hideHeader && (
                 <SortHeaderRow className={gridCols}>
                     <SortHeader
-                        label="Name"
+                        label={driveSortLabel('name')}
                         active={sortKey === 'name'}
                         dir={sortDir}
                         onClick={() => onSortHeader('name')}
@@ -205,7 +212,7 @@ export function DriveTable({
                         </div>
                     )}
                     <SortHeader
-                        label="Size"
+                        label={driveSortLabel('size')}
                         active={sortKey === 'size'}
                         dir={sortDir}
                         onClick={() => onSortHeader('size')}
@@ -214,7 +221,7 @@ export function DriveTable({
                     />
                     {!hideModified && (
                         <SortHeader
-                            label={date?.label ?? 'Modified'}
+                            label={driveSortLabel('modified', date?.label)}
                             active={sortKey === 'modified'}
                             dir={sortDir}
                             onClick={() => onSortHeader('modified')}

@@ -61,6 +61,11 @@ test('the sort and the layout in use are checked, the sort with its direction', 
     expect(modified?.querySelector('.lucide-arrow-down')).not.toBeNull();
 });
 
+test('a listing that shows another date names the date sort after it', async () => {
+    await open({ dateLabel: 'Trashed' });
+    expect(menuRows()).toEqual(['Sort by', 'Name', 'Trashed', 'Size', '—', 'List', 'Grid']);
+});
+
 test('picking the current sort flips its direction, and a layout sets it', async () => {
     await open();
     await clickRow('Modified');
