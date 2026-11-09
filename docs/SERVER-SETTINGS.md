@@ -63,7 +63,7 @@ Each `notifications.email` flag turns one email on or off. The in-app notificati
 
 | Flag | Default | The email goes out when | Why the default |
 |---|---|---|---|
-| `guestOnAclAdd` | on | An address without an account, or a guest, is added to an ACL | The email is the guest's only way in ([GUEST-ACCESS.md](GUEST-ACCESS.md)) |
+| `guestOnAclAdd` | on | An address without an account, or a guest, is added to an ACL | A guest rarely has Eigen open, and one who never signed in has no bell, so the email is how they find out ([GUEST-ACCESS.md](GUEST-ACCESS.md)) |
 | `userOnAclAdd` | off | A registered user is added to an ACL | The bell already tells them |
 | `guestOnAssign` | on | An address without an account, or a guest, is assigned a comment or card, at most once an hour per person and document ([COMMENTS.md](COMMENTS.md#assignment-is-a-members-email-set-by-the-server)) | A guest rarely has Eigen open, and one who never signed in has no bell |
 | `userOnAssign` | off | A registered user is assigned a comment or card, under the same limit | The bell already tells them |
