@@ -1,3 +1,7 @@
+// Drive's Watched page: every file and folder the viewer watches, wherever it lives, in one list from a
+// single request. The rows belong to many owners, so the page is read-only, and a selected row's
+// ?pid=&uid=&mid= opens its detail beside the list.
+
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useAllWatches, usePathInfo } from '@workspace/lib/drive';
@@ -20,12 +24,9 @@ export const Route = createFileRoute('/_auth/watched')({
 function WatchedRoute() {
     const navigate = useNavigate();
     const { user } = useAuth();
-    const userId = user!.id;
     const { pid, uid, mid } = Route.useSearch();
 
-    // One request fans out server-side over the caller's own home, their teams, and every owner
-    // who shared a path with them (?all=1).
-    const { data: watches = [], isLoading } = useAllWatches();
+    const { data: watches = [], isLoading, error } = useAllWatches();
     const { data: selectedPath = null } = usePathInfo(uid || '', mid || DEFAULT_MOUNT_ID, pid || '');
 
     const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({
@@ -53,11 +54,11 @@ function WatchedRoute() {
         <DriveLayout
             pid={pid}
             selectedPath={selectedPath}
-            ownerId={uid || userId}
+            ownerId={uid || user?.id || ''}
             mountId={mid || DEFAULT_MOUNT_ID}
             folderContents={watches}
             isLoading={false}
-            error={null}
+            error={error}
             onRowSelect={onRowSelect}
             onRowActivate={onRowActivate}
             onBackToList={handleBack}
