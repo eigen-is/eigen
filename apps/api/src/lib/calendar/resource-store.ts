@@ -1,9 +1,9 @@
 // The calendar half of the store of iCalendar files. It checks the names clients choose, limits the size of a file,
 // and turns a file into the rows that search and listing read, so that the file stays the only source of truth.
-// Calendar and the CalDAV code write through it.
+// Callers such as the CalDAV store and the event edits prepare a file here, and Calendar writes it.
 
 import type { CalendarItem } from '@workspace/lib/types/calendar';
-import { and, eq, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import type ICAL from 'ical.js';
 import { PATHS } from '../config/paths';
 import type { Tx as DatabaseTx } from '../core';
@@ -133,31 +133,4 @@ export function prepareResource(
         skipped: projected.skipped,
         duplicateMaster,
     };
-}
-
-export function indexResource(tx: Tx, resource: typeof schema.resources.$inferInsert, rows: EventRowInput[]): void {
-    const row = {
-        uri: resource.uri,
-        uid: resource.uid,
-        ics: resource.ics,
-        etag: resource.etag,
-        resourceCtag: resource.resourceCtag,
-        hasUnindexedRecurrence: resource.hasUnindexedRecurrence,
-    };
-    tx.insert(schema.resources)
-        .values({ id: resource.id, calendarId: resource.calendarId, ...row })
-        .onConflictDoUpdate({ target: schema.resources.id, set: row })
-        .run();
-    // The projected rows are replaced wholesale, so an event a rewrite no longer carries leaves no row behind.
-    tx.delete(schema.events).where(eq(schema.events.resourceId, resource.id)).run();
-    for (const event of rows) tx.insert(schema.events).values(event).run();
-    // A resource at this uri is alive, so one written over a deleted name drops its stale removal.
-    tx.delete(schema.resourceTombstones)
-        .where(
-            and(
-                eq(schema.resourceTombstones.calendarId, resource.calendarId),
-                eq(schema.resourceTombstones.uri, resource.uri),
-            ),
-        )
-        .run();
 }

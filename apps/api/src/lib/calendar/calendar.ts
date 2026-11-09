@@ -34,7 +34,7 @@ import * as invitations from './invitations';
 import { dbCalendarToCalendarItem, toEvent } from './mappers';
 import * as occurrences from './occurrences';
 import type { CalendarCollection, PreparedResource, PurgedResource, Tx } from './resource-store';
-import { EVENT_MAX_BYTES, indexResource, resourceBytes, sanitizeCalendarId } from './resource-store';
+import { EVENT_MAX_BYTES, resourceBytes, sanitizeCalendarId } from './resource-store';
 import * as schema from './schema';
 import { notifySharedCalendarUsers, propagateCalendarShare } from './share-propagation';
 import * as shares from './shares';
@@ -127,7 +127,8 @@ export class Calendar {
         prepared: PreparedResource;
         creditBytes: number;
     }): Promise<void> {
-        const { id, uid, bytes, etag, rows, hasUnindexedRecurrence } = opts.prepared;
+        const { calendarId, uri, prepared } = opts;
+        const { id, bytes } = prepared;
         if (bytes.byteLength > EVENT_MAX_BYTES) throw new ApiError(413, 'Event is too large');
         if (this.meteredIngest) {
             await enforceHomeDataQuota(this.home.user.id, bytes.byteLength, opts.creditBytes);
@@ -139,13 +140,27 @@ export class Calendar {
                 .from(schema.resources)
                 .where(eq(schema.resources.id, id))
                 .get();
-            const { calendarId, uri } = opts;
-            const resourceCtag = this.bumpCtag(tx, calendarId);
-            indexResource(
-                tx,
-                { id, calendarId, uri, uid, ics: bytes, etag, hasUnindexedRecurrence, resourceCtag },
-                rows,
-            );
+            const row = {
+                uri,
+                uid: prepared.uid,
+                ics: bytes,
+                etag: prepared.etag,
+                resourceCtag: this.bumpCtag(tx, calendarId),
+                hasUnindexedRecurrence: prepared.hasUnindexedRecurrence,
+            };
+            tx.insert(schema.resources)
+                .values({ id, calendarId, ...row })
+                .onConflictDoUpdate({ target: schema.resources.id, set: row })
+                .run();
+            // The projected rows are replaced wholesale, so an event a rewrite no longer carries leaves no row behind.
+            tx.delete(schema.events).where(eq(schema.events.resourceId, id)).run();
+            for (const event of prepared.rows) tx.insert(schema.events).values(event).run();
+            // A resource at this uri is alive, so one written over a deleted name drops its stale removal.
+            tx.delete(schema.resourceTombstones)
+                .where(
+                    and(eq(schema.resourceTombstones.calendarId, calendarId), eq(schema.resourceTombstones.uri, uri)),
+                )
+                .run();
             return bytes.byteLength - (previous?.size ?? 0);
         });
         this.eventsBytes += delta;
