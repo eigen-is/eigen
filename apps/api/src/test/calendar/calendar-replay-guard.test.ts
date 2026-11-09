@@ -365,3 +365,75 @@ describe('inbound message ordering', () => {
         expect((await exceptionOf(calendar))?.status).toBe('confirmed');
     });
 });
+
+describe('an answer that names a date', () => {
+    const GUESTS = [{ email: GUEST, status: 'pending' as const, role: 'required' as const }];
+    const stored = async (input: { rrule?: string; timezone?: string; startTime: string; endTime: string }) => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const calendarId = (await calendar.getCalendars())[0].id;
+        const event = await calendar.createEvent(calendarId, {
+            title: 'Answered',
+            ...input,
+            startTime: new Date(input.startTime),
+            endTime: new Date(input.endTime),
+            allDay: false,
+            data: { attendees: GUESTS },
+        });
+        const answer = (date: string) =>
+            calendar.receiveRsvpForOccurrence(event.id, GUEST, 'accepted', date, null, false);
+        const overrides = () => calendar.getEventsByUid(event.uid).then((all) => all.filter((e) => e.parentEventId));
+        return { calendar, calendarId, event, answer, overrides };
+    };
+    const MONDAYS = {
+        rrule: 'FREQ=WEEKLY;BYDAY=MO',
+        startTime: '2027-02-01T10:00:00Z',
+        endTime: '2027-02-01T11:00:00Z',
+    };
+
+    test('adds no Wednesday to a Monday series', async () => {
+        const { calendar, calendarId, event, answer, overrides } = await stored(MONDAYS);
+
+        await answer('2027-02-10');
+        await answer('2027-02-09');
+
+        expect(await overrides()).toEqual([]);
+        expect((await calendar.getEventsByUid(event.uid))[0].etag).toBe(event.etag);
+        const days = await calendar.getEventsInRange(new Date('2027-02-08'), new Date('2027-02-14'), calendarId);
+        expect(days.map((e) => e.occurrenceDate)).toEqual(['2027-02-08']);
+    });
+
+    test('adds no occurrence to a single event', async () => {
+        const { answer, overrides } = await stored({ startTime: MONDAYS.startTime, endTime: MONDAYS.endTime });
+
+        await answer('2027-02-10');
+
+        expect(await overrides()).toEqual([]);
+    });
+
+    test('records the answer on a date the rule yields, at the slot the series has', async () => {
+        const { answer, overrides } = await stored(MONDAYS);
+
+        await answer('2027-02-08');
+
+        const [override] = await overrides();
+        expect(override.recurrenceDate).toBe('2027-02-08');
+        expect(override.startTime).toEqual(new Date('2027-02-08T10:00:00Z'));
+        expect(override.endTime).toEqual(new Date('2027-02-08T11:00:00Z'));
+        expect(override.data?.attendees?.[0].status).toBe('accepted');
+    });
+
+    test('finds an occurrence whose key is the day after its UTC date', async () => {
+        const { answer, overrides } = await stored({
+            rrule: 'FREQ=WEEKLY;BYDAY=MO',
+            timezone: 'Pacific/Kiritimati',
+            startTime: '2027-01-31T10:30:00Z',
+            endTime: '2027-01-31T11:30:00Z',
+        });
+
+        await answer('2027-02-08');
+
+        const [override] = await overrides();
+        expect(override.startTime).toEqual(new Date('2027-02-07T10:30:00Z'));
+    });
+});
