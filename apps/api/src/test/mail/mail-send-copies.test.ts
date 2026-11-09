@@ -544,6 +544,18 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
         expect(sent[0].attachments?.map((a) => Buffer.byteLength(a.content))).toEqual([partBytes]);
     });
 
+    test('a replayed send answers 409 and mails nothing', async () => {
+        startCapture();
+        const { draft, res } = await sendDraftWithRef('to@x.com', { refs: [] });
+        expect(res.status).toBe(200);
+        expect(sent.length).toBe(1);
+
+        const replay = await sendMailBody({ id: draft.id, subject: 'Ref send', to: addr('to@x.com'), text: 'again' });
+
+        expect(replay.status).toBe(409);
+        expect(sent.length).toBe(1);
+    });
+
     test('a send carries an attached message as a part, and nothing of it in the body', async () => {
         startCapture();
         const inner = 'From: inner@b.c\r\nBcc: secret@b.c\r\nSubject: Inner\r\n\r\nThe inner words\r\n';

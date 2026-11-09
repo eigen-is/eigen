@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import { readdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
-import { MAILBOX_DRAFTS, MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
+import { MAILBOX_DRAFTS, MAILBOX_INBOX, MAILBOX_SENT, MAILBOX_TRASH } from '@workspace/lib/constants/mailboxes';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type { AddressObject, EmailDraft, EmailSummary } from '@workspace/lib/types/mail';
 import { mailAttachmentName } from '@workspace/lib/types/mail';
@@ -304,6 +304,55 @@ describe.skipIf(isWindows)('Mail — a draft file is the only copy of the draft'
         expect((await home.mail.messageGet(old.id))?.html).toBe('<p>typed since</p>');
         expect((await home.mail.messageGet(client))?.html).toContain('the client’s edit');
         expect(readdirSync(cur).filter((name) => name.startsWith(`${old.id},`)).length).toBe(1);
+    });
+
+    describe('a save naming a message that is not a draft', () => {
+        const putRaw = (mail: Partial<EmailDraft>) =>
+            authedRequest(user.sessionToken, `/mail/${user.id}/message/draft`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mail }),
+            });
+        const filesOf = (mailbox: string, id: string) =>
+            readdirSync(join(boxDir(user.id, mailbox), 'cur')).filter((name) => name.startsWith(`${id},`));
+
+        test('answers 409 for a sent message, which stays in Sent as it was', async () => {
+            const home = await getHome(user.id);
+            const fields = { subject: 'Went out', to, text: 'as sent', html: '<p>as sent</p>' };
+            const draft = await home.mail.messageHandleDraft(fields);
+            await home.mail.messageSend({ ...fields, id: draft.id });
+            const before = await download(draft.id);
+
+            const res = await putRaw({ ...fields, id: draft.id, text: 'stale tab', html: '<p>stale tab</p>' });
+
+            expect(res.status).toBe(409);
+            expect(home.mail.messageGetSummary(draft.id)?.mailbox).toBe(MAILBOX_SENT);
+            expect(filesOf(MAILBOX_SENT, draft.id).length).toBe(1);
+            expect(filesOf(MAILBOX_DRAFTS, draft.id)).toEqual([]);
+            expect(await download(draft.id)).toBe(before);
+        });
+
+        test('answers 409 for a message in the inbox, which stays there', async () => {
+            const id = await seedMessage('<p>from someone</p>', MAILBOX_INBOX, 'S');
+            const res = await putRaw({ id, subject: 'Not mine', to, text: 'x', html: '<p>x</p>' });
+
+            expect(res.status).toBe(409);
+            expect(filesOf(MAILBOX_INBOX, id).length).toBe(1);
+            expect((await read(id)).html).toContain('from someone');
+        });
+
+        test('a draft moved to Trash still saves, and lands back in Drafts', async () => {
+            const home = await getHome(user.id);
+            const draft = await save({ subject: 'Trashed', to, text: 'x', html: '<p>x</p>' });
+            await home.mail.messageMove(draft.id, MAILBOX_TRASH);
+
+            const res = await putRaw({ id: draft.id, subject: 'Rescued', to, text: 'y', html: '<p>y</p>' });
+
+            expect(res.status).toBe(200);
+            expect(home.mail.messageGetSummary(draft.id)?.mailbox).toBe(MAILBOX_DRAFTS);
+            expect(filesOf(MAILBOX_TRASH, draft.id)).toEqual([]);
+            expect(filesOf(MAILBOX_DRAFTS, draft.id).length).toBe(1);
+        });
     });
 
     // MailComposer marks a message/* part inline by default, and the parser then draws it into the body.

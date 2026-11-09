@@ -311,6 +311,10 @@ export class MaildirStore {
 
         // The file write and the row stay one step, or a watcher sync ingests the draft first and fires a spurious received.
         return this.storeLock.run(async () => {
+            const replaced = this.db.getEmail(messageId);
+            // A stale tab or a replayed send names a message that has left Drafts: saving it would take it out of Sent.
+            if (replaced && !replaced.isDraft) throw new ApiError(409, 'This message is no longer a draft');
+
             // Straight into cur/: Eigen placed it there itself, with the flags already in the name.
             const filename = buildMaildirFilename(messageId, { draft: true, seen: true }, bytes.byteLength);
             await this.deliver(MAILBOX_DRAFTS, PATHS.MAIL.CUR, filename, bytes);
@@ -318,7 +322,6 @@ export class MaildirStore {
             applyFlagsFromFilename(parsed, filename);
             parsed.filename = filename;
             parsed.mailbox = MAILBOX_DRAFTS;
-            const replaced = this.db.getEmail(messageId);
             this.db.insertEmails([parsed]);
             this.indexBytes += parsed.size - (replaced?.size ?? 0);
             // The old file goes last, so a crash leaves the draft twice and never not at all. A sync keeps the newer.

@@ -3,6 +3,7 @@
 // forward counts as saved, so a draft only reaches Drafts once the user changes something. The field
 // conversions and the attachment reconcile are exported for their own tests.
 
+import { AppError } from '@workspace/lib/api-error';
 import type { AuthUser } from '@workspace/lib/auth';
 import { useAuth } from '@workspace/lib/auth';
 import { flattenAddresses } from '@workspace/lib/mail';
@@ -380,6 +381,10 @@ export function useDraft({
                 }
             }
             return result;
+        } catch (error) {
+            // The message left Drafts, say through a send in another tab: every later save gets the same answer.
+            if (error instanceof AppError && error.status === 409) disabledRef.current = true;
+            throw error;
         } finally {
             if (inFlightRef.current === promise) inFlightRef.current = null;
         }

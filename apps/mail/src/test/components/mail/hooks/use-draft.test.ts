@@ -7,6 +7,7 @@ import { renderInDocument } from '@workspace/ui/test/render-in-document';
 installHappyDom();
 
 const { act, createElement } = await import('react');
+const { AppError } = await import('@workspace/lib/api-error');
 const { AuthProvider } = await import('@workspace/lib/auth');
 const { buildSaveOptions, initFields, mergeServerAttachments, useDraft } = await import(
     '../../../../components/mail/hooks/use-draft'
@@ -141,6 +142,34 @@ describe('buildSaveOptions', () => {
         expect(options.tempAttachmentIds).toEqual(['t1']);
         expect(options.keepAttachmentIndexes).toEqual([0]);
     });
+});
+
+test('after the server says the message is no longer a draft, nothing saves again', async () => {
+    let saves = 0;
+    const seen: { draft?: ReturnType<typeof useDraft> } = {};
+    function Probe() {
+        seen.draft = useDraft({
+            email: savedDraft([]),
+            onSave: async () => {
+                saves++;
+                throw new AppError({ status: 409, error: { status: 409, value: 'This message is no longer a draft' } });
+            },
+        });
+        return null;
+    }
+    const { unmount } = await renderInDocument(createElement(AuthProvider, null, createElement(Probe)));
+    const edit = (subject: string) => act(async () => seen.draft?.setField('subject', subject));
+
+    await edit('Typed in a tab left open');
+    await act(async () => {
+        await seen.draft?.flushAndGetDraft().catch(() => {});
+    });
+    expect(saves).toBe(1);
+
+    await edit('And typed some more');
+    await act(async () => void (await seen.draft?.flushAndGetDraft()));
+    await unmount();
+    expect(saves).toBe(1);
 });
 
 describe('a forward carries the parts of the message it forwards', () => {
