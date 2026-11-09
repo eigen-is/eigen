@@ -7,7 +7,11 @@ import { createArrayResolver } from '../../engine/cell-resolver';
 import { createCfFormulaEvaluator, evaluateConditionalFormat } from '../../engine/conditional-format';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { FormulaEngine } from '../../engine/formula-engine';
+import { functionStrChange } from '../../engine/formula-shift';
+import { isFormula } from '../../engine/formula-utils';
+import { sheetFinder } from '../../engine/parser/helper/cell';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol, RowColError } from '../../engine/rowcol';
+import { applySheetRename } from '../../engine/sheet-name';
 import type { EditorSheetConfigExtras, ShiftedSheet, SingleRange } from '../../engine/types';
 import { cellLinks } from '../state/factories/links';
 import type { Span } from './range-oracle';
@@ -1019,5 +1023,168 @@ describe('applySheetsInsertRowCol/Delete — chart refs', () => {
                 },
             });
         });
+    });
+});
+
+describe('applySheetsInsertRowCol/Delete — formulas on the other sheets', () => {
+    // Names that are a prefix of another, differ only in case, need quotes or hold one, hold regex specials, or fold
+    // their case one way only.
+    const NAMES = ['Data', 'Data2', 'data', 'My Tab', "It's", 'a.b$(c)+', 'Σσ', 'ß', 'Sheet1'];
+    const PREFIXES = [
+        '',
+        'Data!',
+        'DATA!',
+        'data!',
+        'Data2!',
+        "'Data'!",
+        "'My Tab'!",
+        "'MY TAB'!",
+        "'It''s'!",
+        "It''s!",
+        "'IT''S'!",
+        "'a.b$(c)+'!",
+        "'ΣΣ'!",
+        "'σσ'!",
+        "'ß'!",
+        "'SS'!",
+        'Nosuch!',
+        'Sheet1!',
+        'Stored!',
+    ];
+    const LEGS = ['A1', '$B$2', 'C3:D5', 'A:A', '2:4', '$A1:B$9', 'A1:A3:A5', 'E8'];
+    // Text the walker writes back otherwise even where no ref moves, beside text it keeps.
+    const NOISE = [
+        '"Data!A1"',
+        'MyName',
+        'Data!MyName',
+        '#REF!',
+        '#N/A',
+        '\n',
+        ' : ',
+        ' ',
+        '\t',
+        'TRUE',
+        'Table1[Col]',
+        "'Data'!A1:'My Tab'!B2",
+        "'My Tab'!A1:'MY TAB'!B2",
+        'Data!A1:data!B2',
+        'INDEX(A1:A3,2):A5',
+        'A1 :B2',
+    ];
+    const OPERATORS = ['+', '-', '*', '&', ',', '<>'];
+
+    const random = (seed: number) => {
+        let x = seed;
+        return (n: number) => {
+            x = (x * 1103515245 + 12345) & 0x7fffffff;
+            return (x >> 8) % n;
+        };
+    };
+
+    const formula = (pick: (n: number) => number) => {
+        const parts: string[] = [];
+        for (let i = 0, n = 1 + pick(5); i < n; i += 1) {
+            const roll = pick(10);
+            const ref = () => PREFIXES[pick(PREFIXES.length)] + LEGS[pick(LEGS.length)];
+            if (roll < 6) parts.push(ref());
+            else if (roll < 8) parts.push(NOISE[pick(NOISE.length)]);
+            else parts.push(`SUM(${ref()},${ref()})`);
+        }
+        const text = `=${parts.map((part, i) => (i === 0 ? part : OPERATORS[pick(OPERATORS.length)] + part)).join('')}`;
+        return pick(20) === 0 ? `${text}&"open ` : text;
+    };
+
+    const workbook = (pick: (n: number) => number): Sheet[] => {
+        const grid = () =>
+            Array.from({ length: 8 }, () =>
+                Array.from({ length: 5 }, () => (pick(5) < 3 ? { ...cell(0), f: formula(pick) } : cell(1))),
+            );
+        const rules = (): Sheet['conditionalFormatRules'] => [
+            {
+                type: 'default',
+                conditionName: 'formula',
+                cellrange: [{ row: [0, 2], column: [0, 0] }],
+                conditionValue: [formula(pick)],
+                format: { textColor: '#ff0000' },
+            },
+        ];
+        const sheets = NAMES.map((name, i) =>
+            makeSheet(`s${i}`, name, grid(), { order: i, conditionalFormatRules: rules() }),
+        );
+        // A sheet the replay holds only as its stored list.
+        const stored: Sheet = {
+            id: 'stored',
+            name: 'Stored',
+            order: NAMES.length,
+            celldata: Array.from({ length: 12 }, (_, i) => ({ r: i, c: 0, v: { ...cell(0), f: formula(pick) } })),
+        };
+        return [...sheets, stored];
+    };
+
+    // Each formula outside the op's sheet as functionStrChange alone writes it, which is what every formula went
+    // through before a formula that can't name the sheet was skipped.
+    const mismatches = (before: Sheet[], after: Sheet[], target: number, shift: (txt: string) => string) => {
+        const found: string[] = [];
+        const check = (where: string, was: string, now: string, always = false) => {
+            const expected = always || isFormula(was) ? shift(was) : was;
+            if (now !== expected) found.push(`${where}: ${JSON.stringify([was, now, expected])}`);
+        };
+        for (const [i, sheet] of before.entries()) {
+            if (i === target) continue;
+            const next = after[i];
+            for (const [r, row] of (sheet.data ?? []).entries()) {
+                for (const [c, was] of row.entries()) {
+                    if (was?.f != null) check(`${sheet.name} ${r},${c}`, was.f, next.data?.[r]?.[c]?.f ?? '');
+                }
+            }
+            for (const [k, entry] of (sheet.celldata ?? []).entries()) {
+                if (entry.v?.f != null) check(`${sheet.name} #${k}`, entry.v.f, next.celldata?.[k]?.v?.f ?? '');
+            }
+            for (const [k, rule] of (sheet.conditionalFormatRules ?? []).entries()) {
+                const now = next.conditionalFormatRules?.[k];
+                if (rule.type !== 'default' || now?.type !== 'default') continue;
+                check(`${sheet.name} rule ${k}`, String(rule.conditionValue[0]), String(now.conditionValue[0]), true);
+            }
+        }
+        return found;
+    };
+
+    test.each([1, 2, 3])('every formula reads as the full rewrite writes it, seed %i', (seed) => {
+        const pick = random(seed);
+        let sheets = workbook(pick);
+        let moved = 0;
+        for (let step = 0; step < 150; step += 1) {
+            if (step % 30 === 29) {
+                const id = `s${pick(NAMES.length)}`;
+                sheets = applySheetRename(sheets, { id, name: [`Data ${step}`, `It's ${step}`, `Σ${step}`][pick(3)] });
+                continue;
+            }
+            const target = pick(NAMES.length);
+            const { id, name, data } = sheets[target];
+            const type = pick(2) === 0 ? 'row' : 'column';
+            const size = (type === 'row' ? data?.length : data?.[0]?.length) ?? 0;
+            const at = pick(size);
+            const findSheet = sheetFinder(sheets);
+            const rc = type === 'row' ? 'row' : 'col';
+            const withEquals = (shifted: string, txt: string) => (txt.startsWith('=') ? `=${shifted}` : shifted);
+            let after: Sheet[];
+            let shift: (txt: string) => string;
+            if (size > 3 && pick(2) === 0) {
+                const end = Math.min(size - 1, at + pick(2));
+                after = applySheetsDeleteRowCol(sheets, { type, start: at, end, id });
+                shift = (txt) =>
+                    withEquals(functionStrChange(txt, 'del', rc, null, at, end - at + 1, name, false, findSheet), txt);
+            } else {
+                const count = 1 + pick(2);
+                const direction = pick(2) === 0 ? 'lefttop' : 'rightbottom';
+                after = applySheetsInsertRowCol(sheets, { type, index: at, count, direction, id });
+                shift = (txt) =>
+                    withEquals(functionStrChange(txt, 'add', rc, direction, at, count, name, false, findSheet), txt);
+            }
+            expect(mismatches(sheets, after, target, shift)).toEqual([]);
+            moved += after.filter((sheet, i) => i !== target && sheet !== sheets[i]).length;
+            sheets = after;
+        }
+        expect(moved).toBeGreaterThan(100);
     });
 });

@@ -28,6 +28,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Pasting edited cells in Sheets** — if you edit cells after copying them, a paste in the same tab brings them as they are now
 - **Validation limits in Sheets** — an edit that would push a validation rule past its limit goes through, and the cells past it get no rule
 - **Speed in Sheets** — editing a cell in a workbook of 100,000 formulas takes milliseconds, where it took over a tenth of a second, and a cell that 100,000 formulas read no longer stalls a sheet for a minute
+- **Large spreadsheets after row edits** — opening, exporting and searching a large workbook after many row or column inserts and deletes takes about half as long as before
+- **Formula text in Sheets** — inserting or deleting a row or column changes only the references it moves, so a formula keeps its line breaks and spaces, on every tab
 - **Links in Sheets (breaking)** — an existing spreadsheet opens without its cell links, and their text keeps its blue underline. Add them again, or import the Excel file again. A link now moves with its cell through a sort or a fill
 - **Deleting a tab in Sheets** — formulas that name the tab show `#REF!`, as after deleting a row, and dropdown lists and links that name it stop working. A new tab with that name doesn't bring them back. Undo does, until someone else edits
 - **Sorting in Sheets** — a sort moves a cell's contents, formatting and link, and leaves borders, data validation and conditional formatting where they are. Hidden rows stay put, whether you hid them or a filter did

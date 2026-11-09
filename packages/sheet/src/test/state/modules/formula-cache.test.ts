@@ -311,9 +311,9 @@ describe('setFormulaCellInfo — the cells a formula reads', () => {
         ["=SUM(Data!A1:'Data'!B2)", [on('s2', [0, 1], [0, 1])]],
         ["=SUM('Data'!A1:Data!B2)", [on('s2', [0, 1], [0, 1])]],
         ["=SUM('my sheet-1'!A1:'my sheet-1'!B2)", [on('s3', [0, 1], [0, 1])]],
-        // The engine answers #VALUE! and reads nothing, so what is listed here can only cost a recompute.
-        ['=SUM(Data!A1:Empty!B2)', [on('s2', [0, 1], [0, 1])]],
-        ["=SUM('Data'!A1:'my sheet-1'!B2)", [on('s2', [0, 1], [0, 1])]],
+        // The engine answers #VALUE! and reads nothing.
+        ['=SUM(Data!A1:Empty!B2)', []],
+        ["=SUM('Data'!A1:'my sheet-1'!B2)", []],
         ['=SUM(A1:Data!B2)', []],
         ["='my sheet-1'!A1+1", [on('s3', [0, 0], [0, 0])]],
         ["='my sheet-1'!A1:B2", [on('s3', [0, 1], [0, 1])]],
