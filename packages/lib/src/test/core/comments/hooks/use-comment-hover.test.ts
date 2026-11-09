@@ -180,6 +180,25 @@ test('while the pointer is on the card, repeated reports of left do nothing', as
     expect(jest.getTimerCount()).toBe(0);
 });
 
+// The card holds while the pointer is on its way to it, and the way can cross another comment's mark.
+test('a switch to another card while the pointer held the first lets the next left close it', async () => {
+    const hover = await mountOpen();
+    await run(() => hover().enterCard());
+    await run(() => hover().report({ cardId: 'b', rect: OTHER_RECT }));
+    await run(() => hover().report(null));
+    await advance(150);
+    expect(hover().target).toBeNull();
+});
+
+test('a report of the open card after the pointer held it, as it comes back to the mark, lets the next left close it', async () => {
+    const hover = await mountOpen();
+    await run(() => hover().enterCard());
+    await run(() => hover().report({ cardId: 'a', rect: RECT }));
+    await run(() => hover().report(null));
+    await advance(150);
+    expect(hover().target).toBeNull();
+});
+
 test('leaving the card closes it after the grace', async () => {
     const hover = await mountOpen();
     await run(() => hover().enterCard());

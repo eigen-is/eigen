@@ -1,5 +1,5 @@
 // A comment's card floating at the rect a host reports: drawn as a board draws it, leaving the editor's focus alone,
-// and telling the host when the pointer is on it, when it is clicked and when Radix wants it closed.
+// and telling the host when the pointer is on it or on its way to it, when it is clicked and when Radix wants it closed.
 import { afterAll, expect, mock, test } from 'bun:test';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard, CommentHoverTarget } from '@workspace/lib/types/comments';
@@ -195,16 +195,67 @@ test('opening and closing leave the focus in the editor', async () => {
     editor.remove();
 });
 
-test('the pointer entering and leaving the card tells the host', async () => {
-    const { enterCard, leaveCard } = await renderCard('a');
+// The card is laid out right of the anchor at RECT, with a gap between them, since happy-dom lays nothing out.
+const CARD = new DOMRect(114, 200, 254, 64);
+
+async function renderLaidOut() {
+    const card = await renderCard('a');
     const element = content();
     if (!element) throw new Error('no popover');
-    await act(async () => {
-        element.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
-    });
+    element.getBoundingClientRect = () => CARD;
+    const moveTo = (x: number, y: number) =>
+        act(async () => {
+            document.body.dispatchEvent(new PointerEvent('pointermove', { clientX: x, clientY: y, bubbles: true }));
+        });
+    return { ...card, moveTo };
+}
+
+test('the pointer on the card holds it, and off it lets it go', async () => {
+    const { enterCard, leaveCard, moveTo } = await renderLaidOut();
+    await moveTo(200, 230);
     expect(enterCard).toHaveBeenCalledTimes(1);
-    await act(async () => {
-        element.dispatchEvent(new PointerEvent('pointerout', { bubbles: true }));
-    });
+    await moveTo(200, 240);
+    expect(enterCard).toHaveBeenCalledTimes(1);
+    await moveTo(500, 500);
     expect(leaveCard).toHaveBeenCalledTimes(1);
+});
+
+// A slow hand crosses the gap, or the cell under the anchor, for longer than the grace after the host said it left.
+test('the pointer on its way from the anchor to the card holds it, over the gap or below the anchor', async () => {
+    const { enterCard, leaveCard, moveTo } = await renderLaidOut();
+    await moveTo(105, 215);
+    expect(enterCard).not.toHaveBeenCalled();
+    await moveTo(108, 221);
+    expect(enterCard).toHaveBeenCalledTimes(1);
+    await moveTo(112, 225);
+    await moveTo(120, 230);
+    expect(leaveCard).not.toHaveBeenCalled();
+    await moveTo(90, 240);
+    expect(leaveCard).toHaveBeenCalledTimes(1);
+});
+
+test('the pointer leaving the anchor away from the card leaves the close to the host', async () => {
+    const { enterCard, leaveCard, moveTo } = await renderLaidOut();
+    await moveTo(105, 215);
+    await moveTo(95, 215);
+    await moveTo(105, 230);
+    expect(enterCard).not.toHaveBeenCalled();
+    expect(leaveCard).not.toHaveBeenCalled();
+});
+
+test('a pointer that strayed off the way has to come back over the anchor', async () => {
+    const { enterCard, moveTo } = await renderLaidOut();
+    await moveTo(105, 215);
+    await moveTo(100, 240);
+    await moveTo(110, 222);
+    expect(enterCard).not.toHaveBeenCalled();
+});
+
+// A mark may report itself before this move reaches the page, so a leave here would start a close over the mark.
+test('the pointer coming back from the card to the anchor leaves the hold to the host', async () => {
+    const { enterCard, leaveCard, moveTo } = await renderLaidOut();
+    await moveTo(200, 230);
+    await moveTo(105, 215);
+    expect(enterCard).toHaveBeenCalledTimes(1);
+    expect(leaveCard).not.toHaveBeenCalled();
 });
