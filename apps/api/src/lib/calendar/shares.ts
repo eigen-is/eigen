@@ -4,6 +4,7 @@
 // Callers reach it through Calendar, such as the share routes and reconciliation when shares change.
 
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
+import { calendarShareTag } from '@workspace/lib/notification/tags';
 import type { CalendarShare, SharedCalendar } from '@workspace/lib/types/calendar';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { SSEventType } from '@workspace/lib/types/sse';
@@ -60,7 +61,7 @@ export function receiveShare(
         actorEmail,
         title: actor ? `${actor} shared a calendar` : 'Calendar shared with you',
         body: calendarName,
-        tag: `calendar-share:${calendarId}:${ownerUserId}`,
+        tag: calendarShareTag(calendarId, ownerUserId),
     });
 }
 

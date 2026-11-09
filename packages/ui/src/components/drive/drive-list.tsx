@@ -6,7 +6,7 @@
 import { useBreadcrumb, useDriveViewPreferences } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
 import type { PaletteSelectionAction } from '@workspace/lib/types/command-palette';
-import type { DrivePath, DriveSortKey, DriveViewMode } from '@workspace/lib/types/drive';
+import type { DrivePath, DriveViewMode } from '@workspace/lib/types/drive';
 import { DRIVE_SORT_KEYS } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import {
@@ -29,7 +29,6 @@ import { FileDropOverlay } from '../file-drop-overlay';
 import { EmptyState } from '../layout/app/empty-state';
 import { ErrorState } from '../layout/app/error-state';
 import { useLayout } from '../layout/app/layout-context';
-import { LoadingState } from '../layout/app/loading-state';
 import type { CreateCallbacks } from './create-menu';
 import { getCreateMenuItems } from './create-menu';
 import type { DriveActionRunner } from './drive-action-runner';
@@ -37,9 +36,8 @@ import { DriveBreadcrumb } from './drive-breadcrumb';
 import { DriveGrid } from './drive-grid';
 import { useMountLabel } from './drive-mount-list';
 import { DrivePaletteSelection } from './drive-palette-selection';
-import { DriveTable, nextDriveSort } from './drive-table';
-
-const SORT_LABELS: Record<DriveSortKey, string> = { name: 'Name', modified: 'Modified', size: 'Size' };
+import type { DriveListDate, DriveSortControl } from './drive-table';
+import { DriveTable, driveSortLabel, useDriveSort } from './drive-table';
 
 const VIEW_MODES: { value: DriveViewMode; label: ReactNode }[] = [
     {
@@ -60,12 +58,10 @@ const VIEW_MODES: { value: DriveViewMode; label: ReactNode }[] = [
     },
 ];
 
-// The sort options of the grid's sort menu and of the phone's ⋮. The list sorts by its column headers
-// instead. Picking the active field again flips its direction, and another field starts in its own
-// default direction, as nextDriveSort decides.
-function SortMenuItems() {
-    const { sortKey, sortDir, setSort } = useDriveViewPreferences();
-    const chooseSort = (key: DriveSortKey) => setSort(key, nextDriveSort(key, sortKey, sortDir));
+type DriveViewControlsProps = { sort?: DriveSortControl; dateLabel?: string };
+
+function SortMenuItems({ sort, dateLabel }: DriveViewControlsProps) {
+    const { key: sortKey, dir: sortDir, choose } = useDriveSort(sort);
 
     return (
         <ChoiceMenuItems
@@ -74,7 +70,7 @@ function SortMenuItems() {
                 value: key,
                 label: (
                     <>
-                        {SORT_LABELS[key]}
+                        {driveSortLabel(key, dateLabel)}
                         {key === sortKey &&
                             (sortDir === 'asc' ? (
                                 <ArrowUp className="h-4 w-4 ml-auto" />
@@ -84,16 +80,17 @@ function SortMenuItems() {
                     </>
                 ),
             }))}
-            onChange={chooseSort}
+            onChange={choose}
         />
     );
 }
 
-// The sort menu and the list or grid switch, both bound to the shared view preference. Every Drive
-// listing's toolbar draws them, such as the folder view's or Trash's. A phone folds both into one ⋮.
-export function DriveViewControls() {
+// The sort menu and the list or grid switch. The layout always follows the shared view preference, and the
+// sort does unless the listing keeps its own.
+export function DriveViewControls({ sort, dateLabel }: DriveViewControlsProps) {
     const isMobile = useIsMobile();
-    const { mode, setMode, sortKey } = useDriveViewPreferences();
+    const { mode, setMode } = useDriveViewPreferences();
+    const { key: sortKey } = useDriveSort(sort);
 
     if (isMobile) {
         return (
@@ -101,7 +98,7 @@ export function DriveViewControls() {
                 <KebabTrigger title="View options" />
                 <DropdownMenuContent align="end">
                     <DropdownMenuLabel>Sort by</DropdownMenuLabel>
-                    <SortMenuItems />
+                    <SortMenuItems sort={sort} dateLabel={dateLabel} />
                     <DropdownMenuSeparator />
                     <ChoiceMenuItems value={mode} options={VIEW_MODES} onChange={setMode} />
                 </DropdownMenuContent>
@@ -116,12 +113,12 @@ export function DriveViewControls() {
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button variant="outline" size="sm">
-                            {SORT_LABELS[sortKey]}
+                            {driveSortLabel(sortKey, dateLabel)}
                             <ChevronDown className="h-4 w-4 ml-1" />
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                        <SortMenuItems />
+                        <SortMenuItems sort={sort} dateLabel={dateLabel} />
                     </DropdownMenuContent>
                 </DropdownMenu>
             )}
@@ -155,7 +152,7 @@ type DriveListToolbarProps = CreateCallbacks & {
     onRowActivate?: (path: DrivePath) => void;
     // Set by an app that has a Shared with me page; without it the crumb is plain text.
     onOpenSharedWithMe?: () => void;
-};
+} & DriveViewControlsProps;
 
 export function DriveListToolbar({
     ownerId,
@@ -168,6 +165,8 @@ export function DriveListToolbar({
     onCreateFolder,
     onUploadFile,
     onCreateEigenDoc,
+    sort,
+    dateLabel,
 }: DriveListToolbarProps) {
     const { data: breadcrumbPaths = [] } = useBreadcrumb(ownerId, mountId, showBreadcrumb ? pathId : undefined);
     const mountLabel = useMountLabel(ownerId, mountId);
@@ -216,7 +215,7 @@ export function DriveListToolbar({
                 <div className="flex-1" />
             )}
             <div className="flex items-center gap-1">
-                <DriveViewControls />
+                <DriveViewControls sort={sort} dateLabel={dateLabel} />
                 {isMobile && newItemButton}
             </div>
         </div>
@@ -226,7 +225,6 @@ export function DriveListToolbar({
 type DriveListProps = CreateCallbacks & {
     // Already sorted by the caller: the list draws them and selects ranges in this order.
     items: DrivePath[];
-    isLoading?: boolean;
     error?: Error | null;
     onRowSelect?: (path: DrivePath) => void;
     onRowActivate?: (path: DrivePath) => void;
@@ -243,17 +241,15 @@ type DriveListProps = CreateCallbacks & {
     unreadPathIds?: ReadonlySet<string>;
     hideOwner?: boolean;
     hideShared?: boolean;
-    dateLabel?: string;
-    getItemDate?: (item: DrivePath) => Date | null;
+    date?: DriveListDate;
     // The rows of a listing with actions of its own, such as Trash, for the items they act on: the
     // rows' menu draws them and the command palette offers them.
     ownActions?: (items: readonly DrivePath[]) => PaletteSelectionAction[];
-    emptyState?: ReactNode;
+    sort?: DriveSortControl;
 };
 
 export function DriveList({
-    items = [],
-    isLoading = false,
+    items,
     error = null,
     onRowSelect,
     onRowActivate,
@@ -272,10 +268,9 @@ export function DriveList({
     unreadPathIds,
     hideOwner,
     hideShared,
-    dateLabel,
-    getItemDate,
+    date,
     ownActions,
-    emptyState,
+    sort,
 }: DriveListProps) {
     const { data: breadcrumbPaths } = useBreadcrumb(ownerId, mountId, pathId);
     const { mode } = useDriveViewPreferences();
@@ -287,7 +282,6 @@ export function DriveList({
     // instead, since the rows stop it from reaching the listing.
     const createMenu = useContextMenu<true>();
 
-    // A click on the row that is already active opens it; a click on any other row selects it.
     const handleRowClick = (path: DrivePath) => {
         if (path.id === activeRowId && onRowActivate) {
             onRowActivate(path);
@@ -296,22 +290,15 @@ export function DriveList({
         }
     };
 
-    const { targetProps, isDragging } = useFileDropTarget(
-        (files) => onUploadFiles?.(files),
-        allowUpload && !!onUploadFiles,
-    );
+    const dropWorks = allowUpload && !!onUploadFiles;
+    const { targetProps, isDragging } = useFileDropTarget((files) => onUploadFiles?.(files), dropWorks);
 
     const createItems = getCreateMenuItems({ onCreateFolder, onUploadFile, onCreateEigenDoc });
 
-    if (isLoading) {
-        return <LoadingState />;
-    }
-
     if (error) {
-        return <ErrorState message="Error loading files" detail={error.message} />;
+        return <ErrorState />;
     }
 
-    // What both views take. The table also takes its column flags.
     const sharedProps = {
         items,
         activeItemId: activeRowId,
@@ -325,14 +312,14 @@ export function DriveList({
     };
 
     // The empty listing's hint names a drop only where a drop uploads, and the New button only where
-    // there is something to create.
-    const dropWorks = allowUpload && !!onUploadFiles;
-    const defaultEmptyHint = dropWorks
+    // there is something to create, by the label it has where it creates one kind only.
+    const newLabel = createItems.length === 1 ? createItems[0].buttonLabel : 'New';
+    const emptyHint = dropWorks
         ? createItems.length > 0
-            ? 'Drop files here, or use the “New” button.'
+            ? `Drop files here, or use the “${newLabel}” button.`
             : 'Drop files here.'
         : createItems.length > 0
-          ? 'Use the “New” button to create one.'
+          ? `Use the “${newLabel}” button to create one.`
           : undefined;
 
     const contentDiv = (
@@ -350,13 +337,13 @@ export function DriveList({
                     {...sharedProps}
                     hideOwner={hideOwner}
                     hideShared={hideShared}
-                    dateLabel={dateLabel}
-                    getItemDate={getItemDate}
+                    date={date}
                     ancestorBreadcrumb={breadcrumbPaths ?? []}
+                    sort={sort}
                 />
             )}
 
-            {items.length === 0 && (emptyState ?? <EmptyState hint={defaultEmptyHint} />)}
+            {items.length === 0 && <EmptyState hint={emptyHint} />}
             <DrivePaletteSelection
                 items={selection.selectedItems}
                 listing={items}

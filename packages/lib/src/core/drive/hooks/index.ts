@@ -11,6 +11,7 @@ export * from './use-export-document';
 export * from './use-file-history';
 export * from './use-import-document';
 export * from './use-print-pdf';
+export * from './use-recent-paths';
 export * from './use-watch';
 export * from './use-zombie-media-sweep';
 export * from './writes';

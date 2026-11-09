@@ -18,6 +18,7 @@ import type {
     EffectiveMember,
     EigenDocType,
     InviteResult,
+    RecentPath,
 } from '@workspace/lib/types/drive';
 import {
     DRIVE_TYPE_CHAT,
@@ -41,7 +42,6 @@ import type { SSEventDrive } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import { validateACLEntries, validateEmailAddress } from '@workspace/lib/validation';
-import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { ChatRoom, withCommentIndex } from '../chat';
 import { broadcastCommentIndexUpdated } from '../chat/sse-events';
 import { CollabDocument } from '../collab/collab-document';
@@ -77,6 +77,7 @@ import {
     filterRedundantACL,
     findContainerFromAncestors,
     grantsPublicRead,
+    isInsideDocument,
     isTrashedChain,
     matchesACL,
     mergeACLDelta,
@@ -94,6 +95,9 @@ import { CollabRegistry } from './collab-registry';
 import type { CopyTarget } from './copy-across';
 import { copyPathAcross } from './copy-across';
 import { LockManager } from './lock-manager';
+import type { RecentRow } from './recent';
+import { listRecent, touchRecent } from './recent';
+import type { SharedDb } from './shared';
 import { getSharedDatabase } from './shared';
 import {
     listSharedOwnerIds,
@@ -101,7 +105,6 @@ import {
     listSharedWithMeByMimeType,
     receiveSharedPathChange,
 } from './shared-with-me';
-import type * as sharedSchema from './sharedschema';
 import { broadcastFileHistoryUpdated, buildDriveEvent } from './sse-events';
 import { streamFilesToTemp } from './streaming';
 import { sweepCopy, sweepDocument } from './sweep';
@@ -128,7 +131,7 @@ export class Drive {
     // Every addMount still running, including the close of a mount it built for a closing home.
     private readonly addingMounts = new Set<Promise<void>>();
     private defaultMountId: string = DEFAULT_MOUNT_ID;
-    private sharedDb!: BunSQLiteDatabase<typeof sharedSchema>;
+    private sharedDb!: SharedDb;
     private readonly documents: CollabRegistry;
     // The last change queued for each key, such as the ACL of one path or the settings of one mount.
     private readonly chains = new Map<string, Promise<void>>();
@@ -621,8 +624,7 @@ export class Drive {
     // code passes no user, such as a chat that trashes a deleted message's attachments.
     private async refuseInsideDocument(mount: Mount, pathId: string, user: User | undefined): Promise<void> {
         if (!user) return;
-        const ancestors = (await mount.getBreadcrumb(pathId)).slice(0, -1);
-        if (ancestors.some((crumb) => isDocumentType(crumb.type))) throw new ApiError(400, DOCUMENT_PART_ERROR);
+        if (isInsideDocument(await mount.getBreadcrumb(pathId))) throw new ApiError(400, DOCUMENT_PART_ERROR);
     }
 
     public async updatePathDetails(mountId: string, pathId: string, details: DrivePathDetails): Promise<void> {
@@ -1143,6 +1145,39 @@ export class Drive {
         actorName?: string,
     ): Promise<void> {
         return receiveSharedPathChange(this.sharedDb, this.home, path, newACL, actorEmail, actorName);
+    }
+
+    // ---- Recent ----
+
+    public touchRecent(ownerId: string, mountId: string, pathId: string): void {
+        touchRecent(this.sharedDb, ownerId, mountId, pathId);
+    }
+
+    // This home's own rows, newest first. Only its user reads them, so SharedDrive has no wrapper for it.
+    public listRecent(): RecentRow[] {
+        return listRecent(this.sharedDb);
+    }
+
+    // The paths of this owner that another home's rows name and the user may still read. It deletes no row, as a
+    // failed read looks like a deleted file.
+    public async getRecentPathsFor(
+        user: User,
+        memberships: Memberships,
+        rows: readonly RecentRow[],
+    ): Promise<RecentPath[]> {
+        const found: RecentPath[] = [];
+        for (const [mountId, mountRows] of Map.groupBy(rows, (row) => row.mountId)) {
+            const mount = this.mounts.get(mountId);
+            if (!mount) continue;
+            const chains = await mount.getBreadcrumbs(mountRows.map((row) => row.pathId));
+            for (const [i, chain] of chains.entries()) {
+                const path = chain.at(-1);
+                if (!path || path.parentId === null || isTrashedChain(chain) || isInsideDocument(chain)) continue;
+                if (!canReadFromAncestors(chain, user, memberships)) continue;
+                found.push({ ...path, lastActivityAt: mountRows[i].lastActivityAt });
+            }
+        }
+        return found;
     }
 
     // ---- Chats and comments ----

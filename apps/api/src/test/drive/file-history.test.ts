@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, setSystemTime, test } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DrivePath, FileEditorContent } from '@workspace/lib/types/drive';
@@ -60,6 +60,8 @@ function createGetLocalDatabase(baseDir: string) {
 beforeAll(() => {
     mkdirSync(TEST_DIR, { recursive: true });
 });
+
+afterEach(() => setSystemTime());
 
 afterAll(() => {
     try {
@@ -210,6 +212,15 @@ describe('FileHistory', () => {
 
         const limited = mount.history.list(folderId, { limit: 1 });
         expect(limited).toHaveLength(1);
+    });
+
+    test('lists two events of one second newest first', async () => {
+        const fileId = await mount.touchFile(rootId, 'same-second.txt', 'text/plain');
+        setSystemTime(new Date());
+        const actor = { id: 'u1', email: 'u1@test' };
+        mount.history.record({ pathId: fileId, eventType: 'created', actor });
+        mount.history.record({ pathId: fileId, eventType: 'edited', actor });
+        expect(mount.history.list(fileId).map((event) => event.eventType)).toEqual(['edited', 'created']);
     });
 
     test('deleting a path cascades its file_events rows', async () => {

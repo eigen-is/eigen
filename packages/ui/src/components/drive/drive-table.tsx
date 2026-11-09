@@ -1,12 +1,12 @@
 // The list view of a Drive listing: a virtualized table with sortable column headers, rows and their
 // context menu. DriveList draws it in list mode, and the pickers draw it bare, without actions. It also
-// holds the shared props of both listing views and the sort rule the grid's sort menu reuses.
+// holds the shared props of both listing views and useDriveSort, the sort a listing and its sort menu read.
 
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useDriveViewPreferences } from '@workspace/lib/drive';
 import { useIsCoarsePointer } from '@workspace/lib/media';
 import type { PaletteSelectionAction } from '@workspace/lib/types/command-palette';
-import type { DrivePath, DriveSortDir, DriveSortKey } from '@workspace/lib/types/drive';
+import type { DrivePath, DriveSort, DriveSortDir, DriveSortKey } from '@workspace/lib/types/drive';
 import { nextSortDir, SortHeader, SortHeaderRow } from '@workspace/ui/components/sort-header';
 import { cn } from '@workspace/ui/lib/utils';
 import { useRef } from 'react';
@@ -17,12 +17,34 @@ import { DriveItemContextMenu } from './drive-item-context-menu';
 import { DriveRow } from './drive-row';
 import { useDriveItemController } from './use-drive-item-controller';
 
-// Re-selecting the active field flips the direction; switching field uses that field's default. The
-// grid's sort menu follows the same rule through nextDriveSort.
+// The direction a field starts in when a pick switches to it.
 const DEFAULT_DIR: Record<DriveSortKey, DriveSortDir> = { name: 'asc', modified: 'desc', size: 'desc' };
 
-export function nextDriveSort(key: DriveSortKey, sortKey: DriveSortKey, sortDir: DriveSortDir): DriveSortDir {
-    return nextSortDir(key, sortKey, sortDir, DEFAULT_DIR).dir;
+const SORT_LABELS: Record<DriveSortKey, string> = { name: 'Name', modified: 'Modified', size: 'Size' };
+
+// The label of a sort field in a column header or a sort menu. The date field takes the listing's own label.
+export function driveSortLabel(key: DriveSortKey, dateLabel?: string): string {
+    return key === 'modified' && dateLabel ? dateLabel : SORT_LABELS[key];
+}
+
+// The sort of a listing that keeps its own, such as a picker or the Recent page: a pick calls onChange and
+// never writes the shared view preference.
+export type DriveSortControl = { value: DriveSort; onChange: (sort: DriveSort) => void };
+
+// The date a listing shows and sorts by under its own label, such as Trash's time trashed.
+export type DriveListDate = { label: string; of: (item: DrivePath) => Date | null };
+
+// The sort a listing draws: its own, else the shared view preference. choose is the pick of a column
+// header or a sort menu, and it goes back to where the sort came from.
+export function useDriveSort(sort?: DriveSortControl): DriveSort & { choose: (key: DriveSortKey) => void } {
+    const prefs = useDriveViewPreferences();
+    const { key, dir } = sort?.value ?? { key: prefs.sortKey, dir: prefs.sortDir };
+    const choose = (picked: DriveSortKey) => {
+        const next = nextSortDir(picked, key, dir, DEFAULT_DIR);
+        if (sort) sort.onChange(next);
+        else prefs.setSort(next.key, next.dir);
+    };
+    return { key, dir, choose };
 }
 
 // The props both listing views take, the table's column flags aside. DriveGrid takes exactly these.
@@ -46,7 +68,6 @@ export type DriveViewProps = {
     ownActions?: (items: readonly DrivePath[]) => PaletteSelectionAction[];
 };
 
-// Table view adds the column-layout flags the grid has no concept of.
 export type DriveTableProps = DriveViewProps & {
     hideModified?: boolean;
     hideOwner?: boolean;
@@ -56,19 +77,13 @@ export type DriveTableProps = DriveViewProps & {
     // Drops the ⋮ column and its grid track at every pointer type, for a picker such as DriveBrowser,
     // whose rows have no actions.
     hideActions?: boolean;
-    dateLabel?: string;
-    getItemDate?: (item: DrivePath) => Date | null;
+    date?: DriveListDate;
     ancestorBreadcrumb?: DrivePath[];
-    externalSelectedIds?: ReadonlySet<string>;
-    // A controlled sort: a header click calls onSortChange instead of writing the shared view
-    // preference. A picker passes it, so its sort stays inside the dialog.
-    sort?: { key: DriveSortKey; dir: DriveSortDir };
-    onSortChange?: (sort: { key: DriveSortKey; dir: DriveSortDir }) => void;
+    sort?: DriveSortControl;
 };
 
-// Every combination is written out, so Tailwind finds each class in the source. The key names the
-// optional columns that show. Size always shows from 800px on, right before Modified, so every
-// combination carries a 10% track for it.
+// Written out in full so Tailwind finds each class, keyed by the optional columns that show. Size shows
+// from 800px on in every combination, so each carries its 10% track.
 const GRID_COLS_800: Record<string, string> = {
     'owner-shared-modified': '@[800px]:grid-cols-[minmax(0,1fr)_8%_10%_10%_15%_40px]',
     'owner-shared': '@[800px]:grid-cols-[minmax(0,1fr)_8%_10%_10%_40px]',
@@ -93,7 +108,7 @@ const GRID_COLS_800_NO_ACTIONS: Record<string, string> = {
 };
 
 export function DriveTable({
-    items = [],
+    items,
     activeItemId,
     onItemClick,
     isItemDisabled,
@@ -108,29 +123,16 @@ export function DriveTable({
     hideShareClick = false,
     hideHeader = false,
     hideActions = false,
-    dateLabel = 'Modified',
-    getItemDate,
+    date,
     selection,
-    externalSelectedIds,
     onSelectionChange,
     ownActions,
     sort,
-    onSortChange,
 }: DriveTableProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const listRef = useRef<HTMLDivElement>(null);
 
-    // By default the sort is the shared view preference, which a header click writes as the grid's
-    // sort menu does, so every listing sorts alike. A picker passes sort and onSortChange instead, and
-    // its clicks never write the preference.
-    const prefs = useDriveViewPreferences();
-    const sortKey = sort?.key ?? prefs.sortKey;
-    const sortDir = sort?.dir ?? prefs.sortDir;
-    const onSortHeader = (key: DriveSortKey) => {
-        const dir = nextDriveSort(key, sortKey, sortDir);
-        if (sort) onSortChange?.({ key, dir });
-        else prefs.setSort(key, dir);
-    };
+    const { key: sortKey, dir: sortDir, choose: onSortHeader } = useDriveSort(sort);
 
     // A first guess only: every row is measured, as its height follows the container's width.
     const ROW_HEIGHT = 41;
@@ -193,7 +195,7 @@ export function DriveTable({
             {!hideHeader && (
                 <SortHeaderRow className={gridCols}>
                     <SortHeader
-                        label="Name"
+                        label={driveSortLabel('name')}
                         active={sortKey === 'name'}
                         dir={sortDir}
                         onClick={() => onSortHeader('name')}
@@ -210,7 +212,7 @@ export function DriveTable({
                         </div>
                     )}
                     <SortHeader
-                        label="Size"
+                        label={driveSortLabel('size')}
                         active={sortKey === 'size'}
                         dir={sortDir}
                         onClick={() => onSortHeader('size')}
@@ -219,7 +221,7 @@ export function DriveTable({
                     />
                     {!hideModified && (
                         <SortHeader
-                            label={dateLabel}
+                            label={driveSortLabel('modified', date?.label)}
                             active={sortKey === 'modified'}
                             dir={sortDir}
                             onClick={() => onSortHeader('modified')}
@@ -232,28 +234,28 @@ export function DriveTable({
             )}
 
             <div ref={listRef} style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
-                {virtualizer.getVirtualItems().map((vi) => {
-                    const item = items[vi.index];
+                {virtualizer.getVirtualItems().map((virtualRow) => {
+                    const item = items[virtualRow.index];
                     return (
                         <div
                             key={item.id}
-                            data-index={vi.index}
+                            data-index={virtualRow.index}
                             ref={virtualizer.measureElement}
                             className="absolute inset-x-0 top-0"
-                            style={{ transform: `translateY(${vi.start - virtualizer.options.scrollMargin}px)` }}
+                            style={{
+                                transform: `translateY(${virtualRow.start - virtualizer.options.scrollMargin}px)`,
+                            }}
                         >
                             <DriveRow
                                 item={item}
-                                index={vi.index}
+                                index={virtualRow.index}
                                 gridCols={gridCols}
                                 coarse={coarse}
                                 controller={controller}
                                 longPressBind={longPress.bind}
                                 isActive={activeItemId === item.id}
-                                isCursor={controller.selectedIndex === vi.index}
-                                isSelected={
-                                    controller.selection.isSelected(item.id) || !!externalSelectedIds?.has(item.id)
-                                }
+                                isCursor={controller.selectedIndex === virtualRow.index}
+                                isSelected={controller.selection.isSelected(item.id)}
                                 disabled={isItemDisabled?.(item) ?? false}
                                 getItemHref={getItemHref}
                                 onItemClick={onItemClick}
@@ -263,7 +265,7 @@ export function DriveTable({
                                 hideModified={hideModified}
                                 hideShareClick={hideShareClick}
                                 hideActions={hideActions}
-                                getItemDate={getItemDate}
+                                getItemDate={date?.of}
                                 ancestorBreadcrumb={ancestorBreadcrumb}
                                 unreadPathIds={unreadPathIds}
                             />

@@ -2,6 +2,7 @@
 // come, it starts an attempt, at most one per UTC day that gets as far as writing its record. It reads the backups
 // folder to know what already ran.
 
+import { serverBackupFailedTag } from '@workspace/lib/notification/tags';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core';
 import { alertOwner } from '../user/alert-owner';
@@ -27,7 +28,7 @@ export async function serverBackupTick(): Promise<void> {
         const refused = error instanceof ApiError && error.status === 409;
         if (!refused && alertedOn !== day && !hasScheduledAttemptOn(day)) {
             alertedOn = day;
-            alertOwner('Server backup failed', describeError(error), 'server-backup-schedule').catch(() => {});
+            alertOwner('Server backup failed', describeError(error), serverBackupFailedTag('schedule')).catch(() => {});
         }
         throw error;
     }

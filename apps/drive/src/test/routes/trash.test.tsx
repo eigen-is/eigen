@@ -1,5 +1,6 @@
 // The trash lists what was deleted, and "Modified" sorts it by when each item was trashed, not by its last
-// edit. Empty trash shows only when there is something to empty, and asks before it deletes everything.
+// edit. An empty or failed trash shows the standard text. Empty trash shows only when there is something to
+// empty, and asks before it deletes everything.
 // A trashed row's menu and the command palette offer the same two rows: Restore and Delete permanently.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { PaletteSelectionActions } from '@workspace/lib/types/command-palette';
@@ -33,7 +34,11 @@ const trashed = (name: string, editedDay: number, trashedDay: number): DrivePath
 // The page's data, stubbed: one object per hook, so the effects that depend on them settle.
 const session = { user: { id: 'trash-owner', email: 'me@test.eigen.is', name: 'Me' } };
 const root = { data: drivePath({ id: 'root', name: 'My Drive', type: 'folder', mimeType: 'inode/directory' }) };
-const trash: { data: DrivePath[]; isLoading: boolean } = { data: [], isLoading: false };
+const trash: { data: DrivePath[] | undefined; isLoading: boolean; error: Error | null } = {
+    data: [],
+    isLoading: false,
+    error: null,
+};
 const emptyTrash = { mutateAsync: mock(async () => {}), isPending: false };
 // Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts the originals back.
 const realAuth = { ...(await import('@workspace/lib/auth')) };
@@ -78,6 +83,7 @@ afterEach(() => unmount());
 beforeEach(() => {
     trash.data = [];
     trash.isLoading = false;
+    trash.error = null;
     emptyTrash.mutateAsync.mockClear();
 });
 
@@ -129,10 +135,19 @@ test('the trash sorts newest trashed first, whatever was edited last', async () 
     ]);
 });
 
-test('an empty trash says so and offers nothing to empty', async () => {
+test('an empty trash shows the standard empty text and offers nothing to empty', async () => {
     const container = await open();
-    expect(container.textContent).toContain('Trash is empty');
+    expect(container.textContent).toContain('Within this void, all possibilities are yet unobserved.');
     expect(buttonLabels(container)).not.toContain('Empty trash');
+});
+
+test('a trash that failed to load shows the null vector, with no detail and no empty text', async () => {
+    trash.data = undefined;
+    trash.error = new Error('The server is unreachable');
+    const container = await open();
+    expect(container.textContent).toContain('Encountering the null vector: a rendezvous with nothing at all.');
+    expect(container.textContent).not.toContain('The server is unreachable');
+    expect(container.textContent).not.toContain('Within this void, all possibilities are yet unobserved.');
 });
 
 test('Empty trash asks first, then deletes everything', async () => {
@@ -149,7 +164,7 @@ test('Empty trash asks first, then deletes everything', async () => {
 test('while the trash loads it claims nothing', async () => {
     trash.isLoading = true;
     const container = await open();
-    expect(container.textContent).not.toContain('Trash is empty');
+    expect(container.textContent).not.toContain('Within this void, all possibilities are yet unobserved.');
     expect(buttonLabels(container)).not.toContain('Empty trash');
 });
 

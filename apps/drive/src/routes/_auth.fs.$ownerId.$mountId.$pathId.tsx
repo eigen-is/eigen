@@ -8,9 +8,15 @@ import { getDriveShareUrl } from '@workspace/lib/api';
 import { AppError } from '@workspace/lib/api-error';
 import { useAuth } from '@workspace/lib/auth';
 import { useUnreadChatIds } from '@workspace/lib/chat';
-import { useCheckPermissions, useFolderContent, useIsEffectiveOwner, usePathInfo } from '@workspace/lib/drive';
+import {
+    useCheckPermissions,
+    useFolderContent,
+    useIsEffectiveOwner,
+    usePathInfo,
+    validateDriveSearch,
+} from '@workspace/lib/drive';
 import type { DrivePath, DriveSearchParams } from '@workspace/lib/types/drive';
-import { EmptyState, LoadingState, RequestAccessView } from '@workspace/ui';
+import { LoadingState, RequestAccessView } from '@workspace/ui';
 import { DriveAccessDialog } from '@workspace/ui/components/drive/drive-access-dialog';
 import { browseCapabilities } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
@@ -19,17 +25,15 @@ import { useContext, useEffect } from 'react';
 import { DriveContext } from './__root';
 
 export const Route = createFileRoute('/_auth/fs/$ownerId/$mountId/$pathId')({
-    component: DriveRoute,
-    validateSearch: (search: Record<string, unknown>): DriveSearchParams => {
-        const pid = typeof search.pid === 'string' ? search.pid : undefined;
-        const uid = typeof search.uid === 'string' ? search.uid : undefined;
-        const sharePathId = typeof search.sharePathId === 'string' ? search.sharePathId : undefined;
-        const shareEmail = typeof search.shareEmail === 'string' ? search.shareEmail : undefined;
-        return { pid, uid, sharePathId, shareEmail };
-    },
+    component: FolderRoute,
+    validateSearch: (search: Record<string, unknown>): DriveSearchParams => ({
+        ...validateDriveSearch(search),
+        sharePathId: typeof search.sharePathId === 'string' ? search.sharePathId : undefined,
+        shareEmail: typeof search.shareEmail === 'string' ? search.shareEmail : undefined,
+    }),
 });
 
-function DriveRoute() {
+function FolderRoute() {
     const { ownerId, mountId, pathId } = Route.useParams();
     const { pid, sharePathId, shareEmail } = Route.useSearch();
     const navigate = useNavigate();
@@ -130,12 +134,9 @@ function DriveRoute() {
         return <LoadingState />;
     }
 
-    if (folderContentError) {
-        if (isForbidden) {
-            if (isSelectedPathLoading || selectedPath) return <LoadingState />;
-            return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={pathId} />;
-        }
-        return <EmptyState message="Encountering the null vector: a rendezvous with nothing at all." />;
+    if (isForbidden) {
+        if (isSelectedPathLoading || selectedPath) return <LoadingState />;
+        return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={pathId} />;
     }
 
     return (

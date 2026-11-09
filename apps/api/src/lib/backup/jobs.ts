@@ -3,6 +3,7 @@
 // routes start jobs here, the server backup waits for each home's slot here, and shutdown drains what still runs.
 
 import * as path from 'node:path';
+import { homeBackupUnverifiedTag } from '@workspace/lib/notification/tags';
 import type { BackupJob, BackupProgress } from '@workspace/lib/types/backup';
 import { ApiError } from '../core';
 import { pullHomeSnapshot, sendToHome } from '../home/home-relay';
@@ -178,7 +179,7 @@ export async function runHomeBackup(ownerId: string, job: BackupJob, onProgress:
         // Fire-and-forget like the poke: a relay that fails must not replace the failure the admin needs to read.
         if (verify.status !== 'verified' && job.startedBy) {
             const title = `Backup of ${manifest.name} did not verify`;
-            alertUser(job.startedBy, title, describeFailures(verify), `backup-verify-${manifest.ownerId}`).catch(
+            alertUser(job.startedBy, title, describeFailures(verify), homeBackupUnverifiedTag(manifest.ownerId)).catch(
                 () => {},
             );
         }

@@ -2,6 +2,7 @@
 // login against them, and the queue monitor reports a mail backlog. Both only answer to requests from the same
 // machine.
 
+import { MAIL_QUEUE_BACKLOG_TAG } from '@workspace/lib/notification/tags';
 import { Elysia, t } from 'elysia';
 import { requireLocalhost } from '../lib/auth/access';
 import { verifyProtocolAuth } from '../lib/auth/protocol-auth';
@@ -37,7 +38,7 @@ export const internalRouter = new Elysia({ name: 'internal' })
                 notified: await alertOwner(
                     'Mail queue backlog',
                     `${body.queued} messages queued`,
-                    'mail-queue-backlog',
+                    MAIL_QUEUE_BACKLOG_TAG,
                 ),
             };
         },

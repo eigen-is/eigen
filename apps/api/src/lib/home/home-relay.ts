@@ -1,7 +1,7 @@
-// Every time one owner's Home reaches into another, it goes through this file. sendToHome pushes a
-// message into another home, and each pull reads one answer from one, such as the paths shared
-// with a user. A few calls write server-wide data instead, such as a user's avatar. Today every call
-// runs in this process. When homes live in several processes, only this file has to change.
+// Every time one owner's Home reaches into another, it goes through this file. sendToHome pushes a message into
+// another home, each pull reads one answer from one, such as the paths shared with a user, and pullFromEach runs a
+// pull against many homes at once. A few calls write server-wide data instead, such as a user's avatar. Today every
+// call runs in this process. When homes live in several processes, only this file has to change.
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -13,10 +13,10 @@ import type {
     CalendarItem,
     CalendarShare,
 } from '@workspace/lib/types/calendar';
-import type { DriveACL, DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
+import type { DriveACL, DrivePath, EffectiveMember, RecentPath } from '@workspace/lib/types/drive';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types/owner';
-import type { HomeSizeResponse, TeamSettings, UserSettings } from '@workspace/lib/types/settings';
+import type { HomeSizeResponse, MyTeam, TeamSettings, UserSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { settlesWithin } from '../../utils/timing';
 import { captureBytes, snapshotHome } from '../backup/snapshot-home';
@@ -34,10 +34,11 @@ import {
 } from '../config/paths';
 import { readContactsTotalSize } from '../contacts/card-store';
 import { LocalFilesystem } from '../core';
+import type { RecentRow } from '../drive/recent';
 import type { EventPatch } from '../ical/ical-component';
 import { readMailTotalSize } from '../mail/maildir-store';
-import type { User } from '../user';
-import { getMemberships, getUserById, getUsersByEmails, isGuest, updateUser } from '../user';
+import type { Memberships, User } from '../user';
+import { getMemberships, getOwnerExists, getUserById, getUsersByEmails, isGuest, updateUser } from '../user';
 import { getHome, getTeamHome, loadedHome, openHome } from './get-home';
 import { homeSize, userHomeSize } from './home';
 import { TeamHome } from './team-home';
@@ -48,6 +49,7 @@ import { TeamHome } from './team-home';
 // home does the whole job itself, its events and notifications included.
 export type HomeMessage =
     | { type: 'drive:acl-change'; path: DrivePath; acl: DriveACL[] | null; actorEmail?: string; actorName?: string }
+    | { type: 'drive:recent-open'; ownerId: string; mountId: string; pathId: string }
     | {
           type: 'calendar:share';
           ownerId: string;
@@ -105,6 +107,9 @@ async function deliver(targetId: string, message: DeliveredMessage): Promise<voi
     switch (message.type) {
         case 'drive:acl-change':
             await home.drive.receiveSharedPathChange(message.path, message.acl, message.actorEmail, message.actorName);
+            break;
+        case 'drive:recent-open':
+            home.drive.touchRecent(message.ownerId, message.mountId, message.pathId);
             break;
         case 'calendar:share':
             if (message.permission) {
@@ -245,6 +250,26 @@ export async function broadcastToOwnerAndMembers(
     );
 }
 
+// --- Reads across homes ---
+
+// A gone owner is skipped, and a failed read is logged and leaves that owner out, so the others still answer.
+export async function pullFromEach<T>(
+    ownerIds: readonly string[],
+    pull: (ownerId: string) => Promise<T>,
+): Promise<T[]> {
+    const results = await Promise.all(
+        ownerIds.map((ownerId) =>
+            getOwnerExists(ownerId)
+                .then((exists) => (exists ? pull(ownerId) : null))
+                .catch((err) => {
+                    console.error(`home-relay: reading ${ownerId} failed:`, err);
+                    return null;
+                }),
+        ),
+    );
+    return results.filter((result) => result !== null);
+}
+
 // --- Drive ---
 
 export async function pullSharedPaths(ownerId: string, user: User): Promise<DrivePath[]> {
@@ -255,6 +280,16 @@ export async function pullSharedPaths(ownerId: string, user: User): Promise<Driv
 export async function pullDrivePath(ownerId: string, mountId: string, pathId: string): Promise<DrivePath | null> {
     const home = await getHome(ownerId);
     return home.drive.getPath(mountId, pathId);
+}
+
+export async function pullRecentPaths(
+    ownerId: string,
+    user: User,
+    memberships: Memberships,
+    rows: readonly RecentRow[],
+): Promise<RecentPath[]> {
+    const home = await getHome(ownerId);
+    return home.drive.getRecentPathsFor(user, memberships, rows);
 }
 
 // --- Calendar ---
@@ -372,9 +407,7 @@ export async function pullTeamQuotaOverrides(ownerId: string): Promise<TeamQuota
     return home.settings.get().memberOverrides ?? {};
 }
 
-export async function pullTeamMounts(
-    ownerId: string,
-): Promise<{ id: string; name: string; rootPathId: string | null }[]> {
+export async function pullTeamMounts(ownerId: string): Promise<MyTeam['mounts']> {
     const home = await getTeamHome(ownerId);
     const mounts = Object.entries(home.settings.get().mounts ?? {}).filter(([, mount]) => mount.enabled);
     return Promise.all(

@@ -73,6 +73,16 @@ describe('composeAccessRequestEmail', () => {
         expect(mail.html).not.toContain('I need');
         expect(mail.html).toContain('Bob'); // still mentions requester
     });
+
+    test('a requester without a name is sent from their address', () => {
+        const mail = composeAccessRequestEmail(
+            PATH,
+            { name: 'Owner', email: 'owner@test.eigen.is' },
+            { name: '', email: 'bob@test.eigen.is' },
+            null,
+        );
+        expect(mail.from?.name).toBe('bob@test.eigen.is');
+    });
 });
 
 describe('composeCollaboratorsEmail', () => {
