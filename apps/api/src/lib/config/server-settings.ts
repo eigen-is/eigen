@@ -1,7 +1,7 @@
 // The server's settings, such as the storage quotas, the guest and landing page options and which emails go out,
 // kept in a JSON file in the server's data folder. They load once at startup, and routes and background jobs read
-// them through getServerSettings; the org owner changes them through the settings route. A value the file doesn't
-// hold has its default here.
+// them through getServerSettings; the org owner changes them through the settings route, and an admin reads the part
+// that isn't the owner's. A value the file doesn't hold has its default here.
 
 import type { S3Config } from '@workspace/lib/types/mount';
 import { EMPTY_S3 } from '@workspace/lib/types/mount';
@@ -12,7 +12,7 @@ import { LocalFilesystem } from '../core/local-filesystem';
 import { getServerDataPath, SERVER_FILES } from './paths';
 
 // A server with no backup set up, and what an admin who is not the owner reads of the backup settings.
-export const DEFAULT_BACKUPS: ServerSettings['backups'] = {
+const DEFAULT_BACKUPS: ServerSettings['backups'] = {
     schedule: { enabled: false, hourUtc: 2, withS3: false, keep: 7 },
     upload: { enabled: false, s3: EMPTY_S3, keep: 30 },
 };
@@ -73,6 +73,17 @@ const settingsStore = new JsonStore<ServerSettings>(serverFs, SERVER_FILES.setti
 
 export function getServerSettings(): ServerSettings {
     return settingsStore.get();
+}
+
+// What an admin who is not the owner reads. The mount's S3 secret and the backups are the owner's, and the team
+// mount form needs only the rest of the S3 defaults.
+export function getServerSettingsForAdmin(): ServerSettings {
+    const settings = getServerSettings();
+    const { s3Config } = settings.defaults.mount;
+    const mount = s3Config
+        ? { ...settings.defaults.mount, s3Config: { ...s3Config, secretAccessKey: '' } }
+        : settings.defaults.mount;
+    return { ...settings, defaults: { mount }, backups: DEFAULT_BACKUPS };
 }
 
 export async function updateServerSettings(update: DeepPartial<ServerSettings>): Promise<void> {
