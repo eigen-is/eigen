@@ -83,10 +83,12 @@ const path = drivePath({ name: 'Letter', mimeType: DRIVE_MIME_DOC });
 // lets it.
 const thread = { ...path, id: 'chat-a', name: 'thread-1.eigenchat', parentId: 'chat', mimeType: DRIVE_MIME_CHAT };
 let finishUpload = (_name: string) => {};
+let commentRows: object[] = [];
 spyOn(globalThis, 'fetch').mockImplementation(
     Object.assign(
         async (input: RequestInfo | URL, init?: RequestInit) => {
             if (String(input).includes('/folder/chat')) return Response.json([thread]);
+            if (String(input).endsWith('/comments')) return Response.json(commentRows);
             if (init?.method !== 'POST') return Response.json([]);
             const name = await new Promise<string>((resolve) => {
                 finishUpload = resolve;
@@ -101,6 +103,7 @@ beforeEach(() => {
     provider.destroy();
     doc = new Y.Doc();
     provider = new WebsocketProvider('ws://localhost:1', 'test', doc, { connect: false });
+    commentRows = [];
     // The outline's shown or hidden, which the browser remembers.
     localStorage.clear();
 });
@@ -1417,6 +1420,107 @@ test.each([
     await act(async () => mark.click());
     expect(commentsPanelShown()).toBe(true);
     expect(cardDialogText()).toContain('Check this');
+});
+
+// An equation in a paragraph of its own, at the start of the body.
+function writeEquation() {
+    const paragraph = new Y.XmlElement('paragraph');
+    const equation = new Y.XmlElement('equation');
+    equation.setAttribute('mathml', '<math xmlns="http://www.w3.org/1998/Math/MathML"><mi>x</mi></math>');
+    paragraph.insert(0, [equation]);
+    doc.getXmlFragment('default').insert(0, [paragraph]);
+}
+
+// A comment's hover card, over the body only: the highlighted text and each node's corner mark show the card after a
+// pause, leaving the body hides it, and a click on it opens the card as a click on the text does.
+const moveOver = (target: Element) =>
+    act(async () => target.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })));
+const hoverCardShown = () =>
+    document.querySelector('[data-slot="popover-content"]')?.textContent?.includes('Check this');
+// Longer than the pause before a card opens.
+const pastOpenDelay = () => act(() => new Promise((resolve) => setTimeout(resolve, 400)));
+
+test('a hover over commented text shows its card, and leaving the body hides it', async () => {
+    write('default', 'Hello', { comment: { cardId: 'c1' } });
+    writeCard();
+    await render(WRITER);
+    const span = bodyView()?.querySelector('.comment-highlight');
+    if (!span) throw new Error('no highlight');
+    await moveOver(span);
+    await waitUntil(() => hoverCardShown() === true, 'the hover card');
+
+    await act(async () =>
+        span.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body })),
+    );
+    await waitUntil(() => !hoverCardShown(), 'the hover card to close');
+});
+
+test.each([
+    ['an image', writeFigure],
+    ['a chart', writeChart],
+    ['a text box', writeTextBox],
+    ['an equation', writeEquation],
+])('a hover over the comment mark on %s shows its card, through its node view', async (_, writeNode) => {
+    writeNode();
+    const paragraph = doc.getXmlFragment('default').get(0);
+    const node = paragraph instanceof Y.XmlElement ? paragraph.get(0) : null;
+    if (!(node instanceof Y.XmlElement)) throw new Error('no node');
+    node.setAttribute('commentCardId', 'c1');
+    writeCard();
+    await render(WRITER);
+    const mark = bodyView()?.querySelector('button[data-comment-id="c1"]');
+    if (!mark) throw new Error('no comment mark');
+    await moveOver(mark);
+    await waitUntil(() => hoverCardShown() === true, 'the hover card');
+});
+
+test('a click on the hover card opens the card beside the comments panel', async () => {
+    write('default', 'Hello', { comment: { cardId: 'c1' } });
+    writeCard();
+    await render({ ...WRITER, chatFolderId: 'chats' });
+    const span = bodyView()?.querySelector('.comment-highlight');
+    if (!span) throw new Error('no highlight');
+    await moveOver(span);
+    await waitUntil(() => hoverCardShown() === true, 'the hover card');
+    const card = document.querySelector<HTMLElement>('[data-slot="popover-content"] .line-clamp-2');
+    await act(async () => card?.click());
+    expect(commentsPanelShown()).toBe(true);
+    expect(cardDialogText()).toContain('Check this');
+    expect(hoverCardShown()).toBeFalsy();
+});
+
+test('a resolved comment shows no card from its text, while a corner mark still does', async () => {
+    write('default', 'Hello', { comment: { cardId: 'c1' } });
+    writeEquation();
+    const paragraph = doc.getXmlFragment('default').get(0);
+    const equation = paragraph instanceof Y.XmlElement ? paragraph.get(0) : null;
+    if (!(equation instanceof Y.XmlElement)) throw new Error('no equation');
+    equation.setAttribute('commentCardId', 'c1');
+    writeCard();
+    commentRows = [{ chatName: 'thread-1', status: 'resolved', messageCount: 0 }];
+    await render(WRITER);
+    await waitUntil(() => bodyEditor().storage.comment.resolvedIds.has('c1'), 'the resolved card');
+
+    const span = bodyView()?.querySelector('.comment-highlight');
+    const mark = bodyView()?.querySelector('button[data-comment-id="c1"]');
+    if (!span || !mark) throw new Error('no anchors');
+    await moveOver(span);
+    await pastOpenDelay();
+    expect(hoverCardShown()).toBeFalsy();
+
+    await moveOver(mark);
+    await waitUntil(() => hoverCardShown() === true, 'the hover card');
+});
+
+test('a mark in a band shows no card, as only the body reports a hover', async () => {
+    write('header', 'Hello', { comment: { cardId: 'c1' } });
+    writeCard();
+    await render(WRITER);
+    const span = bandView('header')?.querySelector('.comment-highlight');
+    if (!span) throw new Error('no highlight');
+    await moveOver(span);
+    await pastOpenDelay();
+    expect(hoverCardShown()).toBeFalsy();
 });
 
 // Insert › Footnote and Insert › Text box open the new story with the caret in it; typing lands in the story, and Esc

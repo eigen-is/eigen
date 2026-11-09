@@ -118,7 +118,7 @@ function EquationView({ editor, node, getPos, selected, extension, decorations }
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => onOpenComment(commentCardId)}
                     aria-label="Open comment"
-                    title="Open comment"
+                    data-comment-id={commentCardId}
                 >
                     <CommentIndicator color={commentColor} className="pointer-events-none block" />
                 </button>
