@@ -2,7 +2,13 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import { rmSync } from 'node:fs';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { Calendar } from '../../lib/calendar/calendar';
-import { CALENDAR_TEST_ROOT, makeCalendar, storedEvents } from '../calendar-test-helpers';
+import {
+    CALENDAR_TEST_ROOT,
+    defaultCalendarId,
+    makeCalendar,
+    putResource,
+    storedEvents,
+} from '../calendar-test-helpers';
 import { waitFor } from '../fault-storage-helpers';
 import { vcal } from '../ics-test-helpers';
 
@@ -105,5 +111,89 @@ describe('calendar import', () => {
             'Series 3',
             'Series 4',
         ]);
+    });
+});
+
+describe('two files that define one TZID', () => {
+    const zone = (tzid: string, offset: string) => [
+        'BEGIN:VTIMEZONE',
+        `TZID:${tzid}`,
+        'BEGIN:STANDARD',
+        'DTSTART:19700101T000000',
+        `TZOFFSETFROM:${offset}`,
+        `TZOFFSETTO:${offset}`,
+        'END:STANDARD',
+        'END:VTIMEZONE',
+    ];
+    const zoned = (uid: string, block: string[], param: string) =>
+        vcal(block, [
+            'BEGIN:VEVENT',
+            `UID:${uid}`,
+            `DTSTART;TZID=${param}:20261110T100000`,
+            `DTEND;TZID=${param}:20261110T110000`,
+            'SUMMARY:Zoned',
+            'END:VEVENT',
+        ]);
+    const CUSTOM = 'Customized Time Zone';
+    const QUOTED = `"${CUSTOM}"`;
+
+    const roundTrip = async (files: Record<string, string>) => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        for (const [uid, body] of Object.entries(files))
+            await putResource(harness.instance, calendarId, `${uid}.ics`, body);
+        const text = await harness.instance.exportEvents(calendarId);
+
+        const target = await makeCalendar();
+        await target.instance.importEvents(await defaultCalendarId(target), new TextEncoder().encode(text));
+        const start = async (uid: string) => (await target.instance.getEventsByUid(uid))[0].startTime.toISOString();
+        return { text, start, blocks: text.match(/BEGIN:VTIMEZONE/g)?.length };
+    };
+
+    test('keeps each time when the definitions differ', async () => {
+        const { start, blocks } = await roundTrip({
+            tokyo: zoned('tokyo', zone(CUSTOM, '+0900'), QUOTED),
+            amsterdam: zoned('amsterdam', zone(CUSTOM, '+0100'), QUOTED),
+            amsterdamToo: zoned('amsterdamToo', zone(CUSTOM, '+0100'), QUOTED),
+        });
+
+        expect(await start('tokyo')).toBe('2026-11-10T01:00:00.000Z');
+        expect(await start('amsterdam')).toBe('2026-11-10T09:00:00.000Z');
+        expect(await start('amsterdamToo')).toBe('2026-11-10T09:00:00.000Z');
+        expect(blocks).toBe(2);
+    });
+
+    test('keeps each time when the name needs quoting and escaping', async () => {
+        const name = '(UTC+01:00) Amsterdam, Berlin';
+        const { start } = await roundTrip({
+            first: zoned('first', zone(name.replace(',', '\\,'), '+0100'), `"${name}"`),
+            second: zoned('second', zone(name.replace(',', '\\,'), '+0900'), `"${name}"`),
+        });
+
+        expect(await start('first')).toBe('2026-11-10T09:00:00.000Z');
+        expect(await start('second')).toBe('2026-11-10T01:00:00.000Z');
+    });
+
+    test('carries an identical definition once and a client file as it was written', async () => {
+        const { text, blocks } = await roundTrip({
+            one: zoned('one', zone(CUSTOM, '+0100'), QUOTED),
+            two: zoned('two', zone(CUSTOM, '+0100'), QUOTED),
+        });
+
+        expect(blocks).toBe(1);
+        expect(text.match(/DTSTART;TZID=Customized Time Zone:20261110T100000/g)).toHaveLength(2);
+    });
+
+    test('keeps an IANA name, which resolves through Intl whatever a file defines for it', async () => {
+        const IANA = 'Europe/Amsterdam';
+        const { text, start, blocks } = await roundTrip({
+            apple: zoned('apple', zone(IANA, '+0100'), IANA),
+            other: zoned('other', zone(IANA, '+0200'), IANA),
+        });
+
+        expect(blocks).toBe(1);
+        expect(text.match(/DTSTART;TZID=Europe\/Amsterdam:20261110T100000/g)).toHaveLength(2);
+        expect(await start('apple')).toBe('2026-11-10T09:00:00.000Z');
+        expect(await start('other')).toBe('2026-11-10T09:00:00.000Z');
     });
 });
