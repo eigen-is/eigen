@@ -22,7 +22,7 @@ import { invalidateItemCreated } from '../../drive/hooks/keys';
 import { subjectInfo } from '../../file-subject';
 import { invalidateHomeSize } from '../../home';
 import { fetchImportBlob } from '../../transfer';
-import { emailKeys, invalidateMailboxes } from './keys';
+import { emailKeys, invalidateDraftUpdated, invalidateMailboxes } from './keys';
 
 export function createDraftEmail(input: DraftInput): NewDraft {
     return {
@@ -102,12 +102,16 @@ export function useUpdateDraft() {
         },
         onSuccess: (data) => {
             // The list still refetches, because a row's date and attachment count may have changed.
-            if (data.id) queryClient.setQueryData(emailKeys.detail(ownerId, data.id), data);
+            queryClient.setQueryData(emailKeys.detail(ownerId, data.id), data);
             queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, MAILBOX_DRAFTS) });
             invalidateMailboxes(queryClient, ownerId);
             invalidateHomeSize(queryClient, ownerId);
         },
-        onError: onMutationError,
+        // onMutate wrote what the server refused into the cache, where staleTime: Infinity would keep it.
+        onError: (error, { draft }) => {
+            if (draft.id) invalidateDraftUpdated(queryClient, ownerId, draft.id);
+            onMutationError(error);
+        },
     });
 }
 

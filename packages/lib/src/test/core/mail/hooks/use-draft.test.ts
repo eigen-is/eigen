@@ -5,8 +5,17 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import type { DraftAttachmentUpload } from '@workspace/lib/types/mail';
 import { getMailAttachmentUrl, getMailDraftAttachmentUploadUrl } from '../../../../core/api';
 import { subjectFromMailAttachment } from '../../../../core/file-subject';
+import { emailKeys } from '../../../../core/mail/hooks/keys';
 import { renderHook } from '../../../render-hook';
-import { fetchCalls, installTransferHarness, OWNER, served, toasts, trackingClient } from '../../../transfer-harness';
+import {
+    fetchCalls,
+    hasKey,
+    installTransferHarness,
+    OWNER,
+    served,
+    toasts,
+    trackingClient,
+} from '../../../transfer-harness';
 
 installTransferHarness();
 
@@ -100,5 +109,29 @@ describe('useAttachMailPart', () => {
 
         expect(fetchCalls).toHaveLength(1);
         expect(toasts).toEqual(['error: Attachment 9 not found']);
+    });
+});
+
+describe('useUpdateDraft', () => {
+    test('a save the server refuses leaves the detail cache to refetch, so no unsaved text stays in it', async () => {
+        toasts.length = 0;
+        const { act } = await import('react');
+        const { useUpdateDraft } = await import('../../../../core/mail/hooks/use-draft');
+        const { queryClient, invalidated } = trackingClient();
+        const detail = emailKeys.detail(OWNER, 'm1');
+        queryClient.setQueryData(detail, { id: 'm1', subject: 'Went out', text: 'as sent', html: '<p>as sent</p>' });
+        const { latest, unmount } = await renderHook(() => useUpdateDraft(), queryClient);
+
+        const harnessFetch = globalThis.fetch;
+        const refuse = async () => new Response('This message is no longer a draft', { status: 409 });
+        globalThis.fetch = Object.assign(refuse, { preconnect: harnessFetch.preconnect });
+        await act(async () => {
+            await latest.mutateAsync({ draft: { id: 'm1', text: 'never sent' } }).catch(() => null);
+        });
+        globalThis.fetch = harnessFetch;
+        await unmount();
+
+        expect(hasKey(invalidated, detail)).toBe(true);
+        expect(toasts).toEqual(['error: This message is no longer a draft (409)']);
     });
 });
