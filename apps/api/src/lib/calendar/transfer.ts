@@ -6,7 +6,7 @@ import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { and, eq, inArray } from 'drizzle-orm';
-import ICAL from 'ical.js';
+import type ICAL from 'ical.js';
 import {
     ApiError,
     countVEvents,
@@ -41,9 +41,8 @@ export async function importEvents(
     let roots: ICAL.Component[];
     try {
         roots = parseCalendarStream(text);
-    } catch (e) {
-        if (e instanceof ICAL.parse.ParserError) throw new ApiError(400, NOT_A_CALENDAR_FILE);
-        throw e;
+    } catch {
+        throw new ApiError(400, NOT_A_CALENDAR_FILE);
     }
 
     // Grouped by UID first: a file may spell a master in one VCALENDAR object and its overrides in the next.
@@ -76,13 +75,25 @@ export async function importEvents(
 
     const actor = calendar.home.user.id;
     const result: ImportCountsResult = { imported: 0, skipped: 0, failed: 0 };
+    const held = new Set(
+        calendar.db
+            .select({ uid: schema.resources.uid })
+            .from(schema.resources)
+            .all()
+            .map((row) => row.uid),
+    );
     let written = 0;
     // The store announces nothing, so the file is one event, sent even when a refusal stops it partway.
     try {
-        for (const group of series.values()) {
+        for (const [uid, group] of series) {
             // Overrides with no master have nothing to attach to, and the file goes on without their series.
             if (!group.master) {
                 result.failed++;
+                continue;
+            }
+            // Before it costs a serialize and a parse, so a retry of a file that landed partway finishes it.
+            if (held.has(uid)) {
+                result.skipped++;
                 continue;
             }
             const importedOrganizer = dropScheduling(group.master);
@@ -102,6 +113,11 @@ export async function importEvents(
 
             // A fresh name every time: a UID is not a safe uri, and If-None-Match: * turns a UID the Home already holds into a skippable conflict.
             const body = serializeResource(resource);
+            // Counted before the put, since a series the store refuses has cost its parse all the same.
+            written += Buffer.byteLength(body);
+            if (written > ICS_IMPORT_MAX_WRITTEN_BYTES) {
+                throw new ApiError(413, `Import too large after importing ${result.imported} events`);
+            }
             const put = await davStore.putResource(calendar, calendarId, `${crypto.randomUUID()}.ics`, body, {
                 ifMatch: null,
                 ifNoneMatch: '*',
@@ -110,10 +126,6 @@ export async function importEvents(
             });
             if (put.ok) {
                 result.imported++;
-                written += Buffer.byteLength(body);
-                if (written > ICS_IMPORT_MAX_WRITTEN_BYTES) {
-                    throw new ApiError(413, `Import too large after importing ${result.imported} events`);
-                }
             } else if (put.error === 'uid-conflict') {
                 result.skipped++;
             } else if (put.error === 'quota') {

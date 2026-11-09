@@ -1260,13 +1260,64 @@ describe('Calendar transfer routes', () => {
         expect(await assertJson<ImportCountsResult>(res)).toEqual({ imported: count, skipped: 0, failed: 0 });
     }, 120_000);
 
-    test('a file that is not a calendar is 400 and nothing is written', async () => {
+    test.each([
+        ['bytes', 'not a calendar, just some bytes\r\n'],
+        ['a stray property', 'FOO:bar\r\n'],
+        ['a mail', 'Subject: x\r\n\r\nbody\r\n'],
+        [
+            'a second root ical.js has no design for',
+            'BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\nBEGIN:CONSTRUCTOR\r\nX:y\r\nEND:CONSTRUCTOR\r\n',
+        ],
+    ])('%s is no calendar: 400 and nothing is written', async (_name, file) => {
         const before = (await april()).length;
 
-        const res = await importRequest(alice, calendarId, 'not a calendar, just some bytes\r\n');
+        const res = await importRequest(alice, calendarId, file);
         expect(res.status).toBe(400);
         expect((await april()).length).toBe(before);
     });
+
+    test('series the store refuses count toward the written-bytes cap', async () => {
+        const uid = crypto.randomUUID();
+        const standard =
+            'BEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:+0100\r\nTZOFFSETTO:+0100\r\nEND:STANDARD';
+        const zone = ['BEGIN:VTIMEZONE', 'TZID:Own', ...Array(40_000).fill(standard), 'END:VTIMEZONE'];
+        const refused = Array.from({ length: 20 }, (_, i) => [
+            'BEGIN:VEVENT',
+            `UID:${uid}-${i}@other`,
+            'DTSTART;TZID=Own:20260421T100000',
+            'DTEND;TZID=Own:20260421T090000',
+            'END:VEVENT',
+        ]);
+
+        const res = await importRequest(alice, calendarId, vcal(zone, ...refused));
+
+        expect(res.status).toBe(413);
+        expect((await april()).some((event) => event.uid.startsWith(uid))).toBe(false);
+    }, 60_000);
+
+    test('series the Home already holds are skipped before they cost a parse', async () => {
+        const uid = crypto.randomUUID();
+        const uids = Array.from({ length: 20 }, (_, i) => `${uid}-${i}@other`);
+        const small = uids.map((held) => vevent(held, 'Held', '20260421T090000Z', '20260421T100000Z'));
+        expect((await importRequest(alice, calendarId, vcal(...small))).status).toBe(200);
+        const standard =
+            'BEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:+0100\r\nTZOFFSETTO:+0100\r\nEND:STANDARD';
+        const zone = ['BEGIN:VTIMEZONE', 'TZID:Own', ...Array(40_000).fill(standard), 'END:VTIMEZONE'];
+        const fat = uids.map((held) => [
+            'BEGIN:VEVENT',
+            `UID:${held}`,
+            'DTSTART;TZID=Own:20260421T090000',
+            'DTEND;TZID=Own:20260421T100000',
+            'END:VEVENT',
+        ]);
+
+        const body = vcal(zone, ...fat);
+        const cpuMs = cpuClock();
+        const res = await importRequest(alice, calendarId, body);
+
+        expect(cpuMs()).toBeLessThan(2000);
+        expect(await assertJson<ImportCountsResult>(res)).toEqual({ imported: 0, skipped: 20, failed: 0 });
+    }, 60_000);
 
     // iCalendar is UTF-8 (RFC 5545 §3.1), the same fact a vCard import answers on: the file is refused for
     // its encoding, not lumped in with bytes that are no calendar at all.
