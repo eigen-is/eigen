@@ -81,16 +81,18 @@ export const SheetTab: React.FC = () => {
     const onAddSheetClick = useCallback(
         () =>
             setTimeout(() => {
+                setContext((draftCtx) => {
+                    if (draftCtx.editingCellPosition.length > 0) {
+                        updateCell(
+                            draftCtx,
+                            draftCtx.editingCellPosition[0],
+                            draftCtx.editingCellPosition[1],
+                            refs.cellInput.current,
+                        );
+                    }
+                });
                 setContext(
                     (draftCtx) => {
-                        if (draftCtx.editingCellPosition.length > 0) {
-                            updateCell(
-                                draftCtx,
-                                draftCtx.editingCellPosition[0],
-                                draftCtx.editingCellPosition[1],
-                                refs.cellInput.current,
-                            );
-                        }
                         addSheet(draftCtx);
                     },
                     { addSheetOp: true },

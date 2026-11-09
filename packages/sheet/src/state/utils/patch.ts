@@ -1,5 +1,5 @@
-// Converts between the editor's immer patches and the ops it sends to peers. patchToOp names each sheet by id. A row or
-// column op or a rename ships its marker alone, since every receiver's engine makes the same writes. addSheetOps and
+// Converts between the editor's immer patches and the ops it sends to peers. patchToOp names each sheet by id. A sheet,
+// row or column op ships its marker alone, since every receiver's engine makes the same writes. addSheetOps and
 // deleteSheetOps build a sheet's add and delete batches, the add with the sheet's cells as stored. filterPatch keeps
 // what belongs on the wire, and opToPatch turns a peer's ops back into patches on this client's sheet indices.
 
@@ -44,10 +44,12 @@ export function renameSheetOps(id: string, name: string): Op[] {
     return [{ op: 'renameSheet', id, path: [], value: { name } }];
 }
 
-// The batch an edit sends. A row or column op ships its marker instead of the sheets it rewrote.
+// The batch an edit sends. A sheet or row op ships its marker instead of the sheets it rewrote, because every reader
+// recomputes, and a value it shipped could land on a cell a peer has since moved or written.
 export function patchToOp(ctx: Context, patches: Patch[], options: EntryOptions = {}): Op[] {
     if (options.renamedSheet) return renameSheetOps(options.renamedSheet.id, options.renamedSheet.to);
     if (options.deletedSheet) return deleteSheetOps(options.deletedSheet, ctx.sheets);
+    if (options.addedSheet) return addSheetOps(options.addedSheet, ctx.sheets);
     const marker = rowColMarker(options);
     if (marker) return [marker];
     const ops = patches.map((p) => {
@@ -70,11 +72,6 @@ export function patchToOp(ctx: Context, patches: Patch[], options: EntryOptions 
         const key = `${r}_${c}`;
         const link = ctx.sheets.find((s) => s.id === op.id)?.hyperlink?.[key];
         if (link) ops.push({ id: op.id, op: 'replace', path: ['hyperlink', key], value: link });
-    }
-    if (options.addedSheet) {
-        // A copy moves the sheets after it, and the batch carries their orders. The rest of the recipe still ships.
-        const rest = ops.filter((op) => op.path.length > 0 && op.path[0] !== 'order');
-        return [...rest, ...addSheetOps(options.addedSheet, ctx.sheets)];
     }
     return ops;
 }

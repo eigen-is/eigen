@@ -2,10 +2,13 @@ import { describe, expect, test } from 'bun:test';
 import { produce } from 'immer';
 import { generateAPIs } from '../../../components/Workbook/api';
 import { createArrayResolver } from '../../../engine/cell-resolver';
+import { walkFormulaRefs } from '../../../engine/formula-shift';
 import { recomputeAfter } from '../../../engine/recalc';
 import { replaySheetsOps } from '../../../engine/replay-ops';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from '../../../engine/rowcol';
+import { copySheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
+import { applyOpBatch } from '../../../state/modules/apply-ops';
 import { updateCell } from '../../../state/modules/cell';
 import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
@@ -609,4 +612,64 @@ describe('the seeds are enough', () => {
         expect(wrong).toBe(0);
         expect(changed).toBeGreaterThan(100);
     }, 60_000);
+});
+
+describe('an added tab ships no values', () => {
+    // Two is first so a typed edit lands on it. The add brings a broken name to life, so the author's recompute writes.
+    const start = () => book({ name: 'Two', cells: [[f('=Three!A1', '#REF!'), n(1), null]] });
+    const addThree = (t: ReturnType<typeof tab>) => {
+        const value = { name: 'Three', id: 's3', order: 1, data: [[n(7)]], row: 1, column: 1 } as never;
+        return tabEdit(t, (d) => addSheet(d, 's3', undefined, value), { addSheetOp: true });
+    };
+
+    test('its batch is the sheet alone, whatever the recompute wrote', () => {
+        const t = tab(start());
+        const batch = addThree(t);
+        expect(at(t.ctx.sheets, 's1', 0, 0)?.v).toBe(7);
+        expect(batch.map((op) => op.op)).toEqual(['addSheet']);
+    });
+
+    test('a peer`s edit the log puts before it survives on the author, the peer and a joiner', () => {
+        const base = start();
+        const author = tab(base);
+        const peer = tab(base);
+        const add = addThree(author);
+        const typed = tabEdit(peer, (d) => {
+            updateCell(d, 0, 2, null, 123);
+        });
+        tabReceive(author, typed);
+        tabReceive(peer, add);
+        const joiner = join(base, [typed, add]);
+        for (const sheets of [author.ctx.sheets, peer.ctx.sheets, joiner]) {
+            expect(at(sheets, 's1', 0, 2)?.v).toBe(123);
+            expect(at(sheets, 's1', 0, 0)?.v).toBe(7);
+        }
+    });
+
+    test('a peer`s row insert the log puts before it survives on the author, the peer and a joiner', () => {
+        const base = start();
+        const author = tab(base);
+        const peer = tab(base);
+        const add = addThree(author);
+        const op = insertRow(0);
+        const inserted = tabEdit(peer, (d) => insertRowCol(d, op, false), { insertRowColOp: op });
+        tabReceive(author, inserted);
+        tabReceive(peer, add);
+        const joiner = join(base, [inserted, add]);
+        for (const sheets of [author.ctx.sheets, peer.ctx.sheets, joiner]) {
+            expect(sheets[0].data?.length).toBe(2);
+            expect(at(sheets, 's1', 1, 0)?.f).toBe('=Three!A1');
+            expect(at(sheets, 's1', 1, 0)?.v).toBe(7);
+            expect(at(sheets, 's1', 1, 1)?.v).toBe(1);
+        }
+    });
+
+    test('a copy of a tab ships its add and the orders it moved', () => {
+        const t = tab(book({ cells: [[n(1)]] }, { cells: [[n(2)]] }));
+        const batch = tabEdit(t, (d) => copySheet(d, 's1'), { addSheetOp: true });
+        expect(batch.map((op) => [op.op, op.path.join('.')])).toEqual([
+            ['addSheet', ''],
+            ['replace', 'order'],
+        ]);
+    });
 });
