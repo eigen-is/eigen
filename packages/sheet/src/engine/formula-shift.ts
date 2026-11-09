@@ -1,8 +1,8 @@
 // Reads and rewrites the references in a formula's text without parsing it: a copy or a fill shifts its relative refs,
 // an inserted or deleted row or column moves the refs past it, a renamed sheet renames them and a deleted one breaks
 // them, an xlsx import replaces each defined name with what it refers to, and the dependency walk lists them. One
-// character walker finds the refs and the names for all of them and writes back only those that change. It reads only plain sheets, so the editor and the
-// server share it, for example in the op replay and the recalc.
+// character walker finds the refs and the names for all of them and writes back only those that change. It reads only
+// plain sheets, so the editor and the server share it, for example in the op replay and the recalc.
 
 import type { Cell, Sheet } from '@workspace/lib/sheets';
 import {
