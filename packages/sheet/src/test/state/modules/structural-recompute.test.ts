@@ -673,3 +673,45 @@ describe('an added tab ships no values', () => {
         ]);
     });
 });
+
+describe('an error typed into a formula', () => {
+    const LITERALS = ['#N/A', '#DIV/0!', '#NAME?', '#NULL!', '#NUM!', '#REF!', '#VALUE!'];
+
+    test.each(LITERALS)('%s is a token, so a formula holding it computes on an edit', (literal) => {
+        const t = tab(book({ cells: [[n(2), f(`=IF(A1=1,${literal},A1*2)`, 4)]] }));
+        warmFormulaCellInfoMap(t.ctx);
+        tabEdit(t, (d) => {
+            updateCell(d, 0, 0, null, 5);
+        });
+        expect(at(t.ctx.sheets, 's1', 0, 1)?.v).toBe(10);
+    });
+
+    test.each(LITERALS)('%s stays as it is through a walk, and names no ref', (literal) => {
+        const refs: string[] = [];
+        const names: string[] = [];
+        const text = walkFormulaRefs(
+            `=A1+${literal}+B2`,
+            (ref) => {
+                refs.push(ref);
+                return ref;
+            },
+            (name) => {
+                names.push(name);
+                return name;
+            },
+        );
+        expect(text).toBe(`A1+${literal}+B2`);
+        expect(refs).toEqual(['A1', 'B2']);
+        expect(names.filter(Boolean)).toEqual([]);
+    });
+
+    test('a sheet named in front of #REF! stays one leaf, as Excel writes it', () => {
+        const refs: string[] = [];
+        const text = walkFormulaRefs('=Sheet1!#REF!+B2', (ref) => {
+            refs.push(ref);
+            return ref;
+        });
+        expect(text).toBe('Sheet1!#REF!+B2');
+        expect(refs).toEqual(['B2']);
+    });
+});

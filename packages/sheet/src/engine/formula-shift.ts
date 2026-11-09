@@ -15,6 +15,7 @@ import {
     unquoteSheetName,
 } from './a1-notation';
 import { formulaOperators, iscelldata, isFormula } from './formula-utils';
+import { errorValues } from './parser/error';
 import { offsetCoordinate, offsetRange, sortLegs } from './parser/helper/cell';
 import { error } from './validation';
 
@@ -279,7 +280,11 @@ export function walkFormulaRefs(
             result += leaf() + operator;
             i += operator.length - 1;
         } else {
-            str += s;
+            // An error literal is one token: `#N/A` and `#DIV/0!` hold an operator, which reads their tail as a name.
+            const literal = s === '#' && str === '' ? errorValues.find((text) => txt.startsWith(text, i)) : undefined;
+            if (literal) result += literal;
+            else str += s;
+            i += (literal?.length ?? 1) - 1;
         }
     }
 

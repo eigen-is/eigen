@@ -45,7 +45,7 @@ const errors: Record<string, string> = {
     [ERROR_VALUE]: '#VALUE!',
 };
 
-const errorValues = Object.values(errors);
+export const errorValues = Object.values(errors);
 
 // Look up the user-facing error string (e.g. "#VALUE!") for an error id. Accepts ids with
 // or without surrounding `#!?` so it works both as a lookup and as a normalizer for
