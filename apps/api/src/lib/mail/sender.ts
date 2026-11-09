@@ -3,13 +3,14 @@
 // presses send.
 
 import type { EmailDraft } from '@workspace/lib/types/mail';
-import type { OutboundAttachment, OutboundMail } from '../mailer/mailer';
+import { mailAttachmentName } from '@workspace/lib/types/mail';
+import type { OutboundMail } from '../mailer/mailer';
 import { buildMessageId } from './mailutils';
 import { canonicalizeRecipients } from './recipients';
 
 // `from` is the draft's From, which every draft save pins to the account, else the account's; the mailer decides whether it goes out as that address.
 export function draftToOutboundMail(draft: EmailDraft, fallbackEmail: string): OutboundMail {
-    const fromValue = draft.from?.value?.[0];
+    const fromValue = draft.from?.value[0];
 
     // Flatten groups, dedupe and validate once, then split back into the three fields.
     const to: { name: string; address: string }[] = [];
@@ -25,10 +26,10 @@ export function draftToOutboundMail(draft: EmailDraft, fallbackEmail: string): O
             ? { name: fromValue.name || '', address: fromValue.address }
             : { name: '', address: fallbackEmail },
         to,
-        subject: draft.subject || '',
+        subject: draft.subject,
         text: draft.text || '',
-        // Pin the wire Message-ID to the value the Sent EML carries (mailfile.ts), so a reply to
-        // our sent mail threads against a header the recipient actually saw.
+        // Pin the wire Message-ID to the value the Sent copy carries, so a reply to our sent mail threads against a
+        // header the recipient actually saw.
         messageId: buildMessageId(draft.id),
     };
 
@@ -39,10 +40,14 @@ export function draftToOutboundMail(draft: EmailDraft, fallbackEmail: string): O
 
     if (draft.html) message.html = draft.html;
 
-    if (draft.attachments?.length) {
-        message.attachments = draft.attachments.flatMap((a): OutboundAttachment[] =>
-            a.filename ? [{ filename: a.filename, content: Buffer.from(a.content), contentType: a.contentType }] : [],
-        );
+    if (draft.attachments.length) {
+        // Spelled out because MailComposer marks a message/* part inline, and a recipient's client would draw it in the body.
+        message.attachments = draft.attachments.map((a) => ({
+            filename: mailAttachmentName(a, a.index),
+            content: Buffer.from(a.content),
+            contentType: a.contentType,
+            contentDisposition: 'attachment',
+        }));
     }
 
     return message;

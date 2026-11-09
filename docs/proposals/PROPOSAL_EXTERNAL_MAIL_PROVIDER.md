@@ -59,7 +59,7 @@ This proposal lets Eigen's Mail app work on a mailbox the user already has at an
 - **Folders.** Eigen's Sent / Drafts / Trash / Junk / Archive map onto the provider's folders through `SPECIAL-USE` (RFC 6154), with a name-based fallback. Other folders list as they are.
 - **Flags.** `seen`, `replied`, `flagged`, `draft` are the IMAP system flags; `forwarded` is the `$Forwarded` keyword where the server permits keywords; `trashed` is a move to Trash.
 - **Search.** `search()` is synchronous and runs on the summary index today, so parity costs nothing: the same query over the same table. Server-side full-text (`UID SEARCH`) is a later, async addition.
-- **Drafts stay local in v1.** The sidecar + temp-file machinery (`writeDraftMeta`, `persistDraftTemp`, …) assumes in-place rewrites IMAP does not have. Drafts are kept in the home directory and are not visible in other clients until sent. Appending to the provider's Drafts folder is a follow-up.
+- **Drafts stay local in v1.** The temp-file machinery (`persistDraftTemp`) and a draft saved under one id every few seconds assume a local Maildir, not a provider's IMAP. Drafts are kept in the home directory and are not visible in other clients until sent. Appending to the provider's Drafts folder is a follow-up.
 - **No welcome mail.** `Mail.init` skips the seed when the store is remote.
 - **Library.** `imapflow` is the candidate — same maintainers as the already-used `nodemailer`, with XOAUTH2, IDLE, CONDSTORE/QRESYNC and SPECIAL-USE built in. Verify it under Bun before committing to it.
 

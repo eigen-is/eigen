@@ -5,7 +5,7 @@ import { expect } from 'bun:test';
 import { treaty } from '@elysiajs/eden';
 import type { DrivePath, MountInfo, OrgTeam } from '@workspace/lib/types';
 import { teamOwnerId } from '@workspace/lib/types';
-import type { EmailDraft } from '@workspace/lib/types/mail';
+import type { DraftUpdateOptions, EmailDraft } from '@workspace/lib/types/mail';
 import type { ServerStorageType } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import type { Snapshot } from '@workspace/lib/types/versioning';
@@ -531,7 +531,7 @@ export async function putDraft(
     sessionToken: string,
     ownerId: string,
     mail: Partial<EmailDraft>,
-    options: { tempAttachmentIds?: string[]; keepAttachmentIndexes?: number[] } = {},
+    options: DraftUpdateOptions = {},
 ): Promise<EmailDraft> {
     const res = await authedRequest(sessionToken, `/mail/${ownerId}/message/draft`, {
         method: 'PUT',
@@ -539,7 +539,7 @@ export async function putDraft(
         body: JSON.stringify({
             mail,
             tempAttachmentIds: options.tempAttachmentIds,
-            keepAttachmentIndexes: options.keepAttachmentIndexes,
+            keepAttachments: options.keepAttachments,
         }),
     });
     return assertJson(res);

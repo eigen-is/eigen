@@ -89,6 +89,7 @@ describe('draftToOutboundMail', () => {
             to: { value: [{ name: 'Team', group: [{ name: 'A', address: 'a@x.com' }] }], text: '' },
             inReplyTo: '<parent@x.com>',
             references: '<r1@x.com>',
+            attachments: [],
         } as unknown as EmailDraft;
         const out = draftToOutboundMail(draft, 'me@localhost');
         expect(out.to).toEqual([{ name: 'A', address: 'a@x.com' }]);

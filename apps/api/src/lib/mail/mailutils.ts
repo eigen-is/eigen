@@ -1,3 +1,7 @@
+// The small rules of the Maildir format: how a message's unique id is minted, how a filename carries the id, the size
+// and the flags, and how a mailbox maps to its folder. The store and the parse use them, and so do the tests and scripts
+// that touch the files.
+
 import { hostname } from 'node:os';
 import * as path from 'node:path';
 import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
@@ -32,8 +36,8 @@ export function createUniqueMessageId(): string {
     const usec = (now % 1000) * 1000;
     const pid = process.pid;
     const seq = deliveryCounter++;
-    // The id names a Maildir file, a draft sidecar and a staged part, so the host part is reduced to what
-    // `isSafePathSegment` accepts — Maildir's own `\057`/`\072` escapes for `/` and `:` would fail it.
+    // The id names a Maildir file, so the host part is reduced to what `isSafePathSegment` accepts. Maildir's own
+    // `\057`/`\072` escapes for `/` and `:` would fail it.
     const host = hostname().replace(/[^A-Za-z0-9._-]/g, '-');
     return `${time}.M${usec}P${pid}Q${seq}.${host}`;
 }
@@ -76,12 +80,10 @@ export function parseFlagsFromFilename(fileName: string) {
     };
 }
 
-export function rebuildFlagsSuffix(currentFilename: string, changes: Partial<Record<MailFlag, boolean>>): string {
-    const match = currentFilename.match(FLAGS_SUFFIX_RE);
-    const existing = match?.[1] || '';
-    const keywords = existing.replace(/[A-Z]/g, '');
-    const current = parseFlagsFromFilename(currentFilename);
-    return serializeFlags({ ...current, ...changes }) + keywords;
+export function filenameWithFlags(filename: string, changes: Partial<Record<MailFlag, boolean>>): string {
+    const keywords = (filename.match(FLAGS_SUFFIX_RE)?.[1] ?? '').replace(/[A-Z]/g, '');
+    const flags = { ...parseFlagsFromFilename(filename), ...changes };
+    return `${filename.split(':')[0]}:2,${serializeFlags(flags)}${keywords}`;
 }
 
 export function applyFlagsFromFilename(email: EmailSummary, filename: string): void {

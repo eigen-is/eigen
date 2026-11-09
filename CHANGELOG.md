@@ -31,6 +31,13 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Fixed
 
+- **Drafts in Mail** — a save that fails, or a crash during one, no longer loses the draft. An attached email stays an attachment, and removing an attachment never takes another with it
+- **Older drafts in Mail** — a draft saved before this update loses its Bcc and its links to Drive documents, whose pills stay plain links in the text
+- **Drafts in other mail apps** — a mail app reading over IMAP gets each save as a new message, with its links to Drive documents and its Bcc. Bcc also stays on the copy in **Sent**. A mail app's own send of the draft carries a hidden comment naming those links to its recipients
+- **Editing a draft in a mail app** — while Eigen's composer holds the draft, the next auto-save makes two drafts, with neither's text lost. Eigen's copy keeps its links but not its attachments, and the mail app's keeps both
+- **A draft left open** — opened from Drafts and left idle while a mail app edits it, it says the message is gone, and one draft remains. In two Eigen tabs, the last save wins
+- **Sent mail** — a tab left open after a send can no longer pull the message back into Drafts or mail it twice. A collapsed message keeps Bcc off its To line, and shows Bcc on its summary line only when it went to nobody else
+- **Resolved comments in Docs** — resolving a comment removes its highlight from the text, which used to stay yellow
 - **Merged cells in Sheets** — pasting text over a merged cell replaces the merge, and wrapped text in a merged cell no longer makes its row very tall
 - **Restoring in Slides and Vector** — restoring an earlier version of a deck or drawing brings back the comments deleted since, as Docs and Sheets do. Their replies stay as they are now
 - **Version history in other tabs** — after a restore or a Delete history, another tab open on the same document shows the new list of versions at once
@@ -61,6 +68,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Sending in Chat and comments** — a send that fails keeps its text and files, and a slash command such as /help leaves your attachments waiting. Send stays off until the room has loaded, so a message can't go out without its files
 - **Changing room in Chat** — what you were about to send is cleared when you change room, so it can't go to the wrong one
 - **Two people editing in Calendar** — editing, moving or deleting an event someone else just changed is refused instead of overwriting their change
+- **Removing a location in Calendar** — an update that only removes an event's location or description reaches its guests
+- **Very large calendar events** — saving a huge event through a calendar client takes seconds at most instead of freezing the server for minutes
 - **A refused Save** — in Calendar, Contacts and Personal info in Space, a Save refused because the item changed elsewhere keeps what you typed and takes the other fields from the server
 - **Removing someone with a document open** — removing someone from a team or an organization, or deleting their account, cuts them off at once from the documents they can no longer read. A password reset does too
 - **Losing access to an open document** — in Docs, Sheets, Slides, Vector and Stickies, the page switches to "You need access" at once, or to sign-in if your account was deleted, instead of leaving an editor where typing goes nowhere

@@ -123,3 +123,36 @@ test('the header details name each field in sentence case', async () => {
     );
     expect(labels).toEqual(['From:', 'Reply-to:', 'To:', 'Cc:', 'Bcc:', 'Date:', 'Subject:']);
 });
+
+test('a sent message keeps its Bcc out of the To line, and shows it in the details', async () => {
+    ({ unmount } = await renderInDocument(
+        createElement(MessageView, {
+            subject: 'Sent',
+            to: address('Grace', 'grace@example.com'),
+            bcc: address('Edsger', 'edsger@example.com'),
+            isSent: true,
+            text: 'Hello',
+        }),
+    ));
+    const trigger = [...document.querySelectorAll('button')].find((b) => b.textContent?.startsWith('To: '));
+    if (!trigger) throw new Error('the header has no To: line');
+    expect(trigger.textContent).toBe('To: Grace');
+    await act(async () => trigger.click());
+    expect(document.querySelector('[data-slot="popover-content"]')?.textContent).toContain('Edsger');
+});
+
+test('a message sent only to Bcc names them as Bcc, and its details stay reachable', async () => {
+    ({ unmount } = await renderInDocument(
+        createElement(MessageView, {
+            subject: 'Sent',
+            bcc: address('Edsger', 'edsger@example.com'),
+            date: new Date('2026-01-05T14:30:00Z'),
+            isSent: true,
+            text: 'Hello',
+        }),
+    ));
+    const trigger = [...document.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Bcc: '));
+    if (!trigger) throw new Error('the header has no Bcc: line');
+    expect(trigger.textContent).toBe('Bcc: Edsger');
+    expect(document.body.textContent).not.toContain('Unknown');
+});

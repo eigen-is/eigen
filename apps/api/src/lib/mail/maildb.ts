@@ -1,12 +1,12 @@
 // The mail index of a user's Home: one SQLite database with a row for each message, and full-text search over it.
 // The message itself stays in the maildir. The index keeps what lists and search need, such as the sender, the
-// subject, the flags and a short preview. MailDomain uses it for everything it reads and writes there.
+// subject, the flags and the text. The Maildir store uses it for everything it reads and writes there.
 
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import { MAIL_PREVIEW_CHARS } from '@workspace/lib/constants/mail';
 import { MAILBOX_JUNK, MAILBOX_TRASH } from '@workspace/lib/constants/mailboxes';
-import type { EmailSummary, RecipientSummary } from '@workspace/lib/types/mail';
+import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { SQL } from 'drizzle-orm';
 import { and, count, desc, eq, inArray, lt, notInArray, or, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
@@ -18,10 +18,8 @@ import { MAIL_DB_CONFIG } from './db-config';
 import type { MailSearchOptions } from './mail-store';
 import * as schema from './schema';
 
-// What MailDB.size() answers, for a mail.db nobody has opened — the admin usage view sizes every
-// home at once, so it reads the same index sum the quota gate uses. Read-write on purpose: a WAL
-// database whose owner is not holding it open has no -shm beside it, and a read-only open of one
-// fails outright. Only ever used for this SELECT.
+// What MailDB.size() answers, for a mail.db nobody has opened. Read-write on purpose: a WAL database nobody holds open
+// has no -shm beside it, and a read-only open of one fails outright.
 export function readMailIndexSize(dbPath: string): number {
     if (!fs.existsSync(dbPath)) return 0;
     const db = new Database(dbPath, { readwrite: true, create: false });
@@ -34,7 +32,7 @@ export function readMailIndexSize(dbPath: string): number {
     }
 }
 
-// Mailboxes excluded from default mail search — users can still search them explicitly.
+// Left out of a default search. A search can still name them.
 const SEARCH_EXCLUDED_MAILBOXES = [MAILBOX_TRASH, MAILBOX_JUNK];
 
 // A list or search response carries the preview only; the FULL textShort stays in the DB for FTS5.
@@ -58,8 +56,7 @@ export default class MailDB {
         this.db = this.managedDb.db;
     }
 
-    // Picks the summary fields by name: callers hand in a full parsed Email, whose extra
-    // ParsedMail fields have no column here.
+    // By name, because callers hand in a full parsed Email, whose extra fields have no column here.
     private toRecord(email: EmailSummary) {
         const now = new Date();
         return {
@@ -85,29 +82,8 @@ export default class MailDB {
         };
     }
 
-    public addEmail(email: EmailSummary): boolean {
-        const record = this.toRecord(email);
-
-        const existing = this.db.select().from(schema.emails).where(eq(schema.emails.id, record.id)).get();
-        let inserted: boolean;
-        if (existing) {
-            const { id: _id, ...rest } = record;
-            this.db.update(schema.emails).set(rest).where(eq(schema.emails.id, email.id)).run();
-            inserted = false;
-        } else {
-            this.db.insert(schema.emails).values(record).run();
-            inserted = true;
-        }
-        return inserted;
-    }
-
-    // Bulk insert-only path for the sync's cold-index loop: the caller's diff map already proved
-    // every id is new, so this skips addEmail's per-row SELECT and commits the whole chunk in one
-    // transaction. Upsert (not a plain insert) on the id PK: a cross-mailbox id collision (e.g. a
-    // file whose message-id already lives in another mailbox's row, from a crash mid-move) would
-    // make a plain insert throw and roll back the entire chunk — and the next sync would retry the
-    // same chunk and roll back again, permanently stuck. Upsert re-homes the row instead, matching
-    // addEmail's own check-then-update semantics, while staying a single statement per row.
+    // Upsert on the id, not a plain insert: a file whose id already has a row, such as a re-saved draft or one a crash
+    // left in two mailboxes, would otherwise roll the whole chunk back on every sync. The caller credits what it replaces.
     public insertEmails(emails: EmailSummary[]): void {
         if (emails.length === 0) return;
         this.db.transaction((tx) => {
@@ -126,8 +102,7 @@ export default class MailDB {
         return this.db.select({ size: sql<number>`SUM(size)` }).from(schema.emails).get()?.size || 0;
     }
 
-    // What an upsert chunk is about to replace, in one query — the store's byte counter needs it before
-    // insertEmails runs, and a per-row select is what that path exists to avoid.
+    // What an upsert chunk is about to replace. The byte counter needs it before insertEmails runs.
     public sumSizes(ids: string[]): number {
         if (ids.length === 0) return 0;
         return (
@@ -176,26 +151,7 @@ export default class MailDB {
             .run();
     }
 
-    // `text` is the full draft body, but emails.textShort stores a truncated preview for
-    // list views — the same shape as received mail. The FTS5 trigger on emails picks up
-    // whatever lands in textShort, so drafts get indexed at preview granularity.
-    public updateDraftContent(id: string, subject: string, text: string, recipients: RecipientSummary): void {
-        this.db
-            .update(schema.emails)
-            .set({
-                subject,
-                textShort: text.slice(0, MAIL_PREVIEW_CHARS),
-                updatedAt: new Date(),
-                toShort: recipients.toShort,
-                toAddress: recipients.toAddress,
-                recipientsAll: recipients.recipientsAll,
-            })
-            .where(eq(schema.emails.id, id))
-            .run();
-    }
-
-    // The three columns the reconcile diff reads. A `SELECT *` would carry every row's `textShort` — the
-    // whole body, kept for FTS — so a 100k-message mailbox paid 417 MiB to compare filenames.
+    // A `SELECT *` would carry every row's `textShort`, the whole body kept for FTS, just to compare filenames.
     public listReconcileRows(mailbox: string) {
         return this.db
             .select({ id: schema.emails.id, filename: schema.emails.filename, size: schema.emails.size })
@@ -204,9 +160,7 @@ export default class MailDB {
             .all();
     }
 
-    // Keyset pagination, newest-first. Composite (date, id) cursor because `date` has duplicate
-    // values in practice; `id` (TEXT PK) is the tiebreak. Drizzle serializes the Date param to the
-    // column's second unit, matching the stored value.
+    // Keyset pagination, newest first. `id` breaks a tie, because `date` has duplicates in practice.
     public listMessages(mailbox: string, opts: { limit: number; before?: { date: Date; id: string } }): EmailSummary[] {
         const conditions: (SQL | undefined)[] = [eq(schema.emails.mailbox, mailbox)];
         if (opts.before) {
@@ -230,9 +184,7 @@ export default class MailDB {
     public searchMail(opts: MailSearchOptions): EmailSummary[] {
         const match = sanitizeFtsQuery(opts.q);
 
-        // Filter-first: when a structured filter is present, narrow to candidate ids via
-        // mail.db's own indexed columns, then ask the FTS index to rank within that
-        // subset. Exact recall at any selectivity; no candidate-pool over-fetch.
+        // A structured filter narrows to candidate ids first and FTS ranks within them, for exact recall at any selectivity.
         let candidateIds: string[] | undefined;
         if (opts.from || opts.to) {
             const conditions = [];
@@ -255,8 +207,7 @@ export default class MailDB {
             if (candidateIds.length === 0) return [];
         }
 
-        // Filter-only search (from:/to: with no text term): rank the candidates by recency,
-        // since there is no FTS query to score against.
+        // from: or to: with no text term has no FTS query to score against, so recency ranks.
         if (!match) {
             if (!candidateIds) return [];
             const mailboxCond =
@@ -297,8 +248,7 @@ export default class MailDB {
             candidateFilter = sql` AND e.id IN (${list})`;
         }
 
-        // Pass 1: rank via FTS5, return ordered ids only. No Drizzle column-mode conversion
-        // applies to raw `sql``` results, so we deliberately stay in id-space here.
+        // Ids only: a raw `sql` result gets no Drizzle column-mode conversion, so the rows come in the next query.
         const ranked = this.db.all<{ id: string }>(sql`
             SELECT e.id AS id
             FROM emails_fts
@@ -309,9 +259,6 @@ export default class MailDB {
         `);
         if (ranked.length === 0) return [];
 
-        // Pass 2: re-fetch the ranked rows through Drizzle so `date` / `createdAt` /
-        // `updatedAt` come back as Date (mode: 'timestamp' applies). Order preserved via
-        // the id-keyed map.
         const ids = ranked.map((r) => r.id);
         const rows = this.db.select().from(schema.emails).where(inArray(schema.emails.id, ids)).all();
         const byId = new Map(rows.map((r) => [r.id, cutPreview(r)]));

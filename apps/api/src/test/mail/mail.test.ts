@@ -574,9 +574,9 @@ describe.skipIf(isWindows)('Mail', () => {
             expect(html).not.toContain('evil.example');
         });
 
-        // A draft's body is the composer's own, and the sidecar hands it back verbatim so the compose view
-        // shows what the user typed. Once the message is no longer a draft it reads through the reader.
-        test('a draft round-trip keeps the composer body, and the sent copy is sanitized', async () => {
+        // Any program that reaches the Maildir can write a draft's file, so a draft reads through the reader too. Only the
+        // save's answer echoes what this composer just sent.
+        test('a draft and its sent copy read sanitized, and a save answers with the composer body', async () => {
             const saved = await assertJson<EmailDraft>(
                 await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/draft`, {
                     method: 'PUT',
@@ -585,7 +585,9 @@ describe.skipIf(isWindows)('Mail', () => {
                 }),
             );
             expect(saved.html).toBe(HOSTILE);
-            expect(await messageHtml(saved.id)).toBe(HOSTILE);
+            const draftHtml = await messageHtml(saved.id);
+            expect(draftHtml).toContain('<p>Hi</p>');
+            expect(draftHtml).not.toContain('<script');
 
             const sent = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/send`, {
                 method: 'POST',
