@@ -16,4 +16,4 @@ export {
     storedRevision,
     stripEigenStamps,
 } from './ical-component';
-export { parseIcs, parseResource, projectResource } from './ical-parse';
+export { parseCalendarStream, parseIcs, parseResource, projectResource } from './ical-parse';

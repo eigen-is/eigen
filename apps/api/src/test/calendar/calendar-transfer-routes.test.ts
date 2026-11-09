@@ -1209,6 +1209,21 @@ describe('Calendar transfer routes', () => {
         expect(res.status).toBe(404);
     });
 
+    test('a file nested past the limit is 400 and nothing is written', async () => {
+        const before = (await april()).length;
+        const levels = 20;
+        const file = vcal(
+            vevent(`nested-${crypto.randomUUID()}@other`, 'Nested', '20260416T090000Z', '20260416T100000Z', [
+                ...Array<string>(levels).fill('BEGIN:X-LEVEL'),
+                ...Array<string>(levels).fill('END:X-LEVEL'),
+            ]),
+        );
+
+        const res = await importRequest(alice, calendarId, file);
+        expect(res.status).toBe(400);
+        expect((await april()).length).toBe(before);
+    });
+
     test('a file that is not a calendar is 400 and nothing is written', async () => {
         const before = (await april()).length;
 

@@ -136,6 +136,28 @@ describe('Mail calendar-invite payload', () => {
         expect(attachment.calendarInvite).toBeNull();
     });
 
+    test('a calendar part nested past the limit lands with no summary', async () => {
+        const levels = 20;
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:REQUEST',
+            'BEGIN:VEVENT',
+            'UID:invite-payload-nested@external.com',
+            'SUMMARY:Nested Payload',
+            'DTSTART:20260420T120000Z',
+            ...Array<string>(levels).fill('BEGIN:X-LEVEL'),
+            ...Array<string>(levels).fill('END:X-LEVEL'),
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        const message = await deliverAndGetMessage('Invitation: Nested Payload', 'inv-nested', ics);
+
+        const attachment = findOrFail(message.attachments, (a) => a.contentType.startsWith('text/calendar'));
+        expect(attachment.calendarInvite).toBeNull();
+    });
+
     test('a calendar part past the event size limit lands with no summary', async () => {
         const ics = [
             'BEGIN:VCALENDAR',

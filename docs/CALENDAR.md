@@ -96,7 +96,9 @@ A definition a property still names is the client's own and is never rewritten. 
 
 ## Two readers, one trust rule
 
-`parseIcs(text)` reads bytes a stranger wrote and can't hold a stamp ([§ Eigen's own facts ride as X-EIGEN- lines](#eigens-own-facts-ride-as-x-eigen--lines-no-client-can-write)). `projectResource(component)` reads a resource the store wrote and adds the stamps on top of the same projection. `parseResource` is the only place a stored `.ics` becomes a component tree, so nothing else imports ical.js for one.
+`parseIcs(text)` reads bytes a stranger wrote and can't hold a stamp ([§ Eigen's own facts ride as X-EIGEN- lines](#eigens-own-facts-ride-as-x-eigen--lines-no-client-can-write)). `projectResource(component)` reads a resource the store wrote and adds the stamps on top of the same projection.
+
+`parseCalendarStream` is the one place a `.ics` becomes a component tree, stored or not, and `parseResource` is the same for a text that must hold one object. Before it builds a component it refuses a calendar nested past `MAX_NESTING` (8 levels, where RFC 5545 needs 3) with ical.js's own `ParserError`, so each caller's usual refusal answers: a PUT 403, an import 400, a preview 422, an invite card `null`. A resource stored past the limit by an older build still serves its bytes to GET, REPORT, the range read and export, because none of those parse it. A write to it is a 500, and a delete works.
 
 A VEVENT the parser can't read is skipped and counted rather than failing the file. Each caller answers for its own surface: a PUT refuses the payload, the quick look counts it in `dropped`, an import in `failed`. Each VEVENT is wrapped in an `ICAL.Event` built with `{ exceptions: [] }`, which skips ical.js's scan for sibling exceptions. That scan is quadratic over a whole file: 20,000 events took 17 s.
 

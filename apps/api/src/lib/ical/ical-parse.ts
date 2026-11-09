@@ -1,7 +1,8 @@
-// Reading iCalendar into event rows, each occurrence keyed by its wall-clock date. parseIcs reads bytes a
-// stranger wrote, such as an iMIP mail or a previewed file, and its result type cannot name an `X-EIGEN-*`
-// fact, so a forged organizer link, color or row id has nowhere to land. Only projectResource, which the
-// calendar store runs on a resource it wrote, reads Eigen's own lines.
+// Reading iCalendar into event rows, each occurrence keyed by its wall-clock date. Every `.ics` enters through
+// parseCalendarStream, which refuses what no calendar file is. parseIcs reads bytes a stranger wrote, such as an iMIP
+// mail or a previewed file, and its result type cannot name an `X-EIGEN-*` fact, so a forged organizer link, color or
+// row id has nowhere to land. Only projectResource, which the calendar store runs on a resource it wrote, reads
+// Eigen's own lines.
 
 import { normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
 import type { Attendee, EventData, ImipMethod, Reminder } from '@workspace/lib/types/calendar';
@@ -29,6 +30,46 @@ export type ExclusionStamp = { id: string; sequence: number; dtstamp: Date | nul
 
 const EIGEN_PREFIX = 'x-eigen-';
 
+// ical.js types every jCal array as `any[]`; narrowed here to a component's name, properties and subcomponents.
+type JCalComponent = [string, unknown[], JCalComponent[]];
+
+// RFC 5545 reaches three levels, VCALENDAR, VEVENT and VALARM. More is no calendar, and ical.js walks to the root per
+// property.
+const MAX_NESTING = 8;
+
+// The one place a `.ics` becomes a component tree, so every byte from outside passes one check. A file may be a stream
+// of several VCALENDAR objects (RFC 5545 §3.4), which ICAL.parse answers with an array of roots.
+export function parseCalendarStream(ics: string): ICAL.Component[] {
+    const parsed = ICAL.parse(ics);
+    const roots: JCalComponent[] = typeof parsed[0] === 'string' ? [parsed] : parsed;
+    if (!roots.length) throw new ICAL.parse.ParserError('No calendar in this text');
+    let level = roots;
+    for (let depth = 0; level.length; depth++) {
+        if (depth === MAX_NESTING) throw new ICAL.parse.ParserError('Calendar nested too deep');
+        level = level.flatMap((component) => component[2]);
+    }
+    return roots.map((root) => new ICAL.Component(root));
+}
+
+// A resource is one object: a second one would be silently lost at the first write.
+export function parseResource(ics: string): ICAL.Component {
+    const [resource, ...rest] = parseCalendarStream(ics);
+    if (rest.length) throw new ICAL.parse.ParserError('More than one calendar in one resource');
+    return resource;
+}
+
+// Bytes a stranger wrote.
+export function parseIcs(ics: string): IcsParseResult {
+    const { method, events, skipped } = readResource(parseResource(ics));
+    return { method, events: events.map((read) => read.event), skipped };
+}
+
+// A resource the store wrote, where the `X-EIGEN-*` lines are Eigen's own.
+export function projectResource(resource: ICAL.Component): ProjectedResource {
+    const { events, skipped, hasUnindexedRecurrence } = readResource(resource);
+    return { events: events.map(stamped), skipped, hasUnindexedRecurrence };
+}
+
 // ical.js keeps a vCard-style group in the name (RFC 5545 §3.1), so `A.ATTENDEE` is an ATTENDEE that `getFirstProperty('attendee')` misses.
 export function bareName(name: string): string {
     return name.slice(name.lastIndexOf('.') + 1).toLowerCase();
@@ -38,7 +79,6 @@ export function isEigenName(name: string): boolean {
     return bareName(name).startsWith(EIGEN_PREFIX);
 }
 
-// A property's normalized IANA TZID parameter, or null.
 export function propTzid(prop: ICAL.Property | null | undefined): string | null {
     const raw = prop?.getParameter('tzid') || null;
     const tzid = Array.isArray(raw) ? raw[0] : raw;
@@ -73,7 +113,8 @@ export function calAddress(raw: unknown): string {
     return (typeof raw === 'string' ? raw : String(raw ?? '')).trim().replace(/^mailto:\s*/i, '');
 }
 
-// A valid IANA TZID resolves through Intl rather than the file's VTIMEZONE — the path the builder and the stored `timezone` column take, so identical bytes name one instant and a repeated hour takes its first pass (RFC 5545) — and a floating time maps via Date.UTC, never the server's local zone.
+// A valid IANA TZID resolves through Intl, the path the builder takes, so identical bytes name one instant and a
+// repeated hour takes its first pass. A floating time maps via Date.UTC, never the server's zone.
 export function icalTimeToInstant(t: ICAL.Time, tzid: string | null, fallbackTz: string | null): Date {
     if (t.zone === ICAL.Timezone.utcTimezone) return t.toJSDate();
     const zone = tzid ?? (t.zone === ICAL.Timezone.localTimezone ? fallbackTz : null);
@@ -96,7 +137,7 @@ export function icalTimeToRecurrenceKey(t: ICAL.Time, tz: string | null): string
 }
 
 // Keyed by UID because a previewed or imported file holds every series a calendar has, each in its author's own zone.
-export function seriesTimezones(vevents: ICAL.Component[]): Map<string, string | null> {
+export function seriesTimezones(vevents: readonly ICAL.Component[]): Map<string, string | null> {
     const zones = new Map<string, string | null>();
     for (const vevent of vevents) {
         if (vevent.getFirstProperty('recurrence-id')) continue;
@@ -302,9 +343,9 @@ function stamped({ event, stamps }: ReadEvent): StoredEvent {
     };
 }
 
-function readResource(comp: ICAL.Component): ReadResult {
-    const method = parseImipMethod(comp.getFirstPropertyValue('method'));
-    const vevents = comp.getAllSubcomponents('vevent');
+function readResource(resource: ICAL.Component): ReadResult {
+    const method = parseImipMethod(resource.getFirstPropertyValue('method'));
+    const vevents = resource.getAllSubcomponents('vevent');
 
     // A UTC-Z RECURRENCE-ID / EXDATE keys in the SERIES timezone, so an override whose UID groups with no master falls back to its own DTSTART tz and then to the file's first master's.
     const seriesTzByUid = seriesTimezones(vevents);
@@ -338,10 +379,10 @@ function readResource(comp: ICAL.Component): ReadResult {
             let startTime: Date;
             let endTime: Date;
             if (allDay) {
-                const s = event.startDate;
-                const e = event.endDate;
-                startTime = new Date(Date.UTC(s.year, s.month - 1, s.day));
-                endTime = new Date(Date.UTC(e.year, e.month - 1, e.day));
+                const start = event.startDate;
+                const end = event.endDate;
+                startTime = new Date(Date.UTC(start.year, start.month - 1, start.day));
+                endTime = new Date(Date.UTC(end.year, end.month - 1, end.day));
             } else {
                 startTime = icalTimeToInstant(event.startDate, tzid, null);
                 endTime =
@@ -493,21 +534,4 @@ function readResource(comp: ICAL.Component): ReadResult {
     }
 
     return { method, events: results, skipped, hasUnindexedRecurrence };
-}
-
-// The one place a `.ics` becomes a component tree, so nothing outside these two modules imports ical.js for a stored resource.
-export function parseResource(ics: string): ICAL.Component {
-    return new ICAL.Component(ICAL.parse(ics));
-}
-
-// Bytes a stranger wrote.
-export function parseIcs(icsText: string): IcsParseResult {
-    const { method, events, skipped } = readResource(parseResource(icsText));
-    return { method, events: events.map((read) => read.event), skipped };
-}
-
-// A resource the store wrote, where the `X-EIGEN-*` lines are Eigen's own.
-export function projectResource(resource: ICAL.Component): ProjectedResource {
-    const { events, skipped, hasUnindexedRecurrence } = readResource(resource);
-    return { events: events.map(stamped), skipped, hasUnindexedRecurrence };
 }

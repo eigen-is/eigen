@@ -14,6 +14,7 @@ import {
     icalTimeToInstant,
     icalTimeToRecurrenceKey,
     isEigenName,
+    parseResource,
     projectReminders,
     propTzid,
     readExclusionStamps,
@@ -316,7 +317,7 @@ function syncVTimezones(resource: ICAL.Component): void {
     // A client reads top to bottom, so a TZID met before its definition is floating to it: new blocks go in front and
     // re-adding the VEVENTs moves them behind.
     for (const tzid of added) {
-        resource.addSubcomponent(new ICAL.Component(ICAL.parse(buildVTimezone(tzid, minYear, maxYear).join('\r\n'))));
+        resource.addSubcomponent(parseResource(buildVTimezone(tzid, minYear, maxYear).join('\r\n')));
     }
     for (const vevent of vevents) resource.addSubcomponent(vevent);
 }

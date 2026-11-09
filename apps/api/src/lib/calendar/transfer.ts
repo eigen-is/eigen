@@ -15,7 +15,7 @@ import {
     NOT_A_CALENDAR_FILE,
     NOT_UTF8_FILE,
 } from '../core';
-import { newVCalendar, PRODID, serializeResource, spliceBlocks } from '../ical';
+import { newVCalendar, PRODID, parseCalendarStream, serializeResource, spliceBlocks } from '../ical';
 import { bareName, calAddress, uidOf } from '../ical/ical-parse';
 import type { Calendar } from './calendar';
 import * as davStore from './dav-store';
@@ -23,15 +23,6 @@ import * as schema from './schema';
 
 // A VTIMEZONE is copied into every series that names it, so an upload well inside its own ceiling can ask for many times its size in stored bytes.
 const ICS_IMPORT_MAX_WRITTEN_BYTES = 8 * ICS_MAX_BYTES;
-
-// A `.ics` may be a stream of several VCALENDAR objects (RFC 5545 §3.4), which ICAL.parse answers with an array of jCal arrays.
-function parseCalendarStream(text: string): ICAL.Component[] {
-    const parsed = ICAL.parse(text);
-    if (!Array.isArray(parsed[0])) return [new ICAL.Component(parsed)];
-    const roots: ICAL.Component[] = [];
-    for (const root of parsed) roots.push(new ICAL.Component(root));
-    return roots;
-}
 
 // A zone can hang on any property and inside a subcomponent — a VALARM's absolute TRIGGER names one too.
 function referencedTzids(component: ICAL.Component, into: Set<string>): void {

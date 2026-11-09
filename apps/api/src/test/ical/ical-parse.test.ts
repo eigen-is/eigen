@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { parseIcs } from '../../lib/ical';
+import ICAL from 'ical.js';
+import { parseIcs, parseResource } from '../../lib/ical';
 import { vcal } from '../ics-test-helpers';
 
 // A CalDAV resource holds one UID, but a preview and an import feed the parser whole files: a calendar
@@ -340,5 +341,40 @@ describe('parseIcs over a TZID only its VTIMEZONE names', () => {
 
         expect(event.timezone).toBeNull();
         expect(event.startTime.toISOString()).toBe('2026-06-01T08:00:00.000Z');
+    });
+});
+
+describe('parseResource refuses what no calendar file is', () => {
+    // A VEVENT in a VCALENDAR is two levels already.
+    const nested = (extraLevels: number) =>
+        vcal([
+            'BEGIN:VEVENT',
+            'UID:nested@eigen',
+            'DTSTART:20260601T080000Z',
+            ...Array<string>(extraLevels).fill('BEGIN:X-LEVEL'),
+            ...Array<string>(extraLevels).fill('END:X-LEVEL'),
+            'END:VEVENT',
+        ]);
+
+    test('a calendar eight levels deep parses', () => {
+        expect(parseResource(nested(6)).getAllSubcomponents('vevent')).toHaveLength(1);
+    });
+
+    test('a calendar nine levels deep is refused', () => {
+        expect(() => parseResource(nested(7))).toThrow(ICAL.parse.ParserError);
+        expect(() => parseIcs(nested(7))).toThrow(ICAL.parse.ParserError);
+    });
+
+    test('a calendar two hundred thousand levels deep is refused like any other', () => {
+        expect(() => parseResource(nested(200_000))).toThrow(ICAL.parse.ParserError);
+    });
+
+    test('two VCALENDAR objects are no one resource', () => {
+        const text = `${nested(0)}\r\n${nested(0)}`;
+        expect(() => parseResource(text)).toThrow(ICAL.parse.ParserError);
+    });
+
+    test('a text holding no calendar is refused', () => {
+        expect(() => parseResource('')).toThrow(ICAL.parse.ParserError);
     });
 });

@@ -62,6 +62,22 @@ describe('putResource', () => {
         expect(await harness.instance.listResources(calendarId)).toHaveLength(0);
     });
 
+    test('a body nested past the limit is refused as invalid data', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        const levels = 20;
+        const body = vcal(
+            event('nested@eigen', 'Nested', [
+                ...Array<string>(levels).fill('BEGIN:X-LEVEL'),
+                ...Array<string>(levels).fill('END:X-LEVEL'),
+            ]),
+        );
+
+        const result = await put(harness.instance, calendarId, 'nested.ics', body);
+        expect(result).toMatchObject({ ok: false, error: 'invalid', reason: 'data' });
+        expect(await harness.instance.listResources(calendarId)).toHaveLength(0);
+    });
+
     test('a resource that ends before it starts is refused, where a zero-length one is stored', async () => {
         const harness = await makeCalendar();
         const calendarId = await defaultCalendarId(harness);
