@@ -153,75 +153,81 @@ export function handleOverlayMouseUp(
         }
     }
 
-    // A freeze line dropped on the grid freezes up to it, and dropped on the header edge stops freezing that axis.
     if (ctx.colsFreezeDragging) {
         ctx.colsFreezeDragging = false;
-
-        const [col_pre, col_curr, col_index_curr] = colLocation(x, ctx.visibledatacolumn);
-        const col_index = x > (col_curr + col_pre) / 2 ? col_index_curr : col_index_curr - 1;
-        const idx = getSheetIndex(ctx, ctx.currentSheetId);
-        if (idx == null) return;
-        const sheet = ctx.sheets[idx];
-        const { frozen } = sheet;
-        if (col_index < 0) {
-            if (frozen && freezesColumns(frozen)) {
-                if (freezesRows(frozen)) frozen.type = 'rangeRow';
-                else delete sheet.frozen;
-            }
-        } else if (!frozen) {
-            sheet.frozen = {
-                type: 'rangeColumn',
-                range: { column_focus: col_index, row_focus: 0 },
-            };
-        } else {
-            if (!frozen.range) {
-                frozen.range = { column_focus: col_index, row_focus: 0 };
-            } else {
-                frozen.range.column_focus = col_index;
-            }
-            if (freezesRows(frozen) && !freezesColumns(frozen)) frozen.type = 'rangeBoth';
-        }
-        const freezeHandle = container.querySelector('.sheet-cols-freeze-handle');
-        if (freezeHandle instanceof HTMLElement) {
-            freezeHandle.style.left = `${getFrozenHandleLeft(ctx)}px`;
-        }
+        dropColumnFreeze(ctx, x, container);
     }
 
     if (ctx.rowsFreezeDragging) {
         ctx.rowsFreezeDragging = false;
-
-        const [row_pre, row_curr, row_index_curr] = rowLocation(y, ctx.visibledatarow);
-        const row_index = y > (row_curr + row_pre) / 2 ? row_index_curr : row_index_curr - 1;
-        const idx = getSheetIndex(ctx, ctx.currentSheetId);
-        if (idx == null) return;
-        const sheet = ctx.sheets[idx];
-        const { frozen } = sheet;
-        if (row_index < 0) {
-            if (frozen && freezesRows(frozen)) {
-                if (freezesColumns(frozen)) frozen.type = 'rangeColumn';
-                else delete sheet.frozen;
-            }
-        } else if (!frozen) {
-            sheet.frozen = {
-                type: 'rangeRow',
-                range: { column_focus: 0, row_focus: row_index },
-            };
-        } else {
-            if (!frozen.range) {
-                frozen.range = { column_focus: 0, row_focus: row_index };
-            } else {
-                frozen.range.row_focus = row_index;
-            }
-            if (freezesColumns(frozen) && !freezesRows(frozen)) frozen.type = 'rangeBoth';
-        }
-        const freezeHandle = container.querySelector('.sheet-rows-freeze-handle');
-        if (freezeHandle instanceof HTMLElement) {
-            freezeHandle.style.top = `${getFrozenHandleTop(ctx)}px`;
-        }
+        dropRowFreeze(ctx, y, container);
     }
 
     if (ctx.cellSelectExtending) {
         onDropCellSelectEnd(ctx, e, cellArea, container);
+    }
+}
+
+// A freeze line dropped on the grid freezes up to it, and dropped on the header edge stops freezing that axis.
+function dropColumnFreeze(ctx: Context, x: number, container: HTMLDivElement) {
+    const [col_pre, col_curr, col_index_curr] = colLocation(x, ctx.visibledatacolumn);
+    const col_index = x > (col_curr + col_pre) / 2 ? col_index_curr : col_index_curr - 1;
+    const idx = getSheetIndex(ctx, ctx.currentSheetId);
+    if (idx == null) return;
+    const sheet = ctx.sheets[idx];
+    const { frozen } = sheet;
+    if (col_index < 0) {
+        if (frozen && freezesColumns(frozen)) {
+            if (freezesRows(frozen)) frozen.type = 'rangeRow';
+            else delete sheet.frozen;
+        }
+    } else if (!frozen) {
+        sheet.frozen = {
+            type: 'rangeColumn',
+            range: { column_focus: col_index, row_focus: 0 },
+        };
+    } else {
+        if (!frozen.range) {
+            frozen.range = { column_focus: col_index, row_focus: 0 };
+        } else {
+            frozen.range.column_focus = col_index;
+        }
+        if (freezesRows(frozen) && !freezesColumns(frozen)) frozen.type = 'rangeBoth';
+    }
+    const freezeHandle = container.querySelector('.sheet-cols-freeze-handle');
+    if (freezeHandle instanceof HTMLElement) {
+        freezeHandle.style.left = `${getFrozenHandleLeft(ctx)}px`;
+    }
+}
+
+function dropRowFreeze(ctx: Context, y: number, container: HTMLDivElement) {
+    const [row_pre, row_curr, row_index_curr] = rowLocation(y, ctx.visibledatarow);
+    const row_index = y > (row_curr + row_pre) / 2 ? row_index_curr : row_index_curr - 1;
+    const idx = getSheetIndex(ctx, ctx.currentSheetId);
+    if (idx == null) return;
+    const sheet = ctx.sheets[idx];
+    const { frozen } = sheet;
+    if (row_index < 0) {
+        if (frozen && freezesRows(frozen)) {
+            if (freezesColumns(frozen)) frozen.type = 'rangeColumn';
+            else delete sheet.frozen;
+        }
+    } else if (!frozen) {
+        sheet.frozen = {
+            type: 'rangeRow',
+            range: { column_focus: 0, row_focus: row_index },
+        };
+    } else {
+        if (!frozen.range) {
+            frozen.range = { column_focus: 0, row_focus: row_index };
+        } else {
+            frozen.range.row_focus = row_index;
+        }
+        if (freezesColumns(frozen) && !freezesRows(frozen)) frozen.type = 'rangeBoth';
+    }
+    const freezeHandle = container.querySelector('.sheet-rows-freeze-handle');
+    if (freezeHandle instanceof HTMLElement) {
+        freezeHandle.style.top = `${getFrozenHandleTop(ctx)}px`;
     }
 }
 

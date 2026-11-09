@@ -434,6 +434,16 @@ describe('the frozen and scrolled cases of each remaining handler', () => {
         expect(preview.style.left).toBe('0px');
     });
 
+    test('a freeze drop on a sheet that is gone still ends the other drags', () => {
+        const ctx = grid(FROZEN);
+        ctx.currentSheetId = 'gone';
+        ctx.colsFreezeDragging = true;
+        ctx.rowsFreezeDragging = true;
+        handleOverlayMouseUp(ctx, ctx.getRefs().globalCache, at(0, 0), cellAreaAt(), noElements(), null, null);
+        expect(ctx.colsFreezeDragging).toBe(false);
+        expect(ctx.rowsFreezeDragging).toBe(false);
+    });
+
     test('a frozen row drop on a scrolled sheet ends the pane where it was dropped', () => {
         const ctx = grid(FROZEN);
         ctx.sheets[0].frozen = { type: 'rangeBoth', range: { row_focus: 1, column_focus: 0 } };
