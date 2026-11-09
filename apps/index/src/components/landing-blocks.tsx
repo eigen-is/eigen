@@ -9,15 +9,15 @@ const INSTALL_COMMAND = 'curl -fsSL https://eigen.is/install | sh';
 
 const BLOCKS = [
     {
-        title: 'Native Sync',
+        title: 'Native sync',
         text: 'Works seamlessly with the devices and apps you already use. No vendor lock-in.',
     },
     {
-        title: 'Office Compatible',
+        title: 'Office compatible',
         text: 'Bring the documents you have, and take them with you when you leave.',
     },
     {
-        title: 'Built for Data Sovereignty',
+        title: 'Built for data sovereignty',
         text: 'Runs on your own hardware, and the code is MIT licensed. Mail, contacts and calendars stay in standard .eml, .vcf and .ics.',
     },
 ];

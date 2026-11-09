@@ -7,9 +7,9 @@ import { LandingBlocks } from '../../components/landing-blocks';
 describe('LandingBlocks', () => {
     test('draws the three blocks', () => {
         const html = renderToStaticMarkup(<LandingBlocks showInstall={false} />);
-        expect(html).toContain('Native Sync');
-        expect(html).toContain('Office Compatible');
-        expect(html).toContain('Built for Data Sovereignty');
+        expect(html).toContain('Native sync');
+        expect(html).toContain('Office compatible');
+        expect(html).toContain('Built for data sovereignty');
     });
 
     test('shows the install line only when the setting is on', () => {
