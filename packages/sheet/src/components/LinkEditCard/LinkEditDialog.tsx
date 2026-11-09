@@ -25,8 +25,7 @@ import {
 } from '../../state';
 import { CellRangeDialog } from '../CellRangeDialog';
 
-// The range picker keeps the narrow card size and the 5px gap under the cell it had when it rendered inside the
-// grid overlay.
+// The range picker is a narrow card, a few pixels under the link's cell.
 const RANGE_PICKER_WIDTH = 380;
 const RANGE_PICKER_GAP = 5;
 

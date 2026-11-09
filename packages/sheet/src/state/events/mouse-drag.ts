@@ -90,7 +90,6 @@ export function handleOverlayMouseUp(
 
         let delta = e.clientY - ctx.rowsResizeStart[0];
 
-        // Don't let the row boundary be dragged past the bottom of the view.
         if (viewY > height) delta -= viewY - height;
 
         // A press without movement is a click on the boundary, not a resize, so it writes nothing and takes no undo
@@ -125,7 +124,6 @@ export function handleOverlayMouseUp(
 
         let delta = e.clientX - ctx.colsResizeStart[0];
 
-        // Don't let the column boundary be dragged past the right edge of the view.
         const maxX = width - LINE_RIGHT_MARGIN;
         if (viewX > maxX) delta -= viewX - maxX;
 
@@ -227,10 +225,8 @@ export function handleOverlayMouseUp(
     }
 }
 
-// Records which painted affordance the pointer is over, such as a filter button or a cell glyph. It writes only on a
-// change, so a mouse move that changes nothing redraws nothing. The cursor reads both, and the filter button's hover
-// fill reads ctx.filterButtonHover. Over a glyph the drag handles drop their cursors, because a press there goes to
-// the cell, not the handle.
+// Writes only on a change, so a mouse move that changes nothing redraws nothing. Over a glyph the drag handles drop
+// their cursors, because a press there goes to the cell, not the handle.
 function updateCanvasHover(ctx: Context, e: MouseEvent, cellArea: HTMLDivElement) {
     const { x, y, inside } = sheetPoint(ctx, e, cellArea);
     const col = inside && ctx.filterOptions != null ? getFilterButtonAtPosition(ctx, x, y)?.col : undefined;
@@ -352,10 +348,8 @@ function renderCellSelection(ctx: Context, e: MouseEvent, cellArea: HTMLDivEleme
     scrollToFrozenRowCol(ctx);
 }
 
-// Shift-click and drag extend a selection along one axis (row or column), for the mouse handlers of the cells and
-// the headers alike. Given the anchor selection's start (`pos`) and span, and the newly hit cell's near edge (`pre`),
-// far edge (`end`) and index, it returns the extended start and span and the new [start, end] index pair. It also
-// clamps the anchor's index `range` toward its `focus`, in place.
+// Extends a selection along one axis from the anchor's start and span to the hit cell's edges and index, returning the
+// new start, span and [start, end] indexes. It also clamps the anchor's index `range` toward its `focus`, in place.
 export function extendSelectionGeometry(
     pos: number,
     span: number,
@@ -437,7 +431,6 @@ function renderColFreezeDrag(ctx: Context, e: MouseEvent, cellArea: HTMLDivEleme
         if (freezeHandle instanceof HTMLElement) {
             freezeHandle.style.left = `${x}px`;
         }
-        // The freeze drag shows the resize line too, at the pointer.
         const changeSizeLine = container.querySelector('.sheet-change-size-line');
         if (changeSizeLine instanceof HTMLElement) {
             changeSizeLine.style.left = `${x}px`;

@@ -103,10 +103,8 @@ export function planScroll(
         if (shiftX === 0 && shiftY === 0) continue;
         const area = intersect(coveredPixels(layer.paint, dpr), bounds);
         if (!area) continue;
-        // A pixel the layer shares with its neighbour, at a fractional pixel ratio, is repainted, never
-        // copied: two layers would each copy it. Only the ends across the scroll differ from the pane's
-        // middle; along its sides a moved pixel comes from the same column or row of the same pane, and
-        // the freeze lines look alike all along.
+        // A pixel shared with a neighbouring layer, at a fractional pixel ratio, is repainted, never copied:
+        // two layers would each copy it. Only the ends across the scroll look different from the pane's middle.
         const whole = intersect(wholePixels(layer.paint, dpr), bounds);
         const inside = whole && shrink(whole, shiftX ? edge : 0, shiftY ? edge : 0, bounds);
         const kept = inside && intersect(inside, translate(inside, -shiftX, -shiftY));

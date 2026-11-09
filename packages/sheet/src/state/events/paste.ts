@@ -33,7 +33,6 @@ type PastedData = { getData: (type: string) => string; files: ArrayLike<File> };
 // The one paste of the grid. It is the workbook's own copy only when the clipboard's table carries its id.
 // An image file goes to the app's insert and upload.
 export function handlePaste(ctx: Context, clipboardData: PastedData, onImageFile?: (file: File) => void) {
-    // A paste into several ranges is not supported.
     if (ctx.allowEdit === false || (ctx.selections?.length ?? 0) > 1) return;
     ctx.editingCellPosition = [];
 
@@ -92,7 +91,7 @@ function pasteCut(ctx: Context, copyState: NonNullable<Context['copyState']>) {
     const height = lines.rows.length;
     const width = lines.columns.length;
 
-    const last = ctx.selections?.[ctx.selections.length - 1];
+    const last = ctx.selections?.at(-1);
     if (!last || last.row_focus == null || last.column_focus == null) return;
 
     const top = last.row_focus;
@@ -125,7 +124,7 @@ function pasteCopy(ctx: Context, copyState: NonNullable<Context['copyState']>) {
     // A filter can hide every row of the copy.
     if (copyh === 0 || copyc === 0) return;
 
-    const last = ctx.selections?.[ctx.selections.length - 1];
+    const last = ctx.selections?.at(-1);
     if (!last) return;
     const minh = last.row[0];
     let maxh = last.row[1];
@@ -389,7 +388,6 @@ function pasteText(ctx: Context, text: string) {
 }
 
 function pasteFormula(ctx: Context, formulaStr: string) {
-    // A plain-text formula lands on one cell.
     const selection = ctx.selections?.[0];
     if (!selection) return;
     const r = selection.row[0];

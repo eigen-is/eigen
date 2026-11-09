@@ -28,7 +28,6 @@ import type {
 import type { ConditionRuleType } from './modules/condition-format';
 import type { EntryOptions } from './utils';
 
-// Re-exported so state code needn't know where each type lives.
 export type {
     Cell,
     CellMatrix,

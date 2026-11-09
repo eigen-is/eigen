@@ -360,7 +360,7 @@ export function getFilterColumnValues(ctx: Context, col: number, startRow: numbe
 
         const cell = flowdata[r][col];
 
-        if (cell != null && !isRealNull(cell.v) && cell.ct != null && cell.ct.t === 'd') {
+        if (cell != null && !isRealNull(cell.v) && cell.ct?.t === 'd') {
             const dateStr: string = update('YYYY-MM-DD', cell.v);
             const [y, m, d] = dateStr.split('-');
 
