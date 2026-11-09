@@ -48,6 +48,12 @@ const resolver = createArrayResolver([
             [1, 'Cherry'],
         ]),
     },
+    {
+        // A row of labels with a blank and a number between them, as a scenario picker holds.
+        id: 's4',
+        name: 'Labels',
+        data: rows([[null, 'Real (Low)', 5, 'Real (Central)', 'Real (High)']]),
+    },
 ]);
 
 const engine = new FormulaEngine();
@@ -183,6 +189,47 @@ describe('XMATCH', () => {
     test('a miss is #N/A, a 2-D lookup_array #VALUE!', () => {
         expect(value('=XMATCH(25,A1:A6)')).toBe('#N/A');
         expect(value('=XMATCH(30,A1:B6)')).toBe('#VALUE!');
+    });
+});
+
+describe('MATCH', () => {
+    test('match_type 0 finds text across a row that holds blanks, numbers and parentheses', () => {
+        expect(value('=MATCH("Real (Central)",Labels!A1:E1,0)')).toBe(4);
+        expect(value('=MATCH("real (high)",Labels!A1:E1,0)')).toBe(5);
+        expect(value('=MATCH("x",A1:A6,0)')).toBe('#N/A');
+    });
+
+    test('match_type 0 matches the whole text, with * ? and ~ as wildcards', () => {
+        expect(value('=MATCH("an",B1:B6,0)')).toBe('#N/A');
+        expect(value('=MATCH("ch*",B1:B6,0)')).toBe(3);
+        expect(value('=MATCH("?pple",B1:B6,0)')).toBe(1);
+        expect(value('=MATCH("~*star",B1:B6,0)')).toBe(6);
+    });
+
+    test('a value matches only its own kind, and a blank lookup value is 0', () => {
+        expect(value('=MATCH("30",A1:A6,0)')).toBe('#N/A');
+        expect(value('=MATCH(5,Labels!A1:E1,0)')).toBe(3);
+        expect(value('=MATCH(G1,Labels!A1:E1,0)')).toBe('#N/A');
+    });
+
+    test('match_type 1, the default, takes the last value at or below over ascending data', () => {
+        expect(value('=MATCH(25,A1:A6)')).toBe(2);
+        expect(value('=MATCH(25,A1:A6,1)')).toBe(2);
+        expect(value('=MATCH(99,A1:A6,1)')).toBe(6);
+        expect(value('=MATCH(5,A1:A6)')).toBe('#N/A');
+        expect(value('=MATCH(2,H1:H6)')).toBe(4);
+        expect(value('=MATCH("c",Across!A2:D2)')).toBe(3);
+    });
+
+    test('match_type -1 takes the last value at or above over descending data', () => {
+        expect(value('=MATCH(25,E1:E6,-1)')).toBe(2);
+        expect(value('=MATCH(2,I1:I6,-1)')).toBe(4);
+        expect(value('=MATCH(99,E1:E6,-1)')).toBe('#N/A');
+    });
+
+    test('an empty match_type is 0, an exact match', () => {
+        expect(value('=MATCH(25,A1:A6,)')).toBe('#N/A');
+        expect(value('=MATCH(30,A1:A6,)')).toBe(3);
     });
 });
 

@@ -1,5 +1,5 @@
-// The engine's lookups: XLOOKUP and XMATCH, which formulajs 2.9.3 lacks, and INDEX, ROWS and COLUMNS, where formulajs's
-// differ from Excel's. The function registry calls them. It has already handed on an error in any argument but the
+// The engine's lookups: XLOOKUP and XMATCH, which formulajs 2.9.3 lacks, and MATCH, INDEX, ROWS and COLUMNS, where
+// formulajs's differ from Excel's. The function registry calls them. It has already handed on an error in any argument but the
 // arrays, such as an error match_mode, so these functions only see errors inside the arrays they search or return from.
 
 import type { FormulaArg, FormulaOutput, FormulaValue } from '../../types';
@@ -15,6 +15,11 @@ const SEARCH_MODES = new Set([1, -1, 2, -2]);
 // A lookup only ever lands on a value of its own kind: 5 never matches "5", nor TRUE 1.
 function kindOf(value: FormulaValue): string {
     return value == null ? 'blank' : typeof value;
+}
+
+// The positions in `values` of the lookup's own kind.
+function ofKind(lookup: FormulaValue, values: FormulaValue[]): number[] {
+    return values.flatMap((value, i) => (kindOf(value) === kindOf(lookup) ? [i] : []));
 }
 
 // Within one kind; text compares case-insensitively, as in Excel.
@@ -76,22 +81,23 @@ function linear(lookup: FormulaValue, values: FormulaValue[], indices: number[],
     return best;
 }
 
+// The first of `length` positions whose test holds, or `length`; the test is monotone over sorted data.
+function firstWhere(length: number, test: (p: number) => boolean): number {
+    let low = 0;
+    let high = length;
+    while (low < high) {
+        const mid = (low + high) >> 1;
+        if (test(mid)) high = mid;
+        else low = mid + 1;
+    }
+    return low;
+}
+
 // Descending data is searched as ascending with the order flipped, so its next smaller is the flipped next larger.
 function binary(lookup: FormulaValue, values: FormulaValue[], indices: number[], matchMode: number, flip: number) {
     const order = (p: number) => compare(values[indices[p]], lookup) * flip;
-    // The first position whose test holds; the test is monotone over sorted data.
-    const first = (test: (p: number) => boolean) => {
-        let low = 0;
-        let high = indices.length;
-        while (low < high) {
-            const mid = (low + high) >> 1;
-            if (test(mid)) high = mid;
-            else low = mid + 1;
-        }
-        return low;
-    };
     // An exact match is the first of its run in every mode, the row a linear search finds.
-    const atLeast = first((p) => order(p) >= 0);
+    const atLeast = firstWhere(indices.length, (p) => order(p) >= 0);
     if (atLeast < indices.length && order(atLeast) === 0) return indices[atLeast];
     if (matchMode * flip === -1) return atLeast > 0 ? indices[atLeast - 1] : -1;
     return matchMode * flip === 1 && atLeast < indices.length ? indices[atLeast] : -1;
@@ -102,7 +108,7 @@ function binary(lookup: FormulaValue, values: FormulaValue[], indices: number[],
 function search(lookup: FormulaValue, values: FormulaValue[], matchMode: number, searchMode: number): number {
     const wild = matchMode === 2 && typeof lookup === 'string';
     if (wild && Math.abs(searchMode) === 2) throw Error(ERROR_VALUE);
-    const indices = values.flatMap((value, i) => (kindOf(value) === kindOf(lookup) ? [i] : []));
+    const indices = ofKind(lookup, values);
     if (searchMode === -1) indices.reverse();
     if (wild) {
         const pattern = wildcard(lookup);
@@ -121,6 +127,29 @@ export function rows(params: FunctionArg[]): FormulaOutput {
 export function columns(params: FunctionArg[]): FormulaOutput {
     if (params.length < 1) throw Error(ERROR_NOT_AVAILABLE);
     return referenceGrid(supplied(params[0]))[0].length;
+}
+
+// formulajs's MATCH reads its text as a regular expression, matches part of a cell and calls toLowerCase on a number
+// or a blank. Excel's match_type 1 and -1 are a binary search, which lands on the last of a run of duplicates. A blank
+// lookup value is 0.
+export function match(params: FunctionArg[]): FormulaOutput {
+    const [lookup, lookupArray, matchType] = params;
+    if (params.length < 2) throw Error(ERROR_NOT_AVAILABLE);
+    const [values] = vector(lookupArray);
+    const wanted = lookupValue(lookup) ?? 0;
+    const given = params.length < 3 ? 1 : matchType === OMITTED ? 0 : toNumber(matchType ?? 0);
+    const type = Math.sign(given ?? Number.NaN);
+    if (Number.isNaN(type)) throw Error(ERROR_VALUE);
+    let found = -1;
+    if (type === 0) found = search(wanted, values, 2, 1);
+    else {
+        // The first position past the lookup in the data's order; the one before it is the match.
+        const indices = ofKind(wanted, values);
+        const past = firstWhere(indices.length, (p) => compare(values[indices[p]], wanted) * type > 0);
+        if (past > 0) found = indices[past - 1];
+    }
+    if (found === -1) throw Error(ERROR_NOT_AVAILABLE);
+    return found + 1;
 }
 
 export function xmatch(params: FunctionArg[]): FormulaOutput {
