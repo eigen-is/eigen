@@ -2,11 +2,11 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { htmlToPdf, isWeasyPrintAvailable, shebangPython, weasyPrintPython } from '../../lib/export/weasyprint';
+import { htmlToPdf, shebangPython } from '../../lib/export/weasyprint';
 import renderScript from '../../lib/export/weasyprint-render.py' with { type: 'file' };
+import { weasyPrintPython } from '../pdf-test-helpers';
 
-const wp = await isWeasyPrintAvailable();
-const suite = wp ? describe : describe.skip;
+const suite = weasyPrintPython ? describe : describe.skip;
 
 const HTML = '<!DOCTYPE html><html><body>x</body></html>';
 
@@ -293,7 +293,7 @@ suite('htmlToPdf', () => {
 // so. It leaves at once, so it removes the temporary folder WeasyPrint writes a document's fonts into itself.
 suite('weasyprint-render.py', () => {
     test("a render leaves before Python's exit, its PDF whole and no temporary folder left", async () => {
-        const python = await weasyPrintPython();
+        const python = weasyPrintPython;
         if (python === null) throw new Error('no Python that imports WeasyPrint');
         const font = readFileSync(
             Bun.resolveSync('@workspace/ui/assets/fonts/inter/Inter-Variable.latin.woff2', import.meta.dir),

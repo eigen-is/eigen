@@ -4,9 +4,26 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inflateSync } from 'node:zlib';
 import sharp from 'sharp';
+import { shebangPython } from '../lib/export/weasyprint';
 
 // A PDF's pixels and pages, for the tests that read what WeasyPrint printed. CI installs no rasterizer, so those
-// suites skip without one.
+// suites skip without one, and every PDF suite skips without WeasyPrint.
+
+// The Python renders run under, found as the export finds it: the one the `weasyprint` launcher names, else python3.
+// Null when neither imports a WeasyPrint the export accepts.
+export const weasyPrintPython = await findWeasyPrintPython();
+
+async function findWeasyPrintPython(): Promise<string | null> {
+    const launcher = Bun.which('weasyprint');
+    const named = launcher ? shebangPython(await Bun.file(launcher).slice(0, 512).text()) : null;
+    const check = "import sys, weasyprint; sys.exit(int(weasyprint.__version__.split('.')[0]) < 68)";
+    for (const python of new Set([named ?? 'python3', 'python3'])) {
+        if (!Bun.which(python)) continue;
+        const proc = Bun.spawn([python, '-I', '-c', check], { stdout: 'ignore', stderr: 'ignore' });
+        if ((await proc.exited) === 0) return python;
+    }
+    return null;
+}
 
 // The PDF's first page at 72 dpi, one pixel per point: macOS's sips or poppler's pdftoppm.
 export const rasterizer = Bun.which('sips') ?? Bun.which('pdftoppm');

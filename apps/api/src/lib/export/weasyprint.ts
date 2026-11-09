@@ -67,15 +67,6 @@ async function probeWeasyPrint(): Promise<WeasyPrintProbe> {
 
 const weasyPrint = (): Promise<WeasyPrintProbe> => (cachedProbe ??= probeWeasyPrint());
 
-export async function isWeasyPrintAvailable(): Promise<boolean> {
-    return (await weasyPrintPython()) !== null;
-}
-
-// The interpreter renders run under, for a test that runs its own Python beside WeasyPrint.
-export async function weasyPrintPython(): Promise<string | null> {
-    return (await weasyPrint()).python;
-}
-
 // A cached interpreter can vanish, as a Homebrew upgrade removes the old Cellar path, so a spawn that finds none probes
 // once more. The script's fetcher opens only data: URIs, so nothing in the HTML makes WeasyPrint fetch from the API host.
 // It runs under the transform child's limits, so the kernel's OOM killer takes it before the API.

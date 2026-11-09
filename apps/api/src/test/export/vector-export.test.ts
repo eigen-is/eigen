@@ -4,7 +4,6 @@ import { readVectorFromDoc } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import { exportDocument, runDocumentExport } from '../../lib/export/export-document';
 import { sanitizeSceneHtml } from '../../lib/export/sanitize';
-import { isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { getHome } from '../../lib/home/get-home';
 import { cpuClock } from '../cpu-time';
 import {
@@ -13,6 +12,7 @@ import {
     seedDocumentMedia,
     seedVectorDoc,
 } from '../fixtures/golden-documents';
+import { weasyPrintPython } from '../pdf-test-helpers';
 import { authedRequest, driveGet, drivePost, getTestContext, TEST_PNG_BYTES } from '../setup';
 
 // Response contract of GET /drive/:ownerId/:mountId/file/:pathId/export/:format for
@@ -282,7 +282,7 @@ describe('Eigenvector export — the pdf-html document (what WeasyPrint is hande
     }, 60_000);
 });
 
-const suite = (await isWeasyPrintAvailable()) ? describe : describe.skip;
+const suite = weasyPrintPython ? describe : describe.skip;
 
 suite('Eigenvector export route — PDF (WeasyPrint end-to-end)', () => {
     test('pdf export serves a rendered PDF as an attachment', async () => {
