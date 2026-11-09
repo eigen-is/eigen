@@ -26,6 +26,8 @@ export function opToPatchOnSheets(sheets: Sheet[], ops: Op[]): [Patch[], Op[]] {
         if (!op.id) continue;
         // A log written before a cell's `f` became the one record of its formula holds writes to a list no sheet has.
         if (op.path[0] === 'calcChain') continue;
+        // No writer ships a sheet whole or its stored cell list, and a reader with no matrix would be the only one to apply it.
+        if (op.path.length === 0 || op.path[0] === 'celldata') continue;
         // Every reader walks a sheet's matrix and its rows, so a write that would leave either no array is dropped.
         const writesMatrixOrRow = op.path.length === 1 || (op.path.length === 2 && typeof op.path[1] === 'number');
         if (op.path[0] === 'data' && kind !== 'remove' && writesMatrixOrRow && !Array.isArray(op.value)) continue;

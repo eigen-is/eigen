@@ -258,9 +258,7 @@ describe('document/sheets — patch op replay', () => {
         const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
 
         const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
-        const batch: Op[] = [
-            { op: 'replace', id: 'sheet-1', path: ['celldata'], value: [{ r: 0, c: 0, v: { v: 7 } }] },
-        ];
+        const batch: Op[] = [{ op: 'replace', id: 'sheet-1', path: ['data', 0, 0], value: { v: 7 } }];
         collab.doc.transact(() => {
             collab.doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: false }));
             collab.doc.getArray<Op[]>('ops').push([batch]);
@@ -355,12 +353,8 @@ describe('document/sheets — patch op replay', () => {
         const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
 
         const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
-        const batch1: Op[] = [
-            { op: 'replace', id: 'sheet-1', path: ['celldata'], value: [{ r: 0, c: 0, v: { v: 1 } }] },
-        ];
-        const batch2: Op[] = [
-            { op: 'replace', id: 'sheet-1', path: ['celldata'], value: [{ r: 0, c: 0, v: { v: 2 } }] },
-        ];
+        const batch1: Op[] = [{ op: 'replace', id: 'sheet-1', path: ['data', 0, 0], value: { v: 1 } }];
+        const batch2: Op[] = [{ op: 'replace', id: 'sheet-1', path: ['data', 0, 0], value: { v: 2 } }];
         collab.doc.transact(() => {
             collab.doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: false }));
             collab.doc.getArray<Op[]>('ops').push([batch1, batch2]);

@@ -9,10 +9,21 @@ const SHEETS: Sheet[] = [
 ];
 
 describe('opToPatchOnSheets', () => {
+    test('drops a write to the stored cell list or the whole sheet, which only a reader without a matrix would apply', () => {
+        const link = { type: 'sheet', address: 5 };
+        const ops: Op[] = [
+            { op: 'replace', id: SHEETS[0].id, path: ['celldata'], value: [{ r: 0, c: 0, v: { link } }] },
+            { op: 'add', id: SHEETS[0].id, path: ['celldata', 0], value: { r: 0, c: 0, v: { link } } },
+            { op: 'replace', id: SHEETS[0].id, path: ['celldata', 0, 'v', 'link'], value: link },
+            { op: 'replace', id: SHEETS[0].id, path: [], value: { id: SHEETS[0].id, celldata: [] } },
+        ];
+        expect(opToPatchOnSheets(SHEETS, ops)).toEqual([[], []]);
+    });
+
     test('replace op on existing sheet → patch with [i, ...path]', () => {
-        const ops: Op[] = [{ op: 'replace', id: 'sheet-2', path: ['celldata', 0, 'v'], value: 42 }];
+        const ops: Op[] = [{ op: 'replace', id: 'sheet-2', path: ['data', 0, 0, 'v'], value: 42 }];
         const [patches, special] = opToPatchOnSheets(SHEETS, ops);
-        expect(patches).toEqual([{ op: 'replace', value: 42, path: [1, 'celldata', 0, 'v'] }]);
+        expect(patches).toEqual([{ op: 'replace', value: 42, path: [1, 'data', 0, 0, 'v'] }]);
         expect(special).toEqual([]);
     });
 
