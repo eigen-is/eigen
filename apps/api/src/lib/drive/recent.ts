@@ -52,7 +52,7 @@ export function touchRecent(sharedDb: SharedDb, ownerId: string, mountId: string
             })
             .run();
         tx.run(
-            sql`DELETE FROM ${recentPaths} WHERE rowid NOT IN (SELECT rowid FROM ${recentPaths} ORDER BY ${recentPaths.lastActivityAt} DESC LIMIT ${ROWS_KEPT})`,
+            sql`DELETE FROM ${recentPaths} WHERE rowid NOT IN (SELECT rowid FROM ${recentPaths} ORDER BY ${recentPaths.lastActivityAt} DESC, rowid DESC LIMIT ${ROWS_KEPT})`,
         );
     });
 }

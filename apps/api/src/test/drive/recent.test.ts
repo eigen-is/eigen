@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, mock, setSystemTime, spyOn, test } from 'bun:test';
 import { shareTag } from '@workspace/lib/notification/tags';
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -8,6 +8,7 @@ import { getPublicConfig } from '../../lib/config/server-config';
 import { Drive } from '../../lib/drive';
 import * as inlineEdit from '../../lib/drive/inline-edit';
 import { MAX_INLINE_EDIT_SIZE } from '../../lib/drive/inline-edit';
+import { touchRecent } from '../../lib/drive/recent';
 import { getSharedDatabase } from '../../lib/drive/shared';
 import { recentPaths } from '../../lib/drive/sharedschema';
 import { clearHomeRestoring, getHome, markHomeRestoring } from '../../lib/home/get-home';
@@ -52,7 +53,10 @@ afterAll(() => {
     ctx.app.stop();
 });
 
-afterEach(() => mock.restore());
+afterEach(() => {
+    mock.restore();
+    setSystemTime();
+});
 
 async function newViewer(): Promise<TestUser> {
     const user = await createTestUser(`recent-${crypto.randomUUID()}@test.eigen.is`, 'testpassword123', 'Viewer');
@@ -378,6 +382,18 @@ describe('Recent records an open', () => {
         expect(ids).toHaveLength(200);
         expect(ids).not.toContain(fakes[199].id);
         expect(ids).toContain(fakes[198].id);
+    });
+
+    test('and keeps the row just written when the 200 kept rows share its second', async () => {
+        const viewer = await newViewer();
+        const root = await rootOf(viewer);
+        setSystemTime(new Date());
+        for (let i = 0; i < 200; i++) await insertRow(viewer, { ...root, id: crypto.randomUUID() }, 0);
+        const sharedDb = await getSharedDatabase(await getHome(viewer.id));
+        touchRecent(sharedDb, viewer.id, root.mountId, 'written-last');
+        const ids = await storedIds(viewer);
+        expect(ids).toHaveLength(200);
+        expect(ids).toContain('written-last');
     });
 
     test("and records nothing for a guest's open", async () => {
