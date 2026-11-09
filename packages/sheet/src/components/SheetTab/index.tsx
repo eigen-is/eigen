@@ -1,5 +1,5 @@
-// The sheet tab strip below the grid: the add-sheet button, the list of all sheets, the tabs themselves and the
-// scroll buttons that bring a tab into view. Adding a sheet first commits an open cell edit.
+// The sheet tab strip below the grid: the add-sheet button, the list of all sheets, the tabs themselves, the scroll
+// buttons that bring a tab into view and the selection's count and sum. Adding a sheet first commits an open cell edit.
 
 import {
     ChoiceMenuItems,
@@ -51,10 +51,8 @@ export const SheetTab: React.FC = () => {
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: the sum reads the selection's cells, which only these two change
     useEffect(() => {
-        if (context.selections) {
-            const info = calcSelectionInfo(context);
-            setCalInfo((shown) => (isEqual(shown, info) ? shown : info));
-        }
+        const info = calcSelectionInfo(context);
+        setCalInfo((shown) => (isEqual(shown, info) ? shown : info));
     }, [context.selections, context.sheets]);
 
     const scrollDelta = 150;

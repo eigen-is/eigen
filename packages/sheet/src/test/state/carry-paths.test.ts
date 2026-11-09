@@ -236,14 +236,16 @@ describe('a table of formulas moves', () => {
     test('a formula moved onto a result of another type takes that type', () => {
         const s = session((d) => {
             d[0][0] = number(2);
-            d[0][1] = { f: '=IF(A1>1,"big",0)', v: 'big', m: 'big', ct: { fa: 'General', t: 's' } };
+            d[0][1] = { f: '=IF(D1>1,"big",0)', v: 'big', m: 'big', ct: { fa: 'General', t: 's' } };
+            d[0][3] = number(2);
             d[1][0] = number(1);
-            d[1][1] = { f: '=IF(A2>1,"big",0)', v: 0, m: '0', ct: { fa: '##0.00', t: 'n' } };
+            d[1][1] = { f: '=IF(D2>1,"big",0)', v: 0, m: '0', ct: { fa: '##0.00', t: 'n' } };
+            d[1][3] = number(1);
         });
         s.edit(s.a, (ctx) => sortRange(ctx, range(0, 1, 0, 1), true));
         expectEveryoneAgrees(s, (sheet) => {
-            expect(sheet.data?.[0][1]).toMatchObject({ v: 0, ct: { fa: '##0.00', t: 'n' } });
-            expect(sheet.data?.[1][1]).toMatchObject({ v: 'big', m: 'big', ct: { fa: 'General', t: 'g' } });
+            expect(sheet.data?.[0][1]).toMatchObject({ v: 'big', m: 'big', ct: { fa: '##0.00', t: 'g' } });
+            expect(sheet.data?.[1][1]).toMatchObject({ v: 0, m: '0', ct: { fa: 'General', t: 'n' } });
         });
     });
 
@@ -432,6 +434,19 @@ describe('a source cell without a rule takes the destination rule away, cell by 
         s.edit(s.a, pasteOn(r, 2));
         expectEveryoneAgrees(s, (sheet) => {
             expect(sheet.conditionalFormatRules).toEqual([formula([...ranges], shifted)]);
+        });
+    });
+
+    test('a paste inside a formula rule that lands on its corner moves the corner', () => {
+        const s = columnC({ conditionalFormatRules: [formula([range(0, 2, 2, 2)], '=C1>0')] });
+        s.edit(s.a, (ctx) => {
+            ctx.selections = select(1, 1, 2, 2);
+            copy(ctx, {});
+            ctx.selections = select(0, 0, 2, 2);
+            pasteCopy(ctx);
+        });
+        expectEveryoneAgrees(s, (sheet) => {
+            expect(sheet.conditionalFormatRules).toEqual([formula([range(1, 2, 2, 2), range(0, 0, 2, 2)], '=C2>0')]);
         });
     });
 

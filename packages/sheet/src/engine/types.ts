@@ -131,8 +131,6 @@ export type CellResolver = {
 
 export type EvaluationResult = {
     value: Cell['v'];
-    display: string;
-    type: 'number' | 'string' | 'boolean' | 'date' | 'error';
     // The error is an operator applied to an array, which this build can't evaluate.
     arrayOperation?: boolean;
 };

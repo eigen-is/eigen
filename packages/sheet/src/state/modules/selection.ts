@@ -1,10 +1,10 @@
 // The grid's cell selection: normalizing a range around its merges, moving the highlight with the keyboard,
 // select all, clearing the selected cells' contents, the status bar's sum and count, and the format painter's
-// paste.
+// paste. The keyboard and mouse handlers call it on the context they are changing.
 
 import { cloneDeep, isEmpty, isNil, isNumber } from 'es-toolkit/compat';
 import { format } from 'numfmt';
-import { cellDisplay, numberDisplay } from '../../engine/format';
+import { cellDisplay, writeFormulaResult } from '../../engine/format';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
 import type { FormulaCell, Range, Selection } from '../types';
@@ -14,7 +14,7 @@ import { carriedLines, carryCells } from './carry';
 import { getDataBySelectionNoCopy, mergeBorder, mergeMoveMain } from './cell';
 import { hasPartMC } from './validation';
 
-export function scrollToHighlightCell(ctx: Context, r: number, c: number) {
+function scrollToHighlightCell(ctx: Context, r: number, c: number) {
     const { scrollLeft, scrollTop } = ctx;
     const winH = ctx.cellmainHeight;
     const winW = ctx.cellmainWidth;
@@ -92,24 +92,8 @@ export function normalizeSelection<T extends Selection[] | undefined>(ctx: Conte
         const c1 = selection[i].column[0];
         const c2 = selection[i].column[1] ?? c1;
 
-        let rf: number | undefined;
-        let cf: number | undefined;
-        if (isNil(selection[i].row_focus)) {
-            rf = r1;
-        } else {
-            rf = selection[i].row_focus;
-        }
-
-        if (isNil(selection[i].column_focus)) {
-            cf = c1;
-        } else {
-            cf = selection[i].column_focus;
-        }
-
-        if (isNil(rf) || isNil(cf)) {
-            console.error('normalizeSelection: rf and cf is nil');
-            return selection;
-        }
+        const rf = selection[i].row_focus ?? r1;
+        const cf = selection[i].column_focus ?? c1;
 
         const row = ctx.visibledatarow[r2];
         const row_pre = r1 - 1 === -1 ? 0 : ctx.visibledatarow[r1 - 1];
@@ -256,15 +240,15 @@ export function pasteHandlerOfPaintModel(
     }
 
     carryCells(ctx, lines, tiles, ({ source, r, c }) => {
-        // The destination keeps its value and takes the source's formats.
-        const value = cloneDeep(source);
+        // The destination keeps its value and takes the source's formats. An empty source has none to give.
+        const value = cloneDeep(source) ?? {};
         const cell = flowdata[r][c] ?? {};
-        if (cell.ct?.t === 'inlineStr' && value) {
+        const ownType = cell.ct?.t;
+        if (ownType === 'inlineStr') {
             delete value.ct;
         } else {
             for (const item of PAINTED_FORMATS) Reflect.deleteProperty(cell, item);
         }
-        if (value == null) return cell;
 
         // The value and the link stay the destination's.
         delete value.v;
@@ -281,15 +265,14 @@ export function pasteHandlerOfPaintModel(
                 Object.assign(item, value);
             }
         }
-        if (cell.v != null && value.ct?.fa != null) {
-            // The painted number format changes what the kept value shows.
-            cell.m = numberDisplay(cell.v, value.ct.fa);
-        }
+        // The painted format changes how the kept value shows, not what it is: text someone typed stays text.
+        if (cell.f != null || typeof cell.v === 'number') writeFormulaResult(cell, cell.v);
+        else if (cell.v != null) (cell.ct ??= { fa: 'General' }).t = ownType ?? 'g';
         return cell;
     });
 }
 
-export function rowHasMerged(ctx: Context, r: number, c1: number, c2: number) {
+function rowHasMerged(ctx: Context, r: number, c1: number, c2: number) {
     let hasMerged = false;
     const flowData = getFlowdata(ctx);
     if (isNil(flowData) || isNil(flowData[r])) return false;
@@ -304,7 +287,7 @@ export function rowHasMerged(ctx: Context, r: number, c1: number, c2: number) {
     return hasMerged;
 }
 
-export function colHasMerged(ctx: Context, c: number, r1: number, r2: number) {
+function colHasMerged(ctx: Context, c: number, r1: number, r2: number) {
     let hasMerged = false;
     const flowData = getFlowdata(ctx);
     if (isNil(flowData)) return false;
@@ -319,7 +302,7 @@ export function colHasMerged(ctx: Context, c: number, r1: number, r2: number) {
     return hasMerged;
 }
 
-export function getRowMerge(ctx: Context, rIndex: number, c1: number, c2: number) {
+function getRowMerge(ctx: Context, rIndex: number, c1: number, c2: number) {
     const flowData = getFlowdata(ctx);
     if (isNil(flowData)) return [null, null];
     const merge = getSheetConfig(ctx)?.merge;
@@ -369,7 +352,7 @@ export function getRowMerge(ctx: Context, rIndex: number, c1: number, c2: number
     return [str, end];
 }
 
-export function getColMerge(ctx: Context, cIndex: number, r1: number, r2: number) {
+function getColMerge(ctx: Context, cIndex: number, r1: number, r2: number) {
     const flowData = getFlowdata(ctx);
     if (isNil(flowData)) {
         return [null, null];
@@ -435,32 +418,21 @@ type HighlightCellWalk = {
     moveY: number;
 };
 
-// Advances the focused cell by `index` along `postion`, across merges on both ends.
+// Advances the focused cell by `index` along `position`, across merges on both ends.
 // Off a merge, a selection keys its range off the clamped cursor and a formula range off the moved anchor.
 function computeMoveHighlightCell(
     ctx: Context,
     flowdata: NonNullable<ReturnType<typeof getFlowdata>>,
     last: Selection,
-    postion: 'down' | 'right',
+    position: 'down' | 'right',
     index: number,
     indexFromMove: boolean,
-): HighlightCellWalk | null {
+): HighlightCellWalk {
     const datarowlen = flowdata.length;
     const datacolumnlen = flowdata[0].length;
 
-    let curR: number;
-    if (isNil(last.row_focus)) {
-        [curR] = last.row;
-    } else {
-        curR = last.row_focus;
-    }
-
-    let curC: number;
-    if (isNil(last.column_focus)) {
-        [curC] = last.column;
-    } else {
-        curC = last.column_focus;
-    }
+    let curR = last.row_focus ?? last.row[0];
+    let curC = last.column_focus ?? last.column[0];
 
     const margeset = mergeBorder(ctx, flowdata, curR, curC);
     if (margeset) {
@@ -471,10 +443,10 @@ function computeMoveHighlightCell(
         const end_c = margeset.column[3];
 
         if (index > 0) {
-            if (postion === 'down') {
+            if (position === 'down') {
                 curR = end_r;
                 curC = str_c;
-            } else if (postion === 'right') {
+            } else if (position === 'right') {
                 curR = str_r;
                 curC = end_c;
             }
@@ -484,18 +456,13 @@ function computeMoveHighlightCell(
         }
     }
 
-    if (isNil(curR) || isNil(curC)) {
-        console.error('moveHighlightCell: curR or curC is nil');
-        return null;
-    }
-
     let moveX = isNil(last.moveXY) ? curR : last.moveXY.x;
     let moveY = isNil(last.moveXY) ? curC : last.moveXY.y;
 
-    if (postion === 'down') {
+    if (position === 'down') {
         curR += index;
         moveX = curR;
-    } else if (postion === 'right') {
+    } else if (position === 'right') {
         curC += index;
         moveY = curC;
     }
@@ -550,7 +517,7 @@ function computeMoveHighlightCell(
 
 export function moveHighlightCell(
     ctx: Context,
-    postion: 'down' | 'right',
+    position: 'down' | 'right',
     index: number,
     type: 'rangeOfSelect' | 'rangeOfFormula',
 ) {
@@ -561,8 +528,7 @@ export function moveHighlightCell(
         const last = ctx.selections?.[ctx.selections.length - 1];
         if (!last) return;
 
-        const walk = computeMoveHighlightCell(ctx, flowdata, last, postion, index, false);
-        if (!walk) return;
+        const walk = computeMoveHighlightCell(ctx, flowdata, last, position, index, false);
         const { row_index, row_index_ed, col_index, col_index_ed, moveX, moveY } = walk;
 
         if (isNil(row_index) || isNil(row_index_ed) || isNil(col_index) || isNil(col_index_ed)) {
@@ -582,8 +548,7 @@ export function moveHighlightCell(
         const last = ctx.formulaCache.func_selectedrange;
         if (!last) return;
 
-        const walk = computeMoveHighlightCell(ctx, flowdata, last, postion, index, true);
-        if (!walk) return;
+        const walk = computeMoveHighlightCell(ctx, flowdata, last, position, index, true);
         const { row, row_pre, row_index, row_index_ed, col, col_pre, col_index, col_index_ed, moveX, moveY } = walk;
 
         if (
@@ -622,7 +587,7 @@ export function moveHighlightCell(
 // write back. Unifying them would change behavior.
 export function moveHighlightRange(
     ctx: Context,
-    postion: 'down' | 'right',
+    position: 'down' | 'right',
     index: number,
     type: 'rangeOfSelect' | 'rangeOfFormula',
 ) {
@@ -644,7 +609,7 @@ export function moveHighlightRange(
         if (isNil(rf) || isNil(cf)) return;
         const datarowlen = flowData.length;
         const datacolumnlen = flowData[0].length;
-        if (postion === 'down') {
+        if (position === 'down') {
             if (rowHasMerged(ctx, rf, curC, endC)) {
                 const rfMerge = getRowMerge(ctx, rf, curC, endC);
                 const rf_str = rfMerge[0];
@@ -797,7 +762,7 @@ export function moveHighlightRange(
         last.column = columnseleted;
         normalizeSelection(ctx, ctx.selections);
 
-        if (postion === 'down') {
+        if (position === 'down') {
             const rowToScroll = last.row_focus === last.row[0] ? last.row[1] : last.row[0];
             scrollToHighlightCell(ctx, rowToScroll, -1);
         } else {
@@ -817,7 +782,7 @@ export function moveHighlightRange(
         const datarowlen = flowData.length;
         const datacolumnlen = flowData[0].length;
 
-        if (postion === 'down') {
+        if (position === 'down') {
             if (!isNil(rf) && rowHasMerged(ctx, rf, curC, endC)) {
                 const rfMerge = getRowMerge(ctx, rf, curC, endC);
                 const rf_str = rfMerge[0];
@@ -1034,7 +999,7 @@ export function deleteSelectedCellText(ctx: Context): FormulaCell[] {
 }
 
 export function selectIsOverlap(ctx: Context, range?: Range) {
-    const ranges = cloneDeep(range ?? ctx.selections) ?? [];
+    const ranges = range ?? ctx.selections ?? [];
 
     let overlap = false;
     const seen: Record<string, true> = {};

@@ -31,7 +31,7 @@ import {
 } from '../utils';
 import { applyOpBatch } from './apply-ops';
 import { withoutDeletedFloatingEdits } from './floating';
-import { execFunctionGroup, warmFormulaCellInfoMap } from './formula-exec';
+import { execFunctionGroup } from './formula-exec';
 import { namesStructuralOp, unitOf } from './history-shift';
 import { settleCurrentSheet, shiftSheetOrders } from './sheet';
 
@@ -199,7 +199,7 @@ function patchStep(ctx: Context, apply: Patch[], written: Patch[]): Step {
 
 // The patches without the value and display text the engine computes for a cell that holds a formula once they apply.
 // A peer may have changed that formula's inputs, or the formula itself, since. A formula the engine can't calculate
-// keeps them, as a recompute keeps its number.
+// keeps them, as a recompute keeps what it holds.
 function withoutComputedValues(ctx: Context, patches: Patch[]): Patch[] {
     const after = applyPatches(ctx, patches);
     const { engine } = ctx.formulaCache;
@@ -224,9 +224,8 @@ function recalculate(ctx: Context, patches: Patch[]) {
         cells.set(computedKey(r, c, id), { r, c, id });
     }
     if (cells.size === 0) return;
-    const map = warmFormulaCellInfoMap(ctx);
-    const formulas = [...cells.values()].flatMap(({ r, c, id }) => map[`r${r}c${c}i${id}`] ?? []);
-    execFunctionGroup(ctx, [...cells.values()], formulas);
+    const written = [...cells.values()];
+    execFunctionGroup(ctx, written, written);
 }
 
 // The batch is the marker and what it did not bring back of the recorded fields and cells, read off the engine's own

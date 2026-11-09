@@ -8,13 +8,14 @@ import { evaluateConditionalFormat } from '../../engine/conditional-format';
 import { cellDisplay, cellValue } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
 import type { Context } from '../../state/context';
+import { autoSelectionFormula } from '../../state/modules/autosum';
 import { getCellValue, getRealCellValue, setCellValue, updateCell } from '../../state/modules/cell';
 import { getDropdownList, validateCellData } from '../../state/modules/data-validation';
 import { buildFilterConditionMatcher, getFilterColumnValues } from '../../state/modules/filter';
 import { removeHyperlink, saveHyperlink, showLinkCard } from '../../state/modules/hyperlink';
 import { calcSelectionInfo } from '../../state/modules/selection';
 import { sortedOrder, sortSelection } from '../../state/modules/sort';
-import { autoSelectionFormula, handleMerge } from '../../state/modules/toolbar';
+import { handleMerge } from '../../state/modules/toolbar';
 import { contextFactory, selectionFactory } from './factories/context';
 
 function rich(text: string): Cell {

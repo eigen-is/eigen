@@ -1,21 +1,16 @@
 // The actions of the format toolbar and the Format menu on the selection, such as bold, the font, a
-// number format, borders, merging and autosum. Each runs inside a setContext recipe. While a cell is
-// open on text, a font format goes to the editor's selected characters rather than to the cells.
+// number format, borders and merging. Each runs inside a setContext recipe. While a cell is open on
+// text, a font format goes to the editor's selected characters rather than to the cells.
 
 import type { BorderType } from '@workspace/lib/sheets';
-import { forEach, isNil, isPlainObject, pick } from 'es-toolkit/compat';
-import { cellValue, is_date, numberDisplay } from '../../engine/format';
+import { isNil, isPlainObject, pick } from 'es-toolkit/compat';
+import { is_date, numberDisplay, writeFormulaResult } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
 import { clipToUsedExtent, getSheetIndex } from '../utils';
 import { applyBorder, clearSides } from './border';
-import { getRangetxt, isAllSelectedCellsInStatus, setCellValue } from './cell';
-import { openCellEditor } from './cell-editor';
-import { rangeColor } from './color';
-import { functionCallHtml, israngeseleciton } from './formula-editor';
-import { computeFormula } from './formula-exec';
-import { createFormulaRangeSelect, rangeSetValue } from './formula-range';
+import { isAllSelectedCellsInStatus } from './cell';
 import { showLinkCard } from './hyperlink';
 import {
     editorSelectionStyle,
@@ -23,18 +18,16 @@ import {
     isRunStyleKey,
     updateInlineStringFormatOutside,
 } from './inline-string';
-import { colLocationByIndex, rowLocationByIndex } from './location';
 import { mergeCells } from './merge';
-import { recomputeCells } from './refresh';
 import { selectIsOverlap } from './selection';
 import { growRowToFit } from './text';
-import { hasPartMC, isRealNull, isRealNum } from './validation';
+import { hasPartMC, isRealNum } from './validation';
 
 export function updateFormatCell(
     ctx: Context,
     d: CellMatrix,
     attr: keyof Cell,
-    foucsStatus: string | number,
+    status: string | number,
     row_st: number,
     row_ed: number,
     col_st: number,
@@ -49,6 +42,7 @@ export function updateFormatCell(
     }
     const cfg = (ctx.sheets[sheetIndex].config ??= {});
     if (attr === 'ct') {
+        const fa = String(status);
         for (let r = row_st; r <= row_ed; r += 1) {
             if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[r])) {
                 continue;
@@ -56,34 +50,25 @@ export function updateFormatCell(
 
             for (let c = col_st; c <= col_ed; c += 1) {
                 const cell = d[r][c];
-                let value = cell?.v;
+                if (cell?.f != null) {
+                    // The result keeps the type it has, so a format makes no number of a text result.
+                    (cell.ct ??= {}).fa = fa;
+                    writeFormulaResult(cell, cell.v);
+                    continue;
+                }
 
-                if (foucsStatus !== '@' && isRealNum(value)) {
+                let value = cell?.v;
+                if (fa !== '@' && isRealNum(value)) {
                     value = Number(value);
                 }
 
-                const mask = numberDisplay(value, String(foucsStatus));
+                const mask = numberDisplay(value, fa);
                 let type = 'n';
-
-                if (
-                    is_date(foucsStatus) ||
-                    foucsStatus === 14 ||
-                    foucsStatus === 15 ||
-                    foucsStatus === 16 ||
-                    foucsStatus === 17 ||
-                    foucsStatus === 18 ||
-                    foucsStatus === 19 ||
-                    foucsStatus === 20 ||
-                    foucsStatus === 21 ||
-                    foucsStatus === 22 ||
-                    foucsStatus === 45 ||
-                    foucsStatus === 46 ||
-                    foucsStatus === 47
-                ) {
+                if (is_date(fa)) {
                     type = 'd';
-                } else if (foucsStatus === '@' || foucsStatus === 49) {
+                } else if (fa === '@') {
                     type = 's';
-                } else if (foucsStatus === 'General' || foucsStatus === 0) {
+                } else if (fa === 'General') {
                     type = isRealNum(value) ? 'n' : 'g';
                 }
 
@@ -92,12 +77,12 @@ export function updateFormatCell(
                     if (isNil(cell.ct)) {
                         cell.ct = {};
                     }
-                    cell.ct.fa = String(foucsStatus);
+                    cell.ct.fa = fa;
                     cell.ct.t = type;
                 } else {
                     d[r][c] = {
-                        ct: { fa: String(foucsStatus), t: type },
-                        v: value as string,
+                        ct: { fa, t: type },
+                        v: value,
                         m: mask,
                     };
                 }
@@ -105,28 +90,28 @@ export function updateFormatCell(
         }
     } else {
         if (attr === 'ht') {
-            if (foucsStatus === 'left') {
-                foucsStatus = '1';
-            } else if (foucsStatus === 'center') {
-                foucsStatus = '0';
-            } else if (foucsStatus === 'right') {
-                foucsStatus = '2';
+            if (status === 'left') {
+                status = '1';
+            } else if (status === 'center') {
+                status = '0';
+            } else if (status === 'right') {
+                status = '2';
             }
         } else if (attr === 'vt') {
-            if (foucsStatus === 'top') {
-                foucsStatus = '1';
-            } else if (foucsStatus === 'middle') {
-                foucsStatus = '0';
-            } else if (foucsStatus === 'bottom') {
-                foucsStatus = '2';
+            if (status === 'top') {
+                status = '1';
+            } else if (status === 'middle') {
+                status = '0';
+            } else if (status === 'bottom') {
+                status = '2';
             }
         } else if (attr === 'tb') {
-            if (foucsStatus === 'overflow') {
-                foucsStatus = '1';
-            } else if (foucsStatus === 'clip') {
-                foucsStatus = '0';
-            } else if (foucsStatus === 'wrap') {
-                foucsStatus = '2';
+            if (status === 'overflow') {
+                status = '1';
+            } else if (status === 'clip') {
+                status = '0';
+            } else if (status === 'wrap') {
+                status = '2';
             }
         }
 
@@ -139,12 +124,12 @@ export function updateFormatCell(
                 const value = d[r][c];
 
                 if (value && isPlainObject(value)) {
-                    if (isRunStyleKey(attr)) updateInlineStringFormatOutside(value, attr, foucsStatus);
-                    Object.assign(value, { [attr]: foucsStatus });
+                    if (isRunStyleKey(attr)) updateInlineStringFormatOutside(value, attr, status);
+                    Object.assign(value, { [attr]: status });
                     // A larger size or wrapped lines need a taller row.
-                    if (attr === 'fs' || (attr === 'tb' && foucsStatus === '2')) growRowToFit(ctx, cfg, value, r, c);
+                    if (attr === 'fs' || (attr === 'tb' && status === '2')) growRowToFit(ctx, cfg, value, r, c);
                 } else {
-                    d[r][c] = { [attr]: foucsStatus };
+                    d[r][c] = { [attr]: status };
                 }
             }
         }
@@ -156,22 +141,19 @@ export function updateFormat(
     $input: HTMLDivElement,
     d: CellMatrix,
     attr: keyof Cell,
-    foucsStatus: string | number,
+    status: string | number,
 ) {
     if (ctx.allowEdit === false) return;
 
     if (isRunStyleKey(attr) && isEditingText(ctx, $input)) {
         const [r, c] = ctx.editingCellPosition;
-        formatEditorSelection($input, d[r]?.[c], attr, foucsStatus);
+        formatEditorSelection($input, d[r]?.[c], attr, status);
         return;
     }
 
-    forEach(ctx.selections, (selection) => {
-        const [row_st, row_ed] = selection.row;
-        const [col_st, col_ed] = selection.column;
-
-        updateFormatCell(ctx, d, attr, foucsStatus, row_st, row_ed, col_st, col_ed);
-    });
+    for (const { row, column } of ctx.selections ?? []) {
+        updateFormatCell(ctx, d, attr, status, row[0], row[1], column[0], column[1]);
+    }
 }
 
 // While a cell is open on text, not a formula, a font format applies to the editor's selected
@@ -197,362 +179,6 @@ function setAttr(ctx: Context, cellInput: HTMLDivElement, attr: keyof Cell, valu
     if (!flowdata) return;
 
     updateFormat(ctx, cellInput, flowdata, attr, value);
-}
-
-function checkNoNullValue(cell: Cell | null) {
-    return isRealNum(cellValue(cell)) && (cell?.ct?.t == null || cell.ct.t === 'n' || cell.ct.t === 'g');
-}
-
-function checkNoNullValueAll(cell: Cell | null) {
-    return !isRealNull(cellValue(cell));
-}
-
-// A cell autosum must not write over: one holding a value or text.
-function holdsValue(cell: Cell | null) {
-    const v = cellValue(cell);
-    return v != null && v.toString().length > 0;
-}
-
-function getNoNullValue(d: CellMatrix, st_x: number, ed: number, type: string) {
-    let hasValueStart = null;
-    let nullNum = 0;
-    let nullTime = 0;
-
-    for (let r = ed - 1; r >= 0; r -= 1) {
-        let cell: Cell | null;
-        if (type === 'c') {
-            cell = d[st_x][r];
-        } else {
-            cell = d[r][st_x];
-        }
-
-        if (checkNoNullValue(cell)) {
-            hasValueStart = r;
-        } else if (!holdsValue(cell)) {
-            nullNum += 1;
-
-            if (nullNum >= 40) {
-                if (nullTime <= 0) {
-                    nullTime = 1;
-                } else {
-                    break;
-                }
-            }
-        } else {
-            break;
-        }
-    }
-
-    return hasValueStart;
-}
-
-function activeFormulaInput(
-    cellInput: HTMLDivElement,
-    fxInput: HTMLDivElement | null | undefined,
-    ctx: Context,
-    row_index: number,
-    col_index: number,
-    rowh: number[] | null,
-    columnh: number[] | null,
-    formula: string,
-    isnull = false,
-) {
-    if (isnull) {
-        const html = `${functionCallHtml(formula.toUpperCase())}<span dir="auto" class="sheet-formula-text-color">)</span>`;
-        openCellEditor(ctx, row_index, col_index, { html, caret: formula.length + 2 });
-        return;
-    }
-
-    if (rowh == null || columnh == null) return;
-    const row_pre = rowLocationByIndex(rowh[0], ctx.visibledatarow)[0];
-    const row = rowLocationByIndex(rowh[1], ctx.visibledatarow)[1];
-    const col_pre = colLocationByIndex(columnh[0], ctx.visibledatacolumn)[0];
-    const col = colLocationByIndex(columnh[1], ctx.visibledatacolumn)[1];
-
-    const html = `${functionCallHtml(formula.toUpperCase())}<span class="sheet-formula-functionrange-cell" rangeindex="0" dir="auto" style="color:${rangeColor(
-        0,
-    )};">${getRangetxt(
-        ctx,
-        ctx.currentSheetId,
-        { row: rowh, column: columnh },
-        ctx.currentSheetId,
-    )}</span><span dir="auto" class="sheet-formula-text-color">)</span>`;
-    openCellEditor(ctx, row_index, col_index, { html });
-
-    israngeseleciton(ctx);
-    ctx.formulaCache.rangestart = true;
-    ctx.formulaCache.rangedrag_column_start = false;
-    ctx.formulaCache.rangedrag_row_start = false;
-    ctx.formulaCache.rangechangeindex = 0;
-    rangeSetValue(ctx, cellInput, { row: rowh, column: columnh }, fxInput);
-    ctx.formulaCache.func_selectedrange = {
-        left: col_pre,
-        width: col - col_pre - 1,
-        top: row_pre,
-        height: row - row_pre - 1,
-        left_move: col_pre,
-        width_move: col - col_pre - 1,
-        top_move: row_pre,
-        height_move: row - row_pre - 1,
-        row: [row_index, row_index],
-        column: [col_index, col_index],
-    };
-
-    createFormulaRangeSelect(ctx, {
-        rangeIndex: ctx.formulaCache.rangeIndex || 0,
-        left: col_pre,
-        width: col - col_pre - 1,
-        top: row_pre,
-        height: row - row_pre - 1,
-    });
-}
-
-function backFormulaInput(
-    d: CellMatrix,
-    r: number,
-    c: number,
-    rowh: number[],
-    columnh: number[],
-    formula: string,
-    ctx: Context,
-) {
-    const f = `=${formula.toUpperCase()}(${getRangetxt(
-        ctx,
-        ctx.currentSheetId,
-        { row: rowh, column: columnh },
-        ctx.currentSheetId,
-    )})`;
-    const [v, formulaText] = computeFormula(ctx, f);
-    setCellValue(ctx, r, c, d, { v, f: formulaText });
-    recomputeCells(ctx, [{ r, c, id: ctx.currentSheetId }]);
-}
-
-function singleFormulaInput(
-    cellInput: HTMLDivElement,
-    fxInput: HTMLDivElement | null | undefined,
-    ctx: Context,
-    d: CellMatrix,
-    _index: number,
-    fix: number,
-    st_m: number,
-    ed_m: number,
-    formula: string,
-    type: string,
-    noNum = true,
-    noNull = true,
-) {
-    let isNull = true;
-    let isNum = false;
-
-    for (let c = st_m; c <= ed_m; c += 1) {
-        let cell = null;
-
-        if (type === 'c') {
-            cell = d[c][fix];
-        } else {
-            cell = d[fix][c];
-        }
-
-        if (checkNoNullValue(cell)) {
-            isNull = false;
-            isNum = true;
-        } else if (checkNoNullValueAll(cell)) {
-            isNull = false;
-        }
-    }
-
-    if (isNull && noNull) {
-        let st_r_r = getNoNullValue(d, _index, fix, type);
-
-        if (st_r_r == null) {
-            if (type === 'c') {
-                activeFormulaInput(cellInput, fxInput, ctx, _index, fix, null, null, formula, true);
-            } else {
-                activeFormulaInput(cellInput, fxInput, ctx, fix, _index, null, null, formula, true);
-            }
-        } else {
-            if (_index === st_m) {
-                for (let c = st_m; c <= ed_m; c += 1) {
-                    st_r_r = getNoNullValue(d, c, fix, type);
-
-                    if (st_r_r == null) {
-                        break;
-                    }
-
-                    if (type === 'c') {
-                        backFormulaInput(d, c, fix, [c, c], [st_r_r, fix - 1], formula, ctx);
-                    } else {
-                        backFormulaInput(d, fix, c, [st_r_r, fix - 1], [c, c], formula, ctx);
-                    }
-                }
-            } else {
-                for (let c = ed_m; c >= st_m; c -= 1) {
-                    st_r_r = getNoNullValue(d, c, fix, type);
-
-                    if (st_r_r == null) {
-                        break;
-                    }
-
-                    if (type === 'c') {
-                        backFormulaInput(d, c, fix, [c, c], [st_r_r, fix - 1], formula, ctx);
-                    } else {
-                        backFormulaInput(d, fix, c, [st_r_r, fix - 1], [c, c], formula, ctx);
-                    }
-                }
-            }
-        }
-        return;
-    }
-    if (isNum && noNum) {
-        let cell = null;
-
-        if (type === 'c') {
-            cell = d[ed_m + 1][fix];
-        } else {
-            cell = d[fix][ed_m + 1];
-        }
-
-        /* Note: exclude the cell itself during search to prevent a cell formula from referencing itself */
-        if (holdsValue(cell)) {
-            let c = ed_m + 1;
-
-            if (type === 'c') {
-                cell = d[ed_m + 1][fix];
-            } else {
-                cell = d[fix][ed_m + 1];
-            }
-
-            while (holdsValue(cell)) {
-                c += 1;
-                let len = null;
-
-                if (type === 'c') {
-                    len = d.length;
-                } else {
-                    len = d[0].length;
-                }
-
-                if (c >= len) return;
-
-                if (type === 'c') {
-                    cell = d[c][fix];
-                } else {
-                    cell = d[fix][c];
-                }
-            }
-
-            if (type === 'c') {
-                backFormulaInput(d, c, fix, [st_m, ed_m], [fix, fix], formula, ctx);
-            } else {
-                backFormulaInput(d, fix, c, [fix, fix], [st_m, ed_m], formula, ctx);
-            }
-        } else {
-            if (type === 'c') {
-                backFormulaInput(d, ed_m + 1, fix, [st_m, ed_m], [fix, fix], formula, ctx);
-            } else {
-                backFormulaInput(d, fix, ed_m + 1, [fix, fix], [st_m, ed_m], formula, ctx);
-            }
-        }
-    }
-}
-
-export function autoSelectionFormula(
-    ctx: Context,
-    cellInput: HTMLDivElement,
-    fxInput: HTMLDivElement | null | undefined,
-    formula: string,
-) {
-    if (ctx.allowEdit === false) return;
-    const flowdata = getFlowdata(ctx);
-    if (flowdata == null) return;
-
-    function execFormulaInput_c(
-        d: CellMatrix,
-        st_r: number,
-        ed_r: number,
-        st_c: number,
-        ed_c: number,
-        _formula: string,
-    ) {
-        const st_c_c = getNoNullValue(d, st_r, ed_c, 'c');
-
-        if (st_c_c == null) {
-            activeFormulaInput(cellInput, fxInput, ctx, st_r, st_c, null, null, _formula, true);
-        } else {
-            activeFormulaInput(cellInput, fxInput, ctx, st_r, st_c, [st_r, ed_r], [st_c_c, ed_c - 1], _formula);
-        }
-    }
-
-    function execFormulaInput(d: CellMatrix, st_r: number, ed_r: number, st_c: number, ed_c: number, _formula: string) {
-        const st_r_c = getNoNullValue(d, st_c, ed_r, 'r');
-
-        if (st_r_c == null) {
-            execFormulaInput_c(d, st_r, ed_r, st_c, ed_c, _formula);
-        } else {
-            activeFormulaInput(cellInput, fxInput, ctx, st_r, st_c, [st_r_c, ed_r - 1], [st_c, ed_c], _formula);
-        }
-    }
-
-    if (!ctx.selections) return;
-
-    forEach(ctx.selections, (selection) => {
-        const [st_r, ed_r] = selection.row;
-        const [st_c, ed_c] = selection.column;
-        const row_index = selection.row_focus ?? st_r;
-        const col_index = selection.column_focus ?? st_c;
-
-        if (st_r === ed_r && st_c === ed_c) {
-            if (ed_r - 1 < 0 && ed_c - 1 < 0) {
-                activeFormulaInput(cellInput, fxInput, ctx, st_r, st_c, null, null, formula, true);
-                return;
-            }
-
-            if (ed_r - 1 >= 0 && checkNoNullValue(flowdata[ed_r - 1][st_c])) {
-                execFormulaInput(flowdata, st_r, ed_r, st_c, ed_c, formula);
-            } else if (ed_c - 1 >= 0 && checkNoNullValue(flowdata[st_r][ed_c - 1])) {
-                execFormulaInput_c(flowdata, st_r, ed_r, st_c, ed_c, formula);
-            } else {
-                execFormulaInput(flowdata, st_r, ed_r, st_c, ed_c, formula);
-            }
-        } else if (st_r === ed_r) {
-            singleFormulaInput(cellInput, fxInput, ctx, flowdata, col_index, st_r, st_c, ed_c, formula, 'r');
-        } else if (st_c === ed_c) {
-            singleFormulaInput(cellInput, fxInput, ctx, flowdata, row_index, st_c, st_r, ed_r, formula, 'c');
-        } else {
-            for (let r = st_r; r <= ed_r; r += 1) {
-                singleFormulaInput(
-                    cellInput,
-                    fxInput,
-                    ctx,
-                    flowdata,
-                    col_index,
-                    r,
-                    st_c,
-                    ed_c,
-                    formula,
-                    'r',
-                    true,
-                    false,
-                );
-            }
-            for (let c = st_c; c <= ed_c; c += 1) {
-                singleFormulaInput(
-                    cellInput,
-                    fxInput,
-                    ctx,
-                    flowdata,
-                    row_index,
-                    c,
-                    st_r,
-                    ed_r,
-                    formula,
-                    'c',
-                    true,
-                    false,
-                );
-            }
-        }
-    });
 }
 
 export function cancelPaintModel(ctx: Context) {
@@ -691,8 +317,9 @@ export function handleMerge(ctx: Context, type: string) {
 export function handleFreeze(ctx: Context, type: string) {
     if (ctx.allowEdit === false) return;
 
-    const file = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!];
-    if (!file) return;
+    const index = getSheetIndex(ctx, ctx.currentSheetId);
+    if (index == null) return;
+    const file = ctx.sheets[index];
 
     if (type === 'freeze-cancel') {
         delete file.frozen;

@@ -750,6 +750,25 @@ describe("the reader's errors", () => {
         expect(cellsOf(second)['0_0']?.v).toBe(true);
     });
 
+    test('a formula whose cached result is empty text keeps it, and one with no result has none', () => {
+        const data = [
+            '<row r="1"><c r="A1" t="str"><f>IFERROR(SUM(OFFSET(B1,0,-1)),"")</f><v/></c>',
+            '<c r="B1" t="str"><f>IF(1=1,"",1)</f><v></v></c>',
+            '<c r="C1" t="str"><f>OFFSET(B1,0,1)</f></c>',
+            '<c r="D1" t="str"><v></v></c></row>',
+        ].join('');
+        const cells = cellsOf(xlsxToSheets(xlsxFixture({ sheets: [{ data }] }))[0]);
+        expect(cells['0_0']).toEqual({
+            v: '',
+            m: '',
+            f: '=IFERROR(SUM(OFFSET(B1,0,-1)),"")',
+            ct: { fa: 'General', t: 's' },
+        });
+        expect(cells['0_1']?.v).toBe('');
+        expect(cells['0_2']?.v).toBeUndefined();
+        expect(cells['0_3']).toBeUndefined();
+    });
+
     test('a formula reading an error computes as Excel would after an edit', () => {
         // An edit to A2, and the formulas the editor computes again rather than the values Excel saved.
         const edited = book().sheets.map((sheet) => ({

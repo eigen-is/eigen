@@ -10,9 +10,11 @@ import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from '../../engine/r
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
-import type { Sheet } from '../types';
+import type { Selection, Sheet } from '../types';
 import { deleteMarker, insertMarker } from '../utils';
 import { recomputeAfterOps } from './formula-exec';
+import type { RowColMove } from './history-shift';
+import { deleteMove } from './history-shift';
 
 export const ONE_AREA_ONLY = 'Cannot perform this operation on multiple selection areas, please select a single area';
 
@@ -46,7 +48,7 @@ export function deleteRowCol(
     ctx: Context,
     op: DeleteRowColOp,
     // A batch applies for a read-only viewer too and moves the selection itself, so the permission check and the
-    // selection reset are for a tab's own delete.
+    // landing below are for a tab's own delete.
     fromBatch = false,
 ) {
     if (!fromBatch && ctx.allowEdit === false) return;
@@ -54,8 +56,32 @@ export function deleteRowCol(
 
     ctx.formulaCache.formulaCellInfoMap = null;
     if (fromBatch) return;
-    ctx.selections = undefined;
+    const { type, start } = op;
+    const data = getFlowdata(ctx, op.id);
+    if (data) {
+        // Whoever deleted the row asked for it, so the cursor stays: on what took its place, or on the new last one.
+        const move = deleteMove(op);
+        const line = Math.min(start, (type === 'row' ? data.length : data[0].length) - 1);
+        ctx.selections = ctx.selections?.map(
+            (selection) =>
+                movedSelection(selection, move) ??
+                (type === 'row'
+                    ? { ...selection, row: [line, line], row_focus: line }
+                    : { ...selection, column: [line, line], column_focus: line }),
+        );
+    }
     recomputeAfterOps(ctx, [deleteMarker(op)]);
+}
+
+// Where a selection goes with the cells an op moves, or null when a delete takes all of it.
+export function movedSelection(selection: Selection, move: RowColMove): Selection | null {
+    const shifted = move.range(selection);
+    if (!shifted) return null;
+    const row = move.type === 'row';
+    const [start] = row ? shifted.row : shifted.column;
+    const focus = row ? selection.row_focus : selection.column_focus;
+    const at = focus == null ? start : (move.to(focus) ?? start);
+    return row ? { ...shifted, row_focus: at } : { ...shifted, column_focus: at };
 }
 
 // The selection a hide or a show acts on. More than one gets the notice instead.

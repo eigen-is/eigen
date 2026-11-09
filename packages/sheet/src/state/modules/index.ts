@@ -1,6 +1,7 @@
 export * from '../../engine/format';
 export { functionCopy } from '../../engine/formula-shift';
 export * from './apply-ops';
+export * from './autosum';
 export * from './border';
 export * from './cell';
 export * from './cell-editor';
