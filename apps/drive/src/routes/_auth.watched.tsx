@@ -6,7 +6,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useAllWatches, usePathInfo, validateDriveSearch } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { EmptyState, LoadingState } from '@workspace/ui';
+import { EmptyState } from '@workspace/ui';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
 import { useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';
@@ -43,8 +43,6 @@ function WatchedRoute() {
         navigate({ to: Route.fullPath, search: { pid: undefined, uid: undefined, mid: undefined } });
     };
 
-    if (isLoading) return <LoadingState />;
-
     return (
         <DriveLayout
             pid={pid}
@@ -52,7 +50,7 @@ function WatchedRoute() {
             ownerId={uid || user?.id || ''}
             mountId={mid || DEFAULT_MOUNT_ID}
             folderContents={watches}
-            isLoading={false}
+            isLoading={isLoading}
             error={error}
             onRowSelect={onRowSelect}
             onRowActivate={onRowActivate}
