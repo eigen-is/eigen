@@ -48,7 +48,15 @@ export function parseCalendarStream(ics: string): ICAL.Component[] {
         if (depth === MAX_NESTING) throw new ICAL.parse.ParserError('Calendar nested too deep');
         level = level.flatMap((component) => component[2]);
     }
-    return roots.map((root) => new ICAL.Component(root));
+    return roots.map((root) => hydrated(new ICAL.Component(root)));
+}
+
+// ical.js caches by index, and a cache first written past index 100,000 stays a sparse array, where every splice is
+// slow.
+function hydrated(component: ICAL.Component): ICAL.Component {
+    component.getAllProperties();
+    for (const sub of component.getAllSubcomponents()) hydrated(sub);
+    return component;
 }
 
 // A resource is one object: a second one would be silently lost at the first write.

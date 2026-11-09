@@ -212,18 +212,30 @@ function addStamp(vevent: ICAL.Component, name: string, value: string | null | u
     vevent.addProperty(rawProperty(name, value));
 }
 
+// Every removal is one rebuild, because ical.js scans and splices the whole list per item it removes.
+export function keepProperties(comp: ICAL.Component, keep: (prop: ICAL.Property) => boolean): void {
+    const kept = comp.getAllProperties().filter(keep);
+    comp.removeAllProperties();
+    for (const prop of kept) comp.addProperty(prop);
+}
+
+export function keepSubcomponents(comp: ICAL.Component, keep: (sub: ICAL.Component) => boolean): void {
+    const kept = comp.getAllSubcomponents().filter(keep);
+    comp.removeAllSubcomponents();
+    for (const sub of kept) comp.addSubcomponent(sub);
+}
+
 function setProperty(comp: ICAL.Component, prop: ICAL.Property): boolean {
     const current = comp.getFirstProperty(prop.name);
     if (current && propertyKey(current) === propertyKey(prop)) return false;
-    comp.removeAllProperties(prop.name);
+    clearProperty(comp, prop.name);
     comp.addProperty(prop);
     return true;
 }
 
-// ical.js types removeAllProperties as a boolean, but it returns nothing.
 function clearProperty(comp: ICAL.Component, name: string): boolean {
     const present = comp.hasProperty(name);
-    comp.removeAllProperties(name);
+    if (present) keepProperties(comp, (prop) => prop.name !== name);
     return present;
 }
 
@@ -300,10 +312,10 @@ function syncVTimezones(resource: ICAL.Component): void {
         if (vevent.getFirstProperty('rrule')) hasRrule = true;
     }
 
-    for (const vtimezone of resource.getAllSubcomponents('vtimezone')) {
-        if (referenced.delete(String(vtimezone.getFirstPropertyValue('tzid') ?? ''))) continue;
-        resource.removeSubcomponent(vtimezone);
-    }
+    keepSubcomponents(
+        resource,
+        (sub) => sub.name !== 'vtimezone' || referenced.delete(String(sub.getFirstPropertyValue('tzid') ?? '')),
+    );
     const added = [...referenced].filter((tzid) => normalizeTimezone(tzid) === tzid);
     if (!years.length || !added.length) return;
 
@@ -319,6 +331,7 @@ function syncVTimezones(resource: ICAL.Component): void {
     for (const tzid of added) {
         resource.addSubcomponent(parseResource(buildVTimezone(tzid, minYear, maxYear).join('\r\n')));
     }
+    keepSubcomponents(resource, (sub) => sub.name !== 'vevent');
     for (const vevent of vevents) resource.addSubcomponent(vevent);
 }
 
@@ -429,7 +442,7 @@ export function serializeResource(resource: ICAL.Component): string {
 // RFC 5546 shape: the organizer rides as an ACCEPTED attendee and a REQUEST asks for replies. No VALARM ever, or an
 // `email` reminder would mail the organizer from every guest's client.
 function shapeForImip(vevent: ICAL.Component, method: ImipMethod): void {
-    vevent.removeAllSubcomponents('valarm');
+    keepSubcomponents(vevent, (sub) => sub.name !== 'valarm');
     if (method !== 'REQUEST') return;
 
     const attendees = vevent.getAllProperties('attendee');
@@ -486,16 +499,11 @@ function patchAttendees(
         else byEmail.set(email, [prop]);
     }
     const wanted = new Set(attendees.map((a) => a.email.toLowerCase()));
+    const isWanted = (prop: ICAL.Property) => wanted.has(calAddress(prop.getFirstValue()).toLowerCase());
 
-    let changed = false;
-    let membersChanged = false;
-
-    for (const prop of current) {
-        if (wanted.has(calAddress(prop.getFirstValue()).toLowerCase())) continue;
-        vevent.removeProperty(prop);
-        changed = true;
-        membersChanged = true;
-    }
+    let membersChanged = !current.every(isWanted);
+    if (membersChanged) keepProperties(vevent, (prop) => prop.name !== 'attendee' || isWanted(prop));
+    let changed = membersChanged;
 
     for (const attendee of attendees) {
         const listed = byEmail.get(attendee.email.toLowerCase());
@@ -525,7 +533,7 @@ function patchReminders(vevent: ICAL.Component, reminders: readonly Reminder[]):
         current.every((r, i) => r.type === reminders[i].type && r.minutes === reminders[i].minutes);
     if (same) return false;
 
-    vevent.removeAllSubcomponents('valarm');
+    keepSubcomponents(vevent, (sub) => sub.name !== 'valarm');
     const title = String(vevent.getFirstPropertyValue('summary') ?? '');
     const recipient = calAddress(vevent.getFirstProperty('organizer')?.getFirstValue());
     for (const reminder of reminders) vevent.addSubcomponent(alarmComponent(reminder, title, recipient));
@@ -647,7 +655,7 @@ export function putOverride(resource: ICAL.Component, master: CalendarEvent, ove
     const key = override.recurrenceDate;
     if (!key) throw new Error('putOverride: the override names no occurrence');
     const existing = findVEvent(resource, key);
-    if (existing) resource.removeSubcomponent(existing);
+    if (existing) keepSubcomponents(resource, (sub) => sub !== existing);
     const vevent = masterVEvent(resource);
     if (vevent) dropExclusion(vevent, key);
     resource.addSubcomponent(buildVEvent(override, { master }));
@@ -657,7 +665,10 @@ export function putOverride(resource: ICAL.Component, master: CalendarEvent, ove
 // Drop one occurrence's EXDATE value and the stamp beside it, whatever form the client wrote them in.
 function dropExclusion(vevent: ICAL.Component, recurrenceKey: string): boolean {
     const seriesTz = propTzid(vevent.getFirstProperty('dtstart'));
-    let removed = false;
+    const gone = new Set(
+        vevent.getAllProperties(EIGEN.exdate).filter((stamp) => stamp.getFirstValue() === recurrenceKey),
+    );
+    let removed = gone.size > 0;
     for (const prop of vevent.getAllProperties('exdate')) {
         const values = prop.getValues();
         const kept = values.filter(
@@ -666,13 +677,9 @@ function dropExclusion(vevent: ICAL.Component, recurrenceKey: string): boolean {
         if (kept.length === values.length) continue;
         removed = true;
         if (kept.length) prop.setValues(kept);
-        else vevent.removeProperty(prop);
+        else gone.add(prop);
     }
-    for (const stamp of vevent.getAllProperties(EIGEN.exdate)) {
-        if (stamp.getFirstValue() !== recurrenceKey) continue;
-        vevent.removeProperty(stamp);
-        removed = true;
-    }
+    if (gone.size) keepProperties(vevent, (prop) => !gone.has(prop));
     return removed;
 }
 
@@ -689,15 +696,13 @@ export function addExclusion(
     if (!vevent) throw new Error('addExclusion: the resource holds no master VEVENT');
 
     const override = findVEvent(resource, key);
-    if (override) resource.removeSubcomponent(override);
+    if (override) keepSubcomponents(resource, (sub) => sub !== override);
 
     const seriesTz = propTzid(vevent.getFirstProperty('dtstart'));
     if (!exdateKeys(vevent, seriesTz).has(key)) {
         vevent.addProperty(exdateProperty(master, key, normalizeTimezone(master.timezone)));
     }
-    for (const stamp of vevent.getAllProperties(EIGEN.exdate)) {
-        if (stamp.getFirstValue() === key) vevent.removeProperty(stamp);
-    }
+    keepProperties(vevent, (prop) => prop.name !== EIGEN.exdate || prop.getFirstValue() !== key);
     vevent.addProperty(exclusionStamp(key, exclusion.id, exclusion.sequence, clampStamp(ctx.dtstamp, ctx.now)));
     syncVTimezones(resource);
     touch(vevent, ctx, true);
@@ -710,7 +715,7 @@ export function removeExclusion(resource: ICAL.Component, recurrenceKey: string,
     // way.
     const override = findVEvent(resource, recurrenceKey);
     if (override) {
-        resource.removeSubcomponent(override);
+        keepSubcomponents(resource, (sub) => sub !== override);
         syncVTimezones(resource);
     }
     if (dropExclusion(vevent, recurrenceKey) || override) touch(vevent, ctx, true);
@@ -758,23 +763,19 @@ export function stampInvitationLink(
     link: { organizerEventId: string; organizerUserId: string },
 ): void {
     for (const vevent of resource.getAllSubcomponents('vevent')) {
-        vevent.removeAllProperties(EIGEN.organizerEvent);
-        vevent.removeAllProperties(EIGEN.organizerUser);
+        keepProperties(vevent, (prop) => prop.name !== EIGEN.organizerEvent && prop.name !== EIGEN.organizerUser);
         vevent.addProperty(rawProperty(EIGEN.organizerEvent, link.organizerEventId));
         vevent.addProperty(rawProperty(EIGEN.organizerUser, link.organizerUserId));
     }
 }
 
 export function stripEigenStamps(comp: ICAL.Component): void {
-    // Rebuilt in one pass, because ical.js scans and splices the whole property array per removal.
-    const kept = comp.getAllProperties().filter((prop) => !isEigenName(prop.name));
-    comp.removeAllProperties();
-    for (const prop of kept) {
+    keepProperties(comp, (prop) => !isEigenName(prop.name));
+    for (const prop of comp.getAllProperties()) {
         const [, params]: JCalProperty = prop.toJSON();
         for (const name of Object.keys(params)) {
             if (isEigenName(name)) prop.removeParameter(name);
         }
-        comp.addProperty(prop);
     }
     for (const sub of comp.getAllSubcomponents()) stripEigenStamps(sub);
 }

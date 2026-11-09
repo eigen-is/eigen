@@ -3,6 +3,8 @@ export {
     addExclusion,
     buildResource,
     isNewerRevision,
+    keepProperties,
+    keepSubcomponents,
     newVCalendar,
     PRODID,
     patchEvent,

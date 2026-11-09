@@ -5,6 +5,7 @@ import type { Calendar } from '../../lib/calendar/calendar';
 import { EVENT_MAX_BYTES } from '../../lib/calendar/resource-store';
 import * as schema from '../../lib/calendar/schema';
 import { CALENDAR_TEST_ROOT, makeCalendar, resourceTextOf, storedEvents } from '../calendar-test-helpers';
+import { cpuClock } from '../cpu-time';
 import type { TestHome } from '../home-test-helpers';
 import { vcal } from '../ics-test-helpers';
 
@@ -188,6 +189,36 @@ describe('putResource', () => {
         expect(stored).toContain('TRIGGER:-PT10M');
         expect(stored).toContain('SUMMARY:Linked');
         expect(stored).not.toContain('forged-by-the-client');
+    });
+
+    test('a linked copy adopts a long run of alarms behind other subcomponents in one pass', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const calendarId = await defaultCalendarId(harness);
+        await put(calendar, calendarId, 'linked.ics', vcal(event('linked@eigen', 'Linked')));
+        calendar.db
+            .update(schema.resources)
+            .set({
+                ics: sql`CAST(replace(CAST(${schema.resources.ics} AS TEXT), 'SUMMARY:Linked', 'SUMMARY:Linked\r\nX-EIGEN-ORGANIZER-EVENT:organizer-1') AS BLOB)`,
+            })
+            .where(eq(schema.resources.uri, 'linked.ics'))
+            .run();
+        const count = 30_000;
+        const body = vcal(
+            event('linked@eigen', 'Linked', [
+                ...Array<string>(count).fill('BEGIN:X-FIRST\r\nEND:X-FIRST'),
+                ...Array<string>(count).fill('BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT5M\r\nEND:VALARM'),
+            ]),
+        );
+
+        const cpuMs = cpuClock();
+        const result = await put(calendar, calendarId, 'linked.ics', body);
+        expect(cpuMs()).toBeLessThan(1_500);
+
+        expect(result.ok).toBe(true);
+        const stored = await resourceTextOf(calendar, calendarId, 'linked.ics');
+        expect(stored.match(/BEGIN:VALARM/g)).toHaveLength(count);
+        expect(stored).not.toContain('X-FIRST');
     });
 
     test('a linked copy refuses a body whose occurrence no key can name, and keeps its bytes', async () => {

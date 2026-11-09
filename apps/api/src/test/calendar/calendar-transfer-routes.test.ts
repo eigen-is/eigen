@@ -15,6 +15,7 @@ import { getHome } from '../../lib/home';
 import { parseResource } from '../../lib/ical';
 import type { OutboundMail } from '../../lib/mailer/mailer';
 import { storedEvents } from '../calendar-test-helpers';
+import { cpuClock } from '../cpu-time';
 import { basicAuth, DAV_PASSWORD } from '../dav-test-helpers';
 import { vcal } from '../ics-test-helpers';
 import type { TestUser } from '../setup';
@@ -1223,6 +1224,41 @@ describe('Calendar transfer routes', () => {
         expect(res.status).toBe(400);
         expect((await april()).length).toBe(before);
     });
+
+    test('a series with a long guest list behind a long padding imports in one pass', async () => {
+        const uid = `long-guests-${crypto.randomUUID()}@other`;
+        const file = vcal(
+            vevent(uid, 'Long guests', '20260416T090000Z', '20260416T100000Z', [
+                ...Array<string>(100_000).fill('X:p'),
+                ...Array<string>(30_000).fill('ATTENDEE:mailto:a@b.c'),
+            ]),
+        );
+
+        const cpuMs = cpuClock();
+        const res = await importRequest(alice, calendarId, file);
+        expect(cpuMs()).toBeLessThan(3_000);
+
+        expect(await assertJson<ImportCountsResult>(res)).toEqual({ imported: 1, skipped: 0, failed: 0 });
+        const stored = findOrFail(await april(), (e) => e.uid === uid);
+        expect(stored.data?.attendees).toBeUndefined();
+    });
+
+    test('many series behind a long run of other components import in one pass', async () => {
+        const count = 3_000;
+        const stamp = crypto.randomUUID();
+        const file = vcal(
+            Array<string>(100_000).fill('BEGIN:X-FIRST\r\nEND:X-FIRST'),
+            Array.from({ length: count }, (_, i) =>
+                [`BEGIN:VEVENT`, `UID:many-${stamp}-${i}@other`, 'DTSTART:20260601T090000Z', 'END:VEVENT'].join('\r\n'),
+            ),
+        );
+
+        const cpuMs = cpuClock();
+        const res = await importRequest(alice, calendarId, file);
+        expect(cpuMs()).toBeLessThan(7_000);
+
+        expect(await assertJson<ImportCountsResult>(res)).toEqual({ imported: count, skipped: 0, failed: 0 });
+    }, 120_000);
 
     test('a file that is not a calendar is 400 and nothing is written', async () => {
         const before = (await april()).length;

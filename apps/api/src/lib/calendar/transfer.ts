@@ -15,7 +15,7 @@ import {
     NOT_A_CALENDAR_FILE,
     NOT_UTF8_FILE,
 } from '../core';
-import { newVCalendar, PRODID, parseCalendarStream, serializeResource, spliceBlocks } from '../ical';
+import { keepProperties, newVCalendar, PRODID, parseCalendarStream, serializeResource, spliceBlocks } from '../ical';
 import { bareName, calAddress, uidOf } from '../ical/ical-parse';
 import type { Calendar } from './calendar';
 import * as davStore from './dav-store';
@@ -23,32 +23,6 @@ import * as schema from './schema';
 
 // A VTIMEZONE is copied into every series that names it, so an upload well inside its own ceiling can ask for many times its size in stored bytes.
 const ICS_IMPORT_MAX_WRITTEN_BYTES = 8 * ICS_MAX_BYTES;
-
-// A zone can hang on any property and inside a subcomponent — a VALARM's absolute TRIGGER names one too.
-function referencedTzids(component: ICAL.Component, into: Set<string>): void {
-    for (const prop of component.getAllProperties()) {
-        const raw = prop.getParameter('tzid');
-        const tzid = Array.isArray(raw) ? raw[0] : raw;
-        if (tzid) into.add(String(tzid));
-    }
-    for (const sub of component.getAllSubcomponents()) referencedTzids(sub, into);
-}
-
-// Matched on the bare name: a group prefix ("A.ATTENDEE") names the same property and `removeAllProperties` compares the whole name.
-function takeProperties(vevent: ICAL.Component, name: string): ICAL.Property[] {
-    const found = vevent.getAllProperties().filter((prop) => bareName(prop.name) === name);
-    for (const prop of found) vevent.removeProperty(prop);
-    return found;
-}
-
-// The organizer stays behind as one inert address for the inbound-REQUEST rule; a VALARM's own ATTENDEE is its recipient, not a guest.
-function dropScheduling(vevent: ICAL.Component): string | null {
-    takeProperties(vevent, 'attendee');
-    const organizer = takeProperties(vevent, 'organizer')[0];
-    if (!organizer) return null;
-    const address = calAddress(organizer.getFirstValue()).toLowerCase();
-    return address.includes('@') ? address : null;
-}
 
 // One resource per series, so a crash mid-import is retryable: the series already written are skipped by UID.
 export async function importEvents(
@@ -77,11 +51,15 @@ export async function importEvents(
     const zones = new Map<string, ICAL.Component>();
     let vevents = 0;
     for (const root of roots) {
-        for (const vtimezone of root.getAllSubcomponents('vtimezone')) {
+        const rootZones = root.getAllSubcomponents('vtimezone');
+        const rootEvents = root.getAllSubcomponents('vevent');
+        // Detached all at once, because adding a component to a new parent removes it from the old one per item.
+        root.removeAllSubcomponents();
+        for (const vtimezone of rootZones) {
             const tzid = String(vtimezone.getFirstPropertyValue('tzid') ?? '');
             if (tzid && !zones.has(tzid)) zones.set(tzid, vtimezone);
         }
-        for (const vevent of root.getAllSubcomponents('vevent')) {
+        for (const vevent of rootEvents) {
             vevents++;
             if (!uidOf(vevent)) vevent.updatePropertyWithValue('uid', crypto.randomUUID());
             const uid = uidOf(vevent);
@@ -150,28 +128,33 @@ export async function importEvents(
     return result;
 }
 
-// --- Export ---
-
-// Ordered by the earliest start among the rows asked for, so a reader meets the events in the order a calendar draws them.
-function exportedUris(calendar: Calendar, calendarId: string, ids?: string[]): string[] {
-    const rows = calendar.db
-        .select({ id: schema.events.id, uri: schema.resources.uri, startTime: schema.events.startTime })
-        .from(schema.events)
-        .innerJoin(schema.resources, eq(schema.events.resourceId, schema.resources.id))
-        .where(and(eq(schema.events.calendarId, calendarId), ids ? inArray(schema.events.id, ids) : undefined))
-        .all();
-
-    const starts = new Map<string, number>();
-    const found = new Set<string>();
-    for (const row of rows) {
-        const start = row.startTime.getTime();
-        starts.set(row.uri, Math.min(starts.get(row.uri) ?? start, start));
-        found.add(row.id);
-    }
-    if (ids?.some((id) => !found.has(id))) throw new ApiError(404, 'Event not found');
-
-    return [...starts.keys()].sort((a, b) => (starts.get(a) ?? 0) - (starts.get(b) ?? 0));
+// The organizer stays behind as one inert address for the inbound-REQUEST rule; a VALARM's own ATTENDEE is its recipient, not a guest.
+function dropScheduling(vevent: ICAL.Component): string | null {
+    takeProperties(vevent, 'attendee');
+    const organizer = takeProperties(vevent, 'organizer')[0];
+    if (!organizer) return null;
+    const address = calAddress(organizer.getFirstValue()).toLowerCase();
+    return address.includes('@') ? address : null;
 }
+
+// Matched on the bare name: a group prefix ("A.ATTENDEE") names the same property.
+function takeProperties(vevent: ICAL.Component, name: string): ICAL.Property[] {
+    const found = vevent.getAllProperties().filter((prop) => bareName(prop.name) === name);
+    keepProperties(vevent, (prop) => bareName(prop.name) !== name);
+    return found;
+}
+
+// A zone can hang on any property and inside a subcomponent — a VALARM's absolute TRIGGER names one too.
+function referencedTzids(component: ICAL.Component, into: Set<string>): void {
+    for (const prop of component.getAllProperties()) {
+        const raw = prop.getParameter('tzid');
+        const tzid = Array.isArray(raw) ? raw[0] : raw;
+        if (tzid) into.add(String(tzid));
+    }
+    for (const sub of component.getAllSubcomponents()) referencedTzids(sub, into);
+}
+
+// --- Export ---
 
 // One VCALENDAR, never a concatenation of objects: many readers take only the first object of a stream.
 export async function exportEvents(calendar: Calendar, calendarId: string, ids?: string[]): Promise<string> {
@@ -199,4 +182,25 @@ export async function exportEvents(calendar: Calendar, calendarId: string, ids?:
         'END:VCALENDAR',
         '',
     ].join('\r\n');
+}
+
+// Ordered by the earliest start among the rows asked for, so a reader meets the events in the order a calendar draws them.
+function exportedUris(calendar: Calendar, calendarId: string, ids?: string[]): string[] {
+    const rows = calendar.db
+        .select({ id: schema.events.id, uri: schema.resources.uri, startTime: schema.events.startTime })
+        .from(schema.events)
+        .innerJoin(schema.resources, eq(schema.events.resourceId, schema.resources.id))
+        .where(and(eq(schema.events.calendarId, calendarId), ids ? inArray(schema.events.id, ids) : undefined))
+        .all();
+
+    const starts = new Map<string, number>();
+    const found = new Set<string>();
+    for (const row of rows) {
+        const start = row.startTime.getTime();
+        starts.set(row.uri, Math.min(starts.get(row.uri) ?? start, start));
+        found.add(row.id);
+    }
+    if (ids?.some((id) => !found.has(id))) throw new ApiError(404, 'Event not found');
+
+    return [...starts.keys()].sort((a, b) => (starts.get(a) ?? 0) - (starts.get(b) ?? 0));
 }

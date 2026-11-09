@@ -1288,6 +1288,134 @@ describe('stripping', () => {
     });
 });
 
+describe('a removal costs one pass over the list', () => {
+    const padding = (count: number) => Array<string>(count).fill('X-PAD:p');
+    const emptyComponents = (name: string, count: number) => Array<string>(count).fill(`BEGIN:${name}\r\nEND:${name}`);
+    const series = (...lines: string[]) => [
+        'BEGIN:VEVENT',
+        'UID:large@eigen',
+        'DTSTAMP:20260101T000000Z',
+        'DTSTART:20260415T120000Z',
+        'DTEND:20260415T130000Z',
+        'SUMMARY:Large',
+        'RRULE:FREQ=DAILY',
+        ...lines,
+        'END:VEVENT',
+    ];
+    const overrides = (count: number) =>
+        Array.from({ length: count }, (_, day) => {
+            const key = new Date(Date.UTC(2000, 0, 1) + day * 86400_000).toISOString().slice(0, 10).replace(/-/g, '');
+            return `BEGIN:VEVENT\r\nUID:large@eigen\r\nRECURRENCE-ID:${key}T120000Z\r\nDTSTART:${key}T120000Z\r\nEND:VEVENT`;
+        });
+    const masterNames = (resource: ICAL.Component) =>
+        masterOf(resource)
+            .getAllProperties()
+            .map((prop) => prop.name);
+
+    test('a title save over repeated LAST-MODIFIED lines past a long first stretch', () => {
+        const resource = parseResource(
+            vcal([
+                'BEGIN:VEVENT',
+                'UID:large@eigen',
+                'DTSTAMP:20260101T000000Z',
+                ...padding(110_000),
+                'DTSTART:20260415T120000Z',
+                'SUMMARY:Large',
+                ...Array<string>(60_000).fill('LAST-MODIFIED:20260101T000000Z'),
+                ...padding(100_000),
+                'END:VEVENT',
+            ]),
+        );
+
+        const cpuMs = cpuClock();
+        patchEvent(resource, null, { title: 'New' }, CTX);
+        expect(cpuMs()).toBeLessThan(1_500);
+
+        const names = masterNames(resource);
+        expect(names.filter((name) => name === 'last-modified')).toHaveLength(1);
+        expect(names.filter((name) => name === 'x-pad')).toHaveLength(210_000);
+        expect(masterOf(resource).getFirstPropertyValue('summary')).toBe('New');
+    });
+
+    test('dropping every guest of a long list past a long padding', () => {
+        const resource = parseResource(
+            vcal(series(...padding(30_000), ...Array<string>(30_000).fill('ATTENDEE:mailto:a@b.c'), 'X-LAST:z')),
+        );
+
+        const cpuMs = cpuClock();
+        patchEvent(resource, null, { data: { attendees: [] } }, CTX);
+        expect(cpuMs()).toBeLessThan(800);
+
+        const names = masterNames(resource);
+        expect(names).not.toContain('attendee');
+        expect(names.indexOf('x-last')).toBe(names.lastIndexOf('x-pad') + 1);
+    });
+
+    test('putting back an occurrence named by a long run of repeated EXDATEs', () => {
+        const resource = parseResource(
+            vcal(series(...padding(40_000), ...Array<string>(30_000).fill('EXDATE;VALUE=DATE:20260420'), 'X-LAST:z')),
+        );
+
+        const cpuMs = cpuClock();
+        removeExclusion(resource, '2026-04-20', CTX);
+        expect(cpuMs()).toBeLessThan(800);
+
+        const names = masterNames(resource);
+        expect(names).not.toContain('exdate');
+        expect(names.indexOf('x-last')).toBe(names.lastIndexOf('x-pad') + 1);
+    });
+
+    test('a move drops a long run of unreferenced VTIMEZONEs behind many overrides', () => {
+        const resource = parseResource(
+            vcal(series(), overrides(15_000), emptyComponents('VTIMEZONE', 50_000), emptyComponents('X-LAST', 1)),
+        );
+
+        const cpuMs = cpuClock();
+        patchEvent(resource, null, { startTime: new Date('2026-04-15T11:00:00Z') }, CTX);
+        expect(cpuMs()).toBeLessThan(800);
+
+        const names = resource.getAllSubcomponents().map((sub) => sub.name);
+        expect(names).not.toContain('vtimezone');
+        expect(names).toEqual([...Array<string>(15_001).fill('vevent'), 'x-last']);
+    });
+
+    test('a new zone moves a long run of overrides behind its block', () => {
+        const resource = parseResource(vcal(emptyComponents('X-FIRST', 30_000), series(), overrides(6_000)));
+
+        const cpuMs = cpuClock();
+        patchEvent(resource, null, { startTime: new Date('2026-04-15T11:00:00Z'), timezone: 'Europe/Amsterdam' }, CTX);
+        expect(cpuMs()).toBeLessThan(800);
+
+        const names = resource.getAllSubcomponents().map((sub) => sub.name);
+        expect(names).toEqual([
+            ...Array<string>(30_000).fill('x-first'),
+            'vtimezone',
+            ...Array<string>(6_001).fill('vevent'),
+        ]);
+    });
+
+    test('dropping a long run of alarms in front of other subcomponents', () => {
+        const resource = parseResource(
+            vcal(
+                series(
+                    ...emptyComponents('X-FIRST', 110_000),
+                    ...emptyComponents('VALARM', 60_000),
+                    ...emptyComponents('X-LAST', 60_000),
+                ),
+            ),
+        );
+
+        const cpuMs = cpuClock();
+        patchEvent(resource, null, { data: { reminders: [] } }, CTX);
+        expect(cpuMs()).toBeLessThan(800);
+
+        const names = masterOf(resource)
+            .getAllSubcomponents()
+            .map((sub) => sub.name);
+        expect(names).toEqual([...Array<string>(110_000).fill('x-first'), ...Array<string>(60_000).fill('x-last')]);
+    });
+});
+
 describe('hasUnindexedRecurrence', () => {
     const flagged = (ics: string): boolean => projectResource(parseResource(ics)).hasUnindexedRecurrence;
     const series = (...extra: string[]) => [
