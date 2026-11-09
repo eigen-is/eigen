@@ -1,5 +1,6 @@
 // A sidebar row stays selected while the user selects an item in its list: the click adds `?pid=` (and `?uid=`,
-// `?mid=`) to the URL, and the row names the page, not the selection. Only that one row looks selected.
+// `?mid=`) to the URL, and the row names the page, not the selection. Only that one row looks selected. Recent files
+// sits right below Drive, and outside Drive it opens Drive's page.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../../happy-dom';
 import { renderInDocument } from '../../../render-in-document';
@@ -50,7 +51,15 @@ async function renderSidebar(appName: string, url: string): Promise<void> {
         return createElement(LayoutContext.Provider, { value: { ...layout, appName } }, createElement(AppSidebar));
     }
     const rootRoute = createRootRoute({ component: Sidebar });
-    const paths = ['/', '/mime/$mimeType', '/fs/$ownerId/$mountId/$pathId', '/shared/$to', '/watched', '/trash'];
+    const paths = [
+        '/',
+        '/mime/$mimeType',
+        '/fs/$ownerId/$mountId/$pathId',
+        '/shared/$to',
+        '/recent',
+        '/watched',
+        '/trash',
+    ];
     const router = createRouter({
         routeTree: rootRoute.addChildren(paths.map((path) => createRoute({ getParentRoute: () => rootRoute, path }))),
         history: createMemoryHistory({ initialEntries: [url] }),
@@ -78,6 +87,7 @@ const CASES: ReadonlyArray<{ app: string; path: string; row: string }> = [
     { app: '', path: '/fs/u1/default/root-1', row: 'Drive' },
     { app: '', path: '/fs/team_t1/m1/r1', row: 'Team drive' },
     { app: '', path: '/shared/with-me', row: 'Shared with me' },
+    { app: '', path: '/recent', row: 'Recent files' },
     { app: '', path: '/watched', row: 'Watched' },
     { app: '', path: '/trash', row: 'Trash' },
 ];
@@ -101,4 +111,30 @@ test('the selected row carries only the selected text color, and the others only
     expect([...selected.classList]).not.toContain('text-muted-foreground');
     expect([...idle.classList]).toContain('text-muted-foreground');
     expect([...idle.classList]).not.toContain('text-primary');
+});
+
+// The rows' labels and links in their order, up to the first filter.
+async function firstRows(appName: string): Promise<[string, string | null][]> {
+    await renderSidebar(appName, '/');
+    return [...document.querySelectorAll('a')]
+        .slice(0, 2)
+        .map((row): [string, string | null] => [row.textContent ?? '', row.getAttribute('href')]);
+}
+
+test('Recent files sits right below Drive and stays inside Drive', async () => {
+    expect(await firstRows('')).toEqual([
+        ['Drive', '/fs/u1/default/root-1'],
+        ['Recent files', '/recent'],
+    ]);
+});
+
+// A link out of the app never looks selected, even on a path the app's own router knows.
+test('in another app Recent files sits right below Drive and opens Drive’s page', async () => {
+    const { getDriveAppUrl } = await import('@workspace/lib/api');
+    expect(await firstRows('docs')).toEqual([
+        ['Drive', getDriveAppUrl('fs/u1/default/root-1')],
+        ['Recent files', getDriveAppUrl('recent')],
+    ]);
+    await unmount();
+    expect(await activeRows('docs', '/recent')).toEqual([]);
 });

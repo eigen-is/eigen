@@ -1,3 +1,7 @@
+// Mail's sidebar: the compose button, the special mailboxes such as Inbox and Sent with their unread counts,
+// the link to Drive's Recent files, and the folders the user made in another mail client. A mailbox row takes
+// a dragged message as a move into it.
+
 import {
     mailboxDisplayName,
     mailboxRouteSegment,
@@ -6,18 +10,18 @@ import {
 } from '@workspace/lib/constants/mailboxes';
 import { CUSTOM_MAILBOX_ICON, MAILBOX_ICONS } from '@workspace/lib/mailbox-icons';
 import type { MaildirMailbox } from '@workspace/lib/types/mail';
-import { SidebarBody, SidebarItem, SidebarSection } from '@workspace/ui';
+import { RecentFilesSidebarItem, SidebarBody, SidebarItem, SidebarSection } from '@workspace/ui';
 import { StorageUsage } from '@workspace/ui/components/home';
 import { DroppableSidebarItem } from '@workspace/ui/components/layout/sidebar/droppable-sidebar-item';
 import type { LucideIcon } from 'lucide-react';
-import type React from 'react';
+import type { ReactNode } from 'react';
 import { useMemo } from 'react';
 import { EmailComposeButton } from './email-compose-button';
 
 type SidebarMailbox = {
     path: string;
     name: string;
-    icon: React.ReactNode;
+    icon: ReactNode;
     href: string;
     unread: number;
 };
@@ -35,7 +39,7 @@ const defaultMailboxes: SidebarMailbox[] = SIDEBAR_MAILBOXES.map((box) => ({
     unread: 0,
 }));
 
-type AppSidebarProps = {
+type EmailSidebarProps = {
     condensed?: boolean;
     mailboxes?: MaildirMailbox[];
     isLoading?: boolean;
@@ -74,7 +78,7 @@ export function EmailSidebar({
     isLoading = false,
     error = null,
     onMoveToFolder,
-}: AppSidebarProps) {
+}: EmailSidebarProps) {
     // The special mailboxes in sidebar order, or the defaults while the list is loading or failed.
     const standardMailboxList = useMemo(() => {
         if (isLoading || error) return defaultMailboxes;
@@ -116,6 +120,10 @@ export function EmailSidebar({
                 {standardMailboxList.map((item) => (
                     <MailboxRow key={item.path} item={item} condensed={condensed} onMoveToFolder={onMoveToFolder} />
                 ))}
+            </SidebarSection>
+
+            <SidebarSection condensed={condensed}>
+                <RecentFilesSidebarItem condensed={condensed} />
             </SidebarSection>
 
             {customMailboxList.length > 0 && (

@@ -1,12 +1,12 @@
-// Contacts' sidebar: all the user's contacts, their labels, and each team's members, with the button that
-// creates a contact.
+// Contacts' sidebar: all the user's contacts and each team's members, the link to Drive's Recent files, and
+// the user's labels, with the button that creates a contact.
 
 import { Link } from '@tanstack/react-router';
 import { useLabels } from '@workspace/lib/contacts';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { Label } from '@workspace/lib/types/label';
-import { SidebarBody, SidebarItem, SidebarSection } from '@workspace/ui';
+import { RecentFilesSidebarItem, SidebarBody, SidebarItem, SidebarSection } from '@workspace/ui';
 import { StorageUsage } from '@workspace/ui/components/home';
 import { LabelManager } from '@workspace/ui/components/labels';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
@@ -52,6 +52,10 @@ export function ContactsSidebar({ condensed = false, onAssignLabel }: ContactsSi
                             condensed={condensed}
                         />
                     ))}
+                </SidebarSection>
+
+                <SidebarSection condensed={condensed}>
+                    <RecentFilesSidebarItem condensed={condensed} />
                 </SidebarSection>
 
                 {loading ? (
