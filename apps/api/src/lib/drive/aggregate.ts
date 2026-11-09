@@ -6,9 +6,9 @@
 
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { pullDriveSearch, pullMimeContents } from '../home/home-relay';
+import { pullDriveSearch, pullFromEach, pullMimeContents } from '../home/home-relay';
 import type { User } from '../user';
-import { getMemberships, getOwnerExists } from '../user';
+import { getMemberships } from '../user';
 import { getDrive, getSharedDrive } from './get-drive';
 
 export async function aggregateMimeContents(user: User, mimeType: string): Promise<DrivePath[]> {
@@ -45,21 +45,6 @@ export async function aggregateFileSearch(user: User, q: string, limit: number):
     return mergeById([personal, ...teamResults])
         .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
         .slice(0, limit);
-}
-
-// A gone owner is skipped, and a failed read is logged and leaves that owner out, so the others still answer.
-async function pullFromEach<T>(ownerIds: readonly string[], pull: (ownerId: string) => Promise<T>): Promise<T[]> {
-    const results = await Promise.all(
-        ownerIds.map((ownerId) =>
-            getOwnerExists(ownerId)
-                .then((exists) => (exists ? pull(ownerId) : null))
-                .catch((err) => {
-                    console.error(`aggregate: reading ${ownerId} failed:`, err);
-                    return null;
-                }),
-        ),
-    );
-    return results.filter((result) => result !== null);
 }
 
 // Later lists win, so with the personal list first a team's own copy overwrites its shared_paths mirror.

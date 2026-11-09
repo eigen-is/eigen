@@ -1,8 +1,8 @@
-// Every time one owner's Home reaches into another, it goes through this file. sendToHome pushes a
-// message into another home, and each pull reads one answer from one, such as the paths shared
-// with a user. A few calls write server-wide data instead, such as a user's avatar, and a walk checks
-// the open documents of every loaded home. Today every call runs in this process. When homes live in
-// several processes, only this file has to change.
+// Every time one owner's Home reaches into another, it goes through this file. sendToHome pushes a message into
+// another home, each pull reads one answer from one, such as the paths shared with a user, and pullFromEach runs a
+// pull against many homes at once. A few calls write server-wide data instead, such as a user's avatar, and a walk
+// checks the open documents of every loaded home. Today every call runs in this process. When homes live in several
+// processes, only this file has to change.
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -38,7 +38,7 @@ import { LocalFilesystem } from '../core';
 import type { EventPatch } from '../ical/ical-component';
 import { readMailTotalSize } from '../mail/maildir-store';
 import type { User } from '../user';
-import { getMemberships, getUserById, getUsersByEmails, isGuest, updateUser } from '../user';
+import { getMemberships, getOwnerExists, getUserById, getUsersByEmails, isGuest, updateUser } from '../user';
 import { forEachOpenDocument, getHome, getTeamHome, loadedHome, openHome } from './get-home';
 import { homeSize, userHomeSize } from './home';
 import { TeamHome } from './team-home';
@@ -225,6 +225,26 @@ export async function broadcastToOwnerAndMembers(
     await Promise.all(
         readers.filter((user) => user.id !== ownerId).map((user) => sendToHome(user.id, { type: 'broadcast', event })),
     );
+}
+
+// --- Reads across homes ---
+
+// A gone owner is skipped, and a failed read is logged and leaves that owner out, so the others still answer.
+export async function pullFromEach<T>(
+    ownerIds: readonly string[],
+    pull: (ownerId: string) => Promise<T>,
+): Promise<T[]> {
+    const results = await Promise.all(
+        ownerIds.map((ownerId) =>
+            getOwnerExists(ownerId)
+                .then((exists) => (exists ? pull(ownerId) : null))
+                .catch((err) => {
+                    console.error(`aggregate: reading ${ownerId} failed:`, err);
+                    return null;
+                }),
+        ),
+    );
+    return results.filter((result) => result !== null);
 }
 
 // --- Drive ---
