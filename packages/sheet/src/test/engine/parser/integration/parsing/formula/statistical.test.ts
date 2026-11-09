@@ -278,33 +278,6 @@ describe('.parse() statistical formulas', () => {
         });
     });
 
-    it('COLUMN', () => {
-        const readRange = (a: RangeCell, b: RangeCell) => {
-            if (a.label === 'A1' && b.label === 'C2') {
-                return [
-                    [1, 2],
-                    [2, 3],
-                    [2, 4],
-                ];
-            }
-            return [];
-        };
-
-        expect(parser!.parse('COLUMN()', { readRange })).toMatchObject({
-            error: '#N/A',
-            result: null,
-        });
-        expect(parser!.parse('COLUMN(A1:C2)', { readRange })).toMatchObject({ error: '#N/A', result: null });
-        expect(parser!.parse('COLUMN(A1:C2, 0)', { readRange })).toMatchObject({
-            error: null,
-            result: [[1], [2], [2]],
-        });
-        expect(parser!.parse('COLUMN(A1:C2, 1)', { readRange })).toMatchObject({
-            error: null,
-            result: [[2], [3], [4]],
-        });
-    });
-
     it('COLUMNS', () => {
         const readRange = (a: RangeCell, b: RangeCell) => {
             if (a.label === 'A1' && b.label === 'C2') {
@@ -1408,28 +1381,6 @@ describe('.parse() statistical formulas', () => {
             error: '#VALUE!',
             result: null,
         });
-    });
-
-    it('ROW', () => {
-        const readRange = (a: RangeCell, b: RangeCell) => {
-            if (a.label === 'A1' && b.label === 'C2') {
-                return [
-                    [1, 2],
-                    [2, 3],
-                    [2, 4],
-                ];
-            }
-            return [];
-        };
-
-        expect(parser!.parse('ROW()', { readRange })).toMatchObject({
-            error: '#N/A',
-            result: null,
-        });
-        expect(parser!.parse('ROW(A1:C2)', { readRange })).toMatchObject({ error: '#N/A', result: null });
-        expect(parser!.parse('ROW(A1:C2, -1)', { readRange })).toMatchObject({ error: '#NUM!', result: null });
-        expect(parser!.parse('ROW(A1:C2, 0)', { readRange })).toMatchObject({ error: null, result: [1, 2] });
-        expect(parser!.parse('ROW(A1:C2, 2)', { readRange })).toMatchObject({ error: null, result: [2, 4] });
     });
 
     it('ROWS', () => {

@@ -975,7 +975,7 @@ describe('document/sheets — compactSheetsSnapshot', () => {
         expect(result[0].celldata?.[0]?.v?.v).toBe(99);
     });
 
-    test('a formula typed on an uncomputed workbook leaves its stale neighbours for the export read', () => {
+    test('a formula typed on an uncomputed workbook leaves its neighbours as stored', () => {
         const doc = new Y.Doc();
         sheetsStateMap(doc).set('snapshot', encodeSheetsSnapshot([formulaSheet('sheet-1', 0)], { computed: false }));
         const typed: Op[] = [
@@ -983,7 +983,7 @@ describe('document/sheets — compactSheetsSnapshot', () => {
             { op: 'add', id: 'sheet-1', path: ['calcChain', 0], value: { r: 0, c: 1, id: 'sheet-1' } },
         ];
         doc.getArray<Op[]>('ops').push([typed]);
-        expect(readSheetsFromDoc(doc).sheets[0].celldata?.[0]?.v?.v).toBe(2);
+        expect(readSheetsFromDoc(doc).sheets[0].celldata?.[0]?.v?.v).toBe(99);
         expect(readSheetsFromDoc(doc, { recalc: false }).sheets[0].celldata?.[0]?.v?.v).toBe(99);
         doc.destroy();
     });

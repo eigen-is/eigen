@@ -1,6 +1,7 @@
-// The server's recalc of a workbook nobody computed, such as an xlsx import whose recalc failed. recalcSheets takes
-// the replayed sheets, orders their formula cells through the dependency graph and writes each cell's computed value
-// and display string. A workbook the editor computed is stored as computed, so its readers skip this.
+// Computes stored formula values with no DOM, so every reader lands on the same ones. recalcSheets fills in what an
+// imported workbook holds no value for and trusts the rest, which is Excel's. recomputeAfter runs on every reader after
+// a batch with a sheet, row or column op, seeded with what the op can affect, such as the lines it opened or closed.
+// affectedFormulas and evaluateFormulas are the walk and the pass they share with the editor's recompute of an edit.
 // extractDependencies, the walk that finds the cells a formula reads, builds the editor's formula map too.
 
 import type { Cell, CellMatrix, Sheet } from '@workspace/lib/sheets';
@@ -11,130 +12,238 @@ import { getCalculationOrder } from './dependency-graph';
 import { cellsOf, DependencyIndex, dependencySlots } from './dependency-index';
 import { booleanDisplay, formulaResultType, numberDisplay } from './format';
 import { FormulaEngine } from './formula-engine';
-import { inlineNames, walkFormulaRefs } from './formula-shift';
+import { walkFormulaRefs } from './formula-shift';
 import type { WalkContext } from './formula-utils';
 import { isFormula, matrixWidth, resolveCellRange } from './formula-utils';
 import { valueIsError } from './parser/error';
 import { sheetFinder } from './parser/helper/cell';
-import type { EvaluationResult, FormulaCellInfoMap, FormulaDependency } from './types';
+import type { EvaluationResult, FormulaCellInfo, FormulaCellInfoMap, FormulaDependency } from './types';
 
-// A sheet's dense `data`, by id, which the pass reads and writes.
-type WorkingSheet = { id: string; name: string; data: CellMatrix };
+// A sheet's dense `data`, by id, which a pass reads and writes.
+type WorkingSheet = { id: string; name: string; data?: CellMatrix | null };
 
 type SheetExtent = { rows: number; columns: number };
 
-// The budgets bound what an untrusted workbook's formulas may cost, and past any of them the recalc throws before the
-// work. Without them there is no bound.
-export function recalcSheets(
-    sheets: readonly Sheet[],
+type CellAt = Pick<FormulaCellInfo, 'r' | 'c' | 'id'>;
+
+type FormulaGraph = { formulaCellInfoMap: FormulaCellInfoMap; dependencyIndex: DependencyIndex };
+
+export type FormulaResult = CellAt & { formula: string; result: EvaluationResult };
+
+// What bounds an untrusted workbook's formulas. Past any of them a pass throws before the work. Without them there is
+// no bound.
+export type RecalcBudgets = {
+    maxDependencySlots?: number;
+    maxDependencyVisits?: number;
+    maxDependencyEdges?: number;
+    maxCellsRead?: number;
+};
+
+// What a structural op can affect: the readers of `cells` and of each cell on `lines`, and every formula `reads` picks.
+export type RecomputeSeeds = {
+    cells: readonly CellAt[];
+    lines: readonly { id: string; type: 'row' | 'column'; line: number }[];
+    reads: (formula: string) => boolean;
+};
+
+// An import's values are Excel's, so only a formula with no value of its own is evaluated.
+export function recalcSheets(sheets: readonly Sheet[], budgets: RecalcBudgets = {}): Sheet[] {
+    const working = sheets.map((sheet) => ({ id: sheet.id, name: sheet.name, data: ensureWorkingData(sheet) }));
+    const finish = () =>
+        sheets.map((sheet, i) => ({ ...sheet, data: working[i].data, celldata: dataToCelldata(working[i].data) }));
+    const lacksValue = (cell: Cell | null) => isFormula(cell?.f) && !hasNonErrorCachedValue(cell);
+    if (!working.some(({ data }) => data.some((row) => row?.some(lacksValue)))) return finish();
+
+    const { formulaCellInfoMap, dependencyIndex } = indexFormulas(working, budgets);
+    const infos = Object.values(formulaCellInfoMap);
+    for (const info of infos) info.dependents = dependencyIndex.dependentsOf(info.id, info.r, info.c);
+    const order = getCalculationOrder(infos, formulaCellInfoMap).filter(({ id, r, c }) =>
+        lacksValue(working.find((w) => w.id === id)?.data[r]?.[c] ?? null),
+    );
+    const engine = new FormulaEngine({ maxCellsRead: budgets.maxCellsRead });
+    for (const { id, r, c, result } of evaluateFormulas(order, working, engine, true)) {
+        const row = working.find((w) => w.id === id)?.data[r];
+        const existing = row?.[c];
+        if (!row || existing == null) continue;
+        // The matrix may hold the input snapshot's frozen cells, so write a copy.
+        const cell: Cell = { ...existing };
+        writeCellValue(cell, result);
+        row[c] = cell;
+    }
+    return finish();
+}
+
+// The sheets with what the seeds affect computed again. Every reader runs it, so the values stay off the wire: a clock
+// or a random number keeps its stored value, as every tab must agree. The editor hands its engine, whose formula map it
+// has built. Past a budget the values stay as they were, and the op they follow stands.
+export function recomputeAfter<S extends WorkingSheet>(
+    sheets: S[],
+    seeds: RecomputeSeeds,
+    { engine, budgets = {} }: { engine?: FormulaEngine; budgets?: RecalcBudgets } = {},
+): S[] {
+    try {
+        const graph = engine?.state.formulaCellInfoMap
+            ? { ...engine.state, formulaCellInfoMap: engine.state.formulaCellInfoMap }
+            : indexFormulas(sheets, budgets);
+        const chosen = Object.values(graph.formulaCellInfoMap).filter(({ formula }) => seeds.reads(formula));
+        const order = affectedFormulas(graph, [...seeds.cells, ...cellsOnLines(sheets, seeds.lines)], chosen);
+        const results = evaluateFormulas(
+            order,
+            sheets,
+            engine ?? new FormulaEngine({ maxCellsRead: budgets.maxCellsRead }),
+            true,
+        );
+        return withResults(sheets, results);
+    } catch (e) {
+        if (e instanceof RangeError) return sheets;
+        throw e;
+    }
+}
+
+// Every formula that reads one of `cells`, the `chosen` ones, and every formula reading those in turn, each after what
+// it reads. Each one's `dependents` is refilled so the sort sees fresh edges.
+export function affectedFormulas(
+    { formulaCellInfoMap, dependencyIndex }: FormulaGraph,
+    cells: readonly CellAt[],
+    chosen: readonly FormulaCellInfo[] = [],
+): FormulaCellInfo[] {
+    const affected = new Set(chosen);
+    for (const cell of cells) {
+        for (const key of dependencyIndex.dependentsOf(cell.id, cell.r, cell.c)) {
+            const info = formulaCellInfoMap[key];
+            if (info != null) affected.add(info);
+        }
+    }
+    for (const node of affected) {
+        node.dependents = dependencyIndex.dependentsOf(node.id, node.r, node.c);
+        for (const key of node.dependents) {
+            const info = formulaCellInfoMap[key];
+            if (info != null) affected.add(info);
+        }
+    }
+    return getCalculationOrder([...affected], formulaCellInfoMap);
+}
+
+// Evaluates formulas in order, each value reaching the next through `computed`, which the resolver reads before the
+// matrices, so a reader gets the value without the type the cell keeps. A cell the pass leaves alone is read as stored:
+// a clock or a random number when `keepVolatile` says so, and a number this build can't evaluate the text of.
+export function evaluateFormulas(
+    order: readonly FormulaCellInfo[],
+    sheets: readonly WorkingSheet[],
+    engine: FormulaEngine,
+    keepVolatile: boolean,
+): FormulaResult[] {
+    const stored = createArrayResolver(sheets);
+    const computed = new Map<string, Cell>();
+    const resolver = withComputedValues(stored, computed);
+    const results: FormulaResult[] = [];
+    for (const { formula, r, c, id } of order) {
+        // A read past the budget fails its formula, which the pass would carry on past: it stops at the next.
+        engine.assertWithinCellBudget();
+        if (keepVolatile && VOLATILE_RE.test(formula)) continue;
+        try {
+            const result = engine.evaluate(formula, id, resolver);
+            const cell = stored.getCell(id, r, c);
+            if (cell && hasNonErrorCachedValue(cell) && engine.cantEvaluate(formula, result)) continue;
+            computed.set(computedKey(r, c, id), { v: result.value });
+            results.push({ r, c, id, formula, result });
+        } catch {
+            // An unexpected throw, such as ERROR_REF for a bad sheet name, leaves the stored value.
+        }
+    }
+    engine.assertWithinCellBudget();
+    return results;
+}
+
+// Finds the formula cells by scanning the data, indexes the ranges each one reads, and weighs the links before anyone
+// makes them, since formulas reading one whole column square into links. The visits come first and cost nothing to
+// count, because a range that covers no formula cell makes no link but costs a visit.
+function indexFormulas(
+    sheets: readonly WorkingSheet[],
     {
         maxDependencySlots = Number.POSITIVE_INFINITY,
         maxDependencyVisits = Number.POSITIVE_INFINITY,
         maxDependencyEdges = Number.POSITIVE_INFINITY,
-        maxCellsRead = Number.POSITIVE_INFINITY,
-    } = {},
-): Sheet[] {
-    // 1. Materialize each sheet's dense data, by id.
-    const working: WorkingSheet[] = [];
-    const byId = new Map<string, WorkingSheet>();
-    for (const sheet of sheets) {
-        const w = { id: sheet.id, name: sheet.name, data: ensureWorkingData(sheet) };
-        byId.set(w.id, w);
-        working.push(w);
-    }
-
-    const walk: WalkContext = { findSheet: sheetFinder(working), cellTextToIndexList: {} };
+    }: RecalcBudgets,
+): FormulaGraph {
+    const walk: WalkContext = { findSheet: sheetFinder(sheets), cellTextToIndexList: {} };
     const extents = new Map<string, SheetExtent>();
-    for (const w of working) extents.set(w.id, { rows: w.data.length, columns: matrixWidth(w.data) });
-
-    // 2. Find the formula cells by scanning the data, and index the ranges each one reads.
-    const infoMap: FormulaCellInfoMap = {};
-    const depIndex = new DependencyIndex();
+    for (const { id, data } of sheets) {
+        if (data) extents.set(id, { rows: data.length, columns: matrixWidth(data) });
+    }
+    const formulaCellInfoMap: FormulaCellInfoMap = {};
+    const dependencyIndex = new DependencyIndex();
     let slots = 0;
-    for (const w of working) {
-        for (let r = 0; r < w.data.length; r += 1) {
-            const rowArr = w.data[r];
-            if (!rowArr) continue;
-            for (let c = 0; c < rowArr.length; c += 1) {
-                const f = rowArr[c]?.f;
+    for (const { id, data } of sheets) {
+        for (let r = 0; r < (data?.length ?? 0); r += 1) {
+            const row = data?.[r];
+            if (!row) continue;
+            for (let c = 0; c < row.length; c += 1) {
+                const f = row[c]?.f;
                 if (!isFormula(f)) continue;
-                const key = `r${r}c${c}i${w.id}`;
-                const deps = extractDependencies(walk, f, w.id);
-                infoMap[key] = {
-                    formula: f,
-                    key,
-                    r,
-                    c,
-                    id: w.id,
-                    dependents: [],
-                };
-                const indexed = deps.flatMap((dep) => withinSheet(dep, extents) ?? []);
+                const key = `r${r}c${c}i${id}`;
+                formulaCellInfoMap[key] = { formula: f, key, r, c, id, dependents: [] };
+                const indexed = extractDependencies(walk, f, id).flatMap((dep) => withinSheet(dep, extents) ?? []);
                 slots += dependencySlots(indexed);
                 if (slots > maxDependencySlots) throw new RangeError('Formula ranges past the dependency budget');
-                depIndex.set(key, indexed);
+                dependencyIndex.set(key, indexed);
             }
         }
     }
-
-    const allInfos = Object.values(infoMap);
-    if (allInfos.length === 0) {
-        return finalize(byId, sheets);
-    }
-
-    // 3. Weigh the links before making them, since formulas reading one whole column square into links. The visits come
-    //    first and cost nothing to count, because a range that covers no formula cell makes no link but costs a visit.
+    const infos = Object.values(formulaCellInfoMap);
     let visits = 0;
-    for (const info of allInfos) {
-        visits += depIndex.lookupVisits(info.id, info.r, info.c);
+    for (const { id, r, c } of infos) {
+        visits += dependencyIndex.lookupVisits(id, r, c);
         if (visits > maxDependencyVisits) throw new RangeError('Formula references past the visit budget');
     }
     let edges = 0;
-    for (const info of allInfos) {
-        edges += depIndex.countDependents(info.id, info.r, info.c);
+    for (const { id, r, c } of infos) {
+        edges += dependencyIndex.countDependents(id, r, c);
         if (edges > maxDependencyEdges) throw new RangeError('Formula references past the edge budget');
     }
+    return { formulaCellInfoMap, dependencyIndex };
+}
 
-    // 4. Link each formula to the formulas that read its cell.
-    for (const info of allInfos) info.dependents = depIndex.dependentsOf(info.id, info.r, info.c);
-
-    // 5. Order them. A cycle neither throws nor hangs.
-    const order = getCalculationOrder(allInfos, infoMap);
-
-    // 6. Evaluate in order. A computed value reaches the formulas downstream through `computed`, which the resolver
-    //    reads before the matrices, so they read the value without the type the cell keeps.
-    const engine = new FormulaEngine({ maxCellsRead });
-    const computed = new Map<string, Cell>();
-    const resolver = withComputedValues(createArrayResolver(working), computed);
-    // A read past the budget fails its formula, which the pass would carry on past: it stops at the next.
-    const overRead = () => {
-        if (engine.cellsRead > maxCellsRead) throw new RangeError('Formula ranges read past the cell budget');
-    };
-    for (const info of order) {
-        overRead();
-        if (VOLATILE_RE.test(info.formula)) continue;
-        try {
-            const result = engine.evaluate(info.formula, info.id, resolver);
-            const rowArr = byId.get(info.id)?.data[info.r];
-            if (!rowArr) continue;
-            const existing = rowArr[info.c];
-            if (existing == null) continue;
-            // An unreliable result never overwrites a cached value that is no error, because that value is Excel's.
-            // Leaving it out of `computed` too makes the formulas downstream read the cached value.
-            const unreliable = () => result.type === 'error' || usesUnknownName(engine, info.formula);
-            if (hasNonErrorCachedValue(existing) && unreliable()) continue;
-            computed.set(computedKey(info.r, info.c, info.id), { v: result.value });
-            // The matrix may hold the input snapshot's frozen cells, so write a copy.
-            const cell: Cell = { ...existing };
-            writeCellValue(cell, result);
-            rowArr[info.c] = cell;
-        } catch {
-            // An unexpected throw, such as ERROR_REF for a bad sheet name, leaves the cached value.
+function cellsOnLines(sheets: readonly WorkingSheet[], lines: RecomputeSeeds['lines']): CellAt[] {
+    const cells: CellAt[] = [];
+    for (const { id, type, line } of lines) {
+        const data = sheets.find((sheet) => sheet.id === id)?.data;
+        if (!data || line < 0) continue;
+        if (type === 'row') {
+            if (line >= data.length) continue;
+            const width = matrixWidth(data);
+            for (let c = 0; c < width; c += 1) cells.push({ r: line, c, id });
+        } else {
+            for (let r = 0; r < data.length; r += 1) cells.push({ r, c: line, id });
         }
     }
-    overRead();
+    return cells;
+}
 
-    // 7. Write celldata from the computed data.
-    return finalize(byId, sheets);
+// The sheets with each changed value written. The input may be frozen, and a sheet or row nothing changed keeps its
+// object, so an op that changes no value writes nothing.
+function withResults<S extends WorkingSheet>(sheets: S[], results: readonly FormulaResult[]): S[] {
+    const written = new Map<string, CellMatrix>();
+    const byId = new Map(sheets.map((sheet) => [sheet.id, sheet]));
+    for (const { r, c, id, result } of results) {
+        const before = byId.get(id)?.data;
+        const existing = before?.[r]?.[c];
+        if (!before || existing == null || existing.v === result.value) continue;
+        let data = written.get(id);
+        if (!data) {
+            data = [...before];
+            written.set(id, data);
+        }
+        if (data[r] === before[r]) data[r] = [...before[r]];
+        const cell: Cell = { ...existing };
+        writeCellValue(cell, result);
+        data[r][c] = cell;
+    }
+    if (written.size === 0) return sheets;
+    return sheets.map((sheet) => {
+        const data = written.get(sheet.id);
+        return data ? { ...sheet, data } : sheet;
+    });
 }
 
 // A sheet's dense `data`, built from `celldata` when it has none, as the editor's initSheetData does: a resolver over
@@ -171,23 +280,8 @@ function withinSheet(dep: FormulaDependency, extents: ReadonlyMap<string, SheetE
     return { row: [cells.r0, r1], column: [cells.c0, c1], sheetId: cells.sheetId };
 }
 
-// A formula that reads the clock or a random number keeps its cached value, so an export is the same every time.
 // RANDBETWEEN comes before RAND, so the longer name wins.
 const VOLATILE_RE = /\b(?:NOW|TODAY|RANDBETWEEN|RAND)\s*\(/i;
-
-// A name as Excel spells one: a letter, `_` or `\` first, then letters, digits, `_`, `.`, `\` or `?`.
-const NAME_RE = /^[\p{L}_\\][\p{L}\p{N}_.\\?]*$/u;
-
-// True when the formula uses a name the engine can't resolve, whose #NAME? an IFERROR would trap into a fallback Excel
-// didn't compute. A name Excel reads past its last column (RhoCO2) is one the engine reads as a cell.
-function usesUnknownName(engine: FormulaEngine, formula: string): boolean {
-    let unknown = false;
-    inlineNames(formula, (name) => {
-        if (NAME_RE.test(name) && !engine.isKnownName(name)) unknown = true;
-        return undefined;
-    });
-    return unknown;
-}
 
 // True when a cell holds a value that is no error: not empty, not flagged `ct.t === 'e'`, and no error string.
 function hasNonErrorCachedValue(cell: Cell): boolean {
@@ -220,11 +314,4 @@ function writeCellValue(cell: Cell, result: EvaluationResult): void {
     }
 
     cell.m = result.value == null ? '' : String(result.value);
-}
-
-function finalize(byId: ReadonlyMap<string, WorkingSheet>, sheets: readonly Sheet[]): Sheet[] {
-    return sheets.map((sheet) => {
-        const w = byId.get(sheet.id);
-        return w ? { ...sheet, data: w.data, celldata: dataToCelldata(w.data) } : sheet;
-    });
 }

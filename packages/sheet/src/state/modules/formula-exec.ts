@@ -1,19 +1,20 @@
-// Formula execution in the editor: evaluating a formula, building the formula map from the cells, and recomputing the
-// cells an edit affects (execFunctionGroup). These read and write the workbook context, so they live in the state
-// layer, while the parsing and evaluating they call into is the engine's.
+// Formula execution in the editor: evaluating a formula, building the formula map from the cells, recomputing the cells
+// an edit affects (execFunctionGroup) and what a sheet, row or column op affects (recomputeAfterOps). These read and
+// write the workbook context, so they live in the state layer, while the parsing and evaluating they call into is the
+// engine's.
 
 import { findSheetByName } from '../../engine/a1-notation';
-import { computedKey, createArrayResolver, withComputedValues } from '../../engine/cell-resolver';
-import { getCalculationOrder } from '../../engine/dependency-graph';
+import { createArrayResolver } from '../../engine/cell-resolver';
 import { checkBracketNum, LAST_COLUMN, LAST_ROW, matrixWidth, resolveCellRange } from '../../engine/formula-utils';
+import { affectedFormulas, evaluateFormulas, recomputeAfter } from '../../engine/recalc';
+import { seedsOf } from '../../engine/replay-ops';
 import type { Cell, CellResolver, FormulaCellInfo, FormulaCellInfoMap, FormulaDependency } from '../../engine/types';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
-import type { FormulaCell } from '../types';
+import type { FormulaCell, Op } from '../types';
 import { getSheetIndex } from '../utils';
 import { setCellValue } from './cell';
 import { registerFormulas, snapshotContext } from './formula-cache';
-import { error } from './validation';
 
 // The cells a reference in the grid's UI covers, such as a link or a highlighted range: a whole column or row stops at
 // its sheet's end. null when it covers none, or names a sheet with no matrix to show them on.
@@ -49,7 +50,6 @@ export function computeFormula(
         resolver = createArrayResolver(snapshotContext(ctx).sheets),
     }: ComputeFormulaOptions = {},
 ): [Cell['v'], string] {
-    if (txt.indexOf(error.r) > -1) return [error.r, txt];
     const formula = checkBracketNum(txt) ? txt : `${txt})`;
     return [ctx.formulaCache.engine.evaluate(formula, id, resolver).value, formula];
 }
@@ -78,55 +78,44 @@ export function warmFormulaCellInfoMapOnIdle(getContext: () => Context): () => v
     return () => clearTimeout(id);
 }
 
-// Recomputes every formula that reads a cell in `changedCells`, directly or through another formula, and writes the
-// values that changed. The cells are already written, and the formula map already knows them.
-export function execFunctionGroup(ctx: Context, changedCells: readonly FormulaCell[]): void {
+// Recomputes `formulas` and every formula that reads a cell in `changedCells` or one of those, directly or through
+// another formula, and writes the values that changed. The cells are already written, and the formula map already knows
+// them. A clock or a random number recomputes here, as its author's value then goes out on the wire.
+export function execFunctionGroup(
+    ctx: Context,
+    changedCells: readonly FormulaCell[],
+    formulas: readonly FormulaCellInfo[] = [],
+): void {
     const formulaCellInfoMap = warmFormulaCellInfoMap(ctx);
-    const { dependencyIndex } = ctx.formulaCache;
-
-    // Each affected formula's `dependents` is refilled so the sort below sees fresh edges.
-    const affected: FormulaCellInfo[] = [];
-    const affectedKeys = new Set<string>();
-    const collect = (key: string) => {
-        const info = formulaCellInfoMap[key];
-        if (info == null || affectedKeys.has(key)) return;
-        affectedKeys.add(key);
-        affected.push(info);
-    };
-
-    for (const cell of changedCells) {
-        for (const key of dependencyIndex.dependentsOf(cell.id, cell.r, cell.c)) collect(key);
-    }
-
-    for (let i = 0; i < affected.length; i += 1) {
-        const node = affected[i];
-        node.dependents = dependencyIndex.dependentsOf(node.id, node.r, node.c);
-        for (const key of node.dependents) collect(key);
-    }
-
-    const runList = getCalculationOrder(affected, formulaCellInfoMap);
+    const { dependencyIndex, engine } = ctx.formulaCache;
+    const runList = affectedFormulas({ formulaCellInfoMap, dependencyIndex }, changedCells, formulas);
     if (runList.length === 0) return;
 
-    // Reading cells through immer drafts is slow, so the pass reads a plain view it can't write. Each value it computes
-    // reaches the next formula through `computed`.
+    // Reading cells through immer drafts is slow, so the pass reads a plain view it can't write.
     const snapshot = snapshotContext(ctx);
-    const computed = new Map<string, Cell>();
-    const resolver = withComputedValues(createArrayResolver(snapshot.sheets), computed);
-    const results = runList.map(({ formula, r, c, id }) => {
-        const [v, f] = computeFormula(ctx, formula, { id, resolver });
-        const value: Cell = { v, f };
-        computed.set(computedKey(r, c, id), value);
-        return { r, c, id, value };
-    });
+    const results = evaluateFormulas(runList, snapshot.sheets, engine, false);
 
     // Most recomputed formulas land on their previous value, and a draft write is what immer's finalize pays for.
-    for (const { r, c, id, value } of results) {
+    for (const { r, c, id, formula, result } of results) {
         const idx = getSheetIndex(snapshot, id);
         // A deleted sheet's formula-map entries linger until the next rebuild; this skip makes them harmless.
         if (idx == null) continue;
         const before = snapshot.sheets[idx].data?.[r]?.[c];
-        if (before != null && before.v === value.v && before.f === value.f) continue;
+        if (before != null && before.v === result.value) continue;
         const { data } = ctx.sheets[idx];
-        if (data != null) setCellValue(ctx, r, c, data, value);
+        if (data != null) setCellValue(ctx, r, c, data, { v: result.value, f: formula });
+    }
+}
+
+// What a batch's sheet, row or column ops affect, computed as every other reader computes it, once all of it applied.
+// The formula map it builds is the one the next edit uses.
+export function recomputeAfterOps(ctx: Context, ops: readonly Op[]): void {
+    const seeds = seedsOf(ops);
+    if (!seeds) return;
+    warmFormulaCellInfoMap(ctx);
+    const { sheets } = snapshotContext(ctx);
+    const next = recomputeAfter(sheets, seeds, { engine: ctx.formulaCache.engine });
+    for (const [i, { data }] of next.entries()) {
+        if (data !== sheets[i].data) ctx.sheets[i].data = data;
     }
 }

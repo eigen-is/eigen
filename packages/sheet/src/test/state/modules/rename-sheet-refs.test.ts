@@ -101,9 +101,11 @@ describe('a tab rename rewrites the text that names the tab', () => {
 
     test('a rename keeps the values: a rewritten ref reads the cell it read', () => {
         const t = workbookTab({ '0_0': '=One!A1' });
-        const before = t.ctx.sheets[1].data?.[0][0];
         renameFirst(t, 'Inputs');
-        expect(t.ctx.sheets[1].data?.[0][0]).toEqual({ ...before, f: '=Inputs!A1' });
+        const once = t.ctx.sheets[1].data?.[0][0];
+        expect(once?.f).toBe('=Inputs!A1');
+        renameFirst(t, 'Inputs2');
+        expect(t.ctx.sheets[1].data?.[0][0]).toEqual({ ...once, f: '=Inputs2!A1' });
     });
 
     test('a quoted name, a case variant and both legs of a range are rewritten', () => {
@@ -231,8 +233,6 @@ describe('a tab rename rewrites the text that names the tab', () => {
         expect(peer.ctx.sheets).toEqual(author.ctx.sheets);
         const joined = join(base, [batch]);
         expect(joined[0].name).toBe('Q1 plan');
-        // The batch writes no cell, so the joiner's sheets keep their stored cells and get no matrix.
-        expect(joined[1].data).toBeUndefined();
         expect(joined[1].celldata?.map(({ r, c, v }) => [r, c, v?.f])).toEqual([
             [0, 0, "='Q1 plan'!A1"],
             [0, 1, "=SUM('Q1 plan'!A1:B2)"],

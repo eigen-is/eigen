@@ -193,6 +193,8 @@ const productions_: (number | number[])[] = [
     [22, 0],
     [22, 2],
     [22, 2],
+    // A percent sign after any expression (hand-added, as is its state below): `A1%`.
+    [4, 2],
 ];
 
 const table: any[] = [
@@ -360,13 +362,25 @@ const table: any[] = [
     }),
 ];
 
+// `%` binds tighter than every operator, so it shifts wherever an expression just ended, and a complete operand reduces
+// to one first. `number '%'` keeps its own state, because a literal folds at parse time.
+const ENDS_IN_EXPRESSION = new Set([5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
+const PERCENT_STATE = table.length;
+for (const state of table) {
+    const onAmpersand = state[9];
+    if (onAmpersand == null || state[34] != null) continue;
+    const shifts = onAmpersand[0] === 1 || ENDS_IN_EXPRESSION.has(onAmpersand[1]);
+    state[34] = shifts ? [1, PERCENT_STATE] : onAmpersand;
+}
+table.push(o([...$Vl, 34], [2, 51]));
+
 const defaultActions: Record<number, any> = {18: [2, 1]};
 
 const lexerRules: RegExp[] = [
     /^(?:\s+)/,
     /^(?:"(\\["]|[^"])*")/,
     /^(?:'(\\[']|[^'])*'[^'!])/,
-    /^(?:[A-Za-z_][A-Za-z_0-9\.]+(?=[(]))/,
+    /^(?:[A-Za-z_][A-Za-z_0-9\.]*(?=[(]))/,
     /^(?:#[A-Z0-9\/]+(!|\?)?)/,
     ABSOLUTE_CELL,
     MIXED_CELL_COL,
@@ -1028,6 +1042,9 @@ export class Parser {
             case 50:
                 $$[$0 - 1].push(OMITTED);
                 this.$ = $$[$0 - 1];
+                break;
+            case 51:
+                this.$ = operator(yy, "/", $$[$0 - 1], 100);
                 break;
         }
     }

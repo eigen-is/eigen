@@ -175,18 +175,6 @@ export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?
     ctx.formulaCache.dependencyIndex.set(key, dependencies);
 }
 
-// A sheet arriving whole carries no cell patches; an unbuilt map reads it when it builds.
-export function registerSheetFormulas(ctx: Context, id: string, data: CellMatrix) {
-    const map = ctx.formulaCache.formulaCellInfoMap;
-    if (map == null) return;
-    for (const key of Object.keys(map)) {
-        if (map[key].id !== id) continue;
-        delete map[key];
-        ctx.formulaCache.dependencyIndex.delete(key);
-    }
-    registerFormulas(ctx, id, data);
-}
-
 // Records every formula one sheet's matrix holds. A cell's `f` is the one record of which cells hold a formula.
 export function registerFormulas(ctx: Context, id: string, data: CellMatrix) {
     for (let r = 0; r < data.length; r += 1) {

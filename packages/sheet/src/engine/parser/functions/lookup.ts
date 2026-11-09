@@ -1,6 +1,6 @@
-// The engine's lookups: XLOOKUP and XMATCH, which formulajs 2.9.3 lacks, and INDEX, where formulajs's differs from
-// Excel's. The function registry calls them. It has already handed on an error in any argument but the arrays, such
-// as an error match_mode, so these functions only see errors inside the arrays they search or return from.
+// The engine's lookups: XLOOKUP and XMATCH, which formulajs 2.9.3 lacks, and INDEX, ROWS and COLUMNS, where formulajs's
+// differ from Excel's. The function registry calls them. It has already handed on an error in any argument but the
+// arrays, such as an error match_mode, so these functions only see errors inside the arrays they search or return from.
 
 import type { FormulaArg, FormulaOutput, FormulaValue } from '../../types';
 import { ERROR_NOT_AVAILABLE, ERROR_REF, ERROR_VALUE } from '../error';
@@ -110,6 +110,17 @@ function search(lookup: FormulaValue, values: FormulaValue[], matchMode: number,
     }
     if (Math.abs(searchMode) === 2) return binary(lookup, values, indices, matchMode, Math.sign(searchMode));
     return linear(lookup, values, indices, matchMode);
+}
+
+// A row delete cuts `A1:A2` to `A1`, so one cell answers as the range of one it was.
+export function rows(params: FunctionArg[]): FormulaOutput {
+    if (params.length < 1) throw Error(ERROR_NOT_AVAILABLE);
+    return toGrid(supplied(params[0])).length;
+}
+
+export function columns(params: FunctionArg[]): FormulaOutput {
+    if (params.length < 1) throw Error(ERROR_NOT_AVAILABLE);
+    return toGrid(supplied(params[0]))[0].length;
 }
 
 export function xmatch(params: FunctionArg[]): FormulaOutput {

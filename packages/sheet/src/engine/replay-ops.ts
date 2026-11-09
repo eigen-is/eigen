@@ -1,21 +1,27 @@
 // Replays the stored op batches onto a workbook's stored sheets, for a reader that was not there live, such as a
 // browser that opens the workbook or the server's export. It also owns the shape check a sheet or row op passes before
-// it applies. A live client's applyOpBatch calls the same checks, so a peer, a joiner and the server skip the same ops
-// and end with the same sheets.
+// it applies, and says what a batch's ops can affect, which every reader computes again after the batch. A live
+// client's applyOpBatch calls the same checks, so a peer, a joiner and the server skip the same ops and end with the
+// same sheets.
 
 import { isRecord } from '@workspace/lib/guards';
 import type { Op, Sheet } from '@workspace/lib/sheets';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
 import { applyPatches, enablePatches } from 'immer';
-import { isSheetName } from './a1-notation';
+import { isSheetName, sheetNameKey } from './a1-notation';
 import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
+import { namesSheet } from './formula-shift';
+import type { RecalcBudgets, RecomputeSeeds } from './recalc';
+import { recomputeAfter } from './recalc';
 import type { DeleteRowColOp, InsertRowColOp } from './rowcol';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from './rowcol';
 import { normalizeSheetConfig } from './sheet-config';
 import type { RenameSheetOp } from './sheet-name';
-import { applySheetRename } from './sheet-name';
+import { applySheetDelete, applySheetRename } from './sheet-name';
+import type { ShiftedSheet } from './types';
+import { error } from './validation';
 
 // immer's patch plugin is global, and enabling it twice is harmless. Enabling it here means every caller of
 // replaySheetsOps has it without a setup step of its own.
@@ -25,11 +31,13 @@ type InsertValue = Omit<InsertRowColOp, 'id'>;
 type DeleteValue = Omit<DeleteRowColOp, 'id'>;
 
 // A batch the replay can't apply is reported to `onDropped`, which a caller that wants a count of its own passes. By
-// default each one is logged as a warning.
+// default each one is logged as a warning. `budgets` bound what a batch's recompute may cost the server.
 export function replaySheetsOps(
     sheets: Sheet[],
     opBatches: Op[][],
-    onDropped: (error: unknown) => void = (e) => console.warn('[sheets] op batch failed to apply, skipping batch:', e),
+    onDropped: (dropped: unknown) => void = (e) =>
+        console.warn('[sheets] op batch failed to apply, skipping batch:', e),
+    budgets: RecalcBudgets = {},
 ): Sheet[] {
     // Every base sheet carries its config collections before the first op, so the config patches the editor writes
     // resolve here as they do in the editor.
@@ -54,11 +62,9 @@ export function replaySheetsOps(
                     const added = withNormalizedSheet(op.value);
                     result = [...result, dataOpIds?.has(op.value.id) ? withMaterializedData(added) : added];
                 } else if (op.op === 'deleteSheet' && op.id) {
-                    result = result.filter((s) => s.id !== op.id);
-                } else if (op.op === 'insertRowCol') {
-                    result = applySheetsInsertRowCol(result, insertRowColOf(op));
-                } else if (op.op === 'deleteRowCol') {
-                    result = applySheetsDeleteRowCol(result, deleteRowColOf(op));
+                    result = applySheetDelete(result, op.id);
+                } else if (isRowColOp(op)) {
+                    result = applyRowColOp(result, op);
                 } else if (op.op === 'renameSheet') {
                     result = applySheetRename(result, renameSheetOf(op));
                 }
@@ -66,12 +72,53 @@ export function replaySheetsOps(
             const normalOps = batch.filter((op) => op.op === 'add' || op.op === 'remove' || op.op === 'replace');
             const [patches] = opToPatchOnSheets(result, normalOps);
             result = applyPatches(result, patches);
+            const seeds = seedsOf(batch);
+            if (seeds) result = recomputeAfter(result.map(withMaterializedData), seeds, { budgets });
         } catch (e) {
             onDropped(e);
             result = preBatch;
         }
     }
     return result.map(withSyncedCelldataIfData);
+}
+
+// What a batch's sheet, row and column ops can affect, or null when it holds none, since an edit carries its own
+// values. A cell its patches write counts too, because an undo's repairs change what the formulas reading them hold.
+export function seedsOf(ops: readonly Op[]): RecomputeSeeds | null {
+    const cells: RecomputeSeeds['cells'][number][] = [];
+    const lines: RecomputeSeeds['lines'][number][] = [];
+    const names = new Set<string>();
+    let structural = false;
+    for (const op of ops) {
+        const [field, r, c] = op.path;
+        if (op.op === 'insertRowCol') {
+            const { id, type, index, direction } = insertRowColOf(op);
+            lines.push({ id, type, line: direction === 'lefttop' ? index : index + 1 });
+        } else if (op.op === 'deleteRowCol') {
+            const { id, type, start } = deleteRowColOf(op);
+            lines.push({ id, type, line: start - 1 }, { id, type, line: start });
+        } else if (op.op === 'addSheet' || op.op === 'renameSheet') {
+            const name = isRecord(op.value) ? op.value['name'] : undefined;
+            if (typeof name === 'string') names.add(sheetNameKey(name));
+        } else if (op.op !== 'deleteSheet') {
+            if (field === 'data' && typeof r === 'number' && typeof c === 'number' && op.id) {
+                cells.push({ r, c, id: op.id });
+            }
+            continue;
+        }
+        structural = true;
+    }
+    if (!structural) return null;
+    const reads = (formula: string) =>
+        formula.includes(error.r) || [...names].some((name) => namesSheet(formula, name));
+    return { cells, lines, reads };
+}
+
+// A row or column op's result on plain sheets. An insert past the sheet's size limit throws RowColError.
+export function applyRowColOp<S extends ShiftedSheet>(sheets: S[], op: Op): S[] {
+    return op.op === 'insertRowCol'
+        ? applySheetsInsertRowCol(sheets, insertRowColOf(op))
+        : applySheetsDeleteRowCol(sheets, deleteRowColOf(op));
 }
 
 // A stored sheet keeps its cells as the `celldata` list, but a cell op writes `data[r][c]`. So a sheet gets the dense
@@ -127,10 +174,12 @@ function isLine(value: unknown, type: 'row' | 'column'): value is number {
 }
 
 // A new sheet needs an id no sheet has yet, because every later op names its sheet by id. Its name follows the
-// sheet-name rule, or a rename's undo could not restore it.
+// sheet-name rule, or a rename's undo could not restore it. Its cells must read as cells on every reader.
 export function isNewSheet(v: unknown, sheets: { id: string }[]): v is Sheet {
     if (!isRecord(v)) return false;
-    const { id, name } = v;
+    const { id, name, data, celldata } = v;
+    if (data != null && !(Array.isArray(data) && data.every((row) => row == null || Array.isArray(row)))) return false;
+    if (celldata != null && !(Array.isArray(celldata) && celldata.every(isRecord))) return false;
     return typeof id === 'string' && typeof name === 'string' && isSheetName(name) && !sheets.some((s) => s.id === id);
 }
 
@@ -161,8 +210,8 @@ function collectDataOpSheetIds(batch: Op[]): Set<string> | null {
     return touched;
 }
 
-// Where a sheet has the dense matrix, the matrix holds its latest cells: a replayed cell op writes
-// `data` and leave `celldata` stale. The exports and the preview read `celldata`, so it is written again from `data`.
+// Where a sheet has the dense matrix, the matrix holds its latest cells: a replayed cell op writes `data` and leaves
+// `celldata` stale. The exports and the preview read `celldata`, so it is written again from `data`.
 function withSyncedCelldataIfData(s: Sheet): Sheet {
     if (!s.data) return s;
     return { ...s, celldata: dataToCelldata(s.data) };

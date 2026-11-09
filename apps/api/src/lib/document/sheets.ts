@@ -52,7 +52,9 @@ export function readSheetsFromDoc(
     const { sheets, computed } = decodeOrDefault(readSheetsSnapshotJson(doc));
     // The snapshot stores cells as a list, but conditional formats and the cross-sheet formula resolver read the dense
     // `data` matrix. One far-flung cell makes a huge grid, which the transform's deadline bounds.
-    const replayed = replaySheetsOps(sheets, sheetsOpLog(doc).toArray()).map(withMaterializedData);
+    const replayed = replaySheetsOps(sheets, sheetsOpLog(doc).toArray(), undefined, SERVER_RECALC_BUDGET).map(
+        withMaterializedData,
+    );
 
     // Only a workbook nobody computed is recalculated, and only for an export: a recalc can outlast a preview or a
     // search extract. A recalc that fails leaves the replayed values, because an export must not fail on it.
@@ -75,7 +77,7 @@ export function compactSheetsSnapshot(
 ): { snapshot: string; dropped: number } {
     const { sheets, computed } = decodeOrDefault(snapshotJson);
     let dropped = 0;
-    const replayed = replaySheetsOps(sheets, JSON.parse(batchesJson), () => dropped++);
+    const replayed = replaySheetsOps(sheets, JSON.parse(batchesJson), () => dropped++, SERVER_RECALC_BUDGET);
     // The compaction never recalculates, so a workbook nobody computed stays uncomputed, and an export computes it.
     return { snapshot: encodeSheetsSnapshot(replayed, { computed }), dropped };
 }

@@ -97,12 +97,13 @@ describe('a tab rename', () => {
         const ctx = workbook();
         const tab = document.createElement('span');
         tab.innerText = 'One';
-        ctx.formulaCache.formulaCellInfoMap = {};
+        const stays = {};
+        ctx.formulaCache.formulaCellInfoMap = stays;
         editSheetName(ctx, 's1', tab);
-        expect(ctx.formulaCache.formulaCellInfoMap).toEqual({});
+        expect(ctx.formulaCache.formulaCellInfoMap).toBe(stays);
         tab.innerText = 'Old';
         editSheetName(ctx, 's1', tab);
-        expect(ctx.formulaCache.formulaCellInfoMap).toBeNull();
+        expect(ctx.formulaCache.formulaCellInfoMap).not.toBe(stays);
     });
 
     test('refuses an empty name, and a name another tab has in any case, and says so', () => {

@@ -210,15 +210,15 @@ describe('execFunctionGroup — index-driven recalc', () => {
     });
 
     // An imported cell holds the value Excel computed. Once an input changes, IFERROR's fallback around a function
-    // the engine lacks would read as a real answer, so the cell shows #NAME?.
-    it('shows #NAME? for a real Excel function the engine lacks, even inside IFERROR, once an input changes', () => {
+    // the engine lacks would read as a real answer, and a #NAME? would destroy the number, so the number stays.
+    it('keeps the number of a real Excel function the engine lacks, even inside IFERROR, once an input changes', () => {
         const ctx = makeCtx();
         ctx.sheets[0].data![0][2] = { f: '=IFERROR(FILTER(A1:A3,A1:A3>1),"none")', v: 5, m: '5' };
         warmFormulaCellInfoMap(ctx);
 
         editCell(ctx, 0, 0, 7, 'id_1');
 
-        expect(ctx.sheets[0].data![0][2]?.v).toBe('#NAME?');
+        expect(ctx.sheets[0].data![0][2]?.v).toBe(5);
     });
 
     it('gives the fallback for a name Excel does not know either, such as a typo, as in Excel', () => {
@@ -252,7 +252,7 @@ describe('execFunctionGroup — index-driven recalc', () => {
     // The FILTER cell's #NAME? stands in for a value Excel computed, so IFERROR one cell away hands it on too.
     it('a #NAME? one cell away from a function the engine lacks is no error IFERROR traps', () => {
         const ctx = makeCtx();
-        ctx.sheets[0].data![0][2] = { f: '=FILTER(A1:A3,A1:A3>1)', v: 5, m: '5' };
+        ctx.sheets[0].data![0][2] = { f: '=FILTER(A1:A3,A1:A3>1)' };
         ctx.sheets[0].data![0][3] = { f: '=IFERROR(C1,"none")', v: 5, m: '5' };
         warmFormulaCellInfoMap(ctx);
 
@@ -308,11 +308,11 @@ describe('updateCell — the formulas that read an edited cell through a functio
         const shown = () => formulas.map(([r, c]) => ctx.sheets[0].data![r][c]?.m);
 
         cellModule.updateCell(ctx, 0, 0, null, 10);
-        expect(shown()).toEqual(['10', '18', '#NAME?', '#ERROR!', '33', '6', '1', '11']);
+        expect(shown()).toEqual(['10', '18', '1', '10', '33', '6', '1', '11']);
 
         ctx.currentSheetId = 's2';
         cellModule.updateCell(ctx, 0, 0, null, 10);
-        expect(shown()).toEqual(['10', '18', '#NAME?', '#ERROR!', '33', '15', '10', '11']);
+        expect(shown()).toEqual(['10', '18', '1', '10', '33', '15', '10', '11']);
     });
 });
 
@@ -355,14 +355,15 @@ describe('execFunctionGroup — references resolved before the sheets changed', 
         expect(ctx.sheets[0].data?.[0][1]?.v).toBe(6);
     });
 
-    it('a sheet name reads the sheet added under it after a delete', () => {
+    it('a sheet added under a deleted name does not heal what the delete broke', () => {
         const ctx = workbook('=One!A1');
         warmFormulaCellInfoMap(ctx);
         deleteSheet(ctx, 'id_1');
         addSheet(ctx, 'id_3', 'One');
         ctx.sheets[1].data = grid(4, 4);
         editCell(ctx, 0, 0, 100, 'id_3');
-        expect(ctx.sheets[0].data?.[0][1]?.v).toBe(100);
+        expect(ctx.sheets[0].data?.[0][1]?.f).toBe('=#REF!');
+        expect(ctx.sheets[0].data?.[0][1]?.v).toBe('#REF!');
     });
 
     it('a sheet name that read no sheet reads the sheet renamed to it', () => {
@@ -374,14 +375,13 @@ describe('execFunctionGroup — references resolved before the sheets changed', 
     });
 
     // A rename points the formula at the new name, so the formula keeps reading the sheet.
-    it('a formula that names a renamed sheet follows it, and the map builds again', () => {
+    it('a formula that names a renamed sheet follows it, and the map knows', () => {
         const ctx = workbook('=One!A1');
         warmFormulaCellInfoMap(ctx);
         getcellrange(ctx, 'One!A1');
         renameSheet(ctx, { id: 'id_1', name: 'Gone' });
         expect(ctx.sheets[1].data?.[0][1]?.f).toBe('=Gone!A1');
-        expect(ctx.formulaCache.formulaCellInfoMap).toBeNull();
-        setFormulaCellInfo(ctx, { r: 0, c: 1, id: 'id_2' });
+        expect(ctx.formulaCache.formulaCellInfoMap?.r0c1iid_2?.formula).toBe('=Gone!A1');
         expect(ctx.formulaCache.dependencyIndex.dependentsOf('id_1', 0, 0)).toEqual(['r0c1iid_2']);
     });
 

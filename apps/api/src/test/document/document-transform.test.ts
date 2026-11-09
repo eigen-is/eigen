@@ -541,9 +541,9 @@ describe('document transform (eigensheets export)', () => {
 // Recorded from the import pipeline (xlsxToSheets + recalcImportedSheets +
 // encodeSheetsSnapshot) over buildImportFixture(), so the Worker and the main
 // thread are proven to emit the same bytes. Regenerate only for an intentional
-// converter or wire-format change (last moved when a sheet started storing the size of
-// its dense grid, so a stale smaller size drops no rows).
-const GOLDEN_IMPORT_SNAPSHOT_SHA256 = '09c6ca3cde63464e2e5079bd27dbcc0e74ce2b89dfaf5556f6a340ad004e2740';
+// converter or wire-format change (last moved when the import began to trust the values
+// Excel cached).
+const GOLDEN_IMPORT_SNAPSHOT_SHA256 = 'e7d472068d84abd408aab1ca9270945dda32aeab6bcdc18a4690cf95d92bbe76';
 
 // Small but representative workbook: values, a stale cached formula result the
 // import recalc must correct, styles, a date format, a merge, a column width, a
@@ -750,9 +750,9 @@ describe('document transform (xlsx import)', () => {
         // The same pure pipeline the Worker dispatches to, run on this thread.
         const direct = importXlsxToSheetsSnapshot(await buildImportFixture(), XLSX_JOB);
         expect(snapshotJson).toBe(new TextDecoder().decode(direct.snapshotJson));
-        // The stale cached SUM(B2:B3)=999 was recomputed at import.
+        // The cached SUM(B2:B3)=999 is Excel's, so the import keeps it.
         const sheets = decodeSheetsSnapshot(snapshotJson);
-        expect(sheets[0].celldata?.find((cell) => cell.r === 3 && cell.c === 1)?.v?.v).toBe(49);
+        expect(sheets[0].celldata?.find((cell) => cell.r === 3 && cell.c === 1)?.v?.v).toBe(999);
     }, 120_000);
 
     test('the committed snapshot is stored in the v2 wire format, flagged computed', async () => {

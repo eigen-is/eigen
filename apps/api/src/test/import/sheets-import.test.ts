@@ -1018,12 +1018,10 @@ describe('Sheets xlsx conversion fidelity', () => {
         expect(byCoord.get('1:1')?.m).toBe('0.3');
         expect(byCoord.get('0:2')?.m).toBe('hello');
 
-        // Import-time recalc recomputes formula cells through our engine, so the
-        // xlsx's stale cached result (90) is corrected to A3*2 = 180, rendered
-        // through the cell's mask.
+        // The import trusts the result the xlsx cached, rendered through the cell's mask.
         expect(byCoord.get('0:3')?.f).toBe('=A3*2');
-        expect(byCoord.get('0:3')?.v).toBe(180);
-        expect(byCoord.get('0:3')?.m).toBe('€180');
+        expect(byCoord.get('0:3')?.v).toBe(90);
+        expect(byCoord.get('0:3')?.m).toBe('€90');
     });
 
     test('a malformed numFmt shows the number as General', async () => {

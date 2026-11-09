@@ -13,6 +13,10 @@ import { trimEdges } from './helper/string';
 
 type GrammarParserInstance = { parse: (expression: string) => CompiledFormula; yy: Record<string, unknown> };
 
+// Excel's limit. The lexer and its error recovery cost a forged text its length squared, such as `a.a.a.…`, and every
+// reader parses what a recompute reaches.
+const MAX_FORMULA_LENGTH = 8192;
+
 export class Parser {
     private parser: GrammarParserInstance;
     private variables: Record<string, FormulaArg>;
@@ -49,11 +53,22 @@ export class Parser {
             return () => '';
         }
         try {
-            return this.parser.parse(expression);
+            return this.parseWithinLimit(expression);
         } catch (ex) {
+            // A row delete writes #REF! where a reference stood, which not every place in the grammar takes.
+            const failure = String(expression).includes(errorParser(ERROR_REF)) ? Error(ERROR_REF) : ex;
             return () => {
-                throw ex;
+                throw failure;
             };
+        }
+    }
+
+    public parses(expression: string): boolean {
+        try {
+            this.parseWithinLimit(expression);
+            return true;
+        } catch {
+            return false;
         }
     }
 
@@ -90,6 +105,11 @@ export class Parser {
     // CORREL-style formulas).
     public getVariable(name: string): FormulaArg {
         return this.variables[name.toUpperCase()];
+    }
+
+    private parseWithinLimit(expression: string): CompiledFormula {
+        if (expression.length > MAX_FORMULA_LENGTH) throw Error(ERROR);
+        return this.parser.parse(expression);
     }
 
     // An unknown name is #NAME? in-band, like an unknown function, so IFERROR can trap it.

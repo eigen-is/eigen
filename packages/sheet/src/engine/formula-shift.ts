@@ -1,16 +1,29 @@
 // Reads and rewrites the references in a formula's text without parsing it: a copy or a fill shifts its relative refs,
-// an inserted or deleted row or column moves the refs past it, a renamed sheet renames them, an xlsx import replaces
-// each defined name with what it refers to, and the dependency walk lists them. One character walker finds the refs and
-// the names for all of them. It reads only plain sheets, so the editor and the server share it, for example in the op
-// replay and the recalc.
+// an inserted or deleted row or column moves the refs past it, a renamed sheet renames them and a deleted one breaks
+// them, an xlsx import replaces each defined name with what it refers to, and the dependency walk lists them. One
+// character walker finds the refs and the names for all of them. It reads only plain sheets, so the editor and the
+// server share it, for example in the op replay and the recalc.
 
 import type { Sheet } from '@workspace/lib/sheets';
-import { a1RangeRef, extractLabel, parseA1Range, sheetRefName, toLabel, unquoteSheetName } from './a1-notation';
+import {
+    a1RangeRef,
+    extractLabel,
+    MAX_SHEET_NAME_LENGTH,
+    parseA1Range,
+    sheetNameKey,
+    sheetRefName,
+    toLabel,
+    unquoteSheetName,
+} from './a1-notation';
 import { formulaOperators, iscelldata, isFormula } from './formula-utils';
+import { errorValues } from './parser/error';
 import { offsetCoordinate, offsetRange, sortLegs } from './parser/helper/cell';
 import { error } from './validation';
 
 type RefLeg = NonNullable<ReturnType<typeof extractLabel>>;
+
+// A sheet's name with every quote doubled, its two delimiters and its `!`.
+const LONGEST_SHEET_PREFIX = 2 * MAX_SHEET_NAME_LENGTH + 3;
 
 // Shifts every ref in a formula by rowOffset rows and colOffset columns, as a copy or a fill does. The text comes back
 // without its leading `=`.
@@ -25,14 +38,42 @@ export function renameSheetRefs(
     findSheet: (name: string) => { name: string } | undefined,
     renames: ReadonlyMap<string, string>,
 ): string {
-    if (renames.size === 0 || !txt.includes('!')) return txt;
-    const renamed = walkFormulaRefs(txt, (ref) => {
-        const sheetEnd = ref.lastIndexOf('!');
-        const sheet = sheetEnd > 0 ? findSheet(unquoteSheetName(ref.slice(0, sheetEnd))) : undefined;
+    if (renames.size === 0) return txt;
+    return rewriteSheetRefs(txt, (ref, sheetEnd) => {
+        const sheet = findSheet(unquoteSheetName(ref.slice(0, sheetEnd)));
         const name = sheet && renames.get(sheet.name);
         return name === undefined ? ref : `${sheetRefName(name)}${ref.slice(sheetEnd)}`;
     });
-    return txt.startsWith('=') ? `=${renamed}` : renamed;
+}
+
+// Every ref naming a deleted sheet becomes #REF!, the text a row delete leaves. A leading `=` is kept.
+export function breakSheetRefs(
+    txt: string,
+    findSheet: (name: string) => { name: string } | undefined,
+    deleted: string,
+): string {
+    return rewriteSheetRefs(txt, (ref, sheetEnd) =>
+        findSheet(unquoteSheetName(ref.slice(0, sheetEnd)))?.name === deleted ? error.r : ref,
+    );
+}
+
+// True when a ref in the formula names `key`, a sheetNameKey, whether a sheet holds that name or not.
+export function namesSheet(txt: string, key: string): boolean {
+    let found = false;
+    rewriteSheetRefs(txt, (ref, sheetEnd) => {
+        if (sheetNameKey(unquoteSheetName(ref.slice(0, sheetEnd))) === key) found = true;
+        return ref;
+    });
+    return found;
+}
+
+function rewriteSheetRefs(txt: string, rewrite: (ref: string, sheetEnd: number) => string): string {
+    if (!txt.includes('!')) return txt;
+    const rewritten = walkFormulaRefs(txt, (ref) => {
+        const sheetEnd = ref.lastIndexOf('!');
+        return sheetEnd > 0 ? rewrite(ref, sheetEnd) : ref;
+    });
+    return txt.startsWith('=') ? `=${rewritten}` : rewritten;
 }
 
 // The sheet with `rewrite` run over the formula text in its cells and formula rules.
@@ -243,7 +284,11 @@ export function walkFormulaRefs(
             result += leaf() + operator;
             i += operator.length - 1;
         } else {
-            str += s;
+            // An error literal is one token: `#N/A` and `#DIV/0!` hold an operator, which reads their tail as a name.
+            const literal = s === '#' && str === '' ? errorValues.find((text) => txt.startsWith(text, i)) : undefined;
+            if (literal) result += literal;
+            else str += s;
+            i += (literal?.length ?? 1) - 1;
         }
     }
 
@@ -269,7 +314,8 @@ function refOf(token: string, onRef: (ref: string) => string, onName: (token: st
     const chained = token.slice(sheetEnd).split(':');
     if (chained.length <= 2) return iscelldata(token) ? onRef(token) : onName(token);
     const prefix = token.slice(0, sheetEnd);
-    if (!chained.every((leg) => iscelldata(leg))) return token;
+    // Each leg reads the prefix, so a forged long one would cost its length squared. No sheet is called that.
+    if (prefix.length > LONGEST_SHEET_PREFIX || !chained.every((leg) => iscelldata(leg))) return token;
     const moved = chained.map((leg) => onRef(prefix + leg));
     if (moved.includes(error.r)) return error.r;
     return [moved[0], ...moved.slice(1).map((leg) => leg.slice(prefix.length))].join(':');

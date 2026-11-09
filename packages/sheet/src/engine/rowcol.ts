@@ -288,8 +288,9 @@ export function shiftKeyedMapForDelete(
     return shifted;
 }
 
-// Generic over S, so the editor's wider sheet keeps its type. Nothing is deep-cloned: in the editor the inputs are immer
-// drafts, so rows an op doesn't touch keep their objects, and a row insert on a large sheet doesn't walk every cell.
+// Generic over S, so the editor's wider sheet keeps its type. Nothing is deep-cloned or written in place: in the editor
+// the inputs may be immer drafts, so rows an op doesn't touch keep their objects, and a row insert on a large sheet
+// doesn't walk every cell. The values the op leaves stale are recomputeAfter's.
 export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op: InsertRowColOp): S[] {
     const targetIndex = sheets.findIndex((s) => s.id === op.id);
     if (targetIndex === -1) return sheets;
