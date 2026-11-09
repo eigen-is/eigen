@@ -30,7 +30,12 @@ export async function receiveSharedPathChange(
     const actorDisplay = actorDisplayName(actorName, actorEmail);
     const memberships = await getMemberships(home.user.id);
     if (newACL === null || !matchesACL(newACL, home.user, memberships, 'read')) {
-        sharedDb.delete(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).run();
+        const removed = sharedDb
+            .delete(sharedSchema.sharedPaths)
+            .where(eq(sharedSchema.sharedPaths.id, path.id))
+            .returning({ id: sharedSchema.sharedPaths.id })
+            .get();
+        if (!removed) return;
         home.broadcast(buildDriveEvent(SSEventType.DRIVE_ACL_UNSHARED, path));
         // A user who leaves a share did it themselves, so they get no notice.
         if (actorEmail?.toLowerCase() !== home.user.email.toLowerCase()) {
