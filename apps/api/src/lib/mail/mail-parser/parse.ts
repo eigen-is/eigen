@@ -1,3 +1,6 @@
+// Eigen's own mail parser: from a message's raw bytes to its body as text and HTML, its attachments and its header
+// fields. Its contract is a golden corpus. Callers such as the mail store and the `.eml` preview read through it.
+
 import { escapeHtml } from '@workspace/lib/html';
 import { IMIP_METHODS } from '@workspace/lib/types/calendar';
 import type { AddressObject, Attachment, ParsedMail } from '@workspace/lib/types/mail';
@@ -136,6 +139,7 @@ export function parseMail(bytes: Buffer): ParsedMail {
         replyTo: headers.replyTo,
         messageId: headers.messageId,
         inReplyTo: headers.inReplyTo,
+        repliedToId: headers.repliedToId,
         references: headers.references,
         authenticationResults: headers.authenticationResults,
     };

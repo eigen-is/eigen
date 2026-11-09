@@ -22,7 +22,7 @@ import { invalidateItemCreated } from '../../drive/hooks/keys';
 import { subjectInfo } from '../../file-subject';
 import { invalidateHomeSize } from '../../home';
 import { fetchImportBlob } from '../../transfer';
-import { emailKeys, invalidateMailboxes } from './keys';
+import { emailKeys, invalidateDraftUpdated, invalidateMailboxes } from './keys';
 
 export function createDraftEmail(input: DraftInput): NewDraft {
     return {
@@ -44,9 +44,7 @@ async function updateDraftEmail(
 ): Promise<EmailDraft> {
     const response = await mailApi({ ownerId }).message.draft.put({
         mail: draft,
-        tempAttachmentIds: options.tempAttachmentIds,
-        keepAttachmentIndexes: options.keepAttachmentIndexes,
-        forceFullSave: options.forceFullSave,
+        ...options,
     });
     if (response.error) throw new AppError(response);
     return response.data;
@@ -61,8 +59,7 @@ async function sendDraftEmail(draft: NewDraft, ownerId: string, grantAccessRefId
     return response.data;
 }
 
-// Multipart upload bypasses Eden Treaty (which serializes bodies as JSON) and goes through raw
-// fetch. The response shape is still type-checked against DraftAttachmentUpload.
+// Eden Treaty serializes a body as JSON, so a multipart upload goes through a plain fetch.
 async function uploadDraftAttachmentRequest(ownerId: string, file: File): Promise<DraftAttachmentUpload> {
     const formData = new FormData();
     formData.append('file', file);
@@ -72,7 +69,7 @@ async function uploadDraftAttachmentRequest(ownerId: string, file: File): Promis
         credentials: 'include',
     });
     if (!res.ok) throw new AppError({ status: res.status, error: { status: res.status, value: await res.text() } });
-    return (await res.json()) as DraftAttachmentUpload;
+    return res.json();
 }
 
 export function useUpdateDraft() {
@@ -83,13 +80,8 @@ export function useUpdateDraft() {
     return useMutation({
         mutationFn: ({ draft, ...options }: { draft: NewDraft } & DraftUpdateOptions) =>
             updateDraftEmail(draft, ownerId, options),
-        // Optimistically merge the user's edits into the cached detail. This matters for
-        // fire-and-forget unmount saves: if the user navigates away then immediately back, the
-        // detail query is observed before the network save completes, and useEmail's
-        // staleTime: Infinity would otherwise serve the pre-edit copy. Fields are assigned
-        // directly (no `?? previous` fallback) so that *clearing* a field — e.g. removing the
-        // sole recipient, where draft.to becomes undefined — propagates to the cache rather
-        // than silently reverting to the previous value.
+        // A navigation back would otherwise read the pre-edit copy before a closing save lands, under staleTime: Infinity.
+        // Assigned with no `?? previous`, so clearing a field, such as the sole recipient, reaches the cache.
         onMutate: ({ draft }) => {
             if (!draft.id) return;
             queryClient.setQueryData<EmailDraft | null>(emailKeys.detail(ownerId, draft.id), (previous) =>
@@ -108,15 +100,17 @@ export function useUpdateDraft() {
             );
         },
         onSuccess: (data) => {
-            // Push the parsed response into the cache so the next observe doesn't need a
-            // refetch. The list still gets invalidated because per-message metadata (date,
-            // attachment count) may have changed.
-            if (data.id) queryClient.setQueryData(emailKeys.detail(ownerId, data.id), data);
+            // The list still refetches, because a row's date and attachment count may have changed.
+            queryClient.setQueryData(emailKeys.detail(ownerId, data.id), data);
             queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, MAILBOX_DRAFTS) });
             invalidateMailboxes(queryClient, ownerId);
             invalidateHomeSize(queryClient, ownerId);
         },
-        onError: onMutationError,
+        // onMutate wrote what the server refused into the cache, where staleTime: Infinity would keep it.
+        onError: (error, { draft }) => {
+            if (draft.id) invalidateDraftUpdated(queryClient, ownerId, draft.id);
+            onMutationError(error);
+        },
     });
 }
 

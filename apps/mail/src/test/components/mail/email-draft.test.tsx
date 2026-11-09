@@ -71,6 +71,7 @@ async function openComposer(email: EmailDraftType | null) {
                 prefillDraft: { subject: 'FW: Lunch', html: '<p>quoted</p>', text: 'quoted' },
                 forwardedParts: [part],
                 sendDraft: async () => {},
+                onAutoSave: async () => savedForward,
                 isSending: false,
                 onPreparingSendChange: () => {},
                 filePickerOpen: false,

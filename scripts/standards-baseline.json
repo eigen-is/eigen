@@ -26,7 +26,6 @@
     "packages/lib/src/core/deep-merge.ts": 1,
     "packages/lib/src/core/drive/hooks/writes.ts": 1,
     "packages/lib/src/core/html-dom.ts": 1,
-    "packages/lib/src/core/mail/hooks/use-draft.ts": 1,
     "packages/lib/src/core/mail/hooks/use-emails.ts": 1,
     "packages/lib/src/core/search/pagefind.ts": 1,
     "packages/lib/src/sheets/snapshot-codec.ts": 4,

@@ -24,10 +24,11 @@ type OutboundAddress = {
 
 type SenderFields = Partial<Pick<ServerSettings['mail'], 'senderName' | 'senderAddress'>>;
 
-export type OutboundAttachment = {
+type OutboundAttachment = {
     filename: string;
     content: Buffer | string;
     contentType?: string;
+    contentDisposition?: 'attachment';
 };
 
 export type OutboundICalEvent = {

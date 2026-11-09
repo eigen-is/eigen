@@ -2,7 +2,9 @@ import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type { AddressObject, EmailDraft, SentMailResult } from '@workspace/lib/types/mail';
+import MailComposer from 'nodemailer/lib/mail-composer';
 import { getHome } from '../../lib/home';
+import { parseMail } from '../../lib/mail/mail-parser';
 import * as mailer from '../../lib/mailer/mailer';
 import { restoreEnvAfterEach } from '../env-test-helpers';
 import { makeEml } from '../mail-test-helpers';
@@ -291,7 +293,7 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
         expect(res.status).toBe(400);
     });
 
-    test('threading headers survive the full-save round-trip', async () => {
+    test('threading headers survive the save', async () => {
         startCapture();
         const { draft, res } = await sendDraftWithRef('ext1@x.com', {
             inReplyTo: '<parent@x.com>',
@@ -301,7 +303,7 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
 
         expect(sent.length).toBe(1);
         expect(sent[0].inReplyTo).toBe('<parent@x.com>');
-        expect(sent[0].references).toEqual(['<r1@x.com>']);
+        expect([sent[0].references].flat()).toEqual(['<r1@x.com>']);
 
         const rawRes = await authedRequest(
             ctx.alice.user.sessionToken,
@@ -419,8 +421,7 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
         expect(sent[0].subject).toBe('');
     });
 
-    // Clearing a recipient field on an existing draft (the FE sends `undefined` for a cleared
-    // field) must not be resurrected from the draft-meta sidecar on the next full save or send.
+    // The composer sends `undefined` for a cleared recipient field.
     test('clearing Cc on a saved draft drops it from the reloaded draft and the sent copies', async () => {
         startCapture();
         const put = (mail: Record<string, unknown>) =>
@@ -430,7 +431,7 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
                 body: JSON.stringify({ mail }),
             });
 
-        // 1. Save a draft addressed To + Cc — a full save that writes the sidecar with cc=bob.
+        // 1. Save a draft addressed To + Cc.
         const first = await assertJson<EmailDraft>(
             await put({
                 subject: 'Clear cc',
@@ -468,47 +469,116 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
         expect(addresses(sent[0].to)).toEqual(['to@x.com']);
     });
 
-    // The read-side sibling of the test above: a fast save rewrites only the sidecar, leaving the
-    // EML stale, so a cleared Cc survives the reload only if messageGet takes the sidecar verbatim.
-    test('a Cc cleared on the fast-save path stays cleared when the draft is reloaded', async () => {
-        const tempId = await uploadAttachment(16);
-        const put = (mail: Record<string, unknown>, options: Record<string, unknown>) =>
-            authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/draft`, {
+    // A draft's file holds its references in a comment. What leaves is drawn afresh from the clean html, so a marker or a
+    // second set of pills would show in every copy.
+    describe('what sendMail receives from a draft with links', () => {
+        const expectOneFreshSetOfPills = (mail: mailer.OutboundMail) => {
+            expect(mail.html).not.toContain('eigen-refs');
+            expect(mail.html?.match(/Open Release Notes/g)?.length).toBe(1);
+            expect(mail.text.match(/Release Notes: /g)?.length).toBe(1);
+        };
+
+        test('carries no marker in the internal path', async () => {
+            startCapture();
+            const { res } = await sendDraftWithRef(ctx.alice.user.email);
+            expect(res.status).toBe(200);
+            expect(sent.length).toBe(1);
+            expectOneFreshSetOfPills(sent[0]);
+        });
+
+        test('carries no marker in the personalised external path', async () => {
+            startCapture();
+            const { res } = await sendDraftWithRef('ext1@x.com,ext2@x.com');
+            expect(res.status).toBe(200);
+            expect(sent.length).toBe(2);
+            for (const copy of sent) {
+                expectOneFreshSetOfPills(copy);
+                expect(copy.html).toContain(`email=${encodeURIComponent(copy.envelope?.to[0] ?? '')}`);
+            }
+        });
+
+        test('the Sent copy keeps the comment and the Bcc, and reads with its pills', async () => {
+            startCapture();
+            const { draft, res } = await sendDraftWithRef('ext1@x.com', { bcc: 'hidden@x.com' });
+            expect(res.status).toBe(200);
+            expect(addresses(sent[0].bcc)).toEqual([]);
+            expect(sent[0].envelope?.to).toEqual(['ext1@x.com']);
+
+            const base = `/mail/${ctx.alice.user.id}/message/${draft.id}`;
+            const raw = await (await authedRequest(ctx.alice.user.sessionToken, `${base}/download`)).text();
+            expect(raw).toContain('eigen-refs');
+            expect(raw).toMatch(/^Bcc:.*hidden@x\.com/im);
+
+            const read = await assertJson<EmailDraft>(await authedRequest(ctx.alice.user.sessionToken, base));
+            expect(read.mailbox).toBe('Sent');
+            expect(read.html).toContain('Open Release Notes');
+            expect(read.html).not.toContain('eigen-refs');
+            expect(read.driveReferences).toBeUndefined();
+        });
+    });
+
+    // A part's bytes as JSON are about 3.5 times their size, and the browser's query cache keeps the answer.
+    test("a save's and a send's answer name the part's size and carry none of its bytes", async () => {
+        startCapture();
+        const partBytes = 64 * 1024;
+        const tempId = await uploadAttachment(partBytes);
+        const mail = { subject: 'Heavy part', to: addr('to@x.com'), text: 'hi', html: '<p>hi</p>' };
+
+        const saveBody = await (
+            await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/draft`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mail, ...options }),
-            });
+                body: JSON.stringify({ mail, tempAttachmentIds: [tempId] }),
+            })
+        ).text();
+        const saved: EmailDraft = JSON.parse(saveBody);
+        expect(saved.attachments.map((a) => a.size)).toEqual([partBytes]);
+        expect(saveBody.length).toBeLessThan(partBytes);
 
-        // 1. Full save with an attachment: bakes Cc into the EML and arms the fast path.
-        const first = await assertJson<EmailDraft>(
-            await put(
-                { subject: 'Fast clear', to: addr('to@x.com'), cc: addr('bob@x.com'), text: 'hi', html: '<p>hi</p>' },
-                { tempAttachmentIds: [tempId] },
-            ),
-        );
-        expect(first.attachments.length).toBe(1);
+        const sendBody = await (await sendMailBody({ ...mail, id: saved.id })).text();
+        const answer: SentMailResult = JSON.parse(sendBody);
+        expect(answer.attachments.map((a) => a.size)).toEqual([partBytes]);
+        expect(sendBody.length).toBeLessThan(partBytes);
 
-        // 2. Fast save with Cc omitted (cleared) — attachments untouched, so no EML rebuild.
-        const cleared = await assertJson<EmailDraft>(
-            await put(
-                { id: first.id, subject: 'Fast clear', to: addr('to@x.com'), text: 'hi', html: '<p>hi</p>' },
-                { keepAttachmentIndexes: [0] },
-            ),
-        );
-        expect(cleared.cc?.value ?? []).toEqual([]);
+        expect(sent.length).toBe(1);
+        expect(sent[0].attachments?.map((a) => Buffer.byteLength(a.content))).toEqual([partBytes]);
+    });
 
-        // 3. The EML on disk is indeed stale and still carries the Cc — that is what must not win.
-        const rawRes = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/mail/${ctx.alice.user.id}/message/${first.id}/download`,
-        );
-        expect(await rawRes.text()).toMatch(/^Cc:.*bob@x\.com/im);
+    test('a replayed send answers 409 and mails nothing', async () => {
+        startCapture();
+        const { draft, res } = await sendDraftWithRef('to@x.com', { refs: [] });
+        expect(res.status).toBe(200);
+        expect(sent.length).toBe(1);
 
-        // 4. Reloading the draft still shows no Cc.
-        const reloaded = await assertJson<EmailDraft>(
-            await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/${first.id}`),
+        const replay = await sendMailBody({ id: draft.id, subject: 'Ref send', to: addr('to@x.com'), text: 'again' });
+
+        expect(replay.status).toBe(409);
+        expect(sent.length).toBe(1);
+    });
+
+    test('a send carries an attached message as a part, and nothing of it in the body', async () => {
+        startCapture();
+        const inner = 'From: inner@b.c\r\nBcc: secret@b.c\r\nSubject: Inner\r\n\r\nThe inner words\r\n';
+        const form = new FormData();
+        form.append('file', new File([inner], 'kept.eml', { type: 'message/rfc822' }));
+        const uploaded = await assertJson<{ tempId: string }>(
+            await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/draft/attachment`, {
+                method: 'POST',
+                body: form,
+            }),
         );
-        expect(reloaded.cc?.value ?? []).toEqual([]);
+        const { res } = await sendDraftWithRef('to@x.com', { refs: [], tempAttachmentIds: [uploaded.tempId] });
+        expect(res.status).toBe(200);
+
+        const wire = await new Promise<Buffer>((resolve, reject) => {
+            new MailComposer(sent[0]).compile().build((err, message) => (err ? reject(err) : resolve(message)));
+        });
+        const received = parseMail(wire);
+        expect(received.attachments.map((a) => [a.contentType, Buffer.from(a.content).toString()])).toEqual([
+            ['message/rfc822', inner],
+        ]);
+        expect(received.text).not.toContain('secret@b.c');
+        expect(received.html).not.toContain('secret@b.c');
     });
 
     // IMAP clients read the reply mark off the original's filename (`R`, \Answered); the app off its row.
@@ -557,9 +627,21 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
                 }),
             );
 
-            // Reopened from Drafts, the composer sends what the draft shows, which has no repliedToId.
-            expect((await sendMailBody({ ...reply, id: draft.id })).status).toBe(200);
+            // Reopened from Drafts, the composer sends what the draft's read gave it.
+            const reopened = await assertJson<EmailDraft>(
+                await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/${draft.id}`),
+            );
+            expect(reopened.repliedToId).toBe(originalId);
+            const res = await sendMailBody({ ...reply, id: draft.id, repliedToId: reopened.repliedToId });
+            expect(res.status).toBe(200);
             expect((await getHome(ctx.alice.user.id)).mail.messageGetSummary(originalId)?.isReplied).toBe(true);
+        });
+
+        test('naming a message that does not exist sends all the same and marks nothing', async () => {
+            startCapture();
+            const res = await sendReply('no-such-message');
+            expect(res.status).toBe(200);
+            expect(sent.length).toBe(1);
         });
     });
 });

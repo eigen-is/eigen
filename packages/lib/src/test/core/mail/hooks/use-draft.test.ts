@@ -1,14 +1,39 @@
 // What a forward does with each part of the message it forwards: the browser fetches the part from its
 // download route and uploads it to the draft's upload route, so it lands as a staged upload exactly like a
 // file the user picked, under the part's own name and type.
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { DraftAttachmentUpload } from '@workspace/lib/types/mail';
 import { getMailAttachmentUrl, getMailDraftAttachmentUploadUrl } from '../../../../core/api';
 import { subjectFromMailAttachment } from '../../../../core/file-subject';
+import { emailKeys } from '../../../../core/mail/hooks/keys';
 import { renderHook } from '../../../render-hook';
-import { fetchCalls, installTransferHarness, OWNER, served, toasts, trackingClient } from '../../../transfer-harness';
+import {
+    fetchCalls,
+    hasKey,
+    installTransferHarness,
+    OWNER,
+    served,
+    toasts,
+    trackingClient,
+} from '../../../transfer-harness';
 
 installTransferHarness();
+
+// A copy, because mock.module rewrites a loaded module in place. The draft route answers as a server that refuses the save.
+const realApiModule = { ...(await import('../../../../core/api')) };
+mock.module('../../../../core/api', () => ({
+    ...realApiModule,
+    mailApi: () => ({
+        message: {
+            draft: {
+                put: async () => ({ data: null, error: { status: 409, value: 'No longer a draft' }, status: 409 }),
+            },
+        },
+    }),
+}));
+afterAll(() => {
+    mock.module('../../../../core/api', () => realApiModule);
+});
 
 const staged: DraftAttachmentUpload = {
     tempId: 'temp-1',
@@ -100,5 +125,25 @@ describe('useAttachMailPart', () => {
 
         expect(fetchCalls).toHaveLength(1);
         expect(toasts).toEqual(['error: Attachment 9 not found']);
+    });
+});
+
+describe('useUpdateDraft', () => {
+    test('a save the server refuses leaves the detail cache to refetch, so no unsaved text stays in it', async () => {
+        toasts.length = 0;
+        const { act } = await import('react');
+        const { useUpdateDraft } = await import('../../../../core/mail/hooks/use-draft');
+        const { queryClient, invalidated } = trackingClient();
+        const detail = emailKeys.detail(OWNER, 'm1');
+        queryClient.setQueryData(detail, { id: 'm1', subject: 'Went out', text: 'as sent', html: '<p>as sent</p>' });
+        const { latest, unmount } = await renderHook(() => useUpdateDraft(), queryClient);
+
+        await act(async () => {
+            await latest.mutateAsync({ draft: { id: 'm1', text: 'never sent' } }).catch(() => null);
+        });
+        await unmount();
+
+        expect(hasKey(invalidated, detail)).toBe(true);
+        expect(toasts).toEqual(['error: No longer a draft (409)']);
     });
 });

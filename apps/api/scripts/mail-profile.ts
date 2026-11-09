@@ -73,14 +73,14 @@ const fakeHome = {
 const db = new MailDB(fakeHome);
 await db.init();
 const ti0 = performance.now();
-for (const p of parsed) db.addEmail(p);
+for (const p of parsed) db.insertEmails([p]);
 const tInsert = performance.now() - ti0;
 
 const perMsg = (t: number) => ((t * 1000) / N).toFixed(1);
 console.log(`\n=== cold-sync phase attribution (N=${N.toLocaleString()}) ===`);
 console.log(`readdir(cur)      ${tRead.toFixed(0)} ms          (${perMsg(tRead)} µs/msg)`);
 console.log(`parseEml (MIME)   ${(tParse / 1000).toFixed(1)} s   (${perMsg(tParse)} µs/msg)`);
-console.log(`sqlite addEmail   ${(tInsert / 1000).toFixed(1)} s   (${perMsg(tInsert)} µs/msg)`);
+console.log(`sqlite insert    ${(tInsert / 1000).toFixed(1)} s   (${perMsg(tInsert)} µs/msg)`);
 const tot = tRead + tParse + tInsert;
 console.log(`--------------------------------------------`);
 console.log(`parse  share:  ${((100 * tParse) / tot).toFixed(1)}%`);
