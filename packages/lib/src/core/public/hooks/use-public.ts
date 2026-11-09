@@ -25,9 +25,8 @@ export function usePublicConfig() {
     });
 }
 
-// The one read of the server's hosted-mail flag: every Mail entry point gates on this, and a
-// server that runs without the mail containers hides them all. On until the config lands, so the
-// common deployment never flashes a missing Mail app.
+// The one read of the hosted-mail flag, which hides every Mail entry point on a server without the mail containers.
+// On until the config lands, so the common deployment never flashes a missing Mail app.
 export function useMailEnabled(): boolean {
     const { data } = usePublicConfig();
     return data?.mailEnabled !== false;
@@ -80,8 +79,7 @@ export function usePublicUsers(emailsOrIds: string[]): Record<string, PublicUser
             enabled: !!id,
             staleTime: Infinity,
         })),
-        // Why: combine memoizes with structural sharing, so the map stays referentially
-        // stable across renders and consumer useMemos hold.
+        // combine memoizes with structural sharing, so the map stays stable across renders and callers' useMemos hold.
         combine: (results) => {
             const map: Record<string, PublicUser> = {};
             for (const [i, id] of emailsOrIds.entries()) {
