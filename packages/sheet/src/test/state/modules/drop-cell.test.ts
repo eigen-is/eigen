@@ -552,6 +552,18 @@ describe('a fill counts on from what its source holds', () => {
             expected: ['Item 3', 'Item 4', 'Item 5'],
         },
         {
+            name: 'text keeps the width of a number with leading zeros',
+            source: [text('Item 007'), text('Item 008')],
+            direction: 'down',
+            expected: ['Item 009', 'Item 010', 'Item 011'],
+        },
+        {
+            name: 'text past nine grows without a leading zero',
+            source: [text('Item 8'), text('Item 9')],
+            direction: 'down',
+            expected: ['Item 10', 'Item 11', 'Item 12'],
+        },
+        {
             name: 'text up, past zero',
             source: [text('Item 2'), text('Item 3')],
             direction: 'up',

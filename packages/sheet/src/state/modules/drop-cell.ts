@@ -350,8 +350,8 @@ function textSeries(cells: readonly Cell[]) {
     const numbers = cells.flatMap((cell) => lastNumber(cell.m) ?? []);
     const step = evenStep(numbers.map(({ value }) => value));
     if (step == null) return null;
-    const { value, before, after } = numbers[numbers.length - 1];
-    return (steps: number) => `${before}${Math.abs(value + step * steps)}${after}`;
+    const { value, width, before, after } = numbers[numbers.length - 1];
+    return (steps: number) => `${before}${String(Math.abs(value + step * steps)).padStart(width, '0')}${after}`;
 }
 
 function evenStep(values: readonly number[]) {
@@ -361,10 +361,11 @@ function evenStep(values: readonly number[]) {
 
 function lastNumber(shown: Cell['m']) {
     const text = String(shown ?? '');
-    const match = [...text.matchAll(/0|[1-9][0-9]*/g)].at(-1);
+    const match = [...text.matchAll(/\d+/g)].at(-1);
     if (match == null) return null;
     return {
         value: Number(match[0]),
+        width: match[0].startsWith('0') ? match[0].length : 0,
         before: text.slice(0, match.index),
         after: text.slice(match.index + match[0].length),
     };
