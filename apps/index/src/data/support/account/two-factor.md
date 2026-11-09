@@ -5,7 +5,7 @@ type: how-to
 tags: [account, security, two-factor, authenticator, backup codes]
 related: [account/change-password]
 order: 30
-updated: 2026-10-28
+updated: 2026-11-09
 ---
 
 Two-factor authentication (2FA) adds a second check at sign-in. After you enter your password, Eigen asks for a six-digit code from an authenticator app on your phone. If someone gets hold of your password, they still cannot sign in without that code.
@@ -13,6 +13,8 @@ Two-factor authentication (2FA) adds a second check at sign-in. After you enter 
 ## Before you start
 
 You need an authenticator app on your phone or tablet. Any TOTP-compatible app works, including Google Authenticator, Authy, and Microsoft Authenticator.
+
+Documents you have open in this browser reload once, within 15 seconds, when you turn 2FA on or off.
 
 ## Turn on two-factor authentication
 
