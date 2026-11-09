@@ -2,9 +2,9 @@
 
 Finding a file you just worked on is harder than it should be when it sits deep in a shared folder or a team drive. Drive's listings show where a file lives, and the bell shows events, not files. This proposal adds a **Recent** page to Drive: one flat list of the files and folders that involve you, wherever they live, each once, newest first.
 
-**Status:** not built. The owner agreed to the design on 2026-11-09, including the `shared.db` migration and the two routes below. A builder still asks the owner right before building each of them, per AGENTS.md. A cold review checked it against the code on 2026-11-09, and nothing has been run. Size: M. It replaces the June version of this proposal, which bundled email suggestions and the command palette; those are now the later steps at the end.
+**Status:** not built. The owner agreed to the design on 2026-11-09, including the `shared.db` migration and the two routes below. A builder still asks the owner right before building each of them, per AGENTS.md. A cold review checked it against the code on 2026-11-09, and nothing of Recent has been run. The cost of opening homes below was measured under load the same day, and that measurement dropped an earlier limit on reads. Size: M. It replaces the June version of this proposal, which bundled email suggestions and the command palette; those are now the later steps at the end.
 
-> **TLDR**: A small `recent_paths` table in each user's own `shared.db` holds which file and when, nothing else. A file moves to the top when you open it or when a notification about it reaches you. The Drive route `/recent` checks the newest rows against each file's owner at read time, so names are always current and a file you can no longer read never shows. One helper in `home-relay.ts` asks at most eight homes at a time per load, and Watched, All docs and file search use it too. Every app's sidebar links to that one page, directly below Drive.
+> **TLDR**: A small `recent_paths` table in each user's own `shared.db` holds which file and when, nothing else. A file moves to the top when you open it or when a notification about it reaches you. The Drive route `/recent` checks the newest rows against each file's owner at read time, so names are always current and a file you can no longer read never shows. One helper in `aggregate.ts` logs a failed read and leaves that owner out, and Watched, All docs and file search use it too. Every app's sidebar links to that one page, directly below Drive.
 
 ## What counts
 
@@ -78,7 +78,7 @@ GET /drive/:ownerId/recent     requireSelf + requireNonGuest
 
 1. Take the caller's newest 100 rows and group them by owner, skipping an owner `getOwnerExists` says is gone, so a deleted user's rows don't log an error on each load.
 2. Look up the caller's team memberships once, for the whole load.
-3. Ask each owner through `pullFromEach` and `pullRecentPaths` ([below](#one-limit-for-reads-that-open-homes)). The caller's own home is asked the same way. An owner whose read fails is logged and adds nothing, and the others still answer.
+3. Ask each owner through `pullFromEach` and `pullRecentPaths` ([below](#one-helper-for-reads-across-homes)). The caller's own home is asked the same way. An owner whose read fails is logged and adds nothing, and the others still answer.
 4. If fewer than 100 rows came back visible, do the same for the remaining rows, at most 100 more. This is what the other 100 stored rows are for: after a bulk trash the page still has older files to show, and in the usual load those owners are never asked.
 5. Merge and sort by `lastActivityAt`, newest first, and return at most 100, each as the current `DrivePath` plus `lastActivityAt`.
 
@@ -94,39 +94,28 @@ GET /drive/:ownerId/recent     requireSelf + requireNonGuest
 
 **A read never deletes a row.** A failed lookup looks the same as a missing file at this level, and a brief error must not wipe someone's history. A hidden row comes back when access or the file does, and otherwise falls off through the 200-row trim.
 
-## One limit for reads that open homes
+## One helper for reads across homes
 
-Opening a closed home costs about 25 to 30 file descriptors and a burst of database opens. Today only pushes have a limit: `sendToUserHomes` runs under `deliveryBudget`, a semaphore of eight. Direct `sendToHome` calls and every read go around it, and `aggregateWatches`, `aggregateMimeContents` and `aggregateFileSearch` each ask their homes in one unbounded `Promise.all`.
-
-`sendToUserHomes` can't be the limit for reads. It returns no answer and mostly runs after the response, and [PROPOSAL_HOME_RELAY_OUTBOX.md](PROPOSAL_HOME_RELAY_OUTBOX.md) replaces its semaphore with the drain's `inFlight` map. So `home-relay.ts`, which every cross-home call already passes through, becomes the one place that sets the number:
-
-- One constant, `HOME_OPEN_BUDGET = 8`, replaces the bare number. `deliveryBudget` takes it today, and the outbox's `inFlight` takes it when that lands.
-- One helper runs a fan-out of reads:
+`aggregateWatches`, `aggregateMimeContents` and `aggregateFileSearch` each ask their homes in one `Promise.all` and swallow a failed read with `.catch(() => [])`, so a home that can't answer looks like a home with nothing to show, and nothing records it. One private helper in `aggregate.ts` replaces those three catches, and `aggregateRecents` uses it too:
 
 ```ts
-// One read per owner, at most HOME_OPEN_BUDGET of them at a time for this call. A failed read is logged and
-// leaves that owner out, so the other owners still answer.
-export async function pullFromEach<T>(ownerIds: string[], pull: (ownerId: string) => Promise<T>): Promise<T[]> {
-    const budget = new Semaphore(HOME_OPEN_BUDGET);
+// A failed read is logged and leaves that owner out, so the other owners still answer.
+async function pullFromEach<T>(ownerIds: string[], pull: (ownerId: string) => Promise<T>): Promise<T[]> {
     const results = await Promise.all(
         ownerIds.map((ownerId) =>
-            budget.run(() =>
-                pull(ownerId).catch((err) => {
-                    console.error(`home-relay: reading ${ownerId} failed:`, err);
-                    return null;
-                }),
-            ),
+            pull(ownerId).catch((err) => {
+                console.error(`aggregate: reading ${ownerId} failed:`, err);
+                return null;
+            }),
         ),
     );
     return results.filter((result) => result !== null);
 }
 ```
 
-- `aggregateWatches`, `aggregateMimeContents`, `aggregateFileSearch` and `aggregateRecents` all go through it, in place of their own `Promise.all` and `.catch(() => [])`.
+It sets no limit on how many reads run at once. Measured under load on 2026-11-09, a closed team home opens in 4 to 8 ms with 9 file descriptors, and a closed user home in 6 to 14 ms with 18. Watched and All docs over 100 closed team homes took 350 to 400 ms, about 320 ms of it CPU, and the longest event-loop gap was 7 to 15 ms. Opens are synchronous, so eight at a time and all at once cost the same CPU and end with the same open files.
 
-The limit is per call on purpose, not one queue for the server. A queue shared by every user would make a stuck home everyone's problem: `runInit` has no deadline, `openHome` waits for a closing home inside its permit, and eight viewers of one stuck home would stop all Watched, All docs and search on the server. Per call, a stuck home stalls only the loads that asked for it, as it does today, and needs no deadline or special case to get there. The price is that several users loading at once can each run eight. A home being built is shared by everyone who asks for it, so the same closed homes don't open twice.
-
-The limit smooths the burst of opens. It doesn't limit how many homes stay open afterwards: thirty owners read eight at a time still leave thirty homes open for their idle time, as any read of those homes does. That is the job of the LRU cap in [PROPOSAL_FD_BUDGET.md](PROPOSAL_FD_BUDGET.md). Production pins a high file limit in `docker-compose.yml`, and a dev machine at a low `ulimit -n` can run out sooner, as it already can with Watched or a large share. Recent is normally the lighter of the two, because it asks only the owners in your list, while Watched asks every team and everyone who shared with you.
+The real cost is homes held open. That run took file descriptors from 37 to 937, and those hundred homes stayed open for their idle time, as any read of them does. That is the job of the LRU cap in [PROPOSAL_FD_BUDGET.md](PROPOSAL_FD_BUDGET.md). Production pins a high file limit in `docker-compose.yml`, and a dev machine at a low `ulimit -n` can run out sooner, as it already can with Watched or a large share. Recent is normally the lighter of the two, because it asks only the owners in your list, while Watched asks every team and everyone who shared with you.
 
 `pullRecentPaths` is an ordinary pull:
 
@@ -156,7 +145,7 @@ export async function pullRecentPaths(ownerId: string, user: User, memberships: 
 
 ## Build order
 
-1. `HOME_OPEN_BUDGET` and `pullFromEach` in `home-relay.ts`, with Watched, All docs and file search on them. Its own commit: these get the limit whether or not Recent ships.
+1. `pullFromEach` in `aggregate.ts`, with Watched, All docs and file search on it. Its own commit: these log a failed read whether or not Recent ships.
 2. Table, `Drive.getRecentPathsFor`, `pullRecentPaths`, both routes, the `Home.notify` write, tests.
 3. Sidebar row, page, the sort and date props, the open reports.
 4. The latest-activity line.
@@ -167,13 +156,13 @@ Later steps get their own go, below.
 
 `apps/api/src/test/drive/recent.test.ts`: one row after repeated opens, the 200-row trim, a revoked share hidden and back after re-sharing, a trashed file hidden and back after restore, a deleted file, a mount root, a file inside a container, a shared, a team and a public file, a share notification adding a row, a dismissed notification keeping it, a type without a path adding none, a failing write not failing the notification, a guest refused by both routes, a row for a file the user can't read staying hidden, a row on a missing mount leaving that owner's other rows, one failing owner leaving the others and keeping its rows, a deleted owner skipped, only the newest 100 rows asked in the usual load, and the older rows asked when too few are visible.
 
-In `apps/api/src/test/home/`: `pullFromEach` runs no more than eight reads at once, leaves out a failed read, and a stuck read in one call leaves another call moving.
+In `apps/api/src/test/drive/`, through the public `aggregate*` functions since the helper is private: Watched, All docs and file search each log a failed read, leave that owner out and still return the other owners' files.
 
 Plus `app-sidebar.test.tsx` for the row in Drive and in an app, a test that sorting Recent leaves the shared preference alone, and a run through the verify-in-browser skill.
 
 ## Docs when it lands
 
-`docs/STORAGE.md` or a new domain doc for the table, [ARCHITECTURE.md](../ARCHITECTURE.md) for the concept, [NOTIFICATION-CENTER.md](../NOTIFICATION-CENTER.md) for the write in `Home.notify`, [SCALABILITY.md](../SCALABILITY.md) for `pullFromEach`, the "pulls don't pass the budget" lines in [PROPOSAL_HOME_RELAY_OUTBOX.md](PROPOSAL_HOME_RELAY_OUTBOX.md) and [PROPOSAL_FD_BUDGET.md](PROPOSAL_FD_BUDGET.md), a help-center article under `apps/index/src/data/support/drive/` and `CHANGELOG.md`.
+`docs/STORAGE.md` or a new domain doc for the table, [ARCHITECTURE.md](../ARCHITECTURE.md) for the concept, [NOTIFICATION-CENTER.md](../NOTIFICATION-CENTER.md) for the write in `Home.notify`, [SCALABILITY.md](../SCALABILITY.md) for `pullRecentPaths`, a help-center article under `apps/index/src/data/support/drive/` and `CHANGELOG.md`.
 
 ## Later: Recent files in the command palette
 
@@ -197,7 +186,6 @@ To decide then: whether an address typed into a draft that is never sent counts,
 - **Storing names and types.** Stale after a rename, and they show a file you lost access to.
 - **Recording opens in `GET /collab/.../info`.** It counts refetches as opens, and misses chats and plain files.
 - **Reporting an open through the file's owner, with an access check.** It would open the owner's home for each report, and it would cross from the owner's route into the caller's home. The read's check already covers it.
-- **`sendToUserHomes` as the read limit.** It returns no answer, and the outbox removes its semaphore.
-- **One queue for all reads, or a limit inside `getHome`.** Either bounds the whole server, but a stuck open would then stall other users too, and the fix is a deadline plus a bypass for open homes. A limit per call has neither problem.
+- **A limit on reads that open homes, per load or for the whole server.** Opens are synchronous, so a limit saves no CPU and leaves the same homes open, as measured [above](#one-helper-for-reads-across-homes). A server-wide queue would also let a stuck open stall other users.
 - **Closing a home straight after reading it, with `openHome` and `withHomeHeld`.** It would hold down how many homes stay open, but every load would rerun each closed owner's whole open and close: `history.prune`, the trash purge, the reindex kick, and a close that waits on them while that owner's own requests wait too.
 - **A list that updates live.** Each notification, such as every message in a busy chat, would read every owner again.
