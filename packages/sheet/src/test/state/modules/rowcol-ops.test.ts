@@ -796,4 +796,62 @@ describe('undo and redo of a row op land the selection', () => {
         expect(mine.ctx.editingCellPosition).toEqual([2, 1]);
         expect(rowOf(mine)).toEqual([2, 2]);
     });
+
+    test('my own insert above the open cell editor moves the editor with its cell', () => {
+        const base = produce(selected(3), (draft: Context) => {
+            draft.editingCellPosition = [3, 1];
+        });
+        const mine = tab(base);
+        const op = inserted(1, 'lefttop');
+        tabEdit(mine, (ctx) => insertRowCol(ctx, op), { insertRowColOp: op });
+        expect(mine.ctx.editingCellPosition).toEqual([4, 1]);
+        expect(rowOf(mine)).toEqual([1, 1]);
+    });
+
+    test('my own insert below the open cell editor leaves it, and a column insert left of it moves it', () => {
+        const base = produce(selected(1), (draft: Context) => {
+            draft.editingCellPosition = [1, 1];
+        });
+        const below = tab(base);
+        const row = inserted(2, 'lefttop');
+        tabEdit(below, (ctx) => insertRowCol(ctx, row), { insertRowColOp: row });
+        expect(below.ctx.editingCellPosition).toEqual([1, 1]);
+        const left = tab(base);
+        const column = { type: 'column', index: 0, count: 1, direction: 'lefttop', id: 'id_1' } as const;
+        tabEdit(left, (ctx) => insertRowCol(ctx, column), { insertRowColOp: column });
+        expect(left.ctx.editingCellPosition).toEqual([1, 2]);
+    });
+
+    // The fixture's D4 is covered by the merge at C4:D4.
+    test('my own delete that lands on a covered cell takes the merge head', () => {
+        const mine = tab(
+            produce(selected(2), (draft: Context) => {
+                draft.selections = [{ row: [2, 2], column: [3, 3], row_focus: 2, column_focus: 3 }];
+            }),
+        );
+        const op = { type: 'row', start: 2, end: 2, id: 'id_1' } as const;
+        tabEdit(mine, (ctx) => deleteRowCol(ctx, op), { deleteRowColOp: op });
+        expect(mine.ctx.selections?.[0]).toMatchObject({
+            row: [2, 2],
+            column: [2, 3],
+            row_focus: 2,
+            column_focus: 2,
+        });
+    });
+
+    test('the undo of my insert that lands on a covered cell takes the merge head', () => {
+        const mine = tab(selected(1));
+        const op = inserted(3, 'lefttop');
+        tabEdit(mine, (ctx) => insertRowCol(ctx, op), { insertRowColOp: op });
+        mine.ctx = produce(mine.ctx, (draft: Context) => {
+            draft.selections = [{ row: [3, 3], column: [3, 3], row_focus: 3, column_focus: 3 }];
+        });
+        tabUndo(mine);
+        expect(mine.ctx.selections?.[0]).toMatchObject({
+            row: [3, 3],
+            column: [2, 3],
+            row_focus: 3,
+            column_focus: 2,
+        });
+    });
 });

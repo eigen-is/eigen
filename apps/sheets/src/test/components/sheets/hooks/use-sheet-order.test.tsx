@@ -677,6 +677,74 @@ test("a peer's sheet add after a peer deleted the selected row leaves the select
     expectJoined(tab);
 });
 
+// The merge's head shows what the merge holds, so text typed into a covered cell would never show.
+test("a peer's delete that lands the selection inside a merge types into the head", async () => {
+    const s = new Y.Doc();
+    s.clientID = 1000;
+    const covered = { mc: { r: 3, c: 1 } };
+    const merged: Sheet = {
+        ...sheet({}),
+        config: { merge: { '3_1': { r: 3, c: 1, rs: 2, cs: 2 } } },
+        celldata: [
+            { r: 3, c: 1, v: { v: 'HEAD', m: 'HEAD', mc: { r: 3, c: 1, rs: 2, cs: 2 } } },
+            { r: 3, c: 2, v: covered },
+            { r: 4, c: 1, v: covered },
+            { r: 4, c: 2, v: covered },
+        ],
+    };
+    writeSheetsSnapshot(s, encodeSheetsSnapshot([merged], { computed: true }), null);
+    const tab = await openTab(s, 50);
+    const peer = replica(s, 100);
+    await tab.select(2, 2);
+    push(peer, rowDelete(2));
+    await deliver(peer, tab.doc);
+    expect([tab.seen.selection?.row, tab.seen.selection?.column]).toEqual([
+        [2, 3],
+        [1, 2],
+    ]);
+    await tab.typeOver('typed');
+    expect([tab.cell(2, 1)?.v, tab.cell(2, 2)?.v]).toEqual(['typed', undefined]);
+    expectJoined(tab);
+});
+
+// Concurrent deletes can leave no rows. No cell is left to land on, so no key opens an editor or throws, and a peer's
+// insert brings the grid back for a click to select in.
+test("a peer's delete of every row drops the selection, the keys do nothing, and a peer's insert works", async () => {
+    const s = server({ '3_0': 'gone' });
+    const tab = await openTab(s, 50);
+    const peer = replica(s, 100);
+    await tab.select(3, 0);
+    push(peer, [{ op: 'deleteRowCol', id: 's1', path: [], value: { type: 'row', start: 0, end: 11 } }]);
+    await deliver(peer, tab.doc);
+    expect(tab.workbook().getFlowdata()).toEqual([]);
+    const thrown: unknown[] = [];
+    const onError = (event: ErrorEvent) => thrown.push(event.error);
+    window.addEventListener('error', onError);
+    const sent = opsIn(tab.doc);
+    for (const [key, keyCode] of [
+        ['ArrowDown', 40],
+        ['Enter', 13],
+        ['Enter', 13],
+        ['Tab', 9],
+        ['Escape', 27],
+        ['x', 88],
+    ] as const) {
+        await tab.press(key, keyCode);
+    }
+    window.removeEventListener('error', onError);
+    expect(thrown).toEqual([]);
+    expect(opsIn(tab.doc)).toBe(sent);
+    push(peer, rowInsert(0));
+    push(peer, [
+        { op: 'insertRowCol', id: 's1', path: [], value: { type: 'column', index: 0, count: 1, direction: 'lefttop' } },
+    ]);
+    await deliver(peer, tab.doc);
+    expect(tab.workbook().getFlowdata()).toEqual([[null]]);
+    await tab.type(0, 0, 'back');
+    expect(tab.cell(0, 0)?.v).toBe('back');
+    expectJoined(tab);
+});
+
 // The box lands on the next row, and the text typed for the cell that went must not follow it there.
 test("a peer's delete of the cell being edited closes the editor and writes its text nowhere", async () => {
     const s = server({ '3_0': 'mine', '4_0': 'theirs' });

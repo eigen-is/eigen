@@ -658,14 +658,73 @@ describe("the selection follows a peer's row and column ops", () => {
         expect(focus(applyPeerOps(selected(3, 1), batch))).toEqual([[1, 1], [1, 1], 1, 1]);
     });
 
-    // Two peers each deleting most of the rows can leave none, which every reader applies.
-    it('a delete of every row or column still applies', () => {
+    // Two peers each deleting most of the rows can leave none, which every reader applies. No cell is left to land on,
+    // and the keys throw on a selection with no cell under it.
+    it('a delete of every row or column applies and drops the selection', () => {
         const rows = applyPeerOps(selected(2, 1), [remove('row', 0, 3)]);
         expect(rows.sheets[0].data).toEqual([]);
-        expect(focus(rows)).toEqual([[0, 0], [1, 1], 0, 1]);
+        expect(rows.selections).toBeUndefined();
         const columns = applyPeerOps(selected(2, 1), [remove('column', 0, 3)]);
         expect(columns.sheets[0].data?.[0]).toEqual([]);
-        expect(focus(columns)).toEqual([[2, 2], [0, 0], 2, 0]);
+        expect(columns.selections).toBeUndefined();
+    });
+
+    it('a delete of every row on a sheet the tab left drops the selection kept for it', () => {
+        expect(applyPeerOps(leftBehind(), [remove('row', 0, 3)]).sheetViewRecord.id_1?.selections).toBeUndefined();
+    });
+
+    describe('a landing on a merged cell', () => {
+        // B2:C3 merged, in the four by four grid.
+        const merged = (r: number, c: number) =>
+            produce(selected(r, c), (draft: Context) => {
+                const [sheet] = draft.sheets;
+                sheet.config = { merge: { '1_1': { r: 1, c: 1, rs: 2, cs: 2 } } };
+                const { data } = sheet;
+                if (!data) return;
+                data[1][1] = { v: 'HEAD', m: 'HEAD', mc: { r: 1, c: 1, rs: 2, cs: 2 } };
+                data[1][2] = { mc: { r: 1, c: 1 } };
+                data[2][1] = { mc: { r: 1, c: 1 } };
+                data[2][2] = { mc: { r: 1, c: 1 } };
+            });
+
+        it('takes the head, with the box over the merge', () => {
+            expect(focus(applyPeerOps(merged(0, 2), [remove('row', 0, 0)]))).toEqual([[0, 1], [1, 2], 0, 1]);
+            expect(focus(applyPeerOps(merged(2, 0), [remove('column', 0, 0)]))).toEqual([[1, 2], [0, 1], 1, 0]);
+        });
+
+        it('takes the head when the clamp puts it there', () => {
+            const clamped = applyPeerOps(merged(3, 2), [remove('row', 3, 3)]);
+            expect(focus(clamped)).toEqual([[1, 2], [1, 2], 1, 1]);
+        });
+
+        it('takes the head on a sheet the tab left', () => {
+            const left = produce(merged(0, 2), (draft: Context) => {
+                changeSheet(draft, 'id_2');
+            });
+            expect(focus(backOnFirst(applyPeerOps(left, [remove('row', 0, 0)])))).toEqual([[0, 1], [1, 2], 0, 1]);
+        });
+
+        it('leaves a selection a delete only moves on the cell it was on', () => {
+            const moved = produce(merged(3, 2), (draft: Context) => {
+                draft.selections = [{ row: [3, 3], column: [0, 3], row_focus: 3, column_focus: 2, row_select: true }];
+            });
+            const [selection] = applyPeerOps(moved, [remove('row', 0, 0)]).selections ?? [];
+            expect(selection).toMatchObject({ row: [2, 2], column: [0, 3], row_focus: 2, column_focus: 2 });
+        });
+
+        it('keeps a whole row selected from its header, and grows it over the merge it lands on', () => {
+            const whole = produce(merged(0, 0), (draft: Context) => {
+                draft.selections = [{ row: [0, 0], column: [0, 3], row_focus: 0, column_focus: 2, row_select: true }];
+            });
+            const [selection] = applyPeerOps(whole, [remove('row', 0, 0)]).selections ?? [];
+            expect(selection).toMatchObject({
+                row: [0, 1],
+                column: [0, 3],
+                row_focus: 0,
+                column_focus: 1,
+                row_select: true,
+            });
+        });
     });
 
     it('a whole row or column selected from its header stays on that number', () => {
