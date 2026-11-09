@@ -110,6 +110,10 @@ const READS_ERRORS: Record<string, (position: number) => boolean> = {
     COUNTUNIQUE: all,
 };
 
+export function isRegisteredFunction(name: string): boolean {
+    return availableFunctions[name.toUpperCase()] != null;
+}
+
 // A name Excel doesn't know either, such as a typo, is #NAME? in-band, so IFERROR and ISERROR around it see it as they
 // see any error, as in Excel. A real Excel function the engine lacks is UNSUPPORTED_FUNCTION, which every function
 // hands on, IFERROR, IFNA, ISERROR and ERROR.TYPE too, because their answer would read as the one Excel computed.

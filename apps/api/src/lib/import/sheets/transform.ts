@@ -29,8 +29,8 @@ export function importXlsxToSheetsSnapshot(
     };
 }
 
-// The recalc reconciles the values Excel cached with the engine's, so a later read needn't compute the sheets again.
-// Only a recalc that succeeded is stored as computed. A failure stores the sheets uncomputed with a warning, and an
+// The recalc trusts the values Excel cached and computes only the formulas that hold none, so a later read needn't
+// compute the sheets again. Only a recalc that succeeded is stored as computed. A failure stores the sheets uncomputed with a warning, and an
 // export recalcs them under the same budget.
 function recalcImportedSheets(sheets: Sheet[], warnings: TransformWarning[]): { sheets: Sheet[]; computed: boolean } {
     try {

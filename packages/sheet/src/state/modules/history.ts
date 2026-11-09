@@ -11,6 +11,8 @@ import { get, isEqual } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import { applyPatches, produce, produceWithPatches } from 'immer';
 import { computedKey, createArrayResolver } from '../../engine/cell-resolver';
+import { applyRowColOp } from '../../engine/replay-ops';
+import { RowColError } from '../../engine/rowcol';
 import type { Cell, CellMatrix } from '../../engine/types';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
@@ -55,7 +57,13 @@ export function recordEntry(
             renamedSheet: { id, from: getSheet(before, { id }).name, to: getSheet(after, { id }).name },
         });
     }
-    if (deleteSheetOp) return structural({ deletedSheet: storedCopy(getSheet(before, { id: deleteSheetOp.id })) });
+    if (deleteSheetOp) {
+        return {
+            patches: [],
+            inversePatches: rewrittenByDelete(before, after),
+            options: { deletedSheet: storedCopy(getSheet(before, { id: deleteSheetOp.id })) },
+        };
+    }
     // An add puts its sheet last in the list, whatever its order.
     if (addSheetOp) return structural({ addedSheet: storedCopy(after.sheets[after.sheets.length - 1]) });
     const rowCol = { insertRowColOp, deleteRowColOp };
@@ -64,6 +72,19 @@ export function recordEntry(
         inversePatches: bySheetId(inversePatches, before.sheets),
         options: rowCol,
     };
+}
+
+// What a sheet's delete changed on the sheets it left: the formulas naming it and what reads them.
+function rewrittenByDelete(before: Context, after: Context): Patch[] {
+    const recorded: Patch[] = [];
+    for (const sheet of after.sheets) {
+        const was = getSheet(before, { id: sheet.id });
+        for (const field of ['data', 'conditionalFormatRules'] as const) {
+            if (was[field] === sheet[field]) continue;
+            recorded.push({ op: 'replace', path: ['sheets', sheet.id, field], value: was[field] });
+        }
+    }
+    return recorded;
 }
 
 // How far back undo reaches. A row, column or sheet entry may hold whole cell matrices, so fewer of those stay.
@@ -102,7 +123,7 @@ export function stepNewestEntry(
 
 export function undoEntry(ctx: Context, { options, patches, inversePatches }: History): Step {
     const { addedSheet, deletedSheet, renamedSheet } = options;
-    if (deletedSheet) return sheetStep(ctx, (sheets) => addSheetOps(deletedSheet, sheets));
+    if (deletedSheet) return sheetStep(ctx, (sheets) => addSheetOps(deletedSheet, sheets), inversePatches);
     if (addedSheet) return sheetStep(ctx, (sheets) => deleteSheetOps(addedSheet, sheets));
     if (renamedSheet) return batchStep(ctx, renameSheetOps(renamedSheet.id, renamedSheet.from));
     const marker = rowColMarker(inverseRowColOptions(options));
@@ -143,11 +164,13 @@ function batchStep(ctx: Context, ops: Op[]): Step {
     return applied ? { ctx: produce(applied.ctx, settleCurrentSheet), ops } : { ctx, ops: [] };
 }
 
-// A sheet comes back, or goes, through applyOpBatch, as a peer's would. The step is the author here, so it moves the
-// other sheets' orders itself, and the batch it sends carries the orders it left.
-function sheetStep(ctx: Context, batch: (sheets: Sheet[]) => Op[]): Step {
+// A sheet comes back, or goes, through applyOpBatch, as a peer's would, with what its delete rewrote on the other sheets.
+// The step is the author here, so it moves the other sheets' orders itself, and the batch it sends carries the orders
+// it left.
+function sheetStep(ctx: Context, batch: (sheets: Sheet[]) => Op[], recorded: Patch[] = []): Step {
     const [sheetOp] = batch(ctx.sheets);
-    const applied = applyOpBatch(ctx, [sheetOp]);
+    const restored = restoredOps(ctx.sheets, recorded);
+    const applied = applyOpBatch(ctx, [sheetOp, ...restored]);
     if (!applied) return { ctx, ops: [] };
     const next = produce(applied.ctx, (draft: Context) => {
         if (sheetOp.op === 'addSheet') {
@@ -159,7 +182,7 @@ function sheetStep(ctx: Context, batch: (sheets: Sheet[]) => Op[]): Step {
         }
         settleCurrentSheet(draft);
     });
-    return { ctx: next, ops: batch(next.sheets) };
+    return { ctx: next, ops: [...batch(next.sheets), ...restored] };
 }
 
 // A cell or field entry: `apply` goes in, and `written`, the entry's other side, says what the targets should hold.
@@ -211,21 +234,35 @@ function recalculate(ctx: Context, patches: Patch[]) {
     execFunctionGroup(ctx, [...cells.values()]);
 }
 
-// The batch is the marker and what it did not bring back of the recorded fields and cells. A write the marker already
-// made stays off the wire, so a receiver keeps its own shift of a batch on its way.
+// The batch is the marker and what it did not bring back of the recorded fields and cells, read off the engine's own
+// result of the marker. Every reader then recomputes after the whole batch, so what the marker disturbed on a sheet the
+// entry never recorded comes back through the repairs. A write the marker already made stays off the wire, so a receiver
+// keeps its own shift of a batch on its way.
 function undoRowCol(ctx: Context, marker: Op, recorded: Patch[]): Step {
-    const moved = applyOpBatch(ctx, [marker]);
-    if (!moved) return { ctx, ops: [] };
+    let moved: Sheet[];
+    try {
+        moved = applyRowColOp(ctx.sheets, marker);
+    } catch (e) {
+        if (e instanceof RowColError) return { ctx, ops: [] };
+        throw e;
+    }
+    const restored = restoredOps(moved, recorded);
+    const ops = [marker, ...restored];
+    const applied = applyOpBatch(ctx, ops);
+    return applied ? { ctx: produce(applied.ctx, settleCurrentSheet), ops } : { ctx, ops: [] };
+}
+
+// The recorded writes `sheets` don't hold yet, the cells one by one.
+function restoredOps(sheets: Sheet[], recorded: Patch[]): Op[] {
     const restored: Op[] = [];
     for (const { op, path, value } of recorded) {
         const [, id, ...rest] = path;
-        const sheet = moved.ctx.sheets.find((s) => s.id === id);
+        const sheet = sheets.find((s) => s.id === id);
         if (!sheet) continue;
         if (rest.length === 1 && rest[0] === 'data') restored.push(...repairOps(sheet, value));
         else if (!isEqual(get(sheet, rest), value)) restored.push({ op, id: sheet.id, path: rest, value });
     }
-    const applied = applyOpBatch(moved.ctx, restored, false);
-    return applied ? { ctx: produce(applied.ctx, settleCurrentSheet), ops: [marker, ...restored] } : { ctx, ops: [] };
+    return restored;
 }
 
 // The cells the marker left different from the recorded matrix, such as rows a delete took and a formula it made #REF!.

@@ -7,14 +7,15 @@ import { celldataToData } from '../../engine/celldata';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT, gridSize } from '../../engine/defaults';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { RenameSheetOp } from '../../engine/sheet-name';
-import { applySheetRename, sheetNameRefusal } from '../../engine/sheet-name';
+import { applySheetDelete, applySheetRename, sheetNameRefusal } from '../../engine/sheet-name';
 import type { Context } from '../context';
 import { firstVisibleSheetId, updateContextWithSheetData } from '../context';
 import type { Sheet } from '../types';
-import { getSheetIndex, nextSheetName, sheetOrder } from '../utils';
+import { getSheetIndex, nextSheetName, renameSheetOps, sheetOrder } from '../utils';
 import { cancelNormalSelected } from './cell';
 import { createFilterOptions } from './filter';
 import { snapshotContext } from './formula-cache';
+import { recomputeAfterOps } from './formula-exec';
 import { writeBackSheets } from './rowcol';
 import { normalizeSelection } from './selection';
 
@@ -98,7 +99,10 @@ export function addSheet(
     if (sheetData && !fromBatch) shiftSheetOrders(ctx.sheets, sheetOrder(sheetData), 1);
     initSheetData(sheet);
     ctx.sheets.push(sheet);
+    // A name that read no sheet may read this one now, and the map holds none of its formulas.
+    ctx.formulaCache.formulaCellInfoMap = null;
     if (!newSheetID) changeSheet(ctx, id);
+    if (!fromBatch) recomputeAfterOps(ctx, [{ op: 'addSheet', id, path: [], value: { name: sheet.name } }]);
 }
 
 // A sheet's cells are stored as a sparse list but the editor works on a full matrix, so a sheet gets its matrix
@@ -124,13 +128,16 @@ export function deleteSheet(
     const index = getSheetIndex(ctx, id);
     if (index == null) return;
 
+    const rewritten = applySheetDelete(ctx.sheets, id);
     const [deleted] = ctx.sheets.splice(index, 1);
+    writeBackSheets(ctx, rewritten);
     // The formula map and its resolved references still read the deleted sheet under its name, which a sheet added
     // later may take.
     ctx.formulaCache.formulaCellInfoMap = null;
     if (fromBatch) return;
     shiftSheetOrders(ctx.sheets, sheetOrder(deleted), -1);
     if (id === ctx.currentSheetId) leaveCurrentSheet(ctx);
+    recomputeAfterOps(ctx, [{ op: 'deleteSheet', id, path: [], value: { id } }]);
 }
 
 // A sheet added at order `at`, or deleted from it, moves the sheets from there on one place. Only the author's edit
@@ -163,7 +170,8 @@ export function editSheetName(ctx: Context, id: string, editable: HTMLSpanElemen
 
 // The walk reads a plain snapshot, since reading each formula through a draft is slow. A name that read no sheet may
 // read this one now, so the formula map is built again.
-export function renameSheet(ctx: Context, op: RenameSheetOp) {
+export function renameSheet(ctx: Context, op: RenameSheetOp, fromBatch = false) {
     writeBackSheets(ctx, applySheetRename(snapshotContext(ctx).sheets, op));
     ctx.formulaCache.formulaCellInfoMap = null;
+    if (!fromBatch) recomputeAfterOps(ctx, renameSheetOps(op.id, op.name));
 }

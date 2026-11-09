@@ -1,6 +1,6 @@
 // Applies one op batch to the editor's context, as replaySheetsOps applies it to a joiner's sheets: the sheet, row and
-// column ops first, then the cell and field patches, whole or not at all. An op the replay's shape check refuses is
-// skipped. A batch that changes the open workbook outside an edit's own recipe comes through here, such as a peer's
+// column ops first, then the cell and field patches, whole or not at all, then the recompute a sheet, row or column op
+// asks for. An op the replay's shape check refuses is skipped. A batch that changes the open workbook outside an edit's own recipe comes through here, such as a peer's
 // batch, a log replay or a structural undo, so every tab ends the same. It reports the ops that moved rows, which the
 // undo stacks follow, and a batch new to the tab moves the tab's view too, such as the cell editor and the selections.
 
@@ -12,7 +12,7 @@ import type { Context } from '../context';
 import type { Op, Selection, Sheet } from '../types';
 import { opToPatch } from '../utils';
 import { cancelNormalSelected } from './cell';
-import { registerSheetFormulas } from './formula-cache';
+import { recomputeAfterOps } from './formula-exec';
 import type { RowColMove } from './history-shift';
 import { deleteMove, insertMove } from './history-shift';
 import { deleteRowCol, insertRowCol } from './rowcol';
@@ -29,8 +29,6 @@ export function applyOpBatch(
     moveView = true,
 ): { ctx: Context; moved: AppliedRowCol[] } | null {
     let patches: Patch[] = [];
-    // The sheets this batch adds, whose formulas the formula map learns once the batch applied.
-    const added: string[] = [];
     const moved: AppliedRowCol[] = [];
     let next: Context;
     try {
@@ -58,12 +56,11 @@ export function applyOpBatch(
                     // addSheet keeps the value it is given, so the op itself never ends up in the frozen context.
                     const value = cloneDeep(op.value);
                     addSheet(draft, value.id, undefined, value, true);
-                    added.push(value.id);
                 } else if (op.op === 'deleteSheet' && id) {
                     deleteSheet(draft, id, true);
                     if (moveView && id === draft.currentSheetId) leaveCurrentSheet(draft);
                 } else if (op.op === 'renameSheet') {
-                    renameSheet(draft, renameSheetOf(op));
+                    renameSheet(draft, renameSheetOf(op), true);
                 }
             }
             [patches] = opToPatch(draft, ops);
@@ -72,16 +69,13 @@ export function applyOpBatch(
                 leaveCurrentSheet(draft, first.id);
             }
             if (patches.length > 0) applyPatches(draft, patches);
+            recomputeAfterOps(draft, ops);
         });
     } catch (e) {
         console.warn('[sheet] op batch failed to apply, skipping batch:', e);
         return null;
     }
     // The formula map lives outside immer, so it follows the batch only once the batch applied.
-    for (const id of added) {
-        const data = next.sheets.find((sheet) => sheet.id === id)?.data;
-        if (data) registerSheetFormulas(next, id, data);
-    }
     if (patches.length > 0) next.formulaCache.updateFormulaCache(next, patches);
     return { ctx: next, moved };
 }

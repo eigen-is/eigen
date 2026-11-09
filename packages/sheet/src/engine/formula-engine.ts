@@ -1,10 +1,12 @@
 // The formula engine the editor and the server's recalc share. It owns one Parser, answers its cell and range reads
 // from the CellResolver, and turns each result into a cell value, a display string and a type. An error a cell holds
 // reads back as an error, so ISERROR and IFERROR see it.
-// Every range read is clamped to the sheet's grid and counted against maxCellsRead.
+// Every range read is clamped to the sheet's grid and counted against maxCellsRead. It also says when this build can't
+// evaluate a formula's own text, which a recompute takes as no answer.
 
 import { DependencyIndex } from './dependency-index';
 import { cellValue } from './format';
+import { inlineNames } from './formula-shift';
 import { matrixWidth } from './formula-utils';
 import { Parser } from './parser';
 import errorParser, {
@@ -16,6 +18,7 @@ import errorParser, {
     UNSUPPORTED_FUNCTION,
     valueIsError,
 } from './parser/error';
+import { isRegisteredFunction } from './parser/evaluate-by-operator/evaluate-by-operator';
 import { dateToSerial } from './parser/helper/number';
 import type {
     Cell,
@@ -42,6 +45,11 @@ function getCellValue(cell: Cell | null | undefined): FormulaValue {
     return value === errorParser(ERROR_NAME) ? UNSUPPORTED_FUNCTION : toFormulaError(Error(value));
 }
 
+// A name as Excel spells one: a letter, `_` or `\` first, then letters, digits, `_`, `.`, `\` or `?`.
+const NAME_RE = /^[\p{L}_\\][\p{L}\p{N}_.\\?]*$/u;
+
+const FUNCTION_CALL_RE = /([\p{L}_][\p{L}\p{N}_.]*)\s*\(/gu;
+
 function inferType(value: unknown): EvaluationResult['type'] {
     if (typeof value === 'number') return 'number';
     if (typeof value === 'boolean') return 'boolean';
@@ -58,7 +66,7 @@ export class FormulaEngine {
     private widths = new Map<string, number>();
     private widthsOf: CellResolver | null = null;
     // The cells range reads have cost; a read that would pass `maxCellsRead` fails before it reads.
-    public cellsRead = 0;
+    private cellsRead = 0;
     private readonly maxCellsRead: number;
 
     public constructor({ maxCellsRead = Number.POSITIVE_INFINITY } = {}) {
@@ -71,9 +79,26 @@ export class FormulaEngine {
         this.parser = new Parser();
     }
 
-    // True for a name a formula may use bare, such as TRUE. The engine has no defined names, so any other is #NAME?.
-    public isKnownName(name: string): boolean {
-        return this.parser.getVariable(name) !== undefined;
+    // True when the result says nothing because of the formula's own text: a parse failure, a function this build lacks
+    // that the branch taken holds, or a name it can't resolve, whose #NAME? an IFERROR would trap into a fallback nobody
+    // computed. A #NAME? read from another cell is the other cell's. A name Excel reads past its last column (RhoCO2)
+    // is one the engine reads as a cell.
+    public cantEvaluate(formula: string, { value }: EvaluationResult): boolean {
+        if (value === errorParser(ERROR) && !this.parser.parses(formula.substring(1))) return true;
+        if (value === errorParser(ERROR_NAME)) {
+            const calls = formula.replace(/"(?:[^"]|"")*"/g, '""').matchAll(FUNCTION_CALL_RE);
+            for (const [, name] of calls) if (!isRegisteredFunction(name)) return true;
+        }
+        let unknown = false;
+        inlineNames(formula, (name) => {
+            if (NAME_RE.test(name) && this.parser.getVariable(name) === undefined) unknown = true;
+            return undefined;
+        });
+        return unknown;
+    }
+
+    public assertWithinCellBudget(): void {
+        if (this.cellsRead > this.maxCellsRead) throw new RangeError('Formula ranges read past the cell budget');
     }
 
     public evaluate(formula: string, sheetId: string, resolver: CellResolver): EvaluationResult {

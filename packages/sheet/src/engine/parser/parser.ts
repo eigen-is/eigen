@@ -57,6 +57,15 @@ export class Parser {
         }
     }
 
+    public parses(expression: string): boolean {
+        try {
+            this.parser.parse(expression);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
     public evaluate(compiled: CompiledFormula, options: ParserOptions = {}): ParseResult {
         let result: unknown = null;
         let error: string | null = null;

@@ -1,11 +1,19 @@
 // Reads and rewrites the references in a formula's text without parsing it: a copy or a fill shifts its relative refs,
-// an inserted or deleted row or column moves the refs past it, a renamed sheet renames them, an xlsx import replaces
-// each defined name with what it refers to, and the dependency walk lists them. One character walker finds the refs and
-// the names for all of them. It reads only plain sheets, so the editor and the server share it, for example in the op
+// an inserted or deleted row or column moves the refs past it, a renamed sheet renames them and a deleted one breaks
+// them, an xlsx import replaces each defined name with what it refers to, and the dependency walk lists them. One
+// character walker finds the refs and the names for all of them. It reads only plain sheets, so the editor and the server share it, for example in the op
 // replay and the recalc.
 
 import type { Sheet } from '@workspace/lib/sheets';
-import { a1RangeRef, extractLabel, parseA1Range, sheetRefName, toLabel, unquoteSheetName } from './a1-notation';
+import {
+    a1RangeRef,
+    extractLabel,
+    parseA1Range,
+    sheetNameKey,
+    sheetRefName,
+    toLabel,
+    unquoteSheetName,
+} from './a1-notation';
 import { formulaOperators, iscelldata, isFormula } from './formula-utils';
 import { offsetCoordinate, offsetRange, sortLegs } from './parser/helper/cell';
 import { error } from './validation';
@@ -25,14 +33,42 @@ export function renameSheetRefs(
     findSheet: (name: string) => { name: string } | undefined,
     renames: ReadonlyMap<string, string>,
 ): string {
-    if (renames.size === 0 || !txt.includes('!')) return txt;
-    const renamed = walkFormulaRefs(txt, (ref) => {
-        const sheetEnd = ref.lastIndexOf('!');
-        const sheet = sheetEnd > 0 ? findSheet(unquoteSheetName(ref.slice(0, sheetEnd))) : undefined;
+    if (renames.size === 0) return txt;
+    return rewriteSheetRefs(txt, (ref, sheetEnd) => {
+        const sheet = findSheet(unquoteSheetName(ref.slice(0, sheetEnd)));
         const name = sheet && renames.get(sheet.name);
         return name === undefined ? ref : `${sheetRefName(name)}${ref.slice(sheetEnd)}`;
     });
-    return txt.startsWith('=') ? `=${renamed}` : renamed;
+}
+
+// Every ref naming a deleted sheet becomes #REF!, the text a row delete leaves. A leading `=` is kept.
+export function breakSheetRefs(
+    txt: string,
+    findSheet: (name: string) => { name: string } | undefined,
+    deleted: string,
+): string {
+    return rewriteSheetRefs(txt, (ref, sheetEnd) =>
+        findSheet(unquoteSheetName(ref.slice(0, sheetEnd)))?.name === deleted ? error.r : ref,
+    );
+}
+
+// True when a ref in the formula names `key`, a sheetNameKey, whether a sheet holds that name or not.
+export function namesSheet(txt: string, key: string): boolean {
+    let found = false;
+    rewriteSheetRefs(txt, (ref, sheetEnd) => {
+        if (sheetNameKey(unquoteSheetName(ref.slice(0, sheetEnd))) === key) found = true;
+        return ref;
+    });
+    return found;
+}
+
+function rewriteSheetRefs(txt: string, rewrite: (ref: string, sheetEnd: number) => string): string {
+    if (!txt.includes('!')) return txt;
+    const rewritten = walkFormulaRefs(txt, (ref) => {
+        const sheetEnd = ref.lastIndexOf('!');
+        return sheetEnd > 0 ? rewrite(ref, sheetEnd) : ref;
+    });
+    return txt.startsWith('=') ? `=${rewritten}` : rewritten;
 }
 
 // The sheet with `rewrite` run over the formula text in its cells and formula rules.

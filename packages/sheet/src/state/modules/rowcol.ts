@@ -1,7 +1,8 @@
 // Row and column inserts, deletes, hides and unhides on the open workbook. The engine shifts what every reader of the
 // workbook sees, such as the cells, the formulas and the links (applySheetsInsertRowCol). This module writes that result
 // back into the editor's draft, then moves what only this tab holds, such as the selection. A local edit, a peer's op
-// and an undo all come through here. It also tells the editors and the arrow keys where the hidden rows and columns are.
+// and an undo all come through here, and a local edit recomputes what it affected, as a batch does once it applied. It
+// also tells the editors and the arrow keys where the hidden rows and columns are.
 
 import { isRecord } from '@workspace/lib/guards';
 import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
@@ -10,6 +11,7 @@ import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
 import type { Sheet } from '../types';
+import { recomputeAfterOps } from './formula-exec';
 
 export const ONE_AREA_ONLY = 'Cannot perform this operation on multiple selection areas, please select a single area';
 
@@ -36,6 +38,7 @@ export function insertRowCol(
     }
 
     ctx.formulaCache.formulaCellInfoMap = null;
+    if (!fromBatch) recomputeAfterOps(ctx, [{ op: 'insertRowCol', id: op.id, path: [], value: op }]);
 }
 
 export function deleteRowCol(
@@ -48,9 +51,10 @@ export function deleteRowCol(
     if (!fromBatch && ctx.allowEdit === false) return;
     writeBackSheets(ctx, applySheetsDeleteRowCol(ctx.sheets, op));
 
-    if (!fromBatch) ctx.selections = undefined;
-
     ctx.formulaCache.formulaCellInfoMap = null;
+    if (fromBatch) return;
+    ctx.selections = undefined;
+    recomputeAfterOps(ctx, [{ op: 'deleteRowCol', id: op.id, path: [], value: op }]);
 }
 
 // The selection a hide or a show acts on. More than one gets the notice instead.

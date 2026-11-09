@@ -1,7 +1,7 @@
 // A sheet's name: the one it takes when the workbook already holds its own, such as a copy the tab menu's Duplicate
-// makes or a tab Import… brings, the one it takes in a file that breaks the rule, and a rename, which every text naming
-// the sheet follows. It is DOM-free, so the editor names copies as the API does, and a live tab renames as the op
-// replay does.
+// makes or a tab Import… brings, the one it takes in a file that breaks the rule, a rename, which every text naming the
+// sheet follows, and a delete, which breaks every formula naming it. It is DOM-free, so the editor names copies as the
+// API does, and a live tab renames and deletes as the op replay does.
 
 import type { Sheet } from '@workspace/lib/sheets';
 import { stripNonXmlChars } from '@workspace/lib/xml';
@@ -14,7 +14,7 @@ import {
     sheetFinder,
     sheetNameKey,
 } from './a1-notation';
-import { renameSheetRefs, rewriteSheetFormulas } from './formula-shift';
+import { breakSheetRefs, renameSheetRefs, rewriteSheetFormulas } from './formula-shift';
 import { iscelldata } from './formula-utils';
 
 export type RenameSheetOp = { id: string; name: string };
@@ -38,6 +38,17 @@ export function applySheetRename<S extends Sheet>(sheets: S[], { id, name }: Ren
     const findSheet = sheetFinder(sheets);
     const renames = new Map([[target.name, name]]);
     return sheets.map((sheet) => renameSheetTexts(sheet.id === id ? { ...sheet, name } : sheet, findSheet, renames));
+}
+
+// The sheets without one, and every formula and formula rule naming it reading #REF!, as a row delete leaves them. A new
+// sheet with the name doesn't heal them.
+export function applySheetDelete<S extends Sheet>(sheets: S[], id: string): S[] {
+    const target = sheets.find((sheet) => sheet.id === id);
+    if (!target) return sheets;
+    const findSheet = sheetFinder(sheets);
+    return sheets
+        .filter((sheet) => sheet.id !== id)
+        .map((sheet) => rewriteSheetFormulas(sheet, (txt) => breakSheetRefs(txt, findSheet, target.name)));
 }
 
 // The sheet with every text that names a renamed sheet pointed at its new name: formulas, formula rules, list sources

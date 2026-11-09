@@ -4304,23 +4304,6 @@ export const FUNCTION_LIST: FormulaFunctionEntry[] = [
         ],
     },
     {
-        n: 'ROW',
-        t: 2,
-        d: 'Returns the row number of a specified cell.',
-        a: 'Row number of a specified cell.',
-        m: [0, 1],
-        p: [
-            {
-                name: 'cell_reference',
-                detail: 'The cell whose row number will be returned.',
-                example: 'A9',
-                require: 'o',
-                repeat: 'n',
-                type: 'rangeall',
-            },
-        ],
-    },
-    {
         n: 'ROWS',
         t: 2,
         d: 'Returns the number of rows in a specified array or range.',
@@ -4334,23 +4317,6 @@ export const FUNCTION_LIST: FormulaFunctionEntry[] = [
                 require: 'm',
                 repeat: 'n',
                 type: 'rangenumber',
-            },
-        ],
-    },
-    {
-        n: 'COLUMN',
-        t: 2,
-        d: 'Returns the column number of a specified cell, with `A=1`.',
-        a: 'Column number of a specified cell.',
-        m: [0, 1],
-        p: [
-            {
-                name: 'cell_reference',
-                detail: 'The cell whose column number will be returned. Column `A` corresponds to `1`.',
-                example: 'A9',
-                require: 'o',
-                repeat: 'n',
-                type: 'rangeall',
             },
         ],
     },
