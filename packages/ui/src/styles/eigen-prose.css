@@ -955,7 +955,6 @@ mtable[columnalign="left"] > mtr > mtd {
 /* ===== Comment highlights (shared across apps) ===== */
 
 .tiptap .comment-highlight {
-    background-color: oklch(0.94 0.15 95);
     cursor: pointer;
     border-radius: 2px;
 }
@@ -964,14 +963,10 @@ mtable[columnalign="left"] > mtr > mtd {
     filter: brightness(0.95);
 }
 
-/* Comment highlights and the page break's rule and label are screen chrome; print drops them and the
-   break starts the next page. The doc export embeds this stylesheet and WeasyPrint renders print media,
-   so these rules hold for the PDF too. */
+/* The page break's rule and label are screen chrome; print drops them and the break starts the next
+   page. The doc export embeds this stylesheet and WeasyPrint renders print media, so these rules hold
+   for the PDF too. */
 @media print {
-    .tiptap .comment-highlight {
-        background-color: transparent;
-    }
-
     .tiptap .page-break {
         break-after: page;
         margin: 0;
