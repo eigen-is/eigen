@@ -1,18 +1,23 @@
+// The order a Drive listing draws its rows in, such as a folder, Trash or the file picker: by name with
+// folders first, by date or by size, ties broken by name. Names compare as users see them, without the
+// Eigen extension, so "B Chat" comes before "B Chat Two".
+
 import type { DrivePath, DriveSortDir, DriveSortKey } from '@workspace/lib/types/drive';
+import { stripEigenExtension } from '@workspace/lib/types/drive';
 
 function byName(a: DrivePath, b: DrivePath): number {
-    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    return stripEigenExtension(a.name).localeCompare(stripEigenExtension(b.name), undefined, { sensitivity: 'base' });
 }
 
 export function getDriveComparator(
     sortKey: DriveSortKey,
     sortDir: DriveSortDir,
-    // What "modified" means for this listing — trash sorts by deletion time instead.
+    // The date the listing shows, such as the time an item was trashed.
     getModified: (p: DrivePath) => Date = (p) => p.updatedAt,
 ): (a: DrivePath, b: DrivePath) => number {
     const sign = sortDir === 'desc' ? -1 : 1;
     return (a, b) => {
-        // Only name sort groups folders first; date/size intermix so the column reads strictly ordered.
+        // Only a name sort groups folders first, so a date or size column reads strictly in order.
         if (sortKey === 'name') {
             if (a.type === 'folder' && b.type !== 'folder') return -1;
             if (a.type !== 'folder' && b.type === 'folder') return 1;
