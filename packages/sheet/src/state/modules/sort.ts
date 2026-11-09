@@ -1,7 +1,7 @@
 // Sorting a range of the sheet by one of its columns, ascending or descending: the selected range from a menu such
 // as the Data menu, or the range a dialog such as Custom sort names. A header row, when the caller says the range has
-// one, stays in place. As in Excel, a cell moves with its formats and its link, while borders and the ranges of rules
-// stay where they are, and a formula is shifted to the row it lands on and evaluated again.
+// one, stays in place, and so does a hidden row. As in Excel, a cell moves with its formats and its link, while borders
+// and the ranges of rules stay where they are, and a formula is shifted to the row it lands on and evaluated again.
 
 import { isEqual } from 'es-toolkit/compat';
 import numeral from 'numeral';
@@ -60,14 +60,17 @@ export function sortDataRange(
     const plain = getSheet(snapshot);
     const sheet = getSheet(ctx);
     const { data } = sheet;
-    if (!plain.data || !data) return;
-    const [startRow, endRow] = row;
+    const before = plain.data;
+    if (!before || !data) return;
     const [startColumn, endColumn] = column;
 
+    // A row stays hidden by its index, so a row moved into a hidden one would vanish and the row moved out would show.
+    const rowhidden = plain.config?.rowhidden ?? {};
+    const rows = Array.from({ length: row[1] - row[0] + 1 }, (_, i) => row[0] + i).filter((r) => !(r in rowhidden));
     const order = sortedOrder(
         isAsc,
         index,
-        plain.data.slice(startRow, endRow + 1).map((cells) => cells.slice(startColumn, endColumn + 1)),
+        rows.map((r) => before[r].slice(startColumn, endColumn + 1)),
     );
     if (order.every((from, to) => from === to)) return;
 
@@ -76,11 +79,11 @@ export function sortDataRange(
     const resolver = createArrayResolver(snapshot.sheets);
     for (const [to, from] of order.entries()) {
         if (to === from) continue;
-        const r = startRow + to;
-        const sr = startRow + from;
+        const r = rows[to];
+        const sr = rows[from];
         for (let c = startColumn; c <= endColumn; c += 1) {
-            const cell = landedCell(ctx, plain.data[sr][c], to - from, 0, resolver);
-            if (!isEqual(cell, plain.data[r][c])) data[r][c] = cell;
+            const cell = landedCell(ctx, before[sr][c], r - sr, 0, resolver);
+            if (!isEqual(cell, before[r][c])) data[r][c] = cell;
             const key = `${r}_${c}`;
             const link = plain.hyperlink?.[`${sr}_${c}`];
             if (link) (sheet.hyperlink ??= {})[key] = link;
