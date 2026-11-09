@@ -31,8 +31,8 @@ await recoverBackupsAfterRestart();
 assertMailDomainUnchanged();
 
 const server = app.listen({
-    // 8000 in every deployment, because Caddy, Dovecot and the container healthcheck all name it. The override lets a
-    // test start this file as a real child process on a free port.
+    // 8000 in every deployment, because Caddy, Dovecot and the container healthcheck all name it. The override runs a
+    // second API beside it, such as a test's child process or a second dev stack.
     port: Number(process.env['EIGEN_API_PORT']) || 8000,
     // The streaming parser and the backup upload check their own limits per file. This is the backstop
     // under both.

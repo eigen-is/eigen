@@ -7,7 +7,6 @@
     "apps/api/src/lib/mount/document-db.ts": 1,
     "apps/api/src/lib/shared/video-thumbnail.ts": 1,
     "apps/api/src/scripts/demo/author-fixtures.ts": 1,
-    "apps/calendar/src/routes/_auth.view.$mode.$from.$to.tsx": 1,
     "apps/index/scripts/build-search-index.ts": 2,
     "apps/index/scripts/prerender.tsx": 1,
     "apps/index/src/content/manifest.ts": 3,

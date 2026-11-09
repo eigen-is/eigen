@@ -8,7 +8,6 @@ import { writeMathml } from '@workspace/math';
 import type { Sharp } from 'sharp';
 import sharp from 'sharp';
 import { EXPORT_CSP } from '../../lib/export/sanitize';
-import { isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { getHome } from '../../lib/home/get-home';
 import { openZip } from '../../lib/ooxml/zip';
 import {
@@ -22,6 +21,7 @@ import {
     seedEigendoc,
 } from '../fixtures/golden-documents';
 import { writeSheetsToYjs } from '../fixtures/heavy-sheets';
+import { weasyPrintPython } from '../pdf-test-helpers';
 import { authedRequest, driveGet, drivePost, driveUpload, getTestContext, TEST_PNG_BYTES } from '../setup';
 
 // Response contract of GET /drive/:ownerId/:mountId/file/:pathId/export/:format for
@@ -212,7 +212,7 @@ describe('Export route — a plain file wearing an eigen mime', () => {
     }, 60_000);
 });
 
-const suite = (await isWeasyPrintAvailable()) ? describe : describe.skip;
+const suite = weasyPrintPython ? describe : describe.skip;
 
 suite('Document export routes — PDF (WeasyPrint end-to-end)', () => {
     test('eigendoc pdf export serves a rendered PDF as an attachment', async () => {

@@ -33,8 +33,6 @@ import {
     indexCard,
     normalizeLabelName,
     PURGED_CARD,
-    prepareCard,
-    syncCardLabels,
 } from './card-store';
 import type { CardBook, CardRow, DeleteCardResult, PutCardOptions } from './dav-store';
 import * as davStore from './dav-store';
@@ -274,39 +272,6 @@ export class Contacts {
     }
 
     // --- Contacts ---
-
-    // The blob is the truth, so every projected column and the junction come back from it. Untouched, because no
-    // blob carries them: the self-link, the ctags, the tombstones, and each label's id and color.
-    public rebuildProjection(): void {
-        const rows = this.db
-            .select({
-                id: schema.contacts.id,
-                uid: schema.contacts.uid,
-                vcard: schema.contacts.vcard,
-                data: schema.contacts.data,
-            })
-            .from(schema.contacts)
-            .all();
-        const createdLabelIds = this.db.transaction((tx) => {
-            const created: string[] = [];
-            for (const row of rows) {
-                const parsed = parseVCard(new TextDecoder().decode(row.vcard));
-                // The avatar cache is derived asynchronously from the PHOTO, so the stored URL is carried over,
-                // and the blob the rest is rebuilt from is left alone rather than rewritten to its own value.
-                const { vcard: _bytes, ...projection } = prepareCard(
-                    row.vcard,
-                    parsed,
-                    row.data?.avatar ?? '',
-                    row.uid,
-                );
-                tx.update(schema.contacts).set(projection).where(eq(schema.contacts.id, row.id)).run();
-                created.push(...syncCardLabels(tx, row.id, parsed.categories));
-            }
-            return created;
-        });
-
-        for (const id of createdLabelIds) this.emitLabel(SSEventType.LABEL_CREATED, id);
-    }
 
     // At most one row may carry eigenId = user.id; the X-EIGEN-ID stays in the stored bytes regardless.
     private resolveSelfLink(eigenId: string | undefined): string {

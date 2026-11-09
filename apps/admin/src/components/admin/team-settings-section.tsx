@@ -1,5 +1,6 @@
 // The settings section of a team's admin page: its name and avatar, whether it has a calendar, and the quota
-// overrides that raise its members' storage limits above the server's defaults.
+// overrides that raise its members' storage limits above the server's defaults. Each part saves through its own
+// hook, such as the team settings or the calendar, and a refused save is toasted there.
 
 import { useUpdateTeam } from '@workspace/lib/admin';
 import { useCalendars, useUpdateCalendar } from '@workspace/lib/calendar';
@@ -17,7 +18,7 @@ import { Separator } from '@workspace/ui/components/separator';
 import { Switch } from '@workspace/ui/components/switch';
 import { UserAvatar } from '@workspace/ui/components/user';
 import { Pencil } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 // What a team's members may do with the team calendar. 'read' is the absence of a share row rather
 // than one of the two permissions the API takes, so it lives only here.
@@ -69,11 +70,9 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
         .filter(Boolean)
         .join(' · ');
 
-    const calendarPermission = useMemo(() => {
-        if (!defaultCal?.shares) return 'read';
-        const share = defaultCal.shares.find((s) => s.targetId === ownerId);
-        return share?.permission ?? 'read';
-    }, [defaultCal, ownerId]);
+    const calendarPermission = defaultCal?.shares?.find((s) => s.targetId === ownerId)?.permission ?? 'read';
+    const homeDataTooSmall = draftHomeDataMax !== '' && Number(draftHomeDataMax) < QUOTA_MIN_MB;
+    const mountTooSmall = draftMountMax !== '' && Number(draftMountMax) < QUOTA_MIN_MB;
 
     const openSettingsForm = () => {
         setDraftName(team.name);
@@ -85,40 +84,33 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
         setShowSettingsForm(true);
     };
 
-    const handleSaveSettings = async () => {
-        if (draftName.trim() && draftName.trim() !== team.name) {
-            await updateTeam.mutateAsync({ teamId: team.id, name: draftName.trim() });
-        }
-        await updateSettings.mutateAsync({
-            calendar: { enabled: draftCalEnabled },
-            notifyMembers: draftNotifyMembers,
-            memberOverrides: {
-                homeDataMaxMB: draftHomeDataMax ? Number(draftHomeDataMax) : undefined,
-                defaultMountMaxSizeMB: draftMountMax ? Number(draftMountMax) : undefined,
-            },
-        });
+    const handleSaveSettings = () => {
+        const name = draftName.trim();
+        if (name && name !== team.name) updateTeam.mutate({ teamId: team.id, name });
         if (defaultCal && draftCalEnabled) {
-            const existingShares = (defaultCal.shares || []).filter((s) => s.targetId !== ownerId);
+            const existingShares = (defaultCal.shares ?? []).filter((s) => s.targetId !== ownerId);
             const shares =
                 draftCalPermission === 'read'
                     ? existingShares.length > 0
                         ? existingShares
                         : null
                     : [...existingShares, { targetId: ownerId, permission: draftCalPermission }];
-            await updateCalendar.mutateAsync({ id: defaultCal.id, shares });
+            updateCalendar.mutate({ id: defaultCal.id, shares });
         }
-        setShowSettingsForm(false);
+        updateSettings.mutate(
+            {
+                calendar: { enabled: draftCalEnabled },
+                notifyMembers: draftNotifyMembers,
+                memberOverrides: {
+                    homeDataMaxMB: draftHomeDataMax ? Number(draftHomeDataMax) : undefined,
+                    defaultMountMaxSizeMB: draftMountMax ? Number(draftMountMax) : undefined,
+                },
+            },
+            { onSuccess: () => setShowSettingsForm(false) },
+        );
     };
 
-    const handleAvatarUpload = async (file: File) => {
-        await uploadAvatar.mutateAsync(file);
-        setAvatarUrl(`p/avatar/${ownerId}?v=${Date.now()}`);
-    };
-
-    const handleRemoveAvatar = async () => {
-        await removeAvatar.mutateAsync();
-        setAvatarUrl(`p/avatar/${ownerId}?v=${Date.now()}`);
-    };
+    const refreshAvatar = () => setAvatarUrl(`p/avatar/${ownerId}?v=${Date.now()}`);
 
     return (
         <>
@@ -143,8 +135,8 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
                             className="h-24 w-24"
                             userId={ownerId}
                             imageUrl={avatarUrl}
-                            onUpload={handleAvatarUpload}
-                            onRemove={handleRemoveAvatar}
+                            onUpload={(file) => uploadAvatar.mutate(file, { onSuccess: refreshAvatar })}
+                            onRemove={() => removeAvatar.mutate(undefined, { onSuccess: refreshAvatar })}
                         />
                     </div>
 
@@ -209,6 +201,9 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
                                     value={draftHomeDataMax}
                                     onChange={(e) => setDraftHomeDataMax(e.target.value)}
                                 />
+                                {homeDataTooSmall && (
+                                    <p className="text-xs text-destructive">At least {QUOTA_MIN_MB} MB</p>
+                                )}
                             </div>
                             <div className="space-y-1.5">
                                 <Label>Default mount (MB)</Label>
@@ -219,6 +214,9 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
                                     value={draftMountMax}
                                     onChange={(e) => setDraftMountMax(e.target.value)}
                                 />
+                                {mountTooSmall && (
+                                    <p className="text-xs text-destructive">At least {QUOTA_MIN_MB} MB</p>
+                                )}
                             </div>
                         </div>
                     </SettingsSection>
@@ -227,7 +225,9 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
                         <Button variant="outline" onClick={() => setShowSettingsForm(false)}>
                             Cancel
                         </Button>
-                        <Button onClick={handleSaveSettings}>Save settings</Button>
+                        <Button onClick={handleSaveSettings} disabled={homeDataTooSmall || mountTooSmall}>
+                            Save settings
+                        </Button>
                     </div>
                 </div>
             ) : (

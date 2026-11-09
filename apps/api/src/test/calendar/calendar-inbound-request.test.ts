@@ -1,8 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { rmSync } from 'node:fs';
-import { eq } from 'drizzle-orm';
 import type { Calendar } from '../../lib/calendar/calendar';
-import * as schema from '../../lib/calendar/schema';
 import type { ReceiveInvitationPayload } from '../../lib/calendar/types';
 import { parseIcs } from '../../lib/ical';
 import type { ParsedEvent } from '../../lib/ical/ical-parse';
@@ -57,18 +55,6 @@ async function harnessWith(body?: string): Promise<{ harness: TestHome<Calendar>
 }
 
 const NO_PRECONDITIONS = { ifMatch: null, ifNoneMatch: null };
-
-// Bytes a PUT would strip its Eigen lines from: the blob is the truth, so they are planted as the blob and
-// the projection is rebuilt from them, exactly as a resource written by another build would be read back.
-async function plantResource(calendar: Calendar, calendarId: string, uri: string, text: string): Promise<void> {
-    expect((await calendar.putResource(calendarId, uri, stored(null, `seed-${uri}`), NO_PRECONDITIONS)).ok).toBe(true);
-    calendar.db
-        .update(schema.resources)
-        .set({ ics: Buffer.from(new TextEncoder().encode(text)) })
-        .where(eq(schema.resources.uri, uri))
-        .run();
-    calendar.rebuildProjection();
-}
 
 describe('inbound iMIP REQUEST', () => {
     beforeAll(() => {
@@ -263,10 +249,7 @@ describe('relayed invitation', () => {
     // A file may list its override before its master, so the linked lookup takes the master or a series
     // update would find an exception and read as "an occurrence copy the series now replaces".
     test('a series REQUEST updates the linked series whose file lists its override first', async () => {
-        const harness = await makeCalendar();
-        const id = (await harness.instance.getCalendars())[0].id;
-        const link = [`X-EIGEN-ORGANIZER-EVENT:${UID}`, `X-EIGEN-ORGANIZER-USER:external_${ORG}`];
-        const planted = `${vcal(
+        const overrideFirst = `${vcal(
             [
                 'BEGIN:VEVENT',
                 `UID:${UID}`,
@@ -274,10 +257,7 @@ describe('relayed invitation', () => {
                 'RECURRENCE-ID:20260502T090000Z',
                 'DTSTART:20260502T110000Z',
                 'DTEND:20260502T120000Z',
-                'SEQUENCE:2',
                 `ORGANIZER;CN=Ext Org:mailto:${ORG}`,
-                ...link,
-                'X-EIGEN-EVENT-ID:11111111-1111-4111-8111-111111111111',
                 'DTSTAMP:20260101T000000Z',
                 'END:VEVENT',
             ],
@@ -288,22 +268,21 @@ describe('relayed invitation', () => {
                 'DTSTART:20260501T090000Z',
                 'DTEND:20260501T100000Z',
                 'RRULE:FREQ=DAILY;COUNT=5',
-                'SEQUENCE:2',
                 `ORGANIZER;CN=Ext Org:mailto:${ORG}`,
-                ...link,
-                'X-EIGEN-EVENT-ID:22222222-2222-4222-8222-222222222222',
                 'DTSTAMP:20260101T000000Z',
                 'END:VEVENT',
             ],
         )}\r\n`;
-        await plantResource(harness.instance, id, 'linked.ics', planted);
+        const { calendar } = await harnessWith(overrideFirst);
+        // The first REQUEST adopts the series in place, which links it; the second finds it by that link.
+        await calendar.receiveImipRequest(parsedOf(request(['RRULE:FREQ=DAILY;COUNT=5'])), ORG);
 
         const series = request(['RRULE:FREQ=DAILY;COUNT=5'])
             .replace('SEQUENCE:2', 'SEQUENCE:3')
             .replace('SUMMARY:Quarterly review', 'SUMMARY:Renamed series');
-        await harness.instance.receiveImipRequest(parsedOf(series), ORG);
+        await calendar.receiveImipRequest(parsedOf(series), ORG);
 
-        const rows = await harness.instance.getEventsByUid(UID);
+        const rows = await calendar.getEventsByUid(UID);
         expect(rows.find((r) => !r.parentEventId)?.title).toBe('Renamed series');
         expect(rows.find((r) => r.parentEventId)?.title).toBe('Moved occurrence');
     });

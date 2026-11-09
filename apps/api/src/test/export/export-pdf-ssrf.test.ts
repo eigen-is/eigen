@@ -10,8 +10,9 @@ import { renderEigenslidesHtml } from '../../lib/export/canvas/transform';
 import { renderEigendocExport } from '../../lib/export/doc/transform';
 import { drawnCodePoints, slicesFaceCss } from '../../lib/export/fonts';
 import { sanitizeExportHtml, sanitizeExportMedia, sanitizeSceneHtml } from '../../lib/export/sanitize';
-import { htmlToPdf, isWeasyPrintAvailable } from '../../lib/export/weasyprint';
+import { htmlToPdf } from '../../lib/export/weasyprint';
 import { buildGoldenDeckScene, seedDeckDoc, seedEigendoc } from '../fixtures/golden-documents';
+import { weasyPrintPython } from '../pdf-test-helpers';
 
 // SSRF regression: a collaborator can inject `url(http://…)` or `<img src=http://…>` into a schemaless slide/sheet
 // color or text. WeasyPrint renders through a fetcher that opens only data: URIs, the boundary the last suite tests with
@@ -700,8 +701,7 @@ describe('export sanitize — a data: URI with a fragment is refused', () => {
     });
 });
 
-const wp = await isWeasyPrintAvailable();
-const suite = wp ? describe : describe.skip;
+const suite = weasyPrintPython ? describe : describe.skip;
 
 const page = (body: string) => `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${body}</body></html>`;
 
