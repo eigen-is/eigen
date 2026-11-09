@@ -1,7 +1,7 @@
 // Which comment card the pointer rests on in the grid, and where that cell is on the screen, for the hover card the
 // host floats beside it. The grid's mouse move asks on every frame. A cell counts as under the pointer only over the
 // grid's own surface: an image or a chart hides it, while the selection's handles, which straddle a selected cell's
-// edges, do not.
+// edges, do not. A cell whose link card is open shows that card alone, as the comment card would cover its buttons.
 
 import type { CommentHoverTarget } from '@workspace/lib/types/comments';
 import type { Context } from '../context';
@@ -19,6 +19,8 @@ export function commentHoverAt(ctx: Context, e: MouseEvent, cellArea: HTMLDivEle
     const cell = getCellRowColumn(ctx, e, cellArea);
     if (!flowdata || !cell) return null;
     const { r, c } = cell;
+    const { linkCard } = ctx;
+    if (linkCard?.sheetId === ctx.currentSheetId && linkCard.r === r && linkCard.c === c) return null;
     const cardId = flowdata[r]?.[c]?.commentCardIds?.[0];
     if (!cardId || !ctx.commentCards?.[cardId]) return null;
 

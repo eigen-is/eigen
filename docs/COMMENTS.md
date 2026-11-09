@@ -140,7 +140,7 @@ Resting a mouse on a comment shows its card beside it, after a 300 ms pause that
 | App | What shows a card | Where the card opens |
 |---|---|---|
 | Docs | Highlighted text, and the corner mark of an image, a chart, a text box or an equation | Under it |
-| Sheets | The whole cell, with its first card | Right of it |
+| Sheets | The whole cell, with its first card, unless the cell's link card is open, which the comment card would cover | Right of it |
 | Slides, vector | An element's corner mark, with its first card | Right of it |
 
 Stickies has no target, as its board draws the cards already. Resolved text gets no card, because its highlight is gone and nothing on the page says a comment sits there. A corner mark or a commented cell keeps its triangle when resolved, so it keeps its card. Docs reports from a React handler on a parent of `EditorContent` (`reportCommentHover`), because node views stop ProseMirror's events and draw their portals beside the editor's own div. A span that wraps reports the line under the pointer.
