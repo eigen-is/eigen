@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, formatting, cells, numbers, alignment, borders]
 related: [sheets/conditional-formatting]
 order: 60
-updated: 2026-11-02
+updated: 2026-11-09
 ---
 
 Sheets lets you change how cells look without changing the values inside them. You can apply text styles, number formats, colors, borders, and alignment from the **Format** menu in the toolbar.
@@ -159,4 +159,4 @@ To remove all formatting from a selection without changing the values:
 1. Select the cells.
 2. Open **Format → Clear formatting**.
 
-Clearing formatting removes text styles, colors, alignment settings, borders, and number formats. It keeps the cell values.
+Clearing formatting removes text styles, colors, alignment settings, borders, and number formats. It keeps the cell values, links, and comments.

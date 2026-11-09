@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, tabs, sheets-tabs, rename, reorder]
 related: [sheets/create-and-edit]
 order: 100
-updated: 2026-11-08
+updated: 2026-11-09
 ---
 
 A spreadsheet can contain as many sheets as you need. Each sheet has its own tab along the bottom of the editor. You can add, rename, reorder, and color-code them to keep your data organized.
@@ -63,3 +63,5 @@ To show a hidden sheet again, open the **View** menu in the menu bar. If any she
 Click the **⌄** arrow on a tab and choose **Delete**. You will be asked to confirm before the sheet is removed.
 
 You cannot delete the last sheet in a spreadsheet.
+
+Formulas on other sheets that name the deleted sheet show `#REF!`, and dropdown lists and links that name it stop working. **Undo** brings them back.
