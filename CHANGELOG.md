@@ -42,6 +42,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 - **Formulas after a row or column change in Sheets** — inserting or deleting rows or columns updates what formulas show, for everyone: `=SUM(A1:A3)` follows its shrunk range, and `=A2*2` over a deleted row shows `#REF!` instead of its old number
 - **Links while others edit in Sheets** — two people adding or removing links at once no longer overwrite each other's or put them a row off
+- **The link card in Sheets** — it no longer covers a linked cell's fill handle or gets in the way of a drag, and it goes when a paste takes the link off its cell
 - **Merge, link and split in Sheets** — formulas reading those cells update, and a link's new text or a split piece replaces a formula instead of the formula's result coming back
 - **More formulas in Sheets** — `=A1%` works, `T` and `N` work, `ROWS` and `COLUMNS` count one cell, `AVERAGEIF` skips blanks instead of going blank, and a result such as `STDEV(5)` shows `#NUM!`
 - **Moving cells in Sheets** — cells dragged to the edge of the view land where you drop them, or on the last row or column you can see, not at the far end of the sheet over what was there
