@@ -40,7 +40,7 @@ export class FileHistory {
             )
             SELECT p.type AS type FROM ${paths} p JOIN chain c ON p.id = c.id
         `);
-        return ancestors.some((a) => isDocumentType(a.type));
+        return ancestors.some((ancestor) => isDocumentType(ancestor.type));
     }
 
     public record(input: FileEventInput, opts?: { dedupeWindowMs?: number }): void {
@@ -163,7 +163,7 @@ export class FileHistory {
             .from(pathWatchers)
             .where(eq(pathWatchers.userId, userId))
             .all()
-            .map((r) => r.pathId);
+            .map((row) => row.pathId);
     }
 
     // The watchers of the roots and of every folder above them, without the actor.
@@ -202,8 +202,8 @@ export class FileHistory {
     ): Promise<void> {
         // The body is stored, so the names of the teams in a sharing change are resolved now. The change has landed by
         // now, so a notification that can't be written is logged and never fails it.
-        const d = opts.details;
-        const names = await getBatchPublicInfo(aclPrincipalsToResolve(d)).catch((error: unknown) => {
+        const details = opts.details;
+        const names = await getBatchPublicInfo(aclPrincipalsToResolve(details)).catch((error: unknown) => {
             console.error(`[FileHistory] Failed to notify the watchers of ${opts.tagPathId}:`, error);
             return null;
         });
@@ -211,15 +211,15 @@ export class FileHistory {
         const lines = describeFileEvent(
             {
                 eventType: opts.eventType,
-                details: d ?? null,
+                details: details ?? null,
                 pathName: opts.itemName,
                 pathType: opts.pathType,
             },
             'container',
             { resolveName: (id) => names[id]?.name },
         );
-        const cardId = d && 'cardId' in d ? d.cardId : undefined;
-        const chatName = d && 'chatName' in d ? d.chatName : undefined;
+        const cardId = details && 'cardId' in details ? details.cardId : undefined;
+        const chatName = details && 'chatName' in details ? details.chatName : undefined;
         // One failed lookup skips only that watcher, because the change has landed already.
         const recipients = await Promise.all(
             watcherIds.map(async (watcherId) => {

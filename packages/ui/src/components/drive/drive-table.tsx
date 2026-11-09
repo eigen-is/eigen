@@ -234,25 +234,27 @@ export function DriveTable({
             )}
 
             <div ref={listRef} style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
-                {virtualizer.getVirtualItems().map((vi) => {
-                    const item = items[vi.index];
+                {virtualizer.getVirtualItems().map((virtualRow) => {
+                    const item = items[virtualRow.index];
                     return (
                         <div
                             key={item.id}
-                            data-index={vi.index}
+                            data-index={virtualRow.index}
                             ref={virtualizer.measureElement}
                             className="absolute inset-x-0 top-0"
-                            style={{ transform: `translateY(${vi.start - virtualizer.options.scrollMargin}px)` }}
+                            style={{
+                                transform: `translateY(${virtualRow.start - virtualizer.options.scrollMargin}px)`,
+                            }}
                         >
                             <DriveRow
                                 item={item}
-                                index={vi.index}
+                                index={virtualRow.index}
                                 gridCols={gridCols}
                                 coarse={coarse}
                                 controller={controller}
                                 longPressBind={longPress.bind}
                                 isActive={activeItemId === item.id}
-                                isCursor={controller.selectedIndex === vi.index}
+                                isCursor={controller.selectedIndex === virtualRow.index}
                                 isSelected={controller.selection.isSelected(item.id)}
                                 disabled={isItemDisabled?.(item) ?? false}
                                 getItemHref={getItemHref}
