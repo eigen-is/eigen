@@ -101,7 +101,7 @@ export class FileHistory {
             FROM ${fileEvents} e
             JOIN subtree st ON e.pathId = st.id
             JOIN ${paths} p ON p.id = e.pathId
-            ORDER BY e.createdAt DESC
+            ORDER BY e.createdAt DESC, e.rowid DESC
             LIMIT ${limit}
         `);
 

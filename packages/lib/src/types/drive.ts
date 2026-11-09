@@ -94,18 +94,13 @@ export type ImportResult = { success: true; summary: string | null };
 // for the toast after a download or a print. A file that lost nothing has no such header.
 export const EXPORT_SUMMARY_HEADER = 'Eigen-Export-Summary';
 
-// How File › Import… writes the file into the open document: beside what it holds (a deck's slides after the slide
-// `afterFrameId` names, or after its last; a workbook's tabs after its own), or in place of it, a version saved first.
-// A doc is only ever replaced: the file's page setup and headers can't sit beside the doc's.
+// File › Import… puts the file beside what the document holds, such as slides after `afterFrameId`, or in its place
+// after saving a version. A doc is only ever replaced: the file's page setup and headers can't sit beside the doc's.
 export type ImportMode = 'insert' | 'replace';
 export type DocumentImportOptions = { mode: ImportMode; afterFrameId?: string };
 
-// `mime` is the MIME type a path stores, such as `application/eigendoc`. `urlSlug` is the same type in a form that
-// fits in a URL, such as `application-eigendoc`, and the server turns it back into the MIME type.
-//
-// `yjsRoots` names each top-level root of a collab document's Y.Doc and its kind. A version restore gives both the
-// live doc and the snapshot these root types first, because Y.applyUpdate gives a root no concrete type. A chat keeps
-// no Y.Doc, so it has none.
+// `urlSlug` is the MIME type in a form that fits a URL, such as `application-eigendoc`. A version restore gives the
+// live doc and the snapshot the `yjsRoots` types first, because Y.applyUpdate gives a root no concrete type.
 type EigenDocTypeInfo = {
     type: EigenDocType;
     mime: string;
@@ -208,9 +203,6 @@ export const EIGEN_DOC_TYPE_INFO = {
     },
 } as const satisfies Record<EigenDocType, EigenDocTypeInfo>;
 
-// The Download rows a type offers: read by every menu that draws them and by the export route that
-// gates on them, so a menu can never offer a format the route answers 400 to. Empty for a plain file,
-// a folder, and the two types with nothing to export.
 export function exportFormatsFor(type: DrivePathType): readonly ExportFormat[] {
     return getEigenDocInfoByType(type)?.exportFormats ?? [];
 }
@@ -379,9 +371,7 @@ export function isInlineEditable(mimeType: string, name: string): boolean {
     return INLINE_EDITABLE_EXTENSIONS.has(name.slice(dot).toLowerCase());
 }
 
-// True when the item has a meaningful "Open" action: folders, eigen documents
-// (their own app), chats, and inline-editable text files. Regular binary files
-// (images, PDFs, archives) use the preview lightbox instead, not Open.
+// A binary file, such as an image or a PDF, opens in the preview lightbox instead.
 export function isOpenable(path: { type: DrivePathType; mimeType: string; name: string }): boolean {
     return path.type !== 'file' || isInlineEditable(path.mimeType, path.name);
 }
@@ -422,9 +412,8 @@ export const ICS_ACCEPT = `.ics,${ICS_MIME}`;
 // The media type an iCalendar byte stream is served under (CalDAV GET, PROPFIND getcontenttype, export).
 export const ICS_CONTENT_TYPE = `${ICS_MIME}; charset=utf-8`;
 
-// Whether a media type is iCalendar, with or without parameters. A calendar body names its purpose in them, such as
-// `text/calendar; method=REQUEST; charset=utf-8`, but a type that only starts with the same letters is another type.
-// A stored file and a mail part (isCalendarPart) both ask this, so they can never disagree.
+// A calendar body names its purpose in parameters, such as `text/calendar; method=REQUEST`, but a type that only
+// starts with the same letters is another type.
 export function isIcsMime(mimeType: string): boolean {
     return mimeType === ICS_MIME || mimeType.startsWith(`${ICS_MIME};`);
 }
@@ -478,9 +467,8 @@ export type DrivePath = {
 // A path on the Recent page, with the last time its user opened it or was notified about it.
 export type RecentPath = DrivePath & { lastActivityAt: Date };
 
-// The server cuts another owner's chain at the first folder the viewer can't read, so a chain that
-// doesn't start at a mount root starts where the viewer came in, through a share or a public link.
-// This is that first path, or undefined for a chain that starts at a root.
+// The server cuts another owner's chain at the first folder the viewer can't read, so a chain that doesn't start at
+// a mount root starts where the viewer came in, through a share or a public link.
 export function sharedChainHead(chain: readonly DrivePath[]): DrivePath | undefined {
     const head = chain.at(0);
     return head && head.parentId !== null ? head : undefined;
@@ -510,9 +498,8 @@ export type DriveCapabilities = {
     createTypes?: ReadonlySet<EigenDocType>;
 };
 
-// The Drive file an import-from-drive request names: the picked file's owner, mount and path, and
-// nothing about where it lands. One type for every format, so the contacts, mail and calendar hooks and
-// the routes behind them cannot drift apart on the body they post (importFromDriveSchema mirrors it).
+// The Drive file an import-from-drive request names, and nothing about where it lands. Every format posts this one
+// body, so the hooks and routes can't drift apart; importFromDriveSchema mirrors it.
 export type DriveImportSource = { sourceOwnerId: string; sourceMountId: string; sourcePathId: string };
 
 // The part of a DrivePath that names an item, enough to build its URL or open it. DrivePath is assignable to it.

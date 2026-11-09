@@ -80,10 +80,8 @@ export function matchesACL(
     return false;
 }
 
-// Merges a change onto the ACL as it is now. The removals go first, matched by canonicalACLId. Then each
-// added entry goes in, and one for an id that is there already replaces it, which is how a permission
-// changes. The merge runs on the server, so two people who share at once keep each other's entries. A
-// whole ACL built from an old copy in a tab would drop them.
+// The merge runs on the server, so two people who share at once keep each other's entries. An added entry
+// for an id that is there already replaces it, which is how a permission changes.
 export function mergeACLDelta(current: readonly DriveACL[] | null, delta: DriveACLDelta): DriveACL[] {
     const removed = new Set((delta.remove ?? []).map(canonicalACLId));
     const merged = (current ?? []).filter((entry) => !removed.has(canonicalACLId(entry.id)));

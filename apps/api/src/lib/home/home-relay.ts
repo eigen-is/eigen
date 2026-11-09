@@ -17,7 +17,7 @@ import type {
 import type { DriveACL, DrivePath, EffectiveMember, RecentPath } from '@workspace/lib/types/drive';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types/owner';
-import type { HomeSizeResponse, TeamSettings, UserSettings } from '@workspace/lib/types/settings';
+import type { HomeSizeResponse, MyTeam, TeamSettings, UserSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { Semaphore } from '../../utils/semaphore';
 import { captureBytes, snapshotHome } from '../backup/snapshot-home';
@@ -401,9 +401,7 @@ export async function pullTeamQuotaOverrides(ownerId: string): Promise<TeamQuota
     return home.settings.get().memberOverrides ?? {};
 }
 
-export async function pullTeamMounts(
-    ownerId: string,
-): Promise<{ id: string; name: string; rootPathId: string | null }[]> {
+export async function pullTeamMounts(ownerId: string): Promise<MyTeam['mounts']> {
     const home = await getTeamHome(ownerId);
     const mounts = Object.entries(home.settings.get().mounts ?? {}).filter(([, mount]) => mount.enabled);
     return Promise.all(

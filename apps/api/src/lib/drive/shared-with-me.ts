@@ -9,14 +9,13 @@ import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
 import { getEigenDocInfoByType, isFolderType, stripEigenExtension } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq, inArray } from 'drizzle-orm';
-import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import type { Home } from '../home';
 import { actorDisplayName, getMemberships, getOwnerExists } from '../user';
 import { matchesACL } from './acl';
+import type { SharedDb } from './shared';
 import * as sharedSchema from './sharedschema';
 import { buildDriveEvent } from './sse-events';
 
-type SharedDb = BunSQLiteDatabase<typeof sharedSchema>;
 type SharedPathRow = typeof sharedSchema.sharedPaths.$inferSelect;
 
 export async function receiveSharedPathChange(

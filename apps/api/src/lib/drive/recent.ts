@@ -6,15 +6,14 @@
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { desc, sql } from 'drizzle-orm';
-import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { sendToHome } from '../home/home-relay';
 import type { Mount } from '../mount';
 import type { User } from '../user';
 import { isGuest } from '../user';
 import { isInsideDocument } from './acl';
+import type { SharedDb } from './shared';
 import * as sharedSchema from './sharedschema';
 
-type SharedDb = BunSQLiteDatabase<typeof sharedSchema>;
 export type RecentRow = typeof sharedSchema.recentPaths.$inferSelect;
 
 const ROWS_KEPT = 200;
@@ -22,6 +21,7 @@ const ROWS_KEPT = 200;
 // A part of a document, such as a chat's attachment, opens with its document and gets no row of its own. The check
 // runs after the answer, so it never fails or slows the read.
 export function recordOpenedUnlessInDocument(user: User, mount: Mount, path: DrivePath): void {
+    if (isGuest(user)) return;
     mount
         .getBreadcrumb(path.id)
         .then((chain) => {
@@ -53,7 +53,7 @@ export function touchRecent(sharedDb: SharedDb, ownerId: string, mountId: string
             })
             .run();
         tx.run(
-            sql`DELETE FROM ${recentPaths} WHERE rowid NOT IN (SELECT rowid FROM ${recentPaths} ORDER BY ${recentPaths.lastActivityAt} DESC LIMIT ${ROWS_KEPT})`,
+            sql`DELETE FROM ${recentPaths} WHERE rowid NOT IN (SELECT rowid FROM ${recentPaths} ORDER BY ${recentPaths.lastActivityAt} DESC, rowid DESC LIMIT ${ROWS_KEPT})`,
         );
     });
 }

@@ -42,7 +42,6 @@ import type { SSEventDrive } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import { validateACLEntries, validateEmailAddress } from '@workspace/lib/validation';
-import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { ChatRoom, withCommentIndex } from '../chat';
 import { broadcastCommentIndexUpdated } from '../chat/sse-events';
 import { CollabDocument } from '../collab/collab-document';
@@ -98,6 +97,7 @@ import { copyPathAcross } from './copy-across';
 import { LockManager } from './lock-manager';
 import type { RecentRow } from './recent';
 import { listRecent, touchRecent } from './recent';
+import type { SharedDb } from './shared';
 import { getSharedDatabase } from './shared';
 import {
     listSharedOwnerIds,
@@ -105,7 +105,6 @@ import {
     listSharedWithMeByMimeType,
     receiveSharedPathChange,
 } from './shared-with-me';
-import type * as sharedSchema from './sharedschema';
 import { broadcastFileHistoryUpdated, buildDriveEvent } from './sse-events';
 import { streamFilesToTemp } from './streaming';
 import { sweepCopy, sweepDocument } from './sweep';
@@ -132,7 +131,7 @@ export class Drive {
     // Every addMount still running, including the close of a mount it built for a closing home.
     private readonly addingMounts = new Set<Promise<void>>();
     private defaultMountId: string = DEFAULT_MOUNT_ID;
-    private sharedDb!: BunSQLiteDatabase<typeof sharedSchema>;
+    private sharedDb!: SharedDb;
     private readonly documents: CollabRegistry;
     // The last change queued for each key, such as the ACL of one path or the settings of one mount.
     private readonly chains = new Map<string, Promise<void>>();
@@ -1171,8 +1170,8 @@ export class Drive {
         return listRecent(this.sharedDb);
     }
 
-    // The paths of this owner that another home's rows name and the user may still see. The relay calls it and the
-    // check is here, so SharedDrive has no wrapper. It deletes no row, as a failed read looks like a deleted file.
+    // The paths of this owner that another home's rows name and the user may still read. It deletes no row, as a
+    // failed read looks like a deleted file.
     public async getRecentPathsFor(
         user: User,
         memberships: Memberships,

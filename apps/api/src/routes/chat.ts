@@ -84,9 +84,8 @@ export const chatRouter = new Elysia({ name: 'chat' })
 
             const parentId = body.parentId ?? (await drive.ensureChatsFolder(params.mountId));
 
-            // A chat the wizard named gets a free name beside its siblings, and a name the user typed is a
-            // 409 on a clash. The free name is picked with the extension on, because Drive.create adds it
-            // again.
+            // A chat the wizard named gets a free name beside its siblings, and a typed name is a 409 on a clash.
+            // The free name is picked with the extension on, as the siblings are stored, and create adds it again.
             const create = (name: string) => drive.create(params.mountId, parentId, name, DRIVE_TYPE_CHAT, user);
             let chat: DrivePath;
             if (body.dedupeName) {
@@ -99,9 +98,8 @@ export const chatRouter = new Elysia({ name: 'chat' })
                 chat = await create(fileName);
             }
 
-            // A wizard chat is shared from the start. When the share fails, the new chat goes again
-            // instead of staying unshared. No share email goes out, but the notification and the event
-            // still do.
+            // A wizard chat is shared from the start, so a failed share deletes the new chat. No share email goes
+            // out, but the notification and the event still do.
             if (!isTeam) {
                 try {
                     await drive.updateACLDelta(
