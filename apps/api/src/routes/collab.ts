@@ -1,6 +1,6 @@
-// The collab routes: a document's access info and comment index over HTTP, and the WebSocket each
-// editor opens to sync a document. The socket checks read and its session when it opens and on its keepalive, and
-// write on every message, and it hands the frames to the CollabDocument the Drive keeps open for that document.
+// The collab routes: a document's access info and comment index over HTTP, and the WebSocket each editor opens to sync
+// a document. The socket checks read and its session when it opens and on its keepalive, and write on every message,
+// and it hands the frames to the CollabDocument the Drive keeps open for that document.
 
 import {
     COLLAB_ACCESS_LOST_CLOSE,
@@ -23,6 +23,7 @@ import { ApiError } from '../lib/core/errors';
 import { getSharedDrive } from '../lib/drive';
 import type { DriveLike } from '../lib/drive/get-drive';
 import { getDataEpoch } from '../lib/home/data-epoch';
+import { getSessionUser } from '../lib/user';
 import { betterAuth } from './auth';
 
 type CollabSession = {
@@ -170,9 +171,27 @@ export const collabRouter = new Elysia({
                 session.collabDocument = document;
                 const authSessionId = ws.data.session.id;
                 const checkAccess = async () => {
-                    if (!(await document.keepsReadAccess(rawWs, authSessionId))) cleanupSession(session, rawWs);
+                    // The row, not the user the socket opened with: an ACL entry outlives its user, and matches on
+                    // the email.
+                    const current = await getSessionUser(authSessionId);
+                    if (current && (await drive.canRead(mountId, pathId, current))) return;
+                    rawWs.close(COLLAB_ACCESS_LOST_CLOSE, COLLAB_ACCESS_LOST_REASON);
+                    cleanupSession(session, rawWs);
                 };
-                session.pingInterval = keepWebSocketAlive(session, rawWs, checkAccess);
+                // The ping keeps a proxy from dropping the connection. A check that throws says nothing about the
+                // access, so the socket stays and the next tick asks again.
+                session.pingInterval = setInterval(async () => {
+                    if (rawWs.readyState !== WebSocket.OPEN) {
+                        cleanupSession(session, rawWs);
+                        return;
+                    }
+                    try {
+                        rawWs.ping();
+                        await checkAccess();
+                    } catch (err) {
+                        console.error('Error in collab keepalive:', err);
+                    }
+                }, 15_000);
 
                 // A change during the load is found now, not at the first tick. A frame that waits for `opened` finds
                 // no document once the session is cleaned up.
@@ -241,30 +260,8 @@ export const collabRouter = new Elysia({
         },
     });
 
-// Every 15 seconds a ping, so a proxy keeps the connection, and the access check. A check that fails says nothing about
-// the access, so the socket stays and the next tick asks again.
-function keepWebSocketAlive(
-    session: CollabSession,
-    ws: ServerWebSocket<unknown>,
-    checkAccess: () => Promise<void>,
-): ReturnType<typeof setInterval> {
-    return setInterval(async () => {
-        if (ws.readyState !== WebSocket.OPEN) {
-            cleanupSession(session, ws);
-            return;
-        }
-        try {
-            ws.ping();
-            await checkAccess();
-        } catch (err) {
-            console.error('Error in collab keepalive:', err);
-        }
-    }, 15_000);
-}
-
 function cleanupSession(session: CollabSession, ws: ServerWebSocket<unknown>): void {
-    if (session.pingInterval) clearInterval(session.pingInterval);
-    session.pingInterval = undefined;
+    clearInterval(session.pingInterval);
     session.collabDocument?.unsubscribe(ws);
     session.collabDocument = undefined;
     session.releaseHome?.();

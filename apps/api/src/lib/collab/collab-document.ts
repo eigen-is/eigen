@@ -5,7 +5,6 @@
 // holding its Home while it waits. Before that close, a workbook saves a version and folds its op log.
 
 import { restoreYjsDoc } from '@workspace/lib/collab/yjs-utils';
-import { COLLAB_ACCESS_LOST_CLOSE, COLLAB_ACCESS_LOST_REASON } from '@workspace/lib/constants/collab';
 import { isRecord } from '@workspace/lib/guards';
 import { readSheetsBase, writeSheetsSnapshot } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -28,7 +27,6 @@ import {
     CONTAINER_MEDIA_FOLDER,
 } from '../mount/container-dbs';
 import type { User } from '../user';
-import { getSessionUser } from '../user';
 import { COLLAB_DB_CONFIG } from './db-config';
 import { DbProvider } from './db-provider';
 
@@ -208,17 +206,6 @@ export class CollabDocument {
             if (connection.readyState >= WebSocket.CLOSING) this.dropConnection(connection);
         }
         if (this.connections.size === 0) this.scheduleClose();
-    }
-
-    // Closes a connection whose session ended or whose user may no longer read, and answers whether it is still here.
-    public async keepsReadAccess(conn: ServerWebSocket<unknown>, sessionId: string): Promise<boolean> {
-        if (!this.connections.has(conn)) return false;
-        // The row, not the user the socket opened with: an ACL entry outlives its user, and matches on the email.
-        const user = await getSessionUser(sessionId);
-        if (user && (await this.drive.canRead(this.path.mountId, this.path.id, user))) return true;
-        conn.close(COLLAB_ACCESS_LOST_CLOSE, COLLAB_ACCESS_LOST_REASON);
-        this.unsubscribe(conn);
-        return false;
     }
 
     public handleMessage(conn: ServerWebSocket<unknown>, message: Uint8Array, canWrite: boolean): void {
