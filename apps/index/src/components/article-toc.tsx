@@ -1,6 +1,6 @@
 // The table of contents in the left gutter of a reading page, such as "On this page" beside an article or "Versions"
 // beside the changelog. It sticks at the top of the page's padding, so it does not move while the page scrolls,
-// and marks the entry whose heading is in the top third of the screen. It draws nothing for fewer than two entries.
+// and marks the entry whose heading last passed the top third of the screen. It draws nothing for fewer than two entries.
 
 import { cn } from '@workspace/ui/lib/utils';
 import { useEffect, useMemo, useState } from 'react';
@@ -23,19 +23,23 @@ export function ArticleToc({ toc, label = 'On this page' }: ArticleTocProps) {
             .filter((el): el is HTMLElement => el !== null);
         if (headings.length === 0) return;
 
-        // The band is the top third of the viewport; the topmost heading inside
-        // it is active. When nothing is in the band the previous one stays.
-        const visible = new Map<string, boolean>();
-        const observer = new IntersectionObserver(
-            (changes) => {
-                for (const change of changes) visible.set(change.target.id, change.isIntersecting);
-                const active = entries.find((entry) => visible.get(entry.id));
-                if (active) setActiveId(active.id);
-            },
-            { rootMargin: '0px 0px -66% 0px' },
-        );
-        for (const heading of headings) observer.observe(heading);
-        return () => observer.disconnect();
+        // Scroll events do not bubble, so the capture phase on the document hears whichever div scrolls. The active
+        // entry is the last heading above the top third of the screen, or the last entry at the end of the scroller,
+        // which a short page never lets a heading reach the top third.
+        const onScroll = (event: Event) => {
+            const scroller =
+                event.target instanceof Element
+                    ? event.target
+                    : (document.scrollingElement ?? document.documentElement);
+            if (!scroller.contains(headings[0])) return;
+            const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
+            const line = window.innerHeight / 3;
+            const above = headings.filter((heading) => heading.getBoundingClientRect().top <= line);
+            const active = atBottom ? headings[headings.length - 1] : above[above.length - 1];
+            if (active) setActiveId(active.id);
+        };
+        document.addEventListener('scroll', onScroll, true);
+        return () => document.removeEventListener('scroll', onScroll, true);
     }, [entries]);
 
     if (entries.length < 2) return null;
