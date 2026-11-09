@@ -105,7 +105,7 @@ Right-click a cell that has a comment to see its options:
 - **View comment**: opens the comment thread.
 - **Comment color**: change the color of the cell marker.
 - **Resolve comment** / **Reopen comment**: toggle the status.
-- **Delete comment**: removes the comment from the cell. If you opened the menu on a comment in the comments pane, it asks you to confirm first. To bring it back, press **Ctrl+Z** (Mac: **⌘Z**) before you close the spreadsheet.
+- **Delete comment**: removes the comment from the cell, once you confirm. To bring it back, press **Ctrl+Z** (Mac: **⌘Z**) before you close the spreadsheet.
 
 To edit the title or description of an existing comment, open the thread and click the pencil icon (**Edit**) near the top of the dialog. The trash icon (**Delete**) at the bottom of the edit form deletes the comment, after you confirm.
 
