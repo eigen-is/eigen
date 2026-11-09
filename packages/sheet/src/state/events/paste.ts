@@ -4,15 +4,14 @@
 // none of it comes here. Each kind asks roomFor before its first write, which refuses it or grows the grid.
 
 import { formatForDisplay } from '@tanstack/react-hotkeys';
-import { bundledFontOfStack, readCssFontSize } from '@workspace/lib/constants/fonts';
 import type { CellBorderSides } from '@workspace/lib/sheets';
-import { BORDER_SIDE_CSS, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
-import { cloneDeep, includes, isEmpty, isNil, times, trim } from 'es-toolkit/compat';
+import { BORDER_SIDE_CSS } from '@workspace/lib/sheets';
+import { cloneDeep, isEmpty, isNil, times } from 'es-toolkit/compat';
 import { createArrayResolver } from '../../engine/cell-resolver';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
-import { numberDisplay, parseCellInput } from '../../engine/format';
+import { numberDisplay } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
-import type { Cell, CellMatrix } from '../../engine/types';
+import type { CellMatrix } from '../../engine/types';
 import { setRowHeight } from '../api';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
@@ -27,6 +26,7 @@ import { normalizeSelection } from '../modules/selection';
 import { hasPartMC, PART_MERGE_REFUSAL } from '../modules/validation';
 import { getSheetIndex } from '../utils';
 import { SHEET_HOTKEYS } from './keyboard';
+import { pastedCell, readStyleRules } from './paste-cell';
 
 // What a paste reads of the clipboard: a paste event's DataTransfer, or one a menu row filled.
 type PastedData = { getData: (type: string) => string; files: ArrayLike<File> };
@@ -84,8 +84,7 @@ function pasteCut(ctx: Context, copyState: NonNullable<Context['copyState']>) {
     const copySheetId = copyState.dataSheetId;
     const sourceRange = copyState.copyRange[0];
 
-    const copySheet = getSheet(ctx, { id: copySheetId });
-    if (!copySheet.data) return;
+    if (!getSheet(ctx, { id: copySheetId }).data) return;
     const lines = movedLines(ctx, copySheetId, sourceRange);
     if (!lines) return;
 
@@ -100,8 +99,7 @@ function pasteCut(ctx: Context, copyState: NonNullable<Context['copyState']>) {
     const left = last.column_focus;
     const right = left + width - 1;
 
-    const d = roomFor(ctx, top, bottom, left, right);
-    if (!d) return;
+    if (!roomFor(ctx, top, bottom, left, right)) return;
 
     moveCells(ctx, lines, sourceRange, { row: top, column: left, height, width });
 
@@ -120,38 +118,29 @@ function pasteCopy(ctx: Context, copyState: NonNullable<Context['copyState']>) {
     const copySheetId = copyState.dataSheetId;
     const lines = carriedLines(ctx, copySheetId, copyState.copyRange);
     if (!lines) return;
-    const copyh = lines.rows.length;
-    const copyc = lines.columns.length;
+    const height = lines.rows.length;
+    const width = lines.columns.length;
     // A filter can hide every row of the copy.
-    if (copyh === 0 || copyc === 0) return;
+    if (height === 0 || width === 0) return;
 
     const last = ctx.selections?.at(-1);
     if (!last) return;
-    const minh = last.row[0];
-    let maxh = last.row[1];
-    const minc = last.column[0];
-    let maxc = last.column[1];
+    const top = last.row[0];
+    let bottom = last.row[1];
+    const left = last.column[0];
+    let right = last.column[1];
 
-    const mh = (maxh - minh + 1) % copyh;
-    const mc = (maxc - minc + 1) % copyc;
-
-    if (mh !== 0 || mc !== 0) {
+    if ((bottom - top + 1) % height !== 0 || (right - left + 1) % width !== 0) {
         // A target that is not a whole multiple of the copy takes the copy's size.
-        maxh = minh + copyh - 1;
-        maxc = minc + copyc - 1;
+        bottom = top + height - 1;
+        right = left + width - 1;
     }
 
-    const d = roomFor(ctx, minh, maxh, minc, maxc);
-    if (!d) return;
-
-    const timesH = (maxh - minh + 1) / copyh;
-    const timesC = (maxc - minc + 1) / copyc;
+    if (!roomFor(ctx, top, bottom, left, right)) return;
 
     const tiles: CarryTile[] = [];
-    for (let th = 0; th < timesH; th += 1) {
-        for (let tc = 0; tc < timesC; tc += 1) {
-            tiles.push({ row: minh + th * copyh, column: minc + tc * copyc, height: copyh, width: copyc });
-        }
+    for (let row = top; row <= bottom; row += height) {
+        for (let column = left; column <= right; column += width) tiles.push({ row, column, height, width });
     }
 
     // A copy of several ranges pastes the values of its formulas, not the formulas.
@@ -169,8 +158,8 @@ function pasteCopy(ctx: Context, copyState: NonNullable<Context['copyState']>) {
         return { ...cloneDeep(source), v, f, m: numberDisplay(v, source.ct?.fa) };
     });
 
-    last.row = [minh, maxh];
-    last.column = [minc, maxc];
+    last.row = [top, bottom];
+    last.column = [left, right];
 
     jfrefreshgrid(ctx);
 }
@@ -192,7 +181,7 @@ function pasteTable(ctx: Context, html: string) {
 
     const borderInfo: Record<string, CellBorderSides> = {};
     const styleRules = readStyleRules(parsed.querySelector('style')?.textContent ?? '');
-    const tdVerticalAlign = styleRules.get('td')?.['vertical-align'];
+    const tableVerticalAlign = styleRules.get('td')?.['vertical-align'];
 
     const currentRowlen = getSheetConfig(ctx)?.rowlen ?? {};
     const rowHeights: Record<number, number> = {};
@@ -209,72 +198,9 @@ function pasteTable(ctx: Context, html: string) {
         }
 
         for (const td of tr.querySelectorAll('td')) {
-            const cell: Cell = {};
-            const txt = td.innerText || td.innerHTML;
-            if (trim(txt).length === 0) {
-                cell.v = undefined;
-                cell.m = '';
-            } else {
-                const mask = parseCellInput(txt);
-                [cell.m, cell.ct, cell.v] = mask;
-            }
             const styles = styleRules.get(`.${td.className}`) ?? {};
             if (!isNil(styles.border)) td.style.border = styles.border;
-            let bg: string | undefined = td.style.backgroundColor || styles.background;
-            if (bg === 'rgba(0, 0, 0, 0)' || isEmpty(bg)) bg = undefined;
-            cell.bg = bg;
-
-            const fontWeight = td.style.fontWeight;
-            cell.bl =
-                (fontWeight === '400' || fontWeight === 'normal' || isEmpty(fontWeight)) &&
-                !includes(styles['font-style'], 'bold') &&
-                (!styles['font-weight'] || styles['font-weight'] === '400')
-                    ? 0
-                    : 1;
-
-            cell.it =
-                (td.style.fontStyle === 'normal' || isEmpty(td.style.fontStyle)) &&
-                !includes(styles['font-style'], 'italic')
-                    ? 0
-                    : 1;
-
-            cell.un =
-                includes(td.style.textDecoration, 'underline') || includes(styles['text-decoration'], 'underline')
-                    ? 1
-                    : undefined;
-
-            cell.cl =
-                includes(td.innerHTML, '<s>') ||
-                includes(td.style.textDecoration, 'line-through') ||
-                includes(styles['text-decoration'], 'line-through')
-                    ? 1
-                    : undefined;
-
-            const ff = bundledFontOfStack(td.style.fontFamily || styles['font-family'] || '');
-            if (ff) cell.ff = ff;
-            cell.fs =
-                readCssFontSize(td.style.fontSize) ??
-                readCssFontSize(styles['font-size'] ?? '') ??
-                SHEET_DEFAULT_FONT_SIZE;
-
-            cell.fc = td.style.color || styles.color;
-
-            // A cell without one is left to its value, so a number lands on the right.
-            const ht = td.style.textAlign || styles['text-align'];
-            if (ht === 'center') cell.ht = 0;
-            else if (ht === 'right') cell.ht = 2;
-            else if (ht === 'left') cell.ht = 1;
-
-            const vt = td.style.verticalAlign || styles['vertical-align'] || tdVerticalAlign || 'top';
-            if (vt === 'middle') {
-                cell.vt = 0;
-            } else if (vt === 'top' || vt === 'text-top') {
-                cell.vt = 1;
-            } else {
-                cell.vt = 2;
-            }
-
-            if ('mso-rotate' in styles) cell.rt = parseFloat(styles['mso-rotate']);
+            const cell = pastedCell(td, styles, tableVerticalAlign);
 
             while (c < colLen && !isNil(data[r][c])) {
                 c += 1;
@@ -285,8 +211,8 @@ function pasteTable(ctx: Context, html: string) {
             // A span ends at the table's edge, as it does on the page.
             const rowspan = Math.min(td.rowSpan, data.length - r);
             const colspan = Math.min(td.colSpan, colLen - c);
-            const r_ab = anchor.row[0] + r;
-            const c_ab = anchor.column[0] + c;
+            const anchorRow = anchor.row[0] + r;
+            const anchorColumn = anchor.column[0] + c;
 
             for (let rp = 0; rp < rowspan; rp += 1) {
                 for (let cp = 0; cp < colspan; cp += 1) {
@@ -306,11 +232,11 @@ function pasteTable(ctx: Context, html: string) {
                         );
                     }
 
-                    if (rp > 0 || cp > 0) data[r + rp][c + cp] = { mc: { r: r_ab, c: c_ab } };
+                    if (rp > 0 || cp > 0) data[r + rp][c + cp] = { mc: { r: anchorRow, c: anchorColumn } };
                 }
             }
 
-            if (rowspan > 1 || colspan > 1) cell.mc = { rs: rowspan, cs: colspan, r: r_ab, c: c_ab };
+            if (rowspan > 1 || colspan > 1) cell.mc = { rs: rowspan, cs: colspan, r: anchorRow, c: anchorColumn };
             c += 1;
         }
     }
@@ -339,29 +265,6 @@ function pasteTable(ctx: Context, html: string) {
 
     ctx.selections = [{ row: [top, bottom], column: [left, right] }];
     jfrefreshgrid(ctx);
-}
-
-// Reads a pasted <style> block into each rule's declarations, keyed by selector. Office wraps the block in an
-// HTML comment and writes properties a browser's own CSS parser drops, such as mso-rotate, so the paste reads
-// the text itself. A rule for `td.xl65` is filed under `.xl65`. An at-rule such as @page or @media is skipped,
-// with the rules nested inside it.
-function readStyleRules(css: string): Map<string, Record<string, string>> {
-    const rules = new Map<string, Record<string, string>>();
-    const text = css
-        .replace(/<!--|-->|\/\*[\s\S]*?\*\//g, ' ')
-        .replace(/@[^{};]*(?:;|\{(?:[^{}]|\{[^{}]*\})*\})/g, ' ');
-    for (const [, selectors, body] of text.matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
-        const declarations: Record<string, string> = {};
-        for (const [declaration] of body.matchAll(/(?:[^;"']|"[^"]*"|'[^']*')+/g)) {
-            const colon = declaration.indexOf(':');
-            if (colon > 0) declarations[declaration.slice(0, colon).trim()] = declaration.slice(colon + 1).trim();
-        }
-        for (const selector of selectors.split(',')) {
-            const key = selector.trim().replace(/^td(?=\.)/, '');
-            rules.set(key, { ...rules.get(key), ...declarations });
-        }
-    }
-    return rules;
 }
 
 // Plain text, tabs between columns and newlines between rows. A line with fewer columns than the first is left out.
