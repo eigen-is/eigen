@@ -138,8 +138,8 @@ export const InputBox: React.FC = () => {
                 });
                 e.preventDefault();
             } else if (e.key === 'F4' && context.editingCellPosition.length > 0) {
-                // Cycle the reference at the caret (A1 → $A$1 → A$1 → $A1 → A1); keep the
-                // browser default suppressed even when the caret isn't on a reference.
+                // Cycle the reference at the caret (A1 → $A$1 → A$1 → $A1 → A1). The browser's default stays suppressed
+                // even when the caret isn't on a reference.
                 e.preventDefault();
                 cycleReferenceInEditor(input, refs.fxInput.current, setContext);
             } else if (

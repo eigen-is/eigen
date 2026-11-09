@@ -3,11 +3,11 @@
 import { describe, expect, test } from 'bun:test';
 import { produce } from 'immer';
 import type { Context } from '../../../state/context';
+import { autoSelectionFormula } from '../../../state/modules/autosum';
 import { updateCell } from '../../../state/modules/cell';
 import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import { replaceSearchMatch } from '../../../state/modules/search-replace';
 import { sortRange } from '../../../state/modules/sort';
-import { autoSelectionFormula } from '../../../state/modules/toolbar';
 import { tab, tabEdit, tabUndo } from '../factories/collab';
 import { contextFactory, selectionFactory } from '../factories/context';
 

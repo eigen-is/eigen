@@ -47,31 +47,22 @@ export function FxEditor() {
         const fxInput = refs.fxInput.current;
         if (!fxInput) return;
         const d = getFlowdata(context);
-        let value = '';
+        let html = '';
         if (selection) {
             const r = selection.row_focus;
             const c = selection.column_focus;
             if (r == null || c == null) return;
 
             const cell = d?.[r]?.[c];
-            let isGeneratedHtml = false;
             if (cell) {
                 const rich = richText(cell);
-                if (rich !== undefined) {
-                    value = rich;
-                } else if (cell.f) {
-                    // Colored spans, escaped at their leaves — render, do not escape again.
-                    value = getFormulaHtml(r, c, d) ?? '';
-                    isGeneratedHtml = true;
-                } else {
-                    const shown = valueShowEs(r, c, d);
-                    value = shown == null ? '' : String(shown);
-                }
+                if (rich !== undefined) html = escapeHtml(rich);
+                // Colored spans, escaped at their leaves: render, do not escape again.
+                else if (cell.f) html = getFormulaHtml(r, c, d) ?? '';
+                else html = escapeHtml(String(valueShowEs(r, c, d) ?? ''));
             }
-            fxInput.innerHTML = isGeneratedHtml ? value : escapeHtml(value);
-        } else {
-            fxInput.innerHTML = '';
         }
+        fxInput.innerHTML = html;
     }, [context.sheets, context.currentSheetId, context.selections, context.editingCellPosition]);
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: callback only refreshed when sheet/selection-shape changes — derived helpers (allowEdit, etc.) are read fresh from `context`
@@ -110,8 +101,7 @@ export function FxEditor() {
             if (formulaAutocomplete.handleKeyDown(e)) return;
 
             if (key === 'F4' && context.editingCellPosition.length > 0) {
-                // Cycle the reference at the caret (A1 → $A$1 → A$1 → $A1 → A1); keep the
-                // browser default suppressed even when the caret isn't on a reference.
+                // The browser's default stays suppressed even when the caret isn't on a reference.
                 e.preventDefault();
                 cycleReferenceInEditor(fxInput, refs.cellInput.current, setContext);
                 return;

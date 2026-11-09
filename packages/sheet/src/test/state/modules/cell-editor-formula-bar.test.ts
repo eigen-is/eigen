@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
+import { autoSelectionFormula } from '../../../state/modules/autosum';
 import { openCellEditor } from '../../../state/modules/cell-editor';
-import { autoSelectionFormula } from '../../../state/modules/toolbar';
 import { contextFactory, selectionFactory } from '../factories/context';
 
 installHappyDom();
