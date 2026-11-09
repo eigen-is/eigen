@@ -28,7 +28,6 @@ import type {
 import type { ConditionRuleType } from './modules/condition-format';
 import type { EntryOptions } from './utils';
 
-// Re-exported so state code needn't know where each type lives.
 export type {
     Cell,
     CellMatrix,
@@ -160,15 +159,16 @@ export type History = {
     gesture?: object;
 };
 
-export type FreezenAxisData = {
-    pos: number; // pixel position of the freeze boundary (visibledatarow/col at row_st/col_st)
-    boundary: number; // first row/col index immediately past the freeze boundary
-    scroll: number; // scroll offset captured at freeze init (currently always 0)
+export type FrozenAxis = {
+    // Pixels from the sheet's edge to the end of the frozen pane.
+    pos: number;
+    // The first row or column past the frozen pane.
+    boundary: number;
 };
 
-export type Freezen = {
-    horizontal?: { freezenhorizontaldata: FreezenAxisData };
-    vertical?: { freezenverticaldata: FreezenAxisData };
+export type Freeze = {
+    rows?: FrozenAxis;
+    columns?: FrozenAxis;
 };
 
 export type GlobalCache = {
@@ -184,7 +184,6 @@ export type GlobalCache = {
     // The chart this workbook last copied: the inline parts it put on the clipboard and the chart itself, with its
     // ranges, which a paste of those same parts here keeps, as the wire carries only what every other app can read.
     copiedChart?: { inline: ChartSpecTexts; chart: SheetChart };
-    freezen?: Record<string, Freezen>;
 
     // Kept outside React and immer, so a scroll tick doesn't render every reader of the context.
     scrollLeft: number;

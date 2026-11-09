@@ -4,7 +4,7 @@
 
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { Window } from 'happy-dom';
-import type { Context, Freezen } from '../../../state';
+import type { Context, Sheet } from '../../../state';
 import {
     handleCellAreaDoubleClick,
     handleCellAreaMouseDown,
@@ -32,14 +32,7 @@ const HEIGHT = 500;
 const COLUMN = 74;
 const ROW = 20;
 
-const FROZEN: Freezen = {
-    vertical: {
-        freezenverticaldata: { pos: COLUMN, boundary: 1, scroll: 0 },
-    },
-    horizontal: {
-        freezenhorizontaldata: { pos: 2 * ROW, boundary: 2, scroll: 0 },
-    },
-};
+const FROZEN = { type: 'rangeBoth', range: { row_focus: 1, column_focus: 0 } } as const;
 
 function cellAreaAt(scrollLeft = 0, scrollTop = 0) {
     const { scrollEl } = gridElements();
@@ -49,14 +42,14 @@ function cellAreaAt(scrollLeft = 0, scrollTop = 0) {
     return scrollEl;
 }
 
-function grid(freeze?: Freezen): Context {
+function grid(frozen?: Sheet['frozen']): Context {
     const size = 40;
     const ctx = workbookContextFactory({
         visibledatarow: Array.from({ length: size }, (_, i) => (i + 1) * ROW),
         visibledatacolumn: Array.from({ length: size }, (_, i) => (i + 1) * COLUMN),
     });
     ctx.sheets[0].data = Array.from({ length: size }, () => Array.from({ length: size }, () => null));
-    if (freeze) ctx.getRefs().globalCache.freezen = { [ctx.currentSheetId]: freeze };
+    ctx.sheets[0].frozen = frozen;
     return ctx;
 }
 
@@ -110,7 +103,7 @@ describe('sheetPoint', () => {
 
     test('a sheet frozen elsewhere reads as the sheet the pointer is on', () => {
         const ctx = grid();
-        ctx.getRefs().globalCache.freezen = { other_sheet: FROZEN };
+        ctx.sheets.push({ ...ctx.sheets[0], id: 'other_sheet', frozen: FROZEN });
         expect(sheetPoint(ctx, at(30, 30), cellAreaAt(148, 400)).pane).toBe('main');
     });
 
@@ -169,13 +162,13 @@ describe('a formula range drag', () => {
     });
 
     test('over frozen rows picks the frozen row, not the one scrolled under it', () => {
-        ctx.getRefs().globalCache.freezen = { [ctx.currentSheetId]: FROZEN };
+        ctx.sheets[0].frozen = FROZEN;
         rangeDragRow(ctx, at(-10, ROW + 5), noInput(), cellAreaAt(0, 10 * ROW), noElements());
         expect(selected()?.row).toEqual([0, 1]);
     });
 
     test('over a frozen column picks the frozen column, not the one scrolled under it', () => {
-        ctx.getRefs().globalCache.freezen = { [ctx.currentSheetId]: FROZEN };
+        ctx.sheets[0].frozen = FROZEN;
         rangeDrag(ctx, at(5, 100), noInput(), cellAreaAt(3 * COLUMN), noElements());
         expect(selected()?.column).toEqual([0, 0]);
     });
@@ -250,27 +243,24 @@ describe('a freeze line drop', () => {
         handleOverlayMouseUp(ctx, ctx.getRefs().globalCache, drop, cellArea, noElements(), null, null);
         return ctx.sheets[0].frozen;
     };
-    const frozenTwoColumns: Freezen = {
-        vertical: { freezenverticaldata: { pos: 2 * COLUMN, boundary: 2, scroll: 0 } },
-    };
     const twoColumns = { type: 'rangeColumn', range: { row_focus: 0, column_focus: 1 } } as const;
 
     test('inside the frozen pane of a scrolled sheet ends the pane where it was dropped', () => {
-        const ctx = grid(frozenTwoColumns);
+        const ctx = grid(twoColumns);
         ctx.sheets[0].frozen = { ...twoColumns };
         ctx.colsFreezeDragging = true;
         expect(released(ctx, at(COLUMN + 5, 100), cellAreaAt(10 * COLUMN))?.range?.column_focus).toBe(0);
     });
 
     test('at the header edge of a scrolled sheet stops freezing', () => {
-        const ctx = grid(frozenTwoColumns);
+        const ctx = grid(twoColumns);
         ctx.sheets[0].frozen = { ...twoColumns };
         ctx.colsFreezeDragging = true;
         expect(released(ctx, at(-20, 100), cellAreaAt(10 * COLUMN))).toBeUndefined();
     });
 
     test('past the pane on a scrolled sheet freezes up to the column in view there', () => {
-        const ctx = grid(frozenTwoColumns);
+        const ctx = grid(twoColumns);
         ctx.sheets[0].frozen = { ...twoColumns };
         ctx.colsFreezeDragging = true;
         expect(released(ctx, at(3 * COLUMN + 5, 100), cellAreaAt(10 * COLUMN))?.range?.column_focus).toBe(12);

@@ -12,20 +12,20 @@ import {
     computeRowHeaderRegions,
     overlayRegionForCell,
 } from '../../../state/modules/freeze';
-import type { Freezen } from '../../../state/types';
+import type { Freeze } from '../../../state/types';
 
 const VIEW_W = 900;
 const VIEW_H = 500;
 
-function rowsFreeze(pos: number, boundary: number, scroll = 0): Freezen {
-    return { horizontal: { freezenhorizontaldata: { pos, boundary, scroll } } };
+function rowsFreeze(pos: number, boundary: number): Freeze {
+    return { rows: { pos, boundary } };
 }
 
-function colsFreeze(pos: number, boundary: number, scroll = 0): Freezen {
-    return { vertical: { freezenverticaldata: { pos, boundary, scroll } } };
+function colsFreeze(pos: number, boundary: number): Freeze {
+    return { columns: { pos, boundary } };
 }
 
-function bothFreeze(rowPos: number, rowBoundary: number, colPos: number, colBoundary: number): Freezen {
+function bothFreeze(rowPos: number, rowBoundary: number, colPos: number, colBoundary: number): Freeze {
     return {
         ...rowsFreeze(rowPos, rowBoundary),
         ...colsFreeze(colPos, colBoundary),
@@ -125,13 +125,6 @@ describe('computeOverlayRegions', () => {
             { pane: 'corner', left: 0, top: 0, width: 73, height: 42, clip: true, fixedLeft: 0, fixedTop: 0 },
         ]);
     });
-
-    it('a non-zero freeze-time scroll shrinks the band and pins to that scroll', () => {
-        // Band shows content [scroll, pos): height = pos - scroll, fixedTop = scroll.
-        const regions = computeOverlayRegions(rowsFreeze(52, 2, 10), VIEW_W, VIEW_H);
-        expect(regions[0]).toMatchObject({ pane: 'main', top: 42, height: VIEW_H - 42 });
-        expect(regions[1]).toMatchObject({ pane: 'rows', height: 42, fixedTop: 10 });
-    });
 });
 
 // The header projections drop the irrelevant axis of the body regions and pin
@@ -175,12 +168,6 @@ describe('computeColumnHeaderRegions', () => {
             { pane: 'cols', left: 0, top: 0, width: 73, height: HEADER_H, clip: true, fixedLeft: 0, fixedTop: 0 },
         ]);
     });
-
-    it('a non-zero freeze-time scroll shrinks the band and pins to that scroll', () => {
-        const regions = computeColumnHeaderRegions(colsFreeze(83, 1, 10), VIEW_W, HEADER_H);
-        expect(regions[0]).toMatchObject({ pane: 'main', left: 73, width: VIEW_W - 73 });
-        expect(regions[1]).toMatchObject({ pane: 'cols', width: 73, fixedLeft: 10, fixedTop: 0 });
-    });
 });
 
 describe('computeRowHeaderRegions', () => {
@@ -221,12 +208,6 @@ describe('computeRowHeaderRegions', () => {
             },
             { pane: 'rows', left: 0, top: 0, width: HEADER_W, height: 42, clip: true, fixedLeft: 0, fixedTop: 0 },
         ]);
-    });
-
-    it('a non-zero freeze-time scroll shrinks the band and pins to that scroll', () => {
-        const regions = computeRowHeaderRegions(rowsFreeze(52, 2, 10), HEADER_W, VIEW_H);
-        expect(regions[0]).toMatchObject({ pane: 'main', top: 42, height: VIEW_H - 42 });
-        expect(regions[1]).toMatchObject({ pane: 'rows', height: 42, fixedLeft: 0, fixedTop: 10 });
     });
 });
 

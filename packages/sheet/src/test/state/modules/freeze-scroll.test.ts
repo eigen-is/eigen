@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { Selection } from '../../../state';
-import { initFreeze, scrollToFrozenRowCol } from '../../../state/modules/freeze';
+import { scrollToFrozenRowCol } from '../../../state/modules/freeze';
 import { workbookContextFactory } from '../factories/context';
 
 const COLUMNS = 26;
@@ -26,9 +26,7 @@ function dragTo(selections: Selection[], scrollLeft: number, scrollTop: number) 
         scrollLeft,
         scrollTop,
     });
-    const cache = ctx.getRefs().globalCache;
-    initFreeze(ctx, cache, 'one');
-    scrollToFrozenRowCol(ctx, cache.freezen?.one);
+    scrollToFrozenRowCol(ctx);
     return ctx.scrollRequest;
 }
 

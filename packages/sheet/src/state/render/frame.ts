@@ -7,7 +7,7 @@
 import { SHEET_COLUMN_HEADER_HEIGHT, SHEET_ROW_HEADER_WIDTH } from '@workspace/lib/sheets';
 import { Canvas } from '../canvas';
 import type { Context } from '../context';
-import type { Freezen } from '../types';
+import type { Freeze } from '../types';
 
 export type ScrollPos = { scrollLeft: number; scrollTop: number };
 
@@ -43,7 +43,7 @@ const EDGE = 4;
 const MARGIN = 8;
 const HEADER_MARGIN = 32;
 
-export function drawFrame(canvas: HTMLCanvasElement, ctx: Context, scroll: ScrollPos, freeze: Freezen | undefined) {
+export function drawFrame(canvas: HTMLCanvasElement, ctx: Context, scroll: ScrollPos, freeze: Freeze | undefined) {
     const renderCtx = canvas.getContext('2d');
     if (!renderCtx) return;
     const painter = new Canvas(canvas, ctx);
@@ -59,7 +59,7 @@ export function drawFrame(canvas: HTMLCanvasElement, ctx: Context, scroll: Scrol
 export function scrollFrame(
     canvas: HTMLCanvasElement,
     ctx: Context,
-    freeze: Freezen | undefined,
+    freeze: Freeze | undefined,
     from: ScrollPos,
     to: ScrollPos,
 ): boolean {
@@ -82,7 +82,7 @@ export function scrollFrame(
 // that most of the canvas would be repainted anyway.
 export function planScroll(
     ctx: Context,
-    freeze: Freezen | undefined,
+    freeze: Freeze | undefined,
     from: ScrollPos,
     to: ScrollPos,
     width: number,
@@ -103,10 +103,8 @@ export function planScroll(
         if (shiftX === 0 && shiftY === 0) continue;
         const area = intersect(coveredPixels(layer.paint, dpr), bounds);
         if (!area) continue;
-        // A pixel the layer shares with its neighbour, at a fractional pixel ratio, is repainted, never
-        // copied: two layers would each copy it. Only the ends across the scroll differ from the pane's
-        // middle; along its sides a moved pixel comes from the same column or row of the same pane, and
-        // the freeze lines look alike all along.
+        // A pixel shared with a neighbouring layer, at a fractional pixel ratio, is repainted, never copied:
+        // two layers would each copy it. Only the ends across the scroll look different from the pane's middle.
         const whole = intersect(wholePixels(layer.paint, dpr), bounds);
         const inside = whole && shrink(whole, shiftX ? edge : 0, shiftY ? edge : 0, bounds);
         const kept = inside && intersect(inside, translate(inside, -shiftX, -shiftY));
@@ -122,9 +120,9 @@ export function planScroll(
 // The frame's painter calls, in paint order: the main pane, the frozen rows, the frozen columns and their
 // corner, then the column headers and the row headers. Each band of columns or rows has where it starts on
 // the canvas, how long it is, the sheet position it shows there, and whether it follows the scroll.
-function frameLayers(ctx: Context, scroll: ScrollPos, freeze: Freezen | undefined): Layer[] {
-    const rows = freeze?.horizontal?.freezenhorizontaldata;
-    const cols = freeze?.vertical?.freezenverticaldata;
+function frameLayers(ctx: Context, scroll: ScrollPos, freeze: Freeze | undefined): Layer[] {
+    const rows = freeze?.rows;
+    const cols = freeze?.columns;
     const [width, height] = ctx.tableContentSize;
     const { frozenWidth, frozenHeight } = frozenSize(freeze);
 
@@ -136,7 +134,7 @@ function frameLayers(ctx: Context, scroll: ScrollPos, freeze: Freezen | undefine
             follows: true,
         },
     ];
-    if (cols) colBands.push({ at: SHEET_ROW_HEADER_WIDTH, size: cols.pos, sheet: cols.scroll, follows: false });
+    if (cols) colBands.push({ at: SHEET_ROW_HEADER_WIDTH, size: cols.pos, sheet: 0, follows: false });
     const rowBands = [
         {
             at: SHEET_COLUMN_HEADER_HEIGHT + frozenHeight,
@@ -145,7 +143,7 @@ function frameLayers(ctx: Context, scroll: ScrollPos, freeze: Freezen | undefine
             follows: true,
         },
     ];
-    if (rows) rowBands.push({ at: SHEET_COLUMN_HEADER_HEIGHT, size: rows.pos, sheet: rows.scroll, follows: false });
+    if (rows) rowBands.push({ at: SHEET_COLUMN_HEADER_HEIGHT, size: rows.pos, sheet: 0, follows: false });
 
     const layers: Layer[] = [];
     for (const col of colBands) {
@@ -188,10 +186,10 @@ function frameLayers(ctx: Context, scroll: ScrollPos, freeze: Freezen | undefine
 }
 
 // How far the frozen columns and rows reach on the canvas past the headers.
-function frozenSize(freeze: Freezen | undefined) {
-    const rows = freeze?.horizontal?.freezenhorizontaldata;
-    const cols = freeze?.vertical?.freezenverticaldata;
-    return { frozenWidth: cols ? cols.pos - cols.scroll : 0, frozenHeight: rows ? rows.pos - rows.scroll : 0 };
+function frozenSize(freeze: Freeze | undefined) {
+    const rows = freeze?.rows;
+    const cols = freeze?.columns;
+    return { frozenWidth: cols?.pos ?? 0, frozenHeight: rows?.pos ?? 0 };
 }
 
 // Paints the part of a layer that falls in `part`, a box inside the layer's own, in CSS pixels.
@@ -226,12 +224,12 @@ function paintLayer(painter: Canvas, renderCtx: CanvasRenderingContext2D, ctx: C
     renderCtx.restore();
 }
 
-function drawFreezeLines(painter: Canvas, freeze: Freezen | undefined) {
-    if (!freeze?.horizontal && !freeze?.vertical) return;
+function drawFreezeLines(painter: Canvas, freeze: Freeze | undefined) {
+    if (!freeze?.rows && !freeze?.columns) return;
     const { frozenWidth, frozenHeight } = frozenSize(freeze);
     painter.drawFreezeLine({
-        horizontalTop: freeze.horizontal ? frozenHeight + SHEET_COLUMN_HEADER_HEIGHT - 2 : undefined,
-        verticalLeft: freeze.vertical ? frozenWidth + SHEET_ROW_HEADER_WIDTH - 2 : undefined,
+        horizontalTop: freeze.rows ? frozenHeight + SHEET_COLUMN_HEADER_HEIGHT - 2 : undefined,
+        verticalLeft: freeze.columns ? frozenWidth + SHEET_ROW_HEADER_WIDTH - 2 : undefined,
     });
 }
 
@@ -263,7 +261,7 @@ function repaint(
     painter: Canvas,
     renderCtx: CanvasRenderingContext2D,
     ctx: Context,
-    freeze: Freezen | undefined,
+    freeze: Freeze | undefined,
     layers: Layer[],
     box: Box,
 ) {

@@ -1,49 +1,29 @@
-// The frozen panes as the grid shows them. initFreeze turns a sheet's frozen pane into the pane bounds that the canvas,
-// the overlays and the scroll read, and the helpers here place the overlay panes and the headers' freeze handles.
-// The sheet view calls initFreeze, for example when the sheet or its sizes change, and callers such as the headers and
-// the drag handlers use the rest.
+// The frozen panes as the grid shows them. freezeOf reads the current sheet's frozen pane as the pane bounds that the
+// canvas, the overlays and the mouse handlers use, on the geometry of the same context, and the helpers here place the
+// overlay panes and the headers' freeze handles.
 
 import { freezesColumns, freezesRows } from '@workspace/lib/sheets';
-import type { Context, Freezen, GlobalCache } from '..';
+import type { Context, Freeze } from '..';
 import { colLocationByIndex, getSheetIndex, rowLocationByIndex } from '..';
 
-export function initFreeze(ctx: Context, cache: GlobalCache, sheetId: string) {
-    const idx = getSheetIndex(ctx, sheetId);
-    if (idx == null) return;
-    const { frozen } = ctx.sheets[idx];
+export function freezeOf(ctx: Context): Freeze | undefined {
+    const idx = getSheetIndex(ctx, ctx.currentSheetId);
+    const frozen = idx == null ? undefined : ctx.sheets[idx].frozen;
+    if (frozen == null) return undefined;
 
-    if (frozen == null) {
-        delete cache.freezen;
-        return;
-    }
-
-    const freezen: Freezen = {};
+    const freeze: Freeze = {};
     const range = frozen.range ?? { row_focus: 0, column_focus: 0 };
 
-    // The panes are measured from the top-left of the sheet, scrolled to 0.
     if (freezesRows(frozen)) {
         const row = Math.max(range.row_focus, 0);
-        freezen.horizontal = {
-            freezenhorizontaldata: {
-                pos: ctx.visibledatarow[row],
-                boundary: row + 1,
-                scroll: 0,
-            },
-        };
+        freeze.rows = { pos: ctx.visibledatarow[row], boundary: row + 1 };
     }
     if (freezesColumns(frozen)) {
         const column = Math.max(range.column_focus, 0);
-        freezen.vertical = {
-            freezenverticaldata: {
-                pos: ctx.visibledatacolumn[column],
-                boundary: column + 1,
-                scroll: 0,
-            },
-        };
+        freeze.columns = { pos: ctx.visibledatacolumn[column], boundary: column + 1 };
     }
 
-    cache.freezen ??= {};
-    cache.freezen[ctx.currentSheetId] = freezen;
+    return freeze;
 }
 
 // One pane of the overlays: a fixed rect inside the cell area whose content follows the scroll on its free axes. A
@@ -62,16 +42,16 @@ export type OverlayRegionSpec = {
 // The overlay panes, laid out as the canvas draws them. A band shows the sheet up to pos, pinned at the view's edge.
 // The rects change only with the freeze or the row and column sizes, never with a scroll.
 export function computeOverlayRegions(
-    freeze: Freezen | undefined,
+    freeze: Freeze | undefined,
     viewWidth: number,
     viewHeight: number,
 ): OverlayRegionSpec[] {
-    const hData = freeze?.horizontal?.freezenhorizontaldata;
-    const vData = freeze?.vertical?.freezenverticaldata;
-    const bandH = hData ? hData.pos - hData.scroll : 0;
-    const bandW = vData ? vData.pos - vData.scroll : 0;
+    const rows = freeze?.rows;
+    const cols = freeze?.columns;
+    const bandH = rows?.pos ?? 0;
+    const bandW = cols?.pos ?? 0;
 
-    if (!hData && !vData) {
+    if (!rows && !cols) {
         return [
             {
                 pane: 'main',
@@ -98,7 +78,7 @@ export function computeOverlayRegions(
             fixedTop: null,
         },
     ];
-    if (hData) {
+    if (rows) {
         regions.push({
             pane: 'rows',
             left: bandW,
@@ -107,10 +87,10 @@ export function computeOverlayRegions(
             height: bandH,
             clip: true,
             fixedLeft: null,
-            fixedTop: hData.scroll,
+            fixedTop: 0,
         });
     }
-    if (vData) {
+    if (cols) {
         regions.push({
             pane: 'cols',
             left: 0,
@@ -118,11 +98,11 @@ export function computeOverlayRegions(
             width: bandW,
             height: viewHeight - bandH,
             clip: true,
-            fixedLeft: vData.scroll,
+            fixedLeft: 0,
             fixedTop: null,
         });
     }
-    if (hData && vData) {
+    if (rows && cols) {
         regions.push({
             pane: 'corner',
             left: 0,
@@ -130,8 +110,8 @@ export function computeOverlayRegions(
             width: bandW,
             height: bandH,
             clip: true,
-            fixedLeft: vData.scroll,
-            fixedTop: hData.scroll,
+            fixedLeft: 0,
+            fixedTop: 0,
         });
     }
     return regions;
@@ -140,24 +120,24 @@ export function computeOverlayRegions(
 // A header shares the panes one axis at a time, so its clips can never drift from the body's, and never moves across
 // its own width or height.
 export function computeColumnHeaderRegions(
-    freeze: Freezen | undefined,
+    freeze: Freeze | undefined,
     viewWidth: number,
     headerHeight: number,
 ): OverlayRegionSpec[] {
-    const vertical = freeze?.vertical;
-    return computeOverlayRegions(vertical ? { vertical } : undefined, viewWidth, headerHeight).map((region) => ({
+    const columns = freeze?.columns;
+    return computeOverlayRegions(columns ? { columns } : undefined, viewWidth, headerHeight).map((region) => ({
         ...region,
         fixedTop: 0,
     }));
 }
 
 export function computeRowHeaderRegions(
-    freeze: Freezen | undefined,
+    freeze: Freeze | undefined,
     headerWidth: number,
     viewHeight: number,
 ): OverlayRegionSpec[] {
-    const horizontal = freeze?.horizontal;
-    return computeOverlayRegions(horizontal ? { horizontal } : undefined, headerWidth, viewHeight).map((region) => ({
+    const rows = freeze?.rows;
+    return computeOverlayRegions(rows ? { rows } : undefined, headerWidth, viewHeight).map((region) => ({
         ...region,
         fixedLeft: 0,
     }));
@@ -167,34 +147,35 @@ export function computeRowHeaderRegions(
 // boundary is the first index outside the frozen pane.
 export function overlayRegionForCell(
     regions: OverlayRegionSpec[],
-    freeze: Freezen | undefined,
+    freeze: Freeze | undefined,
     r: number,
     c: number,
 ): OverlayRegionSpec {
-    const hData = freeze?.horizontal?.freezenhorizontaldata;
-    const vData = freeze?.vertical?.freezenverticaldata;
-    const inRows = hData != null && r < hData.boundary;
-    const inCols = vData != null && c < vData.boundary;
+    const rows = freeze?.rows;
+    const cols = freeze?.columns;
+    const inRows = rows != null && r < rows.boundary;
+    const inCols = cols != null && c < cols.boundary;
     const key = inRows && inCols ? 'corner' : inRows ? 'rows' : inCols ? 'cols' : 'main';
     return regions.find((region) => region.pane === key) ?? regions[0];
 }
 
 // A selection drag whose far end has gone behind a frozen band scrolls back to the start, so the cells it reaches show.
 // The main pane starts at the band's width plus the scroll, and a far end past that is in view.
-export function scrollToFrozenRowCol(ctx: Context, freeze: Freezen | undefined) {
+export function scrollToFrozenRowCol(ctx: Context) {
     const selection = ctx.selections?.at(-1);
     if (!selection) return;
 
     const column = farEnd(selection.column, selection.column_focus);
     const row = farEnd(selection.row, selection.row_focus);
-    const columns = freeze?.vertical?.freezenverticaldata;
-    const rows = freeze?.horizontal?.freezenhorizontaldata;
+    const freeze = freezeOf(ctx);
+    const columns = freeze?.columns;
+    const rows = freeze?.rows;
 
     const request: { left?: number; top?: number } = {};
-    if (columns && column != null && ctx.visibledatacolumn[column] <= columns.pos - columns.scroll + ctx.scrollLeft) {
+    if (columns && column != null && ctx.visibledatacolumn[column] <= columns.pos + ctx.scrollLeft) {
         request.left = 0;
     }
-    if (rows && row != null && ctx.visibledatarow[row] <= rows.pos - rows.scroll + ctx.scrollTop) {
+    if (rows && row != null && ctx.visibledatarow[row] <= rows.pos + ctx.scrollTop) {
         request.top = 0;
     }
     if (request.left != null || request.top != null) ctx.scrollRequest = request;

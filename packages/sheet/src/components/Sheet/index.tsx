@@ -1,43 +1,27 @@
-// The open sheet's grid: the canvas the cells are painted on and the overlay above it. It sizes the canvas to
-// its placeholder, derives the row and column geometry when the data or track sizes change, and repaints at most
-// once a frame. An edit draws the frame whole; a scroll alone moves the frame drawn before and paints what came
-// into view.
+// The open sheet's grid: the canvas the cells are painted on and the overlay above it. It sizes the canvas to its
+// placeholder and repaints at most once a frame. An edit draws the frame whole; a scroll alone moves the frame drawn
+// before and paints what came into view.
 
 import type React from 'react';
 import { memo, useCallback, useContext, useEffect, useRef } from 'react';
 import { WorkbookContext } from '../../context';
-import type { Context, Freezen, Sheet as SheetType } from '../../state';
-import { initFreeze, updateContextWithCanvas, updateContextWithSheetData, watchFontFaces } from '../../state';
+import type { Context } from '../../state';
+import { freezeOf, updateContextWithCanvas, watchFontFaces } from '../../state';
 import type { ScrollPos } from '../../state/render/frame';
 import { drawFrame, scrollFrame } from '../../state/render/frame';
 import { SheetOverlay } from '../SheetOverlay';
 
 // What the canvas shows. When only the scroll changed since, scrollFrame moves it instead of drawing it again.
-type DrawnFrame = { ctx: Context; freeze: Freezen | undefined; scroll: ScrollPos };
-
-function useStableJson(value: unknown): string {
-    const json = JSON.stringify(value ?? null);
-    const ref = useRef(json);
-    if (ref.current !== json) ref.current = json;
-    return ref.current;
-}
+type DrawnFrame = { ctx: Context; scroll: ScrollPos };
 
 const MemoizedSheetOverlay = memo(SheetOverlay);
 
-type Props = {
-    sheet: SheetType;
-};
-
-export const Sheet: React.FC<Props> = ({ sheet }) => {
-    const { data } = sheet;
+export const Sheet: React.FC = () => {
     const placeholderRef = useRef<HTMLDivElement>(null);
     const { context, setContext, refs } = useContext(WorkbookContext);
 
     const contextRef = useRef(context);
     contextRef.current = context;
-
-    const dataRef = useRef(data);
-    dataRef.current = data;
 
     const rafIdRef = useRef(0);
     // Sizing the canvas clears its bitmap, even to the same size, so whatever sizes it forgets the frame.
@@ -45,15 +29,7 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
     // Latched by the 0×0 guards below so the rAF redraw skips a hidden surface.
     const visibleRef = useRef(true);
 
-    const rowlenKey = useStableJson(sheet.config?.rowlen);
-    const columnlenKey = useStableJson(sheet.config?.columnlen);
-    const rowhiddenKey = useStableJson(sheet.config?.rowhidden);
-    const colhiddenKey = useStableJson(sheet.config?.colhidden);
-
-    // Data via ref so the handler identity survives edits — a rebuilt observer would re-clear the
-    // canvas bitmap, and so repaint the whole grid, per keystroke.
     const resize = useCallback(() => {
-        // Visibility first: a falsy-data moment must not swallow the entry that un-hides the surface.
         // 0×0 = detaching or hidden; writing it would pin the canvas blank until the next resize.
         const placeholder = placeholderRef.current;
         if (!placeholder || placeholder.clientWidth === 0 || placeholder.clientHeight === 0) {
@@ -62,14 +38,11 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
         }
         visibleRef.current = true;
 
-        const sheetData = dataRef.current;
-        if (!sheetData) return;
         drawnRef.current = undefined;
         setContext((draftCtx) => {
             const canvas = refs.canvas.current;
             if (!canvas) return;
             draftCtx.devicePixelRatio = window.devicePixelRatio;
-            updateContextWithSheetData(draftCtx, sheetData);
             updateContextWithCanvas(draftCtx, canvas, placeholder);
         });
     }, [refs.canvas, setContext]);
@@ -88,17 +61,6 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
         };
     }, [resize]);
 
-    // A switch derives the new sheet's geometry in its own recipe, so a changed sheet id skips the pass.
-    const geometrySheetId = useRef<string | undefined>(undefined);
-    // biome-ignore lint/correctness/useExhaustiveDependencies: keys rowlen/columnlen/rowhidden/colhidden are JSON-stable derived from sheet.config; the source object refs would re-fire on identity churn
-    useEffect(() => {
-        if (!data) return;
-        const switched = geometrySheetId.current != null && geometrySheetId.current !== sheet.id;
-        geometrySheetId.current = sheet.id;
-        if (switched) return;
-        setContext((draftCtx) => updateContextWithSheetData(draftCtx, data));
-    }, [rowlenKey, columnlenKey, rowhiddenKey, colhiddenKey, data, setContext, sheet.id]);
-
     // Init sizing, before the observer's first delivery. Same 0×0 skip: a remount while hidden would pin blank.
     useEffect(() => {
         const placeholder = placeholderRef.current;
@@ -110,11 +72,6 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
         setContext((draftCtx) => updateContextWithCanvas(draftCtx, canvas, placeholder));
     }, [refs.canvas, setContext]);
 
-    // biome-ignore lint/correctness/useExhaustiveDependencies: freeze re-init only on sheet switch / freeze config / row-col visibility change; passing the whole `context` would re-init on every cell edit
-    useEffect(() => {
-        initFreeze(context, refs.globalCache, context.currentSheetId);
-    }, [refs.globalCache, sheet.frozen, context.currentSheetId, context.visibledatacolumn, context.visibledatarow]);
-
     const scheduleRedraw = useCallback(() => {
         cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = requestAnimationFrame(() => {
@@ -122,19 +79,18 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
             const ctx = contextRef.current;
             const canvas = refs.canvas.current;
             if (!canvas) return;
-            const freeze = refs.globalCache.freezen?.[sheet.id];
+            const freeze = freezeOf(ctx);
             const scroll: ScrollPos = {
                 scrollLeft: refs.globalCache.scrollLeft,
                 scrollTop: refs.globalCache.scrollTop,
             };
             const drawn = drawnRef.current;
-            const scrolledOnly = drawn != null && drawn.ctx === ctx && drawn.freeze === freeze;
-            if (!scrolledOnly || !scrollFrame(canvas, ctx, freeze, drawn.scroll, scroll)) {
+            if (drawn?.ctx !== ctx || !scrollFrame(canvas, ctx, freeze, drawn.scroll, scroll)) {
                 drawFrame(canvas, ctx, scroll, freeze);
             }
-            drawnRef.current = { ctx, freeze, scroll };
+            drawnRef.current = { ctx, scroll };
         });
-    }, [refs.canvas, refs.globalCache, sheet.id]);
+    }, [refs.canvas, refs.globalCache]);
 
     // A loaded font and a restored canvas each need a whole redraw, though neither changes the context. A font
     // that finishes loading changes the text's widths, and the font watcher drops the cached measurements before

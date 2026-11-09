@@ -9,12 +9,13 @@ import { ChevronDown } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
-import type { Freezen } from '../../state';
+import type { Freeze } from '../../state';
 import {
     autoFitColumnWidth,
     colLocation,
     colLocationByIndex,
     computeColumnHeaderRegions,
+    freezeOf,
     getFrozenHandleLeft,
     handleColFreezeHandleMouseDown,
     handleColSizeHandleMouseDown,
@@ -164,8 +165,8 @@ export const ColumnHeader: React.FC = () => {
     // The header splits into the body's panes on its own axis: a frozen band that stays put and a main band that
     // scrolls. Each band's clip cuts the highlights at the freeze boundary.
     const headerHeight = SHEET_COLUMN_HEADER_HEIGHT - 1.5;
-    const freeze = refs.globalCache.freezen?.[context.currentSheetId];
-    const colFreeze: Freezen | undefined = freeze?.vertical ? { vertical: freeze.vertical } : undefined;
+    const freeze = freezeOf(context);
+    const colFreeze: Freeze | undefined = freeze?.columns ? { columns: freeze.columns } : undefined;
     const regions = computeColumnHeaderRegions(colFreeze, context.cellmainWidth, headerHeight);
     const hoverRegion = overlayRegionForCell(regions, colFreeze, 0, hoverLocation.col_index);
 

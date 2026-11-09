@@ -18,9 +18,8 @@ import { openCellEditor } from '../modules/cell-editor';
 import { cellFocus, checkboxChange, getCellDataValidation } from '../modules/data-validation';
 import { fillFromEdge } from '../modules/drop-cell';
 import { handleFormulaInput } from '../modules/formula-editor';
-import { moveHighlightCell, moveHighlightRange, selectAll } from '../modules/selection';
+import { moveHighlightCell, moveHighlightRange, normalizeSelection, selectAll } from '../modules/selection';
 import { handleBold, handleItalic, handleUnderline } from '../modules/toolbar';
-import type { Selection } from '../types';
 import { getSheetIndex } from '../utils';
 import { clearSelectedContents } from './clear';
 import { handleCopy, handleCut } from './copy';
@@ -47,14 +46,7 @@ export const SHEET_HOTKEYS = {
 function commitEdit(ctx: Context, cellInput: HTMLDivElement) {
     const [r, c] = ctx.editingCellPosition;
     updateCell(ctx, r, c, cellInput);
-    ctx.selections = [
-        {
-            row: [r, r],
-            column: [c, c],
-            row_focus: r,
-            column_focus: c,
-        },
-    ];
+    ctx.selections = normalizeSelection(ctx, [{ row: [r, r], column: [c, c], row_focus: r, column_focus: c }]);
 }
 
 // Whether a key changes an editor's text, or only moves or commands: Backspace, Space and Delete do, and so does a
@@ -129,8 +121,7 @@ function handleControlPlusArrowKey(ctx: Context, e: KeyboardEvent, shiftPressed:
     if (!sheetData?.length) return;
     const maxRow = sheetData.length;
     const maxCol = sheetData[0]?.length ?? 0;
-    const last: Selection | undefined =
-        ctx.selections && ctx.selections.length > 0 ? ctx.selections[ctx.selections.length - 1] : undefined;
+    const last = ctx.selections?.at(-1);
     if (!last) return;
 
     const currR = last.row_focus;
@@ -201,11 +192,10 @@ export function handleWithCtrlOrMetaKey(
     if (!flowdata) return;
 
     if (e.shiftKey) {
-        ctx.shiftAnchor = cloneDeep(ctx.selections?.[ctx.selections.length - 1]);
+        ctx.shiftAnchor = cloneDeep(ctx.selections?.at(-1));
         ctx.shiftKeyDown = true;
 
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-            // Ctrl + Shift + Arrow: extend selection toward next edge
             handleControlPlusArrowKey(ctx, e, true);
         } else if ([';', '"', ':', "'"].includes(e.key)) {
             const last = ctx.selections?.at(-1);
@@ -256,10 +246,9 @@ export function handleWithCtrlOrMetaKey(
 function handleShiftWithArrowKey(ctx: Context, e: KeyboardEvent) {
     if (ctx.editingCellPosition.length > 0) return;
 
-    ctx.shiftAnchor = cloneDeep(ctx.selections?.[ctx.selections.length - 1]);
+    ctx.shiftAnchor = cloneDeep(ctx.selections?.at(-1));
     ctx.shiftKeyDown = true;
 
-    // Shift + Arrow: extend selection by one cell
     switch (e.key) {
         case 'ArrowUp':
             moveHighlightRange(ctx, 'down', -1, 'rangeOfSelect');
@@ -304,25 +293,22 @@ export function handleArrowKey(ctx: Context, e: KeyboardEvent) {
     }
 }
 
-// Space/Enter toggle the focused tick box — Google's keyboard route to the box
-// the mousedown hit-test reaches. Returns false for every other cell, so the
-// normal Enter/printable-input handling runs unchanged.
+// Space and Enter toggle the focused tick box, as in Google Sheets. Returns false for every other cell, so Enter and
+// typing work as usual.
 function toggleFocusedCheckbox(ctx: Context, kstr: string) {
     if (kstr !== ' ' && kstr !== 'Enter') return false;
     if (ctx.editingCellPosition.length > 0) return false;
-    const selection = ctx.selections?.[ctx.selections.length - 1];
+    const selection = ctx.selections?.at(-1);
     if (selection?.row_focus == null || selection.column_focus == null) return false;
     return checkboxChange(ctx, selection.row_focus, selection.column_focus);
 }
 
-// Alt+Down opens the focused cell's list — Excel's and Google's shortcut, and the
-// keyboard's only route to the chevron the canvas paints on every list cell.
-// cellFocus is what positions the hidden Radix anchor, so it runs first, exactly as
-// the mousedown path does. Returns false for every other cell and key.
+// Alt+Down opens the focused cell's list, as in Excel and Google Sheets. cellFocus positions the hidden Radix anchor,
+// so it runs first, as on a mousedown. Returns false for every other cell and key.
 function openFocusedDropdown(ctx: Context, e: KeyboardEvent) {
     if (!e.altKey || e.key !== 'ArrowDown') return false;
     if (ctx.editingCellPosition.length > 0 || ctx.allowEdit === false) return false;
-    const selection = ctx.selections?.[ctx.selections.length - 1];
+    const selection = ctx.selections?.at(-1);
     if (selection?.row_focus == null || selection.column_focus == null) return false;
     const { row_focus: r, column_focus: c } = selection;
     if (getCellDataValidation(ctx, r, c)?.type !== 'dropdown') return false;
@@ -362,10 +348,8 @@ export function handleGlobalKeyDown(
         return;
     }
 
-    // SHEET_HOTKEYS.focusLock toggles the sheet's focus lock: released, keys fall through to the host
-    // app so a keyboard user can tab out of the grid. Runs independently of sheetFocused so the
-    // lock can be re-taken from anywhere inside the workbook — the keydown listener is on the
-    // workbook container, so focus that has left it can't come back this way.
+    // A released focus lock lets keys fall through to the host app, so a keyboard user can tab out of the grid. This
+    // runs whatever sheetFocused says, so the lock can be re-taken from anywhere inside the workbook.
     if (matchesKeyboardEvent(e, SHEET_HOTKEYS.focusLock)) {
         ctx.sheetFocused = !ctx.sheetFocused;
         e.preventDefault();
@@ -407,8 +391,7 @@ export function handleGlobalKeyDown(
         moveHighlightCell(ctx, 'down', 0, 'rangeOfSelect');
         e.preventDefault();
     } else if (kstr === 'Escape') {
-        // Not editing: bubble to document (skip the tail's focus-steal + stopPropagation) so the
-        // shared find bar's document-level Escape hotkey can dismiss it.
+        // Not editing: the key bubbles to the document, where the find bar's Escape hotkey dismisses it.
         return;
     } else if (e.ctrlKey || e.metaKey) {
         handleWithCtrlOrMetaKey(ctx, e, cellInput, fxInput);

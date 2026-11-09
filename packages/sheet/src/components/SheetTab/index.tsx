@@ -8,6 +8,7 @@ import {
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { cn } from '@workspace/ui/lib/utils';
+import { isEqual } from 'es-toolkit/compat';
 import { ChevronsLeft, ChevronsRight, LayoutGrid, Plus } from 'lucide-react';
 import type React from 'react';
 import { Fragment, useCallback, useContext, useEffect, useRef, useState } from 'react';
@@ -48,12 +49,13 @@ export const SheetTab: React.FC = () => {
         average: '',
     });
 
-    // biome-ignore lint/correctness/useExhaustiveDependencies: selection-info recompute is intentionally selection-only; firing on every props/context change would churn
+    // biome-ignore lint/correctness/useExhaustiveDependencies: the sum reads the selection's cells, which only these two change
     useEffect(() => {
         if (context.selections) {
-            setCalInfo(calcSelectionInfo(context));
+            const info = calcSelectionInfo(context);
+            setCalInfo((shown) => (isEqual(shown, info) ? shown : info));
         }
-    }, [context.selections]);
+    }, [context.selections, context.sheets]);
 
     const scrollDelta = 150;
 

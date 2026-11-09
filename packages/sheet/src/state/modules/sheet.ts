@@ -1,8 +1,9 @@
 // The workbook's sheet list in the editor: adding, renaming, deleting and switching sheets, giving a sheet its cell
 // matrix, and the per-sheet view the grid paints. Menus and the sheet tabs call these inside an edit's recipe, and so
-// does a peer's batch through applyOpBatch.
+// does a peer's batch through applyOpBatch. The Workbook runs deriveView on every context it commits.
 
 import { sheetDefaultColWidth, sheetDefaultRowHeight } from '@workspace/lib/sheets';
+import { produce } from 'immer';
 import { celldataToData } from '../../engine/celldata';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT, gridSize } from '../../engine/defaults';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
@@ -60,8 +61,9 @@ export function settleCurrentSheet(ctx: Context) {
     if (index == null || ctx.sheets[index].hide === 1) leaveCurrentSheet(ctx);
 }
 
-// The per-sheet paint data is derived in the recipe that makes the sheet current, so no frame mixes sheets.
-// A sheet nobody selected in opens on A1: a key needs a cursor.
+// The per-sheet paint data is derived in the recipe that makes the sheet current, so no frame mixes sheets and the
+// recipe can read the new geometry, as a jump to a cell on that sheet does. A sheet nobody selected in opens on A1: a
+// key needs a cursor.
 export function applySheetView(ctx: Context) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
@@ -69,9 +71,33 @@ export function applySheetView(ctx: Context) {
     ctx.defaultrowlen = sheetDefaultRowHeight(sheet);
     ctx.defaultcollen = sheetDefaultColWidth(sheet);
     ctx.showGridLines = sheet.showGridLines !== 0 && sheet.showGridLines !== false;
-    if (sheet.data) updateContextWithSheetData(ctx, sheet.data);
-    createFilterOptions(ctx);
+    deriveGeometry(ctx, sheet);
     if (!ctx.selections?.length) ctx.selections = normalizeSelection(ctx, [{ row: [0, 0], column: [0, 0] }]);
+}
+
+// What the geometry, the selection's box and the filter's rects are worked out from, besides the grid's size. The first
+// row counts too: a column's width depends on whether its first cell is set, and its length is the column count.
+const GEOMETRY_MAPS = ['rowlen', 'columnlen', 'rowhidden', 'colhidden', 'merge'] as const;
+
+// Immer gives a changed map a new identity, so a cell edit and a drag frame cost a few comparisons here. A write outside
+// sheets stays off the wire and out of the undo entry, which are built from the commit's own patches.
+export function deriveView(base: Context, next: Context): Context {
+    if (next.currentSheetId !== base.currentSheetId) return next;
+    const before = base.sheets.find(({ id }) => id === base.currentSheetId);
+    const after = next.sheets.find(({ id }) => id === next.currentSheetId);
+    if (!after || (before === after && base.allowEdit === next.allowEdit)) return next;
+    const changed =
+        base.allowEdit !== next.allowEdit ||
+        before?.data?.length !== after.data?.length ||
+        before?.data?.[0] !== after.data?.[0] ||
+        before?.filterRange !== after.filterRange ||
+        GEOMETRY_MAPS.some((map) => before?.config?.[map] !== after.config?.[map]);
+    return changed ? produce(next, (draft: Context) => deriveGeometry(draft, after)) : next;
+}
+
+function deriveGeometry(ctx: Context, { data }: Sheet) {
+    if (data) updateContextWithSheetData(ctx, data);
+    createFilterOptions(ctx);
 }
 
 export function addSheet(

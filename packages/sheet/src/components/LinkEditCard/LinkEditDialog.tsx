@@ -16,6 +16,7 @@ import type { LinkCardProps, ViewportPoint } from '../../state';
 import {
     changeSheet,
     computeOverlayRegions,
+    freezeOf,
     isLinkValid,
     normalizeSelection,
     overlayAnchorToViewport,
@@ -24,8 +25,7 @@ import {
 } from '../../state';
 import { CellRangeDialog } from '../CellRangeDialog';
 
-// The range picker keeps the narrow card size and the 5px gap under the cell it had when it rendered inside the
-// grid overlay.
+// The range picker is a narrow card, a few pixels under the link's cell.
 const RANGE_PICKER_WIDTH = 380;
 const RANGE_PICKER_GAP = 5;
 
@@ -59,7 +59,7 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
         const area = refs.cellArea.current;
         if (!area) return undefined;
         const { left: areaLeft, top: areaTop } = area.getBoundingClientRect();
-        const freeze = refs.globalCache.freezen?.[context.currentSheetId];
+        const freeze = freezeOf(context);
         const regions = computeOverlayRegions(freeze, context.cellmainWidth, context.cellmainHeight);
         const { fixedLeft, fixedTop } = overlayRegionForCell(regions, freeze, r, c);
         return overlayAnchorToViewport(
