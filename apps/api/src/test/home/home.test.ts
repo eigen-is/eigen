@@ -2,6 +2,7 @@ import { afterEach, beforeAll, describe, expect, mock, spyOn, test } from 'bun:t
 import { existsSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { orgOwnerId, teamOwnerId } from '@workspace/lib/types/owner';
+import type { MyTeam } from '@workspace/lib/types/settings';
 import { getUserHomePath } from '../../lib/config/paths';
 import { getPublicConfig, getServerConfig } from '../../lib/config/server-config';
 import { ApiError } from '../../lib/core';
@@ -20,14 +21,6 @@ import {
     findOrFail,
     getTestContext,
 } from '../setup';
-
-type MyTeam = {
-    id: string;
-    name: string;
-    members: { email: string; name: string }[];
-    mounts: { id: string; name: string }[];
-    calendars: { id: string; name: string; color: string }[];
-};
 
 describe('Home', () => {
     let ctx: TestContext;

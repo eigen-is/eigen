@@ -5,6 +5,7 @@
 // Each kind of home decides which parts it has.
 
 import * as path from 'node:path';
+import { parseNotificationPath } from '@workspace/lib/notification/tags';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
 import type { HomeSizeResponse, UserSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
@@ -276,9 +277,18 @@ export class Home {
         await this._drive?.forEachOpenDocument(visit);
     }
 
-    // A team home has no notification center, so a notice to it is dropped.
+    // A team home has no notification center, so a notice to it is dropped. A notice about a path also puts the path
+    // in Recent, and a failed write there is only logged, so it never fails the change that sent the notice.
     public notify(input: NotificationPersistInput): void {
-        this._notifications?.persist(input);
+        if (!this._notifications) return;
+        this._notifications.persist(input);
+        const path = input.tag ? parseNotificationPath(input.type, input.tag) : null;
+        if (!path) return;
+        try {
+            this.drive.touchRecent(path.ownerId, path.mountId, path.pathId);
+        } catch (err) {
+            console.error(`recent: recording ${path.pathId} for ${this.user.id} failed:`, err);
+        }
     }
 
     // Uses the fields, not the getters: a getter may refuse a part that is switched off, but its

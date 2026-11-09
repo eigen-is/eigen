@@ -1,3 +1,7 @@
+// Turns a notification into the link its row opens, when the bell's row or a toast's View action is clicked. No URL
+// is stored, so the link comes from the tag, and a Drive item is fetched at click time, so the link follows the item
+// to the app its type opens in and survives a move.
+
 import {
     driveApi,
     getCalendarAppUrl,
@@ -7,63 +11,16 @@ import {
     getMailAppUrl,
 } from '@workspace/lib/api';
 import { getMonthRange } from '@workspace/lib/calendar';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { isChatType, isCollabType } from '@workspace/lib/types/drive';
-import type { ChatNotificationThread, Notification } from '@workspace/lib/types/notification';
-import { CHAT_NOTIFICATION_TYPES, parseChatNotificationThread } from './tags';
-
-// share:{ownerId}:{mountId}:{pathId}
-function parseShareTag(tag: string): ChatNotificationThread | null {
-    const [kind, ownerId, mountId, pathId] = tag.split(':');
-    if (kind !== 'share' || !ownerId || !mountId || !pathId) return null;
-    return { ownerId, mountId, pathId };
-}
-
-function parseAccessRequestTag(
-    tag: string,
-): { ownerId: string; mountId: string; pathId: string; email: string } | null {
-    const parts = tag.split(':');
-    if (parts[0] !== 'access-request' || !parts[1] || !parts[2] || !parts[3] || !parts[4]) return null;
-    return { ownerId: parts[1], mountId: parts[2], pathId: parts[3], email: parts.slice(4).join(':') };
-}
-
-function parseCalendarInviteTag(tag: string): { eventId: string; startTime: number } | null {
-    const parts = tag.split(':');
-    if (parts[0] !== 'calendar-invite' || !parts[1]) return null;
-    return { eventId: parts[1], startTime: parts[2] ? Number(parts[2]) || 0 : 0 };
-}
-
-function parseFileEventTag(tag: string): { ownerId: string; mountId: string; pathId: string } | null {
-    const parts = tag.split(':');
-    if (parts[0] !== 'file-event' || !parts[1] || !parts[2] || !parts[3]) return null;
-    return { ownerId: parts[1], mountId: parts[2], pathId: parts[3] };
-}
-
-async function resolveDriveLink(parsed: ChatNotificationThread | null): Promise<string> {
-    if (!parsed) return getDriveAppUrl();
-
-    const response = await driveApi({ ownerId: parsed.ownerId })({ mountId: parsed.mountId })
-        .path({ pathId: parsed.pathId })
-        .get();
-    if (response.error || !response.data) return getDriveAppUrl();
-
-    const path = response.data;
-    return getDriveItemUrl(path, { chat: parsed.chatName }) ?? getDriveShareUrl(path);
-}
-
-async function resolveAccessRequestLink(tag: string): Promise<string | null> {
-    const parsed = parseAccessRequestTag(tag);
-    if (!parsed) return null;
-
-    const response = await driveApi({ ownerId: parsed.ownerId })({ mountId: parsed.mountId })
-        .path({ pathId: parsed.pathId })
-        .get();
-    if (response.error || !response.data) return null;
-
-    const parentId = response.data.parentId || response.data.id;
-    return getDriveAppUrl(
-        `fs/${parsed.ownerId}/${parsed.mountId}/${parentId}?sharePathId=${parsed.pathId}&shareEmail=${encodeURIComponent(parsed.email)}`,
-    );
-}
+import type { ChatNotificationThread, Notification, NotificationPath } from '@workspace/lib/types/notification';
+import {
+    CHAT_NOTIFICATION_TYPES,
+    parseAccessRequestTag,
+    parseCalendarInviteTag,
+    parseChatNotificationThread,
+    parsePathTag,
+} from './tags';
 
 export function isClickableNotification(type: string): boolean {
     return [
@@ -90,7 +47,7 @@ export async function resolveNotificationLink(
 
     switch (type) {
         case 'share':
-            return resolveDriveLink(parseShareTag(tag));
+            return resolveDriveLink(parsePathTag('share', tag));
 
         case 'calendar-invite':
         case 'calendar-invite-updated':
@@ -115,15 +72,10 @@ export async function resolveNotificationLink(
             return resolveAccessRequestLink(tag);
 
         case 'file-event': {
-            const parsed = parseFileEventTag(tag);
+            const parsed = parsePathTag('file-event', tag);
             if (!parsed) return getDriveAppUrl();
-            const response = await driveApi({ ownerId: parsed.ownerId })({ mountId: parsed.mountId })
-                .path({ pathId: parsed.pathId })
-                .get();
-            if (response.error || !response.data) return getDriveAppUrl();
-            const path = response.data;
-            // Only collab/chat types navigate directly into their app; plain files and folders
-            // land on the fs view with the item selected.
+            const path = await fetchDrivePath(parsed);
+            if (!path) return getDriveAppUrl();
             if (isCollabType(path.type) || isChatType(path.type)) {
                 const cardId = details && 'cardId' in details ? details.cardId : undefined;
                 const chatName = details && 'chatName' in details ? details.chatName : undefined;
@@ -136,4 +88,29 @@ export async function resolveNotificationLink(
         default:
             return null;
     }
+}
+
+async function resolveDriveLink(parsed: ChatNotificationThread | null): Promise<string> {
+    if (!parsed) return getDriveAppUrl();
+    const path = await fetchDrivePath(parsed);
+    if (!path) return getDriveAppUrl();
+    return getDriveItemUrl(path, { chat: parsed.chatName }) ?? getDriveShareUrl(path);
+}
+
+async function resolveAccessRequestLink(tag: string): Promise<string | null> {
+    const parsed = parseAccessRequestTag(tag);
+    if (!parsed) return null;
+    const path = await fetchDrivePath(parsed);
+    if (!path) return null;
+    const parentId = path.parentId || path.id;
+    return getDriveAppUrl(
+        `fs/${parsed.ownerId}/${parsed.mountId}/${parentId}?sharePathId=${parsed.pathId}&shareEmail=${encodeURIComponent(parsed.email)}`,
+    );
+}
+
+async function fetchDrivePath(path: NotificationPath): Promise<DrivePath | null> {
+    const response = await driveApi({ ownerId: path.ownerId })({ mountId: path.mountId })
+        .path({ pathId: path.pathId })
+        .get();
+    return response.error ? null : response.data;
 }

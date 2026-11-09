@@ -4,6 +4,7 @@
 // pushes nothing, so a listing drops the rows of an owner who no longer exists. This file is the only
 // one that reads or writes that table. Drive calls it with its shared database.
 
+import { shareTag } from '@workspace/lib/notification/tags';
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
 import { getEigenDocInfoByType, isFolderType, stripEigenExtension } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
@@ -86,7 +87,7 @@ export async function receiveSharedPathChange(
             actorEmail,
             title: actorDisplay ? `${actorDisplay} shared a ${noun}` : 'Shared with you',
             body: displayName,
-            tag: `share:${path.ownerId}:${path.mountId}:${path.id}`,
+            tag: shareTag({ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }),
             details: { pathType: path.type },
         });
     }

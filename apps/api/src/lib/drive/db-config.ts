@@ -1,5 +1,6 @@
 // The migrations of a home's shared.db, which holds what the home keeps about other owners' paths, such as the paths
-// shared with its user and the paths its user opened lately. A Drive opens it when its home loads.
+// shared with its user and the paths its user lately opened or was notified about. A Drive opens it when its home
+// loads.
 
 import type { DatabaseConfig } from '../core/managed-database';
 import * as schema from './sharedschema';

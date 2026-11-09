@@ -1,8 +1,9 @@
 // The settings types the API stores and the apps read, such as a user's personal settings, a team's,
-// a mount's and the server's, with the answers of the setup and S3 checks. A reader that decides what
-// a missing value means, such as celebrationsOn or themeOf, sits beside its type, so the API and every
-// app read it the same way.
+// a mount's and the server's, with the answers of the setup and S3 checks and of a Home's size and teams. A
+// reader that decides what a missing value means, such as celebrationsOn or themeOf, sits beside its type,
+// so the API and every app read it the same way.
 
+import type { CalendarItem } from './calendar';
 import type { DriveViewPreferences } from './drive';
 import type { MountStorageType, S3Config } from './mount';
 
@@ -195,6 +196,15 @@ export type HomeSizeResponse = {
     homeData: { used: number; max: number };
     drive: { default: { used: number; max: number } };
     total: { used: number; max: number };
+};
+
+// A team the signed-in user belongs to, with its enabled mounts and the calendars its home has.
+export type MyTeam = {
+    id: string;
+    name: string;
+    members: { email: string; name: string }[];
+    mounts: { id: string; name: string; rootPathId: string | null }[];
+    calendars: Pick<CalendarItem, 'id' | 'name' | 'color'>[];
 };
 
 export function mapStorageType(type: ServerStorageType): MountSettings['storageType'] {

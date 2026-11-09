@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
+import { shareTag } from '@workspace/lib/notification/tags';
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import * as decoding from 'lib0/decoding';
@@ -15,6 +16,7 @@ import {
     addMember,
     addTeamMount,
     authedRequest,
+    chatPost,
     createTeam,
     createTestGuest,
     createTestUser,
@@ -89,9 +91,9 @@ async function childNamed(user: TestUser, container: DrivePath, name: string): P
     return findOrFail(children, (child) => child.name === name);
 }
 
-function share(owner: TestUser, path: DrivePath, email: string): Promise<unknown> {
+function share(owner: TestUser, path: DrivePath, email: string, write = false): Promise<unknown> {
     return drivePut(owner.sessionToken, path.ownerId, path.mountId, `path/${path.id}/acl`, {
-        add: [{ id: email, read: true, write: false }],
+        add: [{ id: email, read: true, write }],
     });
 }
 
@@ -147,6 +149,14 @@ async function settle(user: TestUser): Promise<void> {
     const marker = await uploadText(user);
     await openInEditor(user, marker);
     await waitForRow(user, marker);
+}
+
+// A share's notification adds a row of its own, so a test of an open clears it first.
+async function shareWithoutRow(owner: TestUser, path: DrivePath, user: TestUser): Promise<void> {
+    await share(owner, path, user.email);
+    await waitForRow(user, path);
+    const sharedDb = await getSharedDatabase(await getHome(user.id));
+    sharedDb.delete(recentPaths).run();
 }
 
 async function insertRow(user: TestUser, path: Pick<DrivePath, 'ownerId' | 'mountId' | 'id'>, secondsAgo: number) {
@@ -232,7 +242,7 @@ describe('Recent records an open', () => {
         const { alice } = ctx;
         const viewer = await newViewer();
         const doc = await create(alice.user, 'doc');
-        await share(alice.user, doc, viewer.email);
+        await shareWithoutRow(alice.user, doc, viewer);
         const checked = Promise.withResolvers<void>();
         const keepsReadAccess = CollabDocument.prototype.keepsReadAccess;
         spyOn(CollabDocument.prototype, 'keepsReadAccess').mockImplementationOnce(async function (
@@ -375,10 +385,119 @@ describe('Recent records an open', () => {
         const guest = await createTestGuest('Recent Guest');
         await getHome(guest.id);
         const file = await uploadText(alice.user);
-        await share(alice.user, file, guest.email);
+        await shareWithoutRow(alice.user, file, guest);
         await openInEditor(guest, file);
         await settle(await newViewer());
         expect(await storedRows(guest)).toEqual([]);
+    });
+});
+
+describe('Recent records a notification', () => {
+    async function notificationTagged(user: TestUser, tag: string) {
+        const home = await getHome(user.id);
+        return eventually(
+            async () => home.notifications.list().find((notification) => notification.tag === tag),
+            `the notification ${tag}`,
+        );
+    }
+
+    test('about a share', async () => {
+        const viewer = await newViewer();
+        const file = await uploadText(ctx.alice.user);
+        await share(ctx.alice.user, file, viewer.email);
+        await waitForRow(viewer, file);
+        expect(await listedIds(viewer)).toContain(file.id);
+    });
+
+    test('and keeps the row once the notification is dismissed', async () => {
+        const viewer = await newViewer();
+        const file = await uploadText(ctx.alice.user);
+        await share(ctx.alice.user, file, viewer.email);
+        await waitForRow(viewer, file);
+        const notification = await notificationTagged(
+            viewer,
+            shareTag({ ownerId: file.ownerId, mountId: file.mountId, pathId: file.id }),
+        );
+        const res = await authedRequest(viewer.sessionToken, `/notifications/${viewer.id}/${notification.id}`, {
+            method: 'DELETE',
+        });
+        expect(res.status).toBe(200);
+        expect(await listedIds(viewer)).toContain(file.id);
+    });
+
+    test('and adds no row for a type that names no file', async () => {
+        const viewer = await newViewer();
+        const home = await getHome(viewer.id);
+        home.notify({ type: 'mail', title: 'New mail', tag: 'mail:new' });
+        home.notify({ type: 'calendar-invite', title: 'Invite', tag: `calendar-invite:${crypto.randomUUID()}:0` });
+        home.notify({ type: 'admin-alert', title: 'Backup failed', tag: `backup-verify-${viewer.id}` });
+        home.notify({ type: 'unshare', title: 'Access removed' });
+        expect(home.notifications.list()).toHaveLength(4);
+        expect(await storedRows(viewer)).toEqual([]);
+    });
+
+    test('and a failing write does not fail the notification', async () => {
+        const viewer = await newViewer();
+        const file = await uploadText(ctx.alice.user);
+        spyOn(Drive.prototype, 'touchRecent').mockImplementation(() => {
+            throw new Error('shared.db is full');
+        });
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        await share(ctx.alice.user, file, viewer.email);
+        await notificationTagged(viewer, shareTag({ ownerId: file.ownerId, mountId: file.mountId, pathId: file.id }));
+        expect(errors).toHaveBeenCalledWith(expect.stringContaining('recent:'), expect.anything());
+        expect(await storedIds(viewer)).not.toContain(file.id);
+    });
+
+    test('about a comment, naming its document and not the thread', async () => {
+        const { alice } = ctx;
+        const viewer = await newViewer();
+        const doc = await create(viewer, 'doc');
+        const thread = await create(viewer, 'chat', await childNamed(viewer, doc, 'chat'));
+        await share(viewer, doc, alice.user.email, true);
+        await chatPost(alice.user.sessionToken, viewer.id, thread.mountId, `${thread.id}/messages`, {
+            content: 'A comment',
+        });
+        await waitForRow(viewer, doc);
+        expect(await storedIds(viewer)).not.toContain(thread.id);
+    });
+
+    test('about a chat message, naming the chat', async () => {
+        const { alice } = ctx;
+        const viewer = await newViewer();
+        const chat = await create(viewer, 'chat');
+        await share(viewer, chat, alice.user.email, true);
+        await chatPost(alice.user.sessionToken, viewer.id, chat.mountId, `${chat.id}/messages`, {
+            content: 'A message',
+        });
+        await waitForRow(viewer, chat);
+        expect(await listedIds(viewer)).toContain(chat.id);
+    });
+
+    test('about a watched change, naming the file, or the folder of an upload', async () => {
+        const { alice } = ctx;
+        const viewer = await newViewer();
+        const root = await rootOf(viewer);
+        const folder = await drivePost<DrivePath>(viewer.sessionToken, viewer.id, root.mountId, `folder/${root.id}`, {
+            folderName: crypto.randomUUID(),
+        });
+        await share(viewer, folder, alice.user.email, true);
+        const watched = await authedRequest(
+            viewer.sessionToken,
+            `/drive/${viewer.id}/${folder.mountId}/path/${folder.id}/watch`,
+            { method: 'POST' },
+        );
+        expect(watched.status).toBe(200);
+
+        const file = new File(['watched'], `${crypto.randomUUID()}.txt`, { type: 'text/plain' });
+        const uploaded = await driveUpload(alice.user.sessionToken, viewer.id, folder.mountId, folder.id, file);
+        await waitForRow(viewer, folder);
+        expect(await storedIds(viewer)).not.toContain(uploaded.id);
+
+        await drivePut(alice.user.sessionToken, viewer.id, folder.mountId, `path/${uploaded.id}/rename`, {
+            newName: `${crypto.randomUUID()}.txt`,
+        });
+        await waitForRow(viewer, uploaded);
     });
 });
 

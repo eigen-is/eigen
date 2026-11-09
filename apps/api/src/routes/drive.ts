@@ -632,13 +632,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             requireNonGuest(user);
             // This skips SharedDrive on purpose, since the caller has no access yet. propagateAccessRequest only
             // notifies the owner through the home relay and never reads the path for the requester.
-            await propagateAccessRequest(
-                params.ownerId,
-                params.mountId,
-                params.pathId,
-                { name: user.name, email: user.email },
-                body.message ?? null,
-            );
+            await propagateAccessRequest(params.ownerId, params.mountId, params.pathId, user, body.message ?? null);
             return { success: true };
         },
         {

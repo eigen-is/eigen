@@ -1,20 +1,34 @@
-// Each user's home keeps the paths they opened lately, wherever those live, so the Recent page can list them. The routes
-// that serve an open, such as the collab socket or a chat's messages, call recordOpened, which pushes the row into the
-// user's own home. A row holds only which path and when, and a listing reads the rest from the path's owner. This file
-// is the only one that reads or writes that table. Drive calls it with its shared database.
+// Each user's home keeps the paths they lately opened or were notified about, wherever those live, so the Recent page
+// can list them. An open, served by a route such as the collab socket or a chat's messages, reaches recordOpened, which
+// pushes the row into the user's own home, and a notification about a path writes its row as the recipient's home
+// stores it. A row holds only which path and when, and a listing reads the rest from the path's owner. This file is
+// the only one that reads or writes that table.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { desc, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { sendToHome } from '../home/home-relay';
+import type { Mount } from '../mount';
 import type { User } from '../user';
 import { isGuest } from '../user';
+import { isInsideDocument } from './acl';
 import * as sharedSchema from './sharedschema';
 
 type SharedDb = BunSQLiteDatabase<typeof sharedSchema>;
 export type RecentRow = typeof sharedSchema.recentPaths.$inferSelect;
 
 const ROWS_KEPT = 200;
+
+// A part of a document, such as a chat's attachment, opens with its document and gets no row of its own. The check
+// runs after the answer, so it never fails or slows the read.
+export function recordOpenedUnlessInDocument(user: User, mount: Mount, path: DrivePath): void {
+    mount
+        .getBreadcrumb(path.id)
+        .then((chain) => {
+            if (!isInsideDocument(chain)) recordOpened(user, path);
+        })
+        .catch((err) => console.error(`recent: checking ${path.id} for ${user.id} failed:`, err));
+}
 
 // The caller passes a path it has just served, and never one inside a document. A failed write never fails the open.
 export function recordOpened(user: User, path: DrivePath): void {
