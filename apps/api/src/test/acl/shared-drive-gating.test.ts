@@ -239,8 +239,7 @@ describe('SharedDrive gating enumeration', () => {
         emailCollaborators: {
             gate: 'denies',
             reason: 'write-gated',
-            call: (sd) =>
-                sd.emailCollaborators(mountId, fileId, null, 'hi', false, { name: 'C', email: charlie.email }),
+            call: (sd) => sd.emailCollaborators(mountId, fileId, null, 'hi', false, charlie),
         },
         inviteToChat: {
             gate: 'denies',

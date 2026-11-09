@@ -13,7 +13,7 @@ import { eq } from 'drizzle-orm';
 import { member as memberSchema, teamMember as teamMemberSchema, user as userSchema } from '../../auth-schema';
 import { app } from '../app';
 import { auth, getAuthDrizzleDb } from '../lib/auth/auth';
-import { getServerSettings, getStorageType, updateServerSettings } from '../lib/config/server-settings';
+import { getServerSettings, updateServerSettings } from '../lib/config/server-settings';
 import type { MediaPixels } from '../lib/export/sheets/render';
 import { getHome } from '../lib/home';
 import { drainHomeDeliveries } from '../lib/home/home-relay';
@@ -153,7 +153,7 @@ export async function createTestUser(email: string, password: string, name: stri
 // A fresh user whose Home opened while the server's default mount storage was `storageType`.
 export async function createTestUserOnStorage(storageType: ServerStorageType, name: string): Promise<TestUser> {
     await ensureServer();
-    const before = getStorageType();
+    const before = getServerSettings().defaults.mount.storageType;
     await updateServerSettings({ defaults: { mount: { storageType } } });
     try {
         const slug = name.toLowerCase().replaceAll(' ', '-');

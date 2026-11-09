@@ -1,53 +1,32 @@
-// A help center section page: the section's title in its color, its description and the list of
-// its articles. It spans the full width with no sidebar, like the help center's landing page.
+// A help center section page: the section's icon and title, its description and the list of its articles, with
+// the articles other sections list here too. The page wears the section's color. It sits in the site's reading
+// column, under a breadcrumb back to the help center's front page.
 
-import { Link } from '@tanstack/react-router';
-import { Column, ColumnLayout } from '@workspace/ui';
 import type { ArticleMeta } from '../../content/manifest';
 import { ArticleBreadcrumb } from '../article-breadcrumb';
+import { ReadingLayout } from '../reading-layout';
+import { SitePage } from '../site-page';
+import { ArticleRows } from './article-rows';
 import { getSection } from './sections';
 
 export function SupportSection({ section, articles }: { section: string; articles: ArticleMeta[] }) {
     const config = getSection(section);
-    const title = config?.title ?? section;
     const sorted = [...articles].sort((a, b) => a.order - b.order);
+    const Icon = config?.icon;
 
     return (
-        <ColumnLayout>
-            <Column
-                id="section"
-                width="flex"
-                toolbar={
-                    <div className="mx-auto w-full max-w-[70ch]">
-                        <ArticleBreadcrumb trail={[{ label: 'Eigen Support', to: '/support' }, { label: title }]} />
-                    </div>
-                }
-            >
-                <div className="h-full overflow-y-auto px-4 py-10">
-                    <div className="mx-auto max-w-[70ch]">
-                        <h1 className="text-3xl font-medium mb-1" style={{ color: config?.color }}>
-                            {title}
-                        </h1>
-                        {config && <p className="text-muted-foreground mb-6">{config.description}</p>}
-                        <ul className="list-disc pl-6 space-y-1 marker:text-muted-foreground">
-                            {sorted.map((article) => {
-                                const [articleSection, file] = article.slug.split('/');
-                                return (
-                                    <li key={article.slug}>
-                                        <Link
-                                            to="/support/$section/$article"
-                                            params={{ section: articleSection, article: file }}
-                                            className="text-link hover:underline"
-                                        >
-                                            {article.title}
-                                        </Link>
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                    </div>
+        <SitePage color={config?.color}>
+            <ReadingLayout>
+                <ArticleBreadcrumb trail={[{ label: 'Support', to: '/support' }]} />
+                <h1 className="flex items-center gap-2.5 text-4xl font-medium tracking-tight">
+                    {Icon && <Icon className="size-7.5 shrink-0 text-(--app-current-color)" strokeWidth={1.75} />}
+                    {config?.title ?? section}
+                </h1>
+                {config && <p className="mt-2 text-muted-foreground">{config.description}</p>}
+                <div className="mt-6">
+                    <ArticleRows articles={sorted} />
                 </div>
-            </Column>
-        </ColumnLayout>
+            </ReadingLayout>
+        </SitePage>
     );
 }

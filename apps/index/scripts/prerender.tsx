@@ -1,3 +1,8 @@
+// Turns the built single-page shell into a static page for every public route: the landing page, the blog and each
+// post, the Support pages, the licenses and the changelog. Each page gets its own title, description and metadata, and
+// the markup the route renders, which the browser then hydrates in place. It runs after the Vite build, and a sitemap
+// comes with it when the server's domain is known.
+
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { escapeHtml } from '@workspace/lib/html';
@@ -36,11 +41,10 @@ type PrerenderRoute = { path: string; meta: PageMeta; article?: ArticleRef };
 function routes(shellDescription: string): PrerenderRoute[] {
     const blogArticles = manifest('blog').articles;
     const support = manifest('support').articles;
-    const latestBlog = blogArticles[0];
     const list: PrerenderRoute[] = [
         {
-            // Landing page. Its first render is deterministic — appIndex starts at 0 and
-            // waitlistEnabled is false until the public config resolves — so it hydrates
+            // Landing page. Its first render is deterministic — the headline starts as "workspace" and
+            // the config-driven buttons and install line wait for the public config — so it hydrates
             // cleanly in place (AuthProvider renders children on the first client render
             // for this ungated app rather than a null loading fallback).
             path: '/',
@@ -49,8 +53,6 @@ function routes(shellDescription: string): PrerenderRoute[] {
         {
             path: '/blog',
             meta: { title: 'Blog - eigen', description: shellDescription, url: publicUrl('/blog'), type: 'website' },
-            // The blog index renders the latest post in full.
-            article: latestBlog ? { collection: 'blog', slug: latestBlog.slug } : undefined,
         },
         {
             path: '/support',
@@ -153,7 +155,7 @@ function jsonLd(m: PageMeta): string {
 // Pair a route's article ref with its prerendered body, read from the generated
 // content. Used both for the server render and for the inlined hydration <script>.
 function readArticle(ref: ArticleRef): PageArticle {
-    const body = JSON.parse(readFileSync(join(GEN, ref.collection, `${ref.slug}.json`), 'utf-8')) as ArticleBody;
+    const body: ArticleBody = JSON.parse(readFileSync(join(GEN, ref.collection, `${ref.slug}.json`), 'utf-8'));
     return { ...ref, body };
 }
 

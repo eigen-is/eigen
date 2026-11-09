@@ -1,8 +1,12 @@
-import type { ArticleBody, ArticleMeta, ContentManifest, TocEntry } from '../../scripts/lib/content-types';
+// The read side of the generated content: the metadata of every blog post and help article, which is small and
+// imported with the code, and the bodies, which load one chunk at a time. The page's own body is inlined by the
+// prerender, so the server render and the first client render both have it. The routes and their hooks read here.
+
+import type { ArticleBody, ArticleMeta, ChangelogBody, ContentManifest } from '../../scripts/lib/content-types';
 import blogManifest from './.generated/blog.manifest.json';
 import supportManifest from './.generated/support.manifest.json';
 
-export type { ArticleBody, ArticleMeta, TocEntry };
+export type { ArticleBody, ArticleMeta, ChangelogBody };
 
 export type ArticleCollection = 'blog' | 'support';
 

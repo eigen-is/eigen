@@ -157,6 +157,7 @@ export type ServerSettings = {
     };
     landing: {
         links: LandingLink[];
+        showInstall: boolean;
     };
     notifications: {
         email: {
@@ -164,6 +165,8 @@ export type ServerSettings = {
             userOnAclAdd: boolean;
             userOnCalendarInvite: boolean;
             ownerOnAccessRequest: boolean;
+            guestOnAssign: boolean;
+            userOnAssign: boolean;
         };
     };
     mail: {

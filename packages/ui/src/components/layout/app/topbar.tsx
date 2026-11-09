@@ -1,13 +1,21 @@
 // The bar across the top of every app: the app switcher and the app's logo on the left, the command palette
 // in the middle, and the notification bell and the account menu on the right. The account menu links to
-// Space's pages, picks the theme and logs out; a guest gets a shorter one.
+// Space's pages, picks the theme and logs out; a guest gets a shorter one. A visitor who is signed out gets the
+// logo and a Login button instead, which goes to the demo on a demo server.
 
 import { useRouter } from '@tanstack/react-router';
 import { useIsAdmin } from '@workspace/lib/admin';
-import { getAdminAppUrl, getSpacePasswordUrl, getSpaceProfileUrl, getSupportUrl } from '@workspace/lib/api';
+import {
+    getAdminAppUrl,
+    getDemoEnterUrl,
+    getSpaceAppUrl,
+    getSpacePasswordUrl,
+    getSpaceProfileUrl,
+    getSupportUrl,
+} from '@workspace/lib/api';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useUnreadNotificationCount } from '@workspace/lib/notification';
-import { useEnabledApps } from '@workspace/lib/public';
+import { useEnabledApps, usePublicConfig } from '@workspace/lib/public';
 import { useTheme } from '@workspace/lib/space';
 import { THEMES } from '@workspace/lib/types/settings';
 import { cn } from '@workspace/ui/lib/utils';
@@ -265,6 +273,17 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
     );
 }
 
+function LoginButton() {
+    const { data: config } = usePublicConfig();
+    const demoMode = config?.demoMode ?? false;
+
+    return (
+        <Button size="sm" asChild>
+            <a href={demoMode ? getDemoEnterUrl() : getSpaceAppUrl()}>{demoMode ? 'Enter demo' : 'Login'}</a>
+        </Button>
+    );
+}
+
 export function Topbar({ rootRoute }: TopbarProps) {
     const { appName, documentTitle, isMobile, sidebarMode } = useLayout();
     const auth = useAuth();
@@ -272,7 +291,8 @@ export function Topbar({ rootRoute }: TopbarProps) {
     const { data: unreadCount = 0 } = useUnreadNotificationCount(auth.user?.id ?? '');
 
     useEffect(() => {
-        const base = documentTitle ? `${documentTitle} — eigen|${appName}>` : `eigen|${appName}>`;
+        const name = appName ? `eigen|${appName}>` : 'eigen';
+        const base = documentTitle ? `${documentTitle} — ${name}` : name;
         document.title = unreadCount > 0 ? `(${unreadCount}) ${base}` : base;
     }, [appName, documentTitle, unreadCount]);
 
@@ -306,6 +326,7 @@ export function Topbar({ rootRoute }: TopbarProps) {
                     {isMobile && auth.isAuthenticated && <CommandPaletteTrigger />}
                     <NotificationBell />
                     {isGuest ? <GuestUserDropdown rootRoute={rootRoute} /> : <UserDropdown rootRoute={rootRoute} />}
+                    {!auth.isAuthenticated && !auth.isLoading && <LoginButton />}
                 </div>
             </div>
         </header>

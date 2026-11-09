@@ -1,11 +1,15 @@
-// The blog's overview page on the public site: the newest post large at the top, and the other posts below it.
-// The list comes from the blog's content files, and each of the other posts links to its own page.
+// The blog's overview page on the public site: a row for each post with its date in the left gutter, the newest
+// post larger and with its cover, the others as list rows. The list comes from the blog's content files, so the
+// prerender has all of it, and every row links to its post.
 
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { formatDateOnly } from '@workspace/lib/date';
-import { Column, ColumnLayout } from '@workspace/ui';
-import { BlogPost } from '../components/blog-post';
-import { useArticleBody } from '../content/use-article-body';
+import { cn } from '@workspace/ui/lib/utils';
+import type { ReactNode } from 'react';
+import { BlogCover } from '../components/blog-cover';
+import { ReadingLayout } from '../components/reading-layout';
+import { SitePage } from '../components/site-page';
+import type { BlogPost } from '../data/blog-posts';
 import { getAllBlogPosts } from '../data/blog-posts';
 
 export const Route = createFileRoute('/blog/')({
@@ -30,45 +34,73 @@ export const Route = createFileRoute('/blog/')({
 });
 
 function BlogOverviewComponent() {
-    const [latestPost, ...otherPosts] = getAllBlogPosts();
-    const body = useArticleBody('blog', latestPost?.slug ?? '');
+    const [newest, ...older] = getAllBlogPosts();
 
     return (
-        <ColumnLayout>
-            <Column id="blog" width="flex">
-                <div className="h-full overflow-y-auto">
-                    <div className="mx-auto w-full max-w-[70ch] px-6 py-10">
-                        {latestPost && body && <BlogPost post={latestPost} body={body} />}
+        <SitePage>
+            <ReadingLayout>
+                <h1 className="text-4xl font-medium tracking-tight">Blog</h1>
+                <p className="mt-2 text-muted-foreground">Notes from building Eigen.</p>
+                {newest && (
+                    <PostRow post={newest} className="mt-10" dateClassName="top-1">
+                        <Link to="/blog/$id" params={{ id: newest.slug }} className="group block">
+                            <PostText post={newest} className="text-3xl group-hover:underline" />
+                            {newest.cover && <BlogCover src={newest.cover} className="mt-5" />}
+                        </Link>
+                    </PostRow>
+                )}
+                {older.map((post) => (
+                    <PostRow key={post.slug} post={post} className="mt-2" dateClassName="top-3.5">
+                        <Link
+                            to="/blog/$id"
+                            params={{ id: post.slug }}
+                            className="eigen-list-item -mx-4 block px-4 py-3.5"
+                        >
+                            <PostText post={post} className="text-[1.375rem]" />
+                        </Link>
+                    </PostRow>
+                ))}
+            </ReadingLayout>
+        </SitePage>
+    );
+}
 
-                        {otherPosts.length > 0 && (
-                            <div className="mt-16 pt-8 border-t border-border">
-                                <h2 className="text-2xl font-medium mb-6">Other posts</h2>
-                                <div className="space-y-8">
-                                    {otherPosts.map((post) => (
-                                        <article key={post.slug}>
-                                            <h3 className="text-xl font-medium mb-1">
-                                                <Link
-                                                    to="/blog/$id"
-                                                    params={{ id: post.slug }}
-                                                    className="hover:text-link"
-                                                >
-                                                    {post.title}
-                                                </Link>
-                                            </h3>
-                                            {post.date && (
-                                                <p className="text-sm text-muted-foreground mb-2">
-                                                    {formatDateOnly(post.date)}
-                                                </p>
-                                            )}
-                                            <p className="text-foreground leading-7">{post.description}</p>
-                                        </article>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </Column>
-        </ColumnLayout>
+type PostRowProps = {
+    post: BlogPost;
+    className: string;
+    dateClassName: string;
+    children: ReactNode;
+};
+
+// The date hangs in the left gutter; below 76rem there is none, and PostText shows it above the title instead.
+function PostRow({ post, className, dateClassName, children }: PostRowProps) {
+    return (
+        <div className={cn('relative', className)}>
+            {post.date && (
+                <time
+                    className={cn(
+                        'absolute right-full mr-(--site-gap) hidden w-(--site-gutter) text-[0.8125rem] leading-7 text-muted-foreground tabular-nums min-[76rem]:block',
+                        dateClassName,
+                    )}
+                >
+                    {formatDateOnly(post.date)}
+                </time>
+            )}
+            {children}
+        </div>
+    );
+}
+
+function PostText({ post, className }: { post: BlogPost; className: string }) {
+    return (
+        <>
+            {post.date && (
+                <time className="block text-[0.8125rem] leading-7 text-muted-foreground tabular-nums min-[76rem]:hidden">
+                    {formatDateOnly(post.date)}
+                </time>
+            )}
+            <h2 className={cn('leading-tight font-medium tracking-tight', className)}>{post.title}</h2>
+            <p className="mt-1.5 text-muted-foreground">{post.description}</p>
+        </>
     );
 }

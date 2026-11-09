@@ -50,6 +50,24 @@ describe('Public Routes', () => {
             expect(withLink.landingLinks).toEqual([link]);
         });
 
+        test('exposes whether the landing page shows the install section', async () => {
+            const off = await assertJson<{ showInstall: boolean }>(
+                await ctx.app.handle(new Request('http://localhost/p/config')),
+            );
+            expect(off.showInstall).toBe(false);
+
+            await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ landing: { showInstall: true } }),
+            });
+
+            const on = await assertJson<{ showInstall: boolean }>(
+                await ctx.app.handle(new Request('http://localhost/p/config')),
+            );
+            expect(on.showInstall).toBe(true);
+        });
+
         test('reports hosted mail as on by default and off with MAIL_ENABLED=0', async () => {
             const on = await assertJson<{ mailEnabled: boolean }>(
                 await ctx.app.handle(new Request('http://localhost/p/config')),
@@ -72,7 +90,7 @@ describe('Public Routes', () => {
             await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ landing: { links: [] } }),
+                body: JSON.stringify({ landing: { links: [], showInstall: false } }),
             });
         });
     });

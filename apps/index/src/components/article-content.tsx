@@ -1,12 +1,15 @@
+// The rendered body of an article, a post or the changelog, in the site's prose style. The build leaves the HTML
+// and a marker for each media grid, so this draws the HTML as it is and each grid as a component, and lets a
+// click on a heading's link icon copy the link. Every page of the public site that shows Markdown uses it.
+
 import { copyToClipboard } from '@workspace/lib/clipboard';
+import { cn } from '@workspace/ui/lib/utils';
 import { useEffect, useMemo, useRef } from 'react';
 import type { ArticleBody } from '../content/manifest';
 import { MediaGrid } from './media-grid';
 
 type ArticleContentProps = { body: ArticleBody; className?: string };
 
-// Splits rendered HTML on the <p>[MEDIAGRID:N]</p> markers left by the build,
-// rendering the HTML chunks statically and the grids as hydrated islands.
 export function ArticleContent({ body, className }: ArticleContentProps) {
     const ref = useRef<HTMLDivElement>(null);
 
@@ -31,7 +34,7 @@ export function ArticleContent({ body, className }: ArticleContentProps) {
         const el = ref.current;
         if (!el) return;
         const onClick = (e: MouseEvent) => {
-            const anchor = (e.target as HTMLElement).closest('a.heading-anchor');
+            const anchor = e.target instanceof Element ? e.target.closest('a.heading-anchor') : null;
             if (!anchor) return;
             e.preventDefault();
             const id = anchor.getAttribute('href')?.slice(1) ?? '';
@@ -42,7 +45,7 @@ export function ArticleContent({ body, className }: ArticleContentProps) {
     }, []);
 
     return (
-        <div ref={ref} className={className}>
+        <div ref={ref} className={cn('eigen-prose site-prose', className)}>
             {parts.map((part, i) => {
                 if ('grid' in part) {
                     const grid = body.mediaGrids[part.grid];
