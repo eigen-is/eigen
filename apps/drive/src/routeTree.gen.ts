@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthRouteImport } from './routes/_auth'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as AuthRecentRouteImport } from './routes/_auth.recent'
 import { Route as AuthTrashRouteImport } from './routes/_auth.trash'
 import { Route as AuthWatchedRouteImport } from './routes/_auth.watched'
 import { Route as AuthMimeMimeTypeRouteImport } from './routes/_auth.mime.$mimeType'
@@ -32,6 +33,11 @@ const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRecentRoute = AuthRecentRouteImport.update({
+  id: '/recent',
+  path: '/recent',
+  getParentRoute: () => AuthRoute,
 } as any)
 const AuthTrashRoute = AuthTrashRouteImport.update({
   id: '/trash',
@@ -69,6 +75,7 @@ const AuthFsOwnerIdMountIdPathIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/recent': typeof AuthRecentRoute
   '/trash': typeof AuthTrashRoute
   '/watched': typeof AuthWatchedRoute
   '/mime/$mimeType': typeof AuthMimeMimeTypeRoute
@@ -79,6 +86,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/recent': typeof AuthRecentRoute
   '/trash': typeof AuthTrashRoute
   '/watched': typeof AuthWatchedRoute
   '/mime/$mimeType': typeof AuthMimeMimeTypeRoute
@@ -91,6 +99,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_auth': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
+  '/_auth/recent': typeof AuthRecentRoute
   '/_auth/trash': typeof AuthTrashRoute
   '/_auth/watched': typeof AuthWatchedRoute
   '/_auth/mime/$mimeType': typeof AuthMimeMimeTypeRoute
@@ -103,6 +112,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/recent'
     | '/trash'
     | '/watched'
     | '/mime/$mimeType'
@@ -113,6 +123,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/recent'
     | '/trash'
     | '/watched'
     | '/mime/$mimeType'
@@ -124,6 +135,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_auth'
     | '/login'
+    | '/_auth/recent'
     | '/_auth/trash'
     | '/_auth/watched'
     | '/_auth/mime/$mimeType'
@@ -160,6 +172,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_auth/recent': {
+      id: '/_auth/recent'
+      path: '/recent'
+      fullPath: '/recent'
+      preLoaderRoute: typeof AuthRecentRouteImport
+      parentRoute: typeof AuthRoute
     }
     '/_auth/trash': {
       id: '/_auth/trash'
@@ -207,6 +226,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthRouteChildren {
+  AuthRecentRoute: typeof AuthRecentRoute
   AuthTrashRoute: typeof AuthTrashRoute
   AuthWatchedRoute: typeof AuthWatchedRoute
   AuthMimeMimeTypeRoute: typeof AuthMimeMimeTypeRoute
@@ -216,6 +236,7 @@ interface AuthRouteChildren {
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
+  AuthRecentRoute: AuthRecentRoute,
   AuthTrashRoute: AuthTrashRoute,
   AuthWatchedRoute: AuthWatchedRoute,
   AuthMimeMimeTypeRoute: AuthMimeMimeTypeRoute,
