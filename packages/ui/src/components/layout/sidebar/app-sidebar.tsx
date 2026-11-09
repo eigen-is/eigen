@@ -117,8 +117,7 @@ function UserAppSidebar({ condensed = false, newButton }: AppSidebarProps) {
     const host = currentHostConfig(appName);
     const inDrive = host === null;
     const userId = user!.id;
-    const { data: ownRoot } = useRootFolder(userId, DEFAULT_MOUNT_ID);
-    const personalRoot = ownRoot ?? null;
+    const { data: personalRoot } = useRootFolder(userId, DEFAULT_MOUNT_ID);
 
     // Empty ownerId short-circuits the hook's enabled guard; only fetch trash count in Drive.
     const { data: trashedItems } = useListTrash(inDrive ? userId : '', DEFAULT_MOUNT_ID);
@@ -191,9 +190,8 @@ function UserAppSidebar({ condensed = false, newButton }: AppSidebarProps) {
                             .filter((mount) => mount.rootPathId)
                             .map((mount) => {
                                 const owner = teamOwnerId(team.id);
-                                // A team drive always opens its folder view — in Drive directly, from
-                                // an eigendoc app over in the Drive app (like the Drive home link). The
-                                // type-filtered slice already lives in this app's "All …" view.
+                                // A team drive opens its folder view in Drive, even from a document app,
+                                // whose own All view already lists that drive's files of its kind.
                                 const fsPath = `fs/${owner}/${mount.id}/${mount.rootPathId}`;
                                 const mountProps = inDrive ? { to: `/${fsPath}` } : { href: getDriveAppUrl(fsPath) };
                                 return (
