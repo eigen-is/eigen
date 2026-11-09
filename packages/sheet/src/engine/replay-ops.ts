@@ -8,7 +8,7 @@ import { isRecord } from '@workspace/lib/guards';
 import type { Op, Sheet } from '@workspace/lib/sheets';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { opToPatchOnSheets, sheetHoldsNoBadLink } from '@workspace/lib/sheets/yjs-ops';
-import { applyPatches, enablePatches } from 'immer';
+import { enablePatches, Immer } from 'immer';
 import { isSheetName, sheetNameKey } from './a1-notation';
 import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
@@ -26,6 +26,9 @@ import { error } from './validation';
 // immer's patch plugin is global, and enabling it twice is harmless. Enabling it here means every caller of
 // replaySheetsOps has it without a setup step of its own.
 enablePatches();
+// The replay copies what it changes and nothing reads its sheets as frozen, and freezing every sheet after each batch
+// would cost a long replay a fifth of its time.
+const immer = new Immer({ autoFreeze: false });
 
 type InsertValue = Omit<InsertRowColOp, 'id'>;
 type DeleteValue = Omit<DeleteRowColOp, 'id'>;
@@ -71,7 +74,7 @@ export function replaySheetsOps(
             }
             const normalOps = batch.filter((op) => op.op === 'add' || op.op === 'remove' || op.op === 'replace');
             const [patches] = opToPatchOnSheets(result, normalOps);
-            result = applyPatches(result, patches);
+            result = immer.applyPatches(result, patches);
             const seeds = seedsOf(batch);
             if (seeds) result = recomputeAfter(result.map(withMaterializedData), seeds, { budgets });
         } catch (e) {
@@ -206,7 +209,7 @@ function collectDataOpSheetIds(batch: Op[]): Set<string> | null {
     for (const op of batch) {
         const needsData = op.path[0] === 'data' || isRowColOp(op);
         if (needsData && op.id) {
-            if (!touched) touched = new Set();
+            touched ??= new Set();
             touched.add(op.id);
         }
     }
