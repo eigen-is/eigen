@@ -11,6 +11,7 @@ import type {
     DriveImportSource,
     DrivePath,
     ImportResult,
+    RecentPath,
 } from '@workspace/lib/types/drive';
 import { EXPORT_SUMMARY_HEADER, isContainerType, isConvertTarget } from '@workspace/lib/types/drive';
 import type { ClientFileEventInput, FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
@@ -31,7 +32,7 @@ import {
 } from '../lib/core/http';
 import { getDrive, getSharedDrive, readImportSourceBytes } from '../lib/drive';
 import { propagateAccessRequest } from '../lib/drive/access-request-propagation';
-import { aggregateMimeContents, aggregateWatches } from '../lib/drive/aggregate';
+import { aggregateMimeContents, aggregateRecents, aggregateWatches } from '../lib/drive/aggregate';
 import { folderIn, withFreeName } from '../lib/drive/naming';
 import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
@@ -797,4 +798,13 @@ export const driveRouter = new Elysia({ name: 'drive' })
             return aggregateWatches(user);
         },
         { auth: true, query: t.Object({ all: t.Optional(t.String()) }) },
+    )
+    .get(
+        '/drive/:ownerId/recent',
+        async ({ params, user }): Promise<RecentPath[]> => {
+            requireSelf(params.ownerId, user.id);
+            requireNonGuest(user);
+            return aggregateRecents(user);
+        },
+        { auth: true },
     );

@@ -88,7 +88,7 @@ export class CollabDocument {
 
     public constructor(
         private readonly drive: Drive,
-        private readonly path: DrivePath,
+        public readonly path: DrivePath,
     ) {}
 
     public get connectionCount(): number {

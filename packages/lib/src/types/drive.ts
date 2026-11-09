@@ -475,6 +475,9 @@ export type DrivePath = {
     updatedAt: Date;
 };
 
+// A path on the Recent page, with the last time its user opened it or was notified about it.
+export type RecentPath = DrivePath & { lastActivityAt: Date };
+
 // The server cuts another owner's chain at the first folder the viewer can't read, so a chain that
 // doesn't start at a mount root starts where the viewer came in, through a share or a public link.
 // This is that first path, or undefined for a chain that starts at a root.

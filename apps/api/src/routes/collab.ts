@@ -1,6 +1,7 @@
 // The collab routes: a document's access info and comment index over HTTP, and the WebSocket each
 // editor opens to sync a document. The socket checks read when it opens and write on every message,
-// and it hands the frames to the CollabDocument the Drive keeps open for that document.
+// and it hands the frames to the CollabDocument the Drive keeps open for that document. An open that
+// succeeds counts on the user's Recent page.
 
 import {
     COLLAB_ACCESS_LOST_CLOSE,
@@ -22,6 +23,7 @@ import { startLoadingHeartbeat } from '../lib/collab/loading-heartbeat';
 import { ApiError } from '../lib/core/errors';
 import { getSharedDrive } from '../lib/drive';
 import type { DriveLike } from '../lib/drive/get-drive';
+import { recordOpened } from '../lib/drive/recent';
 import { getDataEpoch } from '../lib/home/data-epoch';
 import { keepWebSocketAlive } from '../utils/websockets';
 import { betterAuth } from './auth';
@@ -173,7 +175,11 @@ export const collabRouter = new Elysia({
 
                 // A removal or an ACL change during the load found no connection to close, and one after the subscribe
                 // finds this one. A frame that waits for `opened` finds no document once the session is cleaned up.
-                if (!(await document.keepsReadAccess(rawWs))) cleanupSession(session, rawWs);
+                if (!(await document.keepsReadAccess(rawWs))) {
+                    cleanupSession(session, rawWs);
+                    return;
+                }
+                recordOpened(user, document.path);
             } catch (err) {
                 const status = err instanceof ApiError ? err.status : 500;
                 // A refusal, such as a document in the trash, is expected on every reconnect, so it gets one line.

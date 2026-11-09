@@ -1,14 +1,17 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { afterEach, beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
 import { existsSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { orgOwnerId, teamOwnerId } from '@workspace/lib/types/owner';
 import { getUserHomePath } from '../../lib/config/paths';
-import { getServerConfig } from '../../lib/config/server-config';
+import { getPublicConfig, getServerConfig } from '../../lib/config/server-config';
 import { ApiError } from '../../lib/core';
 import { evictHome, getHome } from '../../lib/home/get-home';
 import type { HomeSettings } from '../../lib/home/home';
+import * as homeRelay from '../../lib/home/home-relay';
 import type { TestContext } from '../setup';
 import {
+    addMember,
+    addTeamMount,
     assertJson,
     authedRequest,
     createTeam,
@@ -134,6 +137,42 @@ describe('home: my-teams', () => {
     test('rejects request for another user', async () => {
         const res = await authedRequest(ctx.bob.user.sessionToken, `/home/${ctx.alice.user.id}/my-teams`);
         expect(res.status).toBe(403);
+    });
+
+    afterEach(() => mock.restore());
+
+    function myTeams(): Promise<MyTeam[]> {
+        return authedRequest(ctx.alice.user.sessionToken, `/home/${ctx.alice.user.id}/my-teams`).then((res) =>
+            assertJson<MyTeam[]>(res),
+        );
+    }
+
+    test('logs a failed mount read and still lists every team, the others with their mounts', async () => {
+        const orgId = getPublicConfig().orgId;
+        const liveTeam = await createTeam(ctx, orgId, `Live ${crypto.randomUUID()}`);
+        const brokenTeam = await createTeam(ctx, orgId, `Broken ${crypto.randomUUID()}`);
+        for (const id of [liveTeam, brokenTeam]) {
+            await addMember(ctx, id, ctx.alice.user.id);
+            await addTeamMount(ctx, id, 'Drive');
+        }
+
+        const pullTeamMounts = homeRelay.pullTeamMounts;
+        spyOn(homeRelay, 'pullTeamMounts').mockImplementation(async (ownerId) => {
+            if (ownerId === teamOwnerId(brokenTeam)) throw new Error('metadata.db is unreadable');
+            return pullTeamMounts(ownerId);
+        });
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        const teams = await myTeams();
+        expect(errors).toHaveBeenCalledWith(expect.stringContaining(brokenTeam), expect.anything());
+        expect(findOrFail(teams, (t) => t.id === brokenTeam).mounts).toEqual([]);
+        expect(findOrFail(teams, (t) => t.id === liveTeam).mounts.map((m) => m.name)).toEqual(['Drive']);
+    });
+
+    test('logs nothing for a team with its calendar off, the default', async () => {
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        const teams = await myTeams();
+        expect(findOrFail(teams, (t) => t.id === teamId).calendars).toEqual([]);
+        expect(errors).not.toHaveBeenCalled();
     });
 });
 
