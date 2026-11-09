@@ -179,7 +179,7 @@ Two names mislead: `download` is a leaf subpath but needs `document`, so it is f
 
 ### Third copy → shared wrapper
 
-**About to paste a scaffold into a third app? Extract one wrapper into `packages/ui` instead**, for route guards, `_auth.tsx` files, editor shells and loading, empty and error treatments as well as components. So `createEigenAppRouter` bootstraps every app but the marketing site, `createAuthRouteOptions` guards every app, admin included, which adds the org-role check in its page, and `SidebarSection` is every sidebar's loading, error and empty treatment.
+**About to paste a scaffold into a third app? Extract one wrapper into `packages/ui` instead**, for route guards, `_auth.tsx` files, editor shells and loading, empty and error treatments as well as components. So `createEigenAppRouter` bootstraps every app but the marketing site, `createAuthRouteOptions` guards every app with a signed-in area, admin included, which adds the org-role check in its page, and `SidebarSection` is every sidebar's loading, error and empty treatment.
 
 ## Pitfalls
 
