@@ -61,7 +61,7 @@ function addCard(doc: Y.Doc, id: string, fields: Record<string, unknown>): void 
 async function openDoc(sweepMount: Mount, mountId: string, name: string, blocks: object[]) {
     const root = await sweepMount.getRootFolder();
     if (!root) throw new Error('no root folder');
-    const path = await drive.create(mountId, root.id, `${name}-${crypto.randomUUID()}`, 'doc');
+    const path = await drive.create(mountId, root.id, `${name}-${crypto.randomUUID()}`, 'doc', home.user);
     const collab = await drive.getCollabDocument(mountId, path.id);
     seedEigendoc(collab.doc, { type: 'doc', content: blocks });
     return { path, collab };
@@ -245,7 +245,7 @@ describe('the sweep', () => {
     });
 
     test('a canvas keeps the thread of a document-level card and drops that of a deleted one', async () => {
-        const created = await drive.create(M, rootId, `ThreadCanvas-${crypto.randomUUID()}`, 'vector');
+        const created = await drive.create(M, rootId, `ThreadCanvas-${crypto.randomUUID()}`, 'vector', home.user);
         const collab = await drive.getCollabDocument(M, created.id);
         seedVectorDoc(collab.doc, buildGoldenDeckScene());
         const documentLevel = await addThread(mount, M, created.id);

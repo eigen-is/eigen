@@ -67,9 +67,9 @@ describe('DELETE .../file/:pathId/versions', () => {
         await drive.saveVersion(mountId, doc.id);
         const chat = await mount.getChildByName(doc.id, 'chat');
         if (!chat) throw new Error('no chat folder');
-        const thread = await drive.create(mountId, chat.id, `thread-${crypto.randomUUID()}`, 'chat');
         const author = await getUserById(ctx.alice.user.id);
         if (!author) throw new Error('no author');
+        const thread = await drive.create(mountId, chat.id, `thread-${crypto.randomUUID()}`, 'chat', author);
         await (await drive.getChat(mountId, thread.id)).postMessage(author, 'hello');
         await drive.saveVersion(mountId, thread.id);
         expect(await versionIds(mount, doc.id)).toHaveLength(2);
