@@ -53,7 +53,7 @@ if (CANONICAL_MIMES.size === 0) {
 // Every source file, tests and scripts included, since any of them may use a primitive. The metrics count in the
 // non-test sources of apps and packages.
 const sources: SourceFile[] = [];
-for (const path of (await Bun.$`git ls-files apps packages scripts docker`.text()).split('\n')) {
+for (const path of (await Bun.$`git ls-files --deduplicate apps packages scripts docker`.text()).split('\n')) {
     if (!/\.(?:ts|tsx|js|jsx|mjs)$/.test(path) || GENERATED.some((tail) => path.endsWith(tail))) continue;
     const text = await Bun.file(path).text();
     sources.push({ path, text, code: stripNoise(text, path.endsWith('x')) });
