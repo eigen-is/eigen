@@ -15,6 +15,7 @@ import {
     icalTimeToRecurrenceKey,
     isEigenName,
     parseResource,
+    projectAttendee,
     projectReminders,
     propTzid,
     readExclusionStamps,
@@ -46,16 +47,10 @@ type TrustedStamps = {
 // ical.js types every jCal array as `any[]`; narrowed once here to the shape RFC 5545 gives it.
 type JCalProperty = [string, Record<string, string | string[]>, string, ...unknown[]];
 
-// Never compare bytes: ical.js reorders parameters and rewrites escapes as it likes.
+// What a property says: its value, and the TZID that is half of a time's value. Any other parameter is the client's, so
+// LANGUAGE on a title is no reason to rewrite it.
 function propertyKey(prop: ICAL.Property): string {
-    const [name, params, ...rest]: JCalProperty = prop.toJSON();
-    return JSON.stringify([
-        name,
-        Object.keys(params)
-            .sort()
-            .map((k) => [k, params[k]]),
-        ...rest,
-    ]);
+    return `${prop.getFirstParameter('tzid')}|${prop.getFirstValue()}`;
 }
 
 const PARTSTAT: Record<Attendee['status'], string> = {
@@ -241,7 +236,8 @@ function clearProperty(comp: ICAL.Component, name: string): boolean {
 
 function setOptional(comp: ICAL.Component, name: string, value?: string | null, build = textProperty): boolean {
     if (value === undefined) return false;
-    return value ? setProperty(comp, build(name, value)) : clearProperty(comp, name);
+    if (value) return setProperty(comp, build(name, value));
+    return !!comp.getFirstPropertyValue(name) && clearProperty(comp, name);
 }
 
 function masterVEvent(resource: ICAL.Component): ICAL.Component | null {
@@ -514,8 +510,9 @@ function patchAttendees(
             continue;
         }
         for (const prop of listed) {
+            const stored = new Map(attendeeParameters(projectAttendee(prop)));
             for (const [name, value] of attendeeParameters(attendee)) {
-                if ((prop.getFirstParameter(name) ?? '') === value) continue;
+                if (stored.get(name) === value) continue;
                 if (value) prop.setParameter(name, value);
                 else prop.removeParameter(name);
                 changed = true;
@@ -585,7 +582,7 @@ export function patchEvent(
     let changed = recurrenceKey === null && followMaster(resource, vevent, patch);
     let scheduling = false;
 
-    if (patch.title !== undefined) changed = setProperty(vevent, textProperty('summary', patch.title)) || changed;
+    changed = setOptional(vevent, 'summary', patch.title) || changed;
     changed = setOptional(vevent, 'description', patch.description) || changed;
     changed = setOptional(vevent, 'location', patch.location) || changed;
 
@@ -630,7 +627,7 @@ export function patchEvent(
     if (data) {
         changed = setOptional(vevent, 'url', data.url, rawProperty) || changed;
         changed = setOptional(vevent, EIGEN.color, data.color, rawProperty) || changed;
-        if (data.organizer) {
+        if (data.organizer && calAddress(vevent.getFirstPropertyValue('organizer')) !== data.organizer.email) {
             changed =
                 setProperty(vevent, addressProperty('organizer', data.organizer.email, data.organizer.name)) || changed;
         }

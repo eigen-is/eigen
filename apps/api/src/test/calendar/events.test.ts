@@ -73,6 +73,135 @@ describe('a patch that changes nothing', () => {
     });
 });
 
+describe("the first web save of a client's event", () => {
+    const GUEST = 'guest@example.com';
+    const AMSTERDAM = [
+        'BEGIN:VTIMEZONE',
+        'TZID:Europe/Amsterdam',
+        'BEGIN:STANDARD',
+        'TZOFFSETFROM:+0200',
+        'TZOFFSETTO:+0100',
+        'DTSTART:19961027T030000',
+        'RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU',
+        'END:STANDARD',
+        'BEGIN:DAYLIGHT',
+        'TZOFFSETFROM:+0100',
+        'TZOFFSETTO:+0200',
+        'DTSTART:19810329T020000',
+        'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU',
+        'END:DAYLIGHT',
+        'END:VTIMEZONE',
+    ];
+    // Each as the client writes it: the parameters and spellings Eigen's form can't restate are the point.
+    const CLIENT_EVENTS = (owner: string): Record<string, string[]> => ({
+        outlook: [
+            `ATTENDEE;CN="Guest One";RSVP=TRUE:mailto:${GUEST}`,
+            'DESCRIPTION;LANGUAGE=en-us:Agenda\\n',
+            'DTSTART;TZID="W. Europe Standard Time":20261110T100000',
+            'DTEND;TZID="W. Europe Standard Time":20261110T110000',
+            'LOCATION;LANGUAGE=en-us:Room 1',
+            `ORGANIZER;CN="The Owner":mailto:${owner}`,
+            'SUMMARY;LANGUAGE=en-us:Standup',
+            'X-MICROSOFT-CDO-BUSYSTATUS:BUSY',
+        ],
+        exchange: [
+            `ORGANIZER;CN=The Owner:MAILTO:${owner}`,
+            `ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=Guest One:MAILTO:${GUEST}`,
+            'SUMMARY;LANGUAGE=en-US:Standup',
+            'DTSTART:20261110T090000Z',
+            'DTEND:20261110T100000Z',
+            'STATUS:CONFIRMED',
+        ],
+        thunderbird: [
+            'SUMMARY:Standup',
+            `ORGANIZER;RSVP=FALSE;PARTSTAT=ACCEPTED;ROLE=CHAIR:mailto:${owner}`,
+            `ATTENDEE;RSVP=TRUE;PARTSTAT=NEEDS-ACTION;ROLE=REQ-PARTICIPANT:mailto:${GUEST}`,
+            'DTSTART;TZID=Europe/Amsterdam:20261110T100000',
+            'DTEND;TZID=Europe/Amsterdam:20261110T110000',
+            'X-MOZ-GENERATION:1',
+        ],
+        apple: [
+            `ATTENDEE;CN="The Owner";CUTYPE=INDIVIDUAL;EMAIL="${owner}";PARTSTAT=ACCEPTED;ROLE=CHAIR:mailto:${owner}`,
+            `ATTENDEE;CN="${GUEST}";CUTYPE=INDIVIDUAL;EMAIL="${GUEST}";RSVP=TRUE;SCHEDULE-STATUS=1.2:mailto:${GUEST}`,
+            'DTSTART;TZID=Europe/Amsterdam:20261110T100000',
+            'DTEND;TZID=Europe/Amsterdam:20261110T110000',
+            `ORGANIZER;CN="The Owner";EMAIL="${owner}";SCHEDULE-AGENT=NONE:mailto:${owner}`,
+            'RRULE:FREQ=WEEKLY;INTERVAL=1',
+            'SUMMARY:Standup',
+            'URL;VALUE=URI:https://example.com/agenda',
+        ],
+        google: [
+            'DTSTART:20261110T090000Z',
+            'DTEND:20261110T100000Z',
+            `ORGANIZER;CN=${owner}:mailto:${owner}`,
+            `ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=${GUEST};X-NUM-GUESTS=0:mailto:${GUEST}`,
+            'DESCRIPTION:',
+            'LOCATION:',
+            'STATUS:CONFIRMED',
+            'SUMMARY:Standup',
+        ],
+    });
+    const stored = async (client: string) => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        const calendar = harness.instance;
+        const body = ['BEGIN:VEVENT', 'UID:client', ...CLIENT_EVENTS(harness.user.email)[client], 'END:VEVENT'];
+        await putResource(calendar, calendarId, 'client.ics', vcal(AMSTERDAM, body));
+        return { calendar, calendarId, event: storedEvents(calendar, calendarId)[0] };
+    };
+
+    for (const client of ['outlook', 'exchange', 'thunderbird', 'apple', 'google']) {
+        test(`${client}'s bytes stay when the form restates what it read`, async () => {
+            const { calendar, calendarId, event } = await stored(client);
+            const before = await resourceTextOf(calendar, calendarId, 'client.ics');
+
+            const saved = await calendar.updateEvent(calendarId, event.id, {
+                title: event.title,
+                description: event.description,
+                location: event.location,
+                startTime: event.startTime,
+                endTime: event.endTime,
+                allDay: event.allDay,
+                timezone: event.timezone,
+                rrule: event.rrule,
+                data: event.data,
+            });
+
+            expect(await resourceTextOf(calendar, calendarId, 'client.ics')).toBe(before);
+            expect(saved.etag).toBe(event.etag);
+        });
+    }
+
+    test('an edit rewrites what it changes and leaves the parameters beside it', async () => {
+        const { calendar, calendarId, event } = await stored('outlook');
+
+        await calendar.updateEvent(calendarId, event.id, { title: 'Retro', location: event.location });
+
+        const text = await resourceTextOf(calendar, calendarId, 'client.ics');
+        expect(text).toContain('SUMMARY:Retro');
+        expect(text).toContain('LOCATION;LANGUAGE=en-us:Room 1');
+    });
+
+    test('a guest answer moves their PARTSTAT and no other parameter', async () => {
+        const { calendar, calendarId, event } = await stored('thunderbird');
+
+        await calendar.receiveAttendeeStatus(event.id, GUEST, 'accepted');
+
+        const text = (await resourceTextOf(calendar, calendarId, 'client.ics')).replaceAll('\r\n ', '');
+        expect(text).toContain(`ATTENDEE;RSVP=TRUE;PARTSTAT=ACCEPTED;ROLE=REQ-PARTICIPANT:mailto:${GUEST}`);
+        expect(text).toContain(';RSVP=FALSE;PARTSTAT=ACCEPTED;ROLE=CHAIR:mailto:');
+    });
+
+    test('the same wall clock in another zone is another time, so the TZID still counts', async () => {
+        const { calendar, calendarId, event } = await stored('thunderbird');
+
+        await calendar.updateEvent(calendarId, event.id, { timezone: 'Europe/Paris' });
+
+        const text = await resourceTextOf(calendar, calendarId, 'client.ics');
+        expect(text).toContain('DTSTART;TZID=Europe/Paris:20261110T100000');
+    });
+});
+
 describe('moveEvent', () => {
     const seriesOf = async (harness: TestHome<Calendar>, calendarId: string, uid: string, uri: string) => {
         await putResource(harness.instance, calendarId, uri, vcal(vevent(uid, 'Movable')));
