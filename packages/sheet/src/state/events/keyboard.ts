@@ -1,7 +1,8 @@
 // The grid's keyboard. The Workbook hands each keydown to handleGlobalKeyDown, which moves the selection, commits an
 // open edit on Enter or Tab, runs the ⌘ shortcuts and opens a cell when a key types into it. While a cell is open,
-// the in-cell editor handles every other key. SHEET_HOTKEYS defines every letter shortcut once: the key handlers
-// match against it through TanStack's hotkey matcher, as the other apps' shortcuts do, and the menus show it.
+// the in-cell editor handles every other key, and a key during an IME composition is the IME's. SHEET_HOTKEYS defines
+// every letter shortcut once: the key handlers match against it through TanStack's hotkey matcher, as the other apps'
+// shortcuts do, and the menus show it.
 
 import type { Hotkey } from '@tanstack/react-hotkeys';
 import { matchesKeyboardEvent } from '@tanstack/react-hotkeys';
@@ -55,6 +56,12 @@ export function typesIntoEditor(e: KeyboardEvent) {
     if (key === 8 || key === 32 || key === 46) return true;
     if (e.ctrlKey) return key === 86;
     return !e.altKey && key > 46 && !(key >= 112 && key <= 123) && key !== 144 && key !== 108;
+}
+
+// A key the IME is taking: anything during a composition, or a 229 in an open cell, because Safari fires the Enter that
+// confirms a composition just after compositionend. On a closed cell a 229 is the key that starts typing, and opens it.
+export function imeOwnsKey(e: KeyboardEvent, editing: boolean) {
+    return e.isComposing || (editing && e.keyCode === 229);
 }
 
 export function handleGlobalEnter(ctx: Context, cellInput: HTMLDivElement, e: KeyboardEvent) {
@@ -311,8 +318,9 @@ function openFocusedDropdown(ctx: Context, e: KeyboardEvent) {
 }
 
 export function handleGlobalKeyDown(ctx: Context, cellInput: HTMLDivElement, e: KeyboardEvent) {
+    if (imeOwnsKey(e, ctx.editingCellPosition.length > 0)) return;
+
     ctx.selectionActive = false;
-    const kcode = e.keyCode;
     const kstr = e.key;
     if (ctx.filterContextMenu) {
         return;
@@ -395,7 +403,7 @@ export function handleGlobalKeyDown(ctx: Context, cellInput: HTMLDivElement, e: 
         e.preventDefault();
     } else if (kstr === 'ArrowUp' || kstr === 'ArrowDown' || kstr === 'ArrowLeft' || kstr === 'ArrowRight') {
         handleArrowKey(ctx, e);
-    } else if (typesIntoEditor(e) || kcode === 0) {
+    } else if (typesIntoEditor(e) || e.keyCode === 0) {
         if (!allowEdit) return;
         // With no selection a typed key has no cell to open, so it must not land in the hidden editor either. A key
         // typed into another field of the workbook, such as a toolbar input, still reaches that field.

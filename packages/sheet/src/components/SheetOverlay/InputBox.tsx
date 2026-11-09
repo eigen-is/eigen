@@ -19,6 +19,7 @@ import {
     handleFormulaInput,
     handleItalic,
     handleUnderline,
+    imeOwnsKey,
     israngeseleciton,
     isSelectionOnHiddenRowCol,
     loadCellFont,
@@ -110,6 +111,7 @@ export const InputBox: React.FC = () => {
             if (!input) return;
             lastKeyDownEventRef.current = new KeyboardEvent(e.type, e.nativeEvent);
             preText.current = input.innerText;
+            if (imeOwnsKey(e.nativeEvent, context.editingCellPosition.length > 0)) return;
 
             // Alt or Meta with Enter inserts a newline, whether or not the suggestions show.
             if (e.key === 'Enter' && (e.altKey || e.metaKey) && context.editingCellPosition.length > 0) {

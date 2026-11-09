@@ -280,6 +280,8 @@ The matcher takes the letter the layout types, else the physical key, so ⌘B st
 
 While a cell is open, ⌘Z, ⇧⌘Z and ⌘Y belong to the browser, which undoes the typing in the editor, as Google Sheets does. The Workbook runs the sheet's undo only while no cell is open. Otherwise one ⌘Z would undo the typing and the sheet's last edit at once.
 
+A key during an IME composition is the IME's, in the grid's handler, the cell editor and the formula bar alike (`imeOwnsKey`), so the Enter that confirms a composition keeps the cell open and the next one commits it. That is `isComposing`, or keyCode 229 in an open cell, because Safari fires that Enter just after `compositionend`. On a closed cell a 229 with `isComposing` false is the key that starts typing, as an IME's first key and an Android keyboard send it, and it opens the cell.
+
 Keys with a name rather than a letter, such as Enter, Tab, the arrows, F2, Escape and Delete, still dispatch on `e.key` in `handleGlobalKeyDown`, and so does Ctrl+Shift+; for the date and time: a hotkey string can't name the shifted punctuation a layout types there.
 
 ## Conditional formats evaluate headless

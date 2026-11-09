@@ -14,6 +14,7 @@ import {
     getFormulaHtml,
     handleFormulaInput,
     handleGlobalEnter,
+    imeOwnsKey,
     isSelectionOnHiddenRowCol,
     loadCellFont,
     moveHighlightCell,
@@ -101,6 +102,7 @@ export function FxEditor() {
             const fxInput = refs.fxInput.current;
             if (!fxInput) return;
             recentText.current = fxInput.innerText;
+            if (imeOwnsKey(e.nativeEvent, context.editingCellPosition.length > 0)) return;
             if (key === 'ArrowLeft' || key === 'ArrowRight') {
                 e.stopPropagation();
             }
