@@ -1476,6 +1476,18 @@ test.each([
     await waitUntil(() => hoverCardShown() === true, 'the hover card');
 });
 
+test('a press within the pause shows no card, as for a drag-select that starts on the text', async () => {
+    write('default', 'Hello', { comment: { cardId: 'c1' } });
+    writeCard();
+    await render(WRITER);
+    const span = bodyView()?.querySelector('.comment-highlight');
+    if (!span) throw new Error('no highlight');
+    await moveOver(span);
+    await act(async () => span.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })));
+    await pastOpenDelay();
+    expect(hoverCardShown()).toBeFalsy();
+});
+
 test('a click on the hover card opens the card beside the comments panel', async () => {
     write('default', 'Hello', { comment: { cardId: 'c1' } });
     writeCard();
