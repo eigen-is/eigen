@@ -4,7 +4,6 @@
 // page is read-only, and a selected row's ?pid=&uid=&mid= opens its detail beside the list.
 
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, usePathInfo, useRecentPaths, validateDriveSearch } from '@workspace/lib/drive';
 import type { DrivePath, DriveSort } from '@workspace/lib/types/drive';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
@@ -19,7 +18,7 @@ export const Route = createFileRoute('/_auth/recent')({
 
 function RecentRoute() {
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { user } = Route.useRouteContext();
     const { pid, uid, mid } = Route.useSearch();
 
     const { data: recentPaths = [], isLoading, error } = useRecentPaths();
@@ -53,7 +52,7 @@ function RecentRoute() {
         <DriveLayout
             pid={pid}
             selectedPath={selectedPath}
-            ownerId={uid || user?.id || ''}
+            ownerId={uid || user.id}
             mountId={mid || DEFAULT_MOUNT_ID}
             folderContents={recentPaths}
             isLoading={isLoading}
