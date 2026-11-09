@@ -44,7 +44,7 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
     const [draftCalEnabled, setDraftCalEnabled] = useState(true);
     const [draftCalPermission, setDraftCalPermission] = useState<CalendarAccess>('read');
     const [draftNotifyMembers, setDraftNotifyMembers] = useState(true);
-    const [draftMailMax, setDraftMailMax] = useState('');
+    const [draftHomeDataMax, setDraftHomeDataMax] = useState('');
     const [draftMountMax, setDraftMountMax] = useState('');
 
     const updateTeam = useUpdateTeam(organizationId);
@@ -63,7 +63,7 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
     const notifyMembers = settings?.notifyMembers !== false;
     const overrides = settings?.memberOverrides;
     const overridesText = [
-        overrides?.mailAndContactsMaxMB && `${homeDataLabel}: ${overrides.mailAndContactsMaxMB} MB`,
+        overrides?.homeDataMaxMB && `${homeDataLabel}: ${overrides.homeDataMaxMB} MB`,
         overrides?.defaultMountMaxSizeMB && `Mount: ${overrides.defaultMountMaxSizeMB} MB`,
     ]
         .filter(Boolean)
@@ -80,7 +80,7 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
         setDraftCalEnabled(calendarEnabled);
         setDraftCalPermission(calendarPermission);
         setDraftNotifyMembers(notifyMembers);
-        setDraftMailMax(overrides?.mailAndContactsMaxMB?.toString() ?? '');
+        setDraftHomeDataMax(overrides?.homeDataMaxMB?.toString() ?? '');
         setDraftMountMax(overrides?.defaultMountMaxSizeMB?.toString() ?? '');
         setShowSettingsForm(true);
     };
@@ -93,7 +93,7 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
             calendar: { enabled: draftCalEnabled },
             notifyMembers: draftNotifyMembers,
             memberOverrides: {
-                mailAndContactsMaxMB: draftMailMax ? Number(draftMailMax) : undefined,
+                homeDataMaxMB: draftHomeDataMax ? Number(draftHomeDataMax) : undefined,
                 defaultMountMaxSizeMB: draftMountMax ? Number(draftMountMax) : undefined,
             },
         });
@@ -206,8 +206,8 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
                                     type="number"
                                     min={QUOTA_MIN_MB}
                                     placeholder="Inherit"
-                                    value={draftMailMax}
-                                    onChange={(e) => setDraftMailMax(e.target.value)}
+                                    value={draftHomeDataMax}
+                                    onChange={(e) => setDraftHomeDataMax(e.target.value)}
                                 />
                             </div>
                             <div className="space-y-1.5">

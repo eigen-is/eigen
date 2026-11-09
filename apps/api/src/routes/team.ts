@@ -56,7 +56,7 @@ export const teamRouter = new Elysia({ name: 'team' })
                 ...rest,
                 ...(memberOverrides && {
                     memberOverrides: {
-                        mailAndContactsMaxMB: memberOverrides.mailAndContactsMaxMB ?? undefined,
+                        homeDataMaxMB: memberOverrides.homeDataMaxMB ?? undefined,
                         defaultMountMaxSizeMB: memberOverrides.defaultMountMaxSizeMB ?? undefined,
                     },
                 }),
@@ -67,7 +67,7 @@ export const teamRouter = new Elysia({ name: 'team' })
                 calendar: t.Optional(t.Object({ enabled: t.Optional(t.Boolean()) })),
                 memberOverrides: t.Optional(
                     t.Object({
-                        mailAndContactsMaxMB: t.Optional(t.Nullable(t.Number({ minimum: QUOTA_MIN_MB }))),
+                        homeDataMaxMB: t.Optional(t.Nullable(t.Number({ minimum: QUOTA_MIN_MB }))),
                         defaultMountMaxSizeMB: t.Optional(t.Nullable(t.Number({ minimum: QUOTA_MIN_MB }))),
                     }),
                 ),

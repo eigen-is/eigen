@@ -20,7 +20,7 @@ const DEFAULT_BACKUPS: ServerSettings['backups'] = {
 const serverFs = new LocalFilesystem(getServerDataPath());
 const settingsStore = new JsonStore<ServerSettings>(serverFs, SERVER_FILES.settings, {
     quotas: {
-        mailAndContactsMaxMB: 100,
+        homeDataMaxMB: 100,
         defaultMountMaxSizeMB: 500,
         maxUploadSizeMB: 35,
         trashRetentionDays: 30,

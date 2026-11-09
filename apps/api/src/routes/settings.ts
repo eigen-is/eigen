@@ -119,7 +119,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
             body: t.Object({
                 quotas: t.Optional(
                     t.Object({
-                        mailAndContactsMaxMB: t.Optional(t.Number({ minimum: QUOTA_MIN_MB })),
+                        homeDataMaxMB: t.Optional(t.Number({ minimum: QUOTA_MIN_MB })),
                         defaultMountMaxSizeMB: t.Optional(t.Number({ minimum: QUOTA_MIN_MB })),
                         maxUploadSizeMB: t.Optional(t.Number({ minimum: 1, maximum: UPLOAD_CAP_MAX_MB })),
                         trashRetentionDays: t.Optional(t.Number({ minimum: 0 })),

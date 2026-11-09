@@ -10,10 +10,10 @@ The two budgets follow what a Home holds. A Home is the data folder of one user 
 
 | Budget | What it covers | Server setting |
 |---|---|---|
-| Home data | Mail, contacts and calendar of one Home, together | `quotas.mailAndContactsMaxMB` |
+| Home data | Mail, contacts and calendar of one Home, together | `quotas.homeDataMaxMB` |
 | Drive mount | One mount; each mount has its own | `quotas.defaultMountMaxSizeMB` |
 
-An email-heavy user is not blocked from uploading files, and a file-heavy user can still receive mail. Every code symbol says `homeData`, `HomeSizeResponse.homeData` included. Only the persisted settings, the server's and a team's override, keep the name `mailAndContactsMaxMB`, because stored quotas cannot be rebuilt after a rename. The settings themselves are in [SERVER-SETTINGS.md](SERVER-SETTINGS.md).
+An email-heavy user is not blocked from uploading files, and a file-heavy user can still receive mail. Code, stored settings and wire alike say `homeData`: the server's `quotas.homeDataMaxMB`, a team's `memberOverrides.homeDataMaxMB` and `HomeSizeResponse.homeData`. The settings themselves are in [SERVER-SETTINGS.md](SERVER-SETTINGS.md).
 
 ## Teams can only raise a limit
 

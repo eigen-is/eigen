@@ -342,18 +342,18 @@ describe('Mail transfer routes', () => {
         const MB = 1024 * 1024;
         const user = await createTestUser('eml-import-quota@test.eigen.is', PASSWORD, 'Eml Import Quota');
         const home = await getHome(user.id);
-        const originalMaxMB = getServerSettings().quotas.mailAndContactsMaxMB;
+        const originalMaxMB = getServerSettings().quotas.homeDataMaxMB;
 
         try {
             const used = (await home.mail.size()) + (await home.contacts.size());
-            await updateServerSettings({ quotas: { mailAndContactsMaxMB: Math.floor(used / MB) } });
+            await updateServerSettings({ quotas: { homeDataMaxMB: Math.floor(used / MB) } });
 
             const before = (await inbox(user)).length;
             const res = await importRequest(user, message('Over quota'));
             expect(res.status).toBe(507);
             expect((await inbox(user)).length).toBe(before);
         } finally {
-            await updateServerSettings({ quotas: { mailAndContactsMaxMB: originalMaxMB } });
+            await updateServerSettings({ quotas: { homeDataMaxMB: originalMaxMB } });
         }
     });
 });

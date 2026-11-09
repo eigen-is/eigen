@@ -96,7 +96,7 @@ async function inviteFromAlice(user: TestUser, uid: string): Promise<CalendarEve
     return findOrFail(await home.calendar.getEventsByUid(uid), (e) => !e.parentEventId);
 }
 
-const setBudget = (mb: number) => updateServerSettings({ quotas: { mailAndContactsMaxMB: mb } });
+const setBudget = (mb: number) => updateServerSettings({ quotas: { homeDataMaxMB: mb } });
 
 // The budget the writes below are judged against: exactly what the Home already holds, so anything that adds
 // bytes overflows and only an edit inside the headroom or a shrinking rewrite fits.
@@ -114,7 +114,7 @@ async function overfillBudget(user: TestUser): Promise<void> {
 
 // The ceiling is one server-wide setting, so whatever a test does to it, the next test starts where it did.
 async function restoringBudget<T>(run: () => Promise<T>): Promise<T> {
-    const original = getServerSettings().quotas.mailAndContactsMaxMB;
+    const original = getServerSettings().quotas.homeDataMaxMB;
     try {
         return await run();
     } finally {

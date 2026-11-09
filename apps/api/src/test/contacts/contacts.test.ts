@@ -521,7 +521,7 @@ describe('Contacts', () => {
         test('a create overflows at 507, a growing update too, and an edit or a shrink still fits', async () => {
             const token = ctx.alice.user.sessionToken;
             const url = `/contacts/${ctx.alice.user.id}/contacts`;
-            const originalMaxMB = getServerSettings().quotas.mailAndContactsMaxMB;
+            const originalMaxMB = getServerSettings().quotas.homeDataMaxMB;
 
             // A fat card first (under the default quota), so the book's total is dominated by bytes this test
             // owns and can later shrink away, whatever the fixtures seeded.
@@ -538,7 +538,7 @@ describe('Contacts', () => {
                 const used = (await home.mail.size()) + (await home.contacts.size());
                 // The ceiling now sits at exactly what the book already uses, so anything that adds bytes
                 // overflows and only an edit inside the headroom or a shrinking rewrite fits.
-                await updateServerSettings({ quotas: { mailAndContactsMaxMB: used / MB } });
+                await updateServerSettings({ quotas: { homeDataMaxMB: used / MB } });
 
                 const create = await authedRequest(token, url, {
                     method: 'POST',
@@ -574,7 +574,7 @@ describe('Contacts', () => {
                 });
                 expect(shrink.status).toBe(200);
             } finally {
-                await updateServerSettings({ quotas: { mailAndContactsMaxMB: originalMaxMB } });
+                await updateServerSettings({ quotas: { homeDataMaxMB: originalMaxMB } });
                 const left = await assertJson<Contact>(await authedRequest(token, `${url}/${fatId}`));
                 await authedRequest(token, `${url}/${fatId}?etag=${encodeURIComponent(left.etag)}`, {
                     method: 'DELETE',

@@ -260,8 +260,8 @@ export function ServerSettingsPage() {
                         <Input
                             type="number"
                             min={QUOTA_MIN_MB}
-                            value={current.quotas.mailAndContactsMaxMB}
-                            onChange={(e) => updateQuota('mailAndContactsMaxMB', e.target.valueAsNumber)}
+                            value={current.quotas.homeDataMaxMB}
+                            onChange={(e) => updateQuota('homeDataMaxMB', e.target.valueAsNumber)}
                         />
                     </div>
                     <div className="space-y-1.5">
