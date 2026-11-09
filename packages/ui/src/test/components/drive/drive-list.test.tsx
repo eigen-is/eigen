@@ -73,14 +73,14 @@ test('picking the current sort flips its direction, and a layout sets it', async
 
 test('a sort of its own is checked, and a pick goes to its caller instead of the preference', async () => {
     setSort.mockClear();
-    const onSortChange = mock((_sort: { key: string; dir: string }) => {});
-    await open({ sort: { key: 'name', dir: 'asc' }, onSortChange });
+    const onChange = mock((_sort: { key: string; dir: string }) => {});
+    await open({ sort: { value: { key: 'name', dir: 'asc' }, onChange } });
     expect(checkRows().slice(0, 3)).toEqual([
         ['Name', 'true'],
         ['Modified', 'false'],
         ['Size', 'false'],
     ]);
     await clickRow('Name');
-    expect(onSortChange.mock.calls).toEqual([[{ key: 'name', dir: 'desc' }]]);
+    expect(onChange.mock.calls).toEqual([[{ key: 'name', dir: 'desc' }]]);
     expect(setSort).not.toHaveBeenCalled();
 });

@@ -14,6 +14,10 @@ import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { DriveBreadcrumb } from './drive-breadcrumb';
 import { DriveBrowser } from './drive-browser';
 import { useMountLabel } from './drive-mount-list';
+import type { DriveSortControl } from './drive-table';
+
+// Folders first, then by name, A to Z. The header that would change the sort is hidden.
+const BY_NAME: DriveSortControl = { value: { key: 'name', dir: 'asc' }, onChange: () => {} };
 
 export type DriveLocationValue = { ownerId: string; mountId: string; folderId: string };
 
@@ -121,8 +125,7 @@ export function DriveLocationField({
                         showNewFolder
                         hideToolbar
                         hideHeader
-                        // Folders always sort first, then by name, A to Z. The header that would change the sort is hidden.
-                        sort={{ key: 'name', dir: 'asc' }}
+                        sort={BY_NAME}
                         ownMountsOnly={ownMountsOnly}
                         createFolderOpen={createFolderOpen}
                         onCreateFolderOpenChange={setCreateFolderOpen}

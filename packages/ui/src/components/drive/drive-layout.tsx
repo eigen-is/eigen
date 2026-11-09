@@ -14,10 +14,10 @@ import { LoadingState } from '../layout/app/loading-state';
 import { useDriveActionRunner } from './drive-action-runner';
 import { DriveDetail, DriveDetailToolbar } from './drive-detail';
 import { DriveList, DriveListToolbar } from './drive-list';
-import type { DriveSortProps } from './drive-table';
+import type { DriveListDate, DriveSortControl } from './drive-table';
 import { useDriveSort } from './drive-table';
 
-export type DriveLayoutProps = DriveSortProps & {
+export type DriveLayoutProps = {
     ownerId: string;
     mountId: string;
     pathId?: string;
@@ -38,9 +38,8 @@ export type DriveLayoutProps = DriveSortProps & {
     pid?: string;
     unreadPathIds?: ReadonlySet<string>;
     emptyState?: ReactNode;
-    // The date the list shows and Modified sorts by, such as Recent's last activity, in place of the last edit.
-    dateLabel?: string;
-    getItemDate?: (item: DrivePath) => Date | null;
+    sort?: DriveSortControl;
+    date?: DriveListDate;
 };
 
 export function DriveLayout({
@@ -64,9 +63,7 @@ export function DriveLayout({
     unreadPathIds,
     emptyState,
     sort,
-    onSortChange,
-    dateLabel,
-    getItemDate,
+    date,
 }: DriveLayoutProps) {
     const { isMobile } = useLayout();
     const actions = useDriveActionRunner({
@@ -78,10 +75,10 @@ export function DriveLayout({
         onAfterAction,
     });
 
-    const { key: sortKey, dir: sortDir } = useDriveSort({ sort, onSortChange });
+    const { key: sortKey, dir: sortDir } = useDriveSort(sort);
     const activeSortFn = useMemo(
-        () => getDriveComparator(sortKey, sortDir, (path) => getItemDate?.(path) ?? path.updatedAt),
-        [sortKey, sortDir, getItemDate],
+        () => getDriveComparator(sortKey, sortDir, (path) => date?.of(path) ?? path.updatedAt),
+        [sortKey, sortDir, date],
     );
     const sortedContents = useMemo(() => [...folderContents].sort(activeSortFn), [folderContents, activeSortFn]);
 
@@ -117,9 +114,7 @@ export function DriveLayout({
         unreadPathIds,
         emptyState,
         sort,
-        onSortChange,
-        dateLabel,
-        getItemDate,
+        date,
     };
 
     const listToolbar = (
@@ -135,7 +130,6 @@ export function DriveLayout({
             onUploadFile={actions.onUploadFile}
             onCreateEigenDoc={actions.onCreateEigenDoc}
             sort={sort}
-            onSortChange={onSortChange}
         />
     );
 
@@ -144,9 +138,8 @@ export function DriveLayout({
     const detailPath = pid ? selectedPath : selectedPath || currentPath;
 
     const mobileShowDetail = !!(selectedPath || (currentPath && currentPath.type !== 'folder'));
-    // A folder shows the detail of its own rows only, since a file moved out keeps its pid in the URL. A
-    // feed without a folder, such as Shared with me, shows any pid it resolves: a share link or a
-    // reference chip can land there on an item the feed itself doesn't list.
+    // A file moved out of a folder keeps its pid in the URL, so a folder shows only its own rows' detail. A
+    // feed without a folder shows any pid it resolves, since a share link can land on an item it doesn't list.
     const pidInFolder = pid ? folderContents.some((p) => p.id === pid) : false;
     const desktopShowDetail = !!(
         pidInFolder ||

@@ -21,10 +21,10 @@ import { ContextMenuAnchor, useContextMenu } from '../context-menu';
 import { DriveBreadcrumb } from './drive-breadcrumb';
 import { DriveItemNameDialog } from './drive-item-name-dialog';
 import { DriveMountList, useMountLabel } from './drive-mount-list';
-import type { DriveSortProps } from './drive-table';
+import type { DriveSortControl } from './drive-table';
 import { DriveTable, useDriveSort } from './drive-table';
 
-type DriveBrowserProps = DriveSortProps & {
+type DriveBrowserProps = {
     ownerId: string;
     mode: 'file' | 'folder';
     // Which rows are pickable; every row when omitted.
@@ -42,6 +42,7 @@ type DriveBrowserProps = DriveSortProps & {
     onCreateFolderOpenChange?: (open: boolean) => void;
     onSelectionChange?: (items: DrivePath[]) => void;
     ownMountsOnly?: boolean;
+    sort?: DriveSortControl;
     className?: string;
 };
 
@@ -63,7 +64,6 @@ export function DriveBrowser({
     onSelectionChange,
     ownMountsOnly,
     sort,
-    onSortChange,
     className,
 }: DriveBrowserProps) {
     const [activeMountId, setActiveMountId] = useState(defaultMountId);
@@ -87,9 +87,8 @@ export function DriveBrowser({
         }
     }, [defaultFolderId]);
 
-    // A new owner or mount from the parent moves the browser there, but only when it differs from where the browser
-    // is. A parent that catches up through onFolderChange passes back the mount the user just picked, and that must
-    // not send the user back to the mount's root.
+    // A new owner or mount from the parent moves the browser only when it differs from where the browser is: a
+    // parent catching up through onFolderChange passes back the mount the user just picked.
     const prevOwnerIdRef = useRef(ownerId);
     useEffect(() => {
         if (ownerId !== prevOwnerIdRef.current) {
@@ -116,7 +115,7 @@ export function DriveBrowser({
     const mountLabel = useMountLabel(activeOwnerId, activeMountId);
     const folderId = currentFolderId ?? rootFolder?.id ?? '';
     const { data: folderContents = [] } = useFolderContent(activeOwnerId, activeMountId, folderId);
-    const { key: sortKey, dir: sortDir } = useDriveSort({ sort, onSortChange });
+    const { key: sortKey, dir: sortDir } = useDriveSort(sort);
     const sortedContents = useMemo(
         () => [...folderContents].sort(getDriveComparator(sortKey, sortDir)),
         [folderContents, sortKey, sortDir],
@@ -156,15 +155,13 @@ export function DriveBrowser({
                 if (mode === 'folder') {
                     onSelect?.(item);
                 }
-            } else if (mode === 'file') {
-                if (isPickable(item)) {
-                    // With onConfirm and selectedId both set, a click on the row that is already selected confirms
-                    // it, so the user need not go to the Select button.
-                    if (onConfirm && selectedId === item.id) {
-                        onConfirm(item);
-                    } else {
-                        onSelect?.(item);
-                    }
+            } else if (mode === 'file' && isPickable(item)) {
+                // With onConfirm and selectedId both set, a click on the row that is already selected confirms
+                // it, so the user need not go to the Select button.
+                if (onConfirm && selectedId === item.id) {
+                    onConfirm(item);
+                } else {
+                    onSelect?.(item);
                 }
             }
         },
@@ -223,7 +220,6 @@ export function DriveBrowser({
                 hideHeader={hideHeader}
                 onSelectionChange={onSelectionChange}
                 sort={sort}
-                onSortChange={onSortChange}
             />
         </div>
     );

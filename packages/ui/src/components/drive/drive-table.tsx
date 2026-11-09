@@ -20,24 +20,21 @@ import { useDriveItemController } from './use-drive-item-controller';
 // The direction a field starts in when a pick switches to it.
 const DEFAULT_DIR: Record<DriveSortKey, DriveSortDir> = { name: 'asc', modified: 'desc', size: 'desc' };
 
-// A controlled sort, for a listing that keeps its own, such as a picker or the Recent page: a pick calls
-// onSortChange and never writes the shared view preference.
-export type DriveSortProps = {
-    sort?: DriveSort;
-    onSortChange?: (sort: DriveSort) => void;
-};
+// The sort of a listing that keeps its own, such as a picker or the Recent page: a pick calls onChange and
+// never writes the shared view preference.
+export type DriveSortControl = { value: DriveSort; onChange: (sort: DriveSort) => void };
 
-// The sort a listing draws: the caller's own, else the shared view preference. choose is the pick of a
-// column header or a sort menu, and it goes back to where the sort came from.
-export function useDriveSort({ sort, onSortChange }: DriveSortProps): DriveSort & {
-    choose: (key: DriveSortKey) => void;
-} {
+// The date a listing shows and sorts by under its own label, such as Trash's time trashed.
+export type DriveListDate = { label: string; of: (item: DrivePath) => Date | null };
+
+// The sort a listing draws: its own, else the shared view preference. choose is the pick of a column
+// header or a sort menu, and it goes back to where the sort came from.
+export function useDriveSort(sort?: DriveSortControl): DriveSort & { choose: (key: DriveSortKey) => void } {
     const prefs = useDriveViewPreferences();
-    const key = sort?.key ?? prefs.sortKey;
-    const dir = sort?.dir ?? prefs.sortDir;
+    const { key, dir } = sort?.value ?? { key: prefs.sortKey, dir: prefs.sortDir };
     const choose = (picked: DriveSortKey) => {
         const next = nextSortDir(picked, key, dir, DEFAULT_DIR);
-        if (sort) onSortChange?.(next);
+        if (sort) sort.onChange(next);
         else prefs.setSort(next.key, next.dir);
     };
     return { key, dir, choose };
@@ -64,7 +61,6 @@ export type DriveViewProps = {
     ownActions?: (items: readonly DrivePath[]) => PaletteSelectionAction[];
 };
 
-// Table view adds the column-layout flags the grid has no concept of.
 export type DriveTableProps = DriveViewProps & {
     hideModified?: boolean;
     hideOwner?: boolean;
@@ -74,15 +70,14 @@ export type DriveTableProps = DriveViewProps & {
     // Drops the ⋮ column and its grid track at every pointer type, for a picker such as DriveBrowser,
     // whose rows have no actions.
     hideActions?: boolean;
-    dateLabel?: string;
-    getItemDate?: (item: DrivePath) => Date | null;
+    date?: DriveListDate;
     ancestorBreadcrumb?: DrivePath[];
     externalSelectedIds?: ReadonlySet<string>;
-} & DriveSortProps;
+    sort?: DriveSortControl;
+};
 
-// Every combination is written out, so Tailwind finds each class in the source. The key names the
-// optional columns that show. Size always shows from 800px on, right before Modified, so every
-// combination carries a 10% track for it.
+// Written out in full so Tailwind finds each class, keyed by the optional columns that show. Size shows
+// from 800px on in every combination, so each carries its 10% track.
 const GRID_COLS_800: Record<string, string> = {
     'owner-shared-modified': '@[800px]:grid-cols-[minmax(0,1fr)_8%_10%_10%_15%_40px]',
     'owner-shared': '@[800px]:grid-cols-[minmax(0,1fr)_8%_10%_10%_40px]',
@@ -122,19 +117,17 @@ export function DriveTable({
     hideShareClick = false,
     hideHeader = false,
     hideActions = false,
-    dateLabel = 'Modified',
-    getItemDate,
+    date,
     selection,
     externalSelectedIds,
     onSelectionChange,
     ownActions,
     sort,
-    onSortChange,
 }: DriveTableProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const listRef = useRef<HTMLDivElement>(null);
 
-    const { key: sortKey, dir: sortDir, choose: onSortHeader } = useDriveSort({ sort, onSortChange });
+    const { key: sortKey, dir: sortDir, choose: onSortHeader } = useDriveSort(sort);
 
     // A first guess only: every row is measured, as its height follows the container's width.
     const ROW_HEIGHT = 41;
@@ -223,7 +216,7 @@ export function DriveTable({
                     />
                     {!hideModified && (
                         <SortHeader
-                            label={dateLabel}
+                            label={date?.label ?? 'Modified'}
                             active={sortKey === 'modified'}
                             dir={sortDir}
                             onClick={() => onSortHeader('modified')}
@@ -267,7 +260,7 @@ export function DriveTable({
                                 hideModified={hideModified}
                                 hideShareClick={hideShareClick}
                                 hideActions={hideActions}
-                                getItemDate={getItemDate}
+                                getItemDate={date?.of}
                                 ancestorBreadcrumb={ancestorBreadcrumb}
                                 unreadPathIds={unreadPathIds}
                             />

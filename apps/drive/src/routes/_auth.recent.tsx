@@ -73,10 +73,8 @@ function RecentRoute() {
             title="Recent files"
             onQuickLook={onQuickLook}
             emptyState={<EmptyState message="Files you open or get notified about will appear here." />}
-            sort={sort}
-            onSortChange={setSort}
-            dateLabel="Last activity"
-            getItemDate={(path) => lastActivity.get(path.id) ?? null}
+            sort={{ value: sort, onChange: setSort }}
+            date={{ label: 'Last activity', of: (path) => lastActivity.get(path.id) ?? null }}
         />
     );
 }

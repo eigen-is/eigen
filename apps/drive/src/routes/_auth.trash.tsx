@@ -107,8 +107,7 @@ function TrashRoute() {
                         mountId={mountId}
                         hideOwner
                         hideShared
-                        dateLabel="Trashed"
-                        getItemDate={(item) => item.trashedAt}
+                        date={{ label: 'Trashed', of: (item) => item.trashedAt }}
                         ownActions={trashActions}
                         emptyState={<EmptyState message="Trash is empty" icon={<Trash2 className="h-10 w-10" />} />}
                     />
