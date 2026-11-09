@@ -33,8 +33,8 @@ export function sheetPoint(
     const viewX = e.clientX - left;
     const viewY = e.clientY - top;
     const freeze = freezeOf(ctx);
-    const cols = freeze?.vertical?.freezenverticaldata;
-    const rows = freeze?.horizontal?.freezenhorizontaldata;
+    const cols = freeze?.columns;
+    const rows = freeze?.rows;
     const inCols = cols != null && viewX < cols.pos;
     const inRows = rows != null && viewY < rows.pos;
     return {

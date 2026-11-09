@@ -8,7 +8,7 @@ import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
-import type { Freezen } from '../../state';
+import type { Freeze } from '../../state';
 import {
     computeRowHeaderRegions,
     freezeOf,
@@ -151,7 +151,7 @@ export const RowHeader: React.FC = () => {
     // scrolls. Each band's clip cuts the highlights at the freeze boundary.
     const headerWidth = SHEET_ROW_HEADER_WIDTH - 1.5;
     const freeze = freezeOf(context);
-    const rowFreeze: Freezen | undefined = freeze?.horizontal ? { horizontal: freeze.horizontal } : undefined;
+    const rowFreeze: Freeze | undefined = freeze?.rows ? { rows: freeze.rows } : undefined;
     const regions = computeRowHeaderRegions(rowFreeze, headerWidth, context.cellmainHeight);
     const hoverRegion = overlayRegionForCell(regions, rowFreeze, hoverLocation.row_index, 0);
 

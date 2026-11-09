@@ -5,21 +5,18 @@
 import { describe, expect, test } from 'bun:test';
 import type { Box } from '../../../state/render/frame';
 import { planScroll } from '../../../state/render/frame';
-import type { Freezen, FreezenAxisData } from '../../../state/types';
+import type { Freeze, FrozenAxis } from '../../../state/types';
 import { workbookContextFactory } from '../factories/context';
 
 const overlaps = (a: Box, b: Box) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
 
-const frozenAt = (pos: number): FreezenAxisData => ({ pos, boundary: 1 });
+const frozenAt = (pos: number): FrozenAxis => ({ pos, boundary: 1 });
 
-const FREEZES: [string, Freezen | undefined][] = [
+const FREEZES: [string, Freeze | undefined][] = [
     ['no freeze', undefined],
-    ['frozen rows', { horizontal: { freezenhorizontaldata: frozenAt(61) } }],
-    ['frozen columns', { vertical: { freezenverticaldata: frozenAt(201) } }],
-    [
-        'frozen rows and columns',
-        { horizontal: { freezenhorizontaldata: frozenAt(61) }, vertical: { freezenverticaldata: frozenAt(201) } },
-    ],
+    ['frozen rows', { rows: frozenAt(61) }],
+    ['frozen columns', { columns: frozenAt(201) }],
+    ['frozen rows and columns', { rows: frozenAt(61), columns: frozenAt(201) }],
 ];
 
 const STEPS = [

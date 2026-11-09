@@ -384,8 +384,8 @@ function renderColResize(ctx: Context, e: MouseEvent, cellArea: HTMLDivElement, 
         }
         // The header handle sits in the pane of the resized column. In the main pane it follows the scroll, and in the
         // frozen band it stays put.
-        const vData = freezeOf(ctx)?.vertical?.freezenverticaldata;
-        const inFreeze = vData != null && ctx.colsResizeStart[1] < vData.boundary;
+        const frozen = freezeOf(ctx)?.columns;
+        const inFreeze = frozen != null && ctx.colsResizeStart[1] < frozen.boundary;
         const handleX = inFreeze ? viewX : x;
         const changeSizeCol = container.querySelector('.sheet-cols-change-size');
         if (changeSizeCol instanceof HTMLElement) {
@@ -403,8 +403,8 @@ function renderRowResize(ctx: Context, e: MouseEvent, cellArea: HTMLDivElement, 
             changeSizeLine.style.top = `${y}px`;
         }
         // The handle sits in the pane of the resized row, as renderColResize places it on the other axis.
-        const hData = freezeOf(ctx)?.horizontal?.freezenhorizontaldata;
-        const inFreeze = hData != null && ctx.rowsResizeStart[1] < hData.boundary;
+        const frozen = freezeOf(ctx)?.rows;
+        const inFreeze = frozen != null && ctx.rowsResizeStart[1] < frozen.boundary;
         const handleY = inFreeze ? viewY : y;
         const changeSizeRow = container.querySelector('.sheet-rows-change-size');
         if (changeSizeRow instanceof HTMLElement) {

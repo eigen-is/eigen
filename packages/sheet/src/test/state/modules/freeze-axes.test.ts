@@ -51,8 +51,8 @@ describe('the axes a frozen pane freezes', () => {
     for (const [type, { rows, columns }] of AXES) {
         test(`'${type}' freezes ${rows ? 'rows' : 'no rows'} and ${columns ? 'columns' : 'no columns'}`, () => {
             const { ctx } = frozenContext({ type, range: { row_focus: 1, column_focus: 2 } });
-            expect(freezeOf(ctx)?.horizontal !== undefined).toBe(rows);
-            expect(freezeOf(ctx)?.vertical !== undefined).toBe(columns);
+            expect(freezeOf(ctx)?.rows !== undefined).toBe(rows);
+            expect(freezeOf(ctx)?.columns !== undefined).toBe(columns);
             // A handle sits after the last frozen row or column, and at the scroll edge on an axis that isn't frozen.
             expect(getFrozenHandleTop(ctx)).toBe(rows ? 40 + 5 : 5);
             expect(getFrozenHandleLeft(ctx)).toBe(columns ? 210 - 2 + 7 : 7);

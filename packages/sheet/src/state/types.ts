@@ -159,16 +159,16 @@ export type History = {
     gesture?: object;
 };
 
-export type FreezenAxisData = {
+export type FrozenAxis = {
     // Pixels from the sheet's edge to the end of the frozen pane.
     pos: number;
     // The first row or column past the frozen pane.
     boundary: number;
 };
 
-export type Freezen = {
-    horizontal?: { freezenhorizontaldata: FreezenAxisData };
-    vertical?: { freezenverticaldata: FreezenAxisData };
+export type Freeze = {
+    rows?: FrozenAxis;
+    columns?: FrozenAxis;
 };
 
 export type GlobalCache = {

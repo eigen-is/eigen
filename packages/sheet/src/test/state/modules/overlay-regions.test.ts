@@ -12,20 +12,20 @@ import {
     computeRowHeaderRegions,
     overlayRegionForCell,
 } from '../../../state/modules/freeze';
-import type { Freezen } from '../../../state/types';
+import type { Freeze } from '../../../state/types';
 
 const VIEW_W = 900;
 const VIEW_H = 500;
 
-function rowsFreeze(pos: number, boundary: number): Freezen {
-    return { horizontal: { freezenhorizontaldata: { pos, boundary } } };
+function rowsFreeze(pos: number, boundary: number): Freeze {
+    return { rows: { pos, boundary } };
 }
 
-function colsFreeze(pos: number, boundary: number): Freezen {
-    return { vertical: { freezenverticaldata: { pos, boundary } } };
+function colsFreeze(pos: number, boundary: number): Freeze {
+    return { columns: { pos, boundary } };
 }
 
-function bothFreeze(rowPos: number, rowBoundary: number, colPos: number, colBoundary: number): Freezen {
+function bothFreeze(rowPos: number, rowBoundary: number, colPos: number, colBoundary: number): Freeze {
     return {
         ...rowsFreeze(rowPos, rowBoundary),
         ...colsFreeze(colPos, colBoundary),
