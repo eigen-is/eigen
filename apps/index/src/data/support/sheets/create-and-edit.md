@@ -87,7 +87,7 @@ The **Format** menu covers all formatting options:
 - **Font size**: pick from the list.
 - **Fill color** and **Borders**: set a background color or draw borders around cells.
 - **Merge cells**: combine a selection into one cell.
-- **Clear formatting**: remove all formatting from the selected cells without deleting their values.
+- **Clear formatting**: remove text styles, colors, alignment and borders from the selected cells. Values and number formats stay.
 
 Quick buttons for the font, font size, **Bold**, **Italic**, **Text color**, **Fill color**, and horizontal alignment sit in the center of the menu bar. As the bar gets narrower, for example when a side panel is open, they fold away from the right, alignment first, until none are left. Everything they do stays in the **Format** menu.
 

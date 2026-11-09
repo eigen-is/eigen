@@ -154,9 +154,9 @@ Merging cells can break sorting, filtering, and some formulas. Avoid merging cel
 
 ## Clear formatting
 
-To remove all formatting from a selection without changing the values:
+To remove formatting from a selection without changing the values:
 
 1. Select the cells.
 2. Open **Format → Clear formatting**.
 
-Clearing formatting removes text styles, colors, alignment settings, borders, and number formats. It keeps the cell values, links, and comments.
+Clearing formatting removes text styles, colors, alignment settings, and borders. It keeps the cell values, number formats, links, and comments, and any style set on part of a cell's text.

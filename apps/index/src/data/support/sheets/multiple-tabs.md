@@ -64,4 +64,4 @@ Click the **⌄** arrow on a tab and choose **Delete**. You will be asked to con
 
 You cannot delete the last sheet in a spreadsheet.
 
-Formulas on other sheets that name the deleted sheet show `#REF!`, and dropdown lists and links that name it stop working. **Undo** brings them back.
+Formulas on other sheets that name the deleted sheet show `#REF!`, and dropdown lists and links that name it stop working. **Undo** brings them back, until someone else edits the spreadsheet.
