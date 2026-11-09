@@ -9,7 +9,7 @@ import { LightEditor } from '@workspace/ui/components/editor/light-editor';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
-import { Paperclip } from 'lucide-react';
+import { Paperclip, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
 import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
@@ -42,6 +42,8 @@ type CardFormProps = {
         assignee?: string | null,
     ) => void | Promise<void>;
     onCancel: () => void;
+    // Editing only. The host confirms and deletes, and what was typed stays until it does.
+    onDelete?: () => void;
     // When set, renders a DialogHeader/DialogTitle atop the form (dialog use). Omit
     // for in-place edit, where the host dialog already owns the title.
     dialogTitle?: string;
@@ -62,6 +64,7 @@ export function CardForm({
     initialAssignee = null,
     onSave,
     onCancel,
+    onDelete,
     dialogTitle,
     placeholderTitle = 'Enter title',
     placeholderDescription = 'Enter description',
@@ -210,26 +213,38 @@ export function CardForm({
                 </div>
             </div>
             <DialogFooter className="pt-2">
-                {allowAttachments && (
-                    <>
+                <div className="mr-auto flex gap-2">
+                    {allowAttachments && (
+                        <>
+                            <TooltipButton
+                                icon={Paperclip}
+                                tooltipText="Add attachment"
+                                variant="outline"
+                                className="h-9 w-9 text-muted-foreground hover:text-foreground"
+                                onClick={() => setPickerOpen(true)}
+                                type="button"
+                            />
+                            <DrivePickerWithUpload
+                                open={pickerOpen}
+                                onOpenChange={setPickerOpen}
+                                multiSelect
+                                multiple
+                                onPickFromDrive={(paths) => setDrafts((prev) => [...prev, ...paths])}
+                                onPickFromDevice={(files) => setDrafts((prev) => [...prev, ...files])}
+                            />
+                        </>
+                    )}
+                    {onDelete && (
                         <TooltipButton
-                            icon={Paperclip}
-                            tooltipText="Add attachment"
+                            icon={Trash2}
+                            tooltipText="Delete"
                             variant="outline"
-                            className="mr-auto h-9 w-9 text-muted-foreground hover:text-foreground"
-                            onClick={() => setPickerOpen(true)}
+                            className="h-9 w-9 text-muted-foreground hover:text-destructive"
+                            onClick={onDelete}
                             type="button"
                         />
-                        <DrivePickerWithUpload
-                            open={pickerOpen}
-                            onOpenChange={setPickerOpen}
-                            multiSelect
-                            multiple
-                            onPickFromDrive={(paths) => setDrafts((prev) => [...prev, ...paths])}
-                            onPickFromDevice={(files) => setDrafts((prev) => [...prev, ...files])}
-                        />
-                    </>
-                )}
+                    )}
+                </div>
                 <Button type="button" variant="outline" onClick={onCancel}>
                     Cancel
                 </Button>
