@@ -22,7 +22,7 @@ A cross-user event does two things. `persist()` writes the row and broadcasts `n
 
 ## A notification's tag is its identity
 
-The `tag` column is `UNIQUE`, and `persist()` is an `INSERT ... ON CONFLICT(tag) DO UPDATE`. A repeat with the same tag refreshes the existing row: new title, body, actor and details, unread again, and `createdAt` set to now, so it moves to the top. Twenty mentions in one chat are one row, not twenty. A row without a tag never folds, because SQLite treats NULLs as distinct.
+The `tag` column is `UNIQUE`, and `persist()` is an `INSERT ... ON CONFLICT(tag) DO UPDATE`. A repeat with the same tag refreshes the existing row: new title, body, actor and details, unread again, and `createdAt` set to now, so it moves to the top. Twenty mentions in one chat are one row, not twenty. A row without a tag never folds, because SQLite treats NULLs as distinct. Since a repeat turns a read row unread, a producer that sees the same fact again stays quiet: a calendar share PUT resends every grant, and `receiveShare` notifies only for a new or raised one, as a Drive share notifies only when the reader's `shared_paths` row is new.
 
 The tag also carries the ids the link is built from, so each producer's tag decides both what folds together and where the row leads.
 

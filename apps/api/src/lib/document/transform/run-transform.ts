@@ -42,7 +42,7 @@ type TransformOptions = Omit<RunOptions, 'priority' | 'deadlineMs' | 'admissionC
 };
 
 const TOO_LARGE_TO_INDEX = 'Document too large to index';
-const TOO_LARGE_TO_EXPORT = 'Export failed: the document is too big, or it used too much memory';
+export const TOO_LARGE_TO_EXPORT = 'Export failed: the document is too big, or it used too much memory';
 
 // The failures the same input repeats: a job past its memory or its deadline. A crash may be the install, not the input.
 function repeatsForSameInput(code: TransformError['code']): boolean {

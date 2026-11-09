@@ -117,37 +117,17 @@ export type CardProjection = Omit<CardRowInput, 'id' | 'uri' | 'eigenId' | 'data
 // `avatar` is the cache URL only — inline photo bytes never enter the index.
 export type CardData = NonNullable<(typeof schema.contacts.$inferSelect)['data']>;
 
-// The projection from a parsed card; `avatar` is the derived cache URL the caller resolved.
-export function parsedToData(parsed: ParsedCard, avatar: string): CardData {
-    return {
-        email: parsed.email,
-        phone: parsed.phone,
-        company: parsed.company,
-        jobTitle: parsed.jobTitle,
-        address: parsed.address,
-        birthday: parsed.birthday,
-        notes: parsed.notes,
-        avatar,
-    };
-}
+// Runs inside the transaction that bumped the ctag, so a card write and a label fan-out leave one shape behind.
+// A missing label is minted with its deterministic color, and its id comes back so the caller emits LABEL_CREATED
+// after the transaction.
+export function indexCard(tx: Tx, row: CardRowInput, categories: string[], ctag: number): string[] {
+    // eigenId stays out of the update: the self-link is resolved apart and spread back in.
+    const { id: _id, eigenId: _eigenId, ...update } = row;
+    tx.insert(schema.contacts)
+        .values({ ...row, cardCtag: ctag })
+        .onConflictDoUpdate({ target: schema.contacts.id, set: { ...update, cardCtag: ctag } })
+        .run();
 
-// eigenId stays out: resolveSelfLink and resolveSelfLinkOnPut own the self-link and spread it back in.
-export function cardUpdateSet(row: CardRowInput, ctag: number) {
-    return {
-        uri: row.uri,
-        uid: row.uid,
-        vcard: row.vcard,
-        firstName: row.firstName,
-        lastName: row.lastName,
-        isGroup: row.isGroup,
-        data: row.data,
-        etag: row.etag,
-        cardCtag: ctag,
-    };
-}
-
-// A missing label is minted with its deterministic color, and its id rides back out so the caller emits LABEL_CREATED after the transaction.
-export function syncCardLabels(tx: Tx, contactId: string, categories: string[]): string[] {
     const createdLabelIds: string[] = [];
     const labelIds = new Set<string>();
     for (const name of categories) {
@@ -169,22 +149,10 @@ export function syncCardLabels(tx: Tx, contactId: string, categories: string[]):
             labelIds.add(id);
         }
     }
-
-    tx.delete(schema.contactsToLabels).where(eq(schema.contactsToLabels.contactId, contactId)).run();
+    tx.delete(schema.contactsToLabels).where(eq(schema.contactsToLabels.contactId, row.id)).run();
     for (const labelId of labelIds) {
-        tx.insert(schema.contactsToLabels).values({ contactId, labelId }).run();
+        tx.insert(schema.contactsToLabels).values({ contactId: row.id, labelId }).run();
     }
-    return createdLabelIds;
-}
-
-// Runs inside the transaction that bumped the ctag, so a card write and a label fan-out leave one shape behind.
-export function indexCard(tx: Tx, row: CardRowInput, categories: string[], ctag: number): string[] {
-    tx.insert(schema.contacts)
-        .values({ ...row, cardCtag: ctag })
-        .onConflictDoUpdate({ target: schema.contacts.id, set: cardUpdateSet(row, ctag) })
-        .run();
-
-    const createdLabelIds = syncCardLabels(tx, row.id, categories);
 
     // A card at this uri is alive, so one written over a deleted name drops its stale removal.
     tx.delete(schema.contactTombstones).where(eq(schema.contactTombstones.uri, row.uri)).run();
@@ -205,7 +173,16 @@ export function prepareCard(
         firstName: parsed.firstName.trim(),
         lastName: parsed.lastName.trim(),
         isGroup: parsed.isGroup,
-        data: parsedToData(parsed, avatar),
+        data: {
+            email: parsed.email,
+            phone: parsed.phone,
+            company: parsed.company,
+            jobTitle: parsed.jobTitle,
+            address: parsed.address,
+            birthday: parsed.birthday,
+            notes: parsed.notes,
+            avatar,
+        },
         etag: computeResourceEtag(bytes),
     };
 }

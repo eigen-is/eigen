@@ -20,10 +20,9 @@ import { Semaphore } from '../../utils/semaphore';
 import { enforceHomeDataQuota } from '../config/enforcement';
 import { PATHS } from '../config/paths';
 import type { DeleteResourceResult, ManagedDatabase, PutResourceResult, ResourcePreconditions } from '../core';
-import { ApiError, computeResourceEtag, newSyncGen } from '../core';
+import { ApiError, newSyncGen } from '../core';
 import type { Home } from '../home';
 import { atHome } from '../home';
-import { parseResource } from '../ical';
 import type { EventPatch, Revision } from '../ical/ical-component';
 import type { ParsedEvent } from '../ical/ical-parse';
 import type { User } from '../user';
@@ -34,16 +33,8 @@ import * as events from './events';
 import * as invitations from './invitations';
 import { dbCalendarToCalendarItem, toEvent } from './mappers';
 import * as occurrences from './occurrences';
-import type { CalendarCollection, PreparedResource, PurgedResource, ResourceCommit, Tx } from './resource-store';
-import {
-    EVENT_MAX_BYTES,
-    indexResource,
-    projectRows,
-    reindexEvents,
-    resourceBytes,
-    sanitizeCalendarId,
-    uidOfResource,
-} from './resource-store';
+import type { CalendarCollection, PreparedResource, PurgedResource, Tx } from './resource-store';
+import { EVENT_MAX_BYTES, indexResource, resourceBytes, sanitizeCalendarId } from './resource-store';
 import * as schema from './schema';
 import { notifySharedCalendarUsers, propagateCalendarShare } from './share-propagation';
 import * as shares from './shares';
@@ -136,34 +127,26 @@ export class Calendar {
         prepared: PreparedResource;
         creditBytes: number;
     }): Promise<void> {
-        const { bytes } = opts.prepared;
+        const { id, uid, bytes, etag, rows, hasUnindexedRecurrence } = opts.prepared;
         if (bytes.byteLength > EVENT_MAX_BYTES) throw new ApiError(413, 'Event is too large');
         if (this.meteredIngest) {
             await enforceHomeDataQuota(this.home.user.id, bytes.byteLength, opts.creditBytes);
         }
-        this.commitResource({
-            id: opts.prepared.id,
-            calendarId: opts.calendarId,
-            uri: opts.uri,
-            uid: opts.prepared.uid,
-            ics: bytes,
-            etag: opts.prepared.etag,
-            rows: opts.prepared.rows,
-            hasUnindexedRecurrence: opts.prepared.hasUnindexedRecurrence,
-        });
-    }
-
-    // One transaction, so the ctag bump, the blob, the event rows and the tombstone clear settle together.
-    private commitResource(commit: ResourceCommit): void {
-        const { rows, ...resource } = commit;
+        // One transaction, so the ctag bump, the blob, the event rows and the tombstone clear settle together.
         const delta = this.db.transaction((tx) => {
             const previous = tx
                 .select({ size: resourceBytes })
                 .from(schema.resources)
-                .where(eq(schema.resources.id, commit.id))
+                .where(eq(schema.resources.id, id))
                 .get();
-            indexResource(tx, { ...resource, resourceCtag: this.bumpCtag(tx, commit.calendarId) }, rows);
-            return commit.ics.byteLength - (previous?.size ?? 0);
+            const { calendarId, uri } = opts;
+            const resourceCtag = this.bumpCtag(tx, calendarId);
+            indexResource(
+                tx,
+                { id, calendarId, uri, uid, ics: bytes, etag, hasUnindexedRecurrence, resourceCtag },
+                rows,
+            );
+            return bytes.byteLength - (previous?.size ?? 0);
         });
         this.eventsBytes += delta;
     }
@@ -413,34 +396,6 @@ export class Calendar {
             .all()
             .map(toEvent)
             .filter((e) => e.data?.attendees?.some((a) => a.email.toLowerCase() === email.toLowerCase()));
-    }
-
-    // The blob is the truth, so every projected column and every event row come back from it. Untouched, because
-    // no blob carries them: the resource and calendar ctags, the generation, the tombstones and the share grants.
-    public rebuildProjection(): void {
-        const rows = this.db
-            .select({
-                id: schema.resources.id,
-                calendarId: schema.resources.calendarId,
-                ics: schema.resources.ics,
-            })
-            .from(schema.resources)
-            .all();
-        this.db.transaction((tx) => {
-            for (const row of rows) {
-                const resource = parseResource(new TextDecoder().decode(row.ics));
-                const projection = projectRows(row.calendarId, row.id, resource);
-                tx.update(schema.resources)
-                    .set({
-                        uid: uidOfResource(resource),
-                        etag: computeResourceEtag(row.ics),
-                        hasUnindexedRecurrence: projection.hasUnindexedRecurrence,
-                    })
-                    .where(eq(schema.resources.id, row.id))
-                    .run();
-                reindexEvents(tx, row.id, projection.rows);
-            }
-        });
     }
 
     // --- Announcements ---

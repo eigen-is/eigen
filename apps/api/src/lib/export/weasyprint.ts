@@ -5,6 +5,7 @@
 import { Semaphore } from '../../utils/semaphore';
 import { ApiError } from '../core/errors';
 import { isEnoent } from '../core/local-filesystem';
+import { TOO_LARGE_TO_EXPORT } from '../document/transform/run-transform';
 import { BUSY_MESSAGE, limitedCommand } from '../document/transform/runner';
 import renderScript from './weasyprint-render.py' with { type: 'file' };
 
@@ -152,10 +153,8 @@ async function renderPdf(html: string | Uint8Array, zoom: number, signal?: Abort
     }
     signal?.throwIfAborted();
 
-    // Only the deadline sends SIGTERM; a render that exited on its own has no signalCode.
-    if (result.signalCode === 'SIGTERM') {
-        throw new ApiError(504, 'PDF export timed out');
-    }
+    // Only the deadline sends SIGTERM, and a document that needs longer fails as a transform past its deadline does.
+    if (result.signalCode === 'SIGTERM') throw new ApiError(413, TOO_LARGE_TO_EXPORT);
 
     // The traceback names the install and the checkout, so it stays in the log.
     if (result.exitCode !== 0) {

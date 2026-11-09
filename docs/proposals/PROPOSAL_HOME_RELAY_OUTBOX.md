@@ -168,7 +168,7 @@ A crash between delivery and ack delivers again, so delivery is at least once. *
 |---|---|---|---|---|
 | `drive:acl-change`, add | Nothing | Nothing | `receiveSharedPathChange` | |
 | `drive:acl-change`, revoke | Second bell and toast | Same | Its unshare branch | Fix 1 |
-| `calendar:share`, grant | Second toast, read row turns unread | Dismissed row returns; a removed calendar returns with a fresh color | `receiveShare`, `ensureSharedEntry` | Fix 2; a returning calendar is what any owner share PUT does today |
+| `calendar:share`, grant | Nothing | A removed calendar returns with a fresh color | `receiveShare`, `ensureSharedEntry` | Accepted: a returning calendar is what any owner share PUT does today |
 | `calendar:share`, revoke | Nothing | Nothing | `removeShare` | |
 | `calendar:invitation` | Nothing | Deleted invitation comes back with a bell; own answer resets to pending | `decideInboundRequest`, `fileNewInvitation` | Fix 3; the return is accepted |
 | `calendar:invitation-update`, series | Nothing | Own answer resets, "updated" bell; nothing if the copy is deleted | `applyInvitationUpdate` | Fix 3 |
@@ -182,7 +182,7 @@ A crash between delivery and ack delivers again, so delivery is at least once. *
 **The first build step makes these fixes, because they also fix today's behaviour:**
 
 1. `receiveSharedPathChange`'s revoke notifies only if the delete removed a row, as `removeShare` does. This also stops the bell to a member who never had a mirror row.
-2. `ensureSharedEntry` reports whether it inserted or changed, and `receiveShare` notifies only then. This also stops today's re-raise on every share PUT.
+2. Done: `ensureSharedEntry` answers the permission the entry held, and `receiveShare` notifies only for a new or raised grant, so a share PUT no longer raises the row again for every reader.
 3. A guest's PARTSTAT stays unless the message's SEQUENCE is strictly higher than the stored one, in `applyInvitationUpdate` and `applyInvitationException`. With that a repeat changes nothing, so it sends no notice. It also protects an answer given just after an update was enqueued.
 4. `applyInvitationException` patches an existing override at an equal revision and returns false if unchanged, as `applyInvitationUpdate` does with `patchEvent`.
 5. `cancelInvitationOccurrence` returns early when the occurrence is already excluded at an equal revision. A guest's own removal stamps `sequence: 0` and no dtstamp, so an organizer's message still gets through.

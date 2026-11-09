@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { TeamSettings } from '@workspace/lib/types/settings';
 import { getServerConfig } from '../../lib/config/server-config';
@@ -19,6 +19,11 @@ describe('Team settings', () => {
         const teamId = await createTeam(ctx, orgId, 'Settings Team');
         ownerId = teamOwnerId(teamId);
         await addMember(ctx, teamId, ctx.bob.user.id);
+    });
+
+    // The overrides reach every member's quota, so they go before another file meters Bob's home.
+    afterAll(async () => {
+        expect((await putSettings(ctx.alice.user.sessionToken, { memberOverrides: {} })).status).toBe(200);
     });
 
     function putSettings(token: string, body: TeamSettings): Promise<Response> {
