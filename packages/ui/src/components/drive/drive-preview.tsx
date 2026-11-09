@@ -24,7 +24,7 @@ import type { Contact } from '@workspace/lib/types/contact';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isEmlFile, isIcsFile, isVCardFile } from '@workspace/lib/types/drive';
 import type { LucideIcon } from 'lucide-react';
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useElementSize } from '../../hooks/use-element-size';
 import { cn, IMAGE_CHECKERBOARD_STYLE } from '../../lib/utils';
@@ -294,7 +294,7 @@ function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }
                 // A doc thumbnail is its page, light like the editor's; the prose inside escapes the dark rules.
                 data.mode === 'eigendoc' && 'eigen-paper',
             )}
-            style={{ '--preview-h': `${CANVAS_PREVIEW_HEIGHT}px` } as CSSProperties}
+            style={{ '--preview-h': `${CANVAS_PREVIEW_HEIGHT}px` }}
         >
             <div
                 ref={setContent}

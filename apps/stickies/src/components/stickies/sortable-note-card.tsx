@@ -58,11 +58,8 @@ export const SortableNoteCard = memo(function SortableNoteCard({
         [setNodeRef, card.id],
     );
 
-    // Long-press opens the same menu on touch. `touch-none` (required by the drag sensor) suppresses
-    // the browser's native contextmenu, so the timer-based hook is the only path here. dnd-kit's
-    // onPointerDown listener is composed with the hook's (not clobbered). Drag activates at 5 px but
-    // the long-press only self-cancels at 10 px, so `isDragging` in `disabled` cancels the armed timer
-    // the moment a drag actually starts — otherwise the menu could open mid-drag.
+    // The drag sensor's `touch-none` suppresses the native context menu, so touch gets it by long press. A drag
+    // starts at 5 px but the press only cancels at 10 px, so `isDragging` disarms it or the menu opens mid-drag.
     const longPress = useLongPress<CommentCard>((c, x, y) => onLongPress?.(c, x, y), {
         disabled: !canWrite || !onLongPress || isDragging,
     });
@@ -86,10 +83,8 @@ export const SortableNoteCard = memo(function SortableNoteCard({
     };
 
     return (
-        // Relative wrapper so the peer name chip anchors to the card; the drag transform stays on the
-        // NoteCard node dnd-kit measures. The chip sits just inside the top-left corner rather than
-        // floating above the card — the column's own scroll container (overflow-y-auto) would clip a
-        // chip rendered above the top card. The peer-colored outline uses the shared ring treatment.
+        // The peer's name sits inside the card's corner, as the column's scroll container would clip it above
+        // the top card. The wrapper anchors it, so the drag transform stays on the node dnd-kit measures.
         <div className="relative">
             <NoteCard
                 ref={setRef}
@@ -122,7 +117,7 @@ export const SortableNoteCard = memo(function SortableNoteCard({
                     transform: CSS.Transform.toString(transform) || undefined,
                     transition,
                     zIndex: isDragging ? 10 : 0,
-                    ...(peer ? ({ '--peer-color': peer.color } as React.CSSProperties) : undefined),
+                    ...(peer ? { '--peer-color': peer.color } : undefined),
                 }}
                 {...(canWrite ? attributes : {})}
             />

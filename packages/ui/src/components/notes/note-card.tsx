@@ -1,8 +1,7 @@
 // A card as it sits on a board or in a list, such as a sticky: its cover image, title, a preview of the
-// description, how far its checklist is done, and a footer with a dot when the caller marks it unread, then replies,
-// attachments and the assignee. The footer is muted, except that dot and the avatar of an open card assigned to the
-// person looking at it, which stands out with a ring in the app's color. A deleted comment keeps the frame, without its
-// color, and shows only its title and that it was deleted. Clicking it is the caller's to handle, usually by opening
+// description, how far its checklist is done, and a muted footer with an unread dot, replies, attachments and
+// the assignee, whose avatar gets a ring in the app's color on an open card assigned to the viewer. A deleted
+// comment keeps the uncolored frame and only its title. The caller handles a click, usually by opening
 // NoteCardDialog.
 
 import { useAuth } from '@workspace/lib/auth';
@@ -71,12 +70,12 @@ export function NoteCard({
             )}
             style={{
                 ...(frameColor
-                    ? ({
+                    ? {
                           '--note-bg': lightenColor(frameColor, 0.25),
                           '--note-fg': isLightColor(lightenColor(frameColor, 0.25)) ? '#000' : '#fff',
                           '--note-indicator': EIGEN_STICKIES_INDICATOR_MAP.get(frameColor) ?? frameColor,
                           '--note-soft': 'color-mix(in oklab, var(--note-indicator) 14%, var(--background))',
-                      } as React.CSSProperties)
+                      }
                     : undefined),
                 ...style,
             }}

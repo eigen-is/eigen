@@ -1,3 +1,6 @@
+// A row of toggle buttons, such as Drive's list or grid switch, on Radix's ToggleGroup. The group's
+// variant, size and spacing reach every item through context, and a spacing of 0 joins them into one bar.
+
 import { toggleVariants } from '@workspace/ui/components/toggle';
 import { cn } from '@workspace/ui/lib/utils';
 import type { VariantProps } from 'class-variance-authority';
@@ -31,7 +34,7 @@ function ToggleGroup({
             data-variant={variant}
             data-size={size}
             data-spacing={spacing}
-            style={{ '--gap': spacing } as React.CSSProperties}
+            style={{ '--gap': spacing }}
             className={cn(
                 'group/toggle-group flex w-fit items-center gap-[--spacing(var(--gap))] rounded-md data-[spacing=default]:data-[variant=outline]:shadow-xs',
                 className,

@@ -1,3 +1,6 @@
+// The app-wide toast stack, sonner's Toaster in Eigen's popover colors. It follows the light or dark
+// class on the document, so a theme switch restyles toasts already on screen.
+
 import { useEffect, useState } from 'react';
 import type { ToasterProps } from 'sonner';
 import { Toaster as Sonner } from 'sonner';
@@ -25,13 +28,11 @@ const Toaster = ({ ...props }: ToasterProps) => {
         <Sonner
             theme={theme}
             className="toaster group"
-            style={
-                {
-                    '--normal-bg': 'var(--popover)',
-                    '--normal-text': 'var(--popover-foreground)',
-                    '--normal-border': 'var(--border)',
-                } as React.CSSProperties
-            }
+            style={{
+                '--normal-bg': 'var(--popover)',
+                '--normal-text': 'var(--popover-foreground)',
+                '--normal-border': 'var(--border)',
+            }}
             // A modal Radix dialog parks pointer-events: none on <body>; a toast raised while one is open must opt out.
             toastOptions={{ style: { pointerEvents: 'auto' } }}
             {...props}

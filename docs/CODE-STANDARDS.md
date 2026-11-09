@@ -30,6 +30,7 @@ Six slips recur, with BAD/GOOD code in [CODE-EXAMPLES.md § Review Hot Spots](CO
 Types flow end to end: Elysia handler return type → Eden Treaty → hook → component ([CODE-EXAMPLES.md § Typing](CODE-EXAMPLES.md#typing)).
 
 - No casts or non-null assertions in new code: no `as Type`, `as any`, `as unknown as` or `!` (`as const` is fine). Narrow with a type guard or `instanceof`, or fix the type at its source (a handler's return type, a schema, an optional field that is always set). Removing an old cast elsewhere doesn't pay for a new one
+- A CSS variable in a `style` object needs no cast: React's `CSSProperties` accepts `--*` keys here (`style={{ '--gap': spacing }}`)
 - Eden responses keep their inferred type: the backend handler or domain method gets an explicit return type from `packages/lib/src/types/`
 - Shared types live in `packages/lib/src/types/[domain].ts`, never redefined; a missing one is added there. Only the leaf `@workspace/math` owns its own ([ARCHITECTURE.md § Dependency direction](ARCHITECTURE.md#dependency-direction))
 - `type` over `interface`, except when methods are needed
