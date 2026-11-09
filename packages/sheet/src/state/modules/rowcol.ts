@@ -1,8 +1,8 @@
 // Row and column inserts, deletes, hides and unhides on the open workbook. The engine shifts what every reader of the
-// workbook sees, such as the cells, the formulas and the links (applySheetsInsertRowCol). This module writes that result
-// back into the editor's draft, then moves what only this tab holds, such as the selection. A local edit, a peer's op
-// and an undo all come through here, and a local edit recomputes what it affected, as a batch does once it applied. It
-// also tells the editors and the arrow keys where the hidden rows and columns are.
+// workbook sees, such as the cells, the formulas and the links (applySheetsInsertRowCol). This module writes that
+// result back into the editor's draft, then moves what only this tab holds, such as the selection. A local edit, a
+// peer's op and an undo all come through here, and a local edit recomputes what it affected, as a batch does once it
+// applied. It also tells the editors and the arrow keys where the hidden rows and columns are.
 
 import { isRecord } from '@workspace/lib/guards';
 import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';

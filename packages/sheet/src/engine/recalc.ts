@@ -211,7 +211,8 @@ function cellsOnLines(sheets: readonly WorkingSheet[], lines: RecomputeSeeds['li
         if (!data || line < 0) continue;
         if (type === 'row') {
             if (line >= data.length) continue;
-            for (let c = 0; c < matrixWidth(data); c += 1) cells.push({ r: line, c, id });
+            const width = matrixWidth(data);
+            for (let c = 0; c < width; c += 1) cells.push({ r: line, c, id });
         } else {
             for (let r = 0; r < data.length; r += 1) cells.push({ r, c: line, id });
         }

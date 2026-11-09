@@ -161,9 +161,9 @@ function batchStep(ctx: Context, ops: Op[]): Step {
     return applied ? { ctx: produce(applied.ctx, settleCurrentSheet), ops } : { ctx, ops: [] };
 }
 
-// A sheet comes back, or goes, through applyOpBatch, as a peer's would, with what its delete rewrote on the other sheets.
-// The step is the author here, so it moves the other sheets' orders itself, and the batch it sends carries the orders
-// it left.
+// A sheet comes back, or goes, through applyOpBatch, as a peer's would, with what its delete rewrote on the other
+// sheets. The step is the author here, so it moves the other sheets' orders itself, and the batch it sends carries the
+// orders it left.
 function sheetStep(ctx: Context, batch: (sheets: Sheet[]) => Op[], recorded: Patch[] = []): Step {
     const [sheetOp] = batch(ctx.sheets);
     const restored = restoredOps(ctx.sheets, recorded);
@@ -232,8 +232,8 @@ function recalculate(ctx: Context, patches: Patch[]) {
 
 // The batch is the marker and what it did not bring back of the recorded fields and cells, read off the engine's own
 // result of the marker. Every reader then recomputes after the whole batch, so what the marker disturbed on a sheet the
-// entry never recorded comes back through the repairs. A write the marker already made stays off the wire, so a receiver
-// keeps its own shift of a batch on its way.
+// entry never recorded comes back through the repairs. A write the marker already made stays off the wire, so a
+// receiver keeps its own shift of a batch on its way.
 function undoRowCol(ctx: Context, marker: Op, recorded: Patch[]): Step {
     let moved: Sheet[];
     try {

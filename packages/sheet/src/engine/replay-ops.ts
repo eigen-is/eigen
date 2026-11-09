@@ -1,7 +1,8 @@
 // Replays the stored op batches onto a workbook's stored sheets, for a reader that was not there live, such as a
 // browser that opens the workbook or the server's export. It also owns the shape check a sheet or row op passes before
-// it applies, and says what a batch's ops can affect, which every reader computes again after the batch. A live client's
-// applyOpBatch calls the same checks, so a peer, a joiner and the server skip the same ops and end with the same sheets.
+// it applies, and says what a batch's ops can affect, which every reader computes again after the batch. A live
+// client's applyOpBatch calls the same checks, so a peer, a joiner and the server skip the same ops and end with the
+// same sheets.
 
 import { isRecord } from '@workspace/lib/guards';
 import type { Op, Sheet } from '@workspace/lib/sheets';
@@ -81,8 +82,8 @@ export function replaySheetsOps(
     return result.map(withSyncedCelldataIfData);
 }
 
-// What a batch's sheet, row and column ops can affect, or null when it holds none, since an edit carries its own values.
-// A cell its patches write counts too, because an undo's repairs change what the formulas reading them should hold.
+// What a batch's sheet, row and column ops can affect, or null when it holds none, since an edit carries its own
+// values. A cell its patches write counts too, because an undo's repairs change what the formulas reading them hold.
 export function seedsOf(ops: readonly Op[]): RecomputeSeeds | null {
     const cells: RecomputeSeeds['cells'][number][] = [];
     const lines: RecomputeSeeds['lines'][number][] = [];
@@ -209,8 +210,8 @@ function collectDataOpSheetIds(batch: Op[]): Set<string> | null {
     return touched;
 }
 
-// Where a sheet has the dense matrix, the matrix holds its latest cells: a replayed cell op writes
-// `data` and leave `celldata` stale. The exports and the preview read `celldata`, so it is written again from `data`.
+// Where a sheet has the dense matrix, the matrix holds its latest cells: a replayed cell op writes `data` and leaves
+// `celldata` stale. The exports and the preview read `celldata`, so it is written again from `data`.
 function withSyncedCelldataIfData(s: Sheet): Sheet {
     if (!s.data) return s;
     return { ...s, celldata: dataToCelldata(s.data) };
