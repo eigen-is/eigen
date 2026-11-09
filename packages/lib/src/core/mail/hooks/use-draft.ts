@@ -59,8 +59,7 @@ async function sendDraftEmail(draft: NewDraft, ownerId: string, grantAccessRefId
     return response.data;
 }
 
-// Multipart upload bypasses Eden Treaty (which serializes bodies as JSON) and goes through raw
-// fetch. The response shape is still type-checked against DraftAttachmentUpload.
+// Eden Treaty serializes a body as JSON, so a multipart upload goes through a plain fetch.
 async function uploadDraftAttachmentRequest(ownerId: string, file: File): Promise<DraftAttachmentUpload> {
     const formData = new FormData();
     formData.append('file', file);
@@ -70,7 +69,7 @@ async function uploadDraftAttachmentRequest(ownerId: string, file: File): Promis
         credentials: 'include',
     });
     if (!res.ok) throw new AppError({ status: res.status, error: { status: res.status, value: await res.text() } });
-    return (await res.json()) as DraftAttachmentUpload;
+    return res.json();
 }
 
 export function useUpdateDraft() {

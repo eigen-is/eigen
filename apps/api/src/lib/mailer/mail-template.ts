@@ -42,9 +42,8 @@ type EmailShellInput = {
     recipientEmail?: string;
 };
 
-// Frontend per-app URLs are relative in production (e.g. "/docs"). Outbound emails need
-// absolute URLs — recipients click them from their inbox, where window.location is not us.
-// Resolve against API_URL (the public absolute origin written by setup).
+// A frontend app's URL is relative in production, such as "/docs", and a recipient clicks the link from their inbox. So
+// it resolves against API_URL, the public origin setup writes.
 function appUrl(name: string, fallback: string): string {
     const value = process.env[name] || fallback;
     if (/^https?:\/\//.test(value)) return value;
@@ -80,9 +79,7 @@ function buildReferenceUrl(ref: AttachmentReference): string {
     return `${driveBase}/shared/with-me?pid=${encodeURIComponent(ref.id)}&uid=${encodeURIComponent(ref.ownerId)}&mid=${encodeURIComponent(ref.mountId)}`;
 }
 
-// External recipients get a `?email=` suffix on the link so the guest-OTP login
-// page can pre-fill their address. Same-domain recipients (already Eigen users)
-// see the bare URL.
+// An external recipient's link carries `?email=`, so the guest login page can fill in their address.
 export function buildAttachmentUrl(ref: AttachmentReference, recipientEmail?: string): string {
     const url = buildReferenceUrl(ref);
     if (!recipientEmail || isInternalAddress(recipientEmail)) return url;
@@ -114,10 +111,8 @@ export function renderAttachmentLinksText(references: AttachmentReference[], rec
     return `\n\n${lines.join('\n')}`;
 }
 
-// Wraps bare http(s) URLs in `<a href>` so admin-templated bodies (welcome, invite) get
-// clickable links even when the template stores the URL as plain text. URLs already inside
-// an existing `<a>...</a>` block are passed through; URLs inside double-quoted attribute
-// values (e.g. `<img src="…">`) are skipped via the negative lookbehind.
+// An admin's template may hold a URL as plain text. One already in an `<a>` passes through, and the lookbehind skips one in
+// a quoted attribute, such as `<img src>`.
 function autolinkUrls(html: string): string {
     return html.replace(
         /(<a\s[^>]*>[\s\S]*?<\/a>)|(?<!["'])\b(https?:\/\/[^\s<>"']+)/gi,
