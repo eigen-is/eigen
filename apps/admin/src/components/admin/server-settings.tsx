@@ -369,7 +369,7 @@ export function ServerSettingsPage() {
 
             <SettingsSection
                 title="Landing page"
-                description="Optional extra buttons on the public landing page. Each button links to a URL."
+                description="Extra buttons and the install line on the public landing page."
             >
                 <div className="space-y-3">
                     <SwitchRow
