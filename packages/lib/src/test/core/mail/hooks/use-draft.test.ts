@@ -1,7 +1,7 @@
 // What a forward does with each part of the message it forwards: the browser fetches the part from its
 // download route and uploads it to the draft's upload route, so it lands as a staged upload exactly like a
 // file the user picked, under the part's own name and type.
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { DraftAttachmentUpload } from '@workspace/lib/types/mail';
 import { getMailAttachmentUrl, getMailDraftAttachmentUploadUrl } from '../../../../core/api';
 import { subjectFromMailAttachment } from '../../../../core/file-subject';
@@ -18,6 +18,22 @@ import {
 } from '../../../transfer-harness';
 
 installTransferHarness();
+
+// A copy, because mock.module rewrites a loaded module in place. The draft route answers as a server that refuses the save.
+const realApiModule = { ...(await import('../../../../core/api')) };
+mock.module('../../../../core/api', () => ({
+    ...realApiModule,
+    mailApi: () => ({
+        message: {
+            draft: {
+                put: async () => ({ data: null, error: { status: 409, value: 'No longer a draft' }, status: 409 }),
+            },
+        },
+    }),
+}));
+afterAll(() => {
+    mock.module('../../../../core/api', () => realApiModule);
+});
 
 const staged: DraftAttachmentUpload = {
     tempId: 'temp-1',
@@ -122,16 +138,12 @@ describe('useUpdateDraft', () => {
         queryClient.setQueryData(detail, { id: 'm1', subject: 'Went out', text: 'as sent', html: '<p>as sent</p>' });
         const { latest, unmount } = await renderHook(() => useUpdateDraft(), queryClient);
 
-        const harnessFetch = globalThis.fetch;
-        const refuse = async () => new Response('This message is no longer a draft', { status: 409 });
-        globalThis.fetch = Object.assign(refuse, { preconnect: harnessFetch.preconnect });
         await act(async () => {
             await latest.mutateAsync({ draft: { id: 'm1', text: 'never sent' } }).catch(() => null);
         });
-        globalThis.fetch = harnessFetch;
         await unmount();
 
         expect(hasKey(invalidated, detail)).toBe(true);
-        expect(toasts).toEqual(['error: This message is no longer a draft (409)']);
+        expect(toasts).toEqual(['error: No longer a draft (409)']);
     });
 });
