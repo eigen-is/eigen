@@ -27,8 +27,9 @@ export const demoRouter = new Elysia({ name: 'demo' }).get('/p/demo/enter', asyn
     if (!orgId) throw new ApiError(503, 'Demo not available');
 
     const pool = getDemoPersonaPool(orgId);
+    if (pool.length === 0) throw new ApiError(503, 'Demo not available');
+
     const persona = pool[Math.floor(Math.random() * pool.length)];
-    if (!persona) throw new ApiError(503, 'Demo not available');
     const response = await signInWithScopedPassword('demo', persona.id, persona.email);
 
     // getSetCookie keeps each Set-Cookie header apart, where get() would join them with commas.

@@ -79,7 +79,7 @@ copies under the container's `versions/` folder (`../../apps/api/src/lib/version
 
 **Lifecycle.** `Drive.getCollabDocument` delegates to `CollabRegistry`
 (`../../apps/api/src/lib/drive/collab-registry.ts`), which keys one `createAsyncSingleton` per
-`owner.mount.path` — **concurrent opens of the same doc coalesce into a single `init()`**; a second
+`owner.mount.path` — **concurrent opens of the same doc coalesce into a single `open()`**; a second
 opener awaits the first. `CollabDocument.open` opens `data.db` via `Drive.holdDatabase` →
 `Mount.holdDatabase` (`../../apps/api/src/lib/mount/document-db.ts`, which runs `ManagedDatabase` SQLite
 migrations; open and close are serialized per pathId on the `Mount.documentDbs` slot — a 2026-07
