@@ -4,7 +4,7 @@ import { Column, ColumnLayout } from '@workspace/ui';
 import type { ArticleBody, ArticleMeta } from '../../content/manifest';
 import { ArticleBreadcrumb } from '../article-breadcrumb';
 import { ArticleContent } from '../article-content';
-import { ArticleToc } from './article-toc';
+import { ArticleToc } from '../article-toc';
 import { getSection } from './sections';
 
 // A full article: a single centered column with a sticky on-this-page TOC in the gutter.

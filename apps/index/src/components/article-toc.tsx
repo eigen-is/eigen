@@ -1,6 +1,6 @@
 import { cn } from '@workspace/ui/lib/utils';
 import { useEffect, useState } from 'react';
-import type { TocEntry } from '../../content/manifest';
+import type { TocEntry } from '../content/manifest';
 
 // The on-this-page list. Highlights the heading currently scrolled into view.
 export function ArticleToc({ toc }: { toc: TocEntry[] }) {
