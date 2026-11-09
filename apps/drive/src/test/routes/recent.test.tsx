@@ -151,8 +151,8 @@ test('the phone’s View options sort the page and leave the preference alone', 
     expect(preference()).toEqual({ mode: 'list', sortKey: 'name', sortDir: 'asc' });
 });
 
-test('an empty Recent says what will appear', async () => {
+test('an empty Recent shows the standard empty text', async () => {
     recent.data = [];
     const container = await open();
-    expect(container.textContent).toContain('Files you open or get notified about will appear here.');
+    expect(container.textContent).toContain('Within this void, all possibilities are yet unobserved.');
 });

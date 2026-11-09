@@ -117,10 +117,11 @@ test('an empty list points at the New vector button', async () => {
     expect(text()).toContain('Use the “New vector” button to create one.');
 });
 
-test('a list that fails to load says so', async () => {
+test('a list that fails to load says so, with no detail', async () => {
     vectors.data = undefined;
     vectors.error = new Error('Service unavailable');
     const text = await open('/');
     expect(text()).toContain('Encountering the null vector');
+    expect(text()).not.toContain('Service unavailable');
     expect(text()).not.toContain('Logo');
 });

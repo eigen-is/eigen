@@ -15,7 +15,7 @@ import {
 } from '@workspace/lib/drive';
 import type { PaletteSelectionAction } from '@workspace/lib/types/command-palette';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { Column, ColumnLayout, DeleteDialog, EmptyState, LoadingState, ToolbarTitle } from '@workspace/ui';
+import { Column, ColumnLayout, DeleteDialog, LoadingState, ToolbarTitle } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { DriveList, DriveViewControls } from '@workspace/ui/components/drive/drive-list';
 import type { DriveListDate } from '@workspace/ui/components/drive/drive-table';
@@ -50,7 +50,7 @@ function TrashRoute() {
     const ownerId = auth.user!.id;
     const mountId = DEFAULT_MOUNT_ID;
 
-    const { data: trashedItems = [], isLoading } = useListTrash(ownerId, mountId);
+    const { data: trashedItems = [], isLoading, error } = useListTrash(ownerId, mountId);
     const restorePath = useRestorePath(ownerId, mountId);
     const permanentlyDelete = usePermanentlyDelete(ownerId, mountId);
     const emptyTrash = useEmptyTrash(ownerId, mountId);
@@ -106,13 +106,13 @@ function TrashRoute() {
                 >
                     <DriveList
                         items={sortedItems}
+                        error={error}
                         ownerId={ownerId}
                         mountId={mountId}
                         hideOwner
                         hideShared
                         date={TRASHED}
                         ownActions={trashActions}
-                        emptyState={<EmptyState message="Trash is empty" icon={<Trash2 className="h-10 w-10" />} />}
                     />
                 </Column>
             </ColumnLayout>
