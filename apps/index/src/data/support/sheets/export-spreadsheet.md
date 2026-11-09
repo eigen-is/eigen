@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, export, download, excel, xlsx, pdf]
 related: [sheets/import-excel, sheets/get-started]
 order: 160
-updated: 2026-10-28
+updated: 2026-11-09
 ---
 
 You can download a copy of any spreadsheet to your computer without removing it from Eigen. Three formats are available: Excel, PDF, and web page.
@@ -23,7 +23,7 @@ You can download a copy of any spreadsheet to your computer without removing it 
 
 The downloaded file takes the name of the spreadsheet.
 
-A PDF or web page shows a cell that mixes several styles in the cell's own style. A very large spreadsheet is cut short in the PDF and the web page, which leave out the cells, charts, images, and sheets past a size limit. An image counts toward that limit by its file size. In the PDF, an image with see-through parts also counts by its pixels, so a spreadsheet with many large ones may leave some of them out. Even cut short, a PDF of a very large spreadsheet can take too long to make and fail. A sheet cut short in the PDF keeps the columns one page holds, 192 at the default width, because the page would cut off the rest. The web page keeps more columns while all of the sheet's rows fit. To keep everything, download it as Excel.
+A PDF or web page shows a cell that mixes several styles in the cell's own style. A very large spreadsheet is cut short in the PDF and the web page, which leave out the cells and sheets past a size limit, and the charts and images past the first 1,000 or once the images add up to more than 200 MB. A PDF of a very large spreadsheet, or one with many charts or large images, can take too long to make and fail. A sheet cut short in the PDF keeps the columns one page holds, 192 at the default width, because the page would cut off the rest. The web page keeps more columns while all of the sheet's rows fit. To keep everything, download it as Excel.
 
 In the PDF and the web page, text that doesn't fit its cell's row is cut off at the row's edge, as it is in the spreadsheet.
 

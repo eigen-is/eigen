@@ -27,11 +27,29 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Pasting edited cells in Sheets** — if you edit cells after copying them, a paste in the same tab brings them as they are now
 - **Validation limits in Sheets** — an edit that would push a validation rule past its limit goes through, and the cells past it get no rule
 - **Speed in Sheets** — editing a cell in a workbook of 100,000 formulas takes milliseconds, where it took over a tenth of a second, and a cell that 100,000 formulas read no longer stalls a sheet for a minute
+- **Links in Sheets (breaking)** — an existing spreadsheet opens without its cell links, and their text keeps its blue underline. Add them again, or import the Excel file again. A link now moves with its cell through a sort or a fill
+- **Deleting a tab in Sheets** — formulas that name the tab show `#REF!`, as after deleting a row, and dropdown lists and links that name it stop working. A new tab with that name doesn't bring them back. Undo does
+- **Sorting in Sheets** — a sort moves a cell's contents, formatting and link, and leaves borders, data validation and conditional formatting where they are. Hidden rows stay put, whether you hid them or a filter did
+- **Pasting and filling rules in Sheets** — a paste or fill from a cell with no rule takes the rule off the cell it lands on, so a rule can get a gap. A fill also copies links and replaces the data validation it lands on
+- **Cutting filtered rows in Sheets** — a cut or a drag over rows a filter hides moves nothing and says to clear the filter first. So does a copy of a merged cell a filter partly hides
+- **Filling in Sheets** — Chinese number and weekday series copy, and 1, 2, 4 fills as a straight line
+- **Formulas Sheets can't calculate** — a function it doesn't have, such as `FILTER`, `ROW` or `FIXED`, keeps the number the cell holds when its inputs change, instead of turning into an error. Typed new, it shows `#NAME?`
+- **Excel files in Sheets** — an import keeps the numbers Excel saved, and calculates only a formula saved with none or with an error
+- **Large PDFs from Sheets** — a tall or chart-heavy spreadsheet prints whole, or fails if it takes too long, where it could be cut short to fit. PDFs and web pages draw at most 1,000 images and charts
 - **Default drive size reaches existing users** — raising **Default mount (MB)** in Admin's server settings now gives every user's drive the new size at once, not only users who sign in for the first time. Lowering it shrinks no one's drive
 
 ### Fixed
 
-- **Comments in Sheets** — **Clear formatting** keeps a cell's comment, and **Delete comment** in a cell's menu asks first
+- **Formulas after a row or column change in Sheets** — inserting or deleting rows or columns updates what formulas show, for everyone: `=SUM(A1:A3)` follows its shrunk range, and `=A2*2` over a deleted row shows `#REF!` instead of its old number
+- **Links while others edit in Sheets** — two people adding or removing links at once no longer overwrite each other's or put them a row off
+- **The link card in Sheets** — it no longer covers a linked cell's fill handle or gets in the way of a drag, and it goes when a paste takes the link off its cell
+- **Merge, link and split in Sheets** — formulas reading those cells update, and a link's new text or a split piece replaces a formula instead of the formula's result coming back
+- **More formulas in Sheets** — `=A1%` works, `T` and `N` work, `ROWS` and `COLUMNS` count one cell, `AVERAGEIF` skips blanks instead of going blank, and a result such as `STDEV(5)` shows `#NUM!`
+- **Moving cells in Sheets** — cells dragged to the edge of the view land where you drop them, or on the last row or column you can see, not at the far end of the sheet over what was there
+- **Fills in Sheets** — a block dragged up or left lands in step with its source, and a date series counts by the date, not the text it shows
+- **Frozen panes in Sheets** — a press in a frozen cell that moves a pixel no longer throws the view back to the start
+- **Frozen panes and selection while others edit in Sheets** — a row someone inserts or a freeze someone sets moves your selection and panes at once
+- **Comments in Sheets** — **Clear formatting** keeps a cell's link and comment, and **Delete comment** in a cell's menu asks first
 - **Array formulas in Sheets** — a formula such as `SUMPRODUCT(A1:A3*B1:B3)`, which Sheets can't calculate yet, keeps the number it has when you edit around it, instead of turning into 0. Typed new, it shows `#CALC!`
 - **Drafts in Mail** — a save that fails, or a crash during one, no longer loses the draft. An attached email stays an attachment, and removing an attachment never takes another with it
 - **Older drafts in Mail** — a draft saved before this update loses its Bcc and its links to Drive documents, whose pills stay plain links in the text

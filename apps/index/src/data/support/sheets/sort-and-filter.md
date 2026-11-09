@@ -5,12 +5,14 @@ type: how-to
 tags: [sheets, sort, filter, data]
 related: [sheets/get-started, sheets/rows-and-columns]
 order: 130
-updated: 2026-11-02
+updated: 2026-11-09
 ---
 
 Sorting rearranges your rows by the values in a chosen column. Filtering hides rows that don't match the values you pick, so you can focus on the data you care about. Both work on the same sheet at the same time.
 
 ## Sort a range
+
+A sort moves each cell's contents, its formatting, and its link. Borders, data validation, and conditional formatting stay where they are. Hidden rows stay where they are too, whether you hid them or a filter did, and only the rows you can see change places.
 
 ### Quick sort
 
@@ -77,7 +79,7 @@ If your cells have different background or font colors, you can filter by color 
 
 ### Sort from the filter dropdown
 
-The filter dropdown also lets you sort the whole filtered range by that column without leaving the panel. Click **Ascending sort** or **Descending sort** at the top of the dropdown.
+The filter dropdown also lets you sort the rows the filter shows by that column without leaving the panel. Click **Ascending sort** or **Descending sort** at the top of the dropdown. The rows the filter hides stay where they are.
 
 ### Remove the filter
 
