@@ -1,6 +1,6 @@
 // iMIP, the way calendar invitations travel by email. It builds the mails for an invitation, a cancellation and an
 // RSVP reply, with the calendar file attached, and it reads such a mail when one arrives. Inbound mail is only
-// trusted when the sender is verified, a calendar part past the event size limit is skipped, and only a message's
+// trusted when the sender is verified, a calendar part past the mail size limit is skipped, and only a message's
 // first events are acted on.
 
 import { formatEventWhen, isInvitationFromOthers, normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
@@ -14,12 +14,14 @@ import { parseIcs, serializeEventForImip } from '../ical';
 import { computeOccurrenceTimes } from '../ical/wall-clock';
 import { EMAIL_MUTED, EMAIL_TEXT, renderEigenEmail } from '../mailer/mail-template';
 import type { OutboundICalEvent, OutboundMail } from '../mailer/mailer';
-import { EVENT_MAX_BYTES } from './resource-store';
 
 type Organizer = NonNullable<EventData['organizer']>;
 
 // Above this a body is a mailed calendar export, not a scheduling message, and it does not get to write a Home once per VEVENT.
 export const IMIP_MAX_EVENTS = 50;
+
+// A scheduling message is small, far below what a saved event may hold.
+const IMIP_MAX_BYTES = 1_048_576;
 
 // The calendar file of one save's invitation mails. Nothing in it differs per guest, and its size is guests × exceptions,
 // so a save builds it once.
@@ -126,13 +128,13 @@ export function composeRsvpReply(
     };
 }
 
-// A part past the size a stored event may have is no invitation, and the mail goes on without one.
+// A part past the limit is no invitation, and the mail goes on without one.
 function extractCalendarAttachment(mail: { attachments: readonly Attachment[] }): {
     ics: string;
     method?: ImipMethod;
 } | null {
     const attachment = mail.attachments.find(
-        (part) => isCalendarPart(part) && part.content.byteLength <= EVENT_MAX_BYTES,
+        (part) => isCalendarPart(part) && part.content.byteLength <= IMIP_MAX_BYTES,
     );
     if (!attachment) return null;
 

@@ -8,7 +8,6 @@ import {
     composeRsvpReply,
     processInboundImip,
 } from '../../lib/calendar/imip';
-import { EVENT_MAX_BYTES } from '../../lib/calendar/resource-store';
 import { getMailDomain } from '../../lib/config/server-config';
 import type { Home } from '../../lib/home';
 import { getHome } from '../../lib/home/get-home';
@@ -1097,7 +1096,7 @@ describe('iMIP inbound sender binding (audit P1-7a)', () => {
         expect(home.calendar.calendarRow(bobCalendarId)?.ctag).toBe(ctag + 1);
     });
 
-    test('a verified sender with a part past the event size limit writes nothing', async () => {
+    test('a verified sender with a part past the mail size limit writes nothing', async () => {
         const home = await getHome(ctx.bob.user.id);
         const ics = [
             'BEGIN:VCALENDAR',
@@ -1108,7 +1107,7 @@ describe('iMIP inbound sender binding (audit P1-7a)', () => {
             'SUMMARY:Large Part',
             'DTSTART:20260420T120000Z',
             'ORGANIZER:mailto:organizer@external.com',
-            `X-PAD:${'p'.repeat(EVENT_MAX_BYTES)}`,
+            `X-PAD:${'p'.repeat(1_048_576)}`,
             'END:VEVENT',
             'END:VCALENDAR',
         ].join('\r\n');
