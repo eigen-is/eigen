@@ -32,10 +32,10 @@ export class ChatRoom {
     private constructor(
         private readonly drive: Drive,
         private readonly home: Home,
-        private readonly path: DrivePath,
+        public readonly path: DrivePath,
         private readonly dataDbId: string,
         // The document a comment thread belongs to. A chat on its own has none.
-        private readonly containerPath: DrivePath | null,
+        public readonly containerPath: DrivePath | null,
     ) {}
 
     public static async create(drive: Drive, mountId: string, roomId: string): Promise<void> {

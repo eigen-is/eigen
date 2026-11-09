@@ -19,6 +19,7 @@ import type {
     EffectiveMember,
     EigenDocType,
     InviteResult,
+    RecentPath,
 } from '@workspace/lib/types/drive';
 import {
     DRIVE_TYPE_CHAT,
@@ -95,6 +96,8 @@ import { CollabRegistry } from './collab-registry';
 import type { CopyTarget } from './copy-across';
 import { copyPathAcross } from './copy-across';
 import { LockManager } from './lock-manager';
+import type { RecentRow } from './recent';
+import { listRecent, touchRecent } from './recent';
 import { getSharedDatabase } from './shared';
 import {
     listSharedOwnerIds,
@@ -1156,6 +1159,40 @@ export class Drive {
         actorName?: string,
     ): Promise<void> {
         return receiveSharedPathChange(this.sharedDb, this.home, path, newACL, actorEmail, actorName);
+    }
+
+    // ---- Recent ----
+
+    public touchRecent(ownerId: string, mountId: string, pathId: string): void {
+        touchRecent(this.sharedDb, ownerId, mountId, pathId);
+    }
+
+    // This home's own rows, newest first. Only its user reads them, so SharedDrive has no wrapper for it.
+    public listRecent(): RecentRow[] {
+        return listRecent(this.sharedDb);
+    }
+
+    // The paths of this owner that another home's rows name and the user may still see. The relay calls it and the
+    // check is here, so SharedDrive has no wrapper. It deletes no row, as a failed read looks like a deleted file.
+    public async getRecentPathsFor(
+        user: User,
+        memberships: Memberships,
+        rows: readonly RecentRow[],
+    ): Promise<RecentPath[]> {
+        const found: RecentPath[] = [];
+        for (const [mountId, mountRows] of Map.groupBy(rows, (row) => row.mountId)) {
+            const mount = this.mounts.get(mountId);
+            if (!mount) continue;
+            const chains = await mount.getBreadcrumbs(mountRows.map((row) => row.pathId));
+            for (const [i, chain] of chains.entries()) {
+                const path = chain.at(-1);
+                if (!path || path.parentId === null || isTrashedChain(chain)) continue;
+                if (!canReadFromAncestors(chain, user, memberships)) continue;
+                if (chain.slice(0, -1).some((crumb) => isDocumentType(crumb.type))) continue;
+                found.push({ ...path, lastActivityAt: mountRows[i].lastActivityAt });
+            }
+        }
+        return found;
     }
 
     // ---- Chats and comments ----

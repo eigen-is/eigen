@@ -1,15 +1,18 @@
-// The drive lists that span homes, such as a file search, the documents of one type, or the Watched
-// view. Each starts from the caller's own drive and adds the drive of every team they belong to, and
-// Watched also asks everyone who shared with them, each through getSharedDrive's access check. The
-// owners come from the caller's own memberships and shares, so a request can never point a list at
-// another home. A list that pulls from a team checks membership only, as a member may read all of its drive.
+// The drive lists that span homes, such as a file search, the documents of one type, Watched or Recent. Most start
+// from the caller's own drive and add every team they belong to, Watched also asks everyone who shared with them, and
+// Recent asks the owner of each path in the caller's own rows. The owners come from the caller's own memberships, shares
+// and rows, so a request can never point a list at another home. A list that pulls from a team checks membership only,
+// as a member may read all of its drive; Watched and Recent check each path.
 
 import { teamOwnerId } from '@workspace/lib/types';
-import type { DrivePath } from '@workspace/lib/types/drive';
-import { pullDriveSearch, pullFromEach, pullMimeContents } from '../home/home-relay';
-import type { User } from '../user';
+import type { DrivePath, RecentPath } from '@workspace/lib/types/drive';
+import { pullDriveSearch, pullFromEach, pullMimeContents, pullRecentPaths } from '../home/home-relay';
+import type { Memberships, User } from '../user';
 import { getMemberships } from '../user';
 import { getDrive, getSharedDrive } from './get-drive';
+import type { RecentRow } from './recent';
+
+const RECENT_PAGE = 100;
 
 export async function aggregateMimeContents(user: User, mimeType: string): Promise<DrivePath[]> {
     const drive = await getDrive(user);
@@ -45,6 +48,34 @@ export async function aggregateFileSearch(user: User, q: string, limit: number):
     return mergeById([personal, ...teamResults])
         .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
         .slice(0, limit);
+}
+
+// The newest rows are asked first, and the older ones only when too few of those are still visible.
+export async function aggregateRecents(user: User): Promise<RecentPath[]> {
+    const rows = (await getDrive(user)).listRecent();
+    const memberships = await getMemberships(user.id);
+    const newest = await pullRecents(user, memberships, rows.slice(0, RECENT_PAGE));
+    const older =
+        newest.length < RECENT_PAGE
+            ? await pullRecents(user, memberships, rows.slice(RECENT_PAGE, 2 * RECENT_PAGE))
+            : [];
+    return [...newest, ...older]
+        .sort((a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime())
+        .slice(0, RECENT_PAGE);
+}
+
+// Each owner is asked once, for its own rows.
+async function pullRecents(user: User, memberships: Memberships, rows: readonly RecentRow[]): Promise<RecentPath[]> {
+    const owners = [...new Set(rows.map((row) => row.ownerId))];
+    const lists = await pullFromEach(owners, (ownerId) =>
+        pullRecentPaths(
+            ownerId,
+            user,
+            memberships,
+            rows.filter((row) => row.ownerId === ownerId),
+        ),
+    );
+    return lists.flat();
 }
 
 // Later lists win, so with the personal list first a team's own copy overwrites its shared_paths mirror.

@@ -1,6 +1,7 @@
 // The collab routes: a document's access info and comment index over HTTP, and the WebSocket each
 // editor opens to sync a document. The socket checks read when it opens and write on every message,
-// and it hands the frames to the CollabDocument the Drive keeps open for that document.
+// and it hands the frames to the CollabDocument the Drive keeps open for that document. An open that
+// succeeds counts on the user's Recent page.
 
 import {
     COLLAB_ACCESS_LOST_CLOSE,
@@ -22,6 +23,7 @@ import { startLoadingHeartbeat } from '../lib/collab/loading-heartbeat';
 import { ApiError } from '../lib/core/errors';
 import { getSharedDrive } from '../lib/drive';
 import type { DriveLike } from '../lib/drive/get-drive';
+import { recordOpened } from '../lib/drive/recent';
 import { getDataEpoch } from '../lib/home/data-epoch';
 import { keepWebSocketAlive } from '../utils/websockets';
 import { betterAuth } from './auth';
@@ -162,6 +164,7 @@ export const collabRouter = new Elysia({
                 const document = await drive.getCollabDocument(mountId, pathId);
                 rawWs.send(collabEpochMessage(ownerId));
                 document.subscribe(user, rawWs);
+                recordOpened(user, document.path);
                 console.log(
                     `[collab] open path=${pathId} loadMs=${(performance.now() - loadStart).toFixed(0)} ` +
                         `connections=${document.connectionCount}`,

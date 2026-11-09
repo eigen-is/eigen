@@ -14,6 +14,7 @@ import { ApiError } from '../lib/core/errors';
 import type { Drive } from '../lib/drive';
 import { getDrive, getSharedDrive } from '../lib/drive';
 import { folderIn, withFreeName } from '../lib/drive/naming';
+import { recordOpened } from '../lib/drive/recent';
 import { getTeamHome } from '../lib/home';
 import { betterAuth } from './auth';
 import { attachmentReferenceSchema } from './shared-schemas';
@@ -145,6 +146,8 @@ export const chatRouter = new Elysia({ name: 'chat' })
         async ({ params, query, user }): Promise<ChatMessage[]> => {
             const drive = await getSharedDrive(params.ownerId, user);
             const chat = await drive.getChat(params.mountId, params.chatId);
+            // An older page is of a chat already open, and a comment thread opens with its document.
+            if (!query.before && !chat.containerPath) recordOpened(user, chat.path);
             return await chat.getMessagesForUser(user.email, query.limit ?? 50, query.before || undefined);
         },
         {
