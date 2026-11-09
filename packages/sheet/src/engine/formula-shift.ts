@@ -206,9 +206,7 @@ export function functionStrChange(
     onTargetSheet: boolean,
     findSheet: (name: string) => { name: string } | undefined,
 ): string {
-    if (!txt) {
-        return '';
-    }
+    if (!txt) return '';
     return walkFormulaRefs(txt, (ref) => {
         const sheetEnd = ref.lastIndexOf('!') + 1;
         const onSheet =
@@ -217,6 +215,29 @@ export function functionStrChange(
                 : onTargetSheet;
         return onSheet ? shiftRefForRowCol(ref, sheetEnd, type, rc, orient, stindex, step) : ref;
     });
+}
+
+const WALKER_REWRITES = /[^\S ]|: | :| $/;
+const PRINTABLE_ASCII = /^[ -~]*$/;
+
+// Whether functionStrChange may change a formula off the op's sheet, `name`, asked without the walk. Only a ref naming
+// the sheet moves there, but the walker also writes back whitespace other than a space, a space beside a colon or at
+// the end, and a range whose second leg names a sheet, so such text always takes the walk.
+export function mayShiftOffSheet(name: string): (txt: string) => boolean {
+    // A ref may spell each quote of the name single or doubled, so each run between quotes is looked for on its own.
+    const runs = sheetNameKey(name)
+        .split("'")
+        .filter((run) => run !== '');
+    return (txt) => {
+        if (WALKER_REWRITES.test(txt)) return true;
+        const bang = txt.lastIndexOf('!');
+        if (bang < 0) return false;
+        const colon = txt.indexOf(':');
+        if (colon >= 0 && colon < bang) return true;
+        // On ASCII text toUpperCase gives sheetNameKey's key without its step per character.
+        const key = PRINTABLE_ASCII.test(txt) ? txt.toUpperCase() : sheetNameKey(txt);
+        return runs.every((run) => key.includes(run));
+    };
 }
 
 // Returns [rowAbsolute, colAbsolute] for a single ref like "$A$1" → [true, true].

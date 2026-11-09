@@ -18,7 +18,7 @@ import { sheetFinder } from './a1-notation';
 import { mapChartRefs } from './chart-data';
 import { withCfRanges } from './conditional-format';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from './defaults';
-import { functionStrChange, rewriteSheetFormulas } from './formula-shift';
+import { functionStrChange, mayShiftOffSheet, rewriteSheetFormulas } from './formula-shift';
 import type { ExtendedSheetConfig, FilterEntry, ShiftedSheet, SingleRange } from './types';
 
 export type InsertRowColOp = {
@@ -215,8 +215,10 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
 ): S[] {
     const targetName = sheets[targetIndex].name;
     const findSheet = sheetFinder(sheets);
+    const mayShift = mayShiftOffSheet(targetName);
     return sheets.map((sheet, sheetIndex) =>
         rewriteSheetFormulas(sheet, (txt) => {
+            if (sheetIndex !== targetIndex && !mayShift(txt)) return txt;
             const shifted = functionStrChange(
                 txt,
                 op,
