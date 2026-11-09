@@ -1,4 +1,8 @@
-import { useMutation, useQueries, useQuery } from '@tanstack/react-query';
+// Hooks over the public API, which answers before anyone signs in: the server's config and what
+// it implies, such as whether Mail is offered, the landing page's waitlist signup, and the name
+// and avatar of a user or team by email or id, batched so lookups made together share a request.
+
+import { skipToken, useMutation, useQueries, useQuery } from '@tanstack/react-query';
 import { publicApi } from '@workspace/lib/api';
 import { apps, isMailApp } from '@workspace/lib/apps';
 import { parseOwnerId } from '@workspace/lib/types';
@@ -60,8 +64,10 @@ export function useJoinWaitlist() {
 export function usePublicUser(emailOrId: string | undefined) {
     return useQuery({
         queryKey: publicUserKeys.detail(emailOrId || ''),
-        queryFn: () => fetchPublicUser(emailOrId!),
-        enabled: !!emailOrId && !!(validateEmailAddress(emailOrId) || parseOwnerId(emailOrId).id),
+        queryFn:
+            emailOrId && (validateEmailAddress(emailOrId) || parseOwnerId(emailOrId).id)
+                ? () => fetchPublicUser(emailOrId)
+                : skipToken,
         staleTime: Infinity,
     });
 }
@@ -78,10 +84,10 @@ export function usePublicUsers(emailsOrIds: string[]): Record<string, PublicUser
         // stable across renders and consumer useMemos hold.
         combine: (results) => {
             const map: Record<string, PublicUser> = {};
-            emailsOrIds.forEach((id, i) => {
+            for (const [i, id] of emailsOrIds.entries()) {
                 const user = results[i]?.data;
                 if (user) map[id] = user;
-            });
+            }
             return map;
         },
     });
