@@ -325,10 +325,15 @@ export class MaildirStore {
             applyFlagsFromFilename(parsed, filename);
             parsed.filename = filename;
             parsed.mailbox = MAILBOX_DRAFTS;
-            // A full save rewrites the draft under its own id, so the row it replaces is credited back.
-            const replaced = this.db.getEmail(messageId)?.size ?? 0;
+            const replaced = this.db.getEmail(messageId);
             this.db.addEmail(parsed);
-            this.indexBytes += parsed.size - replaced;
+            this.indexBytes += parsed.size - (replaced?.size ?? 0);
+            // The old file goes last, so a crash leaves the draft twice and never not at all. A sync keeps the newer.
+            if (replaced && (replaced.mailbox !== MAILBOX_DRAFTS || replaced.filename !== filename)) {
+                await this.storage.unlinkDurable(
+                    path.join(this.mailboxDir(replaced.mailbox), PATHS.MAIL.CUR, replaced.filename),
+                );
+            }
             return parsed;
         });
     }
@@ -425,9 +430,13 @@ export class MaildirStore {
 
         const diskFiles = new Map<string, string>();
         for (const fileName of await this.listCurFiles(mailbox)) {
-            if (!fileName.startsWith('.')) {
-                diskFiles.set(getMailIDfromFileName(fileName), fileName);
-            }
+            if (fileName.startsWith('.')) continue;
+            const id = getMailIDfromFileName(fileName);
+            const sameId = diskFiles.get(id);
+            diskFiles.set(
+                id,
+                sameId && mailbox === MAILBOX_DRAFTS ? await this.keepNewerDraftFile(sameId, fileName) : fileName,
+            );
         }
 
         const dbRecords = this.db.listReconcileRows(mailbox);
@@ -504,6 +513,20 @@ export class MaildirStore {
                 this.events.deleted(id, mailbox);
             }
         }
+    }
+
+    // Left behind, the older file could win a later pass over every save after it, and come back after a send or a
+    // delete. A name a rename just retired stats as absent, so its live twin wins.
+    private async keepNewerDraftFile(a: string, b: string): Promise<string> {
+        const cur = path.join(this.mailboxDir(MAILBOX_DRAFTS), PATHS.MAIL.CUR);
+        const modified = (name: string) =>
+            this.storage.stat(path.join(cur, name)).then(
+                (stats) => stats.mtimeMs,
+                () => 0,
+            );
+        const [newer, older] = (await modified(a)) > (await modified(b)) ? [a, b] : [b, a];
+        await this.storage.unlinkDurable(path.join(cur, older));
+        return newer;
     }
 
     // -- Draft meta sidecar (lightweight body-only saves) --

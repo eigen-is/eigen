@@ -19,6 +19,8 @@ Dovecot moves, renames and deletes messages behind the API's back, so only a dif
 
 **The file lands before the index row, always.** A crash between the two leaves the index behind the disk, and the next `reconcileMailbox` repairs it.
 
+**A draft save writes before it deletes.** The new file lands, then the row, then the old file goes, all under `storeLock`, so a save that throws on the way, such as on a staged attachment that is gone, leaves the draft whole. A crash in between leaves two files with one id, which only a draft save can do. The next Drafts sync keeps the newer by modification time and unlinks the other, because the older could otherwise win a later sync over every save after it, or bring back a draft that was deleted or sent. Until the next save the row may keep the old subject, preview and size. The byte counter stays right, because it sums the rows.
+
 Every Maildir write fsyncs the staged file and each indexed directory its rename or unlink changes (`lib/core/local-filesystem.ts`). A directory fsync the file system refuses (NFS, some FUSE mounts) is logged once, not thrown: the rename already happened, and a delivery answering 500 makes the MTA send a duplicate. `apps/api/src/test/mail/mail-durability.test.ts` pins each write.
 
 The sync parses with `parseEml`, which never sanitizes and returns no body. Only the reader's parse sanitizes ([MAIL.md § Only the reader's parse sanitizes](MAIL.md#only-the-readers-parse-sanitizes)).

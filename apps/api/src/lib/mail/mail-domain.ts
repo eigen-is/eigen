@@ -438,7 +438,6 @@ export class Mail {
                     contentType: a.contentType,
                 });
             }
-            await this.store.delete(existingId);
         }
 
         const newAttachments: EmlAttachment[] = [];
