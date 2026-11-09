@@ -49,6 +49,7 @@ type CardDialogProps = {
     onUpdate?: (patch: CardFormPatch & { attachments?: ChatAttachment[] }) => void;
     onResolve?: (chatName: string, next: 'open' | 'resolved', title?: string) => void;
     onAssign?: (chatName: string, assignee: string | null, title?: string) => void;
+    onDelete?: (cardId: string) => void;
 };
 
 export function CardDialog({
@@ -69,6 +70,7 @@ export function CardDialog({
     onUpdate,
     onResolve,
     onAssign,
+    onDelete,
 }: CardDialogProps) {
     const { mediaFolderId } = useMediaResolver();
     const resolveAttachments = useResolveCardAttachments(ownerId, mountId, mediaFolderId);
@@ -195,6 +197,7 @@ export function CardDialog({
                     onEditingChange(false);
                 }}
                 onCancel={() => onEditingChange(false)}
+                onDelete={onDelete && (() => onDelete(card.id))}
             />
         ) : undefined;
 

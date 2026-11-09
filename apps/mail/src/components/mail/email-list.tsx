@@ -7,7 +7,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
 import { formatDateTime } from '@workspace/lib/date';
 import type { EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
-import { EmptyState, ErrorState, KebabTrigger, LoadingState, SearchBar, Toolbar } from '@workspace/ui';
+import { EmptyState, ErrorState, KebabTrigger, LoadingState, SearchBar, Toolbar, UnreadDot } from '@workspace/ui';
 import { ContextMenuAnchor } from '@workspace/ui/components/context-menu';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { useKeyboardListNavigation } from '@workspace/ui/hooks/use-keyboard-list-navigation';
@@ -254,12 +254,9 @@ export function EmailList({
                                         {!email.isRead && (
                                             <span
                                                 aria-hidden
-                                                className="absolute left-0 top-4 flex w-(--app-gutter-x) justify-center"
+                                                className="absolute left-0 top-3.5 flex w-(--app-gutter-x) justify-center"
                                             >
-                                                <span
-                                                    className="h-1.5 w-1.5 rounded-full"
-                                                    style={{ backgroundColor: 'var(--app-current-color)' }}
-                                                />
+                                                <UnreadDot className="static bg-(--app-current-color)" />
                                             </span>
                                         )}
                                         <div className="flex-1 min-w-0">

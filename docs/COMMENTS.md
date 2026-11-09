@@ -106,13 +106,15 @@ The assignee is a lowercased email that must belong to an effective member of th
 
 The client posts the card title with every status and assignee write, and the server caches it in `title` for activity labels. It trusts the client the way the stickies card events do ([FILE-HISTORY.md](FILE-HISTORY.md)), and it lags a rename until the next action, so the UI never reads it and reads the card instead.
 
-The toolbar badge counts the open, anchored comments assigned to you (`useAssignedCommentCount`). It is personal because a document-wide unresolved count would show every viewer the same red number, for threads that belong to someone else.
+The toolbar badge counts the open, anchored comments assigned to you (`useAssignedCommentCount`). It is personal because a document-wide unresolved count would show every viewer the same red number, for threads that belong to someone else. `NoteCard` marks the same thing on the card: its footer is muted, but the avatar of an open card assigned to you is not, and it has a ring in the app's color.
 
 Mentions are recorded in `comment_mentions` on every message, and nothing reads them ([ROADMAP.md](ROADMAP.md)).
 
 ## One lifecycle bundle drives every host
 
 `useCommentLifecycle` bundles the card read, the server entries, create, update, resolve, assign, the open card, `?chat=` and `?card=` resolution and the deleted rule. `mapName` picks `comments` or `tasks`, as `commentMapName` decides for a document type, the rule the server's reader uses too. Every host passes `ready` once its cards have synced and its active set is computed: docs after the first walk of the body, sheets once its workbook loaded and names its sheets, the canvas and stickies on sync. A landing waits for it instead of resolving against an empty map, and opens the card in the state the host shows it in.
+
+A delete from the edit form or `CommentContextMenu` asks first, in the one `DeleteDialog` in `CommentLifecycleDialogs`, which then runs the host's delete and closes the card, since a host that keeps a deleted card would otherwise leave the dialog open on its deleted state. A host's own menu, such as the sheet's cell menu or docs' image menu, deletes through `part="delete"` without asking.
 
 `CommentLifecycleMenuItems` binds the shared rows (view, edit, color, assign, resolve or reopen, delete) to that bundle. It gates every write on `canWrite` in one place, and the host supplies only what its anchor decides: the item under the cursor, add and delete. So a new row lands in every app at once. It renders in `CommentContextMenu` (through `CommentLifecycleDialogs`, which every editor mounts), in the sheet's cell menu and in docs' image menu. Every row is a real menu item, so selecting one closes the host menu.
 

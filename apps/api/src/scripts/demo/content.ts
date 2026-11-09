@@ -10,6 +10,8 @@
 // the data model keys on (ACLs, comments, calendar attendees, stickies creators) resolves by that
 // email, so ids may be random per rebuild. All names, acts and vendors are fictional.
 
+import { CHART_DEFAULT_SIZE, FLAT_CHART_LOOK, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
+import { escapeHtml } from '@workspace/lib/html';
 import type { FillPaint } from '@workspace/lib/types/background';
 import type {
     Arrowhead,
@@ -20,6 +22,7 @@ import type {
     TextAlign,
     VerticalAlign,
 } from '@workspace/lib/vector';
+import { solidFill } from '@workspace/lib/vector';
 import { readLatex, writeMathml } from '@workspace/math';
 
 export type LeadRole =
@@ -1933,6 +1936,15 @@ export const NOTES: PersonalDoc = {
 const displayedEquation = (latex: string) =>
     `<p>${writeMathml(readLatex(latex), latex).replace('<math', '<math display="block"')}</p>`;
 
+// Insert → Chart's chart as the docs editor stores one, in a paragraph, with the Artist sketch, cross-hatched bars and
+// the hand-drawn font. The fixed seed draws the same wobble on every rebuild.
+const sketchedChart = () => {
+    const parts = newChartSpecParts(sampleChartSpec('column', 'Excalifont'));
+    const look = { ...FLAT_CHART_LOOK, fill: solidFill('transparent', 'cross-hatch'), roughness: 1, seed: 7 };
+    const { width, height } = CHART_DEFAULT_SIZE;
+    return `<p><span class="chart" data-chart="${escapeHtml(JSON.stringify(parts))}" data-look="${escapeHtml(JSON.stringify(look))}" data-width="${width}" data-height="${height}"></span></p>`;
+};
+
 // --- A scratch doc in every persona's own drive, beside "my notes": someone made a file to see what the editor does.
 // Not a tour. ---
 
@@ -1943,9 +1955,11 @@ export const TRYING_EIGEN: PersonalDoc = {
         '<p>new doc, just poking around before the festival eats my week.</p>',
         '<p><strong>bold</strong> works. <em>italic</em> works. <s>so does this</s>.</p>',
         '<p><span class="figure"><img data-media-name="hands-up-at-camp.webp" alt="Arms up in front of the tents" width="420"></span></p>',
-        "<p>the logo isn't half a bra-ket: <strong>eigen</strong> is an operator acting on the ket |docs⟩.</p>",
+        '<p>trying out equations:</p>',
         displayedEquation('\\mathbf{eigen}\\,\\ket{\\text{docs}}'),
         '<p>click the equation and the LaTeX comes back. nice.</p>',
+        '<p>we should insert a chart:</p>',
+        sketchedChart(),
         '<ul><li><s>find the strikethrough button</s></li><li>look at the budget sheet</li><li>coffee</li></ul>',
     ].join(''),
     media: ['images/hands-up-at-camp.webp'],

@@ -6,7 +6,7 @@ category: Sharing
 tags: [sheets, sharing, permissions, comments, collaboration]
 related: [sheets/get-started, drive/share-a-file, getting-started/how-sharing-works]
 order: 120
-updated: 2026-11-04
+updated: 2026-11-09
 ---
 
 A spreadsheet is private to you until you share it. You can give specific people access, share with a whole team, or give anyone with the link the ability to view or edit. Once collaborators have access, you can use cell comments to leave notes and discuss specific values without changing the data itself.
@@ -105,9 +105,9 @@ Right-click a cell that has a comment to see its options:
 - **View comment**: opens the comment thread.
 - **Comment color**: change the color of the cell marker.
 - **Resolve comment** / **Reopen comment**: toggle the status.
-- **Delete comment**: removes the comment from the cell. To bring it back, press **Ctrl+Z** (Mac: **⌘Z**) before you close the spreadsheet.
+- **Delete comment**: removes the comment from the cell. If you opened the menu on a comment in the comments pane, it asks you to confirm first. To bring it back, press **Ctrl+Z** (Mac: **⌘Z**) before you close the spreadsheet.
 
-To edit the title or description of an existing comment, open the thread and click the pencil icon (**Edit**) near the top of the dialog.
+To edit the title or description of an existing comment, open the thread and click the pencil icon (**Edit**) near the top of the dialog. The trash icon (**Delete**) at the bottom of the edit form deletes the comment, after you confirm.
 
 ## Copy a link to a comment
 

@@ -231,3 +231,13 @@ test('text put back after a failed send grows the box to fit, as typing does', a
     expect(textarea.style.height).toBe('80px');
     await cleanup();
 });
+
+test('the attach button is a named, flat icon button in the text color', async () => {
+    const { unmount } = await renderInDocument(
+        createElement(ChatMessageInput, { ...inputProps, onSend: async () => true }),
+    );
+    const attach = document.querySelector('button[aria-label="Add attachment"]');
+    expect(attach).not.toBeNull();
+    expect(attach?.className).not.toContain('text-muted-foreground');
+    await unmount();
+});

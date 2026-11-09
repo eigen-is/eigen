@@ -22,6 +22,7 @@ import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
 import { useSuggestions } from '../../hooks/use-suggestions';
 import { AttachmentDraftChips } from '../attachment/attachment-draft-chips';
 import { Button } from '../button';
+import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { ChatPlayerSuggest } from './chat-player-suggest';
 import { ChatSlashSuggest } from './chat-slash-suggest';
 import { getAtSuggestQuery, getSlashTargetQuery } from './chat-utils';
@@ -229,15 +230,14 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
                 }}
             />
             <div className="flex items-end gap-2 relative">
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="shrink-0 h-10 w-10 text-muted-foreground hover:text-foreground"
+                {/* mb-1 centers it on a one-line box, 40px tall, and it stays at the bottom as the box grows. */}
+                <TooltipButton
+                    icon={Paperclip}
+                    tooltipText="Add attachment"
+                    className="mb-1 shrink-0"
                     onClick={onAttachClick}
                     disabled={disabled}
-                >
-                    <Paperclip className="h-4 w-4" />
-                </Button>
+                />
                 <ChatPlayerSuggest
                     query={atQuery || ''}
                     roomMembers={roomMembers}
