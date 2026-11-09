@@ -542,3 +542,22 @@ describe('a write that would leave the matrix or a row no array', () => {
         expect(sheet.celldata).toEqual([{ r: 2, c: 0, v: cell('a') }]);
     });
 });
+
+describe('a batch with two row ops', () => {
+    test('recomputes what the first op touched at the rows the second moved it to', () => {
+        const n = (v: number) => ({ v, m: `${v}`, ct: { fa: 'General', t: 'n' } });
+        const data = [1, 2, 3, 4, 5, 6].map((v, r) => [n(v), r === 0 ? { f: '=SUM(A4:A6)', v: 15 } : null]);
+        const sheet: Sheet = { id: 's1', name: 'One', order: 0, data, config: {} };
+        const batch: Op[] = [
+            { op: 'deleteRowCol', id: 's1', path: [], value: { type: 'row', start: 4, end: 4 } },
+            {
+                op: 'insertRowCol',
+                id: 's1',
+                path: [],
+                value: { type: 'row', index: 0, count: 2, direction: 'lefttop' },
+            },
+        ];
+        const [replayed] = replaySheetsOps([sheet], [batch]);
+        expect(replayed.data?.[2]?.[1]).toMatchObject({ f: '=SUM(A6:A7)', v: 10 });
+    });
+});

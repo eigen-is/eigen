@@ -92,13 +92,24 @@ export function seedsOf(ops: readonly Op[]): RecomputeSeeds | null {
     const lines: RecomputeSeeds['lines'][number][] = [];
     const names = new Set<string>();
     let structural = false;
+    // A later row or column op moves the lines an earlier one opened or closed, as it moves the cells on them.
+    const moveLines = (id: string, type: 'row' | 'column', at: number, by: number) => {
+        for (const [i, seed] of lines.entries()) {
+            if (seed.id !== id || seed.type !== type || seed.line < at) continue;
+            const line = seed.line + by;
+            lines[i] = { ...seed, line: by < 0 ? Math.max(at - 1, line) : line };
+        }
+    };
     for (const op of ops) {
         const [field, r, c] = op.path;
         if (op.op === 'insertRowCol') {
-            const { id, type, index, direction } = insertRowColOf(op);
-            lines.push({ id, type, line: direction === 'lefttop' ? index : index + 1 });
+            const { id, type, index, count, direction } = insertRowColOf(op);
+            const line = direction === 'lefttop' ? index : index + 1;
+            moveLines(id, type, line, count);
+            lines.push({ id, type, line });
         } else if (op.op === 'deleteRowCol') {
-            const { id, type, start } = deleteRowColOf(op);
+            const { id, type, start, end } = deleteRowColOf(op);
+            moveLines(id, type, start, start - end - 1);
             lines.push({ id, type, line: start - 1 }, { id, type, line: start });
         } else if (op.op === 'addSheet' || op.op === 'renameSheet') {
             const name = isRecord(op.value) ? op.value['name'] : undefined;
