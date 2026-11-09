@@ -1,63 +1,70 @@
 // The drive lists that span homes, such as a file search, the documents of one type, or the Watched
-// view. Each starts from the caller's own drive and adds the drive of every team they belong to. The
-// owners come from the caller's own memberships, so a request can never point it at another home.
-// Membership is the only check by design, because a team member may read the whole team drive.
+// view. Each starts from the caller's own drive and adds the drive of every team they belong to, and
+// Watched also asks everyone who shared with them, each through getSharedDrive's access check. The
+// owners come from the caller's own memberships and shares, so a request can never point a list at
+// another home. A list that pulls from a team checks membership only, as a member may read all of its drive.
 
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { pullDriveSearch, pullMimeContents } from '../home/home-relay';
 import type { User } from '../user';
-import { getMemberships } from '../user';
+import { getMemberships, getOwnerExists } from '../user';
 import { getDrive, getSharedDrive } from './get-drive';
 
-// Dedupe by path.id, later lists winning (personal-first callers put personal at the head so
-// authoritative team copies overwrite shared_paths mirrors).
-function mergeById(lists: DrivePath[][]): DrivePath[] {
-    const byId = new Map<string, DrivePath>();
-    for (const list of lists) for (const path of list) byId.set(path.id, path);
-    return [...byId.values()];
-}
-
-// Personal mime contents + every team the caller belongs to; newest first.
 export async function aggregateMimeContents(user: User, mimeType: string): Promise<DrivePath[]> {
     const drive = await getDrive(user);
     const personal = await drive.getMimeTypeContents(mimeType);
     const { teamIds } = await getMemberships(user.id);
-    const teamResults = await Promise.all(
-        teamIds.map((teamId) => pullMimeContents(teamOwnerId(teamId), mimeType).catch(() => [])),
-    );
+    const teamResults = await pullFromEach(teamIds.map(teamOwnerId), (ownerId) => pullMimeContents(ownerId, mimeType));
     return mergeById([personal, ...teamResults]).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 }
 
-// The caller's own home, their teams, and every owner that shared into this home — each via the
-// same ACL-checked getSharedDrive → getWatches. The Watched view sorts client-side, so no ordering here.
+// The Watched view sorts on the client, so this list has no order of its own.
 export async function aggregateWatches(user: User): Promise<DrivePath[]> {
     const { teamIds } = await getMemberships(user.id);
-    const teamOwners = teamIds.map((id) => teamOwnerId(id));
+    const teamOwners = teamIds.map(teamOwnerId);
     const covered = new Set([user.id, ...teamOwners]);
     const ownDrive = await getDrive(user);
     const sharedOwners = (await ownDrive.getSharedOwnerIds()).filter((id) => !covered.has(id));
     const owners = [user.id, ...teamOwners, ...sharedOwners];
 
-    const lists = await Promise.all(
-        owners.map((ownerId) =>
-            getSharedDrive(ownerId, user)
-                .then((drive) => drive.getWatches(user))
-                .catch(() => []),
-        ),
+    const lists = await pullFromEach(owners, (ownerId) =>
+        getSharedDrive(ownerId, user).then((drive) => drive.getWatches(user)),
     );
     return mergeById(lists);
 }
 
-// Personal file search + every team, each keeping the full limit so recency competes fairly.
+// Each home keeps the full limit, so the newest files of all homes compete before the cut.
 export async function aggregateFileSearch(user: User, q: string, limit: number): Promise<DrivePath[]> {
     const drive = await getDrive(user);
     const personal = drive.search({ q, limit });
     const { teamIds } = await getMemberships(user.id);
-    const teamResults = await Promise.all(
-        teamIds.map((teamId) => pullDriveSearch(teamOwnerId(teamId), { q, limit }).catch(() => [])),
+    const teamResults = await pullFromEach(teamIds.map(teamOwnerId), (ownerId) =>
+        pullDriveSearch(ownerId, { q, limit }),
     );
     return mergeById([personal, ...teamResults])
         .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
         .slice(0, limit);
+}
+
+// A gone owner is skipped, and a failed read is logged and leaves that owner out, so the others still answer.
+async function pullFromEach<T>(ownerIds: readonly string[], pull: (ownerId: string) => Promise<T>): Promise<T[]> {
+    const results = await Promise.all(
+        ownerIds.map((ownerId) =>
+            getOwnerExists(ownerId)
+                .then((exists) => (exists ? pull(ownerId) : null))
+                .catch((err) => {
+                    console.error(`aggregate: reading ${ownerId} failed:`, err);
+                    return null;
+                }),
+        ),
+    );
+    return results.filter((result) => result !== null);
+}
+
+// Later lists win, so with the personal list first a team's own copy overwrites its shared_paths mirror.
+function mergeById(lists: readonly (readonly DrivePath[])[]): DrivePath[] {
+    const byId = new Map<string, DrivePath>();
+    for (const list of lists) for (const path of list) byId.set(path.id, path);
+    return [...byId.values()];
 }
