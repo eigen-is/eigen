@@ -188,9 +188,50 @@ describe('a cell move', () => {
         expect(dropped?.row).toEqual([24, 24]);
     });
 
-    test('below the grid lands on the last row', () => {
+    test('below the grid lands on the last row in view, not the last of the sheet', () => {
+        expect(moved(grid(), at(10 * COLUMN + 5, HEIGHT + 1), cellAreaAt())?.row).toEqual([24, 24]);
+    });
+
+    test('above the grid lands on the first row in view, not the first of the sheet', () => {
+        expect(moved(grid(), at(10 * COLUMN + 5, -10), cellAreaAt(0, 10 * ROW))?.row).toEqual([10, 10]);
+    });
+
+    test('near the right edge lands on the column under the pointer, not the last one', () => {
+        expect(moved(grid(), at(WIDTH - 5, 5), cellAreaAt())?.column).toEqual([9, 9]);
+    });
+
+    test('past the right edge lands on the last column in view, not the last of the sheet', () => {
+        expect(moved(grid(), at(WIDTH + 200, 5), cellAreaAt(148))?.column).toEqual([11, 11]);
+    });
+
+    test('left of the grid lands on the first column in view, not the first of the sheet', () => {
+        expect(moved(grid(), at(-10, 5), cellAreaAt(5 * COLUMN))?.column).toEqual([5, 5]);
+    });
+
+    test('at the sheet end keeps the whole range on the sheet', () => {
         const ctx = grid();
-        expect(moved(ctx, at(10 * COLUMN + 5, HEIGHT + 1), cellAreaAt())?.row).toEqual([39, 39]);
+        ctx.cellSelectMoving = true;
+        ctx.cellSelectMoveIndex = [0, 0];
+        ctx.selections = [{ row: [0, 0], column: [0, 2], row_focus: 0, column_focus: 0 }];
+        onCellsMoveEnd(ctx, ctx.getRefs().globalCache, at(WIDTH - 5, 5), cellAreaAt(40 * COLUMN), noElements());
+        expect(ctx.selections?.[0].column).toEqual([37, 39]);
+    });
+
+    test('the preview near an edge draws the range where the drop lands it', () => {
+        const ctx = grid();
+        ctx.cellSelectMoving = true;
+        ctx.cellSelectMoveIndex = [0, 10];
+        ctx.selections = [
+            { row: [5, 5], column: [0, 0], row_focus: 5, column_focus: 0 },
+            { row: [0, 0], column: [10, 11], row_focus: 0, column_focus: 10 },
+        ];
+        const container = noElements();
+        const preview = container.ownerDocument.createElement('div');
+        preview.className = 'sheet-cell-selected-move';
+        container.append(preview);
+        onCellsMove(ctx, ctx.getRefs().globalCache, at(WIDTH - 5, 5), cellAreaAt(), container);
+        expect(preview.style.left).toBe(`${9 * COLUMN}px`);
+        expect(preview.style.width).toBe(`${2 * COLUMN - 2}px`);
     });
 
     test('dropped on a frozen column of a scrolled sheet lands in that column', () => {

@@ -14,13 +14,15 @@ import { getFilterButtonAtPosition } from '../modules/filter';
 import { handleFormulaInput } from '../modules/formula-editor';
 import { rangeDragColumn, rangeDragRow } from '../modules/formula-range';
 import { freezeOf, getFrozenHandleLeft, getFrozenHandleTop, scrollToFrozenRowCol } from '../modules/freeze';
-import { colLocation, rowLocation, SCROLLBAR_MARGIN, sheetPoint } from '../modules/location';
+import { colLocation, rowLocation, sheetPoint } from '../modules/location';
 import { pasteHandlerOfPaintModel } from '../modules/selection';
 import type { GlobalCache } from '../types';
 import { getSheetIndex } from '../utils';
 
 // A resize or freeze line stops this far before the cell area's right edge.
 const LINE_RIGHT_MARGIN = 54;
+// A drag this close to the cell area's right edge scrolls, as it nears the vertical scrollbar.
+const SCROLLBAR_MARGIN = 14;
 
 export function handleOverlayMouseMove(
     ctx: Context,

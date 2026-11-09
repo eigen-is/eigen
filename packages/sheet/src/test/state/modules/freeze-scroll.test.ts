@@ -63,6 +63,20 @@ describe('scrollToFrozenRowCol', () => {
         expect(dragTo([range([20, 6], [1, 1])], 300, 200)).toEqual({ left: 0, top: 0 });
     });
 
+    test('a drag that stays in a frozen column leaves the scroll, as a click does', () => {
+        expect(dragTo([range([20, 1], [20, 1])], 300, 200)).toBeUndefined();
+        expect(dragTo([range([20, 0], [20, 2])], 300, 200)).toBeUndefined();
+    });
+
+    test('a drag that stays in a frozen row leaves the scroll, as a click does', () => {
+        expect(dragTo([range([1, 8], [1, 8])], 300, 200)).toBeUndefined();
+        expect(dragTo([range([0, 8], [2, 8])], 300, 200)).toBeUndefined();
+    });
+
+    test('a drag from a frozen column to a far end behind the band scrolls back', () => {
+        expect(dragTo([range([20, 1], [20, 4])], 300, 200)).toEqual({ left: 0 });
+    });
+
     test('the range being dragged decides, not an earlier one of several', () => {
         expect(dragTo([range([20, 4], [20, 4]), range([20, 6], [25, 6])], 300, 0)).toBeUndefined();
     });

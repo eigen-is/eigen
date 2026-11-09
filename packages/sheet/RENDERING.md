@@ -151,7 +151,7 @@ Comments anchor to cells via `commentCardIds` on `Cell` and use the shared Eigen
 
 Three modes:
 
-1. **Read-only toolbar**: link text plus copy, edit and unlink buttons. The only absolutely positioned one, anchored near the active cell.
+1. **Read-only toolbar**: link text plus copy, edit and unlink buttons. The only absolutely positioned one, anchored under the cell, a few pixels down so the selection's fill handle stays reachable. It still covers the cells below it. It keeps its own mouse events, which would stop a drag's from reaching the document, so it hides while a drag is on (`ctx.scrolling`), and once its cell has lost the link.
 2. **Edit form**: text input, type select and address input, in a centered shared `Dialog` (`@workspace/ui/components/dialog`).
 3. **Range picker**: `CellRangeDialog`, opened through `useDialog().showNonModalDialog` so the grid stays clickable while a range is picked.
 

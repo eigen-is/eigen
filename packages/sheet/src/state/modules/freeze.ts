@@ -160,7 +160,8 @@ export function overlayRegionForCell(
 }
 
 // A selection drag whose far end has gone behind a frozen band scrolls back to the start, so the cells it reaches show.
-// The main pane starts at the band's width plus the scroll, and a far end past that is in view.
+// The main pane starts at the band's width plus the scroll, and a far end past that is in view. A drag inside the band
+// hides nothing, and a mouse's jitter on a press there is one.
 export function scrollToFrozenRowCol(ctx: Context) {
     const selection = ctx.selections?.at(-1);
     if (!selection) return;
@@ -172,10 +173,20 @@ export function scrollToFrozenRowCol(ctx: Context) {
     const rows = freeze?.rows;
 
     const request: { left?: number; top?: number } = {};
-    if (columns && column != null && ctx.visibledatacolumn[column] <= columns.pos + ctx.scrollLeft) {
+    if (
+        columns &&
+        column != null &&
+        selection.column[1] >= columns.boundary &&
+        ctx.visibledatacolumn[column] <= columns.pos + ctx.scrollLeft
+    ) {
         request.left = 0;
     }
-    if (rows && row != null && ctx.visibledatarow[row] <= rows.pos + ctx.scrollTop) {
+    if (
+        rows &&
+        row != null &&
+        selection.row[1] >= rows.boundary &&
+        ctx.visibledatarow[row] <= rows.pos + ctx.scrollTop
+    ) {
         request.top = 0;
     }
     if (request.left != null || request.top != null) ctx.scrollRequest = request;

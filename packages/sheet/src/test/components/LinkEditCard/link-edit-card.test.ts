@@ -21,14 +21,20 @@ const SHEETS = [
     { id: 'id_2', name: 'Sheet2', order: 1, config: {}, data: [[null, null]] },
 ];
 
+const linkedSheet = (type: string, address: string) => ({
+    ...SHEETS[0],
+    data: [[{ v: 'go', link: { type, address } }, null]],
+});
+
 // The link card on A1, inside a stand-in for the grid that listens as cellArea does: editing for Insert link, or the
 // hover card of a link already there.
-const openCard = async ({ isEditing = true, originType = 'webpage', originAddress = '' } = {}) => {
+const openCard = async ({ isEditing = true, originType = 'webpage', originAddress = '', scrolling = false } = {}) => {
     gridMouseDown.mockClear();
     const dialog = await renderSheetDialog(
         () => {},
         {
-            sheets: SHEETS,
+            sheets: isEditing ? SHEETS : [linkedSheet(originType, originAddress), SHEETS[1]],
+            scrolling,
             linkCard: {
                 sheetId: 'id_1',
                 r: 0,
@@ -86,6 +92,42 @@ const pressEscape = () =>
     });
 
 const link = (context: Context) => context.sheets[0].data?.[0][0]?.link;
+
+const hoverCard = (scrolling = false) => openCard({ isEditing: false, originAddress: 'https://eigen.is', scrolling });
+const shownCard = () => document.querySelector('button[aria-label="Edit link"]')?.parentElement;
+
+test('the card sits below the reach of the fill handle, 5 px past the cell', async () => {
+    await hoverCard();
+    expect(Number.parseFloat(shownCard()?.style.top ?? '')).toBeGreaterThanOrEqual(20 + 5);
+});
+
+test('the card stays away during a drag, or the pointer over it would never reach the document', async () => {
+    await hoverCard(true);
+    expect(shownCard()).toBeUndefined();
+});
+
+test('the pointer on the card holds it open, until the card goes from under the pointer', async () => {
+    const dialog = await hoverCard();
+    const { globalCache } = dialog.context().getRefs();
+    await act(async () => {
+        shownCard()?.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    });
+    expect(globalCache.linkCard?.mouseEnter).toBe(true);
+    await dialog.setContext((ctx) => {
+        ctx.scrolling = true;
+    });
+    expect(globalCache.linkCard).toBeUndefined();
+});
+
+test('the card goes when its cell loses the link, such as under a paste', async () => {
+    const dialog = await hoverCard();
+    expect(shownCard()).not.toBeUndefined();
+    await dialog.setContext((ctx) => {
+        const cell = ctx.sheets[0].data?.[0][0];
+        if (cell) delete cell.link;
+    });
+    expect(shownCard()).toBeUndefined();
+});
 
 test('OK saves the link, writes the display text and closes', async () => {
     const dialog = await openCard();
@@ -249,6 +291,8 @@ describe('the range picker', () => {
     test('the link card stays away until a notice takes its place', async () => {
         const dialog = await openPicker();
         await dialog.setContext((ctx) => {
+            const cell = ctx.sheets[0].data?.[0];
+            if (cell) cell[0] = { link: { type: 'webpage', address: HOVER_CARD.originAddress } };
             ctx.linkCard = { ...HOVER_CARD, isEditing: false };
         });
         expect(document.querySelector('button[aria-label="Edit link"]')).toBeNull();

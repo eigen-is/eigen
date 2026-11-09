@@ -21,9 +21,6 @@ type SheetPoint = {
     pane: OverlayRegionSpec['pane'];
 };
 
-// A drag or a drop this close to the cell area's right edge is past it, on the vertical scrollbar.
-export const SCROLLBAR_MARGIN = 14;
-
 export function sheetPoint(
     ctx: Context,
     e: Pick<MouseEvent, 'clientX' | 'clientY'>,
