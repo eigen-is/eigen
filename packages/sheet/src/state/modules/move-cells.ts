@@ -1,11 +1,11 @@
 // Dragging a selection by its border to move the cells: onCellsMoveStart grabs it, onCellsMove draws where it
 // would land, and onCellsMoveEnd moves the cells there, hidden ones too, with their borders, validation, links,
-// merges and conditional-format ranges. The overlay's mouse handlers call all three.
+// merges and conditional-format ranges, or refuses as a cut does. The overlay's mouse handlers call all three.
 
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import type { GlobalCache } from '../types';
-import { carriedLines, moveCells } from './carry';
+import { moveCells, movedLines } from './carry';
 import {
     colLocation,
     colLocationByIndex,
@@ -173,6 +173,8 @@ export function onCellsMoveEnd(
         ctx.warnDialog = PART_MERGE_REFUSAL;
         return;
     }
+    const lines = movedLines(ctx, ctx.currentSheetId, last);
+    if (!lines) return;
 
     let row_s = last.row[0] - row_index_original + row_index;
     let row_e = last.row[1] - row_index_original + row_index;
@@ -204,7 +206,7 @@ export function onCellsMoveEnd(
         return;
     }
 
-    moveCells(ctx, carriedLines(ctx, ctx.currentSheetId, [last], false), last, {
+    moveCells(ctx, lines, last, {
         row: row_s,
         column: col_s,
         height: row_e - row_s + 1,

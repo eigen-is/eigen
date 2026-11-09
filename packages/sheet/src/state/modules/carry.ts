@@ -20,26 +20,28 @@ import { snapshotContext } from './formula-cache';
 import { computeFormula } from './formula-exec';
 import { addValidation, clearValidations } from './validation-rules';
 
-// The rows and columns a copy, cut, move or the format painter carries, in order. Every row and column of the
-// ranges comes along, hidden ones too, as in Excel. With leaveFiltered, the rows an active filter hides stay out,
-// because Excel copies only what a filter shows. Ranges side by side share their rows, and ranges above each
-// other share their columns.
+const FILTERED_MERGE_REFUSAL = 'Cannot copy merged cells a filter partly hides. Clear the filter first.';
+const FILTERED_MOVE_REFUSAL = 'Cannot cut or move rows a filter hides. Clear the filter first.';
+
+// The rows and columns a copy, a move or the format painter carries, in order. Every row and column of the ranges comes
+// along, hidden ones too, as in Excel, except the rows an active filter hides, which stay out so the block closes up.
+// Ranges side by side share their rows, and ranges above each other share their columns. A merge can't close up, so one
+// that a filter's row straddles refuses the carry, with a notice, before anything is written.
 type CarriedLines = { sheetId: string; rows: readonly number[]; columns: readonly number[] };
 
-export function carriedLines(
-    ctx: Context,
-    sheetId: string,
-    ranges: readonly SingleRange[],
-    leaveFiltered: boolean,
-): CarriedLines {
+export function carriedLines(ctx: Context, sheetId: string, ranges: readonly SingleRange[]): CarriedLines | undefined {
     const sheet = getSheet(ctx, { id: sheetId });
     // A filter entry lists the rows it hides. A row the user has shown again since is not hidden any more.
     const filtered = new Set<number>();
     const rowhidden = sheet.config?.rowhidden ?? {};
-    for (const entry of leaveFiltered ? Object.values(sheet.filter ?? {}) : []) {
+    for (const entry of Object.values(sheet.filter ?? {})) {
         for (const r of Object.keys(entry.rowhidden ?? {})) {
             if (r in rowhidden) filtered.add(Number(r));
         }
+    }
+    if (filtered.size > 0 && straddlesFiltered(sheet, filtered, ranges)) {
+        ctx.warnDialog = FILTERED_MERGE_REFUSAL;
+        return undefined;
     }
     const rows = new Set<number>();
     const columns = new Set<number>();
@@ -50,6 +52,28 @@ export function carriedLines(
         for (let c = column[0]; c <= column[1]; c += 1) columns.add(c);
     }
     return { sheetId, rows: [...rows], columns: [...columns] };
+}
+
+// Whether a merge the ranges touch has both rows a filter hides and rows it shows. A collaborator wrote the span, so
+// the walk stops at the grid.
+function straddlesFiltered(sheet: Sheet, filtered: ReadonlySet<number>, ranges: readonly SingleRange[]) {
+    const rowCount = sheet.data?.length ?? 0;
+    return Object.values(sheet.config?.merge ?? {}).some(({ r, c, rs, cs }) => {
+        const area = { row: [r, r + rs - 1], column: [c, c + cs - 1] };
+        if (!ranges.some((range) => rangesOverlap(range, area))) return false;
+        let hidden = 0;
+        for (let row = r; row < r + rs && row < rowCount; row += 1) if (filtered.has(row)) hidden += 1;
+        return hidden > 0 && hidden < rs;
+    });
+}
+
+// The lines of a cut or a drag, which moves every cell of its range. A row a filter hides would land out of sight, or
+// stay behind, so it refuses the move, with a notice.
+export function movedLines(ctx: Context, sheetId: string, range: SingleRange): CarriedLines | undefined {
+    const lines = carriedLines(ctx, sheetId, [range]);
+    if (lines?.rows.length === range.row[1] - range.row[0] + 1) return lines;
+    ctx.warnDialog = FILTERED_MOVE_REFUSAL;
+    return undefined;
 }
 
 // One place a carried block lands: its top-left cell, and how many of its rows and columns land there. The
@@ -150,13 +174,15 @@ export function carryCells(
                 const sourceMc = carried?.mc;
                 if (cell?.mc && sourceMc) {
                     if (cell.mc.rs != null) {
-                        const rs = carriedSpan(rows, skipRows + i, tile.height - i, sr, cell.mc.rs);
-                        const cs = carriedSpan(columns, skipColumns + j, tile.width - j, sc, cell.mc.cs ?? 1);
+                        // A merge stops at the edge of its tile, where the format painter cuts a tile short.
+                        const rs = Math.min(cell.mc.rs, tile.height - i);
+                        const cs = Math.min(cell.mc.cs ?? 1, tile.width - j);
                         cell = { ...cell, mc: { r, c, rs, cs } };
                         merge[key] = { r, c, rs, cs };
                         anchors[`${sourceMc.r}_${sourceMc.c}`] = [r, c];
                     } else {
-                        // A merge whose first cell a filter left out lands as plain cells.
+                        // A paste reads the live cells, so a merge made since the copy can start outside the block.
+                        // Its cells land as plain ones.
                         const anchor = anchors[`${sourceMc.r}_${sourceMc.c}`];
                         if (anchor) cell = { mc: { r: anchor[0], c: anchor[1] } };
                         else {
@@ -315,9 +341,9 @@ export function moveCells(ctx: Context, lines: CarriedLines, range: SingleRange,
     );
 }
 
-// Where the cells of a range land in one tile: a range for each run of carried rows and columns it covers. A whole
-// block lands as one range. A filtered copy splits a range where the filter left rows out, and a tile the format
-// painter cut short takes only its first rows and columns.
+// Where the cells of a range land in one tile: a range for each run of carried rows and columns it covers. A block
+// closed up over a filter's rows lands as one range too. Ranges copied out of the sheet's order can split one, and a
+// tile the format painter cut short takes only its first rows and columns.
 function landedRanges(range: SingleRange, lines: CarriedLines, tile: CarryTile): SingleRange[] {
     const { skipRows = 0, skipColumns = 0 } = tile;
     const rows = landedRuns(lines.rows.slice(skipRows, skipRows + tile.height), range.row, tile.row);
@@ -335,12 +361,4 @@ function landedRuns(lines: readonly number[], [first, last]: readonly number[], 
         else runs.push([start + i, start + i]);
     }
     return runs;
-}
-
-// How many carried lines from index i fall inside a merge's span, counting at most limit of them. A merge closes up
-// where a filtered copy left rows out, and stops at the edge of its tile.
-export function carriedSpan(lines: readonly number[], i: number, limit: number, start: number, span: number) {
-    let n = 0;
-    while (n < limit && lines[i + n] >= start && lines[i + n] < start + span) n += 1;
-    return n;
 }

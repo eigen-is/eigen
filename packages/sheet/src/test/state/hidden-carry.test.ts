@@ -1,7 +1,8 @@
 // Copy, cut, move and the format painter over a range with a hidden row and a hidden column inside it. As in
 // Excel, the hidden cells travel with the rest: their values, formats, borders, validation, links and merges land
 // at the destination, and the destination's rows and columns keep the hidden state they had. Only a copy over
-// rows an active filter hides leaves those rows out, and then the side tables close up with the cells.
+// rows an active filter hides leaves those rows out, and then the side tables close up with the cells. A cut or a
+// move over such a row, and a copy of a merge that straddles one, gets a notice and writes nothing.
 //
 // The source block is A1:D4 with row 2 and column B hidden. Three cells carry a border, a validation rule and a
 // link: A1 before the hidden lines, B2 on both of them, C3 after them. C1:D1 and A3:A4 are merged. The paste
@@ -11,6 +12,7 @@ import { describe, expect, test } from 'bun:test';
 import type { DataValidationRule, SheetValidation } from '@workspace/lib/sheets';
 import { MAX_VALIDATION_RANGES } from '@workspace/lib/sheets';
 import { Window } from 'happy-dom';
+import type { SingleRange } from '../../engine/types';
 import type { Context } from '../../state/context';
 import { handleCopy, handleCut } from '../../state/events/copy';
 import { handlePaste } from '../../state/events/paste';
@@ -34,6 +36,8 @@ g.DOMParser = new Window().DOMParser;
 
 const SIZE = 12;
 const SIDE = { style: 1, color: '#000' };
+const MOVE_REFUSAL = 'Cannot cut or move rows a filter hides. Clear the filter first.';
+const MERGE_REFUSAL = 'Cannot copy merged cells a filter partly hides. Clear the filter first.';
 const MARKED = [
     [0, 0],
     [1, 1],
@@ -109,6 +113,13 @@ function makeCtx({ filtered = false } = {}): Context {
         }) as Context,
     );
     return ctx;
+}
+
+// The lines of a range no filter touches.
+function linesOf(ctx: Context, range: SingleRange) {
+    const lines = carriedLines(ctx, 'id_1', [range]);
+    if (!lines) throw new Error('a test range with no filter is refused');
+    return lines;
 }
 
 function source(): Selection[] {
@@ -312,43 +323,147 @@ describe('a range with a row an active filter hides', () => {
         expectCompacted(ctx, { links: false });
     });
 
-    test('a cut still carries the filtered row, as Excel moves every cell it cuts', () => {
-        const ctx = makeCtx({ filtered: true });
-        editInPlace(ctx, (draft) => paste(draft, true));
-        expectValuesWhole(ctx);
-        expectSourceCleared(ctx);
-    });
-
     test('the clipboard leaves the filtered row out', () => {
         const ctx = makeCtx({ filtered: true });
         const text = rangeValueToClipboard(ctx, 'id_1', source())?.cellText;
         expect(text?.split('\n')).toEqual(['r0c0\tr0c1\tr0c2\t', 'r2c0\tr2c1\tr2c2\tr2c3', '\tr3c1\tr3c2\tr3c3']);
     });
 
-    test("a cut's clipboard holds the filtered row its paste moves", () => {
-        const ctx = makeCtx({ filtered: true });
-        handleCut(ctx);
-        expect(consumePendingCopy()?.cellText.split('\n')).toEqual([
-            'r0c0\tr0c1\tr0c2\t',
-            'r1c0\tr1c1\tr1c2\tr1c3',
-            'r2c0\tr2c1\tr2c2\tr2c3',
-            '\tr3c1\tr3c2\tr3c3',
-        ]);
+    test('a cut is refused with a notice, and writes neither the sheet nor the clipboard', () => {
+        consumePendingCopy();
+        const { next, ops } = author(makeCtx({ filtered: true }), handleCut);
+        expect(next.warnDialog).toBe(MOVE_REFUSAL);
+        expect(next.copyState).toBeUndefined();
+        expect(consumePendingCopy()).toBeNull();
+        expect(ops).toEqual([]);
     });
 
-    // A1:A3 has the filtered row inside it, and A2:A3 has it as its first row. Either way the table keeps its shape.
+    test('a move is refused with a notice, and the cells stay', () => {
+        const ctx = makeCtx({ filtered: true });
+        move(ctx);
+        expect(ctx.warnDialog).toBe(MOVE_REFUSAL);
+        expect(sheet(ctx).data?.[1][1]?.v).toBe('r1c1');
+        expect(sheet(ctx).data?.[6][6]).toBeNull();
+    });
+
+    test('a cut of the rows around the filtered one moves them', () => {
+        const ctx = makeCtx({ filtered: true });
+        ctx.selections = [{ row: [2, 3], column: [0, 3], row_focus: 2, column_focus: 0 }];
+        editInPlace(ctx, (draft) => paste(draft, true));
+        expect(ctx.warnDialog).toBeUndefined();
+        expect(sheet(ctx).data?.[6][6]?.v).toBe('r2c0');
+        expect(sheet(ctx).data?.[2][1]).toBeNull();
+    });
+
+    // A1:A3 has the filtered row inside it, and A2:A3 has it as its first row.
     test.each([
         [0, 2],
         [1, 2],
-    ])('the clipboard table closes a merge over rows %i to %i up with the rows', (first, last) => {
+    ])('a copy of a merge over rows %i to %i is refused with a notice', (first, last) => {
+        consumePendingCopy();
         const ctx = makeCtx({ filtered: true });
         mergeColumnA(ctx, first, last);
-        const html = rangeValueToClipboard(ctx, 'id_1', source())?.html ?? '';
-        expect(tableGrid(html)).toEqual([
+        handleCopy(ctx);
+        expect(ctx.warnDialog).toBe(MERGE_REFUSAL);
+        expect(ctx.copyState).toBeUndefined();
+        expect(consumePendingCopy()).toBeNull();
+    });
+
+    test('the format painter over a straddled merge gets the notice and paints nothing', () => {
+        const ctx = makeCtx({ filtered: true });
+        mergeColumnA(ctx, 0, 2);
+        paint(ctx);
+        expect(ctx.warnDialog).toBe(MERGE_REFUSAL);
+        expect(sheet(ctx).data?.[6][6]).toBeNull();
+    });
+
+    test('a straddled merge outside the copied range is no reason to refuse', () => {
+        const ctx = makeCtx({ filtered: true });
+        mergeColumnA(ctx, 0, 2);
+        ctx.selections = [{ row: [0, 3], column: [1, 3], row_focus: 0, column_focus: 1 }];
+        handleCopy(ctx);
+        expect(ctx.warnDialog).toBeUndefined();
+        expect(ctx.copyState).toBeDefined();
+    });
+
+    test('a merge the filter hides whole stays out with its rows', () => {
+        const ctx = makeCtx({ filtered: true });
+        mergeColumnA(ctx, 1, 2);
+        const s = sheet(ctx);
+        for (const hidden of [s.config?.rowhidden, s.filter?.[0].rowhidden]) if (hidden) hidden[2] = 0;
+        expect(tableGrid(rangeValueToClipboard(ctx, 'id_1', source())?.html ?? '')).toEqual([
             ['r0c0', 'r0c1', 'r0c2', ''],
-            ['', 'r2c1', 'r2c2', 'r2c3'],
             ['r3c0', 'r3c1', 'r3c2', 'r3c3'],
         ]);
+    });
+
+    // The paste reads the live cells, so a filter applied after the copy or the cut counts.
+    describe('applied after the copy', () => {
+        const filterRowB = (ctx: Context) => {
+            sheet(ctx).filter = makeCtx({ filtered: true }).sheets[0].filter;
+        };
+
+        test('a cut is refused at its paste, and the cells stay', () => {
+            const ctx = makeCtx();
+            editInPlace(ctx, (draft) => {
+                handleCut(draft);
+                filterRowB(draft);
+                draft.selections = destination();
+                pasteCopy(draft);
+            });
+            expect(ctx.warnDialog).toBe(MOVE_REFUSAL);
+            expect(sheet(ctx).data?.[1][1]?.v).toBe('r1c1');
+            expect(sheet(ctx).data?.[6][6]).toBeNull();
+        });
+
+        test('a copy whose merge the filter now straddles is refused at its paste', () => {
+            const ctx = makeCtx();
+            mergeColumnA(ctx, 0, 2);
+            editInPlace(ctx, (draft) => {
+                handleCopy(draft);
+                filterRowB(draft);
+                draft.selections = destination();
+                pasteCopy(draft);
+            });
+            expect(ctx.warnDialog).toBe(MERGE_REFUSAL);
+            expect(sheet(ctx).data?.[6][6]).toBeNull();
+        });
+    });
+
+    describe('only what is filter-hidden counts', () => {
+        const cutWhole = (ctx: Context) => {
+            editInPlace(ctx, (draft) => paste(draft, true));
+            expect(ctx.warnDialog).toBeUndefined();
+            expectValuesWhole(ctx);
+            expectSourceCleared(ctx);
+        };
+
+        test('a row shown again since the filter hid it is cut', () => {
+            const ctx = makeCtx({ filtered: true });
+            delete sheet(ctx).config?.rowhidden?.[1];
+            cutWhole(ctx);
+        });
+
+        // The importer reads a filter's span and no entries, so an imported filter's rows read as hidden by hand.
+        test("an imported filter's hidden row is cut", () => {
+            const ctx = makeCtx();
+            sheet(ctx).filterRange = { row: [0, 3], column: [0, 3] };
+            cutWhole(ctx);
+        });
+
+        test('a row hidden by hand while a filter is on is cut and copied', () => {
+            const ctx = makeCtx({ filtered: true });
+            const rowhidden = sheet(ctx).config?.rowhidden;
+            if (rowhidden) rowhidden[2] = 0;
+            ctx.selections = [{ row: [2, 3], column: [0, 3], row_focus: 2, column_focus: 0 }];
+            expect(rangeValueToClipboard(ctx, 'id_1', ctx.selections)?.cellText.split('\n')).toEqual([
+                'r2c0\tr2c1\tr2c2\tr2c3',
+                '\tr3c1\tr3c2\tr3c3',
+            ]);
+            editInPlace(ctx, (draft) => paste(draft, true));
+            expect(ctx.warnDialog).toBeUndefined();
+            expect(sheet(ctx).data?.[6][6]?.v).toBe('r2c0');
+        });
     });
 });
 
@@ -363,8 +478,8 @@ describe('a paste of the clipboard in the same tab', () => {
         expect(sheet(ctx).hyperlink?.[key(6, 6)]).toEqual(link(0, 0));
     });
 
-    test('takes the copy state for a cut over a filter', () => {
-        const ctx = makeCtx({ filtered: true });
+    test('takes the copy state for a cut', () => {
+        const ctx = makeCtx();
         handleCut(ctx);
         pasteFromClipboard(ctx);
         expectValuesWhole(ctx);
@@ -500,7 +615,7 @@ describe('a carried rule lands as ranges', () => {
             ],
         });
         const { next } = author(ctx, (draft) => {
-            const lines = carriedLines(draft, 'id_1', [{ row: [0, 2], column: [0, 0] }], true);
+            const lines = linesOf(draft, { row: [0, 2], column: [0, 0] });
             carryCells(draft, lines, [{ row: 0, column: 2, height: 3, width: 1 }], ({ source }) => source);
         });
         const shown = (c: number) => [0, 1, 2].map((r) => validationAt(sheet(next).dataValidations, r, c));
@@ -525,7 +640,7 @@ describe('a carried rule lands as ranges', () => {
         });
         const tiles = Array.from({ length: rows }, (_, row) => ({ row, column: 3, height: 1, width: 1 }));
         const { next } = author(ctx, (draft) => {
-            const lines = carriedLines(draft, 'id_1', [{ row: [0, 0], column: [1, 1] }], true);
+            const lines = linesOf(draft, { row: [0, 0], column: [1, 1] });
             carryCells(draft, lines, tiles, ({ source }) => source);
         });
         expect(sheet(next).dataValidations?.v.ranges).toEqual([
@@ -559,7 +674,7 @@ describe('a carried rule lands as ranges', () => {
         const tiles = Array.from({ length: rows }, (_, row) => ({ row, column: 3, height: 1, width: 1 }));
         const started = performance.now();
         const { next } = author(ctx, (draft) => {
-            const lines = carriedLines(draft, 'id_1', [cellRange(0, 1)], true);
+            const lines = linesOf(draft, cellRange(0, 1));
             carryCells(draft, lines, tiles, ({ source }) => source);
         });
         expect(performance.now() - started).toBeLessThan(2000);

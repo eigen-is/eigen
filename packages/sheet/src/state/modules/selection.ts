@@ -15,7 +15,7 @@ import { getFlowdata, getSheetConfig } from '../context';
 import type { Cell, CellMatrix, FormulaCell, Range, Selection } from '../types';
 import { getSheetIndex, replaceHtml, styleObjectToCss } from '../utils';
 import type { CarryTile } from './carry';
-import { carriedLines, carriedSpan, carryCells } from './carry';
+import { carriedLines, carryCells } from './carry';
 import { getCellValue, getDataBySelectionNoCopy, getStyleByCell, mergeBorder, mergeMoveMain } from './cell';
 import { setPendingCopy } from './clipboard';
 import { getComputeMap } from './condition-format';
@@ -229,8 +229,8 @@ export function pasteHandlerOfPaintModel(
     ctx: Context,
     { sheetId, range: sourceRange }: NonNullable<Context['painterSource']>,
 ) {
-    // The painter takes what a copy would, so a row an active filter hides stays out.
-    const lines = carriedLines(ctx, sheetId, [sourceRange], true);
+    const lines = carriedLines(ctx, sheetId, [sourceRange]);
+    if (!lines) return;
     const height = lines.rows.length;
     const width = lines.columns.length;
     if (height === 0 || width === 0) return;
@@ -1037,8 +1037,7 @@ function copiedNumberText(cell: Cell): string | undefined {
 export function rangeValueToClipboard(
     ctx: Context,
     sheetId: string,
-    ranges?: Range,
-    { cut = false }: { cut?: boolean } = {},
+    ranges: Range,
 ): { id: string; html: string; text: string; cellText: string } | null {
     const index = getSheetIndex(ctx, sheetId);
     if (index == null) return null;
@@ -1047,15 +1046,16 @@ export function rangeValueToClipboard(
     if (!d) return null;
 
     const rect: [number, number, number, number] = [Infinity, -Infinity, Infinity, -Infinity];
-    for (const range of ranges ?? []) {
+    for (const range of ranges) {
         rect[0] = Math.min(rect[0], range.row[0]);
         rect[1] = Math.max(rect[1], range.row[1]);
         rect[2] = Math.min(rect[2], range.column[0]);
         rect[3] = Math.max(rect[3], range.column[1]);
     }
-    // The clipboard holds the cells a paste in this tab would land, hidden ones too. A cut lands the rows a filter
-    // hides as well.
-    const { rows, columns } = carriedLines(ctx, sheetId, ranges ?? [], !cut);
+    // The clipboard holds the cells a paste in this tab would land, hidden ones too.
+    const lines = carriedLines(ctx, sheetId, ranges);
+    if (!lines) return null;
+    const { rows, columns } = lines;
 
     // A td spans its merge, so the perimeter is read off the master.
     const borderInfoCompute = mergedBorderSides(sheet.config?.borderInfo, sheet.config?.merge, rect);
@@ -1064,9 +1064,6 @@ export function rangeValueToClipboard(
     let colgroup = '';
     let body = '';
     const text: string[][] = [];
-    // A merge writes one td, so the other cells it covers have none. A merge whose first row a filter left out has no
-    // anchor here, and is written as plain cells.
-    const anchors = new Set<string>();
 
     for (let i = 0; i < rows.length; i += 1) {
         const r = rows[i];
@@ -1093,12 +1090,9 @@ export function rangeValueToClipboard(
                 style += styleObjectToCss(getStyleByCell(ctx, d, r, c, cfCompute));
 
                 if (cell.mc?.rs != null) {
-                    anchors.add(`${r}_${c}`);
-                    // A merge closes up over the rows a filter left out, as a paste in this tab lands it.
-                    const rs = carriedSpan(rows, i, rows.length - i, r, finiteOr(cell.mc.rs, 1));
-                    const cs = carriedSpan(columns, j, columns.length - j, c, finiteOr(cell.mc.cs, 1));
-                    span = `rowspan="${rs}" colspan="${cs}"`;
-                } else if (cell.mc && anchors.has(`${cell.mc.r}_${cell.mc.c}`)) {
+                    span = `rowspan="${finiteOr(cell.mc.rs, 1)}" colspan="${finiteOr(cell.mc.cs, 1)}"`;
+                } else if (cell.mc) {
+                    // A merge writes one td, so the other cells it covers have none.
                     textRow.push('');
                     continue;
                 }
@@ -1138,7 +1132,7 @@ export function rangeValueToClipboard(
 
 export function copy(ctx: Context, { cut = false }: { cut?: boolean } = {}) {
     const ranges = ctx.selections ?? [];
-    const clipboard = rangeValueToClipboard(ctx, ctx.currentSheetId, ranges, { cut });
+    const clipboard = rangeValueToClipboard(ctx, ctx.currentSheetId, ranges);
     if (!clipboard) return;
     const copyRange = ranges.map(({ row, column }) => ({ row, column }));
     ctx.formulaRangeSelections = copyRange;
