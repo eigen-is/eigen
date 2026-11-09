@@ -2,6 +2,7 @@
 // It tries sharp first, then a HEIC decode, then the preview exiftool finds embedded in the file, or for a video a
 // frame ffmpeg grabs. The main thread runs one Worker per image under a semaphore and terminates it at its timeout.
 
+/// <reference path="./heic-convert.d.ts" />
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -44,9 +45,8 @@ export type ImageResult = ImageDimensions & {
     duration?: number;
 };
 
-// The main thread terminates this Worker at THUMBNAIL_TIMEOUT_SECONDS. That stops the Worker's timers, but not an
-// exiftool process it started, which would then run on. So exiftool gets a deadline this much earlier, which leaves
-// time for the Worker to start and to resize the preview exiftool found.
+// Terminating this Worker at THUMBNAIL_TIMEOUT_SECONDS leaves its exiftool process running, so exiftool's deadline
+// is this much earlier, with time left to resize the preview it found.
 const EXIFTOOL_SPARE_MS = 5_000;
 
 declare var self: Worker;
@@ -137,15 +137,9 @@ async function processImage(input: WorkerInput, deadline: number): Promise<Image
 
 async function heicToJpeg(source: Buffer | string): Promise<Buffer | null> {
     try {
-        // @ts-expect-error -- no type declarations available for heic-convert
-        const convert = (await import('heic-convert')).default as (opts: {
-            buffer: Buffer;
-            format: string;
-            quality: number;
-        }) => Promise<ArrayBuffer>;
+        const { default: convert } = await import('heic-convert');
         const buffer = typeof source === 'string' ? Buffer.from(await Bun.file(source).arrayBuffer()) : source;
-        const output = await convert({ buffer, format: 'JPEG', quality: 0.8 });
-        return Buffer.from(output);
+        return await convert({ buffer, format: 'JPEG', quality: 0.8 });
     } catch {
         return null;
     }

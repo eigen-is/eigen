@@ -1,4 +1,9 @@
-import { useQuery } from '@tanstack/react-query';
+// The command palette's In comments section: searches the comment threads of the open document,
+// and only in the `doc:` scope, never in the unscoped blend. A document publishes its search as
+// ctx.docCommentSearch; this wraps it in TanStack Query so results cache and dedupe, keyed by the
+// document's own docKey because ctx.ownerId differs on a shared document.
+
+import { skipToken, useQuery } from '@tanstack/react-query';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { CommandContext, PaletteResult, PaletteScope } from '@workspace/lib/types/command-palette';
 import { MessageSquareText } from 'lucide-react';
@@ -7,15 +12,8 @@ import { searchKeys } from '../../search';
 import { useDebouncedValue } from '../../use-debounced-value';
 import { parseQuery } from '../parse-query';
 
-// Debounce keystrokes before firing the comment search (matches mail-search's 150ms).
 const DOC_COMMENT_SEARCH_DEBOUNCE_MS = 150;
 
-// IN COMMENTS section: async thread search, `doc:` scope ONLY (spec decision #6) — never the global
-// unscoped blend; same predicate as the engine filter so the two layers can't disagree. Wraps the
-// published capability's bound `search` (GET /collab/…/comments/search) in TanStack Query so the
-// section caches + dedupes — keyed by the capability's docKey (the open DOCUMENT's identity;
-// ctx.ownerId can differ on shared docs). The caller's useStableWhilePending keeps the last results
-// while a new query is in flight. Present only when a document publishes ctx.docCommentSearch.
 export function useDocCommentSearchResults(
     ctx: CommandContext,
     input: string,
@@ -30,8 +28,7 @@ export function useDocCommentSearchResults(
 
     const { data, isFetching } = useQuery({
         queryKey: searchKeys.docComments(capability?.docKey ?? '', parsed.q),
-        queryFn: () => capability!.search(parsed.q),
-        enabled,
+        queryFn: enabled ? () => capability.search(parsed.q) : skipToken,
         staleTime: STALE_TIME.THIRTY_SECONDS,
     });
 

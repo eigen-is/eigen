@@ -24,7 +24,7 @@ import type { Contact } from '@workspace/lib/types/contact';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isEmlFile, isIcsFile, isVCardFile } from '@workspace/lib/types/drive';
 import type { LucideIcon } from 'lucide-react';
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useElementSize } from '../../hooks/use-element-size';
 import { cn, IMAGE_CHECKERBOARD_STYLE } from '../../lib/utils';
@@ -248,9 +248,8 @@ const INTRINSIC_PAGE: Record<TextPreviewMode, IntrinsicPage | null> = {
     code: DOC_PAGE,
 };
 
-// Rendered prose takes eigen-prose. A code file takes drive-preview-code, because eigen-prose paints a <pre> as a
-// dark code block, which is wrong for a whole file. A deck and a drawing take none: their page carries its own box
-// and paint.
+// Code takes drive-preview-code, as eigen-prose paints a <pre> as a dark block, wrong for a whole file. A deck and a
+// drawing take none, as their page carries its own box and paint.
 const WRAPPER_CLASS: Record<TextPreviewMode, string> = {
     eigendoc: `eigen-prose tiptap ${DOC_PROSE_CLASS}`,
     eigenslides: '',
@@ -294,7 +293,7 @@ function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }
                 // A doc thumbnail is its page, light like the editor's; the prose inside escapes the dark rules.
                 data.mode === 'eigendoc' && 'eigen-paper',
             )}
-            style={{ '--preview-h': `${CANVAS_PREVIEW_HEIGHT}px` } as CSSProperties}
+            style={{ '--preview-h': `${CANVAS_PREVIEW_HEIGHT}px` }}
         >
             <div
                 ref={setContent}

@@ -1,11 +1,7 @@
-// One-time migration script: copies users from users_current.db to users3.db.
-//
-// For each user in users_current.db:
-//   - If the user (by email) doesn't exist in users3.db, inserts the user row
-//   - Copies the matching account row (preserving the hashed password)
-//   - Adds the user as a member of the default organization
-//
-// Usage:  bun run apps/api/src/scripts/migrate-users.ts
+// A one-time migration that copies users from users_current.db into users3.db. For each user not yet in users3.db by
+// email, it inserts the user row, copies its account rows with the hashed password, and adds it to the default
+// organization. An operator runs it by hand: `bun run apps/api/src/scripts/migrate-users.ts`.
+
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import { getServerDataPath, SERVER_DATABASES } from '../lib/config/paths';
@@ -56,10 +52,10 @@ type AccountRow = {
     updated_at: number;
 };
 
-const oldUsers = oldDb.query('SELECT * FROM user').all() as UserRow[];
+const oldUsers = oldDb.query<UserRow, []>('SELECT * FROM user').all();
 console.log(`Found ${oldUsers.length} user(s) in users_current.db`);
 
-const defaultOrg = newDb.query('SELECT id FROM organization LIMIT 1').get() as { id: string } | null;
+const defaultOrg = newDb.query<{ id: string }, []>('SELECT id FROM organization LIMIT 1').get();
 if (!defaultOrg) {
     console.error('No organization found in users3.db — run setup first.');
     process.exit(1);
@@ -67,7 +63,10 @@ if (!defaultOrg) {
 console.log(`Default organization: ${defaultOrg.id}`);
 
 const existingEmails = new Set(
-    (newDb.query('SELECT email FROM user').all() as { email: string }[]).map((r) => r.email.toLowerCase()),
+    newDb
+        .query<{ email: string }, []>('SELECT email FROM user')
+        .all()
+        .map((r) => r.email.toLowerCase()),
 );
 
 let migrated = 0;
@@ -89,11 +88,10 @@ const insertMember = newDb.prepare(`
 `);
 
 const existingMembers = new Set(
-    (
-        newDb.query('SELECT user_id FROM member WHERE organization_id = ?').all(defaultOrg.id) as {
-            user_id: string;
-        }[]
-    ).map((r) => r.user_id),
+    newDb
+        .query<{ user_id: string }, [string]>('SELECT user_id FROM member WHERE organization_id = ?')
+        .all(defaultOrg.id)
+        .map((r) => r.user_id),
 );
 
 for (const user of oldUsers) {
@@ -103,7 +101,7 @@ for (const user of oldUsers) {
         continue;
     }
 
-    const accounts = oldDb.query('SELECT * FROM account WHERE user_id = ?').all(user.id) as AccountRow[];
+    const accounts = oldDb.query<AccountRow, [string]>('SELECT * FROM account WHERE user_id = ?').all(user.id);
 
     newDb.transaction(() => {
         insertUser.run(

@@ -3,7 +3,6 @@
 // the list, the reader and the composer, which share one set of mail actions and shortcuts.
 
 import { createFileRoute, useLocation, useNavigate } from '@tanstack/react-router';
-import { useAuth } from '@workspace/lib/auth';
 import { MAILBOX_ARCHIVE, MAILBOX_JUNK, MAILBOX_TRASH, mailboxRouteSegment } from '@workspace/lib/constants/mailboxes';
 import { usePathInfos } from '@workspace/lib/drive';
 import { useEmail, useEmails, useMailboxes } from '@workspace/lib/mail';
@@ -23,43 +22,26 @@ import { useMailList } from '../components/mail/hooks/use-mail-list';
 import { useMailShortcuts } from '../components/mail/hooks/use-mail-shortcuts';
 import { MailShortcutsDialog } from '../components/mail/mail-shortcuts-dialog';
 
-export type MailSearchParams = {
+type MailSearchParams = {
     mailId?: string;
     mode?: string;
     to?: string;
-    // `attach=<ownerId>/<mountId>/<pathId>,…` — cross-app channel for palette "Mail to…" /
-    // Drive's "Mail to…" item menu. The route resolves each tuple to a DrivePath and hands
-    // them to the composer, which runs them through the same handleDriveAttach the in-app
-    // picker uses.
+    // `<ownerId>/<mountId>/<pathId>,…`: Drive items to attach, sent by another app's Mail to….
     attach?: string;
-    // ?q= from a palette mail hit — highlighted in the open email body. Not latched-and-cleared
-    // like the editors: the highlight is idempotent and stays active as the user moves between
-    // emails. The list searchQuery filter is intentionally NOT seeded from it.
+    // A search hit's terms, highlighted in each email the user opens. The list is not filtered by it.
     q?: string;
 };
 
-function parseAttachRefs(attach: string | undefined): { ownerId: string; mountId: string; pathId: string }[] {
-    if (!attach) return [];
-    return attach
-        .split(',')
-        .map((entry) => entry.split('/'))
-        .filter((parts): parts is [string, string, string] => parts.length === 3 && parts.every(Boolean))
-        .map(([ownerId, mountId, pathId]) => ({ ownerId, mountId, pathId }));
-}
-
 export const Route = createFileRoute('/_auth/$filterType/$filterId')({
     component: MailRoute,
-    validateSearch: (search: Record<string, unknown>) => {
-        const mailId = typeof search.mailId === 'string' ? search.mailId : undefined;
-        const to = typeof search.to === 'string' ? search.to.toLowerCase() : undefined;
-        // mode='compose' can coexist with mailId — when auto-save assigns an id to a fresh compose,
-        // we keep mode so the composer session stays stable (key-identity, toolbar, etc.).
-        const mode = typeof search.mode === 'string' ? search.mode : undefined;
-        const attach = typeof search.attach === 'string' ? search.attach : undefined;
-        const q = typeof search.q === 'string' ? search.q : undefined;
-
-        return { mailId, mode, to, attach, q } as MailSearchParams;
-    },
+    validateSearch: (search: Record<string, unknown>): MailSearchParams => ({
+        mailId: typeof search.mailId === 'string' ? search.mailId : undefined,
+        // mode stays 'compose' once auto-save gives a new draft its mailId, so the composer keeps its session.
+        mode: typeof search.mode === 'string' ? search.mode : undefined,
+        to: typeof search.to === 'string' ? search.to.toLowerCase() : undefined,
+        attach: typeof search.attach === 'string' ? search.attach : undefined,
+        q: typeof search.q === 'string' ? search.q : undefined,
+    }),
 });
 
 function MailRoute() {
@@ -67,18 +49,11 @@ function MailRoute() {
     const { mailId, mode, to, attach, q } = Route.useSearch();
     const navigate = useNavigate();
     const { isTablet } = useLayout();
-    // Reply/Forward/Compose all write to history state (see use-mail-actions.ts). prefillDraft
-    // seeds the composer and forwardedParts are a forward's attachments; composeSessionKey is a nonce
-    // that flips the EmailDraft remount key each time a new compose session starts, so an
-    // in-progress composer is unmounted cleanly.
+    // Reply, Forward and Compose hand the composer its prefill through history state. A new composeSessionKey
+    // starts a new compose session, which remounts the composer.
     const { prefillDraft, forwardedParts, composeSessionKey } = useLocation().state;
 
-    // Cross-app drive attachments (palette "Mail to…") arrive via ?attach=. Resolve each
-    // tuple to a DrivePath via the shared driveKeys.path cache, then hand the resolved list
-    // to EmailDraft — which runs them through the same handleDriveAttach the toolbar's
-    // Paperclip button uses, copying plain files via useAttachFromDrive and adding
-    // containers as driveReferences. Wait until every query settles before publishing the
-    // list so the composer's one-shot apply sees the complete set.
+    // The composer applies its Drive attachments once, so the list waits until every ?attach= item has resolved.
     const attachRefs = useMemo(() => parseAttachRefs(attach), [attach]);
     const pathQueries = usePathInfos(attachRefs);
     const allSettled = attachRefs.length > 0 && pathQueries.every((q) => !q.isPending);
@@ -88,12 +63,8 @@ function MailRoute() {
         return paths.length > 0 ? paths : undefined;
     }, [allSettled, pathQueries]);
 
-    // Strip ?attach= from the URL after the queries settle, so a reload (or the auto-save's
-    // ?mailId rewrite that preserves prev params) doesn't re-trigger the attachment flow.
-    // The composer's prop snapshot already captured initialDriveAttachments — its one-shot
-    // effect runs on the same commit.
+    // Drop ?attach= once resolved, or a reload or auto-save's ?mailId rewrite would attach the items again.
     useEffect(() => {
-        if (!attach) return;
         if (!allSettled) return;
         navigate({
             to: Route.fullPath,
@@ -102,10 +73,9 @@ function MailRoute() {
             state: true,
             replace: true,
         });
-    }, [attach, allSettled, navigate, filterType, filterId]);
+    }, [allSettled, navigate, filterType, filterId]);
 
-    const { user } = useAuth();
-    const ownerId = user?.id || '';
+    const { user } = Route.useRouteContext();
     const [searchQuery, setSearchQuery] = useState('');
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [pendingDeleteEmails, setPendingDeleteEmails] = useState<Email[]>([]);
@@ -119,21 +89,17 @@ function MailRoute() {
     } = useEmails(filterId);
     const { data: selectedEmail = null, isPending: isEmailPending } = useEmail(mailId);
     const { data: mailboxes = [] } = useMailboxes();
-    // Canonical mailbox identity for the list context menu — resolve the URL filterId ('inbox'/'sent'/…)
-    // to the mailbox's canonical `path` ('INBOX'/'Sent'/…), the same identity EmailSummary.mailbox carries and
-    // that emailKeys.list normalizes. Lets the menu hide the current box as a move target and drop the
-    // already-satisfied Archive/Spam actions instead of offering no-op self-moves.
+    // The URL's 'inbox' as the mailbox path an email carries ('INBOX'), so the list menu can hide the current
+    // box as a move target and leave out an Archive or Spam that would move nothing.
     const currentFolderId = mailboxes.find((m) => mailboxRouteSegment(m.path) === filterId)?.path;
     const { data: spaceSettings } = useSpaceSettings();
     const signatureHtml = spaceSettings?.email?.signatures?.[0]?.html;
 
-    // The search box hits the server FTS index scoped to the current mailbox instead of
-    // client-filtering the loaded window. filterId ('inbox'/'sent'/…) is passed verbatim — the
-    // BE case-folds it. Capped at the search route's max (50); results replace the paginated list
-    // while searching.
+    // Search asks the server's index for this mailbox, capped at the search route's 50 hits, and its results
+    // replace the paged list while it runs.
     const isSearching = searchQuery.trim().length > 0;
     const { data: searchData, isFetching: isSearchFetching } = useSearchQuery({
-        ownerId,
+        ownerId: user.id,
         q: searchQuery,
         sources: ['mail'],
         mailbox: filterId,
@@ -145,36 +111,31 @@ function MailRoute() {
 
     const actions = useMailActions();
 
-    // Memoized so it keeps a stable identity across renders while a conversation is open —
-    // otherwise the isRead remap yields a fresh array every render, re-running useMailList's
-    // sort (costly at large mailbox sizes) and churning downstream effects.
+    // Memoized, or the isRead remap makes a new array each render and useMailList sorts a large mailbox again.
     const displayEmails = useMemo(() => {
         const openId = selectedEmail?.id;
         if (!openId || !listEmails.some((m) => m.id === openId)) return listEmails;
         return listEmails.map((m) => (m.id === openId ? { ...m, isRead: true } : m));
     }, [listEmails, selectedEmail?.id]);
 
-    // Ordered rows + selection + keyboard cursor live here (not in EmailList) so
-    // useMailShortcuts can act on the same list the route renders.
+    // The ordered rows, selection and cursor live here, not in EmailList, so the shortcuts act on the list shown.
     const { orderedEmails, selection, cursorIndex, setCursorIndex, setCursorById } = useMailList({
         emails: displayEmails,
         activeId: mailId,
     });
 
-    // The one seam every opener goes through (row click, `o`, `[`/`]`, auto-advance). Opening a row
-    // also makes it the selection, so the batch keys act on the message the user is reading.
+    // Opening a row also selects it, so the batch keys act on the message the user is reading.
     const openEmail = (emailId: string) => {
         selection.setSelection([emailId]);
         actions.handleRowClick(emailId);
     };
 
-    // Gmail keyboard layer — opt-in via the space setting, inert while composing/editing a draft
-    // or while the help overlay is open.
+    // The keyboard shortcuts are opt-in, and inert while composing or while their help is open.
     const shortcutsEnabled = spaceSettings?.email?.keyboardShortcuts ?? false;
     const autoAdvance = spaceSettings?.email?.autoAdvance ?? 'older';
     const isComposing = mode === 'compose' || !!selectedEmail?.isDraft;
     const searchInputRef = useRef<HTMLInputElement>(null);
-    // Scope for the Delete/Backspace bindings; see useMailShortcuts.
+    // Delete and Backspace act only while focus is inside this element.
     const mailSurfaceRef = useRef<HTMLDivElement>(null);
     const [helpOpen, setHelpOpen] = useState(false);
 
@@ -194,17 +155,13 @@ function MailRoute() {
         }
     };
 
-    // Owns the open-conversation landing (auto-advance), shared by the detail toolbar and the
-    // keyboard layer. The land target is computed BEFORE the mutation. The mutation is fired but
-    // NOT awaited — navigation must be instant; blocking on the move/delete round-trip leaves the
-    // user staring at the just-actioned email. The Trash confirm is decided from the open email's
-    // own mailbox (no fetch), so no await is needed for that branch either.
+    // The move or delete is not awaited: waiting for the round trip would leave the actioned email on screen.
+    // So the next email to open is picked before it starts.
     const actOnOpenEmail = (action: 'archive' | 'delete' | 'spam') => {
         const id = mailId;
         if (!id) return;
         const idx = orderedEmails.findIndex((e) => e.id === id);
-        // idx<0 (open email not in the list) would make orderedEmails[idx+1]=[0] land on the top row
-        // for 'older' — guard it so we fall back to the list instead of jumping to the first email.
+        // An open email missing from the list goes back to the list, not to the top row.
         const landId =
             idx < 0 || autoAdvance === 'list'
                 ? undefined
@@ -225,9 +182,7 @@ function MailRoute() {
         else actions.navigateToList();
     };
 
-    // Delete a single row by id, opening the Trash confirm dialog when needed. Resolves true once
-    // actually deleted, false when the dialog was opened — lets the cursor path slide only on a
-    // real delete.
+    // False when the Trash confirm opened instead, so the cursor moves on only after a real delete.
     const requestDeleteById = async (emailId: string) => {
         const res = await actions.deleteEmailByIdOnly(emailId);
         if (res.needsConfirmation) {
@@ -337,12 +292,8 @@ function MailRoute() {
                     <Column id="list" width={showDetail ? listWidth : 'flex'} onBack="sidebar" toolbar={listToolbar}>
                         <div className={cn('flex flex-col h-full overflow-hidden', showDetail && 'border-r')}>
                             <EmailList
-                                // View identity: on a mailbox switch OR any change to the search text,
-                                // EmailList resets the virtualizer to the top. Folding the query in (not just
-                                // isSearching) matters because refining one search into another keeps the same
-                                // mailbox and stays "searching" — a drastic result-set size change under a
-                                // scrolled position otherwise leaves the virtual window desynced from the scroll
-                                // offset (blank list until you nudge the scroll).
+                                // A new mailbox or search text scrolls the list to the top. A refined search
+                                // that shrinks the results would otherwise keep a scroll offset past the end.
                                 resetKey={`${filterId}:${searchQuery.trim()}`}
                                 orderedEmails={orderedEmails}
                                 selection={selection}
@@ -376,13 +327,8 @@ function MailRoute() {
                         <Column id="detail" width="flex" onBack={actions.navigateToList} toolbar={detailToolbar}>
                             {isDraft ? (
                                 <EmailDraft
-                                    // Identity key: within one compose session (mode='compose' +
-                                    // same composeSessionKey), the composer stays mounted across
-                                    // the auto-save URL update. A new Reply/Forward/Compose click
-                                    // bumps composeSessionKey, forcing a remount. For draft
-                                    // detail (mode absent), keying on mailId lets LightEditor pick
-                                    // up fresh initial content — Tiptap's useEditor reads
-                                    // `content` on mount only.
+                                    // A compose session stays mounted across auto-save's URL update. An open
+                                    // draft keys on its id, because the editor reads its content on mount only.
                                     key={
                                         mode === 'compose'
                                             ? `compose-${composeSessionKey ?? 'fresh'}`
@@ -420,4 +366,13 @@ function MailRoute() {
             </div>
         </>
     );
+}
+
+function parseAttachRefs(attach: string | undefined): { ownerId: string; mountId: string; pathId: string }[] {
+    if (!attach) return [];
+    return attach
+        .split(',')
+        .map((entry) => entry.split('/'))
+        .filter((parts): parts is [string, string, string] => parts.length === 3 && parts.every(Boolean))
+        .map(([ownerId, mountId, pathId]) => ({ ownerId, mountId, pathId }));
 }

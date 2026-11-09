@@ -2,7 +2,7 @@
 // deleting them, and creating, finding and inviting to rooms. Contacts' "start a chat" and the wizards call these
 // too. Every write invalidates the caches it changes.
 
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { skipToken, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { chatApi, openDocument } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
@@ -58,9 +58,8 @@ function groupChatsBySection(chats: DrivePath[], teams: readonly { id: string; n
     return { personal, teams: teamSections };
 }
 
-// Flat chat list in sidebar order (personal first, then teams), for the chat index's auto-open. Empty
-// while loading: until useMyTeams settles, team chats sit in the personal catch-all, so the interim
-// list would auto-open the wrong "first" chat.
+// Every chat in sidebar order, for the chat index's auto-open. Empty while loading, as until the teams load a
+// team's chats sit among the personal ones and the wrong chat would open first.
 export function useAllChats(): { chats: DrivePath[]; isLoading: boolean } {
     const { personal, teams, isLoading } = useChatSections();
     return useMemo(
@@ -72,20 +71,21 @@ export function useAllChats(): { chats: DrivePath[]; isLoading: boolean } {
 export function useMessages(ownerId: string, mountId: string, chatId: string | undefined) {
     return useInfiniteQuery({
         queryKey: chatKeys.messages(ownerId, mountId, chatId || ''),
-        queryFn: async ({ pageParam }: { pageParam: string | undefined }) => {
-            if (!chatId) return [] as ChatMessage[];
-            const query: { before?: string; limit?: number } = { limit: MESSAGE_PAGE_SIZE };
-            if (pageParam) query.before = pageParam;
-            const response = await chatApi({ ownerId })({ mountId })({ chatId }).messages.get({ query });
-            if (response.error) throw new AppError(response);
-            return response.data;
-        },
+        queryFn:
+            chatId && ownerId && mountId
+                ? async ({ pageParam }: { pageParam: string | undefined }): Promise<ChatMessage[]> => {
+                      const query: { before?: string; limit?: number } = { limit: MESSAGE_PAGE_SIZE };
+                      if (pageParam) query.before = pageParam;
+                      const response = await chatApi({ ownerId })({ mountId })({ chatId }).messages.get({ query });
+                      if (response.error) throw new AppError(response);
+                      return response.data;
+                  }
+                : skipToken,
         initialPageParam: undefined as string | undefined,
         getNextPageParam: (lastPage: ChatMessage[]) => {
             if (lastPage.length < MESSAGE_PAGE_SIZE) return undefined;
             return lastPage[0]?.id;
         },
-        enabled: !!chatId && !!ownerId && !!mountId,
         staleTime: STALE_TIME.ONE_MINUTE,
     });
 }
@@ -157,9 +157,8 @@ export function useCreateChatRoom(ownerId: string, mountId: string) {
                     if (response.error) throw new AppError(response);
                     return response.data;
                 },
-                // The wizard can omit parentId (the route resolves the lazily-created `chats`
-                // folder, an id no client endpoint hands out), so reconcile over the mount-scoped
-                // chat listing, narrowed to the folder whenever the caller did name one.
+                // Without a parentId the route picks a `chats` folder whose id no client knows, so this
+                // reconciles over the mount's chat listing, narrowed to the folder when one was named.
                 listFolder: async () => {
                     const chats = await fetchListingOnce(
                         queryClient,
@@ -182,10 +181,8 @@ export function useCreateChatRoom(ownerId: string, mountId: string) {
     });
 }
 
-// Contacts' "start a chat": takes the person's addresses and prefers the one that belongs to a
-// registered account — email[0] can be a later-added alias, and the by-members match is keyed by
-// the account address. Exactly one writable match opens directly ('opened'); otherwise the chosen
-// address comes back so the caller opens the wizard pre-filled with it.
+// Contacts' "start a chat". It prefers the address of a registered account, as the first one may be an alias and
+// rooms match on the account's. One writable match opens; otherwise the caller opens the wizard with that address.
 export function useStartChatWith() {
     const queryClient = useQueryClient();
     const { user } = useAuth();
@@ -213,7 +210,7 @@ export function useStartChatWith() {
         // A failed lookup degrades to "no matches" so the caller falls through to opening the wizard.
         const matches = await queryClient
             .fetchQuery(byMembersQueryConfig(ownerId, [email]))
-            .catch(() => [] as ChatMatch[]);
+            .catch((): ChatMatch[] => []);
         const writable = matches.filter((m) => m.canWrite);
         if (writable.length === 1) {
             openDocument(writable[0].path);

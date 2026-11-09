@@ -3,7 +3,6 @@
 // ?pid=&uid=&mid= opens its detail beside the list.
 
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useAllWatches, usePathInfo, validateDriveSearch } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
@@ -17,7 +16,7 @@ export const Route = createFileRoute('/_auth/watched')({
 
 function WatchedRoute() {
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { user } = Route.useRouteContext();
     const { pid, uid, mid } = Route.useSearch();
 
     const { data: watches = [], isLoading, error } = useAllWatches();
@@ -46,7 +45,7 @@ function WatchedRoute() {
         <DriveLayout
             pid={pid}
             selectedPath={selectedPath}
-            ownerId={uid || user?.id || ''}
+            ownerId={uid || user.id}
             mountId={mid || DEFAULT_MOUNT_ID}
             folderContents={watches}
             isLoading={isLoading}

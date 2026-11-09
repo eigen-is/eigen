@@ -8,7 +8,7 @@ The things that surprise people: on a phone only one column renders and the side
 
 ## Every app is `EigenApp` around `AppShell`
 
-`EigenApp` (`layout/app/eigen-app.tsx`) holds the providers every app shares: hotkeys, query client, auth, theme, SSE, uploads, the quick-look overlay and the command palette. `AppShell` (`layout/app/app-shell.tsx`) draws the topbar, the sidebar and `<main>`. A new app wraps its `__root.tsx` in `AppShell` and makes `_auth.tsx` a `createAuthRouteOptions` route.
+`EigenApp` (`layout/app/eigen-app.tsx`) holds the providers every app shares: hotkeys, query client, auth, theme, SSE, uploads, the quick-look overlay and the command palette. `AppShell` (`layout/app/app-shell.tsx`) draws the topbar, the sidebar and `<main>`. A new app wraps its `__root.tsx` in `AppShell` and makes `_auth.tsx` a `createAuthRouteOptions` route. That guard hands the signed-in user to every child route's context, so an `_auth` page reads `Route.useRouteContext().user`, never `useAuth().user!`, and a shared view it renders takes the user's id as a prop.
 
 The marketing routes in `apps/index` use `AppShell` without `EigenApp`, so `PaletteRunner` renders nothing when the palette provider is missing, and nothing for a signed-out visitor. The palette itself is [COMMAND-PALETTE.md](COMMAND-PALETTE.md).
 

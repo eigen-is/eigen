@@ -107,7 +107,11 @@ const FILE_EVENT_PHRASES: Record<FileEventType, string> = {
 // A stored row can hold a type this build doesn't know. It reads as 'edited', so every FileEvent has a known type
 // and every row has words.
 export function toFileEventType(raw: string): FileEventType {
-    return Object.hasOwn(FILE_EVENT_PHRASES, raw) ? (raw as FileEventType) : 'edited';
+    return isFileEventType(raw) ? raw : 'edited';
+}
+
+function isFileEventType(raw: string): raw is FileEventType {
+    return Object.hasOwn(FILE_EVENT_PHRASES, raw);
 }
 
 export type ActivityLines = { action: string; primary?: string; secondary?: string };

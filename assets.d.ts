@@ -1,3 +1,5 @@
+/// <reference path="./react-css-properties.d.ts" />
+
 declare module '*.css' {
     const css: string;
     export default css;

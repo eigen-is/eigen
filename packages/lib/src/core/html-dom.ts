@@ -1,15 +1,15 @@
-// Browser-only HTML helpers — these depend on the DOM (`document`), so backend-shared
-// code (anything importable by apps/api) must never import this module. The BE-safe HTML
-// helpers (escapeHtml, stripTagsServer) live in ./html.
+// The HTML helpers that need a browser DOM: plain text of pasted HTML, its alignment, and the sanitizer that
+// maps pasted or peer-written HTML onto the LightEditor's tags, such as a comment card's description. They use
+// `document`, so code the backend imports never imports this module; the helpers that run anywhere sit beside it.
+
 import type { TextAlign } from '../vector/types';
 import { TEXT_ALIGNS } from '../vector/types';
 import type { LIGHT_EDITOR_MARK_TAGS } from './html';
-import { LIGHT_EDITOR_BLOCK_TAGS, LIGHT_EDITOR_HREF, RAW_TEXT_DROP_TAGS } from './html';
+import { isElement, LIGHT_EDITOR_BLOCK_TAGS, LIGHT_EDITOR_HREF, RAW_TEXT_DROP_TAGS } from './html';
 
 export function htmlToPlainText(html: string): string {
-    // DOMParser, never a live-element innerHTML: callers feed untrusted clipboard HTML, and a
-    // detached element still loads images and fires their onerror handlers — an inert parsed
-    // document does neither.
+    // Untrusted clipboard HTML in a detached element still loads images and fires their onerror handlers, so it
+    // goes into an inert parsed document instead.
     const doc = new DOMParser().parseFromString(html, 'text/html');
     return doc.body.textContent ?? '';
 }
@@ -30,7 +30,7 @@ const MARK_TAG_CANON: Record<string, (typeof LIGHT_EDITOR_MARK_TAGS)[number]> = 
     STRIKE: 's',
 };
 const HEADING_TAGS = new Set(['H1', 'H2', 'H3', 'H4', 'H5', 'H6']);
-// Elements whose CONTENT must be discarded entirely (never unwrapped — their text is code/markup).
+// Elements whose text is code or markup, so their content goes with them instead of unwrapping.
 const DROP_TAGS = new Set(
     [...RAW_TEXT_DROP_TAGS, 'object', 'embed', 'template', 'head'].map((tag) => tag.toUpperCase()),
 );
@@ -42,16 +42,12 @@ function safeHref(href: string | null): string | null {
     return LIGHT_EDITOR_HREF.test(trimmed) ? trimmed : null;
 }
 
-// Comment-card descriptions come from a LightEditor with `taskList` enabled, so they carry TipTap
-// task lists (ul[data-type=taskList] > li[data-checked] > label>input[type=checkbox] + div) that the
-// base allowlist would strip. `taskList: true` keeps exactly that structure — each of the five tags
-// survives only in its own position (tracked by `taskCtx`), with only its own constrained attributes;
-// a stray label/div/input outside a task item unwraps, so the XSS boundary is unchanged. The content
-// div recurses back to plain prose (no `taskCtx`), so a nested task list re-enters through its own ul.
+// A card description carries Tiptap task lists, ul > li > label > input plus a content div. Each of those tags
+// survives only in its own place, tracked by `taskCtx`, so one outside a task item still unwraps.
 type TaskCtx = 'list' | 'item' | 'label';
 type SanitizeOptions = { taskList?: boolean; taskCtx?: TaskCtx };
 
-function appendTaskListNode(el: HTMLElement, parent: HTMLElement, opts: SanitizeOptions): boolean {
+function appendTaskListNode(el: Element, parent: HTMLElement, opts: SanitizeOptions): boolean {
     const tag = el.tagName;
     const recurse = (target: HTMLElement, taskCtx: TaskCtx | undefined) => {
         for (const child of Array.from(el.childNodes)) appendSanitized(child, target, { ...opts, taskCtx });
@@ -100,9 +96,8 @@ function appendSanitized(node: Node, parent: HTMLElement, opts: SanitizeOptions)
         parent.appendChild(document.createTextNode(node.textContent ?? ''));
         return;
     }
-    if (node.nodeType !== Node.ELEMENT_NODE) return;
-    const el = node as HTMLElement;
-    const tag = el.tagName;
+    if (!isElement(node)) return;
+    const tag = node.tagName;
 
     if (DROP_TAGS.has(tag)) return;
     if (tag === 'BR') {
@@ -110,9 +105,9 @@ function appendSanitized(node: Node, parent: HTMLElement, opts: SanitizeOptions)
         return;
     }
     const recurseInto = (target: HTMLElement) => {
-        for (const child of Array.from(el.childNodes)) appendSanitized(child, target, opts);
+        for (const child of Array.from(node.childNodes)) appendSanitized(child, target, opts);
     };
-    if (opts.taskList && appendTaskListNode(el, parent, opts)) return;
+    if (opts.taskList && appendTaskListNode(node, parent, opts)) return;
     // Headings collapse to paragraphs (LightEditor has no heading node).
     if (HEADING_TAGS.has(tag)) {
         const p = document.createElement('p');
@@ -134,14 +129,11 @@ function appendSanitized(node: Node, parent: HTMLElement, opts: SanitizeOptions)
         return;
     }
     if (tag === 'A') {
-        const href = safeHref(el.getAttribute('href'));
+        const href = safeHref(node.getAttribute('href'));
         if (href) {
             const clean = document.createElement('a');
-            // A link always opens in a new tab, with the opener sealed. Forced here rather than trusted
-            // from the source markup: this is the one seam every rendered surface passes through, and a
-            // canvas link that navigates in place would take a presenter out of their own deck. Written
-            // in Tiptap's own serialization order (Link merges its configured HTMLAttributes before
-            // href), so a pasted link is already canonical and the first keystroke rewrites nothing.
+            // Forced, never trusted from the source: a link navigating in place would take a presenter out of
+            // their deck. Tiptap's own attribute order, so the first keystroke rewrites nothing.
             clean.setAttribute('target', '_blank');
             clean.setAttribute('rel', 'noopener noreferrer');
             clean.setAttribute('href', href);
@@ -150,16 +142,12 @@ function appendSanitized(node: Node, parent: HTMLElement, opts: SanitizeOptions)
             return;
         }
     }
-    // Unknown/disallowed element (span, div, font, styled wrappers, unsafe <a>) — unwrap, keep
-    // children. All attributes (style/class/data-*/on*) are dropped by never copying them.
-    for (const child of Array.from(el.childNodes)) appendSanitized(child, parent, opts);
+    // Any other element, such as a span or an unsafe link, unwraps to its children, and no attribute is copied.
+    for (const child of Array.from(node.childNodes)) appendSanitized(child, parent, opts);
 }
 
-// Alignment of pasted prose (docs → slides/vector). Docs' Tiptap TextAlign extension stores it as a
-// block-level `style="text-align: X"` (parseHTML also reads the legacy `align` attr), which the
-// LightEditor sanitizer strips along with every other attribute — so read it here, off the RAW html,
-// before sanitizing. Returns the first top-level block's alignment when it's one of the four canonical
-// values, else null (a default-left paragraph carries no style, so callers keep their own default).
+// The alignment of prose pasted from docs into a slide or drawing, read off the raw HTML because the sanitizer
+// strips the style that carries it. A left paragraph has no style, so null leaves the caller's default.
 export function readDominantTextAlign(html: string): TextAlign | null {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     for (const el of Array.from(doc.body.children)) {
@@ -171,11 +159,8 @@ export function readDominantTextAlign(html: string): TextAlign | null {
     return null;
 }
 
-// Map arbitrary pasted HTML onto the LightEditor tag set (see the sets above): structural formatting
-// and inline marks are kept, headings become paragraphs, everything else is unwrapped or dropped, and
-// ALL attributes are stripped bar a safe `<a href>` and the new-tab pair forced onto it. DOM-based so
-// escaping is automatic and there is no regex-parsing hazard. Returns '' when nothing survives (the
-// caller falls back to plain text).
+// Pasted HTML on the LightEditor's tags: headings become paragraphs, the rest unwraps or drops, and only a safe
+// link keeps an attribute. Nothing left gives '', and the caller pastes plain text.
 export function sanitizeToLightEditorHtml(html: string): string {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const out = document.createElement('div');
@@ -183,9 +168,8 @@ export function sanitizeToLightEditorHtml(html: string): string {
     return out.innerHTML;
 }
 
-// Same allowlist as sanitizeToLightEditorHtml plus TipTap task lists — the schema a comment-card
-// description is authored in. Run at the readCards seam because a card's description reaches every
-// viewer verbatim from a peer's Y.Doc write and is rendered via dangerouslySetInnerHTML.
+// The same tags plus task lists, for a card description, which reaches every viewer verbatim from a peer's
+// Yjs edit and renders as raw HTML.
 export function sanitizeCommentCardHtml(html: string): string {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const out = document.createElement('div');

@@ -1,3 +1,6 @@
+// The Mail section of the account settings: single-key shortcuts on or off, and which conversation opens after
+// one is archived, deleted or reported as spam. Each change saves at once through the space settings.
+
 import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
 import type { EmailSettings } from '@workspace/lib/types/settings';
 import { LoadingState } from '@workspace/ui';
@@ -5,7 +8,11 @@ import { Label } from '@workspace/ui/components/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Switch } from '@workspace/ui/components/switch';
 
-type AutoAdvance = NonNullable<EmailSettings['autoAdvance']>;
+const AUTO_ADVANCE_OPTIONS = [
+    { value: 'older', label: 'Go to the mail below (older)' },
+    { value: 'newer', label: 'Go to the mail above (newer)' },
+    { value: 'list', label: 'Go back to the list' },
+] as const satisfies readonly { value: NonNullable<EmailSettings['autoAdvance']>; label: string }[];
 
 export function MailPrefsSection() {
     const { data, isLoading } = useSpaceSettings();
@@ -43,15 +50,20 @@ export function MailPrefsSection() {
                 <Label>After archiving, deleting, or reporting spam</Label>
                 <Select
                     value={autoAdvance}
-                    onValueChange={(v) => update.mutate({ email: { autoAdvance: v as AutoAdvance } })}
+                    onValueChange={(v) => {
+                        const option = AUTO_ADVANCE_OPTIONS.find((o) => o.value === v);
+                        if (option) update.mutate({ email: { autoAdvance: option.value } });
+                    }}
                 >
                     <SelectTrigger className="w-full sm:w-96">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="older">Go to the mail below (older)</SelectItem>
-                        <SelectItem value="newer">Go to the mail above (newer)</SelectItem>
-                        <SelectItem value="list">Go back to the list</SelectItem>
+                        {AUTO_ADVANCE_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                            </SelectItem>
+                        ))}
                     </SelectContent>
                 </Select>
             </div>

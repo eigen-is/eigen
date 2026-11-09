@@ -11,7 +11,7 @@ import {
 } from '@workspace/lib/api';
 import { EIGEN_DOC_ICONS } from '@workspace/lib/eigendoc-icons';
 import type { EigenDocType } from '@workspace/lib/types/drive';
-import { EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
+import { EIGEN_DOC_TYPE_INFO, EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
 import type { LucideIcon } from 'lucide-react';
 
 export type EigenDocAppConfig = {
@@ -26,8 +26,17 @@ export type EigenDocAppConfig = {
     appUrl: (() => string) | null;
 };
 
-// In sidebar order, not the registry's. Chat has no list of its own, since the chat app opens one
-// conversation, so Drive hosts All chats.
+// Each type's place in the sidebar, which is not the registry's order. A record, so a new type can't go missing.
+const EIGEN_DOC_NAV_ORDER: Record<EigenDocType, number> = {
+    doc: 0,
+    stickies: 1,
+    chat: 2,
+    slides: 3,
+    sheets: 4,
+    vector: 5,
+};
+
+// Chat has no list of its own, since the chat app opens one conversation, so Drive hosts All chats.
 const EIGEN_DOC_APP_URLS: Record<EigenDocType, (() => string) | null> = {
     doc: getDocsAppUrl,
     stickies: getStickiesAppUrl,
@@ -52,10 +61,10 @@ function buildConfig(type: EigenDocType): EigenDocAppConfig {
     };
 }
 
-// Every type in nav order, for surfaces that list them all (the shared sidebar's filters).
-export const EIGEN_DOC_APP_CONFIGS: ReadonlyArray<EigenDocAppConfig> = Object.keys(EIGEN_DOC_APP_URLS).map((type) =>
-    buildConfig(type as EigenDocType),
-);
+// Every type in nav order, for surfaces that list them all, such as the shared sidebar's filters.
+export const EIGEN_DOC_APP_CONFIGS: readonly EigenDocAppConfig[] = EIGEN_DOC_TYPES.toSorted(
+    (a, b) => EIGEN_DOC_NAV_ORDER[a] - EIGEN_DOC_NAV_ORDER[b],
+).map(buildConfig);
 
 export const DOCS_CONFIG: EigenDocAppConfig = buildConfig('doc');
 export const STICKIES_CONFIG: EigenDocAppConfig = buildConfig('stickies');
@@ -63,8 +72,8 @@ export const SLIDES_CONFIG: EigenDocAppConfig = buildConfig('slides');
 export const SHEETS_CONFIG: EigenDocAppConfig = buildConfig('sheets');
 export const VECTOR_CONFIG: EigenDocAppConfig = buildConfig('vector');
 
-// "Docs shared by me" — the sidebar row and the shared page's title must read alike, so
-// both build the phrase here. Without a plural (Drive's own rows) → "Shared by me".
+// "Docs shared by me": the sidebar row and the shared page's title must read alike. Drive's own rows pass no
+// plural and read "Shared by me".
 export function eigenDocSharedTitle(direction: 'by' | 'with', labelPlural?: string): string {
     return labelPlural ? `${labelPlural} shared ${direction} me` : `Shared ${direction} me`;
 }

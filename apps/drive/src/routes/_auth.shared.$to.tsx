@@ -3,7 +3,6 @@
 // offers nothing that writes there, and a delete leaves the share.
 
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, usePathInfo, useSharedPaths, validateDriveSearch } from '@workspace/lib/drive';
 import type { DriveCapabilities, DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
@@ -19,9 +18,9 @@ function SharedRoute() {
     const { to } = Route.useParams();
     const navigate = useNavigate();
     const { uid, pid, mid } = Route.useSearch();
-    const auth = useAuth();
-    const ownerId = auth.user!.id;
-    const { data: selectedPath = null } = usePathInfo(uid || '', mid || DEFAULT_MOUNT_ID, pid || '');
+    const { user } = Route.useRouteContext();
+    const ownerId = user.id;
+    const { data: selectedPath = null } = usePathInfo(uid || '', mid || DEFAULT_MOUNT_ID, pid);
 
     const {
         data: folderContents = [],

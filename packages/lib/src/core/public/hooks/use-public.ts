@@ -1,4 +1,8 @@
-import { useMutation, useQueries, useQuery } from '@tanstack/react-query';
+// Hooks over the public API, which answers before anyone signs in: the server's config and what
+// it implies, such as whether Mail is offered, the landing page's waitlist signup, and the name
+// and avatar of a user or team by email or id, batched so lookups made together share a request.
+
+import { skipToken, useMutation, useQueries, useQuery } from '@tanstack/react-query';
 import { publicApi } from '@workspace/lib/api';
 import { apps, isMailApp } from '@workspace/lib/apps';
 import { parseOwnerId } from '@workspace/lib/types';
@@ -21,9 +25,8 @@ export function usePublicConfig() {
     });
 }
 
-// The one read of the server's hosted-mail flag: every Mail entry point gates on this, and a
-// server that runs without the mail containers hides them all. On until the config lands, so the
-// common deployment never flashes a missing Mail app.
+// The one read of the hosted-mail flag, which hides every Mail entry point on a server without the mail containers.
+// On until the config lands, so the common deployment never flashes a missing Mail app.
 export function useMailEnabled(): boolean {
     const { data } = usePublicConfig();
     return data?.mailEnabled !== false;
@@ -60,8 +63,10 @@ export function useJoinWaitlist() {
 export function usePublicUser(emailOrId: string | undefined) {
     return useQuery({
         queryKey: publicUserKeys.detail(emailOrId || ''),
-        queryFn: () => fetchPublicUser(emailOrId!),
-        enabled: !!emailOrId && !!(validateEmailAddress(emailOrId) || parseOwnerId(emailOrId).id),
+        queryFn:
+            emailOrId && (validateEmailAddress(emailOrId) || parseOwnerId(emailOrId).id)
+                ? () => fetchPublicUser(emailOrId)
+                : skipToken,
         staleTime: Infinity,
     });
 }
@@ -74,14 +79,13 @@ export function usePublicUsers(emailsOrIds: string[]): Record<string, PublicUser
             enabled: !!id,
             staleTime: Infinity,
         })),
-        // Why: combine memoizes with structural sharing, so the map stays referentially
-        // stable across renders and consumer useMemos hold.
+        // combine memoizes with structural sharing, so the map stays stable across renders and callers' useMemos hold.
         combine: (results) => {
             const map: Record<string, PublicUser> = {};
-            emailsOrIds.forEach((id, i) => {
+            for (const [i, id] of emailsOrIds.entries()) {
                 const user = results[i]?.data;
                 if (user) map[id] = user;
-            });
+            }
             return map;
         },
     });

@@ -1,14 +1,8 @@
-// Demo-world content for "Tuimel Festival" — a small, volunteer-run community arts & music
-// festival, ~3 weeks out, line-up ~80% confirmed, short on volunteers, iffy Sunday forecast.
-//
-// This module is DATA: personas, folder names, document/mail/event/chat/contact text, and the few one-line helpers
-// that spell some of it, such as an equation's MathML. The seeder's mechanics turn it into a live workspace
-// through the real product surfaces. Keep it that way so a later content-deepening pass swaps data here without
-// touching mechanics.
-//
-// Personas are keyed by a fixed local-part; the runtime email is `<key>@<MAIL_DOMAIN>`. Everything
-// the data model keys on (ACLs, comments, calendar attendees, stickies creators) resolves by that
-// email, so ids may be random per rebuild. All names, acts and vendors are fictional.
+// The data of the "Tuimel Festival" demo world, a small volunteer-run arts and music festival three weeks out: its
+// personas, folders and the text of its documents, mail, events, chats and contacts, plus a few one-line helpers that
+// spell some of it, such as an equation's MathML. The demo seeder turns it into a live workspace through the real
+// product surfaces, so a richer pass changes data here, not mechanics. Personas resolve by `<key>@<MAIL_DOMAIN>`, so
+// ids may differ per rebuild. All names, acts and vendors are fictional.
 
 import { CHART_DEFAULT_SIZE, FLAT_CHART_LOOK, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { escapeHtml } from '@workspace/lib/html';
@@ -98,7 +92,7 @@ export type DocComment = {
     text: string;
     replies?: { author: string; text: string }[];
     assignTo?: LeadRole; // records an `assigned` activity + notification
-    attach?: string[]; // seeded team documents pinned to the card, see ChatLine.attach
+    attach?: string[]; // seeded team documents pinned to the card
 };
 
 export type SeededDoc = {
@@ -191,9 +185,7 @@ export const DOCS: SeededDoc[] = [
     },
 ];
 
-// --- Workbooks (built from these specs: the budget straight into its container's Y.Doc by buildWorkbookDoc, the
-// generator quote into an xlsx mail attachment by buildWorkbook). Ranges are A1 text; a chart's ranges name the tab
-// they read. ---
+// --- Workbooks. Ranges are A1 text, and a chart's ranges name the tab they read. ---
 
 // Text, a number, or a formula: a string that starts with '='. null leaves the cell empty.
 export type SheetCellSpec = string | number | null;
@@ -225,9 +217,9 @@ const EUR = '_(€* #,##0.00_);_(€* (#,##0.00);_(€* "-"??_);_(@_)';
 const BUDGET_STATUSES = ['confirmed', 'pending', 'paid'];
 
 export const BUDGET = {
-    folder: 'finance' as TeamFolder,
+    folder: 'finance' as const satisfies TeamFolder,
     name: 'budget', // lowercase, no extension
-    author: 'finance' as LeadRole,
+    author: 'finance' as const satisfies LeadRole,
     sheets: [
         {
             name: 'Budget',
@@ -306,10 +298,8 @@ export const GENERATOR_QUOTE: SheetSpec[] = [
     },
 ];
 
-// --- Sponsor deck (a slide deck the seeder builds straight into the container's Y.Doc from this
-// spec by buildDeckDoc — no fixture bytes). A deck is a canvas of frames: one slide per frame,
-// pinned 1920x1080, its elements positioned relative to the frame's top-left corner. Slide keys are
-// stable so element ids stay the same across reseeds. ---
+// --- Sponsor deck: one 1920x1080 frame per slide, elements placed from the frame's top-left corner. Slide keys
+// are stable so element ids stay the same across reseeds. ---
 
 // A text box, authored as the TipTap HTML the editor itself stores (paragraphs, <strong>, lists).
 export type DeckText = {
@@ -376,9 +366,9 @@ const DECK_BODY = {
 } as const;
 
 export const SPONSOR_DECK = {
-    folder: 'marketing' as TeamFolder,
+    folder: 'marketing' as const satisfies TeamFolder,
     name: 'sponsor pitch', // lowercase, no extension
-    author: 'comms' as LeadRole,
+    author: 'comms' as const satisfies LeadRole,
     slides: [
         {
             key: 'title',
@@ -465,14 +455,13 @@ export type CardSpec = {
     // seeded by the creator persona (chat) and referenced back by name (chatName on the card).
     chat: string; // slug, lowercase, no extension
     chatText: string;
-    // attach: see ChatLine.attach. attachVCards names VCARD_FILES entries uploaded into the chat's own
-    // media/ as a plain file attachment, the way a user's upload in a card chat lands.
+    // attachVCards names VCARD_FILES entries, uploaded into the chat's own media/ the way a user's upload lands.
     chatReplies?: { author: string; text: string; attach?: string[]; attachVCards?: string[] }[];
-    attach?: string[]; // seeded team documents pinned to the card, see ChatLine.attach
+    attach?: string[]; // seeded team documents pinned to the card
 };
 
-export const KANBAN = {
-    folder: 'production' as TeamFolder,
+export const KANBAN: { folder: TeamFolder; name: string; columns: string[]; cards: CardSpec[] } = {
+    folder: 'production',
     name: 'festival kanban', // lowercase, no extension
     columns: ['to do', 'doing', 'done'],
     cards: [
@@ -570,7 +559,7 @@ export const KANBAN = {
                 },
             ],
         },
-    ] as CardSpec[],
+    ],
 };
 
 // --- Site photos (committed .webp fixtures uploaded into the team drive's images/ folder) ---
@@ -621,9 +610,8 @@ export type BrandingAsset = {
 
 export const BRANDING: BrandingAsset[] = [{ file: 'logo.svg', mimeType: 'image/svg+xml', uploader: 'mees' }];
 
-// --- Contact cards. One spec shape for every vCard in the demo world: the .vcf files below, the
-// cards attached to seeded mail, and the personas' address books (SeededContact). The seeder
-// serializes it with the shipped createVCard, so a seeded card is what the app itself writes. ---
+// --- Contact cards: one spec shape for every vCard in the demo world. The seeder serializes it with the shipped
+// createVCard, so a seeded card is what the app itself writes. ---
 
 export type VCardSpec = {
     firstName: string;
@@ -636,8 +624,8 @@ export type VCardSpec = {
     photo?: string; // fixture filename under fixtures/avatars/, embedded as the card's PHOTO
 };
 
-// A .vcf uploaded into the team drive like any other file. `name` doubles as the key a card chat
-// reply's `attachVCards` uploads a copy under (see CardSpec.chatReplies).
+// A .vcf uploaded into the team drive like any other file. `name` doubles as the key a card chat reply's
+// `attachVCards` uploads a copy under.
 export type SeededVCardFile = {
     folder: TeamFolder;
     name: string; // lowercase, with the .vcf extension
@@ -663,9 +651,8 @@ export const VCARD_FILES: SeededVCardFile[] = [
     },
 ];
 
-// --- Site plan (a vector drawing the seeder builds straight into the container's Y.Doc from this
-// spec by buildVectorDoc — no fixture bytes). Scene units are pixels, y down; every shape's
-// label is the shape's own text, centered in it. Shape keys are stable so arrows can bind to them by name. ---
+// --- Site plan. Scene units are pixels, y down, and a shape's label is its own text, centered in it. Shape keys
+// are stable so arrows can bind to them by name. ---
 
 export type CanvasSide = 'top' | 'right' | 'bottom' | 'left';
 
@@ -735,15 +722,14 @@ const BUILDING = { fill: '#e9ecef' } as const;
 const NOTE = '#495057';
 
 export const SITE_PLAN = {
-    folder: 'production' as TeamFolder,
+    folder: 'production' as const satisfies TeamFolder,
     name: 'site plan', // lowercase, no extension
-    author: 'production' as LeadRole,
+    author: 'production' as const satisfies LeadRole,
     background: '#fffbeb', // the scene's paper; the fence fill is the meadow on it
     // Drawn bottom-up: lines (ground), shapes, images, arrows, then every text on top.
     lines: [
-        // The dune ridge west of the field, the sea just behind it. It sits a walk away from the fence:
-        // that western margin balances the photo-and-legend column hanging off the east side, which is
-        // what puts the scene's center on the crowd-flow arrow.
+        // The dune ridge sits a walk west of the fence, so it balances the photo-and-legend column on the east
+        // side and puts the scene's center on the crowd-flow arrow.
         {
             points: [
                 [-118, 150],
@@ -1221,9 +1207,8 @@ export const SITE_PLAN = {
 
 // --- Chat channels (real chat rooms in chats/, seeded via ChatRoom.postMessage as personas) ---
 
-// `attach` names seeded team documents (a DOCS/BUDGET/SPONSOR_DECK/KANBAN/SITE_PLAN name, or 'crew
-// roster') posted as drive-reference attachments; the seeder resolves them to the real ids at seed time,
-// so a document can only be attached from content seeded after it.
+// `attach` names seeded team documents, posted as drive-reference attachments. The seeder resolves them to ids at
+// seed time, so a document can only be attached from content seeded after it.
 export type ChatLine = { author: string; text: string; attach?: string[] };
 export type SeededChat = { name: string; messages: ChatLine[] };
 

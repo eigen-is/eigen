@@ -40,8 +40,7 @@ export class CollabRegistry {
                     if (!isCollabType(path.type)) {
                         throw new ApiError(404, 'Document not found');
                     }
-                    const document = new CollabDocument(drive, path);
-                    return await document.init();
+                    return await CollabDocument.open(drive, path);
                 } catch (err) {
                     // A load that failed opened nothing. Only this entry goes, never one a newer get made.
                     if (this.documents.get(key) === getter) this.documents.delete(key);
@@ -64,7 +63,7 @@ export class CollabRegistry {
         doc.destruct();
         console.log(`[collab] teardown path=${pathId}`);
         // When the document was opened again meanwhile, the new one owns data.db, so it stays open.
-        if (doc.dataDbPathId && !this.documents.has(key)) {
+        if (!this.documents.has(key)) {
             await mount.closeDatabase(doc.dataDbPathId, opts);
         }
     }
