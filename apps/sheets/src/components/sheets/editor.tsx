@@ -418,11 +418,10 @@ export function SheetEditor({
                                             commentLifecycle: lifecycle,
                                             ...(canWrite
                                                 ? {
-                                                      onDeleteComment: (r: number, c: number) => {
-                                                          const workbook = workbookRef.current;
-                                                          const cardId =
-                                                              workbook?.getFlowdata()?.[r]?.[c]?.commentCardIds?.[0];
-                                                          if (workbook && cardId) stripCommentCard(workbook, cardId);
+                                                      onDeleteComment: (cardId: string) => {
+                                                          if (workbookRef.current) {
+                                                              stripCommentCard(workbookRef.current, cardId);
+                                                          }
                                                       },
                                                   }
                                                 : {}),

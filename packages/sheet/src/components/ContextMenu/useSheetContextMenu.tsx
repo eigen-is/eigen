@@ -10,6 +10,7 @@ import {
     useContextMenu,
 } from '@workspace/ui/components/context-menu';
 import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
+import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import {
     ArrowDownAZ,
     ArrowDownZA,
@@ -30,7 +31,7 @@ import { useCallback, useContext } from 'react';
 import type { SetContextOptions } from '../../context';
 import { WorkbookContext } from '../../context';
 import { useCellEditorRefocus } from '../../hooks/useCellEditorRefocus';
-import { useDialog } from '../../hooks/useDialog';
+import { useDialog, useDialogProps } from '../../hooks/useDialog';
 import {
     clearSelectedContents,
     createFilter,
@@ -257,8 +258,27 @@ function TickBoxItem() {
     );
 }
 
+// The ask a card's own menu shows, in the same words. It is a dialog of the sheet's slot, which outlives the menu and
+// hands the focus back to the grid, where the shared DeleteDialog has no way to.
+function DeleteCommentDialog({ onDelete }: { onDelete: () => void }) {
+    const dialogProps = useDialogProps();
+    return (
+        <FormDialog
+            {...dialogProps}
+            title="Delete comment"
+            description="This deletes the comment and its replies."
+            size="md"
+        >
+            <FormDialogForm submitLabel="Delete" onSubmit={onDelete}>
+                {null}
+            </FormDialogForm>
+        </FormDialog>
+    );
+}
+
 function CommentItems({ part }: { part: 'rows' | 'delete' }) {
     const { context, refs } = useContext(WorkbookContext);
+    const { showDialog } = useDialog();
     const { getCommentInfo, onAddComment, onDeleteComment, commentLifecycle } = refs.hooks.current;
     const last = context.selections?.[context.selections.length - 1];
     const row = last ? (last.row_focus ?? last.row[0]) : 0;
@@ -275,7 +295,10 @@ function CommentItems({ part }: { part: 'rows' | 'delete' }) {
             item={info ? { card: info.card, entry: info.entry } : null}
             canWrite={context.allowEdit}
             onAddComment={onAddComment && (() => onAddComment(row, col))}
-            onDelete={onDeleteComment && (() => onDeleteComment(row, col))}
+            onDelete={
+                onDeleteComment &&
+                ((cardId) => showDialog(<DeleteCommentDialog onDelete={() => onDeleteComment(cardId)} />))
+            }
             part={part}
         />
     );
