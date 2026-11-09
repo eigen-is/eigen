@@ -1,9 +1,7 @@
-// Shows which version snapshots the system keeps for a given editing pattern, using
-// the REAL retention (selectSnapshotsToPrune + DEFAULT_RETENTION). Handy for tuning
-// the bucket counts. Models the trigger as one snapshot per 30s auto-sync tick while
-// editing (continuous editing crosses writesPerSnapshot=100 every tick).
-//
-// Run: bun apps/api/scripts/version-retention-sim.ts
+// Prints which version snapshots the real retention (selectSnapshotsToPrune with DEFAULT_RETENTION) keeps for a
+// pattern of editing, to tune its bucket counts. It models one snapshot per 30s auto-sync tick while editing, since
+// continuous editing crosses writesPerSnapshot every tick. A developer runs it by hand:
+// `bun apps/api/scripts/version-retention-sim.ts`.
 
 import { DEFAULT_RETENTION, selectSnapshotsToPrune } from '../src/lib/versioning/retention';
 import { formatSnapshotTimestamp, parseSnapshotTimestamp } from '../src/lib/versioning/timestamp';
@@ -24,7 +22,7 @@ function editingTimeline(days: number, sessionHours: number, tickMs: number): nu
 // just-written copy) with the real retention function.
 function simulate(timeline: number[]): Snap[] {
     let stored: Snap[] = [];
-    timeline.forEach((t, i) => {
+    for (const [i, t] of timeline.entries()) {
         const snap: Snap = { id: `s${i}`, name: formatSnapshotTimestamp(new Date(t)) };
         stored.push(snap);
         const prune = new Set(
@@ -34,12 +32,13 @@ function simulate(timeline: number[]): Snap[] {
             ).map((s) => s.id),
         );
         stored = stored.filter((s) => !prune.has(s.id));
-    });
+    }
     return stored;
 }
 
 function fmt(name: string): string {
-    const d = parseSnapshotTimestamp(name)!;
+    const d = parseSnapshotTimestamp(name);
+    if (!d) throw new Error(`Not a snapshot timestamp: ${name}`);
     const p = (n: number) => String(n).padStart(2, '0');
     return `Jun ${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
 }
