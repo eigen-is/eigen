@@ -1,4 +1,4 @@
-// After an edit writes cells, these bring the formula map up to date with them and recompute the formulas that read
+// After an edit writes cells, these bring the formula graph up to date with them and recompute the formulas that read
 // them: the cells the edit names, or every cell of the given or selected ranges. An edit that moved a formula so it
 // reads other cells names it in `formulasAt`, since no cell it reads changed.
 

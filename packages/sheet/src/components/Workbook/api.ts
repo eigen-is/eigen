@@ -110,7 +110,7 @@ export function generateAPIs(
                 return firstMove !== -1 && batches.slice(firstMove).some((ops) => !fresh.has(ops) && movesRows(ops));
             };
             const lost = overtaken(currentSheetId);
-            // The formula engine starts empty, so a replay of cell edits builds no formula map, and it is built once
+            // The formula engine starts empty, so a replay of cell edits builds no formula graph, and it is built once
             // the browser is idle. A batch with a sheet or row op builds it for its recompute.
             getContext().formulaCache.resetEngine();
             setContext(

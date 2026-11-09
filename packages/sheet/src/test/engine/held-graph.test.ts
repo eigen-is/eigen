@@ -233,7 +233,7 @@ function editor(sheets: readonly Sheet[]): Context {
 
 describe('a held formula graph', () => {
     for (const seed of Array.from({ length: 16 }, (_, i) => i + 1)) {
-        test(`seed ${seed}: every batch leaves the values a fresh recalc computes`, () => {
+        test(`seed ${seed}: after every batch the graph reaches what a fresh one does, and the values are fresh`, () => {
             const rnd = random(seed);
             const start = fresh(workbook(rnd));
             const batches: Op[][] = [];

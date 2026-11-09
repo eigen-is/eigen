@@ -217,7 +217,7 @@ describe('applyOp and a joiner agree on the batch shapes that once disagreed', (
         expect(summary(applyPeerOps(ctx, ops).sheets)).toEqual(summary(join(ctx, [ops])));
     });
 
-    it('leaves the formula map alone when a batch fails after adding a sheet with formulas', () => {
+    it('leaves the formula graph alone when a batch fails after adding a sheet with formulas', () => {
         const withFormula = {
             ...added,
             celldata: [

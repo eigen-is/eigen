@@ -1,4 +1,4 @@
-// A merge, a saved link and a split write cells, so each keeps the formula map and the formulas that read those cells
+// A merge, a saved link and a split write cells, so each keeps the formula graph and the formulas that read those cells
 // up to date, and its undo brings both back.
 
 import { describe, expect, test } from 'bun:test';

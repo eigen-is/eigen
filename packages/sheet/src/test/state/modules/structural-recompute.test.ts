@@ -109,7 +109,7 @@ describe('a row delete', () => {
         expect(at(t.ctx.sheets, 's1', 0, 1)?.v).toBe(7);
     });
 
-    test('the next edit finds the formula map the recompute built', () => {
+    test('the next edit finds the formula graph the recompute built', () => {
         const t = tab(start());
         warmFormulaGraph(t.ctx);
         removeRow(t, 1);

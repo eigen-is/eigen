@@ -188,8 +188,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             setContext(viewed);
         }, []);
 
-        // The formula map is built off the interaction path, so the first edit on a large workbook doesn't wait seconds
-        // for it.
+        // The formula graph is built off the interaction path, so the first edit on a large workbook doesn't wait
+        // seconds for it.
         useEffect(() => warmFormulaGraphOnIdle(getContext), [getContext]);
 
         const setContextWithProduce = useCallback(

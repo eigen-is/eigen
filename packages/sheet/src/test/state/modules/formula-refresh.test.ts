@@ -1,7 +1,7 @@
 // Regression: refreshing the grid must not crash when a *non-active* sheet has
 // a formula at a row beyond the active sheet's bounds. Repro: select-all +
 // delete on a small sheet while a taller sheet holds a formula in, say, column
-// E. The delete clears the active sheet's formulaCellInfoMap entries, forcing
+// E. The delete clears the active sheet's formulas from the graph, forcing
 // execFunctionGroup to rebuild the map over every sheet's cells. getcellFormula
 // then indexed the active sheet's data with the *other* sheet's (r,c), throwing
 // "Cannot read properties of undefined (reading '4')".

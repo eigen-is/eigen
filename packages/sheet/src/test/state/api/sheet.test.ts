@@ -140,7 +140,7 @@ describe('sheet/core/api/sheet', () => {
 
     // The map may be built before the copy, such as while the browser is idle after a load, and the add must not leave
     // the copy out of it.
-    test("a copy's formula follows an edit of the copy's cells once the formula map is built", () => {
+    test("a copy's formula follows an edit of the copy's cells once the formula graph is built", () => {
         const base = workbookContextFactory({
             currentSheetId: 'id_1',
             sheets: [

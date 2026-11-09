@@ -32,7 +32,7 @@ const formulaCells = (ctx: Context) =>
 
 // A paste replaces whole cells, so the history of its undo and redo carries whole-cell patches, and the map has to
 // follow them either way.
-// A peer's op or a file can write anything into a cell, and the formula map reads every `f` it finds.
+// A peer's op or a file can write anything into a cell, and the formula graph reads every `f` it finds.
 describe('a formula that is no text', () => {
     const forged = [5, 0, true, {}, ''];
 
@@ -284,7 +284,7 @@ describe('setFormulaCellInfo — a reference to a sheet with no matrix', () => {
     });
 });
 
-// The editor's formula map and the server's recalc must find the same cells a formula reads, or an edit recalculates
+// The editor's formula graph and the server's recalc must find the same cells a formula reads, or an edit recalculates
 // what an export would not. A whole column or row reads the same on any sheet, even Empty with no rows, and Holey,
 // whose first row is missing, as a matrix from a stored file's rows can be. A function's arguments are read like any other part of the formula, INDEX, OFFSET and
 // INDIRECT included.

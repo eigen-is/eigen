@@ -92,6 +92,8 @@ export class FormulaGraph {
         }
         this.cells.set(op.id, moved);
 
+        // The op rewrote the references it moved, so the ones resolved before it are seldom read again.
+        this.walk = { ...this.walk, cellTextToIndexList: {} };
         const data = new Map(sheets.map((sheet) => [sheet.id, sheet.data]));
         for (const node of Object.values(this.nodes)) {
             const formula = data.get(node.id)?.[node.r]?.[node.c]?.f;
