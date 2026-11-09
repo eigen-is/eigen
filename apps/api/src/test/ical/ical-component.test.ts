@@ -355,6 +355,9 @@ describe('SEQUENCE', () => {
         const resource = parseResource(KITCHEN_SINK);
         patchEvent(resource, null, { title: 'Renamed sink', location: 'Room 9' }, CTX);
         expect(Number(masterOf(resource).getFirstPropertyValue('sequence'))).toBe(2);
+
+        patchEvent(resource, null, { description: null }, CTX);
+        expect(Number(masterOf(resource).getFirstPropertyValue('sequence'))).toBe(2);
     });
 
     // An attendee copy mirrors the organizer's revision instead of computing one: the RFC 5546 replay
@@ -387,6 +390,60 @@ describe('SEQUENCE', () => {
         );
         expect(Number(masterOf(resource).getFirstPropertyValue('sequence'))).toBe(3);
         expect(String(masterOf(resource).getFirstPropertyValue('created'))).toBe('2025-12-01T09:00:00Z');
+    });
+});
+
+describe('clearing a field', () => {
+    const series = (...extra: string[]) => parseResource(vcal(VTZ_AMS, clientSeries(...extra)));
+    const FILLED = ['DESCRIPTION:Agenda', 'LOCATION:Room 9', 'URL:https://example.com/a', 'X-EIGEN-COLOR:#ff0000'];
+
+    test.each([
+        ['description', { description: null }],
+        ['location', { location: null }],
+        ['url', { data: { url: '' } }],
+        ['x-eigen-color', { data: { color: '' } }],
+    ])('clearing only %s counts as a change and touches the revision', (name, patch) => {
+        const resource = series(...FILLED);
+
+        expect(patchEvent(resource, null, patch, CTX)).toBe(true);
+
+        const master = masterOf(resource);
+        expect(master.getFirstProperty(name)).toBeNull();
+        expect(String(master.getFirstPropertyValue('last-modified'))).toBe('2026-06-01T10:00:00Z');
+        expect(String(master.getFirstPropertyValue('dtstamp'))).toBe('2026-06-01T10:00:00Z');
+    });
+
+    test('a guest copy mirrors the organizer sequence alongside a cleared field', () => {
+        const resource = series(...FILLED);
+        const guest = { ...CTX, actorIsOrganizer: false };
+
+        expect(patchEvent(resource, null, { location: null, sequence: 3 }, guest)).toBe(true);
+
+        expect(masterOf(resource).getFirstProperty('location')).toBeNull();
+        expect(String(masterOf(resource).getFirstPropertyValue('last-modified'))).toBe('2026-06-01T10:00:00Z');
+    });
+
+    test('dropping a DURATION that sat beside a DTEND counts as a change', () => {
+        const resource = series('DURATION:PT1H');
+        const startTime = new Date('2026-04-15T10:00:00Z');
+
+        expect(patchEvent(resource, null, { startTime }, CTX)).toBe(true);
+
+        expect(masterOf(resource).getFirstProperty('duration')).toBeNull();
+        expect(masterOf(resource).getFirstProperty('last-modified')).not.toBeNull();
+    });
+
+    test('clearing what is already absent, or restating a value, changes nothing', () => {
+        const absent = series();
+        const before = serializeResource(absent);
+        const patch = { description: null, location: '', data: { url: '', color: '' } };
+        expect(patchEvent(absent, null, patch, CTX)).toBe(false);
+        expect(serializeResource(absent)).toBe(before);
+
+        const filled = series(...FILLED);
+        const restated = { description: 'Agenda', location: 'Room 9', sequence: 3 };
+        expect(patchEvent(filled, null, restated, CTX)).toBe(false);
+        expect(masterOf(filled).getFirstProperty('last-modified')).toBeNull();
     });
 });
 
@@ -556,6 +613,74 @@ describe('stamp trust', () => {
         restampResource(incoming, stored());
         expect(cpuMs()).toBeLessThan(1500);
         expect(masterOf(incoming).getAllProperties('x-eigen-exdate')).toHaveLength(20_000);
+    });
+
+    test('thirty-two thousand EXDATEs with no SEQUENCE re-stamp without rescanning the properties per stamp', () => {
+        const count = 32_000;
+        const padding = 128_000;
+        const days = Array.from({ length: count }, (_, day) =>
+            new Date(Date.UTC(2026, 3, 29) + day * 86400_000).toISOString(),
+        );
+        const incoming = parseResource(
+            vcal([
+                'BEGIN:VEVENT',
+                'UID:series@eigen',
+                'DTSTAMP:20260101T000000Z',
+                'DTSTART:20260415T120000Z',
+                ...Array<string>(padding).fill('X-PAD:p'),
+                ...days.map((iso) => `EXDATE:${iso.replace(/[-:]|\.\d{3}/g, '')}`),
+                'END:VEVENT',
+            ]),
+        );
+
+        const cpuMs = cpuClock();
+        restampResource(incoming, null);
+        expect(cpuMs()).toBeLessThan(700);
+
+        const master = masterOf(incoming);
+        expect(master.getAllProperties().map((prop) => prop.name)).toEqual([
+            'uid',
+            'dtstamp',
+            'dtstart',
+            ...Array<string>(padding).fill('x-pad'),
+            ...Array<string>(count).fill('exdate'),
+            'x-eigen-event-id',
+            ...Array<string>(count).fill('x-eigen-exdate'),
+        ]);
+        const stamps = master.getAllProperties('x-eigen-exdate');
+        expect(stamps.map((stamp) => stamp.getFirstValue())).toEqual(days.map((iso) => iso.slice(0, 10)));
+        expect(stamps.every((stamp) => stamp.getFirstParameter('x-eigen-seq') === '0')).toBe(true);
+        expect(new Set(stamps.map((stamp) => stamp.getFirstParameter('x-eigen-event-id'))).size).toBe(count);
+    });
+
+    test('forty thousand twins of one key read a huge stored VEVENT once, and only the first keeps its id', () => {
+        const twins = 40_000;
+        const stamps = [
+            'X-EIGEN-EVENT-ID:stored-id',
+            'X-EIGEN-CREATED-BY:maker',
+            'X-EIGEN-ORGANIZER-EVENT:org-event',
+            'X-EIGEN-ORGANIZER-USER:org-user',
+            'X-EIGEN-COLOR:#ff0000',
+            'X-EIGEN-IMPORTED-ORGANIZER:boss@example.com',
+        ];
+        const stored = parseResource(
+            vcal(['BEGIN:VEVENT', 'UID:twin@eigen', ...Array<string>(16_000).fill('X-PAD:p'), ...stamps, 'END:VEVENT']),
+        );
+        const twin = ['BEGIN:VEVENT', 'UID:twin@eigen', 'DTSTAMP:20260101T000000Z', 'END:VEVENT'];
+        const incoming = parseResource(vcal(Array.from({ length: twins }, () => twin).flat()));
+
+        const cpuMs = cpuClock();
+        restampResource(incoming, stored);
+        expect(cpuMs()).toBeLessThan(2000);
+
+        const lines = (vevent: ICAL.Component) => vevent.getAllProperties().map((prop) => prop.toICALString());
+        const vevents = incoming.getAllSubcomponents('vevent');
+        expect(lines(vevents[0]).slice(2)).toEqual(stamps);
+        for (const vevent of vevents.slice(1)) {
+            expect(lines(vevent).slice(3)).toEqual(stamps.slice(1));
+        }
+        const ids = vevents.map((vevent) => vevent.getFirstPropertyValue('x-eigen-event-id'));
+        expect(new Set(ids).size).toBe(twins);
     });
 
     test('a body that stripped every X- line gets its ids and links back', () => {
@@ -1094,6 +1219,47 @@ describe('refusals', () => {
 });
 
 describe('stripping', () => {
+    test('sixty-four thousand forged stamp names go in one pass and the rest keep their order', () => {
+        const forged = Array.from({ length: 64_000 }, (_, n) => `X-EIGEN-${n}:forged`);
+        const incoming = parseResource(
+            vcal(
+                VTZ_AMS,
+                clientSeries(
+                    'X-KEEP-FIRST:a',
+                    ...forged.slice(0, 32_000),
+                    'ATTENDEE;X-EIGEN-SEQ=9;CN=Bob:mailto:bob@eigen.example',
+                    ...forged.slice(32_000),
+                    'X-KEEP-LAST:z',
+                ),
+            ),
+        );
+
+        const cpuMs = cpuClock();
+        restampResource(incoming, null);
+        expect(cpuMs()).toBeLessThan(250);
+
+        const expected = [
+            'uid',
+            'dtstamp',
+            'summary',
+            'sequence',
+            'dtstart',
+            'dtend',
+            'rrule',
+            'x-keep-first',
+            'attendee',
+            'x-keep-last',
+            'x-eigen-event-id',
+        ];
+        const names = (resource: ICAL.Component) =>
+            masterOf(resource)
+                .getAllProperties()
+                .map((prop) => prop.name);
+        expect(names(incoming)).toEqual(expected);
+        expect(names(parseResource(serializeResource(incoming)))).toEqual(expected);
+        expect(masterOf(incoming).getFirstProperty('attendee')?.toJSON()[1]).toEqual({ cn: 'Bob' });
+    });
+
     test('strip leaves no X-EIGEN substring and changes nothing else', () => {
         const withStamps = buildResource([MASTER, OVERRIDE, EXCLUSION]);
         const stripped = parseResource(serializeResource(withStamps));
