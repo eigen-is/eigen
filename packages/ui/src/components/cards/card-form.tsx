@@ -1,3 +1,7 @@
+// The form that adds or edits a comment card or a sticky: title, description, attachments, color and assignee. It only
+// stages them; the host saves them on submit and uploads the attachments, and Cancel touches nothing. Editing can
+// offer Delete, which the host confirms.
+
 import { wasToasted } from '@workspace/lib/api-error';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { ChatAttachment } from '@workspace/lib/types/chat';
@@ -213,14 +217,12 @@ export function CardForm({
                 </div>
             </div>
             <DialogFooter className="pt-2">
-                <div className="mr-auto flex gap-2">
+                <div className="mr-auto flex items-center gap-2">
                     {allowAttachments && (
                         <>
                             <TooltipButton
                                 icon={Paperclip}
                                 tooltipText="Add attachment"
-                                variant="outline"
-                                className="h-9 w-9 text-muted-foreground hover:text-foreground"
                                 onClick={() => setPickerOpen(true)}
                                 type="button"
                             />
@@ -234,16 +236,7 @@ export function CardForm({
                             />
                         </>
                     )}
-                    {onDelete && (
-                        <TooltipButton
-                            icon={Trash2}
-                            tooltipText="Delete"
-                            variant="outline"
-                            className="h-9 w-9 text-muted-foreground hover:text-destructive"
-                            onClick={onDelete}
-                            type="button"
-                        />
-                    )}
+                    {onDelete && <TooltipButton icon={Trash2} tooltipText="Delete" onClick={onDelete} type="button" />}
                 </div>
                 <Button type="button" variant="outline" onClick={onCancel}>
                     Cancel

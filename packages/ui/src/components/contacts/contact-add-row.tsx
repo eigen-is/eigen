@@ -4,7 +4,7 @@
 
 import { cn } from '@workspace/ui/lib/utils';
 import { Plus } from 'lucide-react';
-import { Button } from '../button';
+import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { ContactAutosuggest } from './contact-autosuggest';
 
 type ContactAddRowProps = {
@@ -31,7 +31,7 @@ export function ContactAddRow({
     className,
 }: ContactAddRowProps) {
     return (
-        <div className={cn('flex', className)}>
+        <div className={cn('flex items-center', className)}>
             <div className="flex-1 relative">
                 <ContactAutosuggest
                     id={id}
@@ -44,17 +44,14 @@ export function ContactAddRow({
                     onEmptyEnter={onEmptyEnter}
                 />
             </div>
-            <Button
+            <TooltipButton
+                icon={Plus}
+                tooltipText="Add"
                 type="button"
-                size="icon"
-                variant="outline"
-                className="ml-2"
-                aria-label="Add"
+                className="ml-2 shrink-0"
                 onClick={onSubmit}
                 disabled={!value}
-            >
-                <Plus className="h-4 w-4" />
-            </Button>
+            />
         </div>
     );
 }

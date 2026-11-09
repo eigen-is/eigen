@@ -1,3 +1,6 @@
+// The icon-only button of every toolbar, panel and dialog: flat, with its tooltip as its name. It takes no outline
+// variant, so an icon can't grow a border (LAYOUT.md § An icon-only button is flat, a button with text has an edge).
+
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { Button } from '../../button';
@@ -8,7 +11,7 @@ export type TooltipButtonProps = {
     tooltipText: string;
     onClick?: () => void;
     size?: 'default' | 'sm' | 'lg' | 'icon';
-    variant?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
+    variant?: 'default' | 'destructive' | 'secondary' | 'ghost' | 'link';
     className?: string;
     disabled?: boolean;
     label?: string;
