@@ -1,6 +1,10 @@
+// A dialog for picking files from the viewer's Drive: a DriveBrowser, a Select button and, where the caller
+// can take one, Upload from device. It hands the picked files back, such as to the file menu's Open. A single
+// pick also confirms on a second click of its row; a multi pick takes every file highlighted.
+
 import { useAuth } from '@workspace/lib/auth';
 import { useDriveViewPreferences } from '@workspace/lib/drive';
-import type { DrivePath, DriveSortDir, DriveSortKey } from '@workspace/lib/types/drive';
+import type { DrivePath, DriveSort } from '@workspace/lib/types/drive';
 import { isFolderType } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import {
@@ -35,14 +39,11 @@ export function DriveFilePicker({
     multiSelect = false,
 }: DriveFilePickerProps) {
     const { user } = useAuth();
-    // Local sort, seeded once from the global view preference — header clicks inside the dialog sort
-    // the listing but never PUT the global settings.
+    // Seeded once from the view preference and kept here, so a sort picked in the dialog never writes it.
     const { sortKey, sortDir } = useDriveViewPreferences();
-    const [sort, setSort] = useState<{ key: DriveSortKey; dir: DriveSortDir }>({ key: sortKey, dir: sortDir });
+    const [sort, setSort] = useState<DriveSort>({ key: sortKey, dir: sortDir });
     const [selected, setSelected] = useState<DrivePath | null>(null);
-    // In multi-select mode the DriveTable owns modifier-aware selection (shift/ctrl range +
-    // toggle). We mirror its current selection here so the submit button reads what the user
-    // actually sees highlighted.
+    // The table owns a multi pick, Shift and Ctrl clicks included; this mirror lets Select read it.
     const [multiSelected, setMultiSelected] = useState<DrivePath[]>([]);
 
     const reset = useCallback(() => {
@@ -68,12 +69,12 @@ export function DriveFilePicker({
 
     if (!user) return null;
     const ownerId = user.id;
+    const pickedFiles = multiSelected.filter((p) => !isFolderType(p.type));
 
     const handleSubmit = () => {
         if (multiSelect) {
-            const files = multiSelected.filter((p) => !isFolderType(p.type));
-            if (files.length === 0) return;
-            onSelect(files);
+            if (pickedFiles.length === 0) return;
+            onSelect(pickedFiles);
             onOpenChange(false);
             reset();
         } else if (selected) {
@@ -86,9 +87,8 @@ export function DriveFilePicker({
         onOpenChange(nextOpen);
     };
 
-    const selectedFileCount = multiSelected.filter((p) => !isFolderType(p.type)).length;
-    const hasSelection = multiSelect ? selectedFileCount > 0 : !!selected;
-    const submitLabel = multiSelect && selectedFileCount > 0 ? `Select (${selectedFileCount})` : 'Select';
+    const hasSelection = multiSelect ? pickedFiles.length > 0 : !!selected;
+    const submitLabel = multiSelect && pickedFiles.length > 0 ? `Select (${pickedFiles.length})` : 'Select';
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
