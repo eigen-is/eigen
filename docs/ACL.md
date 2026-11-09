@@ -159,7 +159,7 @@ Deleting a user or a team reaches into no other home, so the `shared_paths` rows
 
 Only a clean "not found" deletes. A lookup that throws fails the listing with every row in place, and an owner id that is neither a user nor a team is never judged.
 
-The Watched view doesn't take this step. `aggregateWatches` asks each owner in `listSharedOwnerIds` and treats a failure as an empty list, which it needs anyway for an owner whose home is mid-restore, so a deleted owner adds nothing to the view.
+The Watched view doesn't take this step. `aggregateWatches` asks each owner in `listSharedOwnerIds` and skips one `getOwnerExists` says is gone, so a deleted owner adds nothing to the view and logs nothing. Any other failed read, such as a home mid-restore, is logged and leaves that owner out.
 
 A restore of a deleted owner pushes nothing. A recipient who listed at any time between the deletion and the end of the restore has lost the row, though the owner's ACL still lets them in. The row returns at the next change that pushes that path, such as an ACL change or a rename, as a new share with a bell row. This is the accepted cost of cleaning up on read.
 
