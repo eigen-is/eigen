@@ -18,8 +18,13 @@ export function MergedSelect<T extends string>({ value, onChange, options }: Mer
     // warn that the select went from controlled to uncontrolled.
     const controlled = mixed || value === undefined ? '' : value;
     return (
-        // Radix types onValueChange as taking any string, so the cast back to the option union lives here only.
-        <Select value={controlled} onValueChange={(v) => onChange(v as T)}>
+        <Select
+            value={controlled}
+            onValueChange={(v) => {
+                const option = options.find((o) => o.value === v);
+                if (option) onChange(option.value);
+            }}
+        >
             <SelectTrigger size="xs" className="w-full">
                 <SelectValue placeholder={mixed ? '—' : undefined} />
             </SelectTrigger>

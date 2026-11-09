@@ -39,19 +39,8 @@
     "packages/sheet/src/state/modules/toolbar.ts": 1,
     "packages/sheet/src/state/render/cells.ts": 1,
     "packages/ui/src/components/collab/use-awareness-peers.ts": 1,
-    "packages/ui/src/components/comments/comment-filter-button.tsx": 1,
-    "packages/ui/src/components/contacts/contact-autosuggest.tsx": 1,
-    "packages/ui/src/components/drive/eigendoc-config.ts": 1,
-    "packages/ui/src/components/dropdown-menu.tsx": 1,
-    "packages/ui/src/components/form.tsx": 2,
-    "packages/ui/src/components/input-group.tsx": 1,
-    "packages/ui/src/components/layout/app/column-layout.tsx": 1,
     "packages/ui/src/components/layout/pages/login-route.tsx": 1,
-    "packages/ui/src/components/properties-panel/background-fill-block.tsx": 1,
-    "packages/ui/src/components/properties-panel/merged-select.tsx": 1,
-    "packages/ui/src/components/search/prosemirror-search-highlight.ts": 1,
-    "packages/ui/src/hooks/is-typing-target.ts": 1,
-    "packages/ui/src/hooks/use-scroll-to-index.ts": 1
+    "packages/ui/src/components/search/prosemirror-search-highlight.ts": 1
   },
   "non-null-assertions": {
     "apps/api/scripts/mail-bench.ts": 5,
@@ -74,7 +63,6 @@
     "packages/ui/src/components/drive/eigendoc-list-view.tsx": 2,
     "packages/ui/src/components/drive/eigendoc-shared-view.tsx": 1,
     "packages/ui/src/components/layout/sidebar/app-sidebar.tsx": 1,
-    "packages/ui/src/hooks/use-long-press.ts": 1,
     "packages/ui/src/lib/eigenAppRouter.tsx": 1
   },
   "interface-decls": 1,
