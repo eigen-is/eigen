@@ -12,6 +12,7 @@ import { RRule } from 'rrule';
 import { ApiError } from '../core';
 import { addExclusion, buildResource, parseResource, patchEvent, putOverride, removeExclusion } from '../ical';
 import type { EventPatch, WriteContext } from '../ical/ical-component';
+import { serializeEventForImip } from '../ical/ical-component';
 import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../ical/recurrence-limits';
 import { parseRecurrenceKey } from '../ical/wall-clock';
 import { sendMail } from '../mailer/mailer';
@@ -283,6 +284,7 @@ async function propagateWrite(
     // A write that names nobody and replaced nobody owes the guests nothing; emptying a non-override's list cancels.
     if (!attendees.length && !held.length) return;
     if (isInvitationFromOthers(series ?? event, calendar.home.user.email)) return;
+    if (previous && guestView(previous, series) === guestView(event, series)) return;
     if (series && event.status === 'cancelled') {
         await propagateCancellation(calendar.home, event, held, series);
         return;
@@ -290,6 +292,15 @@ async function propagateWrite(
     // An occurrence write is itself one exception and carries none.
     const exceptions = series ? [] : exceptionsOf(calendar, event.id);
     await propagateInvitation(calendar.home, event, user, held, attendees, series ?? undefined, exceptions);
+}
+
+// The file a guest would get, minus the revision that changes with every write. An instant reads the same in any zone,
+// unless a rule repeats in that zone's wall clock.
+function guestView(event: CalendarEvent, series: CalendarEvent | null): string {
+    const never = new Date(0);
+    const timezone = event.rrule ? event.timezone : null;
+    const view = { ...event, timezone, sequence: 0, createdAt: never, updatedAt: never };
+    return serializeEventForImip(view, 'REQUEST', series ?? undefined);
 }
 
 // Caller holds the write lock, so the row the patch is computed against is the row the write overwrites.
