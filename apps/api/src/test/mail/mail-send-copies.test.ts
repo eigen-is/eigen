@@ -2,7 +2,9 @@ import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type { AddressObject, EmailDraft, SentMailResult } from '@workspace/lib/types/mail';
+import MailComposer from 'nodemailer/lib/mail-composer';
 import { getHome } from '../../lib/home';
+import { parseMail } from '../../lib/mail/mail-parser';
 import * as mailer from '../../lib/mailer/mailer';
 import { restoreEnvAfterEach } from '../env-test-helpers';
 import { makeEml } from '../mail-test-helpers';
@@ -540,6 +542,31 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
 
         expect(sent.length).toBe(1);
         expect(sent[0].attachments?.map((a) => Buffer.byteLength(a.content))).toEqual([partBytes]);
+    });
+
+    test('a send carries an attached message as a part, and nothing of it in the body', async () => {
+        startCapture();
+        const inner = 'From: inner@b.c\r\nBcc: secret@b.c\r\nSubject: Inner\r\n\r\nThe inner words\r\n';
+        const form = new FormData();
+        form.append('file', new File([inner], 'kept.eml', { type: 'message/rfc822' }));
+        const uploaded = await assertJson<{ tempId: string }>(
+            await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/draft/attachment`, {
+                method: 'POST',
+                body: form,
+            }),
+        );
+        const { res } = await sendDraftWithRef('to@x.com', { refs: [], tempAttachmentIds: [uploaded.tempId] });
+        expect(res.status).toBe(200);
+
+        const wire = await new Promise<Buffer>((resolve, reject) => {
+            new MailComposer(sent[0]).compile().build((err, message) => (err ? reject(err) : resolve(message)));
+        });
+        const received = parseMail(wire);
+        expect(received.attachments.map((a) => [a.contentType, Buffer.from(a.content).toString()])).toEqual([
+            ['message/rfc822', inner],
+        ]);
+        expect(received.text).not.toContain('secret@b.c');
+        expect(received.html).not.toContain('secret@b.c');
     });
 
     // IMAP clients read the reply mark off the original's filename (`R`, \Answered); the app off its row.

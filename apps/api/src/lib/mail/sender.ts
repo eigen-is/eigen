@@ -3,7 +3,8 @@
 // presses send.
 
 import type { EmailDraft } from '@workspace/lib/types/mail';
-import type { OutboundAttachment, OutboundMail } from '../mailer/mailer';
+import { mailAttachmentName } from '@workspace/lib/types/mail';
+import type { OutboundMail } from '../mailer/mailer';
 import { buildMessageId } from './mailutils';
 import { canonicalizeRecipients } from './recipients';
 
@@ -39,10 +40,14 @@ export function draftToOutboundMail(draft: EmailDraft, fallbackEmail: string): O
 
     if (draft.html) message.html = draft.html;
 
-    if (draft.attachments?.length) {
-        message.attachments = draft.attachments.flatMap((a): OutboundAttachment[] =>
-            a.filename ? [{ filename: a.filename, content: Buffer.from(a.content), contentType: a.contentType }] : [],
-        );
+    if (draft.attachments.length) {
+        // Spelled out because MailComposer marks a message/* part inline, and a recipient's client would draw it in the body.
+        message.attachments = draft.attachments.map((a) => ({
+            filename: mailAttachmentName(a, a.index),
+            content: Buffer.from(a.content),
+            contentType: a.contentType,
+            contentDisposition: 'attachment',
+        }));
     }
 
     return message;

@@ -10,27 +10,27 @@ import { buildMessageId } from './mailutils';
 export type EmlAttachment = {
     filename: string;
     content: Buffer;
-    contentType?: string;
+    contentType: string;
 };
 
-export type EmlInput = {
+type EmlInput = {
     id: string;
-    from?: AddressObject;
+    from: AddressObject;
     to?: AddressObject;
     cc?: AddressObject;
     bcc?: AddressObject;
     subject: string;
     text: string;
     html: string;
-    date?: Date;
+    date: Date;
     inReplyTo?: string;
     references?: string | string[];
     repliedToId?: string;
-    attachments?: EmlAttachment[];
+    attachments: EmlAttachment[];
 };
 
 function formatAddresses(field: AddressObject | undefined): string {
-    if (!field?.value) return '';
+    if (!field) return '';
     // The send path only ever sees the re-parsed header, so a bare group name here would drop every member.
     return flattenAddresses(field.value)
         .map(({ name, address }) => (name ? `${name.trim()} <${address.trim()}>` : address.trim()))
@@ -46,16 +46,13 @@ export async function createEmlContent(input: EmlInput): Promise<Buffer> {
         subject: input.subject,
         text: input.text,
         html: input.html,
-        date: input.date ?? new Date(),
+        date: input.date,
         messageId: buildMessageId(input.id),
         inReplyTo: input.inReplyTo,
         references: input.references,
         headers: input.repliedToId ? { [REPLIED_TO_HEADER]: input.repliedToId } : undefined,
-        attachments: input.attachments?.map((a) => ({
-            filename: a.filename,
-            content: a.content,
-            contentType: a.contentType,
-        })),
+        // Spelled out because MailComposer marks a message/* part inline, and the parser draws an inline one into the body.
+        attachments: input.attachments.map((a) => ({ ...a, contentDisposition: 'attachment' })),
     });
 
     const node = composer.compile();

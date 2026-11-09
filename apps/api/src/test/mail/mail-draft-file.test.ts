@@ -12,7 +12,15 @@ import { parseMail } from '../../lib/mail/mail-parser';
 import { cutDraftReferences } from '../../lib/mail/reference-links';
 import { boxDir, mailRootOf, seedMaildirFile } from '../mail-test-helpers';
 import type { TestUser } from '../setup';
-import { assertJson, authedRequest, createTestUser, ensureServer, eventually, putDraft } from '../setup';
+import {
+    assertJson,
+    authedRequest,
+    createTestUser,
+    ensureServer,
+    eventually,
+    putDraft,
+    uploadDraftAttachment,
+} from '../setup';
 
 const isWindows = process.platform === 'win32';
 
@@ -296,6 +304,45 @@ describe.skipIf(isWindows)('Mail — a draft file is the only copy of the draft'
         expect((await home.mail.messageGet(old.id))?.html).toBe('<p>typed since</p>');
         expect((await home.mail.messageGet(client))?.html).toContain('the client’s edit');
         expect(readdirSync(cur).filter((name) => name.startsWith(`${old.id},`)).length).toBe(1);
+    });
+
+    // MailComposer marks a message/* part inline by default, and the parser then draws it into the body.
+    describe('an attached message stays an attachment', () => {
+        const inner = [
+            'From: inner@b.c',
+            'To: friend@b.c',
+            'Bcc: secret@b.c',
+            'Subject: The inner message',
+            '',
+            'The inner words',
+            '',
+        ].join('\r\n');
+        const report = ['Reporting-MTA: dns; mx.b.c', '', 'Final-Recipient: rfc822; secret@b.c', ''].join('\r\n');
+
+        test.each([
+            ['message/rfc822', 'kept.eml', inner],
+            ['message/delivery-status', 'status.txt', report],
+        ])('a %s part survives three saves byte for byte, and the body stays clean', async (type, name, bytes) => {
+            const uploaded = await uploadDraftAttachment(user.sessionToken, user.id, new File([bytes], name, { type }));
+            const fields = { subject: 'Holds a message', to, text: 'Outer', html: '<p>Outer</p>' };
+            const first = await save(fields, { tempAttachmentIds: [uploaded.tempId] });
+            expect(first.attachments.map((a) => a.filename)).toEqual([name]);
+
+            await save({ ...fields, id: first.id });
+            const third = await save({ ...fields, id: first.id });
+            expect(third.attachments.map((a) => a.filename)).toEqual([name]);
+
+            const fetched = await read(first.id);
+            expect(fetched.attachments.map((a) => a.contentType)).toEqual([type]);
+            expect(fetched.bcc).toBeUndefined();
+            expect(fetched.html).toBe('<p>Outer</p>');
+            expect(fetched.text?.trim()).toBe('Outer');
+            const part = await authedRequest(
+                user.sessionToken,
+                `/mail/${user.id}/message/${first.id}/attachment/0/${name}`,
+            );
+            expect(await part.text()).toBe(bytes);
+        });
     });
 
     test('a nameless part in a draft another client wrote survives a save under its chip name', async () => {

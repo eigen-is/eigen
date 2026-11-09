@@ -341,7 +341,7 @@ export class Mail {
             inReplyTo: email.inReplyTo,
             references: email.references,
             repliedToId: email.repliedToId,
-            attachments: attachments.length ? attachments : undefined,
+            attachments,
         });
 
         // Persist under the id baked into the EML header: a minted id leaves the wire Message-ID out of sync with the Sent EML.
