@@ -61,8 +61,7 @@ export function useCanvasCommentHost({
 }: CanvasCommentHostArgs): CanvasCommentHost {
     const { user } = useAuth();
 
-    // The cards are read here, so the active set doesn't depend on the lifecycle's own read of them. A card
-    // anchored to an element takes that element's text as its panel row.
+    // The cards are read here, so the active set doesn't depend on the lifecycle's own read of them.
     const cards = useCommentCards(doc.yjsDoc, 'comments');
     const activeComments = useCanvasComments(doc.elements, cards);
 
@@ -90,7 +89,6 @@ export function useCanvasCommentHost({
         openChat: openLifecycleChat,
     } = lifecycle;
 
-    // The host owns the filter, so it survives closing and opening the panel.
     const commentFilter = useCommentFilter();
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
 
@@ -109,7 +107,6 @@ export function useCanvasCommentHost({
         if (!open) setCommentAnchorId(null);
     }, []);
 
-    // Opening a card first reveals the element it is anchored to.
     const openCard = useCallback(
         (cardId: string) => {
             const el = elementForCommentCard(doc.elements, cardId);
@@ -125,19 +122,14 @@ export function useCanvasCommentHost({
         [openCard, openLifecycleChat],
     );
 
-    // A comment raised from an element anchors to it. One raised from the panel stays document-level.
     const handleSaveNew = useCallback(
         async (patch: CardFormPatch, attachments?: CardAttachmentDraft[], assignee?: string | null) => {
             const anchorId = commentAnchorId;
             const card = await createCard({ ...patch, attachments });
             if (card && anchorId) {
                 const el = doc.elements.find((e) => e.id === anchorId);
-                // A double submit must not list the same card twice on the element.
                 const ids = el ? parseIdList(el.commentCardIds) : [];
                 if (el && !ids.includes(card.id)) {
-                    // The write is untracked, as the delete is. The card lives in the `comments` map, outside the
-                    // UndoManager's scope, so a ⌘Z that reverted only the anchor would turn the new comment into a
-                    // document-level one.
                     doc.updateElementUntracked(anchorId, { commentCardIds: serializeIdList([...ids, card.id]) });
                 }
             }
