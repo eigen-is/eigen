@@ -49,8 +49,10 @@ export function LandingBlocks({ showInstall }: LandingBlocksProps) {
                             Eigen is pre-1.0. Expect rough edges, and breaking changes until 1.0.
                         </p>
                     </div>
-                    <div className="flex items-center justify-between gap-3 rounded-md border bg-background py-2.5 pr-2.5 pl-4">
-                        <code className="overflow-x-auto font-mono text-sm whitespace-nowrap">{INSTALL_COMMAND}</code>
+                    <div className="flex min-w-0 items-center justify-between gap-3 rounded-md border bg-background py-2.5 pr-2.5 pl-4">
+                        <code className="min-w-0 overflow-x-auto font-mono text-sm whitespace-nowrap">
+                            {INSTALL_COMMAND}
+                        </code>
                         <TooltipButton
                             icon={Copy}
                             tooltipText="Copy to clipboard"
