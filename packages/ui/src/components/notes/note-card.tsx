@@ -1,8 +1,11 @@
 // A card as it sits on a board or in a list, such as a sticky: its cover image, title, a preview of the
-// description, how far its checklist is done, a footer with replies, attachments and the assignee, and a dot
-// when the caller marks it unread. A deleted comment keeps the frame, without its color, and shows only its title
-// and that it was deleted. Clicking it is the caller's to handle, usually by opening NoteCardDialog.
+// description, how far its checklist is done, and a footer with a dot when the caller marks it unread, then replies,
+// attachments and the assignee. The footer is muted, except that dot and the avatar of an open card assigned to the
+// person looking at it, which stands out with a ring in the app's color. A deleted comment keeps the frame, without its
+// color, and shows only its title and that it was deleted. Clicking it is the caller's to handle, usually by opening
+// NoteCardDialog.
 
+import { useAuth } from '@workspace/lib/auth';
 import { EIGEN_STICKIES_INDICATOR_MAP, isLightColor, lightenColor } from '@workspace/lib/constants';
 import { countTaskItems } from '@workspace/lib/html';
 import { cn } from '@workspace/ui/lib/utils';
@@ -46,8 +49,12 @@ export function NoteCard({
     ref,
     ...rest
 }: NoteCardProps) {
+    const { user } = useAuth();
     const { checked, total } = countTaskItems(description ?? '');
     const frameColor = deleted ? null : color;
+    // Open only, as the toolbar badge counts: a resolved card asks nothing more of you. The server stores the assignee
+    // in lowercase.
+    const onMyPlate = !resolved && assigneeEmail === user?.email.toLowerCase();
 
     return (
         <Card
@@ -77,12 +84,11 @@ export function NoteCard({
             onContextMenu={onContextMenu}
             {...rest}
         >
-            <CardContent className="p-3 text-sm relative">
+            <CardContent className="p-3 text-sm">
                 {deleted ? (
                     <DeletedComment title={title} />
                 ) : (
                     <>
-                        {unread && <UnreadDot />}
                         {coverThumbnailUrl && (
                             <img
                                 src={coverThumbnailUrl}
@@ -110,21 +116,28 @@ export function NoteCard({
                                 </span>
                             </div>
                         )}
-                        {(!!replyCount || !!attachmentCount || resolved || assigneeEmail) && (
-                            <p className="text-xs mt-0.5 opacity-50 flex items-center gap-2">
+                        {(unread || !!replyCount || !!attachmentCount || resolved || assigneeEmail) && (
+                            <p className="text-xs mt-2 flex items-center gap-2">
+                                {unread && <UnreadDot className="static shrink-0" />}
                                 {!!replyCount && (
-                                    <span>
+                                    <span className="opacity-50">
                                         {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
                                     </span>
                                 )}
                                 {!!attachmentCount && (
-                                    <span className="flex items-center gap-0.5">
+                                    <span className="flex items-center gap-0.5 opacity-50">
                                         <Paperclip className="h-3 w-3" /> {attachmentCount}
                                     </span>
                                 )}
-                                {resolved && <Check className="h-3 w-3 ml-auto" />}
+                                {resolved && <Check className="h-3 w-3 ml-auto opacity-50" />}
                                 {assigneeEmail && (
-                                    <MemberAvatar email={assigneeEmail} className={resolved ? '' : 'ml-auto'} />
+                                    <MemberAvatar
+                                        email={assigneeEmail}
+                                        className={cn(
+                                            !resolved && 'ml-auto',
+                                            onMyPlate ? 'ring-2 ring-(--app-current-color)' : 'opacity-50',
+                                        )}
+                                    />
                                 )}
                             </p>
                         )}

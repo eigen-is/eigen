@@ -1,6 +1,7 @@
 // The card dialog closes one way, however it closes. A peer who deletes the open card takes it away under the dialog,
 // and that runs the same close as the user's own: the host clears its landing, and an undo that brings the card back
-// doesn't open the dialog again.
+// doesn't open the dialog again. A delete from the edit form or the comment menu asks first, in every host, and only
+// then runs the host's delete and closes the dialog.
 import { afterAll, afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import { DRIVE_MIME_STICKIES } from '@workspace/lib/types/drive';
@@ -12,7 +13,12 @@ import { installHappyDom } from '../../happy-dom';
 installHappyDom();
 
 // The props the card dialog was last rendered with.
-const seen: { open?: boolean; onOpenChange?: (open: boolean) => void } = {};
+const seen: {
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+    onDelete?: (cardId: string) => void;
+    menuDelete?: (cardId: string) => void;
+} = {};
 
 const realAuth = { ...(await import('@workspace/lib/auth')) };
 const realCardDialog = { ...(await import('../../../components/cards/card-dialog')) };
@@ -22,13 +28,23 @@ mock.module('@workspace/lib/auth', () => ({
     useAuth: () => ({ user: { id: 'owner-1', email: 'ada@example.com' } }),
 }));
 mock.module('../../../components/cards/card-dialog', () => ({
-    CardDialog: (props: { open: boolean; onOpenChange: (open: boolean) => void }) => {
+    CardDialog: (props: {
+        open: boolean;
+        onOpenChange: (open: boolean) => void;
+        onDelete?: (cardId: string) => void;
+    }) => {
         seen.open = props.open;
         seen.onOpenChange = props.onOpenChange;
+        seen.onDelete = props.onDelete;
         return null;
     },
 }));
-mock.module('../../../components/comments/comment-context-menu', () => ({ CommentContextMenu: () => null }));
+mock.module('../../../components/comments/comment-context-menu', () => ({
+    CommentContextMenu: (props: { onDelete: (cardId: string) => void }) => {
+        seen.menuDelete = props.onDelete;
+        return null;
+    },
+}));
 afterAll(() => {
     mock.module('@workspace/lib/auth', () => realAuth);
     mock.module('../../../components/cards/card-dialog', () => realCardDialog);
@@ -76,6 +92,7 @@ async function mountBoard() {
     const doc = new Y.Doc();
     addCard(doc);
     const onCardDialogClose = mock(() => {});
+    const onDelete = mock((_cardId: string) => {});
     const handle: { setOpenCardId?: (cardId: string | null) => void } = {};
     function Harness() {
         const lifecycle = useCommentLifecycle({
@@ -96,7 +113,8 @@ async function mountBoard() {
             path,
             canWrite: true,
             commentContextMenu,
-            onDelete: () => {},
+            onDelete,
+            noun: 'sticky',
             onCardDialogClose,
         });
     }
@@ -106,7 +124,7 @@ async function mountBoard() {
     });
     unmount = async () => act(() => root.unmount());
     await act(async () => handle.setOpenCardId?.('card-1'));
-    return { doc, onCardDialogClose };
+    return { doc, onCardDialogClose, onDelete };
 }
 
 test("a peer's delete closes the dialog as the user's close does, and an undo doesn't reopen it", async () => {
@@ -128,4 +146,37 @@ test("the user's close runs the host's close once", async () => {
     await act(async () => seen.onOpenChange?.(false));
     expect(seen.open).toBe(false);
     expect(onCardDialogClose).toHaveBeenCalledTimes(1);
+});
+
+const confirmDialog = () => document.querySelector('[role="alertdialog"], [role="dialog"]');
+const dialogButton = (name: string) => {
+    const button = [...(confirmDialog()?.querySelectorAll('button') ?? [])].find((b) => b.textContent === name);
+    if (!button) throw new Error(`no ${name} button`);
+    return button;
+};
+
+test('deleting from the edit form asks first, then runs the delete and closes the dialog', async () => {
+    const { onDelete, onCardDialogClose } = await mountBoard();
+    await act(async () => seen.onDelete?.('card-1'));
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(confirmDialog()?.textContent).toContain('Delete sticky');
+    expect(seen.open).toBe(true);
+
+    await act(async () => dialogButton('Delete').click());
+    expect(onDelete).toHaveBeenCalledTimes(1);
+    expect(onDelete).toHaveBeenCalledWith('card-1');
+    expect(seen.open).toBe(false);
+    expect(onCardDialogClose).toHaveBeenCalledTimes(1);
+    expect(confirmDialog()).toBeNull();
+});
+
+test('cancelling keeps the card and leaves its dialog open, and the menu asks the same way', async () => {
+    const { onDelete } = await mountBoard();
+    await act(async () => seen.menuDelete?.('card-1'));
+    expect(confirmDialog()?.textContent).toContain('Delete sticky');
+
+    await act(async () => dialogButton('Cancel').click());
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(seen.open).toBe(true);
+    expect(confirmDialog()).toBeNull();
 });

@@ -82,7 +82,6 @@ export function DriveDetail({ path, siblings, actions }: DriveDetailProps) {
                     <div className="flex items-center gap-2 ml-auto">
                         {download && (
                             <TooltipButton
-                                variant="outline"
                                 icon={download.icon}
                                 tooltipText={download.label}
                                 onClick={() => runner.run(download)}
@@ -90,7 +89,6 @@ export function DriveDetail({ path, siblings, actions }: DriveDetailProps) {
                         )}
                         {share && (
                             <TooltipButton
-                                variant="outline"
                                 icon={share.icon}
                                 tooltipText={share.label}
                                 onClick={() => actions.run(share.id, [path])}
@@ -98,7 +96,7 @@ export function DriveDetail({ path, siblings, actions }: DriveDetailProps) {
                         )}
                         <WatchToggleButton ownerId={path.ownerId} mountId={path.mountId} pathId={path.id} />
                         <DropdownMenu>
-                            <KebabTrigger variant="outline" />
+                            <KebabTrigger />
                             <DropdownMenuContent className="w-48">
                                 <DriveItemMenuItems items={[path]} actions={actions} runner={runner} />
                             </DropdownMenuContent>

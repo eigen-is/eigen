@@ -1,9 +1,12 @@
+// A read-only field with a button that copies its value, optionally under a label, for a value someone pastes
+// elsewhere, such as an address or a generated password.
+
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import { Copy } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { Button } from './button';
 import { Input } from './input';
 import { Label } from './label';
+import { TooltipButton } from './layout/toolbar/tooltip-button';
 
 type CopyInputProps = {
     value: string;
@@ -21,14 +24,12 @@ export function CopyInput({ value, label, inputClassName, successMessage }: Copy
                 className={cn('font-mono text-sm', inputClassName)}
                 onClick={(e) => e.currentTarget.select()}
             />
-            <Button
-                variant="outline"
-                size="icon"
+            <TooltipButton
+                icon={Copy}
+                tooltipText="Copy to clipboard"
+                className="shrink-0"
                 onClick={() => copyToClipboard(value, successMessage)}
-                title="Copy to clipboard"
-            >
-                <Copy className="h-4 w-4" />
-            </Button>
+            />
         </div>
     );
 

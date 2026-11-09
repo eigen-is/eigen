@@ -12,6 +12,7 @@ import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
 import { Input } from '@workspace/ui/components/input';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { Textarea } from '@workspace/ui/components/textarea';
 import { useFollowedFields } from '@workspace/ui/hooks/use-followed-fields';
 import { cn } from '@workspace/ui/lib/utils';
@@ -457,9 +458,5 @@ function ValueRows({ control, name, label, placeholder }: ValueRowsProps) {
 }
 
 function RemoveRowButton({ onClick }: { onClick: () => void }) {
-    return (
-        <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onClick}>
-            <Trash2 className="h-4 w-4" />
-        </Button>
-    );
+    return <TooltipButton icon={Trash2} tooltipText="Remove" type="button" className="h-7 w-7" onClick={onClick} />;
 }

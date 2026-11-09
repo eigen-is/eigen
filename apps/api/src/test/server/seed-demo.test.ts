@@ -322,8 +322,8 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             );
             expect(notesDoc[0].n).toBe(1);
 
-            // ...and a "trying eigen" scratch doc: one displayed equation node holding MathML and the LaTeX, and a
-            // figure with no caption whose photo landed in the doc's media/.
+            // ...and a "trying eigen" scratch doc: one displayed equation node holding MathML and the LaTeX, a sketched
+            // chart, and a figure with no caption whose photo landed in the doc's media/.
             const tryingDoc = await loadCollabDoc(
                 findContainerDataDb(
                     personaMetaDb,
@@ -343,6 +343,11 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             expect(equations[0].attrs?.['mathml']).toContain(
                 '<mrow><mo fence="true">|</mo><mtext>docs</mtext><mo fence="true">⟩</mo></mrow>',
             );
+            const tryingCharts = tryingNodes.filter((node) => node.type === 'chart');
+            expect(tryingCharts.length).toBe(1);
+            expect(tryingCharts[0].attrs?.['roughness']).toBe(1);
+            expect(tryingCharts[0].attrs?.['fill']).toContain('cross-hatch');
+            expect(tryingCharts[0].attrs?.['specChart']).toContain('Excalifont');
             const tryingFigures = tryingNodes.filter((node) => node.type === 'figure');
             expect(tryingFigures.length).toBe(1);
             expect(tryingFigures[0].attrs?.['caption']).toBeFalsy();

@@ -66,7 +66,7 @@ export function TeamMembersSection({ teamId, organizationId }: TeamMembersSectio
                                     <TooltipButton
                                         icon={X}
                                         tooltipText={`Remove ${member.name || member.email} from team`}
-                                        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                                        className="h-7 w-7 shrink-0"
                                         onClick={() => removeMember.mutate({ teamId, userId: member.userId })}
                                     />
                                 )}

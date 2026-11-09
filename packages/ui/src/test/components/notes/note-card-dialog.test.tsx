@@ -132,3 +132,20 @@ test('the setting off does not celebrate', () => {
     click('Paint the shed');
     expect(burst).not.toHaveBeenCalled();
 });
+
+test('the actions under the description are named buttons', () => {
+    act(() =>
+        root.render(
+            createElement(NoteCardDialog, {
+                open: true,
+                onOpenChange: () => {},
+                title: 'Shed',
+                description: '',
+                canWrite: true,
+                onEdit: () => {},
+                children: null,
+            }),
+        ),
+    );
+    expect(document.querySelector('button[aria-label="Edit"]')).not.toBeNull();
+});
