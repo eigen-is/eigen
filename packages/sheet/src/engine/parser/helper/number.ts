@@ -22,8 +22,8 @@ export function dateToSerial(value: Date): number {
     return (local - EXCEL_EPOCH_MS + (local >= LOTUS_LEAP_MS ? DAY_MS : 0)) / DAY_MS;
 }
 
-// Arrays produce undefined because scalar operators coerce them to their `?? 0` fallback,
-// matching the runtime path formulajs already handles internally.
+// A blank or an array has no number, so it gives undefined. An operator never gets an array, a function's scalar
+// parameter may.
 export function toNumber(value: FormulaArg | Date): number | undefined {
     if (typeof value === 'number') return value;
     if (typeof value === 'boolean') return value ? 1 : 0;

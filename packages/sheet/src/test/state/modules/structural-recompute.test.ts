@@ -358,6 +358,54 @@ describe('a row op`s undo', () => {
     });
 });
 
+describe('an operator over a range', () => {
+    const start = () =>
+        book({
+            cells: [
+                [n(1), n(10), f('=SUMPRODUCT(A1:A3*B1:B3)', 777), f('=C1+1', 778), f('=SUM(A1:A3)', 6)],
+                [n(2), n(20), null, null, null],
+                [n(3), n(30), null, null, null],
+            ],
+        });
+
+    test('keeps its stored number on a row insert, and a reader reads that', () => {
+        const op = insertRow(1);
+        const t = tab(start());
+        tabEdit(t, (d) => insertRowCol(d, op), { insertRowColOp: op });
+        expect(at(t.ctx.sheets, 's1', 0, 2)?.f).toBe('=SUMPRODUCT(A1:A4*B1:B4)');
+        expect(at(t.ctx.sheets, 's1', 0, 2)?.v).toBe(777);
+        expect(at(t.ctx.sheets, 's1', 0, 3)?.v).toBe(778);
+        expect(at(t.ctx.sheets, 's1', 0, 4)?.f).toBe('=SUM(A1:A4)');
+        const replayed = replaySheetsOps(
+            [{ id: 's1', name: 'One', order: 0, data: start().sheets[0].data }],
+            [[{ op: 'insertRowCol', id: 's1', path: [], value: op }]],
+        );
+        expect(at(replayed, 's1', 0, 2)?.v).toBe(777);
+    });
+
+    test('keeps its stored number on an edit of what it reads', () => {
+        const t = tab(start());
+        warmFormulaCellInfoMap(t.ctx);
+        tabEdit(t, (d) => {
+            updateCell(d, 0, 0, null, 5);
+        });
+        expect(at(t.ctx.sheets, 's1', 0, 2)?.v).toBe(777);
+        expect(at(t.ctx.sheets, 's1', 0, 3)?.v).toBe(778);
+        expect(at(t.ctx.sheets, 's1', 0, 4)?.v).toBe(10);
+    });
+
+    test('typed, with no number to keep, it shows #CALC!', () => {
+        const t = tab(start());
+        tabEdit(t, (d) => {
+            updateCell(d, 1, 3, null, '=SUMPRODUCT(A1:A3*B1:B3)');
+        });
+        const cell = at(t.ctx.sheets, 's1', 1, 3);
+        expect(cell?.v).toBe('#CALC!');
+        expect(cell?.m).toBe('#CALC!');
+        expect(cell?.ct?.t).toBe('e');
+    });
+});
+
 describe('what a recompute keeps', () => {
     test('an AVERAGEIF over the blank row an insert opened ignores it, on the replay', () => {
         const sheets: Sheet[] = [

@@ -76,10 +76,20 @@ export function toFormulaError(e: Error): Error {
 // CHOOSE skips.
 export const UNSUPPORTED_FUNCTION = Error('#NAME?');
 
+// An operator applied to an array, as in `A1:A3*B1:B3`, which the engine doesn't compute element by element. It reads
+// #CALC!, Excel's word for what its calculation engine doesn't support, where a scalar operator's answer would be a
+// silent wrong one. Like UNSUPPORTED_FUNCTION it is handed on through every function. A #CALC! a cell holds is another
+// object, so only this one tells a recompute that the formula's own text can't be evaluated.
+export const UNSUPPORTED_ARRAY_OPERATION = Error('#CALC!');
+
+export function isUnsupported(value: unknown): boolean {
+    return value === UNSUPPORTED_FUNCTION || value === UNSUPPORTED_ARRAY_OPERATION;
+}
+
 // Any error a cell can show, the ones formulajs has no object for included, such as #SPILL! and #CALC!. formulajs's
 // trapping functions miss those, so the engine's ISERROR and IFERROR ask this instead.
 export function isFormulaError(value: unknown): value is Error {
-    return value instanceof Error && value !== UNSUPPORTED_FUNCTION && valueIsError(value.message);
+    return value instanceof Error && !isUnsupported(value) && valueIsError(value.message);
 }
 
 // The first error in a function's argument, a range's cells included.

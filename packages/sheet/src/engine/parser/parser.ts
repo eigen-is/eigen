@@ -4,7 +4,15 @@
 // server. The FormulaEngine owns one, for example, and turns each result into a value or an error string.
 
 import type { CompiledFormula, FormulaArg, FormulaValue, ParseResult, ParserOptions, RangeCell } from '../types';
-import errorParser, { ERROR, ERROR_NAME, ERROR_REF, ERROR_VALUE, toFormulaError } from './error';
+import errorParser, {
+    ERROR,
+    ERROR_CALC,
+    ERROR_NAME,
+    ERROR_REF,
+    ERROR_VALUE,
+    toFormulaError,
+    UNSUPPORTED_ARRAY_OPERATION,
+} from './error';
 import { callFunction, evaluateByOperator } from './evaluate-by-operator/evaluate-by-operator';
 import { Parser as GrammarParser } from './grammar-parser/grammar-parser';
 import { extractLabel, offsetCoordinate, offsetRange, toLabel } from './helper/cell';
@@ -82,6 +90,10 @@ export class Parser {
         } catch (ex) {
             const message = ex instanceof Error ? errorParser(ex.message) : null;
             error = message ?? errorParser(ERROR);
+        }
+
+        if (result === UNSUPPORTED_ARRAY_OPERATION) {
+            return { error: errorParser(ERROR_CALC), result: null, arrayOperation: true };
         }
 
         if (result instanceof Error) {
