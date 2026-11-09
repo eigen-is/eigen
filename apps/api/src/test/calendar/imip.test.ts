@@ -1139,6 +1139,36 @@ describe('iMIP inbound sender binding (audit P1-7a)', () => {
         expect(home.calendar.calendarRow(bobCalendarId)?.ctag).toBe(ctag + 1);
     });
 
+    test('a REPLY answers its first five dates of a series', async () => {
+        const home = await getHome(ctx.bob.user.id);
+        const event = await home.calendar.createEvent(bobCalendarId, {
+            title: 'Daily Answers',
+            startTime: new Date('2026-05-04T10:00:00Z'),
+            endTime: new Date('2026-05-04T11:00:00Z'),
+            allDay: false,
+            rrule: 'FREQ=DAILY',
+            data: { attendees: [{ email: 'dates@external.com', status: 'pending', role: 'required' }] },
+        });
+        const days = Array.from({ length: 7 }, (_, i) => `2026051${i}`);
+        const answers = days.flatMap((day) => [
+            'BEGIN:VEVENT',
+            `UID:${event.uid}`,
+            `RECURRENCE-ID:${day}T100000Z`,
+            `DTSTART:${day}T100000Z`,
+            'ATTENDEE;PARTSTAT=ACCEPTED:mailto:dates@external.com',
+            'END:VEVENT',
+        ]);
+        const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'METHOD:REPLY', ...answers, 'END:VCALENDAR'].join('\r\n');
+
+        await processInboundImip(home, calendarMail(ics, 'dates@external.com'), {
+            verified: true,
+            reason: 'dkim pass',
+        });
+
+        const answered = (await home.calendar.getEventsByUid(event.uid)).flatMap((row) => row.recurrenceDate ?? []);
+        expect(answered.sort()).toEqual(['2026-05-10', '2026-05-11', '2026-05-12', '2026-05-13', '2026-05-14']);
+    });
+
     test('a verified sender with a part past the mail size limit writes nothing', async () => {
         const home = await getHome(ctx.bob.user.id);
         const ics = [

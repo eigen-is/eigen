@@ -20,6 +20,9 @@ type Organizer = NonNullable<EventData['organizer']>;
 // Above this a body is a mailed calendar export, not a scheduling message, and it does not get to write a Home once per VEVENT.
 export const IMIP_MAX_EVENTS = 50;
 
+// An answer for one date of a series walks the series from its start to that date, so a REPLY answers this many.
+const IMIP_MAX_REPLY_DATES = 5;
+
 // A scheduling message is small, far below what a saved event may hold.
 const IMIP_MAX_BYTES = 1_048_576;
 
@@ -199,6 +202,7 @@ export async function processInboundImip(
         console.info(`iMIP: acting on the first ${IMIP_MAX_EVENTS} of ${events.length} events from ${sender}`);
     }
 
+    let replyDates = 0;
     for (const parsed of events.slice(0, IMIP_MAX_EVENTS)) {
         if (parsed.endTime < parsed.startTime) parsed.endTime = parsed.startTime;
 
@@ -219,6 +223,7 @@ export async function processInboundImip(
                 await calendar.removeInvitation(parsed.uid, externalOwnerId(organizerEmail));
             }
         } else if (method === 'REPLY') {
+            if (parsed.recurrenceDate && ++replyDates > IMIP_MAX_REPLY_DATES) continue;
             // A sender answers for themselves alone, once: a later listing of the same address says nothing more.
             const attendee = parsed.data?.attendees?.find((a) => sentBy(a.email));
             if (!attendee) continue;
