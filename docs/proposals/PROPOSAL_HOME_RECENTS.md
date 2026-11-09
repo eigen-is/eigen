@@ -52,15 +52,15 @@ Every Drive home runs this migration at open, and an older archive migrates when
 
 `recent.ts` in `apps/api/src/lib/drive/` holds the upsert, the trim and the list as functions over `sharedDb`, like `shared-with-me.ts`, behind `Drive.touchRecent` and `Drive.listRecent`.
 
-**An open** is recorded on the server, in the three places that already serve one, after their own access check has passed:
+**An open** is recorded on the server, in the three places that already serve one, once the open has succeeded:
 
-| Open | Where |
-|---|---|
-| A document | The collab socket's `open` (`/ws/collab/:ownerId/:mountId/:pathId` in `routes/collab.ts`) |
-| A plain file in the inline editor | `GET /editor/:ownerId/:mountId/:pathId/content`, which only the inline editor reads |
-| A chat | `GET /chat/:ownerId/:mountId/:chatId/messages` |
+| Open | Where | Recorded after |
+|---|---|---|
+| A document | The collab socket's `open` (`/ws/collab/:ownerId/:mountId/:pathId` in `routes/collab.ts`) | `document.subscribe`. `canRead` passes a trashed doc, and `CollabRegistry.get` refuses it later, on every reconnect |
+| A plain file in the inline editor | `GET /editor/:ownerId/:mountId/:pathId/content`, which only the inline editor reads | `getEditableContent` returns, since it refuses binaries and oversized files after `resolveFile` |
+| A chat | `GET /chat/:ownerId/:mountId/:chatId/messages`, first page only | `getChat`. A request with `before` is an older page of a chat already open, so it records nothing |
 
-Each calls one function in `recent.ts`, `recordOpened(user, path)`. It does nothing for a guest or for a path inside a document. Comment threads read the same messages route, and without that check every comment view would write a hidden row and push older files out. Then it pushes the row to the caller's own home with `sendToHome(user.id, ...)`, which `Drive.touchRecent` receives there. The push is fire-and-forget with a `.catch` that logs, so a failed write never fails the open. The ids come from a path the route has just found and checked, so they need no validation of their own.
+Each calls one function in `recent.ts`, `recordOpened(user, path)`, which does nothing for a guest. A path inside a document records nothing either, and each place already has that fact: a collab document is never inside one, `ChatRoom` holds its `containerPath` (a comment thread's chat has one, and without this every comment view would write a hidden row and push older files out), and the editor route reads the parent of the path `resolveFile` returned. Then it pushes the row to the caller's own home with `sendToHome(user.id, ...)`, a new `drive:recent-open` kind of `HomeMessage` beside `drive:acl-change`, which `Drive.touchRecent` receives there. The caller's own home is held open by their SSE stream, so the push opens no home. The push is fire-and-forget with a `.catch` that logs, so a failed write never fails the open. The ids come from a path the route has just found and checked, so they need no validation of their own.
 
 Not `GET /collab/.../info`, even though every editor passes through it. Its query refetches on window focus and on someone else's rename or ACL change (`invalidatePathRenamed`, `invalidateAclUpdated`), so a doc you aren't looking at would keep moving up. No preview path records anything: previews read other routes.
 
