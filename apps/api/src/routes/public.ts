@@ -1,3 +1,7 @@
+// The /p/ routes, eigen's public API surface, such as avatars, user info, the server's config, invites
+// and the waitlist. Pre-auth pages and external callers use them, so every route here is meant to be
+// unauthenticated: do not add `auth: true` or `.use(betterAuth)`.
+
 import { MAX_PUBLIC_USERS_PER_BATCH } from '@workspace/lib/constants/public';
 import type { PublicUser } from '@workspace/lib/types/public';
 import { MAX_EMAIL_LENGTH, MIN_PASSWORD_LENGTH } from '@workspace/lib/validation';
@@ -10,9 +14,6 @@ import { setCacheHeaders } from '../lib/core/http';
 import { generateFallbackSvg, getAvatarByEmailOrId, getBatchPublicInfo } from '../lib/space/public';
 import { registerFromInvite, submitWaitlist, validateInviteToken } from '../lib/waitlist/waitlist';
 
-// The /p/ prefix is eigen's PUBLIC API surface — every route here is intentionally unauthenticated
-// (avatar, user info, config, invite, waitlist). Do NOT add `auth: true` / `.use(betterAuth)`: these
-// are consumed by pre-auth pages and external callers, and gating them breaks the public contract.
 export const publicRouter = new Elysia({ name: 'public' })
     // Avatar URLs built from an empty email/id (e.g. a new contact without email) hit `/p/avatar/` —
     // serve the generic fallback instead of a 404.
@@ -87,6 +88,7 @@ export const publicRouter = new Elysia({ name: 'public' })
             ...config,
             waitlistEnabled: settings.onboarding?.waitlist?.enabled ?? false,
             landingLinks: settings.landing?.links ?? [],
+            showInstall: settings.landing?.showInstall ?? false,
             demoMode: isDemo(),
             mailEnabled: isMailAppEnabled(),
         };
