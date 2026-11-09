@@ -239,6 +239,37 @@ describe('VLOOKUP', () => {
         expect(value('=VLOOKUP(25,A1:B6,2,)')).toBe('#N/A');
         expect(value('=VLOOKUP(30,A1:B6,2,)')).toBe('Cherry');
     });
+
+    test('an exact match is case-insensitive, with * ? and ~ as wildcards, and only of its own kind', () => {
+        expect(value('=VLOOKUP("APPLE",B1:C6,2,FALSE)')).toBe(1.5);
+        expect(value('=VLOOKUP("ch*",B1:C6,2,FALSE)')).toBe(4);
+        expect(value('=VLOOKUP("~*star",B1:C6,2,FALSE)')).toBe(6);
+        expect(value('=VLOOKUP("30",A1:B6,2,FALSE)')).toBe('#N/A');
+    });
+
+    test('a blank lookup value is 0, so it finds no blank cell', () => {
+        expect(value('=VLOOKUP(G1,G1:H6,2,FALSE)')).toBe('#N/A');
+        expect(value('=IFNA(VLOOKUP(G1,G1:H6,2,FALSE),"")')).toBe('');
+    });
+
+    test('an approximate match takes the last row at or below over ascending data', () => {
+        expect(value('=VLOOKUP(99,A1:B6,2,TRUE)')).toBe('*star');
+        expect(value('=VLOOKUP(5,A1:B6,2,TRUE)')).toBe('#N/A');
+        expect(value('=VLOOKUP(25,A1:B6,2,-1)')).toBe('banana');
+    });
+
+    test('a column past the table is #REF!, one below 1 #VALUE!', () => {
+        expect(value('=VLOOKUP(30,A1:B6,3,FALSE)')).toBe('#REF!');
+        expect(value('=VLOOKUP(30,A1:B6,0,FALSE)')).toBe('#VALUE!');
+    });
+});
+
+describe('HLOOKUP', () => {
+    test('searches the first row and returns from the row asked for', () => {
+        expect(value('=HLOOKUP("C",Across!A2:D3,2,FALSE)')).toBe(3);
+        expect(value('=HLOOKUP(25,Across!A1:D3,2)')).toBe('b');
+        expect(value('=HLOOKUP(30,Across!A1:D3,4,FALSE)')).toBe('#REF!');
+    });
 });
 
 describe('INDEX', () => {

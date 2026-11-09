@@ -129,17 +129,19 @@ export function columns(params: FunctionArg[]): FormulaOutput {
     return referenceGrid(supplied(params[0]))[0].length;
 }
 
-// formulajs's MATCH reads its text as a regular expression, matches part of a cell and calls toLowerCase on a number
-// or a blank. Excel's match_type 1 and -1 are a binary search, which lands on the last of a run of duplicates. A blank
-// lookup value is 0.
-export function match(params: FunctionArg[]): FormulaOutput {
-    const [lookup, lookupArray, matchType] = params;
-    if (params.length < 2) throw Error(ERROR_NOT_AVAILABLE);
-    const [values] = vector(lookupArray);
-    const wanted = lookupValue(lookup) ?? 0;
-    const given = params.length < 3 ? 1 : matchType === OMITTED ? 0 : toNumber(matchType ?? 0);
-    const type = Math.sign(given ?? Number.NaN);
+// MATCH's match_type, or a lookup's range_lookup, at `position`: 1 when not given, 0 when empty, else its sign.
+function matchType(params: FunctionArg[], position: number): number {
+    if (params.length <= position) return 1;
+    const arg = params[position];
+    const type = Math.sign(arg === OMITTED ? 0 : (toNumber(arg ?? 0) ?? Number.NaN));
     if (Number.isNaN(type)) throw Error(ERROR_VALUE);
+    return type;
+}
+
+// Where match_type `type` lands the lookup in `values`; a miss is #N/A. 0 is an exact match with wildcards, and 1 and
+// -1 are Excel's binary search, which lands on the last of a run of duplicates. A blank lookup value is 0.
+function matchPosition(lookup: FunctionArg, values: FormulaValue[], type: number): number {
+    const wanted = lookupValue(lookup) ?? 0;
     let found = -1;
     if (type === 0) found = search(wanted, values, 2, 1);
     else {
@@ -149,7 +151,37 @@ export function match(params: FunctionArg[]): FormulaOutput {
         if (past > 0) found = indices[past - 1];
     }
     if (found === -1) throw Error(ERROR_NOT_AVAILABLE);
-    return found + 1;
+    return found;
+}
+
+// formulajs's MATCH reads its text as a regular expression, matches part of a cell and calls toLowerCase on a number
+// or a blank.
+export function match(params: FunctionArg[]): FormulaOutput {
+    if (params.length < 2) throw Error(ERROR_NOT_AVAILABLE);
+    const [values] = vector(params[1]);
+    return matchPosition(params[0], values, matchType(params, 2)) + 1;
+}
+
+// formulajs's VLOOKUP and HLOOKUP compare text case-sensitively, know no wildcard and find a blank lookup value in a
+// blank cell. They search the table's first column, or row `across`, as MATCH does, a range_lookup of TRUE as 1.
+function tableLookup(params: FunctionArg[], across: boolean): FormulaOutput {
+    const [lookup, table, index] = params;
+    if (params.length < 3) throw Error(ERROR_NOT_AVAILABLE);
+    const grid = toGrid(supplied(table));
+    const line = Math.trunc(index === OMITTED ? 0 : (toNumber(index ?? 0) ?? Number.NaN));
+    if (!(line >= 1)) throw Error(ERROR_VALUE);
+    if (line > (across ? grid.length : grid[0].length)) throw Error(ERROR_REF);
+    const keys = across ? grid[0] : grid.map((row) => row[0]);
+    const found = matchPosition(lookup, keys, matchType(params, 3) === 0 ? 0 : 1);
+    return across ? grid[line - 1][found] : grid[found][line - 1];
+}
+
+export function vlookup(params: FunctionArg[]): FormulaOutput {
+    return tableLookup(params, false);
+}
+
+export function hlookup(params: FunctionArg[]): FormulaOutput {
+    return tableLookup(params, true);
 }
 
 export function xmatch(params: FunctionArg[]): FormulaOutput {

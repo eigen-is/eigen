@@ -9,7 +9,7 @@ import type { FormulaArg, FormulaOutput } from '../../../types';
 import { ERROR_NAME, ERROR_NUM, ERROR_VALUE } from '../../error';
 import { errorType, iserr, iserror } from '../../functions/information';
 import { iferror, ifs, switchValue } from '../../functions/logical';
-import { columns, index, match, rows, xlookup, xmatch } from '../../functions/lookup';
+import { columns, hlookup, index, match, rows, vlookup, xlookup, xmatch } from '../../functions/lookup';
 import { aggregate, averageif, averageifs, errorsAsText, maxifs, minifs } from '../../functions/statistical';
 import { concatenate, textjoin } from '../../functions/text';
 import { referenceGrid } from '../../helper/array';
@@ -191,6 +191,7 @@ const FUNCTIONS: Record<string, (params: FunctionArg[]) => FormulaOutput> = {
     AVERAGEIFS: averageifs,
     COLUMNS: columns,
     'ERROR.TYPE': errorType,
+    HLOOKUP: hlookup,
     IFERROR: iferror,
     IFS: ifs,
     ISERR: iserr,
@@ -201,6 +202,7 @@ const FUNCTIONS: Record<string, (params: FunctionArg[]) => FormulaOutput> = {
     ROWS: rows,
     SWITCH: switchValue,
     TEXTJOIN: textjoin,
+    VLOOKUP: vlookup,
     XLOOKUP: xlookup,
     XMATCH: xmatch,
 };
