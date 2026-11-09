@@ -3,20 +3,15 @@
 // in ALL four directions, and the display string renders through that format's
 // mask instead of an auto-detected one.
 //
-// Entry point: autoFillCell below, which primes dropCellCache and calls updateDropCell
+// Entry point: autoFillCell below, which selects the whole range and calls updateDropCell
 // as onDropCellSelectEnd does; results land in ctx.sheets[0].data (getFlowdata identity).
 
 import { describe, expect, it } from 'bun:test';
 import { applyPatches, enablePatches, produceWithPatches } from 'immer';
+import { parseCellInput } from '../../../engine/format';
 import type { Context } from '../../../state/context';
 import { setCellValue } from '../../../state/modules/cell';
-import {
-    dropCellCache,
-    fillFromEdge,
-    getTypeItemHide,
-    onDropCellSelectEnd,
-    updateDropCell,
-} from '../../../state/modules/drop-cell';
+import { fillFromEdge, onDropCellSelectEnd, updateDropCell } from '../../../state/modules/drop-cell';
 import { execFunctionGroup, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import { normalizeSelection } from '../../../state/modules/selection';
 import { validationAt } from '../../../state/modules/validation-rules';
@@ -32,10 +27,6 @@ function autoFillCell(
     applyRange: SingleRange,
     direction: 'up' | 'down' | 'left' | 'right',
 ) {
-    dropCellCache.copyRange = copyRange;
-    dropCellCache.applyRange = applyRange;
-    dropCellCache.direction = direction;
-    dropCellCache.applyType = getTypeItemHide(ctx).slice(0, 7).some(Boolean) ? '1' : '0';
     ctx.selections = normalizeSelection(ctx, [
         {
             row: [Math.min(copyRange.row[0], applyRange.row[0]), Math.max(copyRange.row[1], applyRange.row[1])],
@@ -45,7 +36,7 @@ function autoFillCell(
             ],
         },
     ]);
-    updateDropCell(ctx);
+    updateDropCell(ctx, copyRange, applyRange, direction);
 }
 
 function grid(rows: number, cols: number): (Cell | null)[][] {
@@ -436,5 +427,343 @@ describe('a filled formula', () => {
         execFunctionGroup(ctx, [{ r: 2, c: 0, id: 'id_1' }]);
 
         expect(ctx.sheets[0].data![2][1]?.v).toBe(20);
+    });
+});
+
+describe('a fill counts on from what its source holds', () => {
+    type Direction = 'down' | 'up' | 'right' | 'left';
+    const number = (v: number, bg?: string): Cell => ({ v, m: `${v}`, ct: { fa: 'General', t: 'n' }, bg });
+    const text = (v: string): Cell => ({ v, m: v, ct: { fa: 'General', t: 'g' } });
+    const date = (iso: string, fa = 'yyyy-MM-dd', m = iso, bg?: string): Cell => ({
+        v: parseCellInput(iso)[2],
+        m,
+        ct: { fa, t: 'd' },
+        bg,
+    });
+
+    // Lays `source` along the fill's axis, in sheet order, and returns what lands in the `count` cells beside it,
+    // nearest the source first.
+    function filled(source: (Cell | null)[], count: number, direction: Direction, hide?: (ctx: Context) => void) {
+        const backward = direction === 'up' || direction === 'left';
+        const vertical = direction === 'up' || direction === 'down';
+        const first = backward ? count : 0;
+        const last = first + source.length - 1;
+        const along = (a: number, b: number): SingleRange =>
+            vertical ? { row: [a, b], column: [0, 0] } : { row: [0, 0], column: [a, b] };
+        const ctx = makeCtx(
+            (d) => {
+                for (const [i, cell] of source.entries()) {
+                    if (vertical) d[first + i][0] = cell;
+                    else d[0][first + i] = cell;
+                }
+            },
+            along(first, last),
+        );
+        hide?.(ctx);
+        autoFillCell(
+            ctx,
+            along(first, last),
+            backward ? along(0, first - 1) : along(last + 1, last + count),
+            direction,
+        );
+        return Array.from({ length: count }, (_, i) => {
+            const at = backward ? first - 1 - i : last + 1 + i;
+            return vertical ? ctx.sheets[0].data?.[at][0] : ctx.sheets[0].data?.[0][at];
+        });
+    }
+    const shown = (cells: ReturnType<typeof filled>) => cells.map((cell) => cell?.m ?? null);
+
+    const series: { name: string; source: Cell[]; direction: Direction; expected: string[] }[] = [
+        { name: 'numbers down', source: [number(1), number(2)], direction: 'down', expected: ['3', '4', '5'] },
+        { name: 'numbers up', source: [number(1), number(2)], direction: 'up', expected: ['0', '-1', '-2'] },
+        { name: 'numbers right', source: [number(1), number(2)], direction: 'right', expected: ['3', '4', '5'] },
+        { name: 'numbers left', source: [number(1), number(2)], direction: 'left', expected: ['0', '-1', '-2'] },
+        {
+            name: 'falling numbers down',
+            source: [number(5), number(3)],
+            direction: 'down',
+            expected: ['1', '-1', '-3'],
+        },
+        { name: 'falling numbers up', source: [number(5), number(3)], direction: 'up', expected: ['7', '9', '11'] },
+        {
+            name: 'a trend through uneven numbers',
+            source: [number(1), number(2), number(4)],
+            direction: 'down',
+            expected: ['5.33333', '6.83333', '8.33333'],
+        },
+        {
+            name: 'doubling numbers as a line',
+            source: [number(1), number(2), number(4), number(8)],
+            direction: 'down',
+            expected: ['9.5', '11.8', '14.1'],
+        },
+        {
+            name: 'days down',
+            source: [date('2024-01-30'), date('2024-02-01')],
+            direction: 'down',
+            expected: ['2024-02-03', '2024-02-05', '2024-02-07'],
+        },
+        {
+            name: 'days up',
+            source: [date('2024-01-30'), date('2024-02-01')],
+            direction: 'up',
+            expected: ['2024-01-28', '2024-01-26', '2024-01-24'],
+        },
+        {
+            name: 'months down',
+            source: [date('2024-01-15'), date('2024-02-15')],
+            direction: 'down',
+            expected: ['2024-03-15', '2024-04-15', '2024-05-15'],
+        },
+        {
+            name: 'months up',
+            source: [date('2024-01-15'), date('2024-02-15')],
+            direction: 'up',
+            expected: ['2023-12-15', '2023-11-15', '2023-10-15'],
+        },
+        {
+            name: 'months left',
+            source: [date('2024-01-15'), date('2024-02-15')],
+            direction: 'left',
+            expected: ['2023-12-15', '2023-11-15', '2023-10-15'],
+        },
+        {
+            name: 'falling months down',
+            source: [date('2024-03-15'), date('2024-02-15')],
+            direction: 'down',
+            expected: ['2024-01-15', '2023-12-15', '2023-11-15'],
+        },
+        {
+            name: 'a year as twelve months',
+            source: [date('2024-01-15'), date('2025-01-15')],
+            direction: 'down',
+            expected: ['2026-01-15', '2027-01-15', '2028-01-15'],
+        },
+        {
+            name: 'months past a short month, from the last source date',
+            source: [date('2023-12-31'), date('2024-01-31')],
+            direction: 'down',
+            expected: ['2024-02-29', '2024-03-31', '2024-04-30'],
+        },
+        {
+            name: 'text down',
+            source: [text('Item 1'), text('Item 2')],
+            direction: 'down',
+            expected: ['Item 3', 'Item 4', 'Item 5'],
+        },
+        {
+            name: 'text up, past zero',
+            source: [text('Item 2'), text('Item 3')],
+            direction: 'up',
+            expected: ['Item 1', 'Item 0', 'Item 1'],
+        },
+        {
+            name: 'text right',
+            source: [text('Item 1'), text('Item 2')],
+            direction: 'right',
+            expected: ['Item 3', 'Item 4', 'Item 5'],
+        },
+        {
+            name: 'falling text down',
+            source: [text('Item 9'), text('Item 7')],
+            direction: 'down',
+            expected: ['Item 5', 'Item 3', 'Item 1'],
+        },
+        {
+            name: 'falling text left',
+            source: [text('Item 7'), text('Item 9')],
+            direction: 'left',
+            expected: ['Item 5', 'Item 3', 'Item 1'],
+        },
+        {
+            name: 'the last number of a text, wherever it sits',
+            source: [text('Q1 of 2024 report'), text('Q1 of 2025 report')],
+            direction: 'down',
+            expected: ['Q1 of 2026 report', 'Q1 of 2027 report', 'Q1 of 2028 report'],
+        },
+    ];
+    for (const { name, source, direction, expected } of series) {
+        it(`counts ${name}`, () => {
+            expect(shown(filled(source, 3, direction))).toEqual(expected);
+        });
+    }
+
+    const copies: { name: string; source: (Cell | null)[] }[] = [
+        { name: 'one number', source: [number(7)] },
+        { name: 'one date', source: [date('2024-01-15')] },
+        { name: 'one text with a number', source: [text('Item 1')] },
+        { name: 'dates at uneven days', source: [date('2024-01-01'), date('2024-01-02'), date('2024-01-05')] },
+        { name: 'dates at uneven months', source: [date('2024-01-01'), date('2024-02-01'), date('2024-04-01')] },
+        { name: 'one date twice', source: [date('2024-01-15'), date('2024-01-15')] },
+        { name: 'text at uneven numbers', source: [text('Item 1'), text('Item 2'), text('Item 4')] },
+        { name: 'numbers in different words', source: [text('a1'), text('b2')] },
+        { name: 'plain words', source: [text('yes'), text('no')] },
+        { name: 'kinds side by side', source: [number(1), text('a'), number(3)] },
+        { name: 'a gap between numbers', source: [number(1), null, number(3)] },
+        { name: 'empty text', source: [text(''), text('')] },
+        { name: 'Chinese numerals', source: [text('一'), text('二')] },
+        { name: 'Chinese day names', source: [text('周一'), text('周二')] },
+        { name: 'long Chinese day names', source: [text('星期一'), text('星期二')] },
+        { name: 'the Chinese Sunday', source: [text('六'), text('日')] },
+    ];
+    for (const { name, source } of copies) {
+        it(`copies ${name} down, and mirrored up`, () => {
+            const count = source.length + 1;
+            const m = source.map((cell) => cell?.m ?? null);
+            expect(shown(filled(source, count, 'down'))).toEqual([...m, m[0]]);
+            const mirrored = [...m].reverse();
+            expect(shown(filled(source, count, 'up'))).toEqual([...mirrored, mirrored[0]]);
+        });
+    }
+
+    it('counts a numeric run and copies the words beside it, each repeating its source place', () => {
+        const source = [number(1), number(2), text('a')];
+        expect(shown(filled(source, 5, 'down'))).toEqual(['3', '4', 'a', '5', '6']);
+    });
+
+    // The cell beside the source repeats the source's nearest cell: 'a' above a block that starts 1, 2, a.
+    it('dragged up, a mixed block repeats from its nearest cell', () => {
+        const source = [number(1), number(2), text('a')];
+        expect(shown(filled(source, 5, 'up'))).toEqual(['a', '0', '-1', 'a', '-2']);
+    });
+
+    it('dragged up, a formula in a mixed block shifts by the distance to the cell it repeats', () => {
+        const src: SingleRange = { row: [6, 7], column: [0, 0] };
+        const ctx = makeCtx((d) => {
+            d[6][0] = { f: '=B7', v: 0, m: '0', ct: { fa: 'General', t: 'n' } };
+            d[7][0] = number(5);
+        }, src);
+        autoFillCell(ctx, src, { row: [4, 5], column: [0, 0] }, 'up');
+        const d = ctx.sheets[0].data;
+        expect(d?.[5][0]?.v).toBe(5);
+        expect(d?.[4][0]?.f).toBe('=B5');
+    });
+
+    it('keeps the format of the source cell it repeats, down and up', () => {
+        const source = [number(1, '#f00'), number(2, '#00f')];
+        expect(filled(source, 2, 'down').map((cell) => cell?.bg)).toEqual(['#f00', '#00f']);
+        expect(filled(source, 2, 'up').map((cell) => cell?.bg)).toEqual(['#00f', '#f00']);
+    });
+
+    it('a date series keeps the format of the source cell it repeats', () => {
+        const source = [
+            date('2024-01-15', 'yyyy-MM-dd', '2024-01-15', '#f00'),
+            date('2024-02-15', 'yyyy-MM-dd', '2024-02-15', '#00f'),
+        ];
+        expect(filled(source, 2, 'down').map((cell) => cell?.bg)).toEqual(['#f00', '#00f']);
+    });
+
+    it('renders a series through the number format of its source', () => {
+        const masked = (v: number): Cell => ({ v, m: v.toFixed(2), ct: { fa: '##0.00', t: 'n' } });
+        expect(shown(filled([masked(1), masked(2)], 2, 'down'))).toEqual(['3.00', '4.00']);
+    });
+
+    // 01/02 and 02/02 are a day apart, whatever a date parser makes of the text.
+    it('a date shown day first counts by its value, not its text', () => {
+        const source = [date('2024-02-01', 'dd/MM/yyyy', '01/02/2024'), date('2024-02-02', 'dd/MM/yyyy', '02/02/2024')];
+        expect(shown(filled(source, 2, 'down'))).toEqual(['03/02/2024', '04/02/2024']);
+    });
+
+    it('a hidden row keeps its cell and still takes a step of the series', () => {
+        const cells = filled([number(1), number(2)], 3, 'down', (ctx) => {
+            ctx.sheets[0].config = { rowhidden: { 3: 0 } };
+        });
+        expect(shown(cells)).toEqual(['3', null, '5']);
+    });
+
+    it('a hidden column in a downward fill keeps its cells', () => {
+        const src: SingleRange = { row: [0, 1], column: [0, 1] };
+        const ctx = makeCtx((d) => {
+            d[0][0] = number(1);
+            d[1][0] = number(2);
+            d[0][1] = number(10);
+            d[1][1] = number(20);
+        }, src);
+        ctx.sheets[0].config = { colhidden: { 0: 0 } };
+        autoFillCell(ctx, src, { row: [2, 3], column: [0, 1] }, 'down');
+        const d = ctx.sheets[0].data;
+        expect([d?.[2][0], d?.[3][0]]).toEqual([null, null]);
+        expect([d?.[2][1]?.v, d?.[3][1]?.v]).toEqual([30, 40]);
+    });
+
+    it('each column of a block counts on its own', () => {
+        const src: SingleRange = { row: [0, 1], column: [0, 1] };
+        const ctx = makeCtx((d) => {
+            d[0][0] = number(1);
+            d[1][0] = number(2);
+            d[0][1] = text('Item 5');
+            d[1][1] = text('Item 10');
+        }, src);
+        autoFillCell(ctx, src, { row: [2, 3], column: [0, 1] }, 'down');
+        const d = ctx.sheets[0].data;
+        expect([d?.[2][0]?.m, d?.[3][0]?.m, d?.[2][1]?.m, d?.[3][1]?.m]).toEqual(['3', '4', 'Item 15', 'Item 20']);
+    });
+
+    it('fill down copies the top row, numbers included, and fill right the left column', () => {
+        const seed = (d: (Cell | null)[][]) => {
+            d[0][0] = number(1);
+            d[0][1] = number(2);
+            d[1][0] = number(3);
+        };
+        const range: SingleRange = { row: [0, 2], column: [0, 1] };
+        const down = makeCtx(seed, range);
+        fillFromEdge(down, range, 'down');
+        expect([1, 2].map((r) => down.sheets[0].data?.[r].slice(0, 2).map((cell) => cell?.v))).toEqual([
+            [1, 2],
+            [1, 2],
+        ]);
+        const right = makeCtx(seed, range);
+        fillFromEdge(right, range, 'right');
+        expect(right.sheets[0].data?.[0][1]?.v).toBe(1);
+        expect(right.sheets[0].data?.[1][1]?.v).toBe(3);
+    });
+
+    // Rows are 20px. Drags the handle of A5:A6 to the row under clientY.
+    function dragTo(clientY: number) {
+        const ctx = makeCtx(
+            (d) => {
+                d[4][0] = number(1);
+                d[5][0] = number(2);
+            },
+            { row: [4, 5], column: [0, 0] },
+        );
+        ctx.visibledatarow = [20, 40, 60, 80, 100, 120, 140, 160];
+        ctx.cellSelectExtendIndex = [5, 0];
+        ctx.selections = [
+            {
+                row: [4, 5],
+                column: [0, 0],
+                row_focus: 4,
+                column_focus: 0,
+                top: 80,
+                left: 0,
+                height: 39,
+                width: 73,
+                top_move: 80,
+                left_move: 0,
+                height_move: 39,
+                width_move: 73,
+            },
+        ];
+        const cellArea = {
+            getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600 }),
+            scrollLeft: 0,
+            scrollTop: 0,
+        } as unknown as HTMLDivElement;
+        const container = { querySelectorAll: () => [] } as unknown as HTMLDivElement;
+        onDropCellSelectEnd(ctx, { clientX: 10, clientY } as MouseEvent, cellArea, container);
+        return ctx;
+    }
+
+    it('the handle dragged up counts down from the top of the selection', () => {
+        const ctx = dragTo(50);
+        expect([3, 2].map((r) => ctx.sheets[0].data?.[r][0]?.v)).toEqual([0, -1]);
+        expect(ctx.selections?.[0].row).toEqual([2, 5]);
+    });
+
+    it('the handle dragged down counts on from the bottom of the selection', () => {
+        const ctx = dragTo(150);
+        expect([6, 7].map((r) => ctx.sheets[0].data?.[r][0]?.v)).toEqual([3, 4]);
+        expect(ctx.selections?.[0].row).toEqual([4, 7]);
     });
 });
