@@ -263,6 +263,13 @@ describe('INDEX', () => {
         expect(value('=INDEX(C1:D6,-1,0)')).toBe('#VALUE!');
     });
 
+    test('an empty cell it gives shows 0, as a reference to one does', () => {
+        expect(value('=INDEX(Labels!A1:E1,,1)')).toBe(0);
+        expect(value('=INDEX(Labels!A1:E1,1)')).toBe(0);
+        expect(value('=Labels!A1:E1')).toBe(0);
+        expect(value('=Labels!A1')).toBe(0);
+    });
+
     test('a row and a column still give one cell', () => {
         expect(value('=INDEX(C1:D6,2,2)')).toBe(12);
         expect(value('=INDEX(B1:B6,3)')).toBe('Cherry');
