@@ -4,7 +4,7 @@
 import { applyPatches, enablePatches, produceWithPatches } from 'immer';
 import type { Context } from '../../../state/context';
 import { updateCell } from '../../../state/modules/cell';
-import { copy } from '../../../state/modules/selection';
+import { copy } from '../../../state/modules/clipboard';
 import type { History } from '../../../state/types';
 import { filterPatch } from '../../../state/utils/patch';
 import { pasteCopy } from './clipboard';

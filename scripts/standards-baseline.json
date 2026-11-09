@@ -102,7 +102,7 @@
     "packages/ui/src/lib/eigenAppRouter.tsx": 1
   },
   "interface-decls": 1,
-  "biome-ignore": 40,
+  "biome-ignore": 39,
   "jsdoc-blocks": 0,
   "raw-colors": 0,
   "unused-primitive-types": 0

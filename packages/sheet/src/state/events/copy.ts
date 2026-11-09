@@ -1,12 +1,14 @@
 // A copy or a cut of the grid's selection, from ⌘C, ⌘X or a menu. handleCopy refuses a range that cuts through a
-// merged cell, and several ranges that don't line up or whose conditional formats would not survive the paste. It
-// hands the rest to copy, and ends a format painter that was on.
+// merged cell, several ranges that don't line up or whose conditional formats would not survive the paste, and a cut
+// over a row a filter hides. It hands the rest to copy, and ends a format painter that was on.
 
 import type { SingleRange } from '../../engine/types';
 import { cancelPaintModel, checkCF, getComputeMap } from '..';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
-import { copy, selectIsOverlap } from '../modules/selection';
+import { movedLines } from '../modules/carry';
+import { copy } from '../modules/clipboard';
+import { selectIsOverlap } from '../modules/selection';
 import { hasPartMC } from '../modules/validation';
 
 export function handleCopy(ctx: Context, { cut = false }: { cut?: boolean } = {}) {
@@ -16,6 +18,7 @@ export function handleCopy(ctx: Context, { cut = false }: { cut?: boolean } = {}
     if (ranges.length === 0) return;
     if (ranges.some(({ row, column }) => hasPartMC(ctx, row[0], row[1], column[0], column[1]))) return;
     if (ranges.length > 1 && (holdsConditionalFormat(ctx, ranges) || !linedUp(ranges) || selectIsOverlap(ctx))) return;
+    if (cut && ranges.some((range) => !movedLines(ctx, ctx.currentSheetId, range))) return;
 
     copy(ctx, { cut });
 }

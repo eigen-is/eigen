@@ -8,6 +8,7 @@ import { describe, expect, test } from 'bun:test';
 import { produce } from 'immer';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
+import { sortFilterRange } from '../../../state/modules/filter';
 import { sortedOrder, sortRange, sortSelection } from '../../../state/modules/sort';
 import { contextFactory, selectionFactory } from '../factories/context';
 
@@ -42,6 +43,58 @@ describe('sortedOrder', () => {
         expect(performance.now() - started).toBeLessThan(1000);
         expect(order[0]).toBe(count - 1);
         expect(order[count - 1]).toBe(0);
+    });
+});
+
+// Rows 1 to 4 under a header hold d, a, c, b. A hidden row keeps its cells, or the row that shows after the sort is
+// another row than the one the filter or the user chose.
+describe('a sort over hidden rows', () => {
+    const hiddenCtx = (rowhidden: Record<string, number>, filter = {}) =>
+        contextFactory({
+            sheets: [
+                {
+                    name: 'sheet',
+                    id: 'id_1',
+                    order: 0,
+                    config: { rowhidden },
+                    filter,
+                    filterRange: { row: [0, 4], column: [0, 1] },
+                    data: [
+                        [cell('head'), cell('n')],
+                        [cell('d'), cell(4)],
+                        [cell('a'), cell(1)],
+                        [cell('c'), cell(3)],
+                        [cell('b'), cell(2)],
+                    ],
+                },
+            ],
+        }) as Context;
+    const column = (ctx: Context) => ctx.sheets[0].data?.map((row) => row[0]?.v);
+
+    test('the filter menu sort leaves the rows the filter hides where they are', () => {
+        const hidden = { 2: 0 };
+        const entry = { rowhidden: hidden, optionstate: true, str: 0, edr: 4, cindex: 0, stc: 0, edc: 1 };
+        const next = produce(hiddenCtx(hidden, { 0: entry }), (draft: Context) => {
+            sortFilterRange(draft, 0, 0, 4, 1, 0, true);
+        });
+        expect(column(next)).toEqual(['head', 'b', 'a', 'c', 'd']);
+        expect(next.sheets[0].config?.rowhidden).toEqual(hidden);
+    });
+
+    test('a sort of a range leaves a row hidden by hand where it is', () => {
+        const next = produce(hiddenCtx({ 1: 0 }), (draft: Context) =>
+            sortRange(draft, { row: [1, 4], column: [0, 1] }, true),
+        );
+        expect(column(next)).toEqual(['head', 'd', 'a', 'b', 'c']);
+    });
+
+    test('a formula follows its row across a hidden row', () => {
+        const ctx = hiddenCtx({ 2: 0 });
+        const row = ctx.sheets[0].data?.[1];
+        if (row) row[1] = { v: 4, m: '4', f: '=4*B4/B4' };
+        const next = produce(ctx, (draft: Context) => sortRange(draft, { row: [1, 4], column: [0, 1] }, true));
+        expect(column(next)).toEqual(['head', 'b', 'a', 'c', 'd']);
+        expect(next.sheets[0].data?.[4]?.[1]?.f).toBe('=4*B7/B7');
     });
 });
 

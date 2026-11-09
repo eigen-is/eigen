@@ -18,7 +18,7 @@ import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
 import { carrySides } from '../modules/border';
 import type { CarryTile } from '../modules/carry';
-import { carriedLines, carryCells, landedCell, moveCells } from '../modules/carry';
+import { carriedLines, carryCells, landedCell, moveCells, movedLines } from '../modules/carry';
 import { getQKBorder, setCellValue } from '../modules/cell';
 import { computeFormula } from '../modules/formula-exec';
 import { cellsIn, jfrefreshgrid, recomputeCells } from '../modules/refresh';
@@ -82,11 +82,10 @@ function pasteCut(ctx: Context, copyState: NonNullable<Context['copyState']>) {
     const copySheetId = copyState.dataSheetId;
     const sourceRange = copyState.copyRange[0];
 
-    // A sheet without data has nothing to cut.
     const copySheet = getSheet(ctx, { id: copySheetId });
     if (!copySheet.data) return;
-    // A cut moves every cell it took, a row a filter hides too, as Excel does.
-    const lines = carriedLines(ctx, copySheetId, [sourceRange], false);
+    const lines = movedLines(ctx, copySheetId, sourceRange);
+    if (!lines) return;
 
     const height = lines.rows.length;
     const width = lines.columns.length;
@@ -117,7 +116,8 @@ function pasteCopy(ctx: Context, copyState: NonNullable<Context['copyState']>) {
     const resolver = createArrayResolver(ctx.sheets);
 
     const copySheetId = copyState.dataSheetId;
-    const lines = carriedLines(ctx, copySheetId, copyState.copyRange, true);
+    const lines = carriedLines(ctx, copySheetId, copyState.copyRange);
+    if (!lines) return;
     const copyh = lines.rows.length;
     const copyc = lines.columns.length;
     // A filter can hide every row of the copy.

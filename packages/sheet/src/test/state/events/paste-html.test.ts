@@ -9,8 +9,12 @@ import type { Context } from '../../../state/context';
 import { handleCopy } from '../../../state/events/copy';
 import { handlePaste } from '../../../state/events/paste';
 import { normalizedCellAttr } from '../../../state/modules/cell';
-import { consumePendingCopy } from '../../../state/modules/clipboard';
-import { COPY_ACTION_TABLE_MARKER, copy, rangeValueToClipboard } from '../../../state/modules/selection';
+import {
+    COPY_ACTION_TABLE_MARKER,
+    consumePendingCopy,
+    copy,
+    rangeValueToClipboard,
+} from '../../../state/modules/clipboard';
 import { filterPatch } from '../../../state/utils';
 import { clipboardWith } from '../factories/clipboard';
 import { syncablePaths } from '../factories/collab';
