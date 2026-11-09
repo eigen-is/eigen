@@ -4,9 +4,9 @@ description: "What Eigen is, the apps it includes and what each one is for, and 
 type: overview
 category: Basics
 tags: [getting-started, overview, apps]
-related: [getting-started/your-first-steps, drive/get-started]
+related: [getting-started/your-first-steps, getting-started/taking-your-data-with-you, drive/get-started]
 order: 1
-updated: 2026-10-23
+updated: 2026-11-09
 ---
 
 Eigen is a self-hosted alternative to Google Workspace. Simple and secure. You control your data. Your mail, files, calendar, and more live in one place. It syncs with your own apps over IMAP, SMTP, CalDAV, CardDAV, and WebDAV, and it opens and saves Word, Excel, and PowerPoint files. This page is a quick tour of what Eigen is and the apps it includes.
@@ -48,3 +48,4 @@ To find something fast, open the command palette with the **Search and jump anyw
 - New here? Start with [Your first steps](/support/getting-started/your-first-steps).
 - Learn how your files work in [Get started with Drive](/support/drive/get-started).
 - See [how sharing works](/support/drive/share-a-file) when you're ready to work with other people.
+- Want to know how to leave with your data? See [Taking your data with you](/support/getting-started/taking-your-data-with-you).
