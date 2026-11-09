@@ -6,6 +6,7 @@ import { produce } from 'immer';
 import type { Cell } from '../../../engine/types';
 import type { Context, Sheet } from '../../../state';
 import { handlePaste } from '../../../state/events/paste';
+import { deleteRowCol } from '../../../state/modules/rowcol';
 import { changeSheet, deriveView } from '../../../state/modules/sheet';
 import { workbookContextFactory } from '../factories/context';
 
@@ -151,6 +152,11 @@ describe('deriveView', () => {
         const viewed = deriveView(base, next);
         expect(viewed).not.toBe(next);
         expect(viewed.sheets).toBe(next.sheets);
+    });
+
+    test("a tab's own delete of the selected row draws its box on the row that took its place", () => {
+        const next = commit(workbook(), (draft) => deleteRowCol(draft, { type: 'row', start: 3, end: 3, id: 'one' }));
+        expect(next.selections?.[0]).toMatchObject({ row: [3, 3], top: 3 * HEIGHT });
     });
 
     test('no selection comes back after a row delete dropped it', () => {

@@ -15,7 +15,7 @@ import { cancelNormalSelected } from './cell';
 import { recomputeAfterOps } from './formula-exec';
 import type { RowColMove } from './history-shift';
 import { deleteMove, insertMove } from './history-shift';
-import { deleteRowCol, insertRowCol } from './rowcol';
+import { deleteRowCol, insertRowCol, movedSelection } from './rowcol';
 import { addSheet, deleteSheet, leaveCurrentSheet, renameSheet } from './sheet';
 
 // A row or column op the batch applied, with the sheets it was applied to.
@@ -100,16 +100,6 @@ function followView(draft: Context, move: RowColMove) {
 
 // A selected range the op's delete takes whole goes.
 function movedSelections(selections: Selection[] | undefined, move: RowColMove): Selection[] | undefined {
-    if (!selections) return undefined;
-    const row = move.type === 'row';
-    const moved: Selection[] = [];
-    for (const selection of selections) {
-        const shifted = move.range(selection);
-        if (!shifted) continue;
-        const [start] = row ? shifted.row : shifted.column;
-        const focus = row ? selection.row_focus : selection.column_focus;
-        const at = focus == null ? start : (move.to(focus) ?? start);
-        moved.push(row ? { ...shifted, row_focus: at } : { ...shifted, column_focus: at });
-    }
-    return moved.length > 0 ? moved : undefined;
+    const moved = selections?.flatMap((selection) => movedSelection(selection, move) ?? []);
+    return moved?.length ? moved : undefined;
 }

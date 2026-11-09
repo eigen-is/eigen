@@ -128,10 +128,8 @@ export const ColumnHeader: React.FC = () => {
     );
 
     useEffect(() => {
-        if (context.selections == null) return;
-
         let columnTitleMap: Record<number, number> = {};
-        for (const selection of context.selections) {
+        for (const selection of context.selections ?? []) {
             columnTitleMap = selectTitlesMap(columnTitleMap, selection.column[0], selection.column[1]);
         }
         const selects: { col: number; col_pre: number; c1: number; c2: number }[] = [];
@@ -249,9 +247,8 @@ export const ColumnHeader: React.FC = () => {
                         </div>
                     ) : null}
                 </OverlayRegion>
-                {/* The freeze handle's position adds the scroll offset, so it stays put in the viewport while the content
-                    scrolls. It sits outside the panes, so no clip cuts it, as none cuts the body's drag lines. A freeze
-                    drag moves it directly. */}
+                {/* The freeze handle's position adds the scroll offset, so it stays put while the content scrolls. It
+                    sits outside the panes, so no clip cuts it, as none cuts the body's drag lines. */}
                 <div ref={contentRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
                     <div
                         className="sheet-cols-freeze-handle"
