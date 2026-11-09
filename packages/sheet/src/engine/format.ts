@@ -51,6 +51,22 @@ export function formulaResultType(fa: CellType['fa'], value: Cell['v']): CellTyp
     return typeof value === 'boolean' ? 'b' : 'g';
 }
 
+// A formula's result takes the value's type and shows in the cell's format, which outlives it. Text stays text however
+// it reads (=TEXT(5,"000") is "005"), and a blank result leaves no value for JSON to turn into another shape.
+export function writeFormulaResult(cell: Cell, value: Cell['v']) {
+    const ct = (cell.ct ??= { fa: 'General' });
+    ct.t = formulaResultType(ct.fa, value);
+    if (value == null) {
+        delete cell.v;
+        delete cell.m;
+        return;
+    }
+    cell.v = value;
+    if (typeof value === 'number') cell.m = numberDisplay(value, ct.fa);
+    else if (typeof value === 'boolean') cell.m = booleanDisplay(value);
+    else cell.m = String(value);
+}
+
 // Wrap breaks text only; the value decides too, since a formula typed into a text cell keeps its ct.t.
 export function cellWrapsText(cell: Cell): boolean {
     return cell.tb === '2' && typeof cell.v !== 'number' && cell.ct?.t !== 'n' && cell.ct?.t !== 'd';

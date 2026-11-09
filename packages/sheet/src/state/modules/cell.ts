@@ -13,11 +13,11 @@ import {
     booleanDisplay,
     cellWrapsText,
     dropRuns,
-    formulaResultType,
     generalAlign,
     numberDisplay,
     parseCellInput,
     richText,
+    writeFormulaResult,
 } from '../../engine/format';
 import { iscelldata, isFormula } from '../../engine/formula-utils';
 import type { Cell, CellMatrix, FormulaDependency } from '../../engine/types';
@@ -141,6 +141,12 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
         dropRuns(cell);
     }
 
+    if (cell?.f != null) {
+        writeFormulaResult(cell, value);
+        d[r][c] = cell;
+        return;
+    }
+
     if (isRealNull(value)) {
         if (cell != null && isPlainObject(cell)) {
             delete cell.m;
@@ -155,12 +161,6 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
     }
 
     cell ??= {};
-
-    if (!isNil(cell.f)) {
-        writeFormulaResult(cell, value);
-        d[r][c] = cell;
-        return;
-    }
 
     const text = value.toString();
 
@@ -236,17 +236,6 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
     }
 
     d[r][c] = cell;
-}
-
-// A formula's result takes the value's type and shows in the cell's format, which outlives it. Text stays text however
-// it reads (=TEXT(5,"000") is "005"), as recalc stores it.
-export function writeFormulaResult(cell: Cell, value: Cell['v']) {
-    const ct = (cell.ct ??= { fa: 'General' });
-    cell.v = value;
-    if (typeof value === 'number') cell.m = numberDisplay(value, ct.fa);
-    else if (typeof value === 'boolean') cell.m = booleanDisplay(value);
-    else cell.m = String(value ?? '');
-    ct.t = formulaResultType(ct.fa, value);
 }
 
 export function getRealCellValue(r: number, c: number, data: CellMatrix) {

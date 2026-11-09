@@ -1,6 +1,6 @@
-// Computes stored formula values with no DOM, so every reader lands on the same ones. recalcSheets fills in what an
-// imported workbook holds no value for and trusts the rest, which is Excel's. recomputeAfter runs on every reader after
-// a batch with a sheet, row or column op, seeded with what the op can affect, such as the lines it opened or closed.
+// Computes stored formula values with no DOM, so every reader lands on the same ones. recalcSheets computes what an
+// imported workbook holds no value or an error for and trusts the rest, which is Excel's. recomputeAfter runs on every
+// reader after a batch with a sheet, row or column op, seeded with what the op can affect, such as the lines it opened or closed.
 // affectedFormulas and evaluateFormulas are the walk and the pass they share with the editor's recompute of an edit.
 // extractDependencies, the walk that finds the cells a formula reads, builds the editor's formula map too.
 
@@ -10,7 +10,7 @@ import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
 import { getCalculationOrder } from './dependency-graph';
 import { cellsOf, DependencyIndex, dependencySlots } from './dependency-index';
-import { booleanDisplay, formulaResultType, numberDisplay } from './format';
+import { writeFormulaResult } from './format';
 import { FormulaEngine } from './formula-engine';
 import { walkFormulaRefs } from './formula-shift';
 import type { WalkContext } from './formula-utils';
@@ -64,10 +64,7 @@ export function recalcSheets(sheets: readonly Sheet[], budgets: RecalcBudgets = 
         const row = working.find((w) => w.id === id)?.data[r];
         const existing = row?.[c];
         if (!row || existing == null) continue;
-        // The matrix may hold the input snapshot's frozen cells, so write a copy.
-        const cell: Cell = { ...existing };
-        writeCellValue(cell, result);
-        row[c] = cell;
+        row[c] = withResult(existing, result);
     }
     return finish();
 }
@@ -235,9 +232,7 @@ function withResults<S extends WorkingSheet>(sheets: S[], results: readonly Form
             written.set(id, data);
         }
         if (data[r] === before[r]) data[r] = [...before[r]];
-        const cell: Cell = { ...existing };
-        writeCellValue(cell, result);
-        data[r][c] = cell;
+        data[r][c] = withResult(existing, result);
     }
     if (written.size === 0) return sheets;
     return sheets.map((sheet) => {
@@ -290,29 +285,9 @@ function lacksValue(cell: Cell | null): boolean {
     return typeof cell.v === 'string' && valueIsError(cell.v);
 }
 
-// Writes a result as the editor's setCellValue does, where that is cheap: an error shows its sentinel and carries
-// ct.t 'e', any other value its display string.
-function writeCellValue(cell: Cell, result: EvaluationResult): void {
-    if (result.type === 'error') {
-        const sentinel = String(result.value);
-        cell.v = sentinel;
-        cell.m = sentinel;
-        cell.ct = { ...(cell.ct ?? {}), t: 'e' };
-        return;
-    }
-
-    cell.v = result.value;
-    if (cell.ct) cell.ct = { ...cell.ct, t: formulaResultType(cell.ct.fa, result.value) };
-
-    if (result.type === 'boolean') {
-        cell.m = booleanDisplay(Boolean(result.value));
-        return;
-    }
-
-    if (typeof result.value === 'number') {
-        cell.m = numberDisplay(result.value, cell.ct?.fa);
-        return;
-    }
-
-    cell.m = result.value == null ? '' : String(result.value);
+// A copy of the cell with the result written, because the matrix may hold an input snapshot's frozen cells.
+function withResult(existing: Cell, { value }: EvaluationResult): Cell {
+    const cell: Cell = { ...existing, ct: existing.ct && { ...existing.ct } };
+    writeFormulaResult(cell, value);
+    return cell;
 }

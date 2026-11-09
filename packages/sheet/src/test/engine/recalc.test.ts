@@ -415,7 +415,7 @@ describe('engine/recalc — recalcSheets', () => {
         expect(two).toMatchObject({ v: 4, m: '4.00', ct: { fa: '0.00', t: 'n' } });
         expect(three).toMatchObject({ v: true, ct: { fa: 'General', t: 'b' } });
         expect(four).toMatchObject({ v: 4, ct: { fa: 'yyyy-mm-dd', t: 'd' } });
-        expect(five?.ct).toBeUndefined();
+        expect(five?.ct).toEqual({ fa: 'General', t: 'n' });
     });
 
     test('a malformed number format shows the result as General', () => {

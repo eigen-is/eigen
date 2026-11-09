@@ -106,3 +106,53 @@ describe('a sort writes only what it lands', () => {
         expectEveryone(s, 'B3', { f: '=$H$1*2', v: 10 });
     });
 });
+
+describe('an empty-text result', () => {
+    const IF_ONE = '=IF(A1=1,"",5)';
+    const IMPORTED: Cell = { f: IF_ONE, v: '', m: '', ct: { fa: 'General', t: 'g' } };
+
+    test('is one stored shape, from the editor as from an import, and shows blank', () => {
+        const s = session({ A1: number(1), C1: IMPORTED });
+        s.edit(typed('B1', IF_ONE));
+        for (const sheet of s.readers()) expect(at(sheet, 'B1')).toEqual(IMPORTED);
+    });
+
+    test('plus one is #VALUE!, on either cell, as in Excel', () => {
+        const s = session({ A1: number(1), C1: IMPORTED });
+        s.edit(typed('B1', IF_ONE));
+        s.edit(typed('B2', '=B1+1'));
+        s.edit(typed('C2', '=C1+1'));
+        expectEveryone(s, 'B2', { v: '#VALUE!' });
+        expectEveryone(s, 'C2', { v: '#VALUE!' });
+    });
+
+    test('a reader gives one answer, in the pass of the flip and in a later one', () => {
+        const s = session({ A1: number(0), B1: held(IF_ONE, 5), C1: held('=B1+1', 6), H1: number(1) });
+        s.edit(typed('A1', '1'));
+        expectEveryone(s, 'B1', { v: '', m: '' });
+        expectEveryone(s, 'C1', { v: '#VALUE!' });
+        s.edit(typed('C2', '=B1+1'));
+        expectEveryone(s, 'C2', { v: '#VALUE!' });
+    });
+
+    test('takes away the type an error left', () => {
+        const s = session({
+            A1: number(0),
+            B1: { f: '=IF(A1=1,"",1/0)', v: '#DIV/0!', m: '#DIV/0!', ct: { fa: 'General', t: 'e' } },
+        });
+        s.edit(typed('A1', '1'));
+        expectEveryone(s, 'B1', { v: '', m: '', ct: { fa: 'General', t: 'g' } });
+    });
+
+    test('a cleared formula cell holds no value and no formula', () => {
+        const s = session({ A1: number(1), B1: IMPORTED });
+        s.edit((draft) => {
+            draft.selections = [{ row: [0, 0], column: [1, 1] }];
+            updateCell(draft, 0, 1, null, '');
+        });
+        for (const sheet of s.readers()) {
+            expect(at(sheet, 'B1')?.f).toBeUndefined();
+            expect(at(sheet, 'B1')?.v ?? null).toBeNull();
+        }
+    });
+});
