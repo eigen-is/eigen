@@ -41,7 +41,7 @@ export type Attachment = {
     // The charset the part declares, kept for text parts: the bytes are not UTF-8 unless they say so.
     charset?: string;
     calendarMethod?: ImipMethod;
-    // Set on text/calendar attachments in the message-detail payload; null = unparseable ICS.
+    // Set on text/calendar attachments in the message-detail payload; null = unparseable or too large.
     calendarInvite?: CalendarInvite | null;
 };
 

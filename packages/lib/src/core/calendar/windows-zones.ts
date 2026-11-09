@@ -1,4 +1,5 @@
 // CLDR supplemental `windowsZones.xml`, the `territory="001"` rows: the TZID every Outlook and Exchange file writes.
+// Its `UTC` row is left out, since Intl reads that name as itself and the row would re-spell a client's UTC as Etc/GMT.
 export const WINDOWS_ZONES = new Map<string, string>([
     ['Dateline Standard Time', 'Etc/GMT+12'],
     ['UTC-11', 'Etc/GMT+11'],
@@ -45,7 +46,6 @@ export const WINDOWS_ZONES = new Map<string, string>([
     ['Mid-Atlantic Standard Time', 'Etc/GMT+2'],
     ['Azores Standard Time', 'Atlantic/Azores'],
     ['Cape Verde Standard Time', 'Atlantic/Cape_Verde'],
-    ['UTC', 'Etc/GMT'],
     ['GMT Standard Time', 'Europe/London'],
     ['Greenwich Standard Time', 'Atlantic/Reykjavik'],
     ['Sao Tome Standard Time', 'Africa/Sao_Tome'],

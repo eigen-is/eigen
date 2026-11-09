@@ -11,13 +11,8 @@ import { toEvent } from './mappers';
 import { expandRecurrence } from './recurrence';
 import * as schema from './schema';
 
-// 5 years bounds rrule iteration against a year-9999 span; clamp rather than reject so a wide CalDAV sync still gets bounded data.
-const MAX_RANGE_SPAN_MS = 5 * 366 * 24 * 60 * 60 * 1000;
-
-function clampRangeEnd(from: Date, to: Date): Date {
-    const maxEnd = from.getTime() + MAX_RANGE_SPAN_MS;
-    return to.getTime() > maxEnd ? new Date(maxEnd) : to;
-}
+// Bounds one series' expansion against a year-9999 span. Cut rather than refused, so a wide CalDAV sync gets data.
+const MAX_EXPANSION_MS = 5 * 366 * 24 * 60 * 60 * 1000;
 
 export async function getEventsInRange(
     calendar: Calendar,
@@ -25,10 +20,8 @@ export async function getEventsInRange(
     to: Date,
     calendarId?: string,
 ): Promise<CalendarEventOccurrence[]> {
-    const clampedTo = clampRangeEnd(from, to);
-
     const scoped = calendarId ? [eq(schema.events.calendarId, calendarId)] : [];
-    const overlaps = and(lte(schema.events.startTime, clampedTo), gte(schema.events.endTime, from));
+    const overlaps = and(lte(schema.events.startTime, to), gte(schema.events.endTime, from));
 
     const nonRecurring = calendar
         .joinedEvents()
@@ -40,7 +33,7 @@ export async function getEventsInRange(
     const isMasterInWindow = and(
         sql`${schema.events.rrule} IS NOT NULL`,
         isNull(schema.events.parentEventId),
-        lte(schema.events.startTime, clampedTo),
+        lte(schema.events.startTime, to),
     );
     const recurring = calendar
         .joinedEvents()
@@ -48,7 +41,7 @@ export async function getEventsInRange(
         .all()
         .map(toEvent);
 
-    // An override is read twice: as the parent occurrence it replaces, and — when its own times overlap — where it was moved to.
+    // An override is read twice: as the occurrence it replaces, and where it was moved to when its own times overlap.
     // The parents ride as a subquery: one bound variable per master would pass SQLite's cap on a large home.
     const masterIds = calendar.db
         .select({ id: schema.events.id })
@@ -81,14 +74,18 @@ export async function getEventsInRange(
 
     for (const event of recurring) {
         const replaced = replacedByParent.get(event.id);
-        for (const occurrence of expandRecurrence(event, from, clampedTo)) {
+        // An occurrence that began before the window and still runs is in it, as a single event is.
+        const opened = from.getTime() - (event.endTime.getTime() - event.startTime.getTime());
+        const start = new Date(Math.max(event.startTime.getTime(), opened));
+        const end = new Date(Math.min(to.getTime(), start.getTime() + MAX_EXPANSION_MS));
+        for (const occurrence of expandRecurrence(event, start, end)) {
             if (!replaced?.has(occurrence.occurrenceDate)) results.push(occurrence);
         }
     }
 
     for (const exception of exceptions) {
         if (exception.status === 'cancelled') continue;
-        if (exception.startTime > clampedTo || exception.endTime < from) continue;
+        if (exception.startTime > to || exception.endTime < from) continue;
         // The stored key, not the moved startTime: the FE round-trips occurrenceDate into scope='this' RSVPs.
         if (exception.recurrenceDate) results.push({ ...exception, occurrenceDate: exception.recurrenceDate });
     }

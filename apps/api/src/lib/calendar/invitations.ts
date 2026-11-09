@@ -22,10 +22,12 @@ import * as events from './events';
 import { composeRsvpReply } from './imip';
 import { answeredOccurrence, propagateRsvp } from './invite-propagation';
 import { toEvent } from './mappers';
-import { constrainRRule } from './recurrence';
+import { constrainRRule, expandRecurrence } from './recurrence';
 import * as schema from './schema';
 import { buildCalendarEvent } from './sse-events';
 import type { InvitationExceptionPayload, InvitationUpdatePayload, ReceiveInvitationPayload } from './types';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 // What the transport vouches for about an inbound REQUEST. None of it comes from the message body.
 type InvitationLink = {
@@ -751,13 +753,21 @@ async function rsvpForOccurrence(
             return parent.calendarId;
         }
 
-        const { startTime, endTime } = computeOccurrenceTimes(parent, key);
+        // A zone moves an occurrence at most a day off its key's date. A date the rule doesn't yield is no occurrence, and
+        // an answer doesn't make it one.
+        const day = Date.parse(`${key}T00:00:00Z`);
+        const occurrence =
+            existing ??
+            expandRecurrence(parent, new Date(day - DAY_MS), new Date(day + 2 * DAY_MS)).find(
+                (candidate) => candidate.occurrenceDate === key,
+            );
+        if (!occurrence) return null;
         await events.writeEvent(calendar, parent.calendarId, {
-            title: existing?.title ?? parent.title,
+            title: occurrence.title,
             description: parent.description,
             location: parent.location,
-            startTime: existing?.startTime ?? startTime,
-            endTime: existing?.endTime ?? endTime,
+            startTime: occurrence.startTime,
+            endTime: occurrence.endTime,
             allDay: parent.allDay,
             timezone: parent.timezone,
             parentEventId: eventId,

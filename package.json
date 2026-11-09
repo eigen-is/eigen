@@ -77,6 +77,7 @@
   },
   "trustedDependencies": [],
   "patchedDependencies": {
-    "@formulajs/formulajs@2.9.3": "patches/@formulajs%2Fformulajs@2.9.3.patch"
+    "@formulajs/formulajs@2.9.3": "patches/@formulajs%2Fformulajs@2.9.3.patch",
+    "ical.js@2.2.1": "patches/ical.js@2.2.1.patch"
   }
 }

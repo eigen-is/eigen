@@ -8,7 +8,7 @@ import { and, eq, gt, inArray, or } from 'drizzle-orm';
 import type ICAL from 'ical.js';
 import type { DeleteResourceResult, PutResourceResult, ResourcePreconditions } from '../core';
 import { ApiError, failsPreconditions, normalizeResourceUri } from '../core';
-import { parseResource, restampResource, stripEigenStamps } from '../ical';
+import { keepSubcomponents, parseResource, restampResource, stripEigenStamps } from '../ical';
 import { EIGEN, readStamp, recurrenceKeyOf, seriesTimezones, uidOf } from '../ical/ical-parse';
 import type { Calendar } from './calendar';
 import {
@@ -301,8 +301,11 @@ function adoptAlarms(stored: ICAL.Component, incoming: ICAL.Component): void {
         const uid = uidOf(vevent);
         const match = byKey.get(`${uid}|${recurrenceKeyOf(vevent, storedZones.get(uid) ?? null) ?? ''}`);
         if (!match) continue;
-        vevent.removeAllSubcomponents('valarm');
-        for (const alarm of match.getAllSubcomponents('valarm')) {
+        keepSubcomponents(vevent, (sub) => sub.name !== 'valarm');
+        const alarms = match.getAllSubcomponents('valarm');
+        // Detached all at once, because adding a component to a new parent removes it from the old one per item.
+        keepSubcomponents(match, (sub) => sub.name !== 'valarm');
+        for (const alarm of alarms) {
             // The one write path that keeps a client's own subcomponents: its Eigen lines are still untrusted.
             stripEigenStamps(alarm);
             vevent.addSubcomponent(alarm);
