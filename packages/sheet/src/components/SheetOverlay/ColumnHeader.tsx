@@ -248,7 +248,8 @@ export const ColumnHeader: React.FC = () => {
                     ) : null}
                 </OverlayRegion>
                 {/* The freeze handle's position adds the scroll offset, so it stays put while the content scrolls. It
-                    sits outside the panes, so no clip cuts it, as none cuts the body's drag lines. */}
+                    sits outside the panes, so no clip cuts it, as none cuts the body's drag lines. A freeze drag moves
+                    it directly. */}
                 <div ref={contentRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
                     <div
                         className="sheet-cols-freeze-handle"
