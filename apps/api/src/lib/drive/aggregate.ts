@@ -1,8 +1,8 @@
 // The drive lists that span homes, such as a file search, the documents of one type, Watched or Recent. Most start
 // from the caller's own drive and add every team they belong to, Watched also asks everyone who shared with them, and
-// Recent asks the owner of each path in the caller's own rows. The owners come from the caller's own memberships, shares
-// and rows, so a request can never point a list at another home. A list that pulls from a team checks membership only,
-// as a member may read all of its drive; Watched and Recent check each path.
+// Recent asks the owner of each path in the caller's own rows. The owners come from the caller's own memberships,
+// shares and rows, so a request can never point a list at another home. A list that pulls from a team checks
+// membership only, as a member may read all of its drive; Watched and Recent check each path.
 
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath, RecentPath } from '@workspace/lib/types/drive';
@@ -55,10 +55,7 @@ export async function aggregateRecents(user: User): Promise<RecentPath[]> {
     const rows = (await getDrive(user)).listRecent();
     const memberships = await getMemberships(user.id);
     const newest = await pullRecents(user, memberships, rows.slice(0, RECENT_PAGE));
-    const older =
-        newest.length < RECENT_PAGE
-            ? await pullRecents(user, memberships, rows.slice(RECENT_PAGE, 2 * RECENT_PAGE))
-            : [];
+    const older = newest.length < RECENT_PAGE ? await pullRecents(user, memberships, rows.slice(RECENT_PAGE)) : [];
     return [...newest, ...older]
         .sort((a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime())
         .slice(0, RECENT_PAGE);

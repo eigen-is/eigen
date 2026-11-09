@@ -21,6 +21,7 @@ const ROWS_KEPT = 200;
 // A part of a document, such as a chat's attachment, opens with its document and gets no row of its own. The check
 // runs after the answer, so it never fails or slows the read.
 export function recordOpenedUnlessInDocument(user: User, mount: Mount, path: DrivePath): void {
+    if (isGuest(user)) return;
     mount
         .getBreadcrumb(path.id)
         .then((chain) => {
