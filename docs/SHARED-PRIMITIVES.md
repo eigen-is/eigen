@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2138 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2139 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -552,7 +552,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (447)
+## Types (448)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -612,6 +612,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BorderType` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `Cell` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `CellBorderSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
+| `CellLink` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `CellMatrix` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `CellStyle` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `CellType` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
