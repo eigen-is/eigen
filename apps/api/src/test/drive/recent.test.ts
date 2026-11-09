@@ -1,9 +1,12 @@
 import { afterAll, afterEach, beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
-import { teamOwnerId } from '@workspace/lib/types';
+import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import * as decoding from 'lib0/decoding';
+import { CollabDocument } from '../../lib/collab/collab-document';
 import { getPublicConfig } from '../../lib/config/server-config';
 import { Drive } from '../../lib/drive';
+import * as inlineEdit from '../../lib/drive/inline-edit';
+import { MAX_INLINE_EDIT_SIZE } from '../../lib/drive/inline-edit';
 import { getSharedDatabase } from '../../lib/drive/shared';
 import { recentPaths } from '../../lib/drive/sharedschema';
 import { clearHomeRestoring, getHome, markHomeRestoring } from '../../lib/home/get-home';
@@ -61,8 +64,11 @@ async function rootOf(user: TestUser, ownerId = user.id): Promise<DrivePath> {
 }
 
 async function uploadText(user: TestUser, ownerId = user.id): Promise<DrivePath> {
+    return upload(user, new File(['recent'], `${crypto.randomUUID()}.txt`, { type: 'text/plain' }), ownerId);
+}
+
+async function upload(user: TestUser, file: File, ownerId = user.id): Promise<DrivePath> {
     const root = await rootOf(user, ownerId);
-    const file = new File(['recent'], `${crypto.randomUUID()}.txt`, { type: 'text/plain' });
     return driveUpload(user.sessionToken, ownerId, root.mountId, root.id, file);
 }
 
@@ -89,17 +95,17 @@ function share(owner: TestUser, path: DrivePath, email: string): Promise<unknown
     });
 }
 
-async function openInEditor(user: TestUser, path: DrivePath): Promise<void> {
+async function openInEditor(user: TestUser, path: DrivePath, status = 200): Promise<void> {
     const res = await authedRequest(user.sessionToken, `/editor/${path.ownerId}/${path.mountId}/${path.id}/content`);
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(status);
 }
 
-async function openChat(user: TestUser, chat: DrivePath, query = ''): Promise<void> {
+async function openChat(user: TestUser, chat: DrivePath, query = '', status = 200): Promise<void> {
     const res = await authedRequest(
         user.sessionToken,
         `/chat/${chat.ownerId}/${chat.mountId}/${chat.id}/messages${query}`,
     );
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(status);
 }
 
 // Resolves once the server has answered the sync, which it sends right after the document took the socket.
@@ -203,6 +209,94 @@ describe('Recent records an open', () => {
         expect(await listedIds(viewer)).toContain(chat.id);
     });
 
+    test('and none of a chat whose messages fail to read', async () => {
+        const viewer = await newViewer();
+        const chat = await create(viewer, 'chat');
+        spyOn(Drive.prototype, 'withDatabase').mockRejectedValue(new Error('data.db is unreadable'));
+        spyOn(console, 'error').mockImplementation(() => {});
+        await openChat(viewer, chat, '', 500);
+        mock.restore();
+        await settle(viewer);
+        expect(await storedIds(viewer)).not.toContain(chat.id);
+    });
+
+    test('and none of a socket refused for no read access', async () => {
+        const viewer = await newViewer();
+        const doc = await create(ctx.alice.user, 'doc');
+        await expect(openSocket(viewer, doc)).rejects.toThrow();
+        await settle(viewer);
+        expect(await storedIds(viewer)).not.toContain(doc.id);
+    });
+
+    test('and none of a socket whose read access is revoked while the document loads', async () => {
+        const { alice } = ctx;
+        const viewer = await newViewer();
+        const doc = await create(alice.user, 'doc');
+        await share(alice.user, doc, viewer.email);
+        const checked = Promise.withResolvers<void>();
+        const keepsReadAccess = CollabDocument.prototype.keepsReadAccess;
+        spyOn(CollabDocument.prototype, 'keepsReadAccess').mockImplementationOnce(async function (
+            this: CollabDocument,
+            conn,
+        ) {
+            await drivePut(alice.user.sessionToken, doc.ownerId, doc.mountId, `path/${doc.id}/acl`, {
+                remove: [viewer.email],
+            });
+            const kept = await keepsReadAccess.call(this, conn);
+            checked.resolve();
+            return kept;
+        });
+        await openSocket(viewer, doc).catch(() => undefined);
+        await checked.promise;
+        await settle(viewer);
+        expect(await storedIds(viewer)).not.toContain(doc.id);
+    });
+
+    test("and none of a trashed document's socket", async () => {
+        const viewer = await newViewer();
+        const doc = await create(viewer, 'doc');
+        await driveDelete(viewer.sessionToken, viewer.id, doc.mountId, `path/${doc.id}`);
+        await expect(openSocket(viewer, doc)).rejects.toThrow();
+        await settle(viewer);
+        expect(await storedIds(viewer)).not.toContain(doc.id);
+    });
+
+    test('and none of a binary file the inline editor refuses', async () => {
+        const viewer = await newViewer();
+        const file = await upload(viewer, new File([new Uint8Array([0, 1, 2])], `${crypto.randomUUID()}.bin`));
+        await openInEditor(viewer, file, 400);
+        await settle(viewer);
+        expect(await storedIds(viewer)).not.toContain(file.id);
+    });
+
+    test('and none of a file too large for the inline editor', async () => {
+        const viewer = await newViewer();
+        const name = `${crypto.randomUUID()}.txt`;
+        const file = await upload(
+            viewer,
+            new File(['x'.repeat(MAX_INLINE_EDIT_SIZE + 1)], name, { type: 'text/plain' }),
+        );
+        await openInEditor(viewer, file, 413);
+        await settle(viewer);
+        expect(await storedIds(viewer)).not.toContain(file.id);
+    });
+
+    test('and an editor read is served when the document check fails', async () => {
+        const viewer = await newViewer();
+        const file = await uploadText(viewer);
+        const getEditableContent = inlineEdit.getEditableContent;
+        spyOn(inlineEdit, 'getEditableContent').mockImplementation(async (mount, path) => {
+            const content = await getEditableContent(mount, path);
+            spyOn(mount, 'getBreadcrumb').mockRejectedValue(new Error('metadata.db is busy'));
+            return content;
+        });
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        await openInEditor(viewer, file);
+        await eventually(async () => (errors.mock.calls.length > 0 ? true : undefined), 'the logged failure');
+        expect(errors).toHaveBeenCalledWith(expect.stringContaining('recent:'), expect.anything());
+        expect(await storedIds(viewer)).not.toContain(file.id);
+    });
+
     test("and none of a comment thread's messages", async () => {
         const viewer = await newViewer();
         const doc = await create(viewer, 'doc');
@@ -243,6 +337,7 @@ describe('Recent records an open', () => {
         const errors = spyOn(console, 'error').mockImplementation(() => {});
         await openInEditor(viewer, file);
         await eventually(async () => (errors.mock.calls.length > 0 ? true : undefined), 'the logged failure');
+        expect(errors).toHaveBeenCalledWith(expect.stringContaining('recent:'), expect.anything());
         expect(await storedIds(viewer)).not.toContain(file.id);
     });
 
@@ -321,6 +416,23 @@ describe('Recent lists', () => {
 
         await share(alice.user, file, viewer.email);
         expect(await listedIds(viewer)).toContain(file.id);
+    });
+
+    test('no team file once the user is removed from the team', async () => {
+        const viewer = await newViewer();
+        const team = await newTeamOf(viewer);
+        const teamFile = await uploadText(viewer, team);
+        await openInEditor(viewer, teamFile);
+        await waitForRow(viewer, teamFile);
+        expect(await listedIds(viewer)).toContain(teamFile.id);
+
+        const res = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/remove-team-member', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ teamId: parseOwnerId(team).id, userId: viewer.id }),
+        });
+        expect(res.status).toBe(200);
+        expect(await listedIds(viewer)).not.toContain(teamFile.id);
     });
 
     test('a trashed file hidden, and back once it is restored', async () => {

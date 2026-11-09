@@ -34,7 +34,7 @@ export const homeRouter = new Elysia({ name: 'home' })
             requireSelf(params.ownerId, user.id);
             const { teamIds } = await getMemberships(user.id);
             const owners = teamIds.map(teamOwnerId);
-            const [mounts, calendars] = await Promise.all([
+            const [mounts, calendars, teams] = await Promise.all([
                 pullFromEach(owners, async (owner) => [owner, await pullTeamMounts(owner)] as const),
                 pullFromEach(owners, async (owner) => {
                     const items = await pullCalendars(owner).catch((err) => {
@@ -44,22 +44,18 @@ export const homeRouter = new Elysia({ name: 'home' })
                     });
                     return [owner, items.map(({ id, name, color }) => ({ id, name, color }))] as const;
                 }),
+                Promise.all(teamIds.map((teamId) => Promise.all([teamId, getTeam(teamId), getTeamMembers(teamId)]))),
             ]);
             const mountsOf = new Map(mounts);
             const calendarsOf = new Map(calendars);
 
-            return Promise.all(
-                teamIds.map(async (teamId) => {
-                    const [team, members] = await Promise.all([getTeam(teamId), getTeamMembers(teamId)]);
-                    return {
-                        id: teamId,
-                        name: team?.name ?? teamId,
-                        members: members.map((m) => ({ email: m.user.email, name: m.user.name })),
-                        mounts: mountsOf.get(teamOwnerId(teamId)) ?? [],
-                        calendars: calendarsOf.get(teamOwnerId(teamId)) ?? [],
-                    };
-                }),
-            );
+            return teams.map(([teamId, team, members]) => ({
+                id: teamId,
+                name: team?.name ?? teamId,
+                members: members.map((m) => ({ email: m.user.email, name: m.user.name })),
+                mounts: mountsOf.get(teamOwnerId(teamId)) ?? [],
+                calendars: calendarsOf.get(teamOwnerId(teamId)) ?? [],
+            }));
         },
         { auth: true },
     );

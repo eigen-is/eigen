@@ -106,7 +106,7 @@ export async function pullFromEach<T>(ownerIds: readonly string[], pull: (ownerI
             getOwnerExists(ownerId)
                 .then((exists) => (exists ? pull(ownerId) : null))
                 .catch((err) => {
-                    console.error(`aggregate: reading ${ownerId} failed:`, err);
+                    console.error(`home-relay: reading ${ownerId} failed:`, err);
                     return null;
                 }),
         ),

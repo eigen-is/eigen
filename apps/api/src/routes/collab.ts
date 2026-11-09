@@ -164,7 +164,6 @@ export const collabRouter = new Elysia({
                 const document = await drive.getCollabDocument(mountId, pathId);
                 rawWs.send(collabEpochMessage(ownerId));
                 document.subscribe(user, rawWs);
-                recordOpened(user, document.path);
                 console.log(
                     `[collab] open path=${pathId} loadMs=${(performance.now() - loadStart).toFixed(0)} ` +
                         `connections=${document.connectionCount}`,
@@ -176,7 +175,11 @@ export const collabRouter = new Elysia({
 
                 // A removal or an ACL change during the load found no connection to close, and one after the subscribe
                 // finds this one. A frame that waits for `opened` finds no document once the session is cleaned up.
-                if (!(await document.keepsReadAccess(rawWs))) cleanupSession(session, rawWs);
+                if (!(await document.keepsReadAccess(rawWs))) {
+                    cleanupSession(session, rawWs);
+                    return;
+                }
+                recordOpened(user, document.path);
             } catch (err) {
                 const status = err instanceof ApiError ? err.status : 500;
                 // A refusal, such as a document in the trash, is expected on every reconnect, so it gets one line.

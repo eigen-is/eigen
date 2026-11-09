@@ -64,16 +64,10 @@ export async function aggregateRecents(user: User): Promise<RecentPath[]> {
         .slice(0, RECENT_PAGE);
 }
 
-// Each owner is asked once, for its own rows.
 async function pullRecents(user: User, memberships: Memberships, rows: readonly RecentRow[]): Promise<RecentPath[]> {
-    const owners = [...new Set(rows.map((row) => row.ownerId))];
-    const lists = await pullFromEach(owners, (ownerId) =>
-        pullRecentPaths(
-            ownerId,
-            user,
-            memberships,
-            rows.filter((row) => row.ownerId === ownerId),
-        ),
+    const rowsOf = Map.groupBy(rows, (row) => row.ownerId);
+    const lists = await pullFromEach([...rowsOf.keys()], (ownerId) =>
+        pullRecentPaths(ownerId, user, memberships, rowsOf.get(ownerId) ?? []),
     );
     return lists.flat();
 }

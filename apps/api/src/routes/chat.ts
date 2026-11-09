@@ -1,6 +1,7 @@
 // The chat HTTP routes, for example the wizard that creates a chat with its members, and the messages
 // of one chat room. The room is a .eigenchat file in Drive, so a chat in another owner's drive goes
-// through SharedDrive, which checks the access before ChatRoom does the work.
+// through SharedDrive, which checks the access before ChatRoom does the work. A chat's first page of
+// messages counts as an open on the user's Recent page.
 
 import type { ChatMatch, ChatMessage } from '@workspace/lib/types/chat';
 import type { DrivePath, InviteResult } from '@workspace/lib/types/drive';
@@ -33,9 +34,6 @@ function normalizeMemberEmails(raw: string[]): string[] {
     return emails;
 }
 
-// A chat route may serve another owner's chat, because chats live in shared and team drives. The
-// routes of one chat go through getSharedDrive, which checks the access. The two wizard routes below
-// use the Drive itself, behind requireSelf or requireTeamAccess.
 export const chatRouter = new Elysia({ name: 'chat' })
     .use(betterAuth)
 
@@ -146,9 +144,10 @@ export const chatRouter = new Elysia({ name: 'chat' })
         async ({ params, query, user }): Promise<ChatMessage[]> => {
             const drive = await getSharedDrive(params.ownerId, user);
             const chat = await drive.getChat(params.mountId, params.chatId);
+            const messages = await chat.getMessagesForUser(user.email, query.limit ?? 50, query.before || undefined);
             // An older page is of a chat already open, and a comment thread opens with its document.
             if (!query.before && !chat.containerPath) recordOpened(user, chat.path);
-            return await chat.getMessagesForUser(user.email, query.limit ?? 50, query.before || undefined);
+            return messages;
         },
         {
             query: t.Object({

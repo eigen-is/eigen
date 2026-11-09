@@ -80,6 +80,7 @@ import {
     filterRedundantACL,
     findContainerFromAncestors,
     grantsPublicRead,
+    isInsideDocument,
     isTrashedChain,
     matchesACL,
     mergeACLDelta,
@@ -627,8 +628,7 @@ export class Drive {
     // code passes no user, such as a chat that trashes a deleted message's attachments.
     private async refuseInsideDocument(mount: Mount, pathId: string, user: User | undefined): Promise<void> {
         if (!user) return;
-        const ancestors = (await mount.getBreadcrumb(pathId)).slice(0, -1);
-        if (ancestors.some((crumb) => isDocumentType(crumb.type))) throw new ApiError(400, DOCUMENT_PART_ERROR);
+        if (isInsideDocument(await mount.getBreadcrumb(pathId))) throw new ApiError(400, DOCUMENT_PART_ERROR);
     }
 
     public async updatePathDetails(mountId: string, pathId: string, details: DrivePathDetails): Promise<void> {
@@ -1186,9 +1186,8 @@ export class Drive {
             const chains = await mount.getBreadcrumbs(mountRows.map((row) => row.pathId));
             for (const [i, chain] of chains.entries()) {
                 const path = chain.at(-1);
-                if (!path || path.parentId === null || isTrashedChain(chain)) continue;
+                if (!path || path.parentId === null || isTrashedChain(chain) || isInsideDocument(chain)) continue;
                 if (!canReadFromAncestors(chain, user, memberships)) continue;
-                if (chain.slice(0, -1).some((crumb) => isDocumentType(crumb.type))) continue;
                 found.push({ ...path, lastActivityAt: mountRows[i].lastActivityAt });
             }
         }
