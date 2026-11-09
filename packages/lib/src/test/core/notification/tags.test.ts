@@ -9,6 +9,7 @@ import {
     parseAccessRequestTag,
     parseChatNotificationThread,
     parseFileEventTag,
+    parseNotificationPath,
     parseShareTag,
     shareTag,
 } from '../../../core/notification/tags';
@@ -92,5 +93,39 @@ describe('file notification tags', () => {
         expect(parseShareTag(fileEventTag(PATH))).toBeNull();
         expect(parseAccessRequestTag(shareTag(PATH))).toBeNull();
         expect(parseFileEventTag(shareTag(PATH))).toBeNull();
+    });
+});
+
+describe('the path a notification names', () => {
+    const MENTION = 'bob@eigen.is';
+
+    test('a share, an access request and a file event name the path in their tag', () => {
+        expect(parseNotificationPath('share', shareTag(PATH))).toEqual(PATH);
+        expect(parseNotificationPath('access-request', accessRequestTag(PATH, MENTION))).toEqual(PATH);
+        expect(parseNotificationPath('file-event', fileEventTag(PATH))).toEqual(PATH);
+    });
+
+    test('a chat message and a chat mention name the chat', () => {
+        const chat = { ownerId: CHAT.ownerId, mountId: CHAT.mountId, pathId: CHAT.pathId };
+        expect(parseNotificationPath('chat-message', chatActivityTag(CHAT))).toEqual(chat);
+        expect(parseNotificationPath('mention-chat', chatMentionTag(CHAT, MENTION))).toEqual(chat);
+    });
+
+    test('a comment, a comment mention and an assignment name the container, not the thread', () => {
+        const container = { ownerId: COMMENT.ownerId, mountId: COMMENT.mountId, pathId: COMMENT.pathId };
+        expect(parseNotificationPath('comment-reply', chatActivityTag(COMMENT))).toEqual(container);
+        expect(parseNotificationPath('mention-comment', chatMentionTag(COMMENT, MENTION))).toEqual(container);
+        expect(parseNotificationPath('assigned', commentAssignedTag(COMMENT))).toEqual(container);
+    });
+
+    test('mail, calendar, admin alerts and unshares name none, whatever their tag holds', () => {
+        expect(parseNotificationPath('mail', 'mail:new')).toBeNull();
+        expect(parseNotificationPath('calendar-share', 'calendar-share:cal-1:owner-1')).toBeNull();
+        expect(parseNotificationPath('calendar-unshare', 'calendar-share:cal-1:owner-1')).toBeNull();
+        for (const type of ['calendar-invite', 'calendar-invite-updated', 'calendar-invite-cancelled']) {
+            expect(parseNotificationPath(type, 'calendar-invite:event-1:1700000000000')).toBeNull();
+        }
+        expect(parseNotificationPath('admin-alert', 'backup-verify-owner-1')).toBeNull();
+        expect(parseNotificationPath('unshare', shareTag(PATH))).toBeNull();
     });
 });

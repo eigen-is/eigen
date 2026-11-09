@@ -61,6 +61,24 @@ export function parseFileEventTag(tag: string): NotificationPath | null {
     return { ownerId, mountId, pathId };
 }
 
+// The path a notification is about, such as a comment's container, a chat or a burst's folder.
+export function parseNotificationPath(type: string, tag: string): NotificationPath | null {
+    const thread = parseChatNotificationThread(type, tag);
+    if (thread) return { ownerId: thread.ownerId, mountId: thread.mountId, pathId: thread.pathId };
+    switch (type) {
+        case 'share':
+            return parseShareTag(tag);
+        case 'access-request': {
+            const request = parseAccessRequestTag(tag);
+            return request && { ownerId: request.ownerId, mountId: request.mountId, pathId: request.pathId };
+        }
+        case 'file-event':
+            return parseFileEventTag(tag);
+        default:
+            return null;
+    }
+}
+
 // The type decides the shape: only a comment tag carries a chat name, and a mention's email follows it.
 export function parseChatNotificationThread(type: string, tag: string): ChatNotificationThread | null {
     if (!CHAT_NOTIFICATION_TYPES.some((t) => t === type)) return null;
