@@ -64,27 +64,13 @@ export const FILTER_LABELS: Record<string, string> = Object.fromEntries(
     FILTER_ENTRIES.map((entry) => [entry.driveMime, entry.label]),
 );
 
-// The eigendoc app we're rendering inside, or null in Drive — and in any app without a
-// filter view of its own, which then gets Drive's own rows and links.
-function currentHostConfig(appName: string): EigenDocAppConfig | null {
-    return EIGEN_DOC_APP_CONFIGS.find((config) => config.appUrl && config.appName === appName) ?? null;
-}
-
-function FilterRow({
-    entry,
-    hostApp,
-    condensed,
-}: {
-    entry: FilterEntry;
-    hostApp: EigenDocType | null;
-    condensed: boolean;
-}) {
-    const icon = <entry.icon className="h-4 w-4" />;
-    if (entry.hostApp === hostApp) {
-        const to = hostApp === null ? `/mime/${entry.driveMime}` : '/';
-        return <SidebarItem icon={icon} to={to} label={entry.label} condensed={condensed} exact={to === '/'} />;
+export function AppSidebar({ condensed = false, newButton }: AppSidebarProps) {
+    const { user } = useAuth();
+    const isGuest = useIsGuest();
+    if (!user || isGuest) {
+        return <GuestAppSidebar condensed={condensed} />;
     }
-    return <SidebarItem icon={icon} href={entry.appHref()} label={entry.label} condensed={condensed} />;
+    return <UserAppSidebar user={user} condensed={condensed} newButton={newButton} />;
 }
 
 function GuestAppSidebar({ condensed }: { condensed: boolean }) {
@@ -100,15 +86,6 @@ function GuestAppSidebar({ condensed }: { condensed: boolean }) {
             </SidebarSection>
         </SidebarBody>
     );
-}
-
-export function AppSidebar({ condensed = false, newButton }: AppSidebarProps) {
-    const { user } = useAuth();
-    const isGuest = useIsGuest();
-    if (!user || isGuest) {
-        return <GuestAppSidebar condensed={condensed} />;
-    }
-    return <UserAppSidebar user={user} condensed={condensed} newButton={newButton} />;
 }
 
 // Split from AppSidebar so its hooks sit under the guest fork without breaking hook order.
@@ -211,4 +188,27 @@ function UserAppSidebar({ user, condensed, newButton }: { user: AuthUser; conden
             <StorageUsage className="mt-auto" condensed={condensed} />
         </SidebarBody>
     );
+}
+
+// The eigendoc app we're rendering inside, or null in Drive — and in any app without a
+// filter view of its own, which then gets Drive's own rows and links.
+function currentHostConfig(appName: string): EigenDocAppConfig | null {
+    return EIGEN_DOC_APP_CONFIGS.find((config) => config.appUrl && config.appName === appName) ?? null;
+}
+
+function FilterRow({
+    entry,
+    hostApp,
+    condensed,
+}: {
+    entry: FilterEntry;
+    hostApp: EigenDocType | null;
+    condensed: boolean;
+}) {
+    const icon = <entry.icon className="h-4 w-4" />;
+    if (entry.hostApp === hostApp) {
+        const to = hostApp === null ? `/mime/${entry.driveMime}` : '/';
+        return <SidebarItem icon={icon} to={to} label={entry.label} condensed={condensed} exact={to === '/'} />;
+    }
+    return <SidebarItem icon={icon} href={entry.appHref()} label={entry.label} condensed={condensed} />;
 }

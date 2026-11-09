@@ -15,6 +15,10 @@ export const DriveContext = createContext<DriveContextType>({
     rootPath: null,
 });
 
+export const Route = createRootRouteWithContext<RouterAppContext>()({
+    component: DriveRoot,
+});
+
 function DriveRoot() {
     const { user } = useAuth();
     const isGuest = useIsGuest();
@@ -77,7 +81,3 @@ function AuthenticatedDriveRoot({ user }: { user: AuthUser }) {
         </AppShell>
     );
 }
-
-export const Route = createRootRouteWithContext<RouterAppContext>()({
-    component: DriveRoot,
-});
