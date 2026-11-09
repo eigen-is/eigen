@@ -11,8 +11,8 @@
 import { describe, expect, it } from 'bun:test';
 import type { Cell, DefaultConditionalFormatRule } from '../../../engine/types';
 import type { Context } from '../../../state/context';
+import { copy } from '../../../state/modules/clipboard';
 import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
-import { copy } from '../../../state/modules/selection';
 import { pasteCopy, pasteText } from '../factories/clipboard';
 import { contextFactory, editInPlace } from '../factories/context';
 import { edit, typed } from '../factories/edit-cycle';

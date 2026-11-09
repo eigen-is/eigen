@@ -7,7 +7,8 @@ import { cancelPaintModel, checkCF, getComputeMap } from '..';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { movedLines } from '../modules/carry';
-import { copy, selectIsOverlap } from '../modules/selection';
+import { copy } from '../modules/clipboard';
+import { selectIsOverlap } from '../modules/selection';
 import { hasPartMC } from '../modules/validation';
 
 export function handleCopy(ctx: Context, { cut = false }: { cut?: boolean } = {}) {

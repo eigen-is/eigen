@@ -82,7 +82,6 @@ function pasteCut(ctx: Context, copyState: NonNullable<Context['copyState']>) {
     const copySheetId = copyState.dataSheetId;
     const sourceRange = copyState.copyRange[0];
 
-    // A sheet without data has nothing to cut.
     const copySheet = getSheet(ctx, { id: copySheetId });
     if (!copySheet.data) return;
     const lines = movedLines(ctx, copySheetId, sourceRange);

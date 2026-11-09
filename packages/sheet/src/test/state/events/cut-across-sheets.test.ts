@@ -9,7 +9,7 @@ installHappyDom();
 const { dataToCelldata } = await import('../../../engine/celldata');
 const { defaultContext } = await import('../../../state/context');
 const { updateCell } = await import('../../../state/modules/cell');
-const { copy } = await import('../../../state/modules/selection');
+const { copy } = await import('../../../state/modules/clipboard');
 const { pasteCopy } = await import('../factories/clipboard');
 const { join, tab, tabEdit, tabReceive, tabRedo, tabUndo } = await import('../factories/collab');
 type Context = import('../../../state/context').Context;

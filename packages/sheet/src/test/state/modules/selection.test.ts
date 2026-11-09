@@ -6,8 +6,8 @@
 import { describe, expect, test } from 'bun:test';
 import type { Context } from '../../../state/context';
 import { getRangetxt } from '../../../state/modules/cell';
-import { consumePendingCopy } from '../../../state/modules/clipboard';
-import { copy, moveHighlightRange, normalizeSelection, rangeValueToClipboard } from '../../../state/modules/selection';
+import { consumePendingCopy, copy, rangeValueToClipboard } from '../../../state/modules/clipboard';
+import { moveHighlightRange, normalizeSelection } from '../../../state/modules/selection';
 import { contextFactory } from '../factories/context';
 
 describe('state/modules/selection — rangeValueToClipboard', () => {

@@ -1,14 +1,27 @@
-// The grid's side of the system clipboard. A copy or a cut of cells keeps what it wrote here as the pending copy,
-// and the Workbook's copy listener takes it and puts it on the clipboard. A menu row has no copy event of its own, so
-// it fires one, for cells and for a selected image or chart alike.
+// The grid's side of the system clipboard. A copy or a cut of cells builds what the clipboard carries, an HTML table of
+// the cells' values and styles and the same cells as TSV, and keeps it here as the pending copy. The Workbook's copy
+// listener takes it and puts it on the clipboard. A menu row has no copy event of its own, so it fires one, for cells
+// and for a selected image or chart alike.
+
+import { cellsToTsv } from '@workspace/lib/clipboard';
+import { escapeHtml } from '@workspace/lib/html';
+import type { CellBorderSides } from '@workspace/lib/sheets';
+import { borderSidesToCss, mergedBorderSides } from '@workspace/lib/sheets';
+import { numberText } from '../../engine/format';
+import type { Context } from '../context';
+import type { Cell, CellMatrix, Range } from '../types';
+import { getSheetIndex, styleObjectToCss } from '../utils';
+import { carriedLines } from './carry';
+import { getCellValue, getStyleByCell } from './cell';
+import { getComputeMap } from './condition-format';
+import { hexColor } from './inline-string';
+
+// Marks clipboard HTML as copied from a sheet.
+export const COPY_ACTION_TABLE_MARKER = 'sheet-copy-action-table';
 
 type PendingCopy = { html: string; plainText: string; cellText: string };
 
 let pending: PendingCopy | null = null;
-
-export function setPendingCopy(html: string, plainText: string, cellText: string) {
-    pending = { html, plainText, cellText };
-}
 
 export function consumePendingCopy(): PendingCopy | null {
     const result = pending;
@@ -28,4 +41,119 @@ export function flushPendingCopy() {
 // the event execCommand fires, so a menu copies and cuts the way ⌘C and ⌘X do.
 export function copyActiveObject(cut: boolean) {
     document.execCommand(cut ? 'cut' : 'copy');
+}
+
+export function copy(ctx: Context, { cut = false }: { cut?: boolean } = {}) {
+    const ranges = ctx.selections ?? [];
+    const clipboard = rangeValueToClipboard(ctx, ctx.currentSheetId, ranges);
+    if (!clipboard) return;
+    const copyRange = ranges.map(({ row, column }) => ({ row, column }));
+    ctx.formulaRangeSelections = copyRange;
+    // The engine's own clipboard: the copied ranges, which a paste in this tab reads back from the live cells.
+    ctx.copyState = { id: clipboard.id, cut, dataSheetId: ctx.currentSheetId, copyRange };
+    pending = { html: clipboard.html, plainText: clipboard.text, cellText: clipboard.cellText };
+}
+
+// The range as the clipboard carries it: an HTML table with the cells' styles and a fresh id, the display text as TSV,
+// and the same text unquoted for the Eigen text item, which a consumer reads as text rather than as TSV.
+export function rangeValueToClipboard(
+    ctx: Context,
+    sheetId: string,
+    ranges: Range,
+): { id: string; html: string; text: string; cellText: string } | null {
+    const index = getSheetIndex(ctx, sheetId);
+    if (index == null) return null;
+    const sheet = ctx.sheets[index];
+    const d = sheet.data;
+    if (!d) return null;
+
+    const rect: [number, number, number, number] = [Infinity, -Infinity, Infinity, -Infinity];
+    for (const range of ranges) {
+        rect[0] = Math.min(rect[0], range.row[0]);
+        rect[1] = Math.max(rect[1], range.row[1]);
+        rect[2] = Math.min(rect[2], range.column[0]);
+        rect[3] = Math.max(rect[3], range.column[1]);
+    }
+    // The clipboard holds the cells a paste in this tab would land, hidden ones too.
+    const lines = carriedLines(ctx, sheetId, ranges);
+    if (!lines) return null;
+    const { rows, columns } = lines;
+
+    // A td spans its merge, so the perimeter is read off the master.
+    const borderInfoCompute = mergedBorderSides(sheet.config?.borderInfo, sheet.config?.merge, rect);
+    const cfCompute = getComputeMap(ctx);
+
+    let colgroup = '';
+    let body = '';
+    const text: string[][] = [];
+
+    for (const [i, r] of rows.entries()) {
+        body += '<tr>';
+        const textRow: string[] = [];
+        text.push(textRow);
+
+        for (const [j, c] of columns.entries()) {
+            if (i === 0) {
+                colgroup += `<colgroup width="${finiteOr(sheet.config?.columnlen?.[c], 72)}px"></colgroup>`;
+            }
+
+            const cell = d[r]?.[c];
+            // A merge writes one td, so the other cells it covers have none.
+            if (cell?.mc && cell.mc.rs == null) {
+                textRow.push('');
+                continue;
+            }
+
+            let style = j === 0 ? `height:${finiteOr(sheet.config?.rowlen?.[r], 19)}px;` : '';
+            if (cell) style += styleObjectToCss(getStyleByCell(ctx, d, r, c, cfCompute));
+            const border = borderInfoCompute[`${r}_${c}`];
+            if (border) style += cellBorderCss(border);
+            const span = cell?.mc ? `rowspan="${finiteOr(cell.mc.rs, 1)}" colspan="${finiteOr(cell.mc.cs, 1)}"` : '';
+
+            const shown = copiedCellText(d, r, c);
+            textRow.push(shown);
+            // The style comes from the cell and lands inside an attribute, which the HTML parser decodes before CSS
+            // sees it.
+            body += `<td ${span} style="${escapeHtml(style)}">${escapeHtml(shown)}</td>`;
+        }
+
+        body += '</tr>';
+    }
+
+    const id = crypto.randomUUID();
+    return {
+        id,
+        html: `<table data-type="${COPY_ACTION_TABLE_MARKER}" data-copy-id="${id}">${colgroup}${body}</table>`,
+        text: cellsToTsv(text),
+        cellText: text.map((row) => row.join('\t')).join('\n'),
+    };
+}
+
+// A border's color comes from a collaborator or an xlsx, so only a plain color reaches the copied HTML.
+function cellBorderCss(border: CellBorderSides): string {
+    let css = '';
+    for (const decl of borderSidesToCss(border, (color) => hexColor(color) ?? 'transparent')) css += `${decl};`;
+    return css;
+}
+
+// A stored row height, column width or merge span can be any value a collaborator wrote.
+function finiteOr(value: unknown, fallback: number): number {
+    return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+// The text a copy writes for a cell, in its td and in the TSV. A width format such as w0 shows the raw value, and
+// every other cell its display text.
+function copiedCellText(d: CellMatrix, r: number, c: number): string {
+    const cell = d[r]?.[c];
+    if (cell == null) return '';
+    const value = /^(w|W)((0?)|(0\.0+))$/.test(cell.ct?.fa ?? '')
+        ? getCellValue(r, c, d)
+        : (copiedNumberText(cell) ?? getCellValue(r, c, d, 'm'));
+    return String(value ?? getCellValue(r, c, d) ?? '');
+}
+
+// General cuts a number to 11 characters; the clipboard carries Excel's 15 significant digits instead.
+function copiedNumberText(cell: Cell): string | undefined {
+    if (typeof cell.v !== 'number' || (cell.ct?.fa ?? 'General') !== 'General') return undefined;
+    return numberText(cell.v);
 }
