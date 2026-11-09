@@ -65,6 +65,128 @@ type UseDraftOptions = {
     onDraftIdAssigned?: (id: string) => void;
 };
 
+export function useDraft({
+    email,
+    prefillTo,
+    prefillDraft,
+    signatureHtml,
+    onSave,
+    onDraftIdAssigned,
+}: UseDraftOptions) {
+    const { user } = useAuth();
+    const [state, dispatch] = useReducer(draftReducer, undefined, () =>
+        savedState(initFields(email, prefillTo, prefillDraft, signatureHtml)),
+    );
+
+    // Non-reactive control flow: the in-flight save promise (for serialization) and a kill switch
+    // for the send/delete path.
+    const inFlightRef = useRef<Promise<EmailDraft> | null>(null);
+    const disabledRef = useRef(false);
+
+    // For code that runs after an `await`, where the captured closure may be stale: the timer, the unmount, the send flush.
+    const latestRef = useRef({ state, user, onSave });
+    latestRef.current = { state, user, onSave };
+
+    const runSave = async (): Promise<EmailDraft | null> => {
+        if (disabledRef.current) return null;
+        // Serialize: if a save is already in flight, wait for it before starting a new one. This
+        // also lets the send path flush any racing auto-save.
+        if (inFlightRef.current) {
+            await inFlightRef.current.catch(() => {});
+            if (disabledRef.current) return null;
+        }
+        // Read latest fields here, not from closure — the timer that called us may have been
+        // queued at an earlier render.
+        const { state: s, user: u, onSave: cb } = latestRef.current;
+        const fields = s.fields;
+        const draft = fieldsToDraft(fields, u);
+        const promise = cb(draft, buildSaveOptions(fields));
+        inFlightRef.current = promise;
+        try {
+            const result = await promise;
+            dispatch({ type: 'save-completed', sentFields: fields, serverAttachments: result.attachments });
+            if (!fields.id) {
+                dispatch({ type: 'set-id', id: result.id });
+                onDraftIdAssigned?.(result.id);
+            }
+            return result;
+        } catch (error) {
+            // The message left Drafts, say through a send in another tab: every later save gets the same answer.
+            if (error instanceof AppError && error.status === 409) disabledRef.current = true;
+            throw error;
+        } finally {
+            if (inFlightRef.current === promise) inFlightRef.current = null;
+        }
+    };
+
+    // Saves a short while after the fields drift from the saved fingerprint. Any newer state resets the timer.
+    useEffect(() => {
+        if (disabledRef.current) return;
+        if (!isSaveable(state.fields)) return;
+        if (!isDirty(state)) return;
+        const timer = setTimeout(() => void runSave().catch(rethrowUntoasted), AUTO_SAVE_DEBOUNCE_MS);
+        return () => clearTimeout(timer);
+    }, [state]);
+
+    // Closing the composer saves what the debounce has not reached yet.
+    useEffect(() => {
+        return () => {
+            if (disabledRef.current) return;
+            const { state: s, user: u, onSave: cb } = latestRef.current;
+            if (!isSaveable(s.fields) || !isDirty(s)) return;
+            cb(fieldsToDraft(s.fields, u), buildSaveOptions(s.fields)).catch(rethrowUntoasted);
+        };
+    }, []);
+
+    // Once the editor has parsed the seeded body and emitted its canonical HTML/text, snap
+    // them into state and reset the saved fingerprint. Fires once via LightEditor's onReady.
+    const editorReadyRef = useRef(false);
+    const markEditorReady = (html: string, text: string) => {
+        if (editorReadyRef.current) return;
+        editorReadyRef.current = true;
+        dispatch({ type: 'sync-editor', html, text });
+    };
+
+    return {
+        state: state.fields,
+        setField: (field: DraftEditableField, value: string) => dispatch({ type: 'set-field', field, value }),
+        addAttachment: (meta: AttachmentMeta) => dispatch({ type: 'add-attachment', meta }),
+        addPrefillAttachment: (meta: AttachmentMeta) => dispatch({ type: 'add-prefill-attachment', meta }),
+        removeAttachment: (index: number) => dispatch({ type: 'remove-attachment', index }),
+        addDriveReference: (ref: AttachmentReference) => dispatch({ type: 'add-drive-ref', ref }),
+        removeDriveReference: (id: string) => dispatch({ type: 'remove-drive-ref', id }),
+        markEditorReady,
+        isSendable: !!state.fields.to.trim(),
+
+        // Called when a send is dispatched, not at flush time, so backing out of "Share before sending?" returns to a draft that
+        // still auto-saves. The send's own save owns the write from here.
+        disableSaves: () => {
+            disabledRef.current = true;
+        },
+
+        // A rejected send never left, so the draft is still the user's to edit.
+        enableSaves: () => {
+            disabledRef.current = false;
+        },
+
+        // Flushes any pending save and splices in the server's id, since the first save's dispatch may not have rendered yet.
+        // Saves stay enabled: the caller disables them only once it commits to sending.
+        flushAndGetDraft: async (): Promise<NewDraft> => {
+            let result: EmailDraft | null = null;
+            if (isDirty(state)) {
+                result = await runSave();
+            } else if (inFlightRef.current) {
+                await inFlightRef.current.catch(() => {});
+            }
+            // Read latest after the awaits — user may have edited during the in-flight save.
+            const { state: s, user: u } = latestRef.current;
+            const draft = fieldsToDraft(s.fields, u);
+            if (!draft.id && result?.id) draft.id = result.id;
+            return draft;
+        },
+    };
+}
+
 function addressObjectToString(addr?: AddressObject): string {
     if (!addr) return '';
     if (addr.text) return addr.text;
@@ -319,126 +441,4 @@ function draftReducer(state: DraftState, action: Action): DraftState {
 
 function isSaveable(f: DraftFields): boolean {
     return !!(f.to.trim() || f.subject.trim() || f.cc.trim() || f.bcc.trim() || f.bodyText.trim());
-}
-
-export function useDraft({
-    email,
-    prefillTo,
-    prefillDraft,
-    signatureHtml,
-    onSave,
-    onDraftIdAssigned,
-}: UseDraftOptions) {
-    const { user } = useAuth();
-    const [state, dispatch] = useReducer(draftReducer, undefined, () =>
-        savedState(initFields(email, prefillTo, prefillDraft, signatureHtml)),
-    );
-
-    // Non-reactive control flow: the in-flight save promise (for serialization) and a kill switch
-    // for the send/delete path.
-    const inFlightRef = useRef<Promise<EmailDraft> | null>(null);
-    const disabledRef = useRef(false);
-
-    // For code that runs after an `await`, where the captured closure may be stale: the timer, the unmount, the send flush.
-    const latestRef = useRef({ state, user, onSave });
-    latestRef.current = { state, user, onSave };
-
-    const runSave = async (): Promise<EmailDraft | null> => {
-        if (disabledRef.current) return null;
-        // Serialize: if a save is already in flight, wait for it before starting a new one. This
-        // also lets the send path flush any racing auto-save.
-        if (inFlightRef.current) {
-            await inFlightRef.current.catch(() => {});
-            if (disabledRef.current) return null;
-        }
-        // Read latest fields here, not from closure — the timer that called us may have been
-        // queued at an earlier render.
-        const { state: s, user: u, onSave: cb } = latestRef.current;
-        const fields = s.fields;
-        const draft = fieldsToDraft(fields, u);
-        const promise = cb(draft, buildSaveOptions(fields));
-        inFlightRef.current = promise;
-        try {
-            const result = await promise;
-            dispatch({ type: 'save-completed', sentFields: fields, serverAttachments: result.attachments });
-            if (!fields.id) {
-                dispatch({ type: 'set-id', id: result.id });
-                onDraftIdAssigned?.(result.id);
-            }
-            return result;
-        } catch (error) {
-            // The message left Drafts, say through a send in another tab: every later save gets the same answer.
-            if (error instanceof AppError && error.status === 409) disabledRef.current = true;
-            throw error;
-        } finally {
-            if (inFlightRef.current === promise) inFlightRef.current = null;
-        }
-    };
-
-    // Saves a short while after the fields drift from the saved fingerprint. Any newer state resets the timer.
-    useEffect(() => {
-        if (disabledRef.current) return;
-        if (!isSaveable(state.fields)) return;
-        if (!isDirty(state)) return;
-        const timer = setTimeout(() => void runSave().catch(rethrowUntoasted), AUTO_SAVE_DEBOUNCE_MS);
-        return () => clearTimeout(timer);
-    }, [state]);
-
-    // Closing the composer saves what the debounce has not reached yet.
-    useEffect(() => {
-        return () => {
-            if (disabledRef.current) return;
-            const { state: s, user: u, onSave: cb } = latestRef.current;
-            if (!isSaveable(s.fields) || !isDirty(s)) return;
-            cb(fieldsToDraft(s.fields, u), buildSaveOptions(s.fields)).catch(rethrowUntoasted);
-        };
-    }, []);
-
-    // Once the editor has parsed the seeded body and emitted its canonical HTML/text, snap
-    // them into state and reset the saved fingerprint. Fires once via LightEditor's onReady.
-    const editorReadyRef = useRef(false);
-    const markEditorReady = (html: string, text: string) => {
-        if (editorReadyRef.current) return;
-        editorReadyRef.current = true;
-        dispatch({ type: 'sync-editor', html, text });
-    };
-
-    return {
-        state: state.fields,
-        setField: (field: DraftEditableField, value: string) => dispatch({ type: 'set-field', field, value }),
-        addAttachment: (meta: AttachmentMeta) => dispatch({ type: 'add-attachment', meta }),
-        addPrefillAttachment: (meta: AttachmentMeta) => dispatch({ type: 'add-prefill-attachment', meta }),
-        removeAttachment: (index: number) => dispatch({ type: 'remove-attachment', index }),
-        addDriveReference: (ref: AttachmentReference) => dispatch({ type: 'add-drive-ref', ref }),
-        removeDriveReference: (id: string) => dispatch({ type: 'remove-drive-ref', id }),
-        markEditorReady,
-        isSendable: !!state.fields.to.trim(),
-
-        // Called when a send is dispatched, not at flush time, so backing out of "Share before sending?" returns to a draft that
-        // still auto-saves. The send's own save owns the write from here.
-        disableSaves: () => {
-            disabledRef.current = true;
-        },
-
-        // A rejected send never left, so the draft is still the user's to edit.
-        enableSaves: () => {
-            disabledRef.current = false;
-        },
-
-        // Flushes any pending save and splices in the server's id, since the first save's dispatch may not have rendered yet.
-        // Saves stay enabled: the caller disables them only once it commits to sending.
-        flushAndGetDraft: async (): Promise<NewDraft> => {
-            let result: EmailDraft | null = null;
-            if (isDirty(state)) {
-                result = await runSave();
-            } else if (inFlightRef.current) {
-                await inFlightRef.current.catch(() => {});
-            }
-            // Read latest after the awaits — user may have edited during the in-flight save.
-            const { state: s, user: u } = latestRef.current;
-            const draft = fieldsToDraft(s.fields, u);
-            if (!draft.id && result?.id) draft.id = result.id;
-            return draft;
-        },
-    };
 }
