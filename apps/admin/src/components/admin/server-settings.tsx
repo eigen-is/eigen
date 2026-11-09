@@ -32,8 +32,6 @@ import { ServerStatusSection } from './server-status-section';
 import { StorageTypePicker } from './storage-type-picker';
 import { SwitchRow } from './switch-row';
 
-type EmailFlag = keyof ServerSettings['notifications']['email'];
-
 export function ServerSettingsPage() {
     const { data: settings, isLoading } = useServerSettings();
     const updateSettings = useUpdateServerSettings();
@@ -88,7 +86,7 @@ export function ServerSettingsPage() {
         setDraft((prev) => ({ ...prev, quotas: { ...prev.quotas, [key]: value } }));
     };
 
-    const updateEmailFlag = (key: EmailFlag, value: boolean) => {
+    const updateEmailFlag = (key: keyof ServerSettings['notifications']['email'], value: boolean) => {
         setDirty(true);
         setDraft((prev) => ({
             ...prev,
@@ -344,6 +342,18 @@ export function ServerSettingsPage() {
                         description="In-app notification + bell already fires. Off by default."
                         checked={current.notifications.email.userOnAclAdd}
                         onChange={(v) => updateEmailFlag('userOnAclAdd', v)}
+                    />
+                    <SwitchRow
+                        label="Email guests when assigned a comment or card"
+                        description="A guest rarely has Eigen open, and one who never signed in has no bell."
+                        checked={current.notifications.email.guestOnAssign}
+                        onChange={(v) => updateEmailFlag('guestOnAssign', v)}
+                    />
+                    <SwitchRow
+                        label="Email users when assigned a comment or card"
+                        description="In-app notification + bell already fires. Off by default."
+                        checked={current.notifications.email.userOnAssign}
+                        onChange={(v) => updateEmailFlag('userOnAssign', v)}
                     />
                     <SwitchRow
                         label="Email users for calendar invites"

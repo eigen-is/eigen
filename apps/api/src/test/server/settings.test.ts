@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import * as fs from 'node:fs';
+import { join } from 'node:path';
 import { UPLOAD_CAP_MAX_MB } from '@workspace/lib/constants/mount';
 import type { S3Config } from '@workspace/lib/types';
 import { teamOwnerId } from '@workspace/lib/types';
@@ -18,7 +19,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { user } from '../../../auth-schema';
 import { getAuthDrizzleDb } from '../../lib/auth/auth';
 import { ensureAuthSchemaColumns } from '../../lib/auth/auth-schema-columns';
-import { getUserHomePath } from '../../lib/config/paths';
+import { getServerDataPath, getUserHomePath, SERVER_FILES } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getMaxUploadSize, getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { atHome } from '../../lib/home/get-home';
@@ -674,6 +675,23 @@ describe('Email notification toggles', () => {
         expect(data.notifications.email.userOnAclAdd).toBe(false);
         expect(data.notifications.email.userOnCalendarInvite).toBe(true);
         expect(data.notifications.email.ownerOnAccessRequest).toBe(true);
+        expect(data.notifications.email.guestOnAssign).toBe(true);
+        expect(data.notifications.email.userOnAssign).toBe(false);
+    });
+
+    test('a settings file without the assignment flags reads their defaults', async () => {
+        await updateServerSettings({ notifications: { email: { guestOnAssign: false, userOnAssign: true } } });
+        const file = join(getServerDataPath(), SERVER_FILES.settings);
+        await Bun.write(file, JSON.stringify({ notifications: { email: { guestOnAclAdd: true } } }));
+
+        // The query makes a second copy of the module, and its store reads the file anew.
+        const specifier = '../../lib/config/server-settings?without-assign-flags';
+        const fresh: typeof import('../../lib/config/server-settings') = await import(specifier);
+        const { guestOnAssign, userOnAssign } = fresh.getServerSettings().notifications.email;
+
+        // Saves the live store's whole state back over the stripped file.
+        await updateServerSettings({ notifications: { email: { guestOnAssign: true, userOnAssign: false } } });
+        expect({ guestOnAssign, userOnAssign }).toEqual({ guestOnAssign: true, userOnAssign: false });
     });
 
     test('PUT round-trips notifications.email', async () => {

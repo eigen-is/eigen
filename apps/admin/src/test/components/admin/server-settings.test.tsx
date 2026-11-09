@@ -24,7 +24,14 @@ const SETTINGS: ServerSettings = {
         ],
     },
     notifications: {
-        email: { guestOnAclAdd: true, userOnAclAdd: false, userOnCalendarInvite: true, ownerOnAccessRequest: true },
+        email: {
+            guestOnAclAdd: true,
+            userOnAclAdd: false,
+            userOnCalendarInvite: true,
+            ownerOnAccessRequest: true,
+            guestOnAssign: true,
+            userOnAssign: false,
+        },
     },
     mail: { senderName: '', senderAddress: '', relaySendsAsUsers: false },
     backups: {

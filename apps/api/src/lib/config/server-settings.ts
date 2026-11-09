@@ -1,3 +1,7 @@
+// The settings an admin changes for the whole server, such as quotas, storage defaults and which emails go out. They
+// live in one JSON file under the server's data folder, read once at import, and any part of the API reads them
+// through getServerSettings. A value the file doesn't hold has its default here.
+
 import { UPLOAD_CAP_MAX_MB } from '@workspace/lib/constants/mount';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { EMPTY_S3 } from '@workspace/lib/types/mount';
@@ -56,6 +60,8 @@ const settingsStore = new JsonStore<ServerSettings>(serverFs, SERVER_FILES.setti
             userOnAclAdd: false,
             userOnCalendarInvite: true,
             ownerOnAccessRequest: true,
+            guestOnAssign: true,
+            userOnAssign: false,
         },
     },
     mail: {

@@ -50,10 +50,10 @@ import { CollabDocument } from '../collab/collab-document';
 import { enforceMaxUploadSize, enforceMountQuota } from '../config/enforcement';
 import { getServerSettings } from '../config/server-settings';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
-import { ApiError, computeEtag } from '../core';
+import { ApiError, computeEtag, WindowLimiter } from '../core';
 import type { Home } from '../home';
 import { broadcastToOwnerAndMembers, sendToHome } from '../home/home-relay';
-import { composeCollaboratorsEmail } from '../mailer/mail-composers';
+import { composeAssignedEmail, composeCollaboratorsEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
 import type { DatabaseHold } from '../mount';
 import { createMountConfig, DEFAULT_MOUNT_ID, Mount } from '../mount';
@@ -66,7 +66,7 @@ import { getEntriesForTarget } from '../share';
 import type { StorageFile } from '../storage';
 import { writeTempWithHash } from '../storage';
 import type { Memberships, User } from '../user';
-import { getMemberships, getUserByEmail } from '../user';
+import { getMemberships, getUserByEmail, isGuest } from '../user';
 import { deleteVersions } from '../versioning/delete';
 import { listVersions } from '../versioning/list';
 import { restoreContainer } from '../versioning/restore';
@@ -118,6 +118,9 @@ export type ContentWriteOptions = { user?: User; ifMatch?: string; event?: 'uplo
 export type ContentWriteResult = { path: DrivePath; etag: string };
 
 const DOCUMENT_PART_ERROR = 'Cannot change a part of a document on its own';
+
+// One assignment mail per person and document an hour: a notification folds a repeat on its tag, a mail cannot.
+const assignMailWindow = new WindowLimiter(60 * 60 * 1000, 1);
 
 export class Drive {
     // A live WebDAV lock holds the home, so only a close for another reason, such as a restore, drops it.
@@ -1210,7 +1213,7 @@ export class Drive {
         broadcastCommentIndexUpdated(this, this.owner.id, mountId, pathId, members).catch(() => {});
         if (changed && assignee && assignee !== user.email.toLowerCase()) {
             // The assignment stands whatever happens to the notice, such as a home a restore holds.
-            await this.notifyAssignee(mountId, pathId, chatName, assignee, user).catch(() => {});
+            await this.notifyAssignee(mountId, pathId, chatName, assignee, user, card).catch(() => {});
         }
     }
 
@@ -1220,16 +1223,31 @@ export class Drive {
         chatName: string,
         assignee: string,
         actor: User,
+        card: string | undefined,
     ): Promise<void> {
         const assigneeUser = await getUserByEmail(assignee);
         const path = await this.getPath(mountId, pathId);
-        if (!assigneeUser || !path) return;
+        if (!path) return;
+
+        const { guestOnAssign, userOnAssign } = getServerSettings().notifications.email;
+        const toGuest = !assigneeUser || isGuest(assigneeUser);
+        const mailKey = `${assignee}:${this.owner.id}:${mountId}:${pathId}`;
+        // Before the notification, so a home that refuses it can't stop the mail. The route doesn't wait on the relay.
+        if ((toGuest ? guestOnAssign : userOnAssign) && assignMailWindow.take(mailKey)) {
+            sendMail(composeAssignedEmail(path, assignee, actor, chatName, card))
+                .then((sent) => {
+                    if (!sent) assignMailWindow.release(mailKey);
+                })
+                .catch((err) => console.error('Failed to send assignment email:', err));
+        }
+
+        if (!assigneeUser) return;
         await sendToHome(assigneeUser.id, {
             type: 'notification',
             notification: {
                 type: 'assigned',
                 actorEmail: actor.email,
-                title: `${actor.name} assigned you a comment on "${stripEigenExtension(path.name)}"`,
+                title: `${actor.name || actor.email} assigned you a comment on "${stripEigenExtension(path.name)}"`,
                 tag: commentAssignedTag({ ownerId: this.owner.id, mountId, pathId, chatName }),
                 details: { pathType: path.type },
             },

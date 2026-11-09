@@ -53,6 +53,38 @@ export function composeShareEmail(
     };
 }
 
+export function composeAssignedEmail(
+    path: DrivePath,
+    recipientEmail: string,
+    actor: { name: string; email: string },
+    chatName: string,
+    card: string | undefined,
+): OutboundMail {
+    const displayName = stripEigenExtension(path.name);
+    const actorDisplay = actor.name || actor.email;
+    const subject = `${actorDisplay} assigned you a comment on "${displayName}"`;
+    const url = new URL(buildAttachmentUrl(pathAsAttachmentLink(path), recipientEmail));
+    url.searchParams.set('chat', chatName);
+    const cardBlock = card
+        ? `<div style="margin-top:12px;padding:12px;border-left:3px solid ${EMAIL_BORDER};color:${EMAIL_TEXT};font-size:14px;line-height:1.5">${escapeHtml(card)}</div>`
+        : '';
+    const html = renderEigenEmail({
+        title: subject,
+        bodyHtml: `<p style="font-size:14px;line-height:1.5">${escapeHtml(actorDisplay)} assigned you a comment.</p>${cardBlock}<p style="font-size:14px;line-height:1.5;margin-top:12px"><a href="${escapeHtml(url.toString())}" style="color:${EMAIL_LINK}">Open the comment</a></p>`,
+        footerLine: `Assigned by ${actorDisplay}`,
+    });
+    const textParts = [`${actorDisplay} assigned you a comment on "${displayName}".`];
+    if (card) textParts.push(card);
+    textParts.push(url.toString());
+    return {
+        from: { name: actor.name, address: actor.email },
+        to: [{ name: '', address: recipientEmail }],
+        subject,
+        text: textParts.join('\n\n'),
+        html,
+    };
+}
+
 export function composeAccessRequestEmail(
     path: DrivePath,
     owner: { name: string; email: string },
