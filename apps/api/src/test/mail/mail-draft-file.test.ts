@@ -234,6 +234,16 @@ describe.skipIf(isWindows)('Mail — a draft file is the only copy of the draft'
         expect(fetched.html).toBe('<p>Words</p>');
     });
 
+    test('a block naming the ids this server really mints reads', async () => {
+        const uuid = crypto.randomUUID();
+        const refs = [
+            { ...plan, ownerId: user.id, mountId: 'default', id: uuid },
+            { ...plan, ownerId: `team_${user.id}`, mountId: uuid.slice(0, 8), id: uuid },
+        ];
+        const fetched = await read(await seedMessage(`<p>Words</p>${block(encode(refs))}`));
+        expect(fetched.driveReferences).toEqual(refs);
+    });
+
     // Another program writes these, so anything but a whole, valid block leaves the links as plain links.
     describe('a block that does not hold up leaves the html as it is, with no references', () => {
         const overCap = Array.from({ length: MAX_SEND_REFERENCES + 1 }, (_, i) => ({ ...plan, id: `doc-${i}` }));
@@ -244,6 +254,12 @@ describe.skipIf(isWindows)('Mail — a draft file is the only copy of the draft'
             'a reference with a field missing': block(encode([{ ...plan, mountId: undefined }])),
             'a reference with a field of the wrong type': block(encode([{ ...plan, ownerId: 7 }])),
             'a reference to an unknown kind': block(encode([{ ...plan, driveType: 'evil' }])),
+            'an owner that climbs out of the app': block(encode([{ ...plan, ownerId: '..' }])),
+            'a mount that climbs out of the app': block(encode([{ ...plan, mountId: '..' }])),
+            'an id that is a dot': block(encode([{ ...plan, id: '.' }])),
+            'an id with a slash': block(encode([{ ...plan, id: 'a/b' }])),
+            'an id with a backslash': block(encode([{ ...plan, id: 'a\\b' }])),
+            'an id with a control character': block(encode([{ ...plan, id: 'a\nb' }])),
             'over the cap': block(encode(overCap)),
             'no end marker': `<!--eigen-refs:${encode([plan])}-->${PILL}`,
         };

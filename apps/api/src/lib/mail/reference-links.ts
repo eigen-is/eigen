@@ -5,6 +5,7 @@
 import { MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import { isAttachmentReferenceShape } from '@workspace/lib/types/drive-reference';
+import { isSafePathSegment } from '../core';
 import { renderAttachmentPills } from '../mailer/mail-template';
 
 const BLOCK_START = '<!--eigen-refs:';
@@ -45,9 +46,12 @@ function decodeReferences(data: string): AttachmentReference[] | null {
     } catch {
         return null;
     }
-    return Array.isArray(refs) && refs.length <= MAX_SEND_REFERENCES && refs.every(isAttachmentReferenceShape)
-        ? refs
-        : null;
+    if (!Array.isArray(refs) || refs.length > MAX_SEND_REFERENCES) return null;
+    // A link is built from the three ids, in a pill and in the composer's chip, and each must stay one segment of it.
+    const valid = refs.every(
+        (ref) => isAttachmentReferenceShape(ref) && [ref.ownerId, ref.mountId, ref.id].every(isSafePathSegment),
+    );
+    return valid ? refs : null;
 }
 
 function beforeBodyEnd(html: string, block: string): string {
