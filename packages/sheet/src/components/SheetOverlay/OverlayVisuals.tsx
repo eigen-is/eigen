@@ -195,7 +195,7 @@ export function OverlayVisuals({ containerRef }: Props) {
                     ))}
                 </div>
             )}
-            {context.presences?.map((presence, index) => {
+            {context.presences?.map((presence) => {
                 if (presence.sheetId !== context.currentSheetId) {
                     return null;
                 }
@@ -223,7 +223,7 @@ export function OverlayVisuals({ containerRef }: Props) {
 
                 return (
                     <div
-                        key={presence?.userId || index}
+                        key={presence.clientId}
                         className="sheet-presence-selection eigen-selection-ring eigen-selection-ring-peer"
                         // React's CSSProperties has no custom properties, so the --peer-color entry needs the cast.
                         style={

@@ -6,12 +6,14 @@ export type PeerPresence = {
     selection?: { sheetId: string; r: number; c: number };
 };
 
-// Peers with both an identity and a cursor become rows. A same-user entry is their other window, shown like a peer.
-export function presencesFromPeers(peers: PeerPresence[]): Presence[] {
+// Peers with both an identity and a cursor become rows, one per awareness client. A same-user entry is their other
+// window, shown like a peer.
+export function presencesFromPeers(peers: ReadonlyMap<number, PeerPresence>): Presence[] {
     const result: Presence[] = [];
-    for (const { user, selection } of peers) {
+    for (const [clientId, { user, selection }] of peers) {
         if (!user || !selection) continue;
         result.push({
+            clientId,
             sheetId: selection.sheetId,
             username: user.name,
             userId: user.userId,

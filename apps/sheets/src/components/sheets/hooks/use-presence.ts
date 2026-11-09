@@ -55,7 +55,7 @@ export function usePresence(
         }
         // Remove first, then add the live set: a departed client can share its key with a live one (same user).
         if (removed.length > 0) workbook.removePresences(removed);
-        const toAdd = presencesFromPeers([...peers.values()]);
+        const toAdd = presencesFromPeers(peers);
         if (toAdd.length > 0) workbook.addPresences(toAdd);
 
         prevPeersRef.current = peers;
