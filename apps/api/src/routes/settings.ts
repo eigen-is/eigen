@@ -4,6 +4,12 @@
 
 import { BACKUP_KEEP_MAX } from '@workspace/lib/constants/backup';
 import { UPLOAD_CAP_MAX_MB } from '@workspace/lib/constants/mount';
+import {
+    LANDING_LINK_TITLE_MAX,
+    LANDING_LINK_URL_MAX,
+    LANDING_LINKS_MAX,
+    QUOTA_MIN_MB,
+} from '@workspace/lib/constants/settings';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type {
@@ -113,8 +119,8 @@ export const settingsRouter = new Elysia({ name: 'settings' })
             body: t.Object({
                 quotas: t.Optional(
                     t.Object({
-                        mailAndContactsMaxMB: t.Optional(t.Number({ minimum: 10 })),
-                        defaultMountMaxSizeMB: t.Optional(t.Number({ minimum: 10 })),
+                        mailAndContactsMaxMB: t.Optional(t.Number({ minimum: QUOTA_MIN_MB })),
+                        defaultMountMaxSizeMB: t.Optional(t.Number({ minimum: QUOTA_MIN_MB })),
                         maxUploadSizeMB: t.Optional(t.Number({ minimum: 1, maximum: UPLOAD_CAP_MAX_MB })),
                         trashRetentionDays: t.Optional(t.Number({ minimum: 0 })),
                     }),
@@ -162,10 +168,14 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                         links: t.Optional(
                             t.Array(
                                 t.Object({
-                                    title: t.String({ minLength: 1, maxLength: 80 }),
-                                    url: t.String({ minLength: 1, maxLength: 2048, pattern: '^https?://' }),
+                                    title: t.String({ minLength: 1, maxLength: LANDING_LINK_TITLE_MAX }),
+                                    url: t.String({
+                                        minLength: 1,
+                                        maxLength: LANDING_LINK_URL_MAX,
+                                        pattern: '^https?://',
+                                    }),
                                 }),
-                                { maxItems: 20 },
+                                { maxItems: LANDING_LINKS_MAX },
                             ),
                         ),
                         showInstall: t.Optional(t.Boolean()),

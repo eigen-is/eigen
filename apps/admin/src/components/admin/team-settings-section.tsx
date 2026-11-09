@@ -3,6 +3,7 @@
 
 import { useUpdateTeam } from '@workspace/lib/admin';
 import { useCalendars, useUpdateCalendar } from '@workspace/lib/calendar';
+import { QUOTA_MIN_MB } from '@workspace/lib/constants/settings';
 import { useHomeDataLabel } from '@workspace/lib/public';
 import { useRemoveTeamAvatar, useTeamSettings, useUpdateTeamSettings, useUploadTeamAvatar } from '@workspace/lib/team';
 import type { OrgTeam } from '@workspace/lib/types/admin';
@@ -32,14 +33,11 @@ type TeamSettingsSectionProps = {
     organizationId?: string;
 };
 
-// The team's header with its avatar and name, and the settings it shows or edits below it.
 export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectionProps) {
     const ownerId = teamOwnerId(team.id);
     const [showSettingsForm, setShowSettingsForm] = useState(false);
-    // This page always requests the avatar with a fresh ?v=timestamp (stamped per mount and after
-    // upload/remove): the editing surface must never show the up-to-24h browser-cached copy of the
-    // team's stable /p/avatar URL. Other surfaces accept that TTL. The route mounts the team detail
-    // with key={team.id}, so switching teams remounts and re-stamps naturally.
+    // A fresh ?v= on each mount and after each change, so the editor never shows the browser's cached copy of the
+    // avatar, which other pages accept for up to a day.
     const [avatarUrl, setAvatarUrl] = useState(() => `p/avatar/${ownerId}?v=${Date.now()}`);
 
     const [draftName, setDraftName] = useState(team.name);
@@ -63,11 +61,18 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
 
     const defaultCal = calendars.find((c) => c.isDefault);
     const notifyMembers = settings?.notifyMembers !== false;
+    const overrides = settings?.memberOverrides;
+    const overridesText = [
+        overrides?.mailAndContactsMaxMB && `${homeDataLabel}: ${overrides.mailAndContactsMaxMB} MB`,
+        overrides?.defaultMountMaxSizeMB && `Mount: ${overrides.defaultMountMaxSizeMB} MB`,
+    ]
+        .filter(Boolean)
+        .join(' · ');
 
     const calendarPermission = useMemo(() => {
         if (!defaultCal?.shares) return 'read';
         const share = defaultCal.shares.find((s) => s.targetId === ownerId);
-        return share?.permission || 'read';
+        return share?.permission ?? 'read';
     }, [defaultCal, ownerId]);
 
     const openSettingsForm = () => {
@@ -75,8 +80,8 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
         setDraftCalEnabled(calendarEnabled);
         setDraftCalPermission(calendarPermission);
         setDraftNotifyMembers(notifyMembers);
-        setDraftMailMax(settings?.memberOverrides?.mailAndContactsMaxMB?.toString() ?? '');
-        setDraftMountMax(settings?.memberOverrides?.defaultMountMaxSizeMB?.toString() ?? '');
+        setDraftMailMax(overrides?.mailAndContactsMaxMB?.toString() ?? '');
+        setDraftMountMax(overrides?.defaultMountMaxSizeMB?.toString() ?? '');
         setShowSettingsForm(true);
     };
 
@@ -199,7 +204,7 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
                                 <Label>{homeDataLabel} (MB)</Label>
                                 <Input
                                     type="number"
-                                    min={10}
+                                    min={QUOTA_MIN_MB}
                                     placeholder="Inherit"
                                     value={draftMailMax}
                                     onChange={(e) => setDraftMailMax(e.target.value)}
@@ -209,7 +214,7 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
                                 <Label>Default mount (MB)</Label>
                                 <Input
                                     type="number"
-                                    min={10}
+                                    min={QUOTA_MIN_MB}
                                     placeholder="Inherit"
                                     value={draftMountMax}
                                     onChange={(e) => setDraftMountMax(e.target.value)}
@@ -237,19 +242,10 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
                         <span className="text-sm text-muted-foreground">Notify members</span>
                         <span className="text-sm">{notifyMembers ? 'Enabled' : 'Disabled'}</span>
                     </div>
-                    {(settings?.memberOverrides?.mailAndContactsMaxMB ||
-                        settings?.memberOverrides?.defaultMountMaxSizeMB) && (
+                    {overridesText && (
                         <div className="flex items-center justify-between">
                             <span className="text-sm text-muted-foreground">Quota overrides</span>
-                            <span className="text-sm">
-                                {settings?.memberOverrides?.mailAndContactsMaxMB &&
-                                    `${homeDataLabel}: ${settings.memberOverrides.mailAndContactsMaxMB} MB`}
-                                {settings?.memberOverrides?.mailAndContactsMaxMB &&
-                                    settings?.memberOverrides?.defaultMountMaxSizeMB &&
-                                    ' · '}
-                                {settings?.memberOverrides?.defaultMountMaxSizeMB &&
-                                    `Mount: ${settings.memberOverrides.defaultMountMaxSizeMB} MB`}
-                            </span>
+                            <span className="text-sm">{overridesText}</span>
                         </div>
                     )}
                 </div>
