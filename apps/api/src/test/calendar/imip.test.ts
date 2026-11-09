@@ -1,7 +1,13 @@
 import { beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem, ImipMethod } from '@workspace/lib/types/calendar';
 import type { AddressObject, Attachment } from '@workspace/lib/types/mail';
-import { composeCancelEmail, composeInviteEmail, composeRsvpReply, processInboundImip } from '../../lib/calendar/imip';
+import {
+    composeCancelEmail,
+    composeInviteEmail,
+    composeInviteRequest,
+    composeRsvpReply,
+    processInboundImip,
+} from '../../lib/calendar/imip';
 import { getMailDomain } from '../../lib/config/server-config';
 import type { Home } from '../../lib/home';
 import { getHome } from '../../lib/home/get-home';
@@ -201,6 +207,20 @@ describe('iMIP Parsing', () => {
     });
 });
 
+const invite = (
+    event: CalendarEvent,
+    organizer: Parameters<typeof composeInviteEmail>[1],
+    series?: CalendarEvent,
+    updated = false,
+) =>
+    composeInviteEmail(
+        event,
+        organizer,
+        [{ email: 'bob@external.com', name: 'Bob', status: 'pending', role: 'required' }],
+        composeInviteRequest(event, organizer, series),
+        updated,
+    );
+
 describe('iMIP Outbound Email Composition', () => {
     const organizer = { userId: 'alice-id', email: 'alice@eigen.example', name: 'Alice' };
     const attendee = { email: 'bob@external.com', name: 'Bob', status: 'pending' as const, role: 'required' as const };
@@ -212,7 +232,7 @@ describe('iMIP Outbound Email Composition', () => {
     });
 
     test('composeInviteEmail creates proper OutboundMail with icalEvent', () => {
-        const mail = composeInviteEmail(MOCK_EVENT, organizer, [attendee]);
+        const mail = invite(MOCK_EVENT, organizer);
         expect(mail.from?.address).toBe('alice@eigen.example');
         expect(mail.from?.name).toBe('Alice');
         expect(mail.to[0].address).toBe('bob@external.com');
@@ -226,20 +246,20 @@ describe('iMIP Outbound Email Composition', () => {
     });
 
     test('invitation mail labels a zone-less event UTC instead of guessing the server zone', () => {
-        const mail = composeInviteEmail(MOCK_EVENT, organizer, [attendee]);
+        const mail = invite(MOCK_EVENT, organizer);
         expect(mail.text).toContain('10:00 AM – 11:00 AM (UTC)');
         expect(mail.html).toContain('(UTC)');
     });
 
     test('invitation mail renders a stored zone as its own wall clock, unlabelled', () => {
-        const mail = composeInviteEmail({ ...MOCK_EVENT, timezone: 'Europe/Amsterdam' }, organizer, [attendee]);
+        const mail = invite({ ...MOCK_EVENT, timezone: 'Europe/Amsterdam' }, organizer);
         expect(mail.text).toContain('12:00 PM – 1:00 PM');
         expect(mail.text).not.toContain('(UTC)');
     });
 
     test('an updated invitation uses the updated subject and method', () => {
         const updatedEvent = { ...MOCK_EVENT, sequence: 1 };
-        const mail = composeInviteEmail(updatedEvent, organizer, [attendee], undefined, [], true);
+        const mail = invite(updatedEvent, organizer, undefined, true);
         expect(mail.subject).toBe('Updated invitation: Team Standup');
         expect(mail.html).toContain('This event has been updated');
         expect(mail.icalEvent?.method).toBe('REQUEST');
@@ -307,7 +327,7 @@ describe('iMIP Outbound Email Composition', () => {
     const unfold = (mail: { icalEvent?: { content: string } }) => mail.icalEvent!.content.replace(/\r\n[ \t]/g, '');
 
     test('an occurrence invite names the original instant, not the moved start', () => {
-        const ics = unfold(composeInviteEmail(MOVED_OCCURRENCE, organizer, [attendee], RECURRING_EVENT));
+        const ics = unfold(invite(MOVED_OCCURRENCE, organizer, RECURRING_EVENT));
         expect(ics).toContain(ORIGINAL_SLOT);
         expect(ics).toContain('DTSTART;TZID=America/New_York:20260408T110000');
         expect(ics).not.toContain('RRULE:FREQ=WEEKLY');
@@ -323,9 +343,7 @@ describe('iMIP Outbound Email Composition', () => {
     });
 
     test('an occurrence update and an occurrence cancel carry the same RECURRENCE-ID', () => {
-        expect(
-            unfold(composeInviteEmail(MOVED_OCCURRENCE, organizer, [attendee], RECURRING_EVENT, [], true)),
-        ).toContain(ORIGINAL_SLOT);
+        expect(unfold(invite(MOVED_OCCURRENCE, organizer, RECURRING_EVENT, true))).toContain(ORIGINAL_SLOT);
         expect(unfold(composeCancelEmail(MOVED_OCCURRENCE, organizer, [attendee], RECURRING_EVENT))).toContain(
             ORIGINAL_SLOT,
         );
@@ -354,8 +372,8 @@ describe("iMIP mail on a user's behalf", () => {
     const unfold = (mail: { icalEvent?: { content: string } }) => mail.icalEvent!.content.replace(/\r\n[ \t]/g, '');
     type Organizer = typeof external;
     const composers: [string, (organizer: Organizer) => ReturnType<typeof composeInviteEmail>][] = [
-        ['invite', (organizer) => composeInviteEmail(MOCK_EVENT, organizer, [attendee])],
-        ['update', (organizer) => composeInviteEmail(MOCK_EVENT, organizer, [attendee], undefined, [], true)],
+        ['invite', (organizer) => invite(MOCK_EVENT, organizer)],
+        ['update', (organizer) => invite(MOCK_EVENT, organizer, undefined, true)],
         ['cancel', (organizer) => composeCancelEmail(MOCK_EVENT, organizer, [attendee])],
         [
             'RSVP reply',
@@ -369,7 +387,7 @@ describe("iMIP mail on a user's behalf", () => {
     });
 
     test('an invite from an external organizer keeps her own address as ORGANIZER', () => {
-        const ics = unfold(composeInviteEmail(MOCK_EVENT, external, [attendee]));
+        const ics = unfold(invite(MOCK_EVENT, external));
         expect(ics).toMatch(/^ORGANIZER[^\r\n]*:mailto:alice@gmail\.com\r?$/m);
     });
 

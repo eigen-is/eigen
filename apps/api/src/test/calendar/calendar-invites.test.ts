@@ -1014,3 +1014,89 @@ describe('Delete-as-decline is for attendees only', () => {
         expect(await declinesTo(event.id)).toBe(1);
     });
 });
+
+describe('The invitation mail of one save', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let calendarId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars`);
+        calendarId = findOrFail(await assertJson<CalendarItem[]>(res), (c) => c.isDefault).id;
+    });
+
+    const GUESTS = ['one@external.com', 'two@external.com', 'three@external.com'];
+
+    test('is built once, and each guest gets it under their own address', async () => {
+        const mailer = await import('../../lib/mailer/mailer');
+        const ical = await import('../../lib/ical/ical-component');
+        const mail = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        mail.mockClear();
+        const build = spyOn(ical, 'serializeEventForImip');
+        build.mockClear();
+
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/calendars/${calendarId}/events`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'One body',
+                    startTime: new Date(Date.now() + 3600_000),
+                    endTime: new Date(Date.now() + 7200_000),
+                    allDay: false,
+                    data: { attendees: GUESTS.map((email) => ({ email, status: 'pending', role: 'required' })) },
+                }),
+            },
+        );
+        expect(res.status).toBe(200);
+        const sent = await eventually(async () => {
+            const calls = mail.mock.calls.map((call) => call[0]).filter((m) => m.subject === 'Invitation: One body');
+            return calls.length === GUESTS.length ? calls : undefined;
+        }, 'the invitation to reach every guest');
+
+        expect(build).toHaveBeenCalledTimes(1);
+        expect(sent.map((m) => m.to.map((t) => t.address))).toEqual(GUESTS.map((email) => [email]));
+        const [first] = sent;
+        for (const guest of GUESTS) expect(first.icalEvent?.content).toContain(`mailto:${guest}`);
+        for (const m of sent) expect(m.icalEvent).toEqual(first.icalEvent);
+        build.mockRestore();
+        mail.mockRestore();
+    });
+
+    test('a guest on this server gets a notice with no calendar file, and none is built for them', async () => {
+        const mailer = await import('../../lib/mailer/mailer');
+        const ical = await import('../../lib/ical/ical-component');
+        const mail = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        mail.mockClear();
+        const build = spyOn(ical, 'serializeEventForImip');
+        build.mockClear();
+
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/calendars/${calendarId}/events`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'Local notice',
+                    startTime: new Date(Date.now() + 3600_000),
+                    endTime: new Date(Date.now() + 7200_000),
+                    allDay: false,
+                    data: { attendees: [{ email: ctx.bob.user.email, status: 'pending', role: 'required' }] },
+                }),
+            },
+        );
+        expect(res.status).toBe(200);
+        const notice = await eventually(
+            async () => mail.mock.calls.map((call) => call[0]).find((m) => m.subject === 'Invitation: Local notice'),
+            'the notice to Bob',
+        );
+
+        expect(notice.icalEvent).toBeUndefined();
+        expect(build).not.toHaveBeenCalled();
+        build.mockRestore();
+        mail.mockRestore();
+    });
+});

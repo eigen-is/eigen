@@ -70,17 +70,32 @@ function icalEvent(
     event: CalendarEvent,
     method: 'REQUEST' | 'REPLY' | 'CANCEL',
     series?: CalendarEvent,
-    exceptions?: CalendarEvent[],
+    exceptions?: readonly CalendarEvent[],
 ): OutboundICalEvent {
     return { method, content: serializeEventForImip(event, method, series, exceptions) };
+}
+
+// The calendar file of one save's invitation mails. Nothing in it differs per guest, and its size is guests × exceptions,
+// so a save builds it once.
+export function composeInviteRequest(
+    event: CalendarEvent,
+    organizer: Organizer,
+    series?: CalendarEvent,
+    exceptions: readonly CalendarEvent[] = [],
+): OutboundICalEvent {
+    return icalEvent(
+        withOrganizer(event, organizer),
+        'REQUEST',
+        series,
+        exceptions.map((e) => withOrganizer(e, organizer)),
+    );
 }
 
 export function composeInviteEmail(
     event: CalendarEvent,
     organizer: Organizer,
-    attendees: Attendee[],
-    series?: CalendarEvent,
-    exceptions: CalendarEvent[] = [],
+    attendees: readonly Attendee[],
+    request?: OutboundICalEvent,
     updated = false,
 ): OutboundMail {
     const footer = `Invitation from ${organizer.name || organizer.email}`;
@@ -90,12 +105,7 @@ export function composeInviteEmail(
         subject: `${updated ? 'Updated invitation' : 'Invitation'}: ${event.title}`,
         text: buildEventSummary(event),
         html: buildEventHtml(event, footer, updated ? 'This event has been updated' : undefined),
-        icalEvent: icalEvent(
-            withOrganizer(event, organizer),
-            'REQUEST',
-            series,
-            exceptions.map((e) => withOrganizer(e, organizer)),
-        ),
+        icalEvent: request,
     };
 }
 
@@ -187,7 +197,6 @@ export function summarizeCalendarInvite(attachment: Attachment): CalendarInvite 
         if (!event) return null;
         const organizer = event.data?.organizer;
         return {
-            // A bare event .ics with no METHOD anywhere still renders as an invitation card.
             method: method ?? cal.method ?? 'REQUEST',
             uid: event.uid,
             summary: event.title,
@@ -228,7 +237,7 @@ export async function processInboundImip(
         return;
     }
 
-    const sentBy = (email: string | undefined): email is string => !!sender && email?.toLowerCase() === sender;
+    const sentBy = (email: string | undefined): email is string => email?.toLowerCase() === sender;
 
     const calendar = home.calendar;
 
@@ -237,18 +246,14 @@ export async function processInboundImip(
     }
 
     for (const parsed of events.slice(0, IMIP_MAX_EVENTS)) {
-        // iMIP is fire-and-forget with no 400 to return, so a reversed interval clamps to zero duration rather than dropping the invitation.
         if (parsed.endTime < parsed.startTime) parsed.endTime = parsed.startTime;
 
         if (method === 'REQUEST') {
-            // One locked decision: Postfix delivers concurrently, and two deliveries would otherwise file two masters for one UID.
             await calendar.receiveImipRequest(parsed, sender);
         } else if (method === 'CANCEL') {
-            // CANCEL is an organizer action too — same sender binding as REQUEST.
             const organizerEmail = parsed.data?.organizer?.email;
             if (!sentBy(organizerEmail)) continue;
             if (parsed.recurrenceDate) {
-                // One instance only: removeInvitation would delete the attendee's whole linked series.
                 await calendar.cancelInvitationOccurrence(
                     parsed.uid,
                     externalOwnerId(organizerEmail),
@@ -266,10 +271,9 @@ export async function processInboundImip(
             );
             if (ownerEvent && parsed.data?.attendees) {
                 for (const attendee of parsed.data.attendees) {
-                    // A REPLY may only set the PARTSTAT of the attendee who actually sent it.
                     if (!sentBy(attendee.email)) continue;
                     if (parsed.recurrenceDate) {
-                        // The PARTSTAT lands on that instance's exception, and restoreCancelled=false keeps it from resurrecting an occurrence the organizer deleted.
+                        // False: an answer never brings back an occurrence the organizer deleted.
                         await calendar.receiveRsvpForOccurrence(
                             ownerEvent.id,
                             attendee.email,
@@ -279,7 +283,6 @@ export async function processInboundImip(
                             false,
                         );
                     } else {
-                        // Skip uninvited senders so a forged REPLY can't churn rows on the master.
                         const invited = ownerEvent.data?.attendees?.some(
                             (a) => a.email.toLowerCase() === attendee.email.toLowerCase(),
                         );

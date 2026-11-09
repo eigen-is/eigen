@@ -9,11 +9,12 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import { getServerSettings } from '../config/server-settings';
 import type { Home } from '../home';
 import { sendToHome } from '../home/home-relay';
+import type { OutboundICalEvent } from '../mailer/mailer';
 import { sendMail } from '../mailer/mailer';
 import { addRegistryEntry } from '../share';
 import type { User } from '../user';
 import { getUserByEmail, isGuest } from '../user';
-import { composeCancelEmail, composeInviteEmail } from './imip';
+import { composeCancelEmail, composeInviteEmail, composeInviteRequest } from './imip';
 import { buildCalendarEvent } from './sse-events';
 
 // The revision its receiver orders the removal against; undefined for a message about the whole series.
@@ -78,49 +79,52 @@ export async function propagateInvitation(
     oldAttendees: Attendee[],
     newAttendees: Attendee[],
     series?: CalendarEvent,
-    exceptions: CalendarEvent[] = [],
+    exceptions: readonly CalendarEvent[] = [],
 ): Promise<void> {
     const organizerEventId = series?.id ?? event.id;
     const recurrenceDate = series ? event.recurrenceDate : null;
     const oldEmails = new Set(oldAttendees.map((a) => a.email.toLowerCase()));
     const newEmails = new Set(newAttendees.map((a) => a.email.toLowerCase()));
 
-    const added = newAttendees.filter((a) => !oldEmails.has(a.email.toLowerCase()));
-    const removed = oldAttendees.filter((a) => !newEmails.has(a.email.toLowerCase()));
-    const existing = newAttendees.filter((a) => oldEmails.has(a.email.toLowerCase()));
-
-    // A collaborator writes in the owner's calendar, so the owner already holds the event and gets no copy.
     const selves = new Set([user.email.toLowerCase(), organizerHome.user.email.toLowerCase()]);
+    const notSelf = (a: Attendee) => !selves.has(a.email.toLowerCase());
+    const added = newAttendees.filter((a) => notSelf(a) && !oldEmails.has(a.email.toLowerCase()));
+    const removed = oldAttendees.filter((a) => notSelf(a) && !newEmails.has(a.email.toLowerCase()));
+    const existing = newAttendees.filter((a) => notSelf(a) && oldEmails.has(a.email.toLowerCase()));
+
     const organizer = { userId: user.id, email: user.email, name: user.name };
+    const eventFields = {
+        recurrenceDate,
+        title: event.title,
+        description: event.description,
+        location: event.location,
+        startTime: event.startTime,
+        endTime: event.endTime,
+        allDay: event.allDay,
+        rrule: event.rrule,
+        timezone: event.timezone,
+        status: event.status,
+        sequence: event.sequence,
+        // The organizer's own revision, so the attendee can order this message against the next: the fan-out is unordered.
+        dtstamp: event.updatedAt,
+    };
+    let request: OutboundICalEvent | undefined;
 
     for (const attendee of added) {
-        if (selves.has(attendee.email.toLowerCase())) continue;
         try {
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || isGuest(targetUser)) {
                 await addRegistryEntry(organizerHome.user.id, attendee.email);
-                const mail = composeInviteEmail(event, organizer, [attendee], series, exceptions);
+                request ??= composeInviteRequest(event, organizer, series, exceptions);
+                const mail = composeInviteEmail(event, organizer, [attendee], request);
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP invite:', err));
                 continue;
             }
             await sendToHome(targetUser.id, {
                 type: 'calendar:invitation',
                 payload: {
+                    ...eventFields,
                     uid: event.uid,
-                    recurrenceDate,
-                    title: event.title,
-                    description: event.description,
-                    location: event.location,
-                    startTime: event.startTime,
-                    endTime: event.endTime,
-                    allDay: event.allDay,
-                    rrule: event.rrule,
-                    timezone: event.timezone,
-                    status: event.status,
-                    sequence: event.sequence,
-                    // The organizer's own revision, so the attendee can order this message against the next: the
-                    // fan-out is unordered.
-                    dtstamp: event.updatedAt,
                     data: {
                         organizer: { userId: organizerHome.user.id, email: user.email, name: user.name },
                         organizerEventId,
@@ -133,9 +137,8 @@ export async function propagateInvitation(
             });
             await sendSeriesExceptions(targetUser.id, organizerHome, organizerEventId, exceptions, event);
             if (getServerSettings().notifications.email.userOnCalendarInvite) {
-                const mail = composeInviteEmail(event, organizer, [attendee], series);
                 // A local recipient has the event from sendToHome, so an iMIP attachment would update it twice.
-                mail.icalEvent = undefined;
+                const mail = composeInviteEmail(event, organizer, [attendee]);
                 sendMail(mail).catch((err) => console.error('Failed to send Eigen invite email:', err));
             }
         } catch (error) {
@@ -144,7 +147,6 @@ export async function propagateInvitation(
     }
 
     for (const attendee of removed) {
-        if (selves.has(attendee.email.toLowerCase())) continue;
         try {
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || isGuest(targetUser)) {
@@ -164,11 +166,11 @@ export async function propagateInvitation(
     }
 
     for (const attendee of existing) {
-        if (selves.has(attendee.email.toLowerCase())) continue;
         try {
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || isGuest(targetUser)) {
-                const mail = composeInviteEmail(event, organizer, [attendee], series, exceptions, true);
+                request ??= composeInviteRequest(event, organizer, series, exceptions);
+                const mail = composeInviteEmail(event, organizer, [attendee], request, true);
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP update:', err));
                 continue;
             }
@@ -176,21 +178,7 @@ export async function propagateInvitation(
                 type: 'calendar:invitation-update',
                 orgEventId: organizerEventId,
                 orgUserId: organizerHome.user.id,
-                payload: {
-                    recurrenceDate,
-                    title: event.title,
-                    description: event.description,
-                    location: event.location,
-                    startTime: event.startTime,
-                    endTime: event.endTime,
-                    allDay: event.allDay,
-                    rrule: event.rrule,
-                    timezone: event.timezone,
-                    status: event.status,
-                    sequence: event.sequence,
-                    dtstamp: event.updatedAt,
-                    attendees: newAttendees,
-                },
+                payload: { ...eventFields, attendees: newAttendees },
             });
         } catch (error) {
             console.error('Failed to update invitation:', error);
@@ -230,7 +218,6 @@ export async function propagateCancellation(
         try {
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || isGuest(targetUser)) {
-                // A team Home has no address, and a CANCEL with an empty organizer names no one a client could match.
                 if (!organizerHome.user.email) {
                     console.warn(`Skipped the iMIP cancel to ${attendee.email}: the organizer has no address`);
                     continue;
