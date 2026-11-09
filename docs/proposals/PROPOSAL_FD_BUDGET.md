@@ -2,6 +2,8 @@
 
 This proposal keeps Eigen from failing silently when the process runs out of file descriptors. Every open Home, the data folder of one user or team, costs about 30 of them: three files per SQLite database in WAL mode, plus the mail folder watchers. A fan-out across many Homes under a small `ulimit -n` exhausts them, SQLite starts failing with `SQLITE_IOERR`, and that shows up only as skipped recipients and swallowed watcher errors. The compose deployment pins the limit high. This proposal covers the rest: a startup check that warns loudly on a small limit and deploy docs for installs without compose (phase 1, S), and an optional cap on resident Homes, least recently used first out, with one retry in `ManagedDatabase.open` (phase 2, M, only when needed). It stays small on purpose: no resource-manager framework.
 
+**Measured 2026-11-09:** a closed user Home opens with 18 fds and a team Home with 9, on a Mac and in the API image, so the mail watchers add none of their own and the 30 below is high.
+
 **Status:** nothing of it is built. Written 2026-07-05 and checked against the code on 2026-08-04, after the storage-audit fixes, and the home-lifecycle program has changed it since: a socket or stream holds its Home (`Home.hold`, `Drive.holdHome`), so `holds > 0` is the live signal (see Eviction safety). [ROADMAP.md](../ROADMAP.md) keeps its row.
 
 ## Problem
@@ -12,7 +14,7 @@ the fan-out crashed with `SQLITE_IOERR_VNODE` mid-delivery and **silently skippe
 the per-recipient `catch` in `sendToUserHomes` (`../../apps/api/src/lib/home/home-relay.ts`) logs
 and moves on. Nothing told the operator the process was out of file descriptors.
 
-The fan-outs through `sendToUserHomes` are bounded now (`deliveryBudget`, a semaphore of eight), and
+The fan-outs through `sendToUserHomes` open one home at a time now, though every opened home stays open, and
 `../../docker-compose.yml` pins the limit for the `eigen-api` service:
 
 ```yaml
@@ -22,7 +24,7 @@ ulimits:
     hard: 1048576
 ```
 
-But the semaphore bounds *concurrent opens*, not *resident* Homes — each delivered Home stays
+But that bounds *concurrent opens*, not *resident* Homes — each delivered Home stays
 open for its idle window, which is per-type since 2026-07-14: `UserHome` 5 minutes
 (`idleMs` in `../../apps/api/src/lib/home/home.ts`), `TeamHome` 30 minutes
 (`TEAM_HOME_IDLE_MS`, `../../apps/api/src/lib/home/team-home.ts`). The longer team window is a
@@ -220,7 +222,7 @@ other half left for sockets, document DBs, and multi-mount variance. Pinned comp
 on *in-flight opens* (flow). Pulls don't pass it. The LRU cap bounds *resident homes* (stock). They
 compose without coordination: a fan-out opens at most `budget` homes concurrently, each install
 may evict the least-recently-used resident, so residency overshoots N by at most the open budget
-plus any concurrent pulls. The budget today is `deliveryBudget` in `home-relay.ts`.
+plus any concurrent pulls. Today's code has no budget: `sendToUserHomes` opens one home at a time.
 
 ## Failure honesty
 

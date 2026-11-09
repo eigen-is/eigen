@@ -4,7 +4,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type { SSEvent, SSEventChat, SSEventDrive } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { getServerConfig } from '../../lib/config/server-config';
-import { drainACLFanOuts } from '../../lib/drive/acl-propagation';
+import { drainHomeDeliveries } from '../../lib/home/home-relay';
 import type { SSECollector, TestContext, TestUser } from '../setup';
 import {
     addMember,
@@ -148,7 +148,7 @@ describe('a drive change inside a shared folder', () => {
         await drivePut(token, ctx.alice.user.id, aliceMountId, `path/${sharedFolder.id}/acl`, {
             add: [{ id: ctx.bob.user.email, read: true, write: false }],
         });
-        await drainACLFanOuts();
+        await drainHomeDeliveries();
     });
 
     test("reaches the sharee's stream, and a change beside it does not", async () => {
@@ -180,7 +180,7 @@ describe('a drive change inside a shared folder', () => {
         await drivePut(token, ctx.alice.user.id, aliceMountId, `path/${dropBox.id}/acl`, {
             add: [{ id: ctx.charlie.user.email, read: false, write: true }],
         });
-        await drainACLFanOuts();
+        await drainHomeDeliveries();
         const aliceSSE = await collectSSE(ctx.alice.user.id);
         const charlieSSE = await collectSSE(ctx.charlie.user.id);
         const inside = await createFolder(token, ctx.alice.user.id, aliceMountId, dropBox.id, 'sse-write-only-inside');
@@ -248,7 +248,7 @@ describe('a chat message in a shared chat', () => {
                 { id: ctx.charlie.user.email, read: false, write: true },
             ],
         });
-        await drainACLFanOuts();
+        await drainHomeDeliveries();
         const aliceSSE = await collectSSE(ctx.alice.user.id);
         const bobSSE = await collectSSE(ctx.bob.user.id);
         const charlieSSE = await collectSSE(ctx.charlie.user.id);

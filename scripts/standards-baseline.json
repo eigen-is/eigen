@@ -83,7 +83,6 @@
     "apps/api/src/lib/setup/setup.ts": 1,
     "apps/api/src/lib/versioning/retention.ts": 1,
     "apps/api/src/routes/demo.ts": 1,
-    "apps/api/src/scripts/demo/author-fixtures.ts": 1,
     "apps/drive/src/routes/__root.tsx": 1,
     "apps/drive/src/routes/_auth.mime.$mimeType.tsx": 1,
     "apps/drive/src/routes/_auth.shared.$to.tsx": 1,
