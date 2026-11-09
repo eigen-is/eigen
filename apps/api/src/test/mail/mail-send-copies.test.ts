@@ -511,6 +511,33 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
         expect(reloaded.cc?.value ?? []).toEqual([]);
     });
 
+    // A part's bytes as JSON are about 3.5 times their size, and the browser's query cache keeps the answer.
+    test("a save's and a send's answer name the part's size and carry none of its bytes", async () => {
+        startCapture();
+        const partBytes = 64 * 1024;
+        const tempId = await uploadAttachment(partBytes);
+        const mail = { subject: 'Heavy part', to: addr('to@x.com'), text: 'hi', html: '<p>hi</p>' };
+
+        const saveBody = await (
+            await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/draft`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mail, tempAttachmentIds: [tempId] }),
+            })
+        ).text();
+        const saved: EmailDraft = JSON.parse(saveBody);
+        expect(saved.attachments.map((a) => a.size)).toEqual([partBytes]);
+        expect(saveBody.length).toBeLessThan(partBytes);
+
+        const sendBody = await (await sendMailBody({ ...mail, id: saved.id })).text();
+        const answer: SentMailResult = JSON.parse(sendBody);
+        expect(answer.attachments.map((a) => a.size)).toEqual([partBytes]);
+        expect(sendBody.length).toBeLessThan(partBytes);
+
+        expect(sent.length).toBe(1);
+        expect(sent[0].attachments?.map((a) => Buffer.byteLength(a.content))).toEqual([partBytes]);
+    });
+
     // IMAP clients read the reply mark off the original's filename (`R`, \Answered); the app off its row.
     describe('a reply', () => {
         const deliverOriginal = async (subject: string): Promise<string> => {

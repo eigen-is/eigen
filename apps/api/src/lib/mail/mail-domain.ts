@@ -70,6 +70,13 @@ function appendReferenceLinks(html: string, refs: AttachmentReference[], recipie
     return replaced !== html ? replaced : html + refHtml;
 }
 
+// An answer to the browser names a part and its size. The bytes come from the part's own route: as JSON they are about
+// 3.5 times their size, and the browser's query cache keeps the answer.
+function blankAttachmentBytes<T extends Pick<Email, 'attachments'>>(email: T): T {
+    for (const a of email.attachments) a.content = Buffer.alloc(0);
+    return email;
+}
+
 export class Mail {
     public constructor(
         public readonly home: Home,
@@ -207,8 +214,8 @@ export class Mail {
             if (isCalendarPart(a)) {
                 a.calendarInvite = summarizeCalendarInvite(a);
             }
-            a.content = Buffer.alloc(0);
         }
+        blankAttachmentBytes(message);
 
         // A fast-path save leaves the EML stale, so the sidecar wins over both the EML and the summary row.
         if (message.isDraft) {
@@ -337,7 +344,7 @@ export class Mail {
             }
         }
 
-        return this.draftFullSave(email, existingId, options);
+        return blankAttachmentBytes(await this.draftFullSave(email, existingId, options));
     }
 
     private async draftFastSave(
@@ -666,6 +673,7 @@ export class Mail {
             );
         }
 
+        blankAttachmentBytes(mail);
         return failedRecipients.length ? { ...mail, failedRecipients } : mail;
     }
 
