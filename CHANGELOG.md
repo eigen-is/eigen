@@ -6,10 +6,15 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Added
 
+- **Login in the top bar** — a signed-out visitor sees a **Login** button on every page, the sign-in pages included. On a demo server it reads **Enter demo**
+- **Install line on the landing page** — the owner can show the one-line install command, with a copy button, from **Show install section** under **Landing page** in Admin's server settings. It is off until turned on
+- **Covers on the blog** — a blog post can have a cover image, shown big on the post and on the newest post in the blog overview
 - **Delete history** — in Docs, Sheets, Slides, Vector and Stickies, File › Version history › **Delete history…** deletes every earlier version of a document, and the images and comments deleted from it, to free space. It keeps what was added or replied to in the last three days. Only an owner of the drive sees it
 
 ### Changed
 
+- **A new look for the public site** — the landing page, Support, the blog and the changelog share one layout, with a footer that shows the version. The apps named on the landing page link to their Support sections
+- **Table of contents in the changelog** — a Versions list beside the changelog jumps to a release, and each entry starts with its bold title
 - **Moving a formula in Sheets** — a formula cut to another tab keeps reading the cells it read, as in Excel: `=A1*2` cut from One to Two becomes `=One!A1*2`, and a cell that moved along with it is still followed
 - **Uploading a backup** — only the owner can upload an archive in the **Backup** section of a user or team in Admin. Other admins still back up, download and restore
 - **Cards assigned to you** — on a Stickies board and in the comments pane of Docs, Sheets, Slides and Vector, the assignee's avatar stands out with a ring in the app's color when an open card is yours

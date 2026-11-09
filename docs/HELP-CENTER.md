@@ -53,7 +53,7 @@ A mismatch makes React throw the prerendered DOM away and render the page again.
 - `useMediaQuery` is `useSyncExternalStore` with a desktop `getServerSnapshot`.
 - The `Toaster` mounts only after hydration.
 - React's auto-emitted `<link rel="preload">` tags are moved into `<head>`, where the browser's React puts them.
-- The landing page's first render is deterministic.
+- The landing page's first render is deterministic: the headline starts as `workspace`, and the buttons, the version label, Login and the install line wait for the config and the session.
 
 The comments in `prerender.tsx`, `entry-server.tsx` and `main.tsx` explain each one. Read them before changing the render path.
 
@@ -89,9 +89,33 @@ The search box on `/support` (`components/support/support-search.tsx`) and the c
 
 The index app sends a signed-in visitor on to `/space/` from a `useEffect` in `routes/index.tsx`. The redirect belongs to that one route, so `/support/*` and `/blog/*` stay reachable while signed in with no exemption logic. It is an effect, not a router `beforeLoad`, because the landing is prerendered and `AuthProvider` doesn't block there, so a `beforeLoad` only ever sees a signed-out visitor.
 
-## The help center uses the shared app shell
+## The public site uses the shared app shell
 
-`routes/support.tsx` wraps the whole tree in the shared `AppShell` (`appName="support"`), which already provides `LayoutContext`. There is no separate public shell and no section sidebar. The landing, section and article pages are each a single flex `Column`, and an article keeps its TOC in a sticky gutter at `xl` and up.
+Every route of `apps/index` wraps its page in the shared `AppShell` with an `appName`: `support`, `blog`, `changelog`, `licenses`, and an empty one for the landing page, where the top bar shows the bare `eigen` wordmark. `routes/support.tsx` does it once for the whole Support tree. There is no separate public shell and no section sidebar.
+
+`components/site-page.tsx` (`SitePage`) is the frame inside it: one scrolling column with the footer after the content, so a short page's footer rests at the bottom. A Support page passes its section's color, which sets `--app-current-color` for the rows and the table of contents. `components/site-footer.tsx` is the one-line footer, drawn by `SitePage` and never by a page: the build's version label linking to the changelog, then Support, Blog, Changelog, GitHub, Sponsor and Licenses. `components/reading-layout.tsx` (`ReadingLayout`) is the grid of a reading page: an optional left gutter and the column, centered. Blog posts, the changelog and the Support section and article pages read in it. The gutter goes below 76rem.
+
+Login is in the shared `Topbar` in `packages/ui`, not in this app. It shows on every signed-out top bar, the login pages included, and reads `demoMode` from `/p/config` to become an Enter demo button. Like the version label and the install line it waits for the session and the config, so it is the one part of the top bar the prerender does not contain. `AuthProvider` starts with `isLoading` true, on the server and in the first client render, so that what waits for the session matches the prerender.
+
+The breadcrumb (`components/article-breadcrumb.tsx`) is the line above a title, such as Support › Sheets over an article or Blog · 14 Sep 2026 over a post. A crumb with a `to` links, and one with an icon is a Support section, drawn in the page's color. The page's own title is never a crumb.
+
+The table of contents (`components/article-toc.tsx`, `ArticleToc`) fills the left gutter. It lists the h2 headings of an article, or the releases of the changelog with their short dates under the label Versions. It sticks while the page scrolls, marks the entry whose heading is in the top third of the screen, and draws nothing for fewer than two entries.
+
+## The changelog is built from CHANGELOG.md
+
+`build-changelog.ts` renders `CHANGELOG.md` with the same Markdown pipeline as the articles. It drops everything before the first version heading, because the page draws its own title, and wraps each release in a section with a head of version and date (`Unreleased` has none). A bullet's bold label becomes a lead that starts the entry, and the text after it starts with a capital letter. It also writes the list of versions that `ArticleToc` shows. Its output is `src/content/.generated/changelog.json`, a `ChangelogBody` that is an article body plus `versions`. The page and the prerender read the same file, so the whole changelog is in the static HTML.
+
+## The blog overview and covers
+
+The overview lists the posts newest first from the build-time manifest, so every row is in the prerendered HTML. The newest is larger and carries its cover, the others are list rows, and each date hangs in the left gutter. A post may set `cover` in its frontmatter, a path under `public/` such as `/data/blog/media/<folder>/<image>.webp`. `BlogCover` crops it to a 16:9 frame from the top, on the overview for the newest post and under the title on the post page. A post without `cover` shows none. A post page ends with a pager to the older and the newer post.
+
+## The landing page
+
+`routes/index.tsx` is the landing page: the hero (`components/landing-hero.tsx`), the buttons, and three blocks (`components/landing-blocks.tsx`). The headline word cycles through the apps, but the first render is always `workspace` and the timer starts in an effect, so the prerender and the first client render are the same. Each app named in the pitch line links to its Support section for now. The buttons are Login, the waitlist button and the admin's `landing.links`, and the install line under the blocks shows only when `landing.showInstall` is on ([SERVER-SETTINGS.md](SERVER-SETTINGS.md)). Those come from `/p/config` and appear after load. A demo server shows the Enter demo button and a line about the demo instead of the pitch.
+
+## What comes next
+
+The About pages, one overview and one page per app, are proposed in [proposals/PROPOSAL_ABOUT_PAGES.md](proposals/PROPOSAL_ABOUT_PAGES.md). They would reuse `SitePage`, `ReadingLayout`, `ArticleToc` and the breadcrumb as they are.
 
 ## See also
 
