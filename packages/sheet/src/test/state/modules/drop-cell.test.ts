@@ -617,7 +617,7 @@ describe('a fill counts on from what its source holds', () => {
         expect(shown(filled([text('Item 007')], 1, 'right'))).toEqual(['Item 008']);
     });
 
-    test('counts on from one text ending in a number that a number format left as text', () => {
+    it('counts on from one text ending in a number that a number format left as text', () => {
         const numbered = (v: string): Cell => ({ v, m: v, ct: { fa: '##0.00', t: 'n' } });
         expect(shown(filled([numbered('x1')], 2, 'down'))).toEqual(['x2', 'x3']);
         expect(shown(filled([numbered('12')], 2, 'down'))).toEqual(['12', '12']);
