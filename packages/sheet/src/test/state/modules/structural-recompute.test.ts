@@ -901,3 +901,22 @@ describe('one cell where a range was', () => {
         expect(at(t.ctx.sheets, 's1', 0, 2)?.v).toBe(1);
     });
 });
+
+describe('a function with a one-letter name', () => {
+    const value = (formula: string) => {
+        const resolver = createArrayResolver([{ id: 's1', name: 'One', data: [[n(5)]] }]);
+        return tab(book({ cells: [[n(1)]] })).ctx.formulaCache.engine.evaluate(formula, 's1', resolver).value;
+    };
+
+    test.each([
+        ['=N(1)', 1],
+        ['=N(A1)', 5],
+        ['=T("a")', 'a'],
+        ['=n(A1)+1', 6],
+        ['=A(1)', '#NAME?'],
+        ['=A1', 5],
+        ['=SUM(A:A)', 5],
+    ])('%s is %p', (formula, expected) => {
+        expect(value(formula)).toBe(expected);
+    });
+});
