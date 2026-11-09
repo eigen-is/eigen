@@ -372,6 +372,36 @@ describe('an override names its parent', () => {
     });
 });
 
+describe('a window that opens inside a repeated occurrence', () => {
+    const WINDOW = [new Date('2026-01-14T00:00:00Z'), new Date('2026-01-15T00:00:00Z')] as const;
+
+    test('finds the occurrence that began before it, as it finds a single event', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        const threeDays = (uid: string, extra: string[]) =>
+            vcal([
+                'BEGIN:VEVENT',
+                `UID:${uid}`,
+                'DTSTART:20260112T100000Z',
+                'DTEND:20260115T100000Z',
+                'SUMMARY:Retreat',
+                ...extra,
+                'END:VEVENT',
+            ]);
+        await put(harness.instance, calendarId, 'single.ics', threeDays('single', []));
+        await put(harness.instance, calendarId, 'weekly.ics', threeDays('weekly', ['RRULE:FREQ=WEEKLY']));
+
+        const found = await harness.instance.getEventsInRange(...WINDOW, calendarId);
+        const resources = await harness.instance.getResourcesInRange(calendarId, ...WINDOW);
+
+        expect(found.map((event) => `${event.uri} ${event.occurrenceDate}`).sort()).toEqual([
+            'single.ics 2026-01-12',
+            'weekly.ics 2026-01-12',
+        ]);
+        expect(resources.map((resource) => resource.uri).sort()).toEqual(['single.ics', 'weekly.ics']);
+    });
+});
+
 describe('a query window wider than one expansion', () => {
     const CAREER = [new Date('2010-01-01T00:00:00Z'), new Date('2040-01-01T00:00:00Z')] as const;
     const at = (uid: string, start: string, extra: string[] = []) =>

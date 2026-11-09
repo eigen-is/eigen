@@ -74,7 +74,9 @@ export async function getEventsInRange(
 
     for (const event of recurring) {
         const replaced = replacedByParent.get(event.id);
-        const start = event.startTime > from ? event.startTime : from;
+        // An occurrence that began before the window and still runs is in it, as a single event is.
+        const opened = from.getTime() - (event.endTime.getTime() - event.startTime.getTime());
+        const start = new Date(Math.max(event.startTime.getTime(), opened));
         const end = new Date(Math.min(to.getTime(), start.getTime() + MAX_EXPANSION_MS));
         for (const occurrence of expandRecurrence(event, start, end)) {
             if (!replaced?.has(occurrence.occurrenceDate)) results.push(occurrence);
