@@ -43,8 +43,8 @@ function routes(shellDescription: string): PrerenderRoute[] {
     const support = manifest('support').articles;
     const list: PrerenderRoute[] = [
         {
-            // Landing page. Its first render is deterministic — appIndex starts at 0 and
-            // waitlistEnabled is false until the public config resolves — so it hydrates
+            // Landing page. Its first render is deterministic — the headline starts as "workspace" and
+            // the config-driven buttons and install line wait for the public config — so it hydrates
             // cleanly in place (AuthProvider renders children on the first client render
             // for this ungated app rather than a null loading fallback).
             path: '/',
