@@ -2,6 +2,7 @@
 // column, and the write that spreads each cell's parts over the columns to its right. The parts replace what those
 // cells held, a formula included, and the formulas that read them recompute.
 
+import { escapeRegExp } from 'es-toolkit';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import { getCellValue, setCellValue } from './cell';
@@ -25,9 +26,9 @@ export function getRegStr(selected: ReadonlySet<string>, otherValue: string) {
     if (selected.has('semicolon')) separators.push(';');
     if (selected.has('comma')) separators.push(',');
     if (selected.has('space')) separators.push('\\s');
-    if (selected.has('other') && otherValue !== '') separators.push(otherValue);
+    if (selected.has('other') && otherValue !== '') separators.push(escapeRegExp(otherValue));
     const regStr = separators.join('|');
-    return selected.has('splitsimple') ? `[${regStr}]+` : regStr;
+    return selected.has('splitsimple') && regStr !== '' ? `(?:${regStr})+` : regStr;
 }
 
 // One row of pieces per selected cell, the short rows padded to the widest. With no pattern, each cell is one piece.
