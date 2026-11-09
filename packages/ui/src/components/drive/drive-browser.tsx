@@ -152,9 +152,6 @@ export function DriveBrowser({
         (item: DrivePath) => {
             if (isFolderType(item.type)) {
                 navigateToFolder(item);
-                if (mode === 'folder') {
-                    onSelect?.(item);
-                }
             } else if (mode === 'file' && isPickable(item)) {
                 // With onConfirm and selectedId both set, a click on the row that is already selected confirms
                 // it, so the user need not go to the Select button.
@@ -176,7 +173,6 @@ export function DriveBrowser({
             folderName,
         });
         navigateToFolder(newFolder);
-        if (mode === 'folder') onSelect?.(newFolder);
     };
 
     const isItemDisabled = useCallback(

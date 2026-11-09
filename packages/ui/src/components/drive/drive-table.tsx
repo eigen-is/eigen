@@ -72,7 +72,6 @@ export type DriveTableProps = DriveViewProps & {
     hideActions?: boolean;
     date?: DriveListDate;
     ancestorBreadcrumb?: DrivePath[];
-    externalSelectedIds?: ReadonlySet<string>;
     sort?: DriveSortControl;
 };
 
@@ -119,7 +118,6 @@ export function DriveTable({
     hideActions = false,
     date,
     selection,
-    externalSelectedIds,
     onSelectionChange,
     ownActions,
     sort,
@@ -248,9 +246,7 @@ export function DriveTable({
                                 longPressBind={longPress.bind}
                                 isActive={activeItemId === item.id}
                                 isCursor={controller.selectedIndex === vi.index}
-                                isSelected={
-                                    controller.selection.isSelected(item.id) || !!externalSelectedIds?.has(item.id)
-                                }
+                                isSelected={controller.selection.isSelected(item.id)}
                                 disabled={isItemDisabled?.(item) ?? false}
                                 getItemHref={getItemHref}
                                 onItemClick={onItemClick}
