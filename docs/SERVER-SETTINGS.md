@@ -70,7 +70,7 @@ Each `notifications.email` flag turns one email on or off. The in-app notificati
 | `userOnCalendarInvite` | on | An Eigen user is invited to an event | An invitation is time-sensitive, and Google and Outlook mail it too |
 | `ownerOnAccessRequest` | on | Someone asks for access to a path: the user who owns it, or each member of the team that owns it while the team's `notifyMembers` is on | A mail reaches an owner who doesn't have Eigen open |
 
-The ACL flags are read inline in `propagateSharedPathChange` (`apps/api/src/lib/drive/acl-propagation.ts`), the access-request flag in `access-request-propagation.ts`, the invite flag in `invite-propagation.ts` and the assignment flags in `Drive.notifyAssignee` (`apps/api/src/lib/drive/drive.ts`). See [ACL.md](ACL.md).
+The ACL flags are read inline in `propagateSharedPathChange` (`apps/api/src/lib/drive/acl-propagation.ts`), the access-request flag in `access-request-propagation.ts`, the invite flag in `invite-propagation.ts` and the assignment flags in `propagateAssignment` (`assignment-propagation.ts`). See [ACL.md](ACL.md).
 
 ## Settings are the owner's, the pages admins need are theirs too
 

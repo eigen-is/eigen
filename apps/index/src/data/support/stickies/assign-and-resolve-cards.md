@@ -26,7 +26,7 @@ An open card has the same control in the row under the description, on the right
 
 If you assign a card to someone else, they get a notification. A guest also gets an email that names the card and links to it, because a guest rarely has Eigen open. Someone the board is shared with who has no account yet gets only the email. These are the defaults, and the server owner can change them in [Server settings](/support/admin/server-settings).
 
-A person gets at most one email an hour for each board. Any other cards you assign them in that hour show up in the bell, not in their inbox.
+A person gets at most one email an hour for each board. Any other cards you assign them in that hour reach them only in Eigen: in the bell, and as the colored ring on their avatar on the card. Someone with no account yet sees those cards only once they sign in.
 
 To take the assignee off again, choose **Unassigned**.
 
