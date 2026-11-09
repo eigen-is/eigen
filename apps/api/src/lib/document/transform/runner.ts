@@ -28,12 +28,11 @@ export const TRANSFORM_LIMITS: Record<
     Pick<RunOptions, 'deadlineMs' | 'admissionCostMs'>
 > = {
     preview: { deadlineMs: 30_000, admissionCostMs: 15_000 },
-    // Heavy but user-requested work (exports, imports and conversions); the PDF
-    // subprocess keeps its own deadline.
+    // Heavy but user-requested work (exports, imports and conversions); the PDF subprocess keeps its own deadline.
     export: { deadlineMs: 120_000, admissionCostMs: 30_000 },
     import: { deadlineMs: 120_000, admissionCostMs: 30_000 },
-    // Search reindexing: nobody waits on it, but a stuck job must not hold the single
-    // active child away from user-facing work. It reuses the preview cost.
+    // Search reindexing: nobody waits on it, but a stuck job must not hold the single active child away from
+    // user-facing work. It reuses the preview cost.
     'extract-text': { deadlineMs: 30_000, admissionCostMs: 15_000 },
     // A workbook's log folded at its close: a decode, a replay and an encode, less than an export does. It runs in the
     // background and holds the one child, so it gets a preview's cost and room for a large workbook.
@@ -51,8 +50,9 @@ const MAX_PREDICTED_WAIT_MS = 120_000;
 const CLOSE_GRACE_MS = 5_000;
 // A killed child stuck in the kernel can't exit, and must not hold the shutdown.
 const KILL_WAIT_MS = 1_000;
-// The client shows it word for word, so it stays readable for a person.
+// The client shows these word for word, so they stay readable for a person.
 export const BUSY_MESSAGE = 'The server is busy, please try again in a moment';
+export const TOO_LARGE_TO_EXPORT = 'Export failed: the document is too big, or it used too much memory';
 
 // Linux alone takes these limits, as macOS refuses setrlimit for the data segment. $1 is the data segment in KiB, $2
 // the CPU seconds, and the rest is the command.
@@ -196,8 +196,7 @@ export class DocumentTransformRunner {
         throw new ApiError(503, BUSY_MESSAGE);
     }
 
-    // Throws ApiError(503) synchronously when the job cannot be admitted; the
-    // returned promise always resolves with a DocumentTransformResponse.
+    // Throws ApiError(503) synchronously when the job cannot be admitted; the returned promise always resolves.
     public run(request: DocumentTransformRequest, opts: RunOptions): Promise<DocumentTransformResponse> {
         this.assertAdmissible(opts.priority);
 

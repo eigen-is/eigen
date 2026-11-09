@@ -33,7 +33,7 @@ import type {
     TransformWarning,
 } from './protocol';
 import type { RunOptions, TransformPriority } from './runner';
-import { documentTransformRunner, TRANSFORM_LIMITS } from './runner';
+import { documentTransformRunner, TOO_LARGE_TO_EXPORT, TRANSFORM_LIMITS } from './runner';
 
 // What a caller still decides, since the limits belong to the job kind and the capture is timed here. `prepMs` is the
 // time the caller spent preparing media on the main thread, which the job's log line shows.
@@ -42,7 +42,6 @@ type TransformOptions = Omit<RunOptions, 'priority' | 'deadlineMs' | 'admissionC
 };
 
 const TOO_LARGE_TO_INDEX = 'Document too large to index';
-export const TOO_LARGE_TO_EXPORT = 'Export failed: the document is too big, or it used too much memory';
 
 // The failures the same input repeats: a job past its memory or its deadline. A crash may be the install, not the input.
 function repeatsForSameInput(code: TransformError['code']): boolean {
