@@ -1,14 +1,18 @@
 // Sorting a range of the sheet by one of its columns, ascending or descending: the selected range from a menu such
 // as the Data menu, or the range a dialog such as Custom sort names. A header row, when the caller says the range has
-// one, stays in place. Formulas in the sorted rows are shifted to the rows they land on and evaluated again.
+// one, stays in place. As in Excel, a cell moves with its formats and its link, while borders and the ranges of rules
+// stay where they are, and a formula is shifted to the row it lands on and evaluated again.
 
+import { isEqual } from 'es-toolkit/compat';
 import numeral from 'numeral';
 import { createArrayResolver } from '../../engine/cell-resolver';
 import { cellValue } from '../../engine/format';
-import type { Cell, CellMatrix } from '../../engine/types';
+import type { Cell } from '../../engine/types';
 import type { Context, Selection } from '..';
 import { diff, getFlowdata, isdatetime, isRealNull, isRealNum } from '..';
-import { computeFormula, functionCopy, numberDisplay } from '.';
+import { getSheet } from '../api/common';
+import { landedCell } from './carry';
+import { snapshotContext } from './formula-cache';
 import { jfrefreshgrid } from './refresh';
 
 // The menus' Ascending and Descending: the one selected range, by its first column.
@@ -19,7 +23,7 @@ export function sortSelection(ctx: Context, isAsc: boolean) {
 
 export function sortRange(ctx: Context, range: Selection, isAsc: boolean, columnOffset = 0, hasHeaderRow = false) {
     if (ctx.allowEdit === false) return;
-    const d = getFlowdata(ctx);
+    const d = getFlowdata(snapshotContext(ctx));
     if (d == null) return;
 
     const {
@@ -42,45 +46,54 @@ export function sortRange(ctx: Context, range: Selection, isAsc: boolean, column
     // A merged cell can't move with its row, so a range that holds one stays as it is.
     if (data.some((row) => row.some((cell) => cell?.mc != null))) return;
 
-    sortDataRange(ctx, d, data, columnOffset, isAsc, startRow, endRow, startColumn, endColumn);
+    sortDataRange(ctx, { row: [startRow, endRow], column: [startColumn, endColumn] }, columnOffset, isAsc);
 }
 
 export function sortDataRange(
     ctx: Context,
-    sheetData: CellMatrix,
-    dataRange: CellMatrix,
+    { row, column }: Pick<Selection, 'row' | 'column'>,
     index: number,
     isAsc: boolean,
-    startRow: number,
-    endRow: number,
-    startColumn: number,
-    endColumn: number,
 ) {
-    const { sortedData, rowOffsets } = sortRows(isAsc, index, dataRange);
+    // Cells are read from a plain view, because a read through an immer draft makes a child draft of each cell.
+    const snapshot = snapshotContext(ctx);
+    const plain = getSheet(snapshot);
+    const sheet = getSheet(ctx);
+    const { data } = sheet;
+    if (!plain.data || !data) return;
+    const [startRow, endRow] = row;
+    const [startColumn, endColumn] = column;
+    const rows = plain.data.slice(startRow, endRow + 1).map((cells) => cells.slice());
+    const links = { ...plain.hyperlink };
 
-    // One live resolver serves every formula in the sort, so no formula takes its own snapshot of the workbook.
-    const resolver = createArrayResolver(ctx.sheets);
-    for (let r = startRow; r <= endRow; r += 1) {
+    const order = sortedOrder(
+        isAsc,
+        index,
+        rows.map((cells) => cells.slice(startColumn, endColumn + 1)),
+    );
+    if (order.every((from, to) => from === to)) return;
+
+    // A formula reading a moved cell is recomputed below, so it may land with the value of the rows as they were.
+    const resolver = createArrayResolver(snapshot.sheets);
+    for (const [to, from] of order.entries()) {
+        if (to === from) continue;
+        const r = startRow + to;
+        const sr = startRow + from;
         for (let c = startColumn; c <= endColumn; c += 1) {
-            const cell = sortedData[r - startRow][c - startColumn];
-            if (cell?.f) {
-                const moveOffset = rowOffsets[r - startRow];
-                let func = cell.f;
-                if (moveOffset !== 0) {
-                    func = `=${functionCopy(func, moveOffset, 0)}`;
-                }
-                [cell.v, cell.f] = computeFormula(ctx, func, { resolver });
-                cell.m = numberDisplay(cell.v, cell.ct?.fa);
-            }
-            sheetData[r][c] = cell;
+            const cell = landedCell(ctx, rows[from][c], to - from, 0, resolver);
+            if (!isEqual(cell, rows[to][c])) data[r][c] = cell;
+            const key = `${r}_${c}`;
+            const link = links[`${sr}_${c}`];
+            if (link) (sheet.hyperlink ??= {})[key] = link;
+            else if (links[key]) delete sheet.hyperlink?.[key];
         }
     }
 
-    jfrefreshgrid(ctx, [{ row: [startRow, endRow], column: [startColumn, endColumn] }]);
+    jfrefreshgrid(ctx, [{ row, column }]);
 }
 
-// The rows in their sorted order by the column at `index`, empty cells last, and how far each one moved.
-export function sortRows(isAsc: boolean, index: number, data: readonly (Cell | null)[][]) {
+// The old place of each row in its sorted order by the column at `index`, empty cells last.
+export function sortedOrder(isAsc: boolean, index: number, data: readonly (Cell | null)[][]) {
     const ascending = (x: (Cell | null)[], y: (Cell | null)[]) => {
         const x1 = cellValue(x[index]);
         const y1 = cellValue(y[index]);
@@ -113,7 +126,5 @@ export function sortRows(isAsc: boolean, index: number, data: readonly (Cell | n
     };
     const descending = (x: (Cell | null)[], y: (Cell | null)[]) => ascending(y, x);
     const compare = isAsc ? ascending : descending;
-    // The old place of each row in its new order, so a formula knows how far its row moved.
-    const order = data.map((_, i) => i).sort((a, b) => compare(data[a], data[b]));
-    return { sortedData: order.map((i) => data[i]), rowOffsets: order.map((from, to) => to - from) };
+    return data.map((_, i) => i).sort((a, b) => compare(data[a], data[b]));
 }

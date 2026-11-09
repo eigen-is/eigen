@@ -5,22 +5,21 @@
 
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import { bundledFontOfStack, readCssFontSize } from '@workspace/lib/constants/fonts';
-import type { CellBorderSides, ConditionalFormatRule } from '@workspace/lib/sheets';
+import type { CellBorderSides } from '@workspace/lib/sheets';
 import { BORDER_SIDE_CSS, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
-import { cloneDeep, includes, isEmpty, isNil, times, trim } from 'es-toolkit/compat';
+import { includes, isEmpty, isNil, times, trim } from 'es-toolkit/compat';
 import { createArrayResolver } from '../../engine/cell-resolver';
-import { cfSplitRange, withCfRanges } from '../../engine/conditional-format';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { numberDisplay, parseCellInput } from '../../engine/format';
-import { functionCopy } from '../../engine/formula-shift';
 import type { Cell, CellMatrix } from '../../engine/types';
 import { setRowHeight } from '../api';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
 import { carrySides } from '../modules/border';
-import type { CarryTile } from '../modules/cell';
-import { carriedLines, carryCells, getQKBorder, landedRanges, moveCells, setCellValue } from '../modules/cell';
+import type { CarryTile } from '../modules/carry';
+import { carriedLines, carryCells, landedCell, moveCells } from '../modules/carry';
+import { getQKBorder, setCellValue } from '../modules/cell';
 import { computeFormula } from '../modules/formula-exec';
 import { cellsIn, jfrefreshgrid, recomputeCells } from '../modules/refresh';
 import { hasPartMC, PART_MERGE_REFUSAL } from '../modules/validation';
@@ -100,44 +99,13 @@ function pasteCut(ctx: Context, copyState: NonNullable<Context['copyState']>) {
     const left = last.column_focus;
     const right = left + width - 1;
 
-    const sheet = getSheet(ctx);
     const d = roomFor(ctx, top, bottom, left, right);
     if (!d) return;
 
     moveCells(ctx, lines, sourceRange, { row: top, column: left, height, width });
 
-    last.row = [top, bottom];
-    last.column = [left, right];
-
     const targetRange = { row: [top, bottom], column: [left, right] };
-    if (ctx.currentSheetId !== copySheetId) {
-        // A rule over cut cells splits: the part over them moves to the target, the rest stays.
-        const sourceRules = cloneDeep(copySheet.conditionalFormatRules) ?? [];
-        const movedRules: ConditionalFormatRule[] = [];
-        for (let i = 0; i < sourceRules.length; i += 1) {
-            const rule = sourceRules[i];
-            const moved = rule.cellrange.flatMap((range) =>
-                cfSplitRange(range, sourceRange, targetRange, 'operatePart'),
-            );
-            if (moved.length > 0) movedRules.push(cloneDeep(withCfRanges(rule, moved)));
-            const rest = rule.cellrange.flatMap((range) => cfSplitRange(range, sourceRange, targetRange, 'restPart'));
-            sourceRules[i] = withCfRanges(rule, rest);
-        }
-        if (movedRules.length > 0) {
-            // A rule whose every cell was cut away has moved to the target.
-            copySheet.conditionalFormatRules = sourceRules.filter((rule) => rule.cellrange.length > 0);
-            sheet.conditionalFormatRules = [...(cloneDeep(sheet.conditionalFormatRules) ?? []), ...movedRules];
-        }
-    } else if (sheet.conditionalFormatRules) {
-        sheet.conditionalFormatRules = sheet.conditionalFormatRules.map((rule) =>
-            withCfRanges(
-                cloneDeep(rule),
-                rule.cellrange.flatMap((range) => cfSplitRange(range, sourceRange, targetRange, 'allPart')),
-            ),
-        );
-    }
-
-    ctx.selections = [{ row: targetRange.row, column: targetRange.column }];
+    ctx.selections = [targetRange];
     recomputeCells(ctx, [...cellsIn(sourceRange, copySheetId), ...cellsIn(targetRange, ctx.currentSheetId)]);
     // A cut moves its cells once. The clipboard still holds them, and a next paste lands them as a table.
     ctx.copyState = undefined;
@@ -158,15 +126,15 @@ function pasteCopy(ctx: Context, copyState: NonNullable<Context['copyState']>) {
     const last = ctx.selections?.[ctx.selections.length - 1];
     if (!last) return;
     const minh = last.row[0];
-    let maxh = last.row[1]; // first and last row of apply range
+    let maxh = last.row[1];
     const minc = last.column[0];
-    let maxc = last.column[1]; // first and last column of apply range
+    let maxc = last.column[1];
 
     const mh = (maxh - minh + 1) % copyh;
     const mc = (maxc - minc + 1) % copyc;
 
     if (mh !== 0 || mc !== 0) {
-        // if the apply range is not an integer multiple of the copy data dimensions, use the copy data dimensions
+        // A target that is not a whole multiple of the copy takes the copy's size.
         maxh = minh + copyh - 1;
         maxc = minc + copyc - 1;
     }
@@ -174,7 +142,6 @@ function pasteCopy(ctx: Context, copyState: NonNullable<Context['copyState']>) {
     const d = roomFor(ctx, minh, maxh, minc, maxc);
     if (!d) return;
 
-    const file = getSheet(ctx);
     const timesH = (maxh - minh + 1) / copyh;
     const timesC = (maxc - minc + 1) / copyc;
 
@@ -187,27 +154,11 @@ function pasteCopy(ctx: Context, copyState: NonNullable<Context['copyState']>) {
 
     // A copy of several ranges pastes the values of its formulas, not the formulas.
     const several = copyState.copyRange.length > 1;
-    carryCells(ctx, lines, tiles, ({ source: cell, r, c, sr, sc }) => {
-        if (cell?.f == null) return cell;
-        if (several) {
-            delete cell.f;
-            return cell;
-        }
-        const func = r === sr && c === sc ? cell.f : `=${functionCopy(cell.f, r - sr, c - sc)}`;
-        [cell.v, cell.f] = computeFormula(ctx, func, { resolver });
-        cell.m = numberDisplay(cell.v, cell.ct?.fa);
-        return cell;
+    carryCells(ctx, lines, tiles, ({ source, r, c, sr, sc }) => {
+        if (source?.f == null || !several) return landedCell(ctx, source, r - sr, c - sc, resolver);
+        const { f: _, ...value } = source;
+        return value;
     });
-
-    // A rule over copied cells also covers where they landed.
-    const pastedRules: ConditionalFormatRule[] = [];
-    for (const rule of getSheet(ctx, { id: copySheetId }).conditionalFormatRules ?? []) {
-        const cellrange = tiles.flatMap((tile) => rule.cellrange.flatMap((range) => landedRanges(range, lines, tile)));
-        if (cellrange.length > 0) pastedRules.push(withCfRanges(cloneDeep(rule), cellrange));
-    }
-    if (pastedRules.length > 0) {
-        file.conditionalFormatRules = [...(cloneDeep(file.conditionalFormatRules) ?? []), ...pastedRules];
-    }
 
     last.row = [minh, maxh];
     last.column = [minc, maxc];
@@ -224,9 +175,7 @@ function pasteTable(ctx: Context, html: string) {
     const parsed = new DOMParser().parseFromString(html, 'text/html');
 
     const trList = parsed.querySelectorAll('table tr');
-    if (trList.length === 0) {
-        return;
-    }
+    if (trList.length === 0) return;
 
     let colLen = 0;
     for (const td of trList[0].querySelectorAll('td')) colLen += td.colSpan;
@@ -263,10 +212,7 @@ function pasteTable(ctx: Context, html: string) {
             const styles = styleRules.get(`.${td.className}`) ?? {};
             if (!isNil(styles.border)) td.style.border = styles.border;
             let bg: string | undefined = td.style.backgroundColor || styles.background;
-            if (bg === 'rgba(0, 0, 0, 0)' || isEmpty(bg)) {
-                bg = undefined;
-            }
-
+            if (bg === 'rgba(0, 0, 0, 0)' || isEmpty(bg)) bg = undefined;
             cell.bg = bg;
 
             const fontWeight = td.style.fontWeight;

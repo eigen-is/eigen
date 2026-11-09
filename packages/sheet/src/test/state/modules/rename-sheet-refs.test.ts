@@ -471,10 +471,15 @@ describe('a rename after a fill down from a linked cell', () => {
         return { t, base, log: [link, fill] };
     }
 
-    test('the fill ships no link for a cell that holds none', () => {
+    test('the fill ships the link of the cell it fills, with its value', () => {
         const { t, log } = linkedAndFilled();
         expect(t.ctx.sheets[0].data?.[1][0]?.hl).toBeDefined();
-        expect(log[1].filter(({ path }) => path[0] === 'hyperlink')).toEqual([]);
+        const links = log[1].filter(({ path }) => path[0] === 'hyperlink');
+        expect(links.length).toBeGreaterThan(0);
+        for (const { path, value } of links) {
+            expect(path).toEqual(['hyperlink', '1_0']);
+            expect(value).toEqual({ linkType: 'webpage', linkAddress: 'https://example.com' });
+        }
     });
 
     test('the peer and the joiner take the rename', () => {
@@ -485,7 +490,7 @@ describe('a rename after a fill down from a linked cell', () => {
         tabReceive(peer, rename);
         for (const sheets of [t.ctx.sheets, peer.ctx.sheets, join(base, [...log, rename])]) {
             expect(sheets[0].name).toBe('Renamed');
-            expect(Object.keys(sheets[0].hyperlink ?? {})).toEqual(['0_0']);
+            expect(Object.keys(sheets[0].hyperlink ?? {})).toEqual(['0_0', '1_0']);
         }
     });
 
@@ -503,7 +508,8 @@ describe('a rename after a fill down from a linked cell', () => {
         const rename = renameFirst(t, 'Renamed');
         const joined = join(base, [...log, forged, rename]);
         expect(joined[0].name).toBe('Renamed');
-        expect(joined[0].hyperlink).toEqual({ '0_0': { linkType: 'webpage', linkAddress: 'https://example.com' } });
+        const link = { linkType: 'webpage', linkAddress: 'https://example.com' };
+        expect(joined[0].hyperlink).toEqual({ '0_0': link, '1_0': link });
         expect(t.ctx.sheets[0].hyperlink).toEqual(joined[0].hyperlink);
     });
 });

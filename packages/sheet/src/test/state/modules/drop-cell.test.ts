@@ -248,7 +248,7 @@ describe('drag-fill carries the source cell data validation', () => {
         expect(filled.sheets[0].dataValidations?.v.ranges).toEqual([{ row: [0, rows - 1], column: [0, 0] }]);
     });
 
-    it('a filled cell takes the rule of the cell it repeats, and one whose source has none keeps its own', () => {
+    it('a filled cell takes the rule of the cell it repeats, and one whose source has none loses its own', () => {
         const other: DataValidationRule = { ...rule, value1: 'a,b' };
         const ctx = makeCtx(() => {}, { row: [0, 1], column: [0, 1] });
         ctx.sheets[0].dataValidations = {
@@ -260,13 +260,14 @@ describe('drag-fill carries the source cell data validation', () => {
         });
         const rules = filled.sheets[0].dataValidations;
         for (let r = 2; r <= 5; r += 1) {
-            for (let c = 0; c <= 1; c += 1) expect(validationAt(rules, r, c)).toEqual(r % 2 === 0 ? rule : other);
+            for (let c = 0; c <= 1; c += 1) expect(validationAt(rules, r, c)).toEqual(r % 2 === 0 ? rule : undefined);
         }
         expect(rules?.v.ranges).toEqual([
             { row: [0, 0], column: [0, 1] },
             { row: [2, 2], column: [0, 1] },
             { row: [4, 4], column: [0, 1] },
         ]);
+        expect(rules?.own).toBeUndefined();
     });
 });
 
@@ -600,10 +601,27 @@ describe('a fill counts on from what its source holds', () => {
         });
     }
 
+    it('counts one text ending in a number, down and up, and keeps its width', () => {
+        expect(shown(filled([text('Item 1')], 3, 'down'))).toEqual(['Item 2', 'Item 3', 'Item 4']);
+        expect(shown(filled([text('Item 5')], 2, 'up'))).toEqual(['Item 4', 'Item 3']);
+        expect(shown(filled([text('Item 5')], 2, 'left'))).toEqual(['Item 4', 'Item 3']);
+        expect(shown(filled([text('Item 007')], 1, 'right'))).toEqual(['Item 008']);
+    });
+
+    it('fill down copies one text ending in a number', () => {
+        const range: SingleRange = { row: [0, 1], column: [0, 0] };
+        const ctx = makeCtx((d) => {
+            d[0][0] = text('Item 1');
+        }, range);
+        fillFromEdge(ctx, range, 'down');
+        expect(ctx.sheets[0].data?.[1][0]?.m).toBe('Item 1');
+    });
+
     const copies: { name: string; source: (Cell | null)[] }[] = [
         { name: 'one number', source: [number(7)] },
         { name: 'one date', source: [date('2024-01-15')] },
-        { name: 'one text with a number', source: [text('Item 1')] },
+        { name: 'one text with a number inside it', source: [text('Item 1 of 3 left')] },
+        { name: 'one number with no type', source: [{ v: 5, m: '5' }] },
         { name: 'dates at uneven days', source: [date('2024-01-01'), date('2024-01-02'), date('2024-01-05')] },
         { name: 'dates at uneven months', source: [date('2024-01-01'), date('2024-02-01'), date('2024-04-01')] },
         { name: 'one date twice', source: [date('2024-01-15'), date('2024-01-15')] },

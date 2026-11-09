@@ -1,4 +1,4 @@
-// Sorting has two layers: the pure `sortRows` comparator (numeric, 'en' text,
+// Sorting has two layers: the pure `sortedOrder` comparator (numeric, 'en' text,
 // nulls last) and `sortRange`, which picks the rows then delegates. These
 // pin which rows the sort covers: a leading CJK cell sorts like any other value
 // with no header-guessing, a header row stays only when the caller says so, and
@@ -7,43 +7,40 @@
 import { describe, expect, test } from 'bun:test';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
-import { sortRange, sortRows, sortSelection } from '../../../state/modules/sort';
+import { sortedOrder, sortRange, sortSelection } from '../../../state/modules/sort';
 import { contextFactory, selectionFactory } from '../factories/context';
 
 const cell = (v: Cell['v']): Cell => ({ v, m: String(v) });
+const sorted = (isAsc: boolean, rows: (Cell | null)[][]) => sortedOrder(isAsc, 0, rows).map((i) => rows[i]);
 
-describe('sortRows', () => {
+describe('sortedOrder', () => {
     test('numeric ascending keeps nulls last', () => {
         const rows = [[cell(3)], [cell(1)], [null], [cell(2)]];
-        const { sortedData } = sortRows(true, 0, rows);
-        expect(sortedData.map((r) => r[0]?.v ?? null)).toEqual([1, 2, 3, null]);
+        expect(sorted(true, rows).map((r) => r[0]?.v ?? null)).toEqual([1, 2, 3, null]);
     });
 
     test('numeric descending keeps nulls last', () => {
         const rows = [[cell(3)], [cell(1)], [null], [cell(2)]];
-        const { sortedData } = sortRows(false, 0, rows);
-        expect(sortedData.map((r) => r[0]?.v ?? null)).toEqual([3, 2, 1, null]);
+        expect(sorted(false, rows).map((r) => r[0]?.v ?? null)).toEqual([3, 2, 1, null]);
     });
 
     test("text compares with the 'en' locale", () => {
         const rows = [[cell('banana')], [cell('apple')], [cell('cherry')]];
-        const { sortedData } = sortRows(true, 0, rows);
-        expect(sortedData.map((r) => r[0]?.v)).toEqual(['apple', 'banana', 'cherry']);
+        expect(sorted(true, rows).map((r) => r[0]?.v)).toEqual(['apple', 'banana', 'cherry']);
     });
 
-    test('says how far each row moved, and sorts a large range in linear time per row', () => {
+    test("says each row's old place, and sorts a large range in linear time per row", () => {
         const rows = [[cell(30)], [cell(10)], [cell(20)]];
-        expect(sortRows(true, 0, rows).rowOffsets).toEqual([-1, -1, 2]);
+        expect(sortedOrder(true, 0, rows)).toEqual([1, 2, 0]);
 
         // Reversed, so every row moves. Finding each row's old place by a search made this quadratic, seconds long.
         const count = 50_000;
         const large = Array.from({ length: count }, (_, i) => [cell(count - i)]);
         const started = performance.now();
-        const { sortedData, rowOffsets } = sortRows(true, 0, large);
+        const order = sortedOrder(true, 0, large);
         expect(performance.now() - started).toBeLessThan(1000);
-        expect(sortedData[0]?.[0]?.v).toBe(1);
-        expect(rowOffsets[0]).toBe(-(count - 1));
-        expect(rowOffsets[count - 1]).toBe(count - 1);
+        expect(order[0]).toBe(count - 1);
+        expect(order[count - 1]).toBe(0);
     });
 });
 

@@ -14,7 +14,7 @@ import { Window } from 'happy-dom';
 import type { Context } from '../../state/context';
 import { handleCopy, handleCut } from '../../state/events/copy';
 import { handlePaste } from '../../state/events/paste';
-import { carriedLines, carryCells } from '../../state/modules/cell';
+import { carriedLines, carryCells } from '../../state/modules/carry';
 import { consumePendingCopy } from '../../state/modules/clipboard';
 import { onCellsMoveEnd } from '../../state/modules/move-cells';
 import { pasteHandlerOfPaintModel, rangeValueToClipboard } from '../../state/modules/selection';

@@ -18,7 +18,7 @@ import {
     rangesOverlap,
 } from '@workspace/lib/sheets';
 import { escapeXml } from '@workspace/lib/xml';
-import { cfSplitRange, iscelldata, isWellFormedCfRule, rangeToA1, toA1, withCfRanges } from '@workspace/sheet/engine';
+import { iscelldata, isWellFormedCfRule, rangeToA1, rangeWithout, toA1, withCfRanges } from '@workspace/sheet/engine';
 import type { Lost } from '../../../document/transform/protocol';
 import {
     CF_CELL_IS_CONDITION,
@@ -328,9 +328,7 @@ function tileGrid(rows: number, columns: number) {
 function cutOut(range: SingleRange, above: readonly SingleRange[]): SingleRange[] {
     let pieces = [range];
     for (const higher of above) {
-        pieces = pieces.flatMap((piece) =>
-            rangesOverlap(higher, piece) ? cfSplitRange(piece, higher, higher, 'restPart') : [piece],
-        );
+        pieces = pieces.flatMap((piece) => (rangesOverlap(higher, piece) ? rangeWithout(piece, higher) : [piece]));
     }
     return pieces;
 }

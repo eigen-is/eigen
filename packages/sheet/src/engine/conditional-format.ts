@@ -12,10 +12,6 @@ import { matrixWidth } from './formula-utils';
 import type { CellMatrix, CellResolver, CompiledFormula, ConditionalFormatRule, SingleRange } from './types';
 import { isRealNull } from './validation';
 
-// CF rule shapes (`ConditionalFormatRule`, `DataBarRule`, etc.) are defined in
-// `@workspace/lib/sheets` since they live on `Sheet.conditionalFormatRules`
-// — see engine/types.ts for the re-export.
-
 export type DataBar =
     | { valueType: 'minus'; valueLen: number; format: string[]; minusLen: number }
     | { valueType: 'plus'; valueLen: number; format: string[]; plusLen: number; minusLen: number };
@@ -40,8 +36,8 @@ export type EvaluateConditionalFormatOptions = {
     evaluateFormula?: ConditionalFormatFormulaEvaluator;
 };
 
-// The evaluator both the canvas and the HTML export use. A rule runs at every cell of its range,
-// so each formula parses once and resolves its relative refs at the cell's offset from the anchor.
+// A rule runs at every cell of its ranges, so each formula parses once and resolves its relative refs at the cell's
+// offset from the anchor.
 export function createCfFormulaEvaluator(
     engine: FormulaEngine,
     resolver: CellResolver,
@@ -59,31 +55,28 @@ export function createCfFormulaEvaluator(
     };
 }
 
-// Returns the cell's display value at (r, c). Mirrors the "v" attribute path of
-// state-side getCellValue, simplified for the conditional-format evaluator.
 function cellValueAt(data: CellMatrix, r: number, c: number) {
     return cellValue(data[r]?.[c]) ?? null;
 }
 
-// Merge a partial cell style into the map, creating the entry if absent. The CF evaluator
-// applies overlapping rules in order, so later rules layer onto earlier entries instead of
-// overwriting them — matching canvas-painter behavior. Null/undefined fields are skipped:
-// a later rule that sets only a fill must not erase the text color an earlier rule
-// contributed (Excel resolves each style property independently by rule precedence, and
-// the xlsx importer relies on this by emitting rules in ascending-precedence order).
+// Excel resolves each style property by rule precedence, so a later rule that sets only a fill keeps the text color an
+// earlier rule gave the cell. The xlsx importer emits rules in ascending precedence for this.
 function applyCellStyle(map: ComputeMap, r: number, c: number, style: CellFormatStyle) {
     const key = `${r}_${c}`;
-    const entry = map[key] ?? (map[key] = {});
+    const entry = (map[key] ??= {});
     if (style.textColor != null) entry.textColor = style.textColor;
     if (style.cellColor != null) entry.cellColor = style.cellColor;
     if (style.dataBar != null) entry.dataBar = style.dataBar;
 }
 
-// Clamped to the matrix because an xlsx sqref runs to row 1048576 (Excel writes a whole-column
-// rule as A1:A1048576) and every visit costs a map entry; holes inside the matrix are still visited.
-function forEachCellInRanges(data: CellMatrix, ranges: SingleRange[], cb: (r: number, c: number) => void) {
-    const lastRow = data.length - 1;
-    const lastColumn = matrixWidth(data) - 1;
+type GridEnd = { lastRow: number; lastColumn: number };
+
+// Clamped to the matrix because Excel writes a whole-column rule as A1:A1048576, and every visit costs a map entry.
+function forEachCellInRanges(
+    { lastRow, lastColumn }: GridEnd,
+    ranges: SingleRange[],
+    cb: (r: number, c: number) => void,
+) {
     for (const range of ranges) {
         const rowEnd = Math.min(range.row[1], lastRow);
         const columnEnd = Math.min(range.column[1], lastColumn);
@@ -116,10 +109,7 @@ function getColorGradation(color1: string, color2: string, value1: number, value
     return `rgb(${r}, ${g}, ${b})`;
 }
 
-// Pure conditional-format evaluator. Returns a map keyed by `${r}_${c}` with the
-// computed text/cell colors and data bars per cell. The formula-rule branch is
-// gated on options.evaluateFormula — when not provided, formula-based rules are
-// skipped entirely (other rule types still evaluate).
+// Each cell's colors and data bar, keyed by `${r}_${c}`. Without options.evaluateFormula a formula rule is skipped.
 export function evaluateConditionalFormat(
     rules: ConditionalFormatRule[] | null | undefined,
     data: CellMatrix,
@@ -127,13 +117,15 @@ export function evaluateConditionalFormat(
 ): ComputeMap {
     const ruleArr = rules ?? [];
     const computeMap: ComputeMap = {};
+    // Once per evaluation: finding the width walks every row, and a rule can hold thousands of ranges.
+    const end = { lastRow: data.length - 1, lastColumn: matrixWidth(data) - 1 };
 
     for (const rule of ruleArr) {
         if (rule.type === 'dataBar') {
             const { cellrange, format } = rule;
             let max: number | null = null;
             let min: number | null = null;
-            forEachCellInRanges(data, cellrange, (r, c) => {
+            forEachCellInRanges(end, cellrange, (r, c) => {
                 const cell = data[r]?.[c];
                 if (isNil(cell) || isNil(cell.ct) || cell.ct.t !== 'n' || isNil(cell.v)) {
                     return;
@@ -148,14 +140,13 @@ export function evaluateConditionalFormat(
                 }
             });
             if (!isNil(max) && !isNil(min)) {
-                // Narrowed rebinds — the apply callbacks below close over them.
                 const maxNum = max;
                 const minNum = min;
                 if (minNum < 0) {
-                    const plusLen = Math.round((maxNum / (maxNum - minNum)) * 10) / 10; // proportion of positive numbers
-                    const minusLen = Math.round((Math.abs(minNum) / (maxNum - minNum)) * 10) / 10; // proportion of negative numbers
+                    const plusLen = Math.round((maxNum / (maxNum - minNum)) * 10) / 10;
+                    const minusLen = Math.round((Math.abs(minNum) / (maxNum - minNum)) * 10) / 10;
 
-                    forEachCellInRanges(data, cellrange, (r, c) => {
+                    forEachCellInRanges(end, cellrange, (r, c) => {
                         const cell = data[r]?.[c];
                         if (isNil(cell) || isNil(cell.ct) || cell.ct.t !== 'n' || isNil(cell.v)) {
                             return;
@@ -178,7 +169,7 @@ export function evaluateConditionalFormat(
                 } else {
                     const plusLen = 1;
 
-                    forEachCellInRanges(data, cellrange, (r, c) => {
+                    forEachCellInRanges(end, cellrange, (r, c) => {
                         const cell = data[r]?.[c];
                         if (isNil(cell) || isNil(cell.ct) || cell.ct.t !== 'n' || isNil(cell.v)) {
                             return;
@@ -197,7 +188,7 @@ export function evaluateConditionalFormat(
             let min: number | null = null;
             let sum = 0;
             let count = 0;
-            forEachCellInRanges(data, cellrange, (r, c) => {
+            forEachCellInRanges(end, cellrange, (r, c) => {
                 const cell = data[r]?.[c];
                 if (isNil(cell) || isNil(cell.ct) || cell.ct.t !== 'n' || isNil(cell.v)) {
                     return;
@@ -216,12 +207,8 @@ export function evaluateConditionalFormat(
                 }
             });
             if (!isNil(max) && !isNil(min) && (format.length === 2 || format.length === 3)) {
-                // Narrowed rebinds — stopFor and the apply callback close over them.
                 const maxNum = max;
                 const minNum = min;
-                // Per-cell color picker — interpolates between max/min (2-color) or
-                // max/avg/min (3-color) stops. Returns null for cells outside the
-                // bracketed range, mirroring the original branch behavior.
                 const avg = format.length === 3 ? Math.floor(sum / count) : 0;
                 const stopFor = (numVal: number): string | null => {
                     if (format.length === 3) {
@@ -238,7 +225,7 @@ export function evaluateConditionalFormat(
                     return null;
                 };
 
-                forEachCellInRanges(data, cellrange, (r, c) => {
+                forEachCellInRanges(end, cellrange, (r, c) => {
                     const cell = data[r]?.[c];
                     if (isNil(cell) || isNil(cell.ct) || cell.ct.t !== 'n' || isNil(cell.v)) {
                         return;
@@ -250,12 +237,11 @@ export function evaluateConditionalFormat(
                 });
             }
         } else {
-            // 'default' — comparison / aggregation / formula rules
             const { cellrange, format, conditionName, conditionValue } = rule;
             const conditionValue0 = conditionValue[0];
             const conditionValue1 = conditionValue[1];
             const { textColor, cellColor } = format;
-            // Per-range on purpose: duplicateValue's dmap and top10/average's dArr are scoped to a single range.
+            // duplicateValue, top10 and the averages look at one range at a time.
             for (const range of cellrange) {
                 if (
                     conditionName === 'greaterThan' ||
@@ -266,12 +252,10 @@ export function evaluateConditionalFormat(
                     conditionName === 'notEqual' ||
                     conditionName === 'textContains'
                 ) {
-                    // Coerce the threshold once — form input arrives as string. Ordering rules
-                    // (greater/less) only match numeric cells; equal/notEqual compare numerically
-                    // when both sides are numeric, else fall back to exact string comparison.
-                    // Matches Excel/Google, mirroring the `between` branch below.
+                    // A dialog's threshold is a string. As in Excel, greater and less match only numbers, and equal
+                    // compares numbers when both sides are numeric, else the exact text.
                     const threshold = Number(conditionValue0);
-                    forEachCellInRanges(data, [range], (r, c) => {
+                    forEachCellInRanges(end, [range], (r, c) => {
                         const v = cellValue(data[r]?.[c]);
                         if (isNil(v) || isRealNull(v)) {
                             return;
@@ -296,8 +280,6 @@ export function evaluateConditionalFormat(
                                     ? v !== threshold
                                     : v.toString() !== conditionValue0;
                         } else if (conditionName === 'textContains') {
-                            // Excel's "Text that contains" ignores case, and the xlsx importer
-                            // maps containsText onto this rule.
                             matches = v.toString().toLowerCase().indexOf(String(conditionValue0).toLowerCase()) !== -1;
                         }
                         if (matches) {
@@ -305,13 +287,11 @@ export function evaluateConditionalFormat(
                         }
                     });
                 } else if (conditionName === 'between' || conditionName === 'notBetween') {
-                    // Coerce to number — both variants only compare against numeric cell values
-                    // (`typeof cell.v === 'number'` guard below) and form input arrives as string.
                     const v0 = Number(conditionValue0);
                     const v1 = Number(conditionValue1);
                     const vBig = Math.max(v0, v1);
                     const vSmall = Math.min(v0, v1);
-                    forEachCellInRanges(data, [range], (r, c) => {
+                    forEachCellInRanges(end, [range], (r, c) => {
                         const cell = data[r]?.[c];
                         if (isNil(cell) || isNil(cell.v) || isRealNull(cell.v) || typeof cell.v !== 'number') {
                             return;
@@ -334,7 +314,7 @@ export function evaluateConditionalFormat(
                         dBig = parseCellInput(str[1].trim())[2].toString();
                         dSmall = parseCellInput(str[0].trim())[2].toString();
                     }
-                    forEachCellInRanges(data, [range], (r, c) => {
+                    forEachCellInRanges(end, [range], (r, c) => {
                         const cell = data[r]?.[c];
                         if (isNil(cell) || isNil(cell.ct) || cell.ct.t !== 'd') {
                             return;
@@ -346,10 +326,9 @@ export function evaluateConditionalFormat(
                     });
                 } else if (conditionName === 'duplicateValue') {
                     const dmap: Record<string, { r: number; c: number }[]> = {};
-                    forEachCellInRanges(data, [range], (r, c) => {
+                    forEachCellInRanges(end, [range], (r, c) => {
                         const value = cellValueAt(data, r, c);
-                        // Excel's Duplicate Values never highlights blanks, and these rules are
-                        // normally drawn over a whole column of mostly empty cells.
+                        // Excel never highlights blanks, and these rules usually span a mostly empty column.
                         if (isRealNull(value)) {
                             return;
                         }
@@ -383,7 +362,7 @@ export function evaluateConditionalFormat(
                     conditionName === 'belowAverage'
                 ) {
                     const dArr: number[] = [];
-                    forEachCellInRanges(data, [range], (r, c) => {
+                    forEachCellInRanges(end, [range], (r, c) => {
                         const cell = data[r]?.[c];
                         if (isNil(cell) || isNil(cell.ct) || cell.ct.t !== 'n') {
                             return;
@@ -398,7 +377,6 @@ export function evaluateConditionalFormat(
                     ) {
                         dArr.sort((a, b) => b - a);
 
-                        // form input arrives as string; coerce once for arithmetic / slice
                         const n = Number(conditionValue0);
                         let cArr: number[] = [];
                         if (conditionName === 'top10') {
@@ -410,9 +388,8 @@ export function evaluateConditionalFormat(
                         } else if (conditionName === 'last10_percent') {
                             cArr = dArr.slice(dArr.length - Math.floor((n * dArr.length) / 100), dArr.length);
                         }
-                        // Membership set — O(1) per-cell lookup instead of indexOf's O(n) scan.
                         const cSet = new Set(cArr);
-                        forEachCellInRanges(data, [range], (r, c) => {
+                        forEachCellInRanges(end, [range], (r, c) => {
                             if (isNil(data[r]?.[c])) {
                                 return;
                             }
@@ -426,7 +403,7 @@ export function evaluateConditionalFormat(
                         const averageNum = dArr.reduce((acc, n) => acc + n, 0) / dArr.length;
                         const matches = (n: number) =>
                             conditionName === 'aboveAverage' ? n > averageNum : n < averageNum;
-                        forEachCellInRanges(data, [range], (r, c) => {
+                        forEachCellInRanges(end, [range], (r, c) => {
                             if (isNil(data[r]?.[c])) {
                                 return;
                             }
@@ -437,13 +414,12 @@ export function evaluateConditionalFormat(
                     }
                 } else if (conditionName === 'formula' && options?.evaluateFormula) {
                     const { evaluateFormula } = options;
-                    // Excel's anchor: every range reads relative to the first range's top-left, even where the scan clamps it.
                     const anchorRow = cellrange[0].row[0];
                     const anchorCol = cellrange[0].column[0];
 
                     const formulaSrc = String(conditionValue0);
                     const formulaTxt = formulaSrc.startsWith('=') ? formulaSrc : `=${formulaSrc}`;
-                    forEachCellInRanges(data, [range], (r, c) => {
+                    forEachCellInRanges(end, [range], (r, c) => {
                         const raw = evaluateFormula(formulaTxt, anchorRow, anchorCol, r, c);
                         const v = typeof raw === 'boolean' ? raw : !!Number(raw);
                         if (v) {
@@ -488,8 +464,8 @@ function isSpan(ends: unknown): boolean {
     return Array.isArray(ends) && ends.length === 2 && ends.every(Number.isInteger) && ends[0] <= ends[1];
 }
 
-// A formula rule reads relative to its first range's top-left, so moving that corner re-expresses the formula and
-// every cell keeps its meaning. The shift is how far a row/column delete moved the new first range.
+// A formula rule reads relative to its first range's top-left, as in Excel, so moving that corner re-expresses the
+// formula and every cell keeps its meaning. The shift is how far a row or column delete moved the new first range.
 export function withCfRanges(
     rule: ConditionalFormatRule,
     cellrange: SingleRange[],
@@ -514,53 +490,20 @@ export function withCfRanges(
     };
 }
 
-// Which slice of the split cfSplitRange returns: the parts that stay put, the
-// part that moves with the operate range, or both.
-export type CfSplitRangeType = 'allPart' | 'restPart' | 'operatePart';
+// What is left of a range once an area is taken out of it: the strips above, left, right and below the overlap.
+export function rangeWithout(range: SingleRange, area: SingleRange): SingleRange[] {
+    const [r1, r2] = range.row;
+    const [c1, c2] = range.column;
+    const top = Math.max(r1, area.row[0]);
+    const bottom = Math.min(r2, area.row[1]);
+    const left = Math.max(c1, area.column[0]);
+    const right = Math.min(c2, area.column[1]);
+    if (top > bottom || left > right) return [range];
 
-export function cfSplitRange(
-    range1: SingleRange,
-    range2: SingleRange,
-    range3: SingleRange,
-    type: CfSplitRangeType,
-): SingleRange[] {
-    const offset_r = range3.row[0] - range2.row[0];
-    const offset_c = range3.column[0] - range2.column[0];
-
-    const r1 = range1.row[0];
-    const r2 = range1.row[1];
-    const c1 = range1.column[0];
-    const c2 = range1.column[1];
-
-    // Intersection of range1 (CF apply range) with range2 (operate/selection).
-    const ir1 = Math.max(r1, range2.row[0]);
-    const ir2 = Math.min(r2, range2.row[1]);
-    const ic1 = Math.max(c1, range2.column[0]);
-    const ic2 = Math.min(c2, range2.column[1]);
-
-    if (ir1 > ir2 || ic1 > ic2) {
-        // No overlap: range1 stays put in full, nothing operates.
-        if (type === 'operatePart') return [];
-        return [{ row: [r1, r2], column: [c1, c2] }];
-    }
-
-    // range1 minus the intersection, emitted as strips in a fixed order — top and
-    // bottom span the full width; left and right are clamped to the intersection's
-    // row band. Empty strips are skipped. (Reproduces the old 16-branch pyramid.)
-    const restPart: SingleRange[] = [];
-    if (ir1 > r1) restPart.push({ row: [r1, ir1 - 1], column: [c1, c2] }); // top
-    if (ic1 > c1) restPart.push({ row: [ir1, ir2], column: [c1, ic1 - 1] }); // left
-    if (ic2 < c2) restPart.push({ row: [ir1, ir2], column: [ic2 + 1, c2] }); // right
-    if (ir2 < r2) restPart.push({ row: [ir2 + 1, r2], column: [c1, c2] }); // bottom
-
-    if (type === 'restPart') return restPart;
-
-    // The intersection, shifted with the operate range to its destination.
-    const operate: SingleRange = {
-        row: [ir1 + offset_r, ir2 + offset_r],
-        column: [ic1 + offset_c, ic2 + offset_c],
-    };
-
-    if (type === 'operatePart') return [operate];
-    return [...restPart, operate];
+    const rest: SingleRange[] = [];
+    if (top > r1) rest.push({ row: [r1, top - 1], column: [c1, c2] });
+    if (left > c1) rest.push({ row: [top, bottom], column: [c1, left - 1] });
+    if (right < c2) rest.push({ row: [top, bottom], column: [right + 1, c2] });
+    if (bottom < r2) rest.push({ row: [bottom + 1, r2], column: [c1, c2] });
+    return rest;
 }
