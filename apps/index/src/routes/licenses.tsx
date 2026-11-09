@@ -1,6 +1,11 @@
+// The open-source licenses page: the packages Eigen is built on, the code it ports or forks and the fonts it bundles,
+// each with its license. The build writes the lists, and the prerender has them, so the page reads without scripts.
+
 import { createFileRoute } from '@tanstack/react-router';
-import { AppShell, Column, ColumnLayout } from '@workspace/ui';
+import { AppShell } from '@workspace/ui';
 import type { LicenseFont, LicensePackage, LicenseVendored } from '../../scripts/lib/content-types';
+import { ReadingLayout } from '../components/reading-layout';
+import { SitePage } from '../components/site-page';
 
 // Eager glob (not a static import) so a not-yet-generated file degrades to an empty list
 // in dev instead of breaking the module load. Regenerated on every prod build by
@@ -32,49 +37,45 @@ export const Route = createFileRoute('/licenses')({
 function LicensesPage() {
     return (
         <AppShell appName="licenses" rootRoute={Route}>
-            <ColumnLayout>
-                <Column id="licenses" width="flex">
-                    <div className="h-full overflow-y-auto">
-                        <div className="mx-auto w-full max-w-[80ch] px-6 py-10">
-                            <h1 className="text-2xl font-medium mb-2">Open-source licenses</h1>
-                            <p className="text-foreground leading-7 mb-8">
-                                eigen is built on the work of {packages.length} open-source packages. Thank you to
-                                everyone who maintains them.
-                            </p>
-                            <h2 className="text-lg font-medium mb-2">Ported and forked code</h2>
-                            <p className="text-foreground leading-7 mb-4">
-                                Some of eigen is adapted from other projects rather than installed as a package.
-                            </p>
-                            <ul className="divide-y divide-border mb-10">
-                                {vendored.map((project) => (
-                                    <li key={project.name} className="py-2 text-sm">
-                                        <div className="flex items-baseline gap-3">
-                                            <LicenseLine {...project} />
-                                        </div>
-                                        <p className="text-muted-foreground">{project.note}</p>
-                                    </li>
-                                ))}
-                            </ul>
-                            <h2 className="text-lg font-medium mb-2">Fonts</h2>
-                            <ul className="divide-y divide-border mb-10">
-                                {fonts.map((font) => (
-                                    <li key={font.name} className="flex items-baseline gap-3 py-2 text-sm">
-                                        <LicenseLine {...font} />
-                                    </li>
-                                ))}
-                            </ul>
-                            <h2 className="text-lg font-medium mb-2">Packages</h2>
-                            <ul className="divide-y divide-border">
-                                {packages.map((pkg) => (
-                                    <li key={pkg.name} className="flex items-baseline gap-3 py-2 text-sm">
-                                        <LicenseLine {...pkg} />
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                    </div>
-                </Column>
-            </ColumnLayout>
+            <SitePage>
+                <ReadingLayout>
+                    <h1 className="text-4xl font-medium tracking-tight">Open-source licenses</h1>
+                    <p className="mt-2 mb-8 leading-7">
+                        eigen is built on the work of {packages.length} open-source packages. Thank you to everyone who
+                        maintains them.
+                    </p>
+                    <h2 className="mb-2 text-lg font-medium">Ported and forked code</h2>
+                    <p className="mb-4 leading-7">
+                        Some of eigen is adapted from other projects rather than installed as a package.
+                    </p>
+                    <ul className="mb-10 divide-y divide-border">
+                        {vendored.map((project) => (
+                            <li key={project.name} className="py-2 text-sm">
+                                <div className="flex items-baseline gap-3">
+                                    <LicenseLine {...project} />
+                                </div>
+                                <p className="text-muted-foreground">{project.note}</p>
+                            </li>
+                        ))}
+                    </ul>
+                    <h2 className="mb-2 text-lg font-medium">Fonts</h2>
+                    <ul className="mb-10 divide-y divide-border">
+                        {fonts.map((font) => (
+                            <li key={font.name} className="flex items-baseline gap-3 py-2 text-sm">
+                                <LicenseLine {...font} />
+                            </li>
+                        ))}
+                    </ul>
+                    <h2 className="mb-2 text-lg font-medium">Packages</h2>
+                    <ul className="divide-y divide-border">
+                        {packages.map((pkg) => (
+                            <li key={pkg.name} className="flex items-baseline gap-3 py-2 text-sm">
+                                <LicenseLine {...pkg} />
+                            </li>
+                        ))}
+                    </ul>
+                </ReadingLayout>
+            </SitePage>
         </AppShell>
     );
 }
