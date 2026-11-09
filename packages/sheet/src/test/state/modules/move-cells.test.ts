@@ -3,6 +3,7 @@
 // where the source has none.
 
 import { describe, expect, test } from 'bun:test';
+import { produce } from 'immer';
 import type { Context } from '../../../state/context';
 import { onCellsMoveEnd } from '../../../state/modules/move-cells';
 import type { Cell, GlobalCache } from '../../../state/types';
@@ -37,8 +38,7 @@ function moveTopLeftToRowTwo(
     ctx.cellSelectMoveIndex = [0, 0];
     const { container, scrollEl } = gridElements();
     const event = { clientX: 50, clientY: 70 } as MouseEvent;
-    onCellsMoveEnd(ctx, {} as GlobalCache, event, scrollEl, container);
-    return ctx;
+    return produce(ctx, (draft: Context) => onCellsMoveEnd(draft, {} as GlobalCache, event, scrollEl, container));
 }
 
 describe('onCellsMoveEnd carries borders', () => {

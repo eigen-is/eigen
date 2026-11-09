@@ -3,6 +3,7 @@
 // writer that writes plain text drops the runs, which would otherwise outrank what it wrote.
 
 import { describe, expect, test } from 'bun:test';
+import { produce } from 'immer';
 import { evaluateConditionalFormat } from '../../engine/conditional-format';
 import { cellDisplay, cellValue } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
@@ -12,7 +13,7 @@ import { getDropdownList, validateCellData } from '../../state/modules/data-vali
 import { buildFilterConditionMatcher, getFilterColumnValues } from '../../state/modules/filter';
 import { removeHyperlink, saveHyperlink, showLinkCard } from '../../state/modules/hyperlink';
 import { calcSelectionInfo } from '../../state/modules/selection';
-import { sortRows, sortSelection } from '../../state/modules/sort';
+import { sortedOrder, sortSelection } from '../../state/modules/sort';
 import { autoSelectionFormula, handleMerge } from '../../state/modules/toolbar';
 import { contextFactory, selectionFactory } from './factories/context';
 
@@ -101,15 +102,15 @@ describe('readers of a rich cell', () => {
     });
 
     test('sort orders rich cells by their text and takes a rich first row into the range', () => {
-        const { sortedData } = sortRows(true, 0, [[rich('Cherry')], [plain('apple')], [rich('Banana')]]);
-        expect(sortedData.map((row) => cellValue(row[0]))).toEqual(['apple', 'Banana', 'Cherry']);
+        const rows = [[rich('Cherry')], [plain('apple')], [rich('Banana')]];
+        expect(sortedOrder(true, 0, rows).map((i) => cellValue(rows[i][0]))).toEqual(['apple', 'Banana', 'Cherry']);
 
         const ctx = sheetContext(
             [[rich('Cherry')], [plain('apple')], [rich('Banana')]],
             selectionFactory([0, 2], [0, 0], 0, 0),
         );
-        sortSelection(ctx, true);
-        expect(ctx.sheets[0].data!.map((row) => cellValue(row[0]))).toEqual(['apple', 'Banana', 'Cherry']);
+        const next = produce(ctx, (draft: Context) => sortSelection(draft, true));
+        expect(next.sheets[0].data!.map((row) => cellValue(row[0]))).toEqual(['apple', 'Banana', 'Cherry']);
     });
 
     test('filter conditions and the value list read the text', () => {

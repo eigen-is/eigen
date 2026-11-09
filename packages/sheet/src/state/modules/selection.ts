@@ -5,27 +5,18 @@
 
 import { cellsToTsv } from '@workspace/lib/clipboard';
 import { escapeHtml } from '@workspace/lib/html';
-import type { CellBorderSides, ConditionalFormatRule } from '@workspace/lib/sheets';
+import type { CellBorderSides } from '@workspace/lib/sheets';
 import { borderSidesToCss, mergedBorderSides } from '@workspace/lib/sheets';
 import { cloneDeep, isEmpty, isNil, isNumber } from 'es-toolkit/compat';
 import { format } from 'numfmt';
-import { cfSplitRange, withCfRanges } from '../../engine/conditional-format';
 import { cellDisplay, numberDisplay, numberText } from '../../engine/format';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
-import type { Cell, CellMatrix, FormulaCell, Range, Selection, SingleRange } from '../types';
+import type { Cell, CellMatrix, FormulaCell, Range, Selection } from '../types';
 import { getSheetIndex, replaceHtml, styleObjectToCss } from '../utils';
-import type { CarryTile } from './cell';
-import {
-    carriedLines,
-    carriedSpan,
-    carryCells,
-    getCellValue,
-    getDataBySelectionNoCopy,
-    getStyleByCell,
-    mergeBorder,
-    mergeMoveMain,
-} from './cell';
+import type { CarryTile } from './carry';
+import { carriedLines, carriedSpan, carryCells } from './carry';
+import { getCellValue, getDataBySelectionNoCopy, getStyleByCell, mergeBorder, mergeMoveMain } from './cell';
 import { setPendingCopy } from './clipboard';
 import { getComputeMap } from './condition-format';
 import { hexColor } from './inline-string';
@@ -55,8 +46,7 @@ export function scrollToHighlightCell(ctx: Context, r: number, c: number) {
 
     const frozen = sheet?.frozen;
 
-    // Accumulate both axes into one scrollRequest so a single keyboard-follow
-    // produces one programmatic-scroll intent applied to the native surface.
+    // Both axes go into one request, so a keyboard follow scrolls once.
     const request: { left?: number; top?: number } = {};
 
     if (r >= 0) {
@@ -117,8 +107,7 @@ export function normalizeSelection<T extends Selection[] | undefined>(ctx: Conte
 
     for (let i = 0; i < selection.length; i += 1) {
         const r1 = selection[i].row[0];
-        // `row`/`column` are typed `number[]`, so callers may pass a single-cell
-        // `[n]`; backfill the missing end so it normalizes to a `[n, n]` range.
+        // A caller may pass a one-cell `[n]`; the missing end becomes `[n, n]`.
         const r2 = selection[i].row[1] ?? r1;
         const c1 = selection[i].column[0];
         const c2 = selection[i].column[1] ?? c1;
@@ -180,10 +169,7 @@ export function normalizeSelection<T extends Selection[] | undefined>(ctx: Conte
 export function selectTitlesMap(rangeMap: Record<string, number>, range1: number, range2: number) {
     const map: Record<string, number> = rangeMap || {};
     for (let i = range1; i <= range2; i += 1) {
-        if (i in map) {
-            continue;
-        }
-        map[i] = 0;
+        map[i] ??= 0;
     }
     return map;
 }
@@ -243,9 +229,6 @@ export function pasteHandlerOfPaintModel(
     ctx: Context,
     { sheetId, range: sourceRange }: NonNullable<Context['painterSource']>,
 ) {
-    const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
-    if (sheetIndex == null) return;
-
     // The painter takes what a copy would, so a row an active filter hides stays out.
     const lines = carriedLines(ctx, sheetId, [sourceRange], true);
     const height = lines.rows.length;
@@ -296,9 +279,10 @@ export function pasteHandlerOfPaintModel(
         ctx,
         lines,
         tiles,
-        ({ source: value, replaced }) => {
+        ({ source, r, c }) => {
             // The destination keeps its value and takes the source's formats.
-            const cell = replaced ?? {};
+            const value = cloneDeep(source);
+            const cell = flowdata[r][c] ?? {};
             if (cell.ct?.t === 'inlineStr' && value) {
                 delete value.ct;
             } else {
@@ -329,29 +313,8 @@ export function pasteHandlerOfPaintModel(
         },
         { links: false },
     );
-
-    const sheet = ctx.sheets[sheetIndex];
-
-    const copyIndex = getSheetIndex(ctx, sheetId);
-    if (copyIndex == null) return;
-    const sourceRules: ConditionalFormatRule[] | undefined = cloneDeep(ctx.sheets[copyIndex].conditionalFormatRules);
-    if (isNil(sourceRules) || sourceRules.length === 0) return;
-
-    const rules: ConditionalFormatRule[] = cloneDeep(sheet.conditionalFormatRules) ?? [];
-    const painted: SingleRange = { row: [top, bottom], column: [left, right] };
-
-    for (const rule of sourceRules) {
-        const overlaps = rule.cellrange.some((cr) => cfSplitRange(cr, sourceRange, painted, 'operatePart').length > 0);
-        if (overlaps) {
-            // Fresh per-rule box so a later mutation on one rule can't bleed into the others.
-            rules.push(withCfRanges(rule, [{ row: [...painted.row], column: [...painted.column] }]));
-        }
-    }
-
-    sheet.conditionalFormatRules = rules;
 }
 
-// shift + arrow key / ctrl + shift + arrow key functionality
 export function rowHasMerged(ctx: Context, r: number, c1: number, c2: number) {
     let hasMerged = false;
     const flowData = getFlowdata(ctx);
@@ -485,8 +448,6 @@ export function getColMerge(ctx: Context, cIndex: number, r1: number, r2: number
     return [str, end];
 }
 
-// Advances the focused cell by `index` along `postion`, across merges on both ends.
-// Off a merge, a selection keys its range off the clamped cursor and a formula range off the moved anchor.
 type HighlightCellWalk = {
     row: number | undefined;
     row_pre: number | undefined;
@@ -500,6 +461,8 @@ type HighlightCellWalk = {
     moveY: number;
 };
 
+// Advances the focused cell by `index` along `postion`, across merges on both ends.
+// Off a merge, a selection keys its range off the clamped cursor and a formula range off the moved anchor.
 function computeMoveHighlightCell(
     ctx: Context,
     flowdata: NonNullable<ReturnType<typeof getFlowdata>>,
@@ -681,31 +644,14 @@ export function moveHighlightCell(
     }
 }
 
-// shift + arrow key: adjust the selection range
-//
-// NOTE: the two targets below look like clones but are NOT — do not
-// "de-duplicate" them. The formula arm diverges from the selection arm inside
-// several merge branches, preserved verbatim from upstream:
-//   - down / merged, `rf_end < endR` branch: the selection arm reads
-//     getRowMerge(ctx, curR, …) and applies `endR += index` outside the guard;
-//     the formula arm reads getRowMerge(ctx, endR, …) and applies it inside.
-//   - right / first branch (both merged and non-merged): the selection arm adds
-//     `curC += index` twice (inside + outside the inner guard); the formula arm
-//     adds it once.
-//   - the selection arm returns early when rf/cf are nil and then compares them
-//     directly; the formula arm guards every rf/cf use with !isNil instead.
-//   - the write-backs differ (in-place selection mutate + normalize + scroll vs.
-//     rebuilding func_selectedrange with fresh geometry).
-// Unifying would change behavior. The shared clamp/geometry tail is left inline
-// so these divergences stay visible side by side.
+// The selection arm and the formula arm look like clones but differ inside several merge branches and in how they
+// write back. Unifying them would change behavior.
 export function moveHighlightRange(
     ctx: Context,
     postion: 'down' | 'right',
     index: number,
     type: 'rangeOfSelect' | 'rangeOfFormula',
 ) {
-    // Pixel-coordinate edges of the resulting selection rectangle, assigned
-    // inside the branch that matches `type` and then read once for display.
     let row: number;
     let row_pre: number;
     let col: number;
@@ -800,7 +746,6 @@ export function moveHighlightRange(
                         if (!isNil(v)) {
                             curC = v;
                         }
-                        curC += index;
                     }
                     curC += index;
                 } else if (!isNil(cf_end) && cf_end < endC && cf_str === curC) {
@@ -825,7 +770,6 @@ export function moveHighlightRange(
                         if (!isNil(v)) {
                             curC = v;
                         }
-                        curC += index;
                     }
                     curC += index;
                 } else if (cf < endC && cf === curC) {
@@ -1068,8 +1012,7 @@ export function moveHighlightRange(
     }
 }
 
-// The marker that says "this clipboard HTML came from a sheet": written by the copy path,
-// matched by every paste reader.
+// Marks clipboard HTML as copied from a sheet.
 export const COPY_ACTION_TABLE_MARKER = 'sheet-copy-action-table';
 
 // The text a copy writes for a cell, in its td and in the TSV. A width format such as w0 shows the raw value, and
@@ -1312,13 +1255,10 @@ export function calcSelectionInfo(ctx: Context) {
         const data = getDataBySelectionNoCopy(ctx, selection[s]);
         for (let r = 0; r < data.length; r += 1) {
             for (let c = 0; c < data[0].length; c += 1) {
-                if (r >= data.length || c >= data[0].length) break;
                 const cell = data[r][c];
                 const ct = cell?.ct?.t;
                 const value = cellDisplay(cell);
-                // Numeric cells keep the raw number in v; m is the formatted display
-                // string (currency symbols, separators) that parseFloat cannot read.
-                // A nil v (empty cell formatted as numeric) must not become Number(null) = 0
+                // Numeric cells read v, as parseFloat cannot read m's currency symbols and separators. A nil v is NaN, not 0.
                 const valueNumber = ct === 'n' ? Number(cell?.v ?? Number.NaN) : parseFloat(String(value));
                 if ((ct === 'n' || ct === 'g') && !Number.isNaN(valueNumber)) {
                     count += 1;

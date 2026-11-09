@@ -1,26 +1,24 @@
 // The fill handle: dragging the selection's corner extends its cells over the dragged range, and fill down and fill
-// right extend one edge of a range the same way. Along each line of a fill, neighbouring cells of one kind count on,
-// such as numbers along their trend, dates by days or months and text by its last number. Anything else, a lone cell
-// included, repeats. The canvas overlay's mouse handlers and the keyboard handler call in here.
+// right repeat one edge of a range the same way. Along each line of a dragged fill, neighbouring cells of one kind count
+// on, such as numbers along their trend, dates by days or months and text by its last number, and a lone text ending in
+// a number counts by one. Anything else repeats. The canvas overlay's mouse handlers and the keyboard handler call in.
 
 import dayjs from 'dayjs';
 import { cloneDeep } from 'es-toolkit/compat';
 import { createArrayResolver } from '../../engine/cell-resolver';
-import { cfSplitRange } from '../../engine/conditional-format';
 import { numberDisplay, parseCellInput, update } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
 import type { Cell, SingleRange } from '../../engine/types';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
 import type { Rect } from '../types';
-import { getSheetIndex } from '../utils';
-import { carrySides, getBorderInfoCompute } from './border';
+import { carryCells } from './carry';
 import { setCellValue } from './cell';
+import { snapshotContext } from './formula-cache';
 import { computeFormula } from './formula-exec';
 import { colLocation, rowLocation, sheetPoint } from './location';
 import { jfrefreshgrid } from './refresh';
 import { normalizeSelection } from './selection';
-import { addValidation, validationEntryAt } from './validation-rules';
 
 type FillDirection = 'down' | 'up' | 'left' | 'right';
 
@@ -152,7 +150,7 @@ export function fillFromEdge(ctx: Context, range: SingleRange, direction: 'down'
     const copyRange = down ? { row: [start, start], column } : { row, column: [start, start] };
     const applyRange = down ? { row: [start + 1, end], column } : { row, column: [start + 1, end] };
     if (fillTouchesMerge(ctx, copyRange, applyRange)) return;
-    updateDropCell(ctx, copyRange, applyRange, direction);
+    updateDropCell(ctx, copyRange, applyRange, direction, false);
 }
 
 export function updateDropCell(
@@ -160,33 +158,19 @@ export function updateDropCell(
     copyRange: SingleRange,
     applyRange: SingleRange,
     direction: FillDirection,
+    dragged = true,
 ) {
     const d = getFlowdata(ctx);
-    if (ctx.allowEdit === false || d == null) return;
+    // A read through an immer draft makes a child draft of each cell, so the series read a plain view.
+    const before = getFlowdata(snapshotContext(ctx));
+    if (ctx.allowEdit === false || d == null || before == null) return;
 
-    const index = getSheetIndex(ctx, ctx.currentSheetId);
-    if (index == null) return;
-    const file = ctx.sheets[index];
-    const hiddenRows = new Set(Object.keys(file.config?.rowhidden ?? {}));
-    const hiddenCols = new Set(Object.keys(file.config?.colhidden ?? {}));
+    const config = getSheetConfig(ctx);
+    const hiddenRows = new Set(Object.keys(config?.rowhidden ?? {}));
+    const hiddenCols = new Set(Object.keys(config?.colhidden ?? {}));
 
     // One live resolver per fill, not a snapshot per filled formula cell.
     const resolver = createArrayResolver(ctx.sheets);
-
-    const cfg = (file.config ??= {});
-    cfg.borderInfo ??= {};
-    // The cells each validation rule fills, by the rule's id: a filled cell takes the rule of the cell it repeats, as
-    // in Excel and Google. They land once the fill is done, one write per rule.
-    const filledRules = new Map<string, SingleRange[]>();
-    // The rule of each source cell, looked up once: a long fill repeats a few source cells many times.
-    const sourceRules = new Map<string, string | undefined>();
-
-    const borderInfoCompute = getBorderInfoCompute(ctx, ctx.currentSheetId, [
-        copyRange.row[0],
-        copyRange.row[1],
-        copyRange.column[0],
-        copyRange.column[1],
-    ]);
 
     const vertical = direction === 'down' || direction === 'up';
     const backward = direction === 'up' || direction === 'left';
@@ -194,67 +178,67 @@ export function updateDropCell(
     const [applyStart, applyEnd] = vertical ? applyRange.row : applyRange.column;
     const [lineStart, lineEnd] = vertical ? applyRange.column : applyRange.row;
     const lineHidden = vertical ? hiddenCols : hiddenRows;
-    const stepHidden = vertical ? hiddenRows : hiddenCols;
     const sourceLength = copyEnd - copyStart + 1;
     const count = applyEnd - applyStart + 1;
     // The source position a step repeats. A backward fill reads the source from its far end, so the series below need
     // no direction: the last cell they read always sits beside the first cell they fill.
     const sourceAt = (step: number) => (backward ? copyEnd - (step % sourceLength) : copyStart + (step % sourceLength));
 
+    const loneStep = !dragged ? 0 : backward ? -1 : 1;
+
+    // The series of every line, worked out before a cell lands.
+    const series = new Map<number, (Cell | null)[]>();
     for (let line = lineStart; line <= lineEnd; line += 1) {
         if (lineHidden.has(`${line}`)) continue;
-
         const source = Array.from({ length: sourceLength }, (_, step) =>
-            vertical ? d[sourceAt(step)][line] : d[line][sourceAt(step)],
+            vertical ? before[sourceAt(step)][line] : before[line][sourceAt(step)],
         );
-        const filled = fillLine(source, count);
-
-        for (let step = 0; step < count; step += 1) {
-            const pos = backward ? applyEnd - step : applyStart + step;
-            if (stepHidden.has(`${pos}`)) continue;
-
-            const row = vertical ? pos : line;
-            const col = vertical ? line : pos;
-            const cell = filled[step];
-            const sourcePos = sourceAt(step);
-            const sourceRow = vertical ? sourcePos : line;
-            const sourceCol = vertical ? line : sourcePos;
-
-            d[row][col] = cell;
-
-            if (cell?.f != null) {
-                const offset = pos - sourcePos;
-                const f = `=${functionCopy(cell.f, vertical ? offset : 0, vertical ? 0 : offset)}`;
-                const [value, filledF] = computeFormula(ctx, f, { resolver });
-                setCellValue(ctx, row, col, d, { v: value, f: filledF });
-            }
-
-            const sourceKey = `${sourceRow}_${sourceCol}`;
-            carrySides(cfg.borderInfo, row, col, borderInfoCompute[sourceKey]);
-
-            if (!sourceRules.has(sourceKey)) {
-                sourceRules.set(sourceKey, validationEntryAt(file.dataValidations, sourceRow, sourceCol)?.[0]);
-            }
-            const ruleId = sourceRules.get(sourceKey);
-            if (ruleId) {
-                const cells = filledRules.get(ruleId) ?? [];
-                cells.push({ row: [row, row], column: [col, col] });
-                filledRules.set(ruleId, cells);
-            }
-        }
-    }
-    for (const [id, cells] of filledRules) {
-        const rule = file.dataValidations?.[id]?.rule;
-        if (rule) addValidation(file, id, rule, cells);
+        series.set(line, fillLine(source, count, loneStep));
     }
 
-    for (const rule of file.conditionalFormatRules ?? []) {
-        if (rule.cellrange.some((range) => cfSplitRange(range, copyRange, applyRange, 'operatePart').length > 0)) {
-            rule.cellrange.push(applyRange);
-        }
-    }
+    // The steps, in the order the cells lie on the sheet. A hidden line takes a step of the series and no cell.
+    const stepAt = (pos: number) => (backward ? applyEnd - pos : pos - applyStart);
+    const stepLines = Array.from({ length: count }, (_, i) => sourceAt(stepAt(applyStart + i)));
+    const crossLines = Array.from({ length: lineEnd - lineStart + 1 }, (_, i) => lineStart + i);
+    const lines = {
+        sheetId: ctx.currentSheetId,
+        rows: vertical ? stepLines : crossLines,
+        columns: vertical ? crossLines : stepLines,
+    };
+    const tiles = visibleRuns(applyRange.row, hiddenRows).flatMap(([top, bottom]) =>
+        visibleRuns(applyRange.column, hiddenCols).map(([left, right]) => ({
+            row: top,
+            column: left,
+            height: bottom - top + 1,
+            width: right - left + 1,
+            skipRows: top - applyRange.row[0],
+            skipColumns: left - applyRange.column[0],
+        })),
+    );
+
+    carryCells(ctx, lines, tiles, ({ r, c, sr, sc }) => {
+        const cell = series.get(vertical ? c : r)?.[stepAt(vertical ? r : c)] ?? null;
+        if (cell?.f == null) return cell;
+        // setCellValue types the result in place, so the cell lands first.
+        d[r][c] = cell;
+        const [value, f] = computeFormula(ctx, `=${functionCopy(cell.f, r - sr, c - sc)}`, { resolver });
+        setCellValue(ctx, r, c, d, { v: value, f });
+        return d[r][c];
+    });
 
     jfrefreshgrid(ctx);
+}
+
+// The runs of a span that no hidden line interrupts.
+function visibleRuns([first, last]: readonly number[], hidden: ReadonlySet<string>) {
+    const runs: [number, number][] = [];
+    for (let line = first; line <= last; line += 1) {
+        if (hidden.has(`${line}`)) continue;
+        const run = runs.at(-1);
+        if (run && run[1] === line - 1) run[1] = line;
+        else runs.push([line, line]);
+    }
+    return runs;
 }
 
 // Excel refuses a fill that would split or overwrite a merge.
@@ -269,8 +253,8 @@ function fillTouchesMerge(ctx: Context, copyRange: SingleRange, applyRange: Sing
 }
 
 // Takes one source line in fill order and returns `count` cells. Each run of one kind keeps its places in the source
-// on every round, and its series counts on over those places alone.
-function fillLine(line: readonly (Cell | null | undefined)[], count: number) {
+// on every round, and its series counts on over those places alone. loneStep is how a line of one cell counts, 0 to copy.
+function fillLine(line: readonly (Cell | null | undefined)[], count: number, loneStep: number) {
     const filled = new Array<Cell | null>(count).fill(null);
     let start = 0;
     while (start < line.length) {
@@ -279,7 +263,9 @@ function fillLine(line: readonly (Cell | null | undefined)[], count: number) {
         while (end < line.length && seriesKind(line[end]) === kind) end += 1;
 
         const run = line.slice(start, end);
-        const cellAt = runFill(kind, run);
+        // The kind of a text ending in a number ends in the number's mark.
+        const lone = line.length === 1 && kind.endsWith('#') && typeof run[0]?.v === 'string';
+        const cellAt = runFill(kind, run, lone ? loneStep : 0);
         let nth = 0;
         for (let roundStart = start; roundStart < count; roundStart += line.length) {
             for (let i = 0; i < run.length && roundStart + i < count; i += 1) {
@@ -301,12 +287,13 @@ function seriesKind(cell: Cell | null | undefined) {
     return number ? `${number.before}#${number.after}` : 'copy';
 }
 
-function runFill(kind: string, run: readonly (Cell | null | undefined)[]) {
+function runFill(kind: string, run: readonly (Cell | null | undefined)[], loneStep: number) {
     const copy = (nth: number) => cloneDeep(run[nth % run.length]) ?? null;
     const cells = run.filter((cell) => cell != null);
-    if (kind === 'copy' || cells.length < 2) return copy;
+    if (kind === 'copy' || (cells.length < 2 && loneStep === 0)) return copy;
 
-    const valueAt = kind === 'number' ? numberSeries(cells) : kind === 'date' ? dateSeries(cells) : textSeries(cells);
+    const valueAt =
+        kind === 'number' ? numberSeries(cells) : kind === 'date' ? dateSeries(cells) : textSeries(cells, loneStep);
     if (valueAt == null) return copy;
 
     return (nth: number) => {
@@ -346,9 +333,9 @@ function dateSeries(cells: readonly Cell[]) {
         parseCellInput(last.add(step * steps, sameDay ? 'months' : 'days').format('YYYY-MM-DD'))[2];
 }
 
-function textSeries(cells: readonly Cell[]) {
+function textSeries(cells: readonly Cell[], loneStep: number) {
     const numbers = cells.flatMap((cell) => lastNumber(cell.m) ?? []);
-    const step = evenStep(numbers.map(({ value }) => value));
+    const step = numbers.length === 1 ? loneStep : evenStep(numbers.map(({ value }) => value));
     if (step == null) return null;
     const { value, width, before, after } = numbers[numbers.length - 1];
     return (steps: number) => `${before}${String(Math.abs(value + step * steps)).padStart(width, '0')}${after}`;

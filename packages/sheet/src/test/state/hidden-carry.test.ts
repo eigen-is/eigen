@@ -14,7 +14,7 @@ import { Window } from 'happy-dom';
 import type { Context } from '../../state/context';
 import { handleCopy, handleCut } from '../../state/events/copy';
 import { handlePaste } from '../../state/events/paste';
-import { carriedLines, carryCells } from '../../state/modules/cell';
+import { carriedLines, carryCells } from '../../state/modules/carry';
 import { consumePendingCopy } from '../../state/modules/clipboard';
 import { onCellsMoveEnd } from '../../state/modules/move-cells';
 import { pasteHandlerOfPaintModel, rangeValueToClipboard } from '../../state/modules/selection';
@@ -23,7 +23,7 @@ import { validationAt } from '../../state/modules/validation-rules';
 import type { Cell, GlobalCache, Op, Selection } from '../../state/types';
 import { clipboardWith, pasteCopy } from './factories/clipboard';
 import { author, join, receive } from './factories/collab';
-import { contextFactory, workbookContextFactory } from './factories/context';
+import { contextFactory, editInPlace, workbookContextFactory } from './factories/context';
 import { gridElements, withGridGeometry } from './factories/grid-dom';
 import { validationsByCell } from './factories/validations';
 
@@ -129,8 +129,10 @@ function paste(ctx: Context, cut: boolean) {
 // ⌘V: the browser hands over the table the copy put on the clipboard.
 function pasteFromClipboard(ctx: Context) {
     const html = consumePendingCopy()?.html ?? '';
-    ctx.selections = destination();
-    handlePaste(ctx, clipboardWith({ html }));
+    editInPlace(ctx, (draft) => {
+        draft.selections = destination();
+        handlePaste(draft, clipboardWith({ html }));
+    });
 }
 
 function paint(ctx: Context) {
@@ -145,7 +147,7 @@ function move(ctx: Context) {
     ctx.cellSelectMoveIndex = [0, 0];
     const { container, scrollEl } = gridElements();
     const event = { clientX: 46 + 6 * 74 + 30, clientY: 20 + 6 * 20 + 10 } as MouseEvent;
-    onCellsMoveEnd(ctx, {} as GlobalCache, event, scrollEl, container);
+    editInPlace(ctx, (draft) => onCellsMoveEnd(draft, {} as GlobalCache, event, scrollEl, container));
 }
 
 const sheet = (ctx: Context) => ctx.sheets[0];
@@ -216,7 +218,7 @@ describe('a range with a hidden row and column inside it', () => {
 
     test('a cut pastes the hidden cells rather than losing them', () => {
         const ctx = makeCtx();
-        paste(ctx, true);
+        editInPlace(ctx, (draft) => paste(draft, true));
         expectValuesWhole(ctx);
         expectCarriedWhole(ctx);
         expectSourceCleared(ctx);
@@ -312,7 +314,7 @@ describe('a range with a row an active filter hides', () => {
 
     test('a cut still carries the filtered row, as Excel moves every cell it cuts', () => {
         const ctx = makeCtx({ filtered: true });
-        paste(ctx, true);
+        editInPlace(ctx, (draft) => paste(draft, true));
         expectValuesWhole(ctx);
         expectSourceCleared(ctx);
     });
@@ -468,10 +470,12 @@ describe('a carried rule lands as ranges', () => {
 
     test('a cut onto another sheet takes the rule off the cells it cut', () => {
         const ctx = rangesCtx();
-        handleCut(ctx);
-        toOtherSheet(ctx);
-        ctx.selections = destination();
-        pasteCopy(ctx);
+        editInPlace(ctx, (draft) => {
+            handleCut(draft);
+            toOtherSheet(draft);
+            draft.selections = destination();
+            pasteCopy(draft);
+        });
         expect(Object.values(ctx.sheets[1].dataValidations ?? {})).toEqual([
             { ranges: [{ row: [6, 9], column: [6, 6] }], rule: rule(9, 9) },
         ]);

@@ -69,7 +69,6 @@ export function patchToOp(ctx: Context, patches: Patch[], options: EntryOptions 
         if (op.op !== 'replace' || op.value?.hl == null || op.path.length !== 3 || field !== 'data') continue;
         const key = `${r}_${c}`;
         const link = ctx.sheets.find((s) => s.id === op.id)?.hyperlink?.[key];
-        // A filled cell carries the `hl` of the cell it came from, and no link of its own.
         if (link) ops.push({ id: op.id, op: 'replace', path: ['hyperlink', key], value: link });
     }
     if (options.addedSheet) {

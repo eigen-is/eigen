@@ -2,12 +2,10 @@
 // would land, and onCellsMoveEnd moves the cells there, hidden ones too, with their borders, validation, links,
 // merges and conditional-format ranges. The overlay's mouse handlers call all three.
 
-import { cfSplitRange, withCfRanges } from '../../engine/conditional-format';
-import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import type { GlobalCache } from '../types';
-import { carriedLines, moveCells } from './cell';
+import { carriedLines, moveCells } from './carry';
 import {
     colLocation,
     colLocationByIndex,
@@ -212,15 +210,6 @@ export function onCellsMoveEnd(
         height: row_e - row_s + 1,
         width: col_e - col_s + 1,
     });
-
-    // A conditional format over the moved cells moves with them.
-    const rules = getSheet(ctx).conditionalFormatRules ?? [];
-    for (let i = 0; i < rules.length; i += 1) {
-        const cellrange = rules[i].cellrange.flatMap((range) =>
-            cfSplitRange(range, last, { row: [row_s, row_e], column: [col_s, col_e] }, 'allPart'),
-        );
-        rules[i] = withCfRanges(rules[i], cellrange);
-    }
 
     const range = [
         { row: last.row, column: last.column },

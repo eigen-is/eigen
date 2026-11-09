@@ -19,10 +19,10 @@ export type {
     EvaluateConditionalFormatOptions,
 } from './conditional-format';
 export {
-    cfSplitRange,
     createCfFormulaEvaluator,
     evaluateConditionalFormat,
     isWellFormedCfRule,
+    rangeWithout,
     withCfRanges,
 } from './conditional-format';
 // CF rule shapes (`ConditionalFormatRule` etc.) live in `@workspace/lib/sheets` and

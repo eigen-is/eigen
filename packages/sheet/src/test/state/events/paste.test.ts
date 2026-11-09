@@ -14,7 +14,7 @@ import type { Context } from '../../../state/context';
 import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import { copy } from '../../../state/modules/selection';
 import { pasteCopy, pasteText } from '../factories/clipboard';
-import { contextFactory } from '../factories/context';
+import { contextFactory, editInPlace } from '../factories/context';
 import { edit, typed } from '../factories/edit-cycle';
 
 // Explicit selection builders. selectionFactory takes (row, column, ...) as
@@ -50,10 +50,12 @@ function copyThenPaste(
     dest: ReturnType<typeof single>,
     { cut = false }: { cut?: boolean } = {},
 ) {
-    ctx.selections = source;
-    copy(ctx, { cut });
-    ctx.selections = dest;
-    pasteCopy(ctx);
+    editInPlace(ctx, (draft) => {
+        draft.selections = source;
+        copy(draft, { cut });
+        draft.selections = dest;
+        pasteCopy(draft);
+    });
 }
 
 // A paste past the last row or column grows the grid, and the sheet's size grows with it: a stored snapshot keeps the
@@ -364,11 +366,13 @@ describe('cut/paste — cross-range move', () => {
         }) as Context;
 
         // copy from sheet two, switch to sheet one, cut-paste
-        ctx.selections = single(0, 0);
-        copy(ctx, { cut: true });
-        ctx.currentSheetId = 'id_1';
-        ctx.selections = single(2, 2);
-        pasteCopy(ctx);
+        editInPlace(ctx, (draft) => {
+            draft.selections = single(0, 0);
+            copy(draft, { cut: true });
+            draft.currentSheetId = 'id_1';
+            draft.selections = single(2, 2);
+            pasteCopy(draft);
+        });
 
         // destination on sheet one filled
         expect(ctx.sheets[0].data![2][2]?.v).toBe('Z');
@@ -377,7 +381,7 @@ describe('cut/paste — cross-range move', () => {
     });
 });
 
-describe('conditional-format migration on cut/paste (cfSplitRange contract)', () => {
+describe('conditional-format migration on cut/paste', () => {
     it('drops the cut cells from a same-sheet CF rule range', () => {
         const ctx = makeCtx(8, 8, (d) => {
             d[1][1] = { v: 'C', m: 'C' };
@@ -396,7 +400,7 @@ describe('conditional-format migration on cut/paste (cfSplitRange contract)', ()
             cut: true,
         });
 
-        // same-sheet cut uses cfSplitRange 'allPart': the rule range MOVES with
+        // same-sheet cut: the rule range MOVES with
         // the cells — exactly the destination cell, nothing at the source. A
         // refactor that reached for 'restPart' here (empty cellrange = CF
         // silently deleted) must fail this.
@@ -431,13 +435,20 @@ describe('conditional-format migration on cut/paste (cfSplitRange contract)', ()
         pasteCopy(ctx);
     };
 
-    it('keeps the target sheet rules when the copied cells carry none', () => {
+    it('takes only the pasted cells out of the target sheet rules when the copied cells carry none', () => {
         const ctx = twoSheets();
-        ctx.sheets[0].conditionalFormatRules = [formulaRule()];
+        const far = { ...formulaRule(), cellrange: [{ row: [9, 9], column: [3, 3] }] };
+        ctx.sheets[0].conditionalFormatRules = [
+            { ...formulaRule(), cellrange: [{ row: [1, 7], column: [1, 1] }] },
+            far,
+        ];
 
         crossSheetPaste(ctx, false);
 
-        expect(ctx.sheets[0].conditionalFormatRules).toEqual([formulaRule()]);
+        expect(ctx.sheets[0].conditionalFormatRules).toEqual([
+            { ...formulaRule(), cellrange: [{ row: [6, 7], column: [1, 1] }], conditionValue: ['=B7>1'] },
+            far,
+        ]);
     });
 
     it('moves a whole rule cut to a sheet without rules, leaving no empty rule behind', () => {
@@ -468,17 +479,22 @@ describe('conditional-format migration on cut/paste (cfSplitRange contract)', ()
         ]);
     });
 
-    it('re-expresses a formula rule copied from the middle of its range', () => {
+    it('joins a copy from the middle of a formula rule, so each cell reads as it did', () => {
         const ctx = makeCtx(12, 8);
         ctx.sheets[0].conditionalFormatRules = [formulaRule()];
 
         copyThenPaste(ctx, single(2, 1), single(5, 4));
 
-        expect(ctx.sheets[0].conditionalFormatRules?.[1]).toEqual({
-            ...formulaRule(),
-            cellrange: [{ row: [5, 5], column: [4, 4] }],
-            conditionValue: ['=E6>1'],
-        });
+        // The rule keeps its corner and its text: at E6 it reads E6, four rows down and three across from B2.
+        expect(ctx.sheets[0].conditionalFormatRules).toEqual([
+            {
+                ...formulaRule(),
+                cellrange: [
+                    { row: [1, 5], column: [1, 1] },
+                    { row: [5, 5], column: [4, 4] },
+                ],
+            },
+        ]);
     });
 });
 
