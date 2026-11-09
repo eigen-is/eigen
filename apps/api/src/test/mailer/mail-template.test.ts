@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { renderEigenEmail } from '../../lib/mailer/mail-template';
+import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
+import { buildAttachmentUrl, renderEigenEmail } from '../../lib/mailer/mail-template';
 
 describe('renderEigenEmail', () => {
     test('renders title in an h2', () => {
@@ -69,5 +70,35 @@ describe('renderEigenEmail', () => {
         });
         // The anchor tag should appear exactly once — no nested <a><a>...</a></a>.
         expect(html.match(/<a\s/g)?.length).toBe(1);
+    });
+});
+
+describe('buildAttachmentUrl', () => {
+    const ref = (driveType: AttachmentReference['driveType'], ownerId = 'u_1-A'): AttachmentReference => ({
+        type: 'reference',
+        ownerId,
+        mountId: 'default',
+        id: '3f2c9c1e-7a10-4b1f-9d7e-2a1c0b9e8f7a',
+        name: 'x',
+        driveType,
+        mimeType: 'x/y',
+    });
+
+    test('an ordinary reference gets the same URL as ever, in every app', () => {
+        const path = 'u_1-A/default/3f2c9c1e-7a10-4b1f-9d7e-2a1c0b9e8f7a';
+        expect(buildAttachmentUrl(ref('doc'))).toEndWith(`/docs/doc/${path}`);
+        expect(buildAttachmentUrl(ref('stickies'))).toEndWith(`/stickies/board/${path}`);
+        expect(buildAttachmentUrl(ref('slides'))).toEndWith(`/slides/slide/${path}`);
+        expect(buildAttachmentUrl(ref('sheets'))).toEndWith(`/sheets/sheet/${path}`);
+        expect(buildAttachmentUrl(ref('vector'))).toEndWith(`/vector/vector/${path}`);
+        expect(buildAttachmentUrl(ref('chat'))).toEndWith(`/chat/${path}`);
+        expect(buildAttachmentUrl(ref('folder'))).toEndWith(`/drive/fs/${path}`);
+    });
+
+    test('a segment an IMAP client wrote stays one segment, and cannot climb out of the app', () => {
+        const url = buildAttachmentUrl(ref('doc', '../../admin'));
+        expect(url).toEndWith('/docs/doc/..%2F..%2Fadmin/default/3f2c9c1e-7a10-4b1f-9d7e-2a1c0b9e8f7a');
+        expect(new URL(url).pathname).toStartWith('/docs/doc/');
+        expect(buildAttachmentUrl(ref('folder', 'a/b?c#d'))).toContain('/drive/fs/a%2Fb%3Fc%23d/');
     });
 });

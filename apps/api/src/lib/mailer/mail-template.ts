@@ -38,7 +38,7 @@ export type EmailShellInput = {
     banner?: string;
     attachmentLinks?: AttachmentReference[];
     footerLine?: string;
-    // Drives the `?email=` suffix on pill URLs — see buildAttachmentUrl.
+    // The address the `?email=` suffix on a pill's URL carries.
     recipientEmail?: string;
 };
 
@@ -58,7 +58,8 @@ export function adminUrl(): string {
 }
 
 function buildReferenceUrl(ref: AttachmentReference): string {
-    const path = `${ref.ownerId}/${ref.mountId}/${ref.id}`;
+    // A draft's references are read off a file another program can write, so each stays one segment of the path.
+    const path = [ref.ownerId, ref.mountId, ref.id].map(encodeURIComponent).join('/');
     switch (ref.driveType) {
         case DRIVE_TYPE_DOC:
             return `${appUrl('VITE_APP_DOCS_URL', 'http://localhost:3006/docs')}/doc/${path}`;
