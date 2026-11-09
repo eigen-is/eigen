@@ -245,9 +245,6 @@ function sumLine(
     // The sum lands on the first free cell past the selection, or it would read itself.
     const length = type === 'c' ? d.length : d[0].length;
     let at = ed_m + 1;
-    while (holdsValue(cellAt(at))) {
-        at += 1;
-        if (at >= length) return;
-    }
-    write(at, [st_m, ed_m], [fix, fix]);
+    while (at < length && holdsValue(cellAt(at))) at += 1;
+    if (at < length) write(at, [st_m, ed_m], [fix, fix]);
 }
