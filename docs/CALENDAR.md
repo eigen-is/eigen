@@ -64,7 +64,7 @@ Every resource write ends in `Calendar.writeResource`. It takes a `PreparedResou
 
 ## A web save patches what moved, and a CalDAV PUT replaces the file
 
-The web form restates every field on every save. So `updateEvent` (`events.ts`) diffs the submitted times against the stored row, and `patchEvent` (`lib/ical/ical-component.ts`) writes only the properties that really changed. A title edit leaves a client's own `DTSTART` spelling, its `DURATION` and its VTIMEZONE alone. Each `ATTENDEE` line is patched in place, so `CUTYPE`, `RSVP` and every `X-` parameter a client set survive. Re-spelling the same instants in another zone changes bytes but is not a reschedule, so no guest is mailed.
+The web form restates every field on every save. So `updateEvent` (`events.ts`) diffs the submitted times against the stored row, and `patchEvent` (`lib/ical/ical-component.ts`) writes only the properties that really changed. A title edit leaves a client's own `DTSTART` spelling, its `DURATION` and its VTIMEZONE alone. Each `ATTENDEE` line is patched in place, so `CUTYPE`, `RSVP` and every `X-` parameter a client set survive. Re-spelling the same instants in another zone changes bytes but is not a reschedule, so no guest is mailed. A save that patches nothing writes nothing: no ctag moves, nothing is announced and no guest is mailed. An `ATTENDEE` with no `PARTSTAT` or `ROLE` gains them from the form's restated list, so the first web save of such a client's event counts as an edit.
 
 A CalDAV PUT replaces the whole resource, under the preconditions and the linked-copy rule in [CALDAV.md](CALDAV.md#a-put-is-judged-inside-the-write-lock).
 
@@ -164,7 +164,7 @@ Calendar counts against the home data quota with mail and contacts ([QUOTA.md](Q
 
 ## Every write is announced to every Home that sees the calendar
 
-A change broadcasts a `calendar:*` event ([SSE.md](SSE.md)) to the owner's tabs and to each Home the calendar is shared with. A PUT of bytes already stored commits nothing and announces nothing. An import writes each series through the store, which announces nothing, and sends one `calendar:events-changed` when it ends if it wrote a series, even when a refusal stops it partway. Other requests' events go out at once meanwhile. The frontend hooks and the SSE handler that invalidates them are in `packages/lib/src/core/calendar/`.
+A change broadcasts a `calendar:*` event ([SSE.md](SSE.md)) to the owner's tabs and to each Home the calendar is shared with. A PUT of bytes already stored commits nothing and announces nothing, and neither does a web save that changes nothing. An import writes each series through the store, which announces nothing, and sends one `calendar:events-changed` when it ends if it wrote a series, even when a refusal stops it partway. Other requests' events go out at once meanwhile. The frontend hooks and the SSE handler that invalidates them are in `packages/lib/src/core/calendar/`.
 
 ## A linked copy is an ordinary resource with the organizer's stamp
 

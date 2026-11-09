@@ -17,11 +17,63 @@ import { vcal } from '../ics-test-helpers';
 
 // The event writes that re-home a stored resource. See docs/CALENDAR.md § Every write takes one lock and one function.
 
-describe('moveEvent', () => {
-    beforeAll(() => {
-        rmSync(CALENDAR_TEST_ROOT, { recursive: true, force: true });
+beforeAll(() => {
+    rmSync(CALENDAR_TEST_ROOT, { recursive: true, force: true });
+});
+
+describe('a patch that changes nothing', () => {
+    // A client's own spelling, which a rewrite through the store must not get a chance to disturb.
+    const CLIENT_LINES = [
+        'DURATION:PT1H',
+        'X-CLIENT;X-P="a b":kept',
+        'ATTENDEE;PARTSTAT=TENTATIVE;ROLE=REQ-PARTICIPANT:mailto:g@example.com',
+    ];
+    const stored = async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        const calendar = harness.instance;
+        const body = vcal([
+            'BEGIN:VEVENT',
+            'UID:same',
+            'DTSTART:20260401T100000Z',
+            'SUMMARY:Same',
+            ...CLIENT_LINES,
+            'END:VEVENT',
+        ]);
+        await putResource(calendar, calendarId, 'same.ics', body);
+        const event = storedEvents(calendar, calendarId)[0];
+        return { calendar, calendarId, event, ctag: (await calendar.getCollection(calendarId))?.ctag };
+    };
+
+    test('a save restating the stored event leaves the row and the bytes alone', async () => {
+        const { calendar, calendarId, event, ctag } = await stored();
+        const row = resourceRowOf(calendar, calendarId, 'same.ics');
+
+        const saved = await calendar.updateEvent(calendarId, event.id, {
+            title: event.title,
+            startTime: event.startTime,
+            endTime: event.endTime,
+            allDay: event.allDay,
+            timezone: event.timezone,
+            data: event.data,
+        });
+
+        expect(saved.etag).toBe(event.etag);
+        expect((await calendar.getCollection(calendarId))?.ctag).toBe(ctag);
+        expect(resourceRowOf(calendar, calendarId, 'same.ics').ics).toEqual(row.ics);
     });
 
+    test('an answer the guest already gave moves no ctag', async () => {
+        const { calendar, calendarId, event, ctag } = await stored();
+
+        await calendar.receiveAttendeeStatus(event.id, 'g@example.com', 'tentative');
+
+        expect((await calendar.getCollection(calendarId))?.ctag).toBe(ctag);
+        expect(storedEvents(calendar, calendarId)[0].etag).toBe(event.etag);
+    });
+});
+
+describe('moveEvent', () => {
     const seriesOf = async (harness: TestHome<Calendar>, calendarId: string, uid: string, uri: string) => {
         await putResource(harness.instance, calendarId, uri, vcal(vevent(uid, 'Movable')));
         return storedEvents(harness.instance, calendarId).find((e) => e.uid === uid)!;

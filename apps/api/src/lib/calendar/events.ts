@@ -113,9 +113,8 @@ export async function patchResource(
     patch: EventPatch,
     context: WriteContext,
 ): Promise<void> {
-    await editResource(calendar, resource, (component) => {
-        patchEvent(component, recurrenceKey, patch, context);
-    });
+    const component = storedComponent(calendar, resource);
+    if (patchEvent(component, recurrenceKey, patch, context)) await writeComponent(calendar, resource, component);
 }
 
 export function writeContext(actorIsOrganizer: boolean, dtstamp?: Date | null): WriteContext {
@@ -162,14 +161,12 @@ async function propagateWrite(
     const attendees = heldAttendees(event, series);
     // A write that names nobody and replaced nobody owes the guests nothing; emptying a non-override's list cancels.
     if (!attendees.length && !held.length) return;
-    // Only the organizer fans out: a guest's own edit bumping SEQUENCE would outrun the organizer's updates.
     if (isInvitationFromOthers(series ?? event, calendar.home.user.email)) return;
     if (series && event.status === 'cancelled') {
         await propagateCancellation(calendar.home, event, held, series);
         return;
     }
-    // A series message restates its exceptions, or a guest's copy renders a moved occurrence at its original slot. An
-    // occurrence write is itself one exception and carries none.
+    // An occurrence write is itself one exception and carries none.
     const exceptions = series ? [] : exceptionsOf(calendar, event.id);
     await propagateInvitation(calendar.home, event, user, held, attendees, series ?? undefined, exceptions);
 }
@@ -271,8 +268,10 @@ export async function updateEvent(
     const { updated, existing } = await calendar.writeLock.run(() =>
         patchStoredEvent(calendar, calendarId, id, input, user, expectedEtag),
     );
-    calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, calendarId);
+    // Judged on the bytes by their hash, as a PUT is: a save that moved nothing tells nobody.
+    if (updated.etag === existing.etag) return updated;
 
+    calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, calendarId);
     if (user) propagateWrite(calendar, updated, user, existing).catch(console.error);
     return updated;
 }
@@ -290,7 +289,6 @@ async function patchStoredEvent(
     // 404 (not 403) on calendar mismatch so a share on one calendar can't oracle event ids in another.
     if (!existing || existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
 
-    // Linked event guard: attendees can only change local fields (reminders, color).
     const linked = isInvitationFromOthers(existing, calendar.home.user.email);
     if (linked) {
         const localData: EventData = { ...existing.data };
@@ -328,8 +326,6 @@ async function patchStoredEvent(
     if (!resource) throw new ApiError(404, 'Event not found');
     assertEtag(resource, expectedEtag);
 
-    // Cancelling an override replaces it with an EXDATE: Thunderbird drops a STATUS:CANCELLED override from its next
-    // PUT, which brings the occurrence back.
     if (existing.parentEventId && input.status === 'cancelled') {
         const parent = requireEvent(calendar, existing.parentEventId);
         await editResource(calendar, resource, (component) => {
@@ -340,7 +336,6 @@ async function patchStoredEvent(
         return { updated: { ...cancelled, startTime: existing.startTime, endTime: existing.endTime }, existing };
     }
 
-    // A save form restates the times on every edit, so only the bounds that really moved reach the patch.
     const startMoved = input.startTime !== undefined && input.startTime.getTime() !== existing.startTime.getTime();
     const endMoved = input.endTime !== undefined && input.endTime.getTime() !== existing.endTime.getTime();
     const allDayMoved = input.allDay !== undefined && input.allDay !== existing.allDay;
@@ -382,11 +377,9 @@ export async function deleteEvent(
     // nothing: an occurrence comes back, and a cancelled master's PUT already fanned out STATUS:CANCELLED.
     const series = existing.parentEventId ? eventById(calendar, existing.parentEventId) : null;
     const held = existing.status === 'cancelled' ? [] : heldAttendees(existing, series);
-    // Only an attendee has an RSVP to give: any client can hang an ORGANIZER on an event.
     const declining = user && held.some((a) => a.email.toLowerCase() === user.email.toLowerCase());
     if (declining && invitation?.organizer) {
         const orgUserId = invitation.organizer.userId;
-        // An organizer known by address only has no Eigen id to relay to, so the decline goes as a REPLY.
         if (!orgUserId || isExternalOwnerId(orgUserId)) {
             const mail = composeRsvpReply(existing, user.email, user.name ?? user.email, 'declined');
             sendMail(mail).catch(console.error);
@@ -415,9 +408,7 @@ async function eraseStoredEvent(
     expectedEtag?: string,
 ): Promise<CalendarEvent | null> {
     const existing = eventById(calendar, id);
-    // Idempotent, and the event is not evaluated further for a resource that no longer exists.
     if (!existing) return null;
-    // 404 (not 403) on calendar mismatch so a share on one calendar can't oracle event ids in another.
     if (existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
     const resource = resourceOf(calendar, id);
     if (!resource) throw new ApiError(404, 'Event not found');

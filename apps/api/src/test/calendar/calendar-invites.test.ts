@@ -1100,3 +1100,76 @@ describe('The invitation mail of one save', () => {
         mail.mockRestore();
     });
 });
+
+describe('A save that changes nothing', () => {
+    test('moves no ctag, announces nothing and mails no guest', async () => {
+        const ctx = await getTestContext();
+        const owner = ctx.alice.user;
+        const calendar = (await getHome(owner.id)).calendar;
+        const calendarId = findOrFail(await calendar.getCalendars(), (c) => c.isDefault).id;
+        const eventUrl = (id: string) => `/calendar/${owner.id}/calendars/${calendarId}/events/${id}`;
+        const save = (id: string, body: object) =>
+            authedRequest(owner.sessionToken, eventUrl(id), {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+        const mailer = await import('../../lib/mailer/mailer');
+        const mail = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        const mailed = (subject: string) => mail.mock.calls.filter((call) => call[0].subject === subject).length;
+
+        const event = await assertJson<CalendarEvent>(
+            await authedRequest(owner.sessionToken, `/calendar/${owner.id}/calendars/${calendarId}/events`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'Restated',
+                    description: 'Agenda',
+                    location: 'Room 1',
+                    startTime: new Date(Date.now() + 3600_000),
+                    endTime: new Date(Date.now() + 7200_000),
+                    allDay: false,
+                    timezone: 'Europe/Amsterdam',
+                    rrule: 'FREQ=WEEKLY',
+                    data: {
+                        url: 'https://example.com/agenda',
+                        color: '#2563eb',
+                        reminders: [{ type: 'notification', minutes: 10 }],
+                        attendees: [
+                            { email: 'restated@external.com', name: 'Guest', status: 'pending', role: 'required' },
+                        ],
+                    },
+                }),
+            }),
+        );
+        await eventually(async () => mailed('Invitation: Restated') || undefined, 'the invitation to reach the guest');
+        const ctag = (await calendar.getCollection(calendarId))?.ctag;
+        const sse = await collectSSE(owner.id);
+
+        // The form restates every field on every save.
+        const answer = await save(event.id, {
+            title: event.title,
+            description: event.description,
+            location: event.location,
+            startTime: event.startTime,
+            endTime: event.endTime,
+            allDay: event.allDay,
+            timezone: event.timezone,
+            rrule: event.rrule,
+            data: event.data,
+            etag: event.etag,
+        });
+        const unchanged = await assertJson<CalendarEvent>(answer);
+        expect(unchanged.etag).toBe(event.etag);
+        expect((await calendar.getCollection(calendarId))?.ctag).toBe(ctag);
+
+        // Absence only counts behind what IS expected: a real edit, made second, takes the very path the save must not.
+        expect((await save(event.id, { title: 'Really changed' })).status).toBe(200);
+        await eventually(async () => mailed('Updated invitation: Really changed') || undefined, 'the real update');
+
+        expect(mailed('Updated invitation: Restated')).toBe(0);
+        expect(sse.events.filter((e) => e.type === SSEventType.CALENDAR_EVENT_UPDATED)).toHaveLength(1);
+        sse.stop();
+        mail.mockRestore();
+    });
+});
