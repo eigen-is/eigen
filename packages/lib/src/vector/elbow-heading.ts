@@ -48,20 +48,18 @@ export function aabbForElement(shape: VectorBindableElement, offset?: B4): B4 {
 
 // The heading a bound endpoint leaves its shape by, as Excalidraw's getHeadingForElbowArrowSnap. Far from the
 // shape, it points from the shape's center to the endpoint. Close to it, a cone test on `aabb` picks the side.
-// `origPoint` is the endpoint before it docked, and only its distance decides between the two. An unbound end has
-// no shape, so it points at the other endpoint.
+// An unbound end has no shape, so it points at the other endpoint.
 export function getHeadingForElbowArrowSnap(
     p: Point,
     otherPoint: Point,
     shape: VectorBindableElement | null,
     aabb: B4 | null,
-    origPoint: Point,
 ): Heading {
     const otherPointHeading = vectorToHeading(otherPoint.x - p.x, otherPoint.y - p.y);
     if (!shape || !aabb) return otherPointHeading;
 
     // A degenerate outline reads a distance of 0, so it counts as near, like an endpoint on the edge.
-    if (distanceToElement(shape, origPoint) > MAX_BINDING_DISTANCE) {
+    if (distanceToElement(shape, p) > MAX_BINDING_DISTANCE) {
         const c = boxCenter(shape);
         return vectorToHeading(p.x - c.x, p.y - c.y);
     }

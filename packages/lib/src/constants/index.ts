@@ -15,6 +15,7 @@ export * from './mount';
 export * from './preview';
 export * from './public';
 export * from './s3';
+export * from './settings';
 export * from './setup';
 export * from './stale-time';
 export * from './sweep';

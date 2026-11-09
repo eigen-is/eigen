@@ -134,4 +134,66 @@ describe('Mail calendar-invite payload', () => {
         const attachment = findOrFail(message.attachments, (a) => a.contentType.startsWith('text/calendar'));
         expect(attachment.calendarInvite).toBeNull();
     });
+
+    test('a calendar part nested past the limit lands with no summary', async () => {
+        const levels = 20;
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:REQUEST',
+            'BEGIN:VEVENT',
+            'UID:invite-payload-nested@external.com',
+            'SUMMARY:Nested Payload',
+            'DTSTART:20260420T120000Z',
+            ...Array<string>(levels).fill('BEGIN:X-LEVEL'),
+            ...Array<string>(levels).fill('END:X-LEVEL'),
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        const message = await deliverAndGetMessage('Invitation: Nested Payload', 'inv-nested', ics);
+
+        const attachment = findOrFail(message.attachments, (a) => a.contentType.startsWith('text/calendar'));
+        expect(attachment.calendarInvite).toBeNull();
+    });
+
+    test('a calendar part under the mail size limit has its summary', async () => {
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:REQUEST',
+            'BEGIN:VEVENT',
+            'UID:invite-payload-sized@external.com',
+            'SUMMARY:Sized Payload',
+            'DTSTART:20260420T120000Z',
+            `X-PAD:${'p'.repeat(1_000_000)}`,
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        const message = await deliverAndGetMessage('Invitation: Sized Payload', 'inv-sized', ics);
+
+        const attachment = findOrFail(message.attachments, (a) => a.contentType.startsWith('text/calendar'));
+        expect(attachment.calendarInvite?.summary).toBe('Sized Payload');
+    });
+
+    test('a calendar part past the mail size limit lands with no summary', async () => {
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:REQUEST',
+            'BEGIN:VEVENT',
+            'UID:invite-payload-large@external.com',
+            'SUMMARY:Large Payload',
+            'DTSTART:20260420T120000Z',
+            `X-PAD:${'p'.repeat(1_048_576)}`,
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        const message = await deliverAndGetMessage('Invitation: Large Payload', 'inv-large', ics);
+
+        const attachment = findOrFail(message.attachments, (a) => a.contentType.startsWith('text/calendar'));
+        expect(attachment.calendarInvite).toBeNull();
+    });
 });

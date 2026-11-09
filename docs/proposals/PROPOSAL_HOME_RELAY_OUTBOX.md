@@ -29,14 +29,14 @@ So the rule is "everything that is pushed", not "everything that crosses".
 
 | Problem | Where |
 |---|---|
-| A crash loses every queued and running delivery | All pushes. `acl-propagation.ts` and `sendToUserHomes` hold them in memory |
+| A crash loses every queued and running delivery | All pushes. `home-relay.ts` holds them in memory |
 | A failed delivery is logged and dropped, with no retry | `sendToUserHomes`, `share-propagation.ts`, `reconciliation.ts` |
-| Pushes follow three policies: a chain plus the budget of eight, only the budget, or neither | ACL; chat and watchers; calendar, reconciliation, access requests, comment assignment and alerts |
+| Pushes follow three policies: a per-path chain, one home at a time, or a direct send | ACL; chat and watchers; calendar, reconciliation, access requests, comment assignment and alerts |
 | A share PUT waits for one Home open per target | `Calendar` awaits `propagateCalendarShare` |
+| A shutdown waits for each running delivery, not for a caller's loop. A later direct `sendToHome` of an invitation to several guests or of a reconciliation gets a 503 and is lost | `invite-propagation.ts`, `reconciliation.ts` |
 | An invitation update delivered before its create is dropped for good, because the receiver has no linked event yet | `receiveInvitationUpdate`, fed by `invite-propagation.ts` |
-| A shutdown waits for two of the three policies. A direct `sendToHome` that opens a Home during the teardown gets a 503 and is lost | `drainDeliveriesWithin` |
 
-`sendToUserHomes` already solves a graceful shutdown and the fd burst of chat and watcher fan-outs. So the outbox's value is durability, retry, ordering, and one path instead of three.
+The relay already waits for each running push at a graceful shutdown, and today's code holds no limit on opens, because a fan-out opens one home at a time. So the outbox's value is durability, retry, ordering, and one path instead of three.
 
 ## One function decides where a push goes
 
@@ -82,11 +82,10 @@ In a cluster "server-level" means per process. Each process's outbox holds what 
 
 | Leaves | Lines |
 |---|---|
-| `pendingFanOuts`, `queueACLFanOut`, `drainACLFanOuts` and `drainDeliveriesWithin` in `acl-propagation.ts` | about 47 of 177 |
-| `deliveryBudget`, `deliveries`, `drainHomeDeliveries`, `countHomeDeliveries` and the permit reasoning in `home-relay.ts` | about 40 |
-| The `.catch` handlers in `chat.ts` and `history.ts`, whose `sendToUserHomes` never rejects, and the `try/catch` in `notifySharedCalendarUsers`, the only one that guards a delivery alone | about 20 |
+| `deliveries`, `lastInOrder`, `tracked`, `deliverToEach`, `drainHomeDeliveries` and `drainDeliveriesWithin` in `home-relay.ts` | about 50 |
+| The `try/catch` in `notifySharedCalendarUsers`, the only one that guards a delivery alone | about 5 |
 
-In comes `outbox.ts`, its db-config and schema, the codec, the receiver fixes and the status row. The estimate is about 250 to 320 net lines of production code, plus the test migration, which is larger than the production diff. `content-reindex-queue.ts` is 130 lines and `upload-queue.ts` is 518, and `outbox.ts` sits between them.
+In comes `outbox.ts`, its db-config and schema, the codec, the receiver fixes and the status row. The estimate is about 300 to 370 net lines of production code, plus the test migration, which is larger than the production diff. `content-reindex-queue.ts` is 130 lines and `upload-queue.ts` is 518, and `outbox.ts` sits between them.
 
 What gets simpler is what a reader has to know: one ordering rule, one budget, one retry curve and one shutdown step. The price is that a push is not done when `sendToHome` returns ([What changes for callers](#what-changes-for-callers)).
 
@@ -258,7 +257,7 @@ One unit branch lands together, in six commits. Moving verb by verb would keep t
 1. **Lift the backoff.** `uploadBackoffMs` moves to `utils/timing.ts`. The `upload-limits.ts` header and SYNC.md change with it.
 2. **Fix the receivers.** The six fixes in [A repeat delivery is tolerated and rare](#a-repeat-delivery-is-tolerated-and-rare), and the required tag on the relay's message type.
 3. **Add the outbox, unused.** `outbox.ts`, the schema, the db-config, the `SERVER_RUNTIME_FILES` entry and its unit tests. `test/server/server-files.test.ts` learns that `outbox.db` is a runtime database.
-4. **Switch, atomically.** `deliver`, `enqueue`, the RSVP move, the deletions, `server.ts`, the boot kick, and the test and seed migration. The deletions are `drainDeliveriesWithin`, `drainACLFanOuts`, `drainHomeDeliveries`, `countHomeDeliveries` and `queueACLFanOut`, with the state behind them.
+4. **Switch, atomically.** `deliver`, `enqueue`, the RSVP move, the deletions, `server.ts`, the boot kick, and the test and seed migration. The deletions are `drainDeliveriesWithin`, `drainHomeDeliveries`, `tracked`, `deliverToEach` and `lastInOrder`, with the state behind them.
 5. **Report it.** The status field and the `printReport` row, with the `ControlStatus` fixtures in `test/cli/status.test.ts` and `test/server/setup-token.test.ts`.
 6. **Document it.** SCALABILITY.md, ACL.md, SYNC.md, DATABASE.md, BACKUP.md (it lists the runtime files), CHAT.md, FILE-HISTORY.md, NOTIFICATION-CENTER.md, CALENDAR.md, an ARCHITECTURE.md row, the ROADMAP row, CHANGELOG, and the help center's `commands-and-files.md`, whose list of what `./eigen status` shows gets the new row.
 
@@ -276,7 +275,7 @@ Closing a removed member's open collab sockets doesn't use the outbox. Those soc
 ## Open questions
 
 - **Is 7 days the right maximum age?** Long enough for any outage we would survive, short enough that a row holding someone's text doesn't linger. A wrong value costs little and changes one constant.
-- **Is eight still the right budget?** It is the current value. Revisit it with the cap on open Homes.
+- **Is eight the right budget?** Today's code has none: a fan-out opens one home at a time. Revisit it with the cap on open Homes.
 
 ## Testing
 

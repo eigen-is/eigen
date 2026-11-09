@@ -7,7 +7,6 @@ import {
     isChartSpecKey,
     MAX_CHART_POINTS,
     MAX_CHART_SPEC_BYTES,
-    MAX_CHART_SPEC_DEPTH,
     mapChartSpecParts,
     newChartSpecParts,
     newSheetChartSpecParts,
@@ -19,6 +18,9 @@ import {
 import type { ChartSpecChange } from '../../types/chart';
 import { CHART_SPEC_PART_KEYS, CHART_SPEC_PARTS, CHART_TYPES } from '../../types/chart';
 import { chart, stored } from './spec-fixtures';
+
+// Mirrors the parser's nesting limit.
+const MAX_CHART_SPEC_DEPTH = 32;
 
 describe('readChartSpec and parseChartSpec', () => {
     const partsOf = (raw: Record<string, unknown>) => mapChartSpecParts((part) => JSON.stringify(raw[part]));

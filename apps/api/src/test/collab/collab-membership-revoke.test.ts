@@ -1,11 +1,15 @@
+import type { Mock } from 'bun:test';
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { COLLAB_ACCESS_LOST_CLOSE, COLLAB_ACCESS_LOST_REASON } from '@workspace/lib/constants/collab';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { teamOwnerId } from '@workspace/lib/types/owner';
+import { eq } from 'drizzle-orm';
 import * as decoding from 'lib0/decoding';
 import * as encoding from 'lib0/encoding';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
+import { session as sessionTable, user as userTable } from '../../../auth-schema';
+import { getAuthDrizzleDb } from '../../lib/auth/auth';
 import { CollabDocument, MESSAGE_SYNC } from '../../lib/collab/collab-document';
 import { getServerConfig } from '../../lib/config/server-config';
 import { Drive } from '../../lib/drive';
@@ -21,12 +25,14 @@ import {
     createTestUser,
     driveGet,
     drivePost,
+    extractSessionToken,
     firstMountId,
     getTestContext,
 } from '../setup';
 
-// Read is checked when a collab socket opens, so a membership that goes must close the sockets that lost read with it,
-// on every loaded home, whichever way better-auth removed the row. Needs a real listening server.
+// Read is checked when a collab socket opens and again on its 15 s keepalive, along with its session. So a socket that
+// lost read or whose session ended closes at the next tick, whichever way the row went. Needs a real listening server.
+// The tests run a tick by hand: the callback each socket gave setInterval, the real one, with no wait.
 
 const REVOKED = { code: COLLAB_ACCESS_LOST_CLOSE, reason: COLLAB_ACCESS_LOST_REASON };
 
@@ -34,8 +40,10 @@ let ctx: Awaited<ReturnType<typeof getTestContext>>;
 let orgId: string;
 let port: number | undefined;
 const sockets = new Set<WebSocket>();
+let intervals: Mock<typeof setInterval>;
 
 beforeAll(async () => {
+    intervals = spyOn(globalThis, 'setInterval');
     ctx = await getTestContext();
     const config = getServerConfig();
     if (!config) throw new Error('the server has no org');
@@ -47,11 +55,18 @@ beforeAll(async () => {
 afterEach(() => {
     for (const ws of sockets) ws.close();
     sockets.clear();
+    intervals.mockClear();
 });
 
 afterAll(() => {
     ctx.app.stop();
+    intervals.mockRestore();
 });
+
+// Runs every keepalive once and waits for its checks.
+async function tick(): Promise<void> {
+    await Promise.all(intervals.mock.calls.filter(([, ms]) => ms === 15_000).map(([keepalive]) => keepalive()));
+}
 
 // As alice, who owns the org.
 function post(path: string, body: Record<string, unknown>): Promise<Response> {
@@ -143,7 +158,7 @@ async function expectStillReceiving(socket: Socket, ownerId: string, mountId: st
     await waitFor(() => socket.frames() > before, 5_000);
 }
 
-describe('a membership that goes closes the sockets that lost read', () => {
+describe('a membership that goes closes the sockets that lost read at the next tick', () => {
     test("removal from a team, on a doc shared with the team in another owner's Home", async () => {
         const [removed, stays, direct] = await Promise.all([newUser('removed'), newUser('stays'), newUser('direct')]);
         const owner = ctx.alice.user;
@@ -155,12 +170,14 @@ describe('a membership that goes closes the sockets that lost read', () => {
 
         const first = await post('/auth/organization/remove-team-member', { teamId, userId: removed.id });
         expect(first.status).toBe(200);
+        await tick();
         expect(await removedSocket.closed).toEqual(REVOKED);
         await expectStillReceiving(staysSocket, owner.id, mountId, docId);
 
         // Still read through the entry that names them.
         const second = await post('/auth/organization/remove-team-member', { teamId, userId: direct.id });
         expect(second.status).toBe(200);
+        await tick();
         await expectStillReceiving(directSocket, owner.id, mountId, docId);
         await expectStillReceiving(staysSocket, owner.id, mountId, docId);
     });
@@ -180,6 +197,7 @@ describe('a membership that goes closes the sockets that lost read', () => {
         const staysSocket = await openSocket(stays, ownerId, mountId, doc.id);
 
         await post('/auth/organization/remove-team-member', { teamId, userId: removed.id });
+        await tick();
 
         expect(await removedSocket.closed).toEqual(REVOKED);
         await expectStillReceiving(staysSocket, ownerId, mountId, doc.id);
@@ -199,6 +217,7 @@ describe('a membership that goes closes the sockets that lost read', () => {
         });
 
         expect(res.status).toBe(200);
+        await tick();
         expect(await removedSocket.closed).toEqual(REVOKED);
         await expectStillReceiving(staysSocket, owner.id, mountId, docId);
     });
@@ -214,6 +233,7 @@ describe('a membership that goes closes the sockets that lost read', () => {
         const res = await post('/auth/organization/remove-team', { teamId, organizationId: orgId });
 
         expect(res.status).toBe(200);
+        await tick();
         expect(await memberSocket.closed).toEqual(REVOKED);
         await expectStillReceiving(directSocket, owner.id, mountId, docId);
     });
@@ -229,6 +249,7 @@ describe('a membership that goes closes the sockets that lost read', () => {
         const res = await post('/auth/admin/remove-user', { userId: removed.id });
 
         expect(res.status).toBe(200);
+        await tick();
         expect(await removedSocket.closed).toEqual(REVOKED);
         await expectStillReceiving(staysSocket, owner.id, mountId, docId);
     });
@@ -243,6 +264,7 @@ describe('a membership that goes closes the sockets that lost read', () => {
         const res = await post('/auth/admin/remove-user', { userId: removed.id });
 
         expect(res.status).toBe(200);
+        await tick();
         expect(await removedSocket.closed).toEqual(REVOKED);
         await expectStillReceiving(siblingSocket, owner.id, mountId, docId);
     });
@@ -257,6 +279,7 @@ describe('a membership that goes closes the sockets that lost read', () => {
         const res = await post('/auth/admin/remove-user', { userId: removed.id });
 
         expect(res.status).toBe(200);
+        await tick();
         expect(await removedSocket.closed).toEqual(REVOKED);
         await expectStillReceiving(staysSocket, owner.id, mountId, docId);
     });
@@ -283,14 +306,34 @@ describe('a membership that goes closes the sockets that lost read', () => {
         const ownerSocket = await openSocket(owner, owner.id, mountId, doc.id);
 
         await post('/auth/organization/remove-team-member', { teamId, userId: removed.id });
+        await tick();
 
         expect(await removedSocket.closed).toEqual(REVOKED);
         await expectStillReceiving(ownerSocket, owner.id, mountId, doc.id);
     });
 });
 
-describe("a password reset closes that user's sockets", () => {
-    test("on every loaded home, whether or not they may still read, and another user's socket stays", async () => {
+describe('a session that ends closes the sockets it opened at the next tick', () => {
+    // Two sessions of one user, as on a laptop and a phone, each with a socket on a doc the user may read.
+    async function twoSessionsOnOwnDoc() {
+        const email = `sessions-${crypto.randomUUID()}@test.eigen.is`;
+        const first = await createTestUser(email, 'testpassword123', 'Sessions');
+        const second = await createTestUser(email, 'testpassword123', 'Sessions');
+        const doc = await newDoc(first);
+        const firstSocket = await openSocket(first, first.id, doc.mountId, doc.docId);
+        const secondSocket = await openSocket(second, first.id, doc.mountId, doc.docId);
+        return { first, second, doc, firstSocket, secondSocket };
+    }
+
+    function asUser(token: string, path: string, body: Record<string, unknown> = {}): Promise<Response> {
+        return authedRequest(token, path, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+    }
+
+    test("an admin's password reset closes them whether or not the user may still read, and no one else's", async () => {
         const [locked, stays] = await Promise.all([newUser('locked'), newUser('stays')]);
         const owner = ctx.alice.user;
         const shared = await docNaming(owner, locked, stays);
@@ -304,11 +347,195 @@ describe("a password reset closes that user's sockets", () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ password: 'a-new-password-1' }),
         });
+        await tick();
 
         expect(res.status).toBe(200);
         expect(await sharedSocket.closed).toEqual(REVOKED);
         expect(await ownSocket.closed).toEqual(REVOKED);
         await expectStillReceiving(staysSocket, owner.id, shared.mountId, shared.docId);
+    });
+
+    test('a password change that revokes the other sessions closes all of them, and the new session opens', async () => {
+        const { first, doc, firstSocket, secondSocket } = await twoSessionsOnOwnDoc();
+
+        const res = await asUser(first.sessionToken, '/auth/change-password', {
+            currentPassword: 'testpassword123',
+            newPassword: 'a-new-password-1',
+            revokeOtherSessions: true,
+        });
+        expect(res.status).toBe(200);
+        await tick();
+
+        expect(await firstSocket.closed).toEqual(REVOKED);
+        expect(await secondSocket.closed).toEqual(REVOKED);
+
+        // The reload of the tab that changed it carries the new cookie, and that socket stays through a tick.
+        const reloaded = { ...first, sessionToken: extractSessionToken(res.headers) };
+        const socket = await openSocket(reloaded, first.id, doc.mountId, doc.docId);
+        await tick();
+        await expectStillReceiving(socket, first.id, doc.mountId, doc.docId);
+    });
+
+    test('a password change that keeps the sessions closes nothing', async () => {
+        const { first, doc, firstSocket, secondSocket } = await twoSessionsOnOwnDoc();
+
+        const res = await asUser(first.sessionToken, '/auth/change-password', {
+            currentPassword: 'testpassword123',
+            newPassword: 'a-new-password-1',
+        });
+        expect(res.status).toBe(200);
+        await tick();
+
+        await expectStillReceiving(firstSocket, first.id, doc.mountId, doc.docId);
+        await expectStillReceiving(secondSocket, first.id, doc.mountId, doc.docId);
+    });
+
+    test('/auth/revoke-sessions closes every session, its own included', async () => {
+        const { first, firstSocket, secondSocket } = await twoSessionsOnOwnDoc();
+
+        expect((await asUser(first.sessionToken, '/auth/revoke-sessions')).status).toBe(200);
+        await tick();
+
+        expect(await firstSocket.closed).toEqual(REVOKED);
+        expect(await secondSocket.closed).toEqual(REVOKED);
+    });
+
+    test('/auth/revoke-other-sessions closes the others and keeps its own', async () => {
+        const { first, doc, firstSocket, secondSocket } = await twoSessionsOnOwnDoc();
+
+        expect((await asUser(first.sessionToken, '/auth/revoke-other-sessions')).status).toBe(200);
+        await tick();
+
+        expect(await secondSocket.closed).toEqual(REVOKED);
+        await expectStillReceiving(firstSocket, first.id, doc.mountId, doc.docId);
+    });
+
+    test('a sign-out closes that session and keeps the other', async () => {
+        const { first, doc, firstSocket, secondSocket } = await twoSessionsOnOwnDoc();
+
+        expect((await asUser(first.sessionToken, '/auth/sign-out')).status).toBe(200);
+        await tick();
+
+        expect(await firstSocket.closed).toEqual(REVOKED);
+        await expectStillReceiving(secondSocket, first.id, doc.mountId, doc.docId);
+    });
+
+    test('a session past its expiry closes though its row is still there', async () => {
+        const { first, doc, firstSocket, secondSocket } = await twoSessionsOnOwnDoc();
+        const token = decodeURIComponent(first.sessionToken).split('.')[0] ?? '';
+
+        await getAuthDrizzleDb()
+            .update(sessionTable)
+            .set({ expiresAt: new Date(Date.now() - 1000) })
+            .where(eq(sessionTable.token, token));
+        await tick();
+
+        expect(await firstSocket.closed).toEqual(REVOKED);
+        await expectStillReceiving(secondSocket, first.id, doc.mountId, doc.docId);
+    });
+});
+
+describe('a share that goes', () => {
+    // A frame that sets one key, as an editor would.
+    function editFrame(key: string): Uint8Array {
+        const edit = new Y.Doc();
+        edit.getMap('probe').set(key, 'typed');
+        const encoder = encoding.createEncoder();
+        encoding.writeVarUint(encoder, MESSAGE_SYNC);
+        syncProtocol.writeUpdate(encoder, Y.encodeStateAsUpdate(edit));
+        return encoding.toUint8Array(encoder);
+    }
+
+    test('refuses the next edit at once, and closes the socket at the next tick', async () => {
+        const sharee = await newUser('sharee');
+        const owner = ctx.alice.user;
+        const { mountId, docId } = await docNaming(owner, sharee);
+        const shareeSocket = await openSocket(sharee, owner.id, mountId, docId);
+        const ownerSocket = await openSocket(owner, owner.id, mountId, docId);
+        const drive = (await getHome(owner.id)).drive;
+        const document = await drive.getCollabDocument(mountId, docId);
+        const probe = document.doc.getMap('probe');
+
+        shareeSocket.ws.send(new Uint8Array(editFrame('while shared')));
+        await waitFor(() => probe.has('while shared'), 5_000);
+
+        await drive.updateACL(mountId, docId, []);
+
+        expect(shareeSocket.ws.readyState).toBe(WebSocket.OPEN);
+        shareeSocket.ws.send(new Uint8Array(editFrame('after the share went')));
+        await Bun.sleep(100);
+        expect(probe.has('after the share went')).toBe(false);
+
+        await tick();
+        expect(await shareeSocket.closed).toEqual(REVOKED);
+        await expectStillReceiving(ownerSocket, owner.id, mountId, docId);
+    });
+
+    test('the tick leaves the readers of another document, and a writer who keeps read', async () => {
+        const [revoked, demoted] = await Promise.all([newUser('revoked'), newUser('demoted')]);
+        const owner = ctx.alice.user;
+        const untouched = await docNaming(owner, revoked);
+        const changed = await docNaming(owner, revoked, demoted);
+        const drive = (await getHome(owner.id)).drive;
+        const untouchedSocket = await openSocket(revoked, owner.id, untouched.mountId, untouched.docId);
+        const revokedSocket = await openSocket(revoked, owner.id, changed.mountId, changed.docId);
+        const demotedSocket = await openSocket(demoted, owner.id, changed.mountId, changed.docId);
+
+        await drive.updateACL(changed.mountId, changed.docId, [{ id: demoted.email, read: true, write: false }]);
+        await tick();
+
+        expect(await revokedSocket.closed).toEqual(REVOKED);
+        await expectStillReceiving(untouchedSocket, owner.id, untouched.mountId, untouched.docId);
+        await expectStillReceiving(demotedSocket, owner.id, changed.mountId, changed.docId);
+    });
+
+    test('a move out of a shared folder closes who read through it, and a move within it closes no one', async () => {
+        const sharee = await newUser('sharee');
+        const owner = ctx.alice.user;
+        const mountId = await firstMountId(owner.sessionToken, owner.id);
+        const root = await driveGet<DrivePath>(owner.sessionToken, owner.id, mountId, 'root');
+        const home = await getHome(owner.id);
+        const drive = home.drive;
+        const folder = await drive.createFolder(mountId, root.id, `Shared ${crypto.randomUUID()}`);
+        await drive.updateACL(mountId, folder.id, [{ id: sharee.email, read: true, write: true }]);
+        const inner = await drive.createFolder(mountId, folder.id, 'Inner');
+        const doc = await drivePost<DrivePath>(
+            owner.sessionToken,
+            owner.id,
+            mountId,
+            `folder/${folder.id}/create/doc`,
+            {
+                fileName: 'Moving probe',
+            },
+        );
+        const shareeSocket = await openSocket(sharee, owner.id, mountId, doc.id);
+        const ownerSocket = await openSocket(owner, owner.id, mountId, doc.id);
+
+        await drive.movePath(mountId, doc.id, inner.id, home.user);
+        await tick();
+        await expectStillReceiving(shareeSocket, owner.id, mountId, doc.id);
+
+        await drive.movePath(mountId, doc.id, root.id, home.user);
+        expect(shareeSocket.ws.readyState).toBe(WebSocket.OPEN);
+        await tick();
+
+        expect(await shareeSocket.closed).toEqual(REVOKED);
+        await expectStillReceiving(ownerSocket, owner.id, mountId, doc.id);
+    });
+
+    test('a new email closes the socket that the old address in the ACL let in', async () => {
+        const sharee = await newUser('sharee');
+        const owner = ctx.alice.user;
+        const { mountId, docId } = await docNaming(owner, sharee);
+        const socket = await openSocket(sharee, owner.id, mountId, docId);
+
+        await getAuthDrizzleDb()
+            .update(userTable)
+            .set({ email: `moved-${crypto.randomUUID()}@test.eigen.is` })
+            .where(eq(userTable.id, sharee.id));
+        await tick();
+
+        expect(await socket.closed).toEqual(REVOKED);
     });
 });
 
@@ -404,72 +631,43 @@ describe('an open that is still loading the document', () => {
     });
 });
 
-describe('the walk over the loaded homes', () => {
-    test('does not count as a request on a home with an open socket', async () => {
-        const [removed, idle] = await Promise.all([newUser('removed'), newUser('idle')]);
-        const teamId = await newTeamWith(removed);
+describe('the tick', () => {
+    test('counts as no request on the home of an open socket', async () => {
+        const idle = await newUser('idle');
         const { mountId, docId } = await newDoc(idle);
         const socket = await openSocket(idle, idle.id, mountId, docId);
         const home = await getHome(idle.id);
         const canRead = spyOn(home.drive, 'canRead');
         const requests = spyOn(home, 'touch');
-
-        await post('/auth/organization/remove-team-member', { teamId, userId: removed.id });
-
-        expect(canRead).toHaveBeenCalled();
-        expect(requests).not.toHaveBeenCalled();
-        expect(socket.ws.readyState).toBe(WebSocket.OPEN);
-    });
-
-    test('neither waits for a document that is still loading nor starts it', async () => {
-        const removed = await newUser('removed');
-        const owner = ctx.alice.user;
-        const teamId = await newTeamWith(removed);
-        const { mountId, docId } = await newDoc(owner);
-        const loading = Promise.withResolvers<void>();
-        const init = CollabDocument.prototype.init;
-        const inits = spyOn(CollabDocument.prototype, 'init').mockImplementationOnce(async function (
-            this: CollabDocument,
-        ) {
-            await loading.promise;
-            return init.call(this);
-        });
         try {
-            const drive = (await getHome(owner.id)).drive;
-            const opening = drive.getCollabDocument(mountId, docId);
+            await tick();
 
-            const res = await post('/auth/organization/remove-team-member', { teamId, userId: removed.id });
-
-            expect(res.status).toBe(200);
-            expect(inits).toHaveBeenCalledTimes(1);
-            loading.resolve();
-            await opening;
+            expect(canRead).toHaveBeenCalled();
+            expect(requests).not.toHaveBeenCalled();
+            expect(socket.ws.readyState).toBe(WebSocket.OPEN);
         } finally {
-            inits.mockRestore();
+            canRead.mockRestore();
+            requests.mockRestore();
         }
     });
 
-    test('a check that fails stops neither the walk nor the removal', async () => {
-        const removed = await newUser('removed');
-        const teamId = await newTeamWith(removed);
-        const owners = [ctx.alice.user, ctx.bob.user];
-        const opened = await Promise.all(
-            owners.map(async (owner) => {
-                const { mountId, docId } = await docSharedWith(owner, teamId);
-                return openSocket(removed, owner.id, mountId, docId);
-            }),
-        );
+    test('a check that fails keeps the socket, and the next tick asks again', async () => {
+        const sharee = await newUser('sharee');
+        const owner = ctx.alice.user;
+        const { mountId, docId } = await docNaming(owner, sharee);
+        const socket = await openSocket(sharee, owner.id, mountId, docId);
+        await (await getHome(owner.id)).drive.updateACL(mountId, docId, []);
         const canRead = spyOn(Drive.prototype, 'canRead').mockImplementationOnce(() => {
             throw new Error('a mount that fails');
         });
         const errors = spyOn(console, 'error').mockImplementation(() => {});
         try {
-            const res = await post('/auth/organization/remove-team-member', { teamId, userId: removed.id });
+            await tick();
+            expect(socket.ws.readyState).toBe(WebSocket.OPEN);
+            expect(errors).toHaveBeenCalled();
 
-            expect(res.status).toBe(200);
-            // The home the walk reaches first keeps its socket, and the other loses it.
-            await waitFor(() => opened.some((socket) => socket.ws.readyState === WebSocket.CLOSED), 5_000);
-            expect(opened.filter((socket) => socket.ws.readyState === WebSocket.OPEN)).toHaveLength(1);
+            await tick();
+            expect(await socket.closed).toEqual(REVOKED);
         } finally {
             canRead.mockRestore();
             errors.mockRestore();

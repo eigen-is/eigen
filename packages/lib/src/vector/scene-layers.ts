@@ -1,8 +1,7 @@
-// The scene as an ordered list of placed boxes: one definition of "where does this element go and what
-// does it draw", so the live canvas (one absolutely positioned div per element), the server compositor
-// (the same boxes as HTML) and the standalone SVG serializer agree by construction. The canvas draws each
-// element through elementLayer's two halves (ElementLayer); sceneLayers is the same pass over a whole
-// scene, for a host that lays a whole page out at once.
+// The scene as an ordered list of placed boxes: one definition of what each element draws (layerContent) and where
+// it goes (placeLayer), so the live canvas, the server compositor and the standalone SVG serializer agree by
+// construction. The canvas calls the two halves per element; sceneLayers runs them over a whole scene, for a host
+// that lays a whole page out at once.
 
 import { escapeXml } from '../core/xml';
 import { arrowRoute } from './elbow-route';
@@ -41,14 +40,6 @@ type ElementLayerOptions = {
     // Prefixes the ids of the element's defs, for a surface that draws a copy of what another on the page draws.
     idScope?: string;
 };
-
-// One element as a placed layer, or null when the kind draws nothing at all. The live canvas renders per
-// element with local preview overrides, so it builds its layers from the two halves below; sceneLayers
-// is this over a whole scene.
-export function elementLayer(el: VectorElement, opts: ElementLayerOptions = {}): Layer | null {
-    const content = layerContent(el, opts);
-    return content && placeLayer(el, content);
-}
 
 // The fields only placeLayer reads: no kind's render does, so a host may keep a body across a change to them.
 export const PLACEMENT_FIELDS: readonly string[] = ['x', 'y', 'angle', 'opacity'];
@@ -152,9 +143,8 @@ export function sceneLayers(scene: VectorScene, opts: SceneLayersOptions = {}): 
     const byId = opts.byId ?? new Map(scene.elements.map((el) => [el.id, el]));
     const layers: Layer[] = [];
     for (const el of orderByFractionalIndex(visible)) {
-        // arrowRoute self-guards (not an arrow, or not elbow => undefined), so no element-type test is needed.
-        const layer = elementLayer(el, { resolveMedia: opts.resolveMedia, route: arrowRoute(el, byId) });
-        if (layer) layers.push(layer);
+        const content = layerContent(el, { resolveMedia: opts.resolveMedia, route: arrowRoute(el, byId) });
+        if (content) layers.push(placeLayer(el, content));
     }
     return layers;
 }

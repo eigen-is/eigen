@@ -77,8 +77,8 @@ services:
     # drains pending S3 uploads for 20 s (SHUTDOWN_DRAIN_BUDGET_MS, server.ts): 50 s, and room for
     # closing the homes. An upload still in flight past this replays from pending_uploads on boot.
     stop_grace_period: 90s
-    # Each open Home costs ~25-30 fds (~6 WAL SQLite DBs × 3 files each + ~10 maildir fs.watch
-    # handles). Distro/Docker defaults (often 1024 soft) cap concurrent open homes at ~35, and
+    # Each open user Home costs ~18 fds (6 WAL SQLite DBs × 3 files each). A hard limit of 1024
+    # caps open homes at ~55, and
     # cross-home fan-outs (e.g. sharing to a large team) then fail with SQLITE_IOERR and
     # silently skip recipients. Pin the limit high — fds are cheap kernel objects.
     ulimits:

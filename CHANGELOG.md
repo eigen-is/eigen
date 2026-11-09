@@ -14,6 +14,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Changed
 
+- **Storage limit for mail, contacts and calendar (breaking)** — the limit per user, and a team's override of it, goes back to its default of 100 MB. Set it again under **Storage quotas** in Admin's server settings and **Quota overrides** on the team's page
 - **A new look for the public site** — the landing page, Support, the blog and the changelog share one layout, with a footer that shows the version. The apps named on the landing page link to their Support sections
 - **Tile titles** — on the Space home page and the help center's front page, an app's title is in the normal text color. The icon and the stripe keep the app's color
 - **Table of contents in the changelog** — a Versions list beside the changelog jumps to a release, and each entry starts with its bold title
@@ -34,6 +35,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Pasting edited cells in Sheets** — if you edit cells after copying them, a paste in the same tab brings them as they are now
 - **Validation limits in Sheets** — an edit that would push a validation rule past its limit goes through, and the cells past it get no rule
 - **Speed in Sheets** — editing a cell in a workbook of 100,000 formulas takes milliseconds, where it took over a tenth of a second, and a cell that 100,000 formulas read no longer stalls a sheet for a minute
+- **Large invites in Mail** — a calendar invite over 1 MiB shows "This calendar invitation could not be read" instead of a preview, and no longer changes your calendar by itself
+- **Unusual repeat rules in Calendar** — an event whose repeat rule would take the server too long to work out shows on its first date only, and calendar apps still get the whole rule. An invite whose rule names no frequency arrives as one event instead of getting lost
 - **Default drive size reaches existing users** — raising **Default mount (MB)** in Admin's server settings now gives every user's drive the new size at once, not only users who sign in for the first time. Lowering it shrinks no one's drive
 
 ### Fixed
@@ -76,10 +79,17 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Changing room in Chat** — what you were about to send is cleared when you change room, so it can't go to the wrong one
 - **Two people editing in Calendar** — editing, moving or deleting an event someone else just changed is refused instead of overwriting their change
 - **Removing a location in Calendar** — an update that only removes an event's location or description reaches its guests
-- **Very large calendar events** — saving a huge event through a calendar client takes seconds at most instead of freezing the server for minutes
+- **Calendar files from others** — a calendar file someone else made, in a mail invite, from a calendar app or in an import, no longer freezes the server
+- **Guest emails in Calendar** — changing only an event's color or reminder, or moving a one-off event to another time zone without changing when it happens, no longer emails its guests. Neither does a save that changes nothing
+- **Events from other calendar apps** — the first save in Calendar of an event made in another calendar app no longer rewrites what you didn't change, or emails its guests
+- **Guest replies in Calendar** — a guest's answer for a date a repeating event doesn't have no longer adds that date to it
+- **Long date ranges in Calendar** — a repeating event lasting several days shows when it began before the days in view, in Calendar and in calendar apps. A calendar app asking for more than five years at once gets the events past the first five
+- **Time zones in calendar files** — an export keeps each event's time when two custom time zones share a name, and so does an import of a file holding several calendars. An event a calendar app saved in UTC shows as UTC, not GMT, and stays UTC when moved
+- **Importing a file that isn't a calendar** — Calendar says it is not a calendar file instead of showing an internal error
 - **A refused Save** — in Calendar, Contacts and Personal info in Space, a Save refused because the item changed elsewhere keeps what you typed and takes the other fields from the server
-- **Removing someone with a document open** — removing someone from a team or an organization, or deleting their account, cuts them off at once from the documents they can no longer read. A password reset does too
-- **Losing access to an open document** — in Docs, Sheets, Slides, Vector and Stickies, the page switches to "You need access" at once, or to sign-in if your account was deleted, instead of leaving an editor where typing goes nowhere
+- **Removing someone with a document open** — removing someone from a team or an organization, or deleting their account, cuts them off within 15 seconds from the documents they can no longer read. A password reset does too
+- **Losing access to an open document** — in Docs, Sheets, Slides, Vector and Stickies, the page switches to "You need access" within 15 seconds, or to sign-in if your account was deleted, instead of leaving an editor where typing goes nowhere
+- **Signing out with a document open** — signing out or changing your password with **Log out of all other devices** ticked also ends open documents and live updates, within 15 seconds
 - **Shared with me** — items of a deleted person or team no longer show
 - **Restoring a deleted account or team** — a restore of a deleted team, or of a deleted user whose address another account now holds, is refused before it changes anything. A restore that fails no longer reloads open tabs, so they keep their unsaved edits
 - **Deleting during an upload** — on local storage, deleting a file while an upload of the same name runs no longer loses the new file

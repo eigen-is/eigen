@@ -291,13 +291,13 @@ describe('Contacts import quota', () => {
         await getTestContext();
         const user = await createTestUser('vcard-import@test.eigen.is', 'testpassword123', 'VCard Import');
         const home = await getHome(user.id);
-        const originalMaxMB = getServerSettings().quotas.mailAndContactsMaxMB;
+        const originalMaxMB = getServerSettings().quotas.homeDataMaxMB;
 
         try {
             const used = (await home.mail.size()) + (await home.contacts.size());
             // Between 1 and 2 MB of headroom: the small card fits, the fat one (under CARD_MAX_BYTES, so it
             // reaches the quota gate rather than the size ceiling) cannot.
-            await updateServerSettings({ quotas: { mailAndContactsMaxMB: Math.floor(used / MB) + 2 } });
+            await updateServerSettings({ quotas: { homeDataMaxMB: Math.floor(used / MB) + 2 } });
 
             const text =
                 card30('Small Card', 'small@example.com', crypto.randomUUID()) +
@@ -313,7 +313,7 @@ describe('Contacts import quota', () => {
             expect(book.some((c) => c.firstName === 'Small')).toBe(true);
             expect(book.some((c) => c.firstName === 'Fat')).toBe(false);
         } finally {
-            await updateServerSettings({ quotas: { mailAndContactsMaxMB: originalMaxMB } });
+            await updateServerSettings({ quotas: { homeDataMaxMB: originalMaxMB } });
         }
     });
 });

@@ -125,7 +125,7 @@ function lookup<V>(map: ReadonlyMap<string, V>, key: string): V {
 // A raw message from the MIME composer that the app's outbound mail uses. It calls the composer directly, not
 // through composeRfc822, so the seed sets the threading headers (Message-ID, In-Reply-To, References) itself.
 // With html, the message is multipart/alternative, so the mail client renders its lists and paragraphs.
-async function buildRfc822(o: {
+async function buildRfc822(mail: {
     from: string;
     to: string;
     subject: string;
@@ -139,17 +139,17 @@ async function buildRfc822(o: {
     icalEvent?: { method: string; content: string };
 }): Promise<Buffer> {
     return new MailComposer({
-        from: o.from,
-        to: o.to,
-        subject: o.subject,
-        date: o.date,
-        text: o.text,
-        html: o.html,
-        messageId: `<${o.messageId}>`,
-        inReplyTo: o.inReplyTo ? `<${o.inReplyTo}>` : undefined,
-        references: o.references?.length ? o.references.map((r) => `<${r}>`) : undefined,
-        attachments: o.attachments,
-        icalEvent: o.icalEvent,
+        from: mail.from,
+        to: mail.to,
+        subject: mail.subject,
+        date: mail.date,
+        text: mail.text,
+        html: mail.html,
+        messageId: `<${mail.messageId}>`,
+        inReplyTo: mail.inReplyTo ? `<${mail.inReplyTo}>` : undefined,
+        references: mail.references?.length ? mail.references.map((id) => `<${id}>`) : undefined,
+        attachments: mail.attachments,
+        icalEvent: mail.icalEvent,
     })
         .compile()
         .build();
@@ -191,16 +191,16 @@ function htmlToDocJson(schema: Schema, html: string): JSONContent {
 // The comments panel renders from the doc's `comments` Y.Map. Mirrors the FE's writeCardToDoc, which lives in a
 // React hooks module the API must not pull into its module graph.
 function writeCommentCard(doc: Y.Doc, card: CommentCard): void {
-    const y = new Y.Map<unknown>();
-    y.set('id', card.id);
-    y.set('title', card.title);
-    y.set('description', card.description);
-    if (card.color) y.set('color', card.color);
-    if (card.chatName) y.set('chatName', card.chatName);
-    if (card.creator) y.set('creator', card.creator);
-    if (card.createdAt !== undefined) y.set('createdAt', card.createdAt);
-    if (card.attachments) y.set('attachments', card.attachments);
-    getItemMapRoot(doc, 'comments').set(card.id, y);
+    const entry = new Y.Map<unknown>();
+    entry.set('id', card.id);
+    entry.set('title', card.title);
+    entry.set('description', card.description);
+    if (card.color) entry.set('color', card.color);
+    if (card.chatName) entry.set('chatName', card.chatName);
+    if (card.creator) entry.set('creator', card.creator);
+    if (card.createdAt !== undefined) entry.set('createdAt', card.createdAt);
+    if (card.attachments) entry.set('attachments', card.attachments);
+    getItemMapRoot(doc, 'comments').set(card.id, entry);
 }
 
 async function main(): Promise<void> {
@@ -230,10 +230,9 @@ async function main(): Promise<void> {
     const { getHome, getTeamHome, shutdownAllHomes } = await import('../lib/home');
     const { getUserByEmail } = await import('../lib/user');
     const { resolveContacts } = await import('../lib/contacts/get-contacts');
-    const { drainACLFanOuts } = await import('../lib/drive/acl-propagation');
     const { commitEigendocImport } = await import('../lib/document/doc');
     const { docSchema } = await import('../lib/document/doc-schema');
-    const { pushTeamAvatar } = await import('../lib/home/home-relay');
+    const { drainHomeDeliveries, pushTeamAvatar } = await import('../lib/home/home-relay');
     const { generateImagePreview } = await import('../lib/shared/thumbnails');
     const { renderAttachmentPills } = await import('../lib/mailer/mail-template');
     const { createVCard } = await import('../lib/vcard');
@@ -464,9 +463,9 @@ async function main(): Promise<void> {
     // whatever domain serves the demo. ---
     {
         const author = userForRole('volunteers');
-        const rosterItems = PERSONAS.map((p) => {
-            const url = `/contacts/team/${teamId}?contactId=${encodeURIComponent(emailFor(p.key))}`;
-            return `<li><a href="${url}">${p.name}</a> - ${p.title}</li>`;
+        const rosterItems = PERSONAS.map((persona) => {
+            const url = `/contacts/team/${teamId}?contactId=${encodeURIComponent(emailFor(persona.key))}`;
+            return `<li><a href="${url}">${persona.name}</a> - ${persona.title}</li>`;
         }).join('');
         const rosterHtml = [
             '<h1>Crew roster</h1>',
@@ -699,7 +698,7 @@ async function main(): Promise<void> {
     }
 
     // --- Calendar: team events. The team calendar is shared, so an event sends no invitations. ---
-    const defaultCalendar = (await teamHome.calendar.getCalendars()).find((c) => c.isDefault);
+    const defaultCalendar = (await teamHome.calendar.getCalendars()).find((calendar) => calendar.isDefault);
     if (!defaultCalendar) throw new Error('Team default calendar missing');
     const now = new Date();
     // Anchor the festival on a weekend: the first Saturday at least ~3 weeks out (so it lands 20-26
@@ -718,7 +717,7 @@ async function main(): Promise<void> {
         end.setHours(end.getHours() + slot.durationHours);
         return { start, end };
     };
-    const resolvePersona = (ref: string) => PERSONAS.find((p) => p.role === ref) ?? personaByKey(ref);
+    const resolvePersona = (ref: string) => PERSONAS.find((persona) => persona.role === ref) ?? personaByKey(ref);
     for (const event of EVENTS) {
         let { start, end } = timedSlot(event);
         if (event.allDay) {
@@ -755,7 +754,7 @@ async function main(): Promise<void> {
     for (const shift of SHIFTS) {
         const owner = lookup(userByKey, shift.persona);
         const { calendar } = await getHome(owner.id);
-        const personal = (await calendar.getCalendars()).find((c) => c.isDefault);
+        const personal = (await calendar.getCalendars()).find((candidate) => candidate.isDefault);
         if (!personal) throw new Error(`Default calendar missing for ${owner.email}`);
         const { start, end } = timedSlot(shift);
         await calendar.createEvent(personal.id, {
@@ -845,26 +844,26 @@ async function main(): Promise<void> {
         let previous: { id: string; from: { name: string; address: string }; date: Date; html: string } | undefined;
         return async (
             message: SeededMail['messages'][number],
-            o: { to: string; html?: string; icalEvent?: { method: string; content: string } },
+            parts: { to: string; html?: string; icalEvent?: { method: string; content: string } },
         ): Promise<Buffer> => {
             const date = new Date(now.getTime() - message.daysAgo * 86_400_000);
             date.setHours(message.hour, 0, 0, 0);
             const messageId = `${crypto.randomUUID()}@${MAIL_DOMAIN}`;
             const from = senderOf(message);
-            const ownHtml = o.html ?? textToHtml(message.text);
+            const ownHtml = parts.html ?? textToHtml(message.text);
             const reply = previous && ownHtml + formatReplyQuote(previous.from, previous.date, previous.html);
             const buffer = await buildRfc822({
                 from: `${from.name} <${from.address}>`,
-                to: o.to,
+                to: parts.to,
                 subject: previous ? `Re: ${subject}` : subject,
                 date,
                 text: reply ? stripTagsServer(reply) : message.text,
-                html: reply ?? o.html,
+                html: reply ?? parts.html,
                 messageId,
                 inReplyTo: previous?.id,
                 references: references.length ? references : undefined,
                 attachments: message.attachments?.map(mailAttachment),
-                icalEvent: o.icalEvent,
+                icalEvent: parts.icalEvent,
             });
             references.push(messageId);
             previous = { id: messageId, from, date, html: reply ?? ownHtml };
@@ -878,7 +877,7 @@ async function main(): Promise<void> {
             const recipient = lookup(userByKey, resolvePersona(flow.to).key);
             const recipientHome = await getHome(recipient.id);
             // The outside party, such as a booker, is the other end of every message.
-            const externalParty = flow.messages.find((m) => m.fromExternal)?.fromExternal;
+            const externalParty = flow.messages.find((message) => message.fromExternal)?.fromExternal;
             let answeredId: string | undefined;
             for (const message of flow.messages) {
                 const external = message.fromExternal;
@@ -997,10 +996,10 @@ async function main(): Promise<void> {
         }
     }
 
-    // Wait for the ACL fan-outs that run in the background, then close every home with its databases.
-    await drainACLFanOuts();
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    await drainACLFanOuts();
+    // Wait for the deliveries that run in the background, then close every home with its databases.
+    await drainHomeDeliveries();
+    await Bun.sleep(500);
+    await drainHomeDeliveries();
     await shutdownAllHomes();
 
     console.log(`Seeded "Tuimel Festival" for ${PERSONAS.length} personas at ${DATA_ROOT}`);

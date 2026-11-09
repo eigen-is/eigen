@@ -76,7 +76,7 @@ export type TeamSettings = {
     };
     mounts?: Record<string, MountSettings>;
     memberOverrides?: {
-        mailAndContactsMaxMB?: number;
+        homeDataMaxMB?: number;
         defaultMountMaxSizeMB?: number;
     };
     // Missing = on: a notification relayed to the team reaches its members.
@@ -124,8 +124,7 @@ export type LandingLink = {
 
 export type ServerSettings = {
     quotas: {
-        // Named for the two domains it started with; the budget covers the Home's calendar bytes too.
-        mailAndContactsMaxMB: number;
+        homeDataMaxMB: number;
         defaultMountMaxSizeMB: number;
         maxUploadSizeMB: number;
         trashRetentionDays: number;

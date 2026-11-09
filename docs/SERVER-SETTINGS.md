@@ -81,11 +81,11 @@ Admins keep what the Users, Guests and team pages need. They read `GET /settings
 
 ## An admin password reset revokes every way in
 
-`PUT /settings/user/:userId/password` calls `resetUserPassword()` (`apps/api/src/lib/user/reset-password.ts`), the same path as `./eigen reset-password`. It signs the user out everywhere, closes their collab sockets and revokes their app passwords, since those open IMAP, CalDAV and WebDAV without the password. An open IMAP session stays up until it drops, because Dovecot checks the password only at login, and so does the user's event stream. It refuses a guest, who signs in with a code, and it refuses the owner unless the owner resets their own. better-auth's own `/admin/set-user-password` revokes nothing, so it is in `disabledPaths` (`apps/api/src/lib/auth/auth.ts`).
+`PUT /settings/user/:userId/password` calls `resetUserPassword()` (`apps/api/src/lib/user/reset-password.ts`), the same path as `./eigen reset-password`. It signs the user out everywhere, which closes their collab sockets and event streams within 15 s, and revokes their app passwords, since those open IMAP, CalDAV and WebDAV without the password. An open IMAP session stays up until it drops, because Dovecot checks the password only at login. It refuses a guest, who signs in with a code, and it refuses the owner unless the owner resets their own. better-auth's own `/admin/set-user-password` revokes nothing, so it is in `disabledPaths` (`apps/api/src/lib/auth/auth.ts`).
 
 ## The Users page sizes homes without booting them
 
-`GET /settings/users/usage` sizes every user through `pullHomeSize` (`apps/api/src/lib/home/home-relay.ts`), which reads the home's own databases and folders instead of booting the Home. A boot apiece costs seconds. `getAllUsersUsage` (`apps/api/src/lib/user/admin-usage.ts`) still caps the disk work at four homes at once, caches the result for five minutes per exact set of users, and skips a home that fails rather than failing the page. What each number counts is in [QUOTA.md](QUOTA.md#a-cold-read-reports-what-a-live-home-reports).
+`GET /settings/users/usage` sizes every user through `pullHomeSize` (`apps/api/src/lib/home/home-relay.ts`), which reads the home's own databases and folders instead of booting the Home. A boot apiece costs seconds. `getAllUsersUsage` (`apps/api/src/lib/user/admin-users.ts`, beside the queries behind the Users and Guests lists) still caps the disk work at four homes at once, caches the result for five minutes per exact set of users, and skips a home that fails rather than failing the page. What each number counts is in [QUOTA.md](QUOTA.md#a-cold-read-reports-what-a-live-home-reports).
 
 ## The status section is what ./eigen status reports
 

@@ -299,6 +299,17 @@ describe('normalizeTimezone', () => {
         expect(normalizeTimezone('AUS Eastern Standard Time')).toBe('Australia/Sydney');
     });
 
+    test("any spelling of a zone answers Intl's own", () => {
+        expect(normalizeTimezone('EUROPE/amsterdam')).toBe('Europe/Amsterdam');
+        expect(normalizeTimezone('america/new_york')).toBe('America/New_York');
+    });
+
+    test('a zone spelled as Intl spells it stays as it is', () => {
+        const zones = Intl.supportedValuesOf('timeZone').filter((zone) => !WINDOWS_ZONES.has(zone));
+
+        expect(zones.filter((zone) => normalizeTimezone(zone) !== zone)).toEqual([]);
+    });
+
     test('every zone the Windows table names is one Intl knows', () => {
         expect([...WINDOWS_ZONES.keys()].filter((name) => normalizeTimezone(name) === null)).toEqual([]);
     });

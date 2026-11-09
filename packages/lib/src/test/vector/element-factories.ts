@@ -5,6 +5,7 @@ import { newChartSpecParts } from '../../charts/spec';
 import type { ChartSpec } from '../../types/chart';
 import { ELEMENT_KINDS, textualDefaults, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
 import { serializePoints } from '../../vector/points';
+import { sceneToSvg } from '../../vector/scene-to-svg';
 import type {
     VectorArrowElement,
     VectorChartElement,
@@ -121,6 +122,13 @@ export function arrow(over: Partial<VectorArrowElement> & Pick<VectorArrowElemen
 
 export function scene(elements: VectorElement[], background = 'transparent'): VectorScene {
     return { meta: { ...DEFAULT_SCENE_META, background }, frames: [], elements };
+}
+
+// One element's SVG fragment, exactly as sceneToSvg writes it into a scene, without the outer <svg> viewport.
+export function elementSvg(el: VectorElement): string {
+    return sceneToSvg(scene([el]))
+        .replace(/^<svg[^>]*>/, '')
+        .replace(/<\/svg>$/, '');
 }
 
 // The scene lookup every geometry entry point takes, from the elements a test cares about.

@@ -1,53 +1,25 @@
-// The `eigen-media:` ref codec for image-bearing vector SVGs. A copied
-// selection's SVG references each image BY NAME — `href="eigen-media:<encodeURIComponent(name)>"` —
-// never by bytes; the stored .svg keeps those refs so a container copy resolves them against the
-// copy's own media/ siblings, and the display path (the API preview inliner) swaps each ref for a
-// `data:` URI at serve time. Pure string ops, no XML parsing.
-//
-// escapeXml invariance is the load-bearing property: sceneToSvg writes `href="${escapeXml(href)}"`,
-// and escapeXml touches only `& < > " '`, tab/LF/CR and characters XML can't hold. encodeURIComponent
-// already percent-encodes all of them but `'` (a lone surrogate throws), so eigenMediaHref also encodes
-// `'` to %27. The resulting token contains none of escapeXml's characters, so the SVG stores the token
-// verbatim and rewrite/strip are exact-token string replaces, never a parse-and-reserialize.
+// The `eigen-media:` refs a copied drawing's SVG names its images by, never by their bytes. A copy resolves them
+// against its own media files, and the API's preview inliner swaps each for a data URI when it serves the SVG. A ref
+// holds none of the characters escapeXml rewrites, since `'` is encoded too, so the stored SVG keeps it verbatim and
+// every rewrite here is an exact string replace, never a parse.
 
 import { CONTROL_CHARS } from '../validation/text';
 
 export const EIGEN_MEDIA_SCHEME = 'eigen-media:';
 
-// Every ref in an SVG, permissive to the boundary so a FORGED token (raw `/`, unencoded chars) is
-// captured whole and then rejected by parse. A real eigenMediaHref token contains no whitespace,
-// quote, or angle bracket (all percent-encoded), so this matches ours exactly too.
+// Loose up to the boundary, so a forged ref is captured whole and then refused by its parse.
 const REF_SCAN = /eigen-media:[^\s"'<>]*/g;
 
-// name → `eigen-media:<encoded>`. Called by buildSelectionData's resolveMedia (the copy path)
-// and by the preview inliner to rebuild a ref's exact search token.
 export function eigenMediaHref(name: string): string {
     return EIGEN_MEDIA_SCHEME + encodeURIComponent(name).replace(/'/g, '%27');
 }
 
-// `eigen-media:<encoded>` → the decoded media name, or null when the href is not an eigen-media ref,
-// is malformed, or decodes to an unsafe name. Unsafe = contains `/`, `\`, or a control char — the
-// traversal/injection guard the preview inliner rides so a same-folder getChildByName lookup
-// can never escape the container. The symmetric inverse of eigenMediaHref; backs listEigenMediaRefs.
-export function parseEigenMediaHref(href: string): string | null {
-    if (!href.startsWith(EIGEN_MEDIA_SCHEME)) return null;
-    let name: string;
-    try {
-        name = decodeURIComponent(href.slice(EIGEN_MEDIA_SCHEME.length));
-    } catch {
-        return null; // malformed percent-encoding
-    }
-    return isSafeMediaName(name) ? name : null;
-}
-
-// The traversal/injection guard on a media name: no `/`, no `\`, no control character, not empty. One
-// definition, so a frame background's stored name is exactly as safe as a ref parsed out of an SVG.
+// A media name is looked up beside the document, so a slash or a control character could reach outside it.
 export function isSafeMediaName(name: string): boolean {
     return name !== '' && !name.includes('/') && !name.includes('\\') && !CONTROL_CHARS.test(name);
 }
 
-// The distinct, safe media names an SVG references, in first-seen order. Forged/unsafe refs are
-// dropped (parse returns null). Called by the preview inliner to enumerate the siblings to resolve.
+// The distinct safe media names an SVG references, in first-seen order.
 export function listEigenMediaRefs(svg: string): string[] {
     const names: string[] = [];
     const seen = new Set<string>();
@@ -61,9 +33,19 @@ export function listEigenMediaRefs(svg: string): string[] {
     return names;
 }
 
-// Rewrite each `eigen-media:` ref whose current name is a key of `renames` to its new name — one
-// swap-safe pass (a rename chain like a→b, b→a is applied once, not composed). A token absent from the
-// map is left untouched. Called by materializeClipboardSvg after collision-renaming re-uploads.
+// The inverse of eigenMediaHref: the decoded media name, or null for another href, a malformed one or an unsafe name.
+function parseEigenMediaHref(href: string): string | null {
+    if (!href.startsWith(EIGEN_MEDIA_SCHEME)) return null;
+    let name: string;
+    try {
+        name = decodeURIComponent(href.slice(EIGEN_MEDIA_SCHEME.length));
+    } catch {
+        return null; // malformed percent-encoding
+    }
+    return isSafeMediaName(name) ? name : null;
+}
+
+// Renames refs in one pass, so a swap such as a→b with b→a applies once and doesn't compose.
 export function rewriteEigenMediaRefs(svg: string, renames: Map<string, string>): string {
     if (renames.size === 0) return svg;
     const tokens = new Map<string, string>();
@@ -71,10 +53,7 @@ export function rewriteEigenMediaRefs(svg: string, renames: Map<string, string>)
     return svg.replace(REF_SCAN, (token) => tokens.get(token) ?? token);
 }
 
-// Replace each `eigen-media:` ref named in `replacements` with an arbitrary href value (e.g. a base64
-// `data:` URI) — the same token-precise `href="…"` swap stripEigenMediaRefs does, only substituting
-// instead of removing. A name absent from the map is left untouched. Called by the clipboard's
-// foreign-flavor SVG inliner; the value is the full replacement href, not another eigen-media token.
+// Replaces each named ref's whole href with another, such as a data URI.
 export function replaceEigenMediaHrefs(svg: string, replacements: Map<string, string>): string {
     if (replacements.size === 0) return svg;
     let out = svg;
@@ -84,9 +63,7 @@ export function replaceEigenMediaHrefs(svg: string, replacements: Map<string, st
     return out;
 }
 
-// Drop the `href` attribute of every `<image>` referencing one of `names`, so the element renders as
-// nothing (sceneToSvg's null-media contract). Called by materializeClipboardSvg for images
-// whose re-upload failed — skip-on-failure, never abort the paste.
+// Drops the href of every image that names one of `names`, so it draws nothing, as an image with no media does.
 export function stripEigenMediaRefs(svg: string, names: Iterable<string>): string {
     let out = svg;
     for (const name of names) {

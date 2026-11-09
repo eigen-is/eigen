@@ -1,6 +1,5 @@
-// Align / distribute / match-size, shared by slides + vector (U7a). Pure geometry over the minimal
-// {id, x, y, width, height} shape (angle-agnostic — align uses the axis-aligned box, matching slides'
-// behavior), so both hosts feed their own element type in and apply the returned patches.
+// Align, distribute and match size for a selection, shared by the canvas hosts such as Slides and Vector. It is pure
+// geometry over each item's unturned box, so a host feeds its own elements in and applies the patches it gets back.
 
 export type ArrangeOp =
     | 'align-left'
@@ -15,22 +14,14 @@ export type ArrangeOp =
     | 'match-height';
 
 type ArrangePatch = { id: string; x?: number; y?: number; width?: number; height?: number };
-export type ArrangeItem = { id: string; x: number; y: number; width: number; height: number };
-
-type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
-
-export function arrangeBoundingBox(items: ArrangeItem[]): Bounds {
-    return {
-        minX: Math.min(...items.map((o) => o.x)),
-        minY: Math.min(...items.map((o) => o.y)),
-        maxX: Math.max(...items.map((o) => o.x + o.width)),
-        maxY: Math.max(...items.map((o) => o.y + o.height)),
-    };
-}
+type ArrangeItem = { id: string; x: number; y: number; width: number; height: number };
 
 export function computeArrange(items: ArrangeItem[], op: ArrangeOp): ArrangePatch[] {
     if (items.length < 2) return [];
-    const { minX, minY, maxX, maxY } = arrangeBoundingBox(items);
+    const minX = Math.min(...items.map((o) => o.x));
+    const minY = Math.min(...items.map((o) => o.y));
+    const maxX = Math.max(...items.map((o) => o.x + o.width));
+    const maxY = Math.max(...items.map((o) => o.y + o.height));
 
     switch (op) {
         case 'align-left':

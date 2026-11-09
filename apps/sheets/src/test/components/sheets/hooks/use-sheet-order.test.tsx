@@ -19,8 +19,8 @@ const { replaySheetsOps, withMaterializedData } = await import('@workspace/sheet
 type Op = import('@workspace/sheet').Op;
 type Sheet = import('@workspace/lib/sheets').Sheet;
 type WorkbookInstance = import('@workspace/sheet').WorkbookInstance;
-type CollabDocContext = import('@workspace/lib/collab').CollabDocContext;
-type UseCollabDocOptions = import('@workspace/lib/collab').UseCollabDocOptions;
+type UseCollabDocOptions = Parameters<typeof import('@workspace/lib/collab').useCollabDoc>[0];
+type CollabDocContext = Parameters<NonNullable<UseCollabDocOptions['onInit']>>[0];
 type YDoc = import('yjs').Doc;
 
 // Each tab's doc, by the path id its host opens, and the shared hook's sync event again, as a reconnect fires it.

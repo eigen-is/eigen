@@ -7,7 +7,6 @@ import {
     keysAfter,
     orderByFractionalIndex,
     syncInvalidIndices,
-    validateOrderKey,
     zOrderKeys,
 } from '../../vector/fractional-index';
 
@@ -24,6 +23,11 @@ describe('generateKeyBetween', () => {
         expect(a < b).toBe(true);
         const mid = generateKeyBetween(a, b);
         expect(a < mid && mid < b).toBe(true);
+    });
+
+    test('throws on a malformed bound', () => {
+        expect(() => generateKeyBetween('not a key', null)).toThrow();
+        expect(() => generateKeyBetween(null, '')).toThrow();
     });
 });
 
@@ -65,7 +69,7 @@ describe('syncInvalidIndices', () => {
     const assertHealed = (els: { id: string; index: string }[]) => {
         for (let i = 0; i < els.length; i++) {
             expect(isValidFractionalIndex(els[i].index, els[i - 1]?.index, els[i + 1]?.index)).toBe(true);
-            expect(() => validateOrderKey(els[i].index)).not.toThrow();
+            expect(() => generateKeyBetween(els[i].index, null)).not.toThrow(); // a well-formed key
         }
     };
 

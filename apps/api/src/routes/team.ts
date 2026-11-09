@@ -1,6 +1,7 @@
 // The routes to manage one team: its members, its settings, the drives it mounts, and its avatar. Members can read
 // them, and only an admin or the owner of the server can change them. The team data lives in the Home of the team.
 
+import { QUOTA_MIN_MB } from '@workspace/lib/constants/settings';
 import { MOUNT_STORAGE_TYPES } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { MountSettings, TeamSettings } from '@workspace/lib/types/settings';
@@ -55,7 +56,7 @@ export const teamRouter = new Elysia({ name: 'team' })
                 ...rest,
                 ...(memberOverrides && {
                     memberOverrides: {
-                        mailAndContactsMaxMB: memberOverrides.mailAndContactsMaxMB ?? undefined,
+                        homeDataMaxMB: memberOverrides.homeDataMaxMB ?? undefined,
                         defaultMountMaxSizeMB: memberOverrides.defaultMountMaxSizeMB ?? undefined,
                     },
                 }),
@@ -66,8 +67,8 @@ export const teamRouter = new Elysia({ name: 'team' })
                 calendar: t.Optional(t.Object({ enabled: t.Optional(t.Boolean()) })),
                 memberOverrides: t.Optional(
                     t.Object({
-                        mailAndContactsMaxMB: t.Optional(t.Nullable(t.Number({ minimum: 10 }))),
-                        defaultMountMaxSizeMB: t.Optional(t.Nullable(t.Number({ minimum: 10 }))),
+                        homeDataMaxMB: t.Optional(t.Nullable(t.Number({ minimum: QUOTA_MIN_MB }))),
+                        defaultMountMaxSizeMB: t.Optional(t.Nullable(t.Number({ minimum: QUOTA_MIN_MB }))),
                     }),
                 ),
                 notifyMembers: t.Optional(t.Boolean()),
@@ -97,7 +98,7 @@ export const teamRouter = new Elysia({ name: 'team' })
             body: t.Object({
                 name: t.String({ minLength: 1 }),
                 storageType: optionalEnum(MOUNT_STORAGE_TYPES),
-                maxSizeMB: t.Optional(t.Number({ minimum: 10 })),
+                maxSizeMB: t.Optional(t.Number({ minimum: QUOTA_MIN_MB })),
                 s3Config: t.Optional(s3ConfigBody),
             }),
             auth: true,
@@ -116,7 +117,7 @@ export const teamRouter = new Elysia({ name: 'team' })
         {
             body: t.Object({
                 enabled: t.Optional(t.Boolean()),
-                maxSizeMB: t.Optional(t.Number({ minimum: 10 })),
+                maxSizeMB: t.Optional(t.Number({ minimum: QUOTA_MIN_MB })),
                 name: t.Optional(t.String({ minLength: 1 })),
                 s3Config: t.Optional(s3ConfigBody),
             }),
@@ -130,8 +131,7 @@ export const teamRouter = new Elysia({ name: 'team' })
             const id = teamId(params.ownerId);
             await requireTeamAdmin(user.id, id);
             if (!(await getTeamExists(id))) throw new ApiError(404, 'Team not found');
-            // Global max upload size only — a team avatar shouldn't bill the uploading admin's
-            // personal mail+contacts quota (that's what enforceAvatarUpload adds on top).
+            // The per-file cap alone, so a team avatar never counts against the uploading admin's home data.
             enforceMaxUploadSize(body.file.size);
             const buffer = Buffer.from(await body.file.arrayBuffer());
             const result = await generateImagePreview(buffer, body.file.type, body.file.name, '', 'avatar', {

@@ -59,11 +59,11 @@ describe('Mail usage', () => {
     test('the quota gate charges a delivery to the next check', async () => {
         const MB = 1024 * 1024;
         const home = await getHome(userId);
-        const originalMaxMB = getServerSettings().quotas.mailAndContactsMaxMB;
+        const originalMaxMB = getServerSettings().quotas.homeDataMaxMB;
         try {
             // Squeeze the budget so what is left of it, not the 25 MB attachment ceiling, is the answer.
             const used = (await home.mail.size()) + (await home.contacts.size());
-            await updateServerSettings({ quotas: { mailAndContactsMaxMB: Math.ceil(used / MB) + 1 } });
+            await updateServerSettings({ quotas: { homeDataMaxMB: Math.ceil(used / MB) + 1 } });
 
             const before = await getMailUploadMaxSize(userId);
             const message = sizedEml('Mail size gate', 'z'.repeat(8192));
@@ -71,7 +71,7 @@ describe('Mail usage', () => {
 
             expect(await getMailUploadMaxSize(userId)).toBe(before - message.byteLength);
         } finally {
-            await updateServerSettings({ quotas: { mailAndContactsMaxMB: originalMaxMB } });
+            await updateServerSettings({ quotas: { homeDataMaxMB: originalMaxMB } });
         }
     });
 
@@ -171,11 +171,11 @@ describe('Staged draft attachment usage', () => {
     });
 
     test('staging past the quota is refused and leaves nothing staged', async () => {
-        const originalMaxMB = getServerSettings().quotas.mailAndContactsMaxMB;
+        const originalMaxMB = getServerSettings().quotas.homeDataMaxMB;
         try {
             const used = await reportedUsage();
             const maxMB = Math.ceil(used / MB) + 1;
-            await updateServerSettings({ quotas: { mailAndContactsMaxMB: maxMB } });
+            await updateServerSettings({ quotas: { homeDataMaxMB: maxMB } });
 
             // Exactly fills the budget, so what refuses the next upload is the staged file itself.
             const headroom = maxMB * MB - used;
@@ -196,7 +196,7 @@ describe('Staged draft attachment usage', () => {
             expect(res.status).toBe(507);
             expect(readdirSync(stagingDir).sort()).toEqual([fill.tempId, `${fill.tempId}.json`].sort());
         } finally {
-            await updateServerSettings({ quotas: { mailAndContactsMaxMB: originalMaxMB } });
+            await updateServerSettings({ quotas: { homeDataMaxMB: originalMaxMB } });
         }
     });
 });

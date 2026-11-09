@@ -5,6 +5,7 @@ import type { Calendar } from '../../lib/calendar/calendar';
 import { EVENT_MAX_BYTES } from '../../lib/calendar/resource-store';
 import * as schema from '../../lib/calendar/schema';
 import { CALENDAR_TEST_ROOT, makeCalendar, resourceTextOf, storedEvents } from '../calendar-test-helpers';
+import { cpuClock } from '../cpu-time';
 import type { TestHome } from '../home-test-helpers';
 import { vcal } from '../ics-test-helpers';
 
@@ -59,6 +60,39 @@ describe('putResource', () => {
             const result = await put(harness.instance, calendarId, 'uid.ics', vcal(event(uid, 'Unstorable')));
             expect(result).toMatchObject({ ok: false, error: 'invalid', reason: 'data' });
         }
+        expect(await harness.instance.listResources(calendarId)).toHaveLength(0);
+    });
+
+    test('a body nested past the limit is refused as invalid data', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        const levels = 20;
+        const body = vcal(
+            event('nested@eigen', 'Nested', [
+                ...Array<string>(levels).fill('BEGIN:X-LEVEL'),
+                ...Array<string>(levels).fill('END:X-LEVEL'),
+            ]),
+        );
+
+        const result = await put(harness.instance, calendarId, 'nested.ics', body);
+        expect(result).toMatchObject({ ok: false, error: 'invalid', reason: 'data' });
+        expect(await harness.instance.listResources(calendarId)).toHaveLength(0);
+    });
+
+    test('a DURATION past any date a row can hold is refused and stores nothing', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        const body = vcal([
+            'BEGIN:VEVENT',
+            'UID:far@eigen',
+            'DTSTART:20260401T100000Z',
+            'DURATION:P100000000W',
+            'END:VEVENT',
+        ]);
+
+        const result = await put(harness.instance, calendarId, 'far.ics', body);
+
+        expect(result).toMatchObject({ ok: false, error: 'invalid', reason: 'object' });
         expect(await harness.instance.listResources(calendarId)).toHaveLength(0);
     });
 
@@ -172,6 +206,36 @@ describe('putResource', () => {
         expect(stored).toContain('TRIGGER:-PT10M');
         expect(stored).toContain('SUMMARY:Linked');
         expect(stored).not.toContain('forged-by-the-client');
+    });
+
+    test('a linked copy adopts a long run of alarms behind other subcomponents in one pass', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const calendarId = await defaultCalendarId(harness);
+        await put(calendar, calendarId, 'linked.ics', vcal(event('linked@eigen', 'Linked')));
+        calendar.db
+            .update(schema.resources)
+            .set({
+                ics: sql`CAST(replace(CAST(${schema.resources.ics} AS TEXT), 'SUMMARY:Linked', 'SUMMARY:Linked\r\nX-EIGEN-ORGANIZER-EVENT:organizer-1') AS BLOB)`,
+            })
+            .where(eq(schema.resources.uri, 'linked.ics'))
+            .run();
+        const count = 30_000;
+        const body = vcal(
+            event('linked@eigen', 'Linked', [
+                ...Array<string>(count).fill('BEGIN:X-FIRST\r\nEND:X-FIRST'),
+                ...Array<string>(count).fill('BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT5M\r\nEND:VALARM'),
+            ]),
+        );
+
+        const cpuMs = cpuClock();
+        const result = await put(calendar, calendarId, 'linked.ics', body);
+        expect(cpuMs()).toBeLessThan(1_500);
+
+        expect(result.ok).toBe(true);
+        const stored = await resourceTextOf(calendar, calendarId, 'linked.ics');
+        expect(stored.match(/BEGIN:VALARM/g)).toHaveLength(count);
+        expect(stored).not.toContain('X-FIRST');
     });
 
     test('a linked copy refuses a body whose occurrence no key can name, and keeps its bytes', async () => {
@@ -305,5 +369,103 @@ describe('an override names its parent', () => {
         const exceptions = storedEvents(harness.instance, calendarId).filter((e) => e.parentEventId);
         expect(exceptions.map((e) => e.title)).toEqual(['Second take']);
         expect(await harness.instance.listResources(calendarId)).toHaveLength(1);
+    });
+});
+
+describe('a window that opens inside a repeated occurrence', () => {
+    const WINDOW = [new Date('2026-01-14T00:00:00Z'), new Date('2026-01-15T00:00:00Z')] as const;
+
+    test('finds the occurrence that began before it, as it finds a single event', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        const threeDays = (uid: string, extra: string[]) =>
+            vcal([
+                'BEGIN:VEVENT',
+                `UID:${uid}`,
+                'DTSTART:20260112T100000Z',
+                'DTEND:20260115T100000Z',
+                'SUMMARY:Retreat',
+                ...extra,
+                'END:VEVENT',
+            ]);
+        await put(harness.instance, calendarId, 'single.ics', threeDays('single', []));
+        await put(harness.instance, calendarId, 'weekly.ics', threeDays('weekly', ['RRULE:FREQ=WEEKLY']));
+
+        const found = await harness.instance.getEventsInRange(...WINDOW, calendarId);
+        const resources = await harness.instance.getResourcesInRange(calendarId, ...WINDOW);
+
+        expect(found.map((event) => `${event.uri} ${event.occurrenceDate}`).sort()).toEqual([
+            'single.ics 2026-01-12',
+            'weekly.ics 2026-01-12',
+        ]);
+        expect(resources.map((resource) => resource.uri).sort()).toEqual(['single.ics', 'weekly.ics']);
+    });
+});
+
+describe('a query window wider than one expansion', () => {
+    const CAREER = [new Date('2010-01-01T00:00:00Z'), new Date('2040-01-01T00:00:00Z')] as const;
+    const at = (uid: string, start: string, extra: string[] = []) =>
+        vcal([
+            'BEGIN:VEVENT',
+            `UID:${uid}`,
+            `DTSTART:${start}T100000Z`,
+            `DTEND:${start}T110000Z`,
+            'SUMMARY:Wide',
+            ...extra,
+            'END:VEVENT',
+        ]);
+
+    test('still finds every single event in it', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        await put(harness.instance, calendarId, 'soon.ics', at('soon', '20261110'));
+        await put(harness.instance, calendarId, 'far.ics', at('far', '20350110'));
+
+        const found = await harness.instance.getResourcesInRange(calendarId, ...CAREER);
+
+        expect(found.map((r) => r.uri).sort()).toEqual(['far.ics', 'soon.ics']);
+    });
+
+    test('expands a series from where it starts, and at most five years of it', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        await put(harness.instance, calendarId, 'series.ics', at('series', '20300101', ['RRULE:FREQ=YEARLY']));
+
+        const found = await harness.instance.getEventsInRange(...CAREER, calendarId);
+
+        expect(found.map((e) => e.occurrenceDate)).toEqual([
+            '2030-01-01',
+            '2031-01-01',
+            '2032-01-01',
+            '2033-01-01',
+            '2034-01-01',
+            '2035-01-01',
+        ]);
+    });
+
+    test('still finds an occurrence moved past those five years', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        const body = vcal([
+            'BEGIN:VEVENT',
+            'UID:moved',
+            'DTSTART:20300101T100000Z',
+            'DTEND:20300101T110000Z',
+            'SUMMARY:Wide',
+            'RRULE:FREQ=YEARLY;COUNT=2',
+            'END:VEVENT',
+            'BEGIN:VEVENT',
+            'UID:moved',
+            'RECURRENCE-ID:20310101T100000Z',
+            'DTSTART:20380101T100000Z',
+            'DTEND:20380101T110000Z',
+            'SUMMARY:Wide, moved',
+            'END:VEVENT',
+        ]);
+        await put(harness.instance, calendarId, 'moved.ics', body);
+
+        const found = await harness.instance.getEventsInRange(...CAREER, calendarId);
+
+        expect(found.map((e) => e.startTime.getUTCFullYear())).toEqual([2030, 2038]);
     });
 });

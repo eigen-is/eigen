@@ -3,6 +3,12 @@
 
 import { defaultSenderAddress } from '@workspace/lib/constants/mail';
 import { UPLOAD_CAP_MAX_MB } from '@workspace/lib/constants/mount';
+import {
+    LANDING_LINK_TITLE_MAX,
+    LANDING_LINK_URL_MAX,
+    LANDING_LINKS_MAX,
+    QUOTA_MIN_MB,
+} from '@workspace/lib/constants/settings';
 import { useHomeDataLabel, useMailEnabled, usePublicConfig } from '@workspace/lib/public';
 import {
     useCheckS3Connection,
@@ -253,16 +259,16 @@ export function ServerSettingsPage() {
                         <Label>{homeDataLabel} (MB)</Label>
                         <Input
                             type="number"
-                            min={10}
-                            value={current.quotas.mailAndContactsMaxMB}
-                            onChange={(e) => updateQuota('mailAndContactsMaxMB', e.target.valueAsNumber)}
+                            min={QUOTA_MIN_MB}
+                            value={current.quotas.homeDataMaxMB}
+                            onChange={(e) => updateQuota('homeDataMaxMB', e.target.valueAsNumber)}
                         />
                     </div>
                     <div className="space-y-1.5">
                         <Label>Default mount (MB)</Label>
                         <Input
                             type="number"
-                            min={10}
+                            min={QUOTA_MIN_MB}
                             value={current.quotas.defaultMountMaxSizeMB}
                             onChange={(e) => updateQuota('defaultMountMaxSizeMB', e.target.valueAsNumber)}
                         />
@@ -391,13 +397,13 @@ export function ServerSettingsPage() {
                         <div key={i} className="flex items-center gap-2">
                             <Input
                                 placeholder="Title"
-                                maxLength={80}
+                                maxLength={LANDING_LINK_TITLE_MAX}
                                 value={link.title}
                                 onChange={(e) => patchLink(i, { title: e.target.value })}
                             />
                             <Input
                                 placeholder="https://..."
-                                maxLength={2048}
+                                maxLength={LANDING_LINK_URL_MAX}
                                 value={link.url}
                                 onChange={(e) => patchLink(i, { url: e.target.value })}
                             />
@@ -408,7 +414,7 @@ export function ServerSettingsPage() {
                             />
                         </div>
                     ))}
-                    {current.landing.links.length < 20 && (
+                    {current.landing.links.length < LANDING_LINKS_MAX && (
                         <Button
                             variant="outline"
                             size="sm"

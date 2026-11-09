@@ -14,9 +14,9 @@ import { member as memberSchema, teamMember as teamMemberSchema, user as userSch
 import { app } from '../app';
 import { auth, getAuthDrizzleDb } from '../lib/auth/auth';
 import { getServerSettings, updateServerSettings } from '../lib/config/server-settings';
-import { drainACLFanOuts } from '../lib/drive/acl-propagation';
 import type { MediaPixels } from '../lib/export/sheets/render';
 import { getHome } from '../lib/home';
+import { drainHomeDeliveries } from '../lib/home/home-relay';
 import { createSetupToken } from '../lib/setup/setup-token';
 import { TEST_DATA_DIR } from './test-env';
 
@@ -97,7 +97,7 @@ export type TestContext = {
 
 let context: TestContext | null = null;
 
-function extractSessionToken(headers: Headers): string {
+export function extractSessionToken(headers: Headers): string {
     const setCookie = headers.get('set-cookie') || '';
     const match = setCookie.match(/better-auth\.session_token=([^;]+)/);
     if (!match) {
@@ -189,6 +189,14 @@ export async function signsIn(email: string, password: string): Promise<boolean>
     }
 }
 
+export async function sessionIdOf(sessionToken: string): Promise<string> {
+    const session = await auth.api.getSession({
+        headers: new Headers({ cookie: `better-auth.session_token=${sessionToken}` }),
+    });
+    if (!session) throw new Error('the token has no session');
+    return session.session.id;
+}
+
 export async function hasSession(sessionToken: string): Promise<boolean> {
     const session = await auth.api.getSession({
         headers: new Headers({ cookie: `better-auth.session_token=${sessionToken}` }),
@@ -225,11 +233,11 @@ export async function getTestContext(): Promise<TestContext> {
 
 export async function authedRequest(sessionToken: string, path: string, options?: RequestInit): Promise<Response> {
     await ensureServer();
-    // ACL fan-out to recipient homes is async (fire-and-forget after the mutation returns).
+    // Delivery to recipient homes is async (fire-and-forget after the mutation returns).
     // Draining here gives every test read-your-fanout consistency: a cross-user assertion
     // that follows a share/revoke/rename/trash sees the delivered mirror state, matching
     // what a real client experiences after its SSE-triggered refetch. No-op when idle.
-    await drainACLFanOuts();
+    await drainHomeDeliveries();
     return app.handle(
         new Request(`http://localhost${path}`, {
             ...options,
