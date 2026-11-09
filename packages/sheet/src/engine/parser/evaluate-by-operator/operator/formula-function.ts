@@ -9,7 +9,7 @@ import type { FormulaArg, FormulaOutput } from '../../../types';
 import { ERROR_NAME, ERROR_NUM, ERROR_VALUE } from '../../error';
 import { errorType, iserr, iserror } from '../../functions/information';
 import { iferror, ifs, switchValue } from '../../functions/logical';
-import { index, xlookup, xmatch } from '../../functions/lookup';
+import { columns, index, rows, xlookup, xmatch } from '../../functions/lookup';
 import { aggregate, errorsAsText, maxifs, minifs } from '../../functions/statistical';
 import { concatenate, textjoin } from '../../functions/text';
 import { toNumber } from '../../helper/number';
@@ -195,6 +195,7 @@ const OVERRIDES: Record<string, (params: FormulaArg[]) => FormulaOutput | undefi
 // of `undefined` is a blank, not a fall-through, and an empty argument arrives as OMITTED, for each to read as Excel
 // reads that parameter.
 const FUNCTIONS: Record<string, (params: FunctionArg[]) => FormulaOutput> = {
+    COLUMNS: columns,
     'ERROR.TYPE': errorType,
     IFERROR: iferror,
     IFS: ifs,
@@ -202,6 +203,7 @@ const FUNCTIONS: Record<string, (params: FunctionArg[]) => FormulaOutput> = {
     ISERROR: iserror,
     MAXIFS: maxifs,
     MINIFS: minifs,
+    ROWS: rows,
     SWITCH: switchValue,
     TEXTJOIN: textjoin,
     XLOOKUP: xlookup,

@@ -858,3 +858,46 @@ describe('an undo over a function this build lacks', () => {
         expect(at(t.ctx.sheets, 's1', 0, 1)?.v).toBe(20);
     });
 });
+
+describe('one cell where a range was', () => {
+    const value = (formula: string) => {
+        const resolver = createArrayResolver([
+            {
+                id: 's1',
+                name: 'One',
+                data: [
+                    [n(1), n(2)],
+                    [n(3), n(4)],
+                ],
+            },
+        ]);
+        return tab(book({ cells: [[n(1)]] })).ctx.formulaCache.engine.evaluate(formula, 's1', resolver).value;
+    };
+
+    test.each([
+        ['=ROWS(A1)', 1],
+        ['=COLUMNS(A1)', 1],
+        ['=ROWS(A1:A2)', 2],
+        ['=COLUMNS(A1:B1)', 2],
+        ['=ROWS(A1:B2)', 2],
+        ['=COLUMNS(A1:B2)', 2],
+        ['=ROWS(5)', 1],
+        ['=ROWS(#REF!)', '#REF!'],
+    ])('%s is %p', (formula, expected) => {
+        expect(value(formula)).toBe(expected);
+    });
+
+    test('a range the shift cut to one cell answers 1', () => {
+        const t = tab(
+            book({
+                cells: [
+                    [n(1), f('=ROWS(A1:A2)', 2), f('=COLUMNS(A1:A2)', 1)],
+                    [n(2), null, null],
+                ],
+            }),
+        );
+        removeRow(t, 1);
+        expect(at(t.ctx.sheets, 's1', 0, 1)?.v).toBe(1);
+        expect(at(t.ctx.sheets, 's1', 0, 2)?.v).toBe(1);
+    });
+});
