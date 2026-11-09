@@ -56,9 +56,7 @@ unconditionally); the watcher count is **12** — `STANDARD_MAILBOXES` is
 `['', 'Sent', 'Drafts', 'Trash', 'Junk', 'Archive']`, each watched on both `cur/` and `new/`
 (`MaildirStore.watch`). So 30 fds is the warm ceiling, not the top of a 25–30 range — and it
 is paid at open time, which is exactly the crash arithmetic: 26 fan-out opens ≈ 780 fds
-against a 256 limit. The `../ROADMAP.md` row already carries these measured figures; the
-`../../docker-compose.yml` comment above the `ulimits` pin still says "~25-30 fds … ~10 maildir
-fs.watch handles … ~35 homes" and updates in phase 1.
+against a 256 limit. Measured again on 2026-11-09: 18 fds for a user Home and 9 for a team Home.
 
 Per-home cost is **variable**:
 
@@ -117,10 +115,6 @@ notification would re-fire on every boot with no in-app action to take. Log only
 - **`PROPOSAL_SINGLE_MACHINE_CLUSTER.md`** — both capacity-story corrections (fds, not
   memory, are the binding resource; each `eigen-api-1..3` service needs the `ulimits` block)
   are folded into that doc as of 2026-08-04. Nothing left to do here.
-- **Propagate the corrected figures** (one source per fact): the `../../docker-compose.yml` comment
-  block above the `ulimits` pin ("~25-30 fds … ~10 maildir fs.watch handles … ~35 homes")
-  updates to the measured 30-fd warm ceiling and 12 watchers. (`../ROADMAP.md` already carries
-  the corrected figures.)
 
 Also fix a broken window found while reading: `MaildirStore.watch` swallows *all* `fs.watch`
 errors as "directory may not exist yet". Under fd pressure that hides `EMFILE` — log anything

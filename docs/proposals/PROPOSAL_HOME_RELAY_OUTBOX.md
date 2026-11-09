@@ -33,9 +33,10 @@ So the rule is "everything that is pushed", not "everything that crosses".
 | A failed delivery is logged and dropped, with no retry | `sendToUserHomes`, `share-propagation.ts`, `reconciliation.ts` |
 | Pushes follow three policies: a per-path chain, one home at a time, or a direct send | ACL; chat and watchers; calendar, reconciliation, access requests, comment assignment and alerts |
 | A share PUT waits for one Home open per target | `Calendar` awaits `propagateCalendarShare` |
+| A shutdown waits for each running delivery, not for a caller's loop. A later direct `sendToHome` of an invitation to several guests or of a reconciliation gets a 503 and is lost | `invite-propagation.ts`, `reconciliation.ts` |
 | An invitation update delivered before its create is dropped for good, because the receiver has no linked event yet | `receiveInvitationUpdate`, fed by `invite-propagation.ts` |
 
-The relay already waits for every push at a graceful shutdown, and today's code holds no limit on opens, because a fan-out opens one home at a time. So the outbox's value is durability, retry, ordering, and one path instead of three.
+The relay already waits for each running push at a graceful shutdown, and today's code holds no limit on opens, because a fan-out opens one home at a time. So the outbox's value is durability, retry, ordering, and one path instead of three.
 
 ## One function decides where a push goes
 
@@ -256,7 +257,7 @@ One unit branch lands together, in six commits. Moving verb by verb would keep t
 1. **Lift the backoff.** `uploadBackoffMs` moves to `utils/timing.ts`. The `upload-limits.ts` header and SYNC.md change with it.
 2. **Fix the receivers.** The six fixes in [A repeat delivery is tolerated and rare](#a-repeat-delivery-is-tolerated-and-rare), and the required tag on the relay's message type.
 3. **Add the outbox, unused.** `outbox.ts`, the schema, the db-config, the `SERVER_RUNTIME_FILES` entry and its unit tests. `test/server/server-files.test.ts` learns that `outbox.db` is a runtime database.
-4. **Switch, atomically.** `deliver`, `enqueue`, the RSVP move, the deletions, `server.ts`, the boot kick, and the test and seed migration. The deletions are `drainDeliveriesWithin`, `drainHomeDeliveries`, `drainHomeDeliveries`, `countHomeDeliveries` and `queueACLFanOut`, with the state behind them.
+4. **Switch, atomically.** `deliver`, `enqueue`, the RSVP move, the deletions, `server.ts`, the boot kick, and the test and seed migration. The deletions are `drainDeliveriesWithin`, `drainHomeDeliveries`, `tracked`, `deliverToEach` and `lastInOrder`, with the state behind them.
 5. **Report it.** The status field and the `printReport` row, with the `ControlStatus` fixtures in `test/cli/status.test.ts` and `test/server/setup-token.test.ts`.
 6. **Document it.** SCALABILITY.md, ACL.md, SYNC.md, DATABASE.md, BACKUP.md (it lists the runtime files), CHAT.md, FILE-HISTORY.md, NOTIFICATION-CENTER.md, CALENDAR.md, an ARCHITECTURE.md row, the ROADMAP row, CHANGELOG, and the help center's `commands-and-files.md`, whose list of what `./eigen status` shows gets the new row.
 

@@ -18,6 +18,7 @@ import type { NotificationPersistInput } from '@workspace/lib/types/notification
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types/owner';
 import type { HomeSizeResponse, TeamSettings, UserSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
+import { settlesWithin } from '../../utils/timing';
 import { captureBytes, snapshotHome } from '../backup/snapshot-home';
 import type { Calendar } from '../calendar/calendar';
 import { readCalendarTotalSize } from '../calendar/resource-store';
@@ -209,8 +210,8 @@ function tracked(delivery: Promise<void>): Promise<void> {
     return delivery.finally(() => deliveries.delete(delivery));
 }
 
-// Waits for every delivery still running and for those that start meanwhile, such as a team notification a delivery
-// passes on.
+// Waits for every delivery still running and for those that start meanwhile. The sends of a caller's own loop that
+// hasn't reached them yet are not among them.
 export async function drainHomeDeliveries(): Promise<void> {
     while (deliveries.size > 0) {
         await Promise.allSettled([...deliveries]);
@@ -220,8 +221,7 @@ export async function drainHomeDeliveries(): Promise<void> {
 // A delivery can hang on a home that is slow to close, such as during a bucket outage. It must not hang a shutdown, or
 // use up the time the mounts need to upload. What is left when the bound is over is lost, as in a crash.
 export async function drainDeliveriesWithin(boundMs: number): Promise<void> {
-    const drained = drainHomeDeliveries().then(() => true);
-    if (await Promise.race([drained, Bun.sleep(boundMs).then(() => false)])) return;
+    if (await settlesWithin(drainHomeDeliveries(), boundMs)) return;
     console.warn(`[shutdown] gave up after ${boundMs} ms with ${deliveries.size} home deliveries left`);
 }
 
