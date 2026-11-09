@@ -1,14 +1,17 @@
 import { Database } from 'bun:sqlite';
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { readdirSync, unlinkSync } from 'node:fs';
+import * as fsPromises from 'node:fs/promises';
 import { join } from 'node:path';
 import { MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
 import { MAILBOX_DRAFTS, MAILBOX_INBOX, MAILBOX_SENT, MAILBOX_TRASH } from '@workspace/lib/constants/mailboxes';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type { AddressObject, EmailDraft, EmailSummary } from '@workspace/lib/types/mail';
 import { mailAttachmentName } from '@workspace/lib/types/mail';
+import { ApiError } from '../../lib/core';
 import { getHome } from '../../lib/home';
 import { parseMail } from '../../lib/mail/mail-parser';
+import { MaildirStore } from '../../lib/mail/maildir-store';
 import { cutDraftReferences } from '../../lib/mail/reference-links';
 import { boxDir, mailRootOf, seedMaildirFile } from '../mail-test-helpers';
 import type { TestUser } from '../setup';
@@ -330,6 +333,41 @@ describe.skipIf(isWindows)('Mail — a draft file is the only copy of the draft'
             expect(filesOf(MAILBOX_SENT, draft.id).length).toBe(1);
             expect(filesOf(MAILBOX_DRAFTS, draft.id)).toEqual([]);
             expect(await download(draft.id)).toBe(before);
+        });
+
+        test('a save queued during the rename to Sent answers 409, and the Sent copy stays as sent', async () => {
+            const home = await getHome(user.id);
+            const fields = { subject: 'Went out once', to, text: 'as sent', html: '<p>as sent</p>' };
+            const draft = await home.mail.messageHandleDraft(fields);
+
+            const saving = spyOn(MaildirStore.prototype, 'saveDraft');
+            const rename = fsPromises.rename;
+            let stale: Promise<unknown> | undefined;
+            const renaming = spyOn(fsPromises, 'rename').mockImplementation(async (from, dest) => {
+                if (!stale && String(dest).includes(`/.${MAILBOX_SENT}/cur/`)) {
+                    const queued = saving.mock.calls.length + 1;
+                    const stored = { ...fields, id: draft.id, text: 'stale tab', html: '<p>stale tab</p>' };
+                    stale = home.mail.messageHandleDraft(stored).catch((error: unknown) => error);
+                    await eventually(
+                        async () => (saving.mock.calls.length >= queued ? true : undefined),
+                        'the stale save queued on the store lock',
+                    );
+                }
+                return rename(from, dest);
+            });
+            try {
+                await home.mail.messageSend({ ...fields, id: draft.id });
+            } finally {
+                renaming.mockRestore();
+                saving.mockRestore();
+            }
+
+            const answer = await stale;
+            expect(answer instanceof ApiError && answer.status).toBe(409);
+            expect(filesOf(MAILBOX_DRAFTS, draft.id)).toEqual([]);
+            expect(filesOf(MAILBOX_SENT, draft.id).map((name) => name.split(':2,')[1])).toEqual(['S']);
+            expect(home.mail.messageGetSummary(draft.id)).toMatchObject({ mailbox: MAILBOX_SENT, isDraft: false });
+            expect((await read(draft.id)).text?.trim()).toBe('as sent');
         });
 
         test('answers 409 for a message in the inbox, which stays there', async () => {

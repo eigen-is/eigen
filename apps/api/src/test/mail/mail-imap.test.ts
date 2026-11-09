@@ -8,9 +8,9 @@ import {
     applyFlagsFromFilename,
     buildMaildirFilename,
     createUniqueMessageId,
+    filenameWithFlags,
     getMailIDfromFileName,
     parseFlagsFromFilename,
-    rebuildFlagsSuffix,
 } from '../../lib/mail/mailutils';
 import { boxDir, maildirOf, makeEml } from '../mail-test-helpers';
 import { assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
@@ -91,15 +91,13 @@ describe('Maildir Utility Functions', () => {
         expect(filename).toBe('unique123,S=100:2,');
     });
 
-    test('rebuildFlagsSuffix preserves Dovecot keyword flags', () => {
+    test('filenameWithFlags preserves Dovecot keyword flags', () => {
         // lowercase 'ab' are Dovecot custom keywords
-        const result = rebuildFlagsSuffix('msg:2,Sab', { replied: true });
-        expect(result).toBe('RSab');
+        expect(filenameWithFlags('msg:2,Sab', { replied: true })).toBe('msg:2,RSab');
     });
 
-    test('rebuildFlagsSuffix removes standard flag', () => {
-        const result = rebuildFlagsSuffix('msg:2,RS', { seen: false });
-        expect(result).toBe('R');
+    test('filenameWithFlags removes standard flag', () => {
+        expect(filenameWithFlags('msg:2,RS', { seen: false })).toBe('msg:2,R');
     });
 
     test('applyFlagsFromFilename sets email flags', () => {

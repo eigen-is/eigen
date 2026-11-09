@@ -80,12 +80,10 @@ export function parseFlagsFromFilename(fileName: string) {
     };
 }
 
-export function rebuildFlagsSuffix(currentFilename: string, changes: Partial<Record<MailFlag, boolean>>): string {
-    const match = currentFilename.match(FLAGS_SUFFIX_RE);
-    const existing = match?.[1] || '';
-    const keywords = existing.replace(/[A-Z]/g, '');
-    const current = parseFlagsFromFilename(currentFilename);
-    return serializeFlags({ ...current, ...changes }) + keywords;
+export function filenameWithFlags(filename: string, changes: Partial<Record<MailFlag, boolean>>): string {
+    const keywords = (filename.match(FLAGS_SUFFIX_RE)?.[1] ?? '').replace(/[A-Z]/g, '');
+    const flags = { ...parseFlagsFromFilename(filename), ...changes };
+    return `${filename.split(':')[0]}:2,${serializeFlags(flags)}${keywords}`;
 }
 
 export function applyFlagsFromFilename(email: EmailSummary, filename: string): void {

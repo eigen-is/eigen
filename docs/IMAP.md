@@ -49,7 +49,7 @@ A draft save adds a field of its own, `{unique},M={stamp},S={size}:2,DS`, with a
 
 The letters after `:2,` are the truth. The index mirrors `S` (`isRead`), `R` (`isReplied`), `F` (`isFlagged`, the star in the UI) and `D` (`isDraft`) for queries. `T` (trashed) and `P` (passed) are parsed and kept in the name, but not indexed. The letters stay ASCII-sorted, as the spec asks.
 
-Dovecot appends lowercase letters for IMAP keywords and maps them in its `dovecot-keywords` file. `rebuildFlagsSuffix` keeps those letters when Eigen changes a standard flag, so Eigen never strips a keyword a client set.
+Dovecot appends lowercase letters for IMAP keywords and maps them in its `dovecot-keywords` file. `filenameWithFlags` keeps those letters when Eigen changes a standard flag, so Eigen never strips a keyword a client set.
 
 ## The Maildir root is the inbox and a folder is a dot directory
 
@@ -81,7 +81,7 @@ A row can outlive its file for a moment, when a mail client renames or removes t
 
 ## Every file is staged in tmp/ first
 
-`append` writes the bytes to `tmp/`, fsyncs them and renames them into `new/`. It serves every message the store did not write itself: a delivery from Postfix (`POST /mail/deliver/:to`), an import, a copy and the welcome mail. It then reconciles the mailbox, unless the caller passes `skipReconcile`. `saveDraft` stages the same way but renames into `Drafts/cur/` with `D` and `S` set, since Eigen knows the flags. A send moves that draft to Sent and clears `D`.
+`append` writes the bytes to `tmp/`, fsyncs them and renames them into `new/`. It serves every message the store did not write itself: a delivery from Postfix (`POST /mail/deliver/:to`), an import, a copy and the welcome mail. It then reconciles the mailbox, unless the caller passes `skipReconcile`. `saveDraft` stages the same way but renames into `Drafts/cur/` with `D` and `S` set, since Eigen knows the flags. A send moves that draft to Sent and clears `D` in one rename.
 
 ## A sync diffs cur/ against the index
 

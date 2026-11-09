@@ -85,7 +85,7 @@ An IMAP client that edits a draft saves a new message and removes the old, and t
 
 So a save naming an id with no row neither throws nor loses text (`mail-draft-file.test.ts`).
 
-A save naming a message that is no longer a draft answers 409, under the same lock as the write, so a stale tab can't pull a sent message back into Drafts and a replayed send can't mail twice. A draft in Trash still saves and lands in Drafts, because the composer opens one. The composer stops saving after a 409, so a tab left open after a send toasts once.
+A save naming a message that is no longer a draft answers 409, under the same lock as the write, so a stale tab can't pull a sent message back into Drafts and a replayed send can't mail twice. A send's move to Sent clears the draft flag in the same rename, under that lock, so a save queued behind it gets the 409 too. A draft in Trash still saves and lands in Drafts, because the composer opens one. The composer stops saving after a 409, so a tab left open after a send toasts once.
 
 A part is always written as an attachment, in the draft's file and in an outgoing mail. The composer library marks a `message/*` part inline by default, and the parser draws an inline message into the body, its inner Bcc included.
 

@@ -492,9 +492,8 @@ export class Mail {
             }
         }
 
-        await this.messageMove(mail.id, MAILBOX_SENT);
-        await this.store.setFlags(mail.id, { draft: false });
-        this.emit(SSEventType.MAIL_FLAGS_CHANGED, { messageId: mail.id, mailbox: MAILBOX_SENT });
+        await this.store.move(mail.id, MAILBOX_SENT, { draft: false });
+        this.emit(SSEventType.MAIL_MOVED, { messageId: mail.id, mailbox: MAILBOX_DRAFTS, toMailbox: MAILBOX_SENT });
         this.emit(SSEventType.MAIL_SENT, { messageId: mail.id, mailbox: MAILBOX_SENT });
 
         // The mail is out: a reply mark that fails to stick must not fail the send, or a retry sends it twice.

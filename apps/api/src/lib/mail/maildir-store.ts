@@ -26,10 +26,10 @@ import {
     applyFlagsFromFilename,
     buildMaildirFilename,
     createUniqueMessageId,
+    filenameWithFlags,
     getMailIDfromFileName,
     maildirFolder,
     parseFlagsFromFilename,
-    rebuildFlagsSuffix,
 } from './mailutils';
 
 // The Maildir spec's own age: a `tmp/` file older than this is a crash leftover, never an in-flight write.
@@ -354,7 +354,12 @@ export class MaildirStore {
         });
     }
 
-    public async move(messageId: string, targetMailbox: string): Promise<void> {
+    // Flags change in the same rename, so a save queued on the lock never finds a sent message that is still a draft.
+    public async move(
+        messageId: string,
+        targetMailbox: string,
+        changes: Partial<Record<MailFlag, boolean>> = {},
+    ): Promise<void> {
         return this.storeLock.run(async () => {
             const email = this.db.getEmail(messageId);
             if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
@@ -364,11 +369,13 @@ export class MaildirStore {
             }
 
             // Both ends are indexed here: the old name must not come back after the index says it moved.
+            const filename = filenameWithFlags(email.filename, changes);
             await this.storage.moveDurable(
                 path.join(this.mailboxDir(email.mailbox), PATHS.MAIL.CUR, email.filename),
-                path.join(this.mailboxDir(targetMailbox), PATHS.MAIL.CUR, email.filename),
+                path.join(this.mailboxDir(targetMailbox), PATHS.MAIL.CUR, filename),
             );
             this.db.moveEmail(messageId, targetMailbox);
+            this.updateRowFlags(messageId, filename);
         });
     }
 
@@ -377,8 +384,7 @@ export class MaildirStore {
             const email = this.db.getEmail(messageId);
             if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
 
-            const newFlagStr = rebuildFlagsSuffix(email.filename, changes);
-            const newFilename = `${email.filename.split(':')[0]}:2,${newFlagStr}`;
+            const newFilename = filenameWithFlags(email.filename, changes);
 
             if (newFilename !== email.filename) {
                 const cur = path.join(this.mailboxDir(email.mailbox), PATHS.MAIL.CUR);
