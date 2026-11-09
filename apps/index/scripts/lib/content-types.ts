@@ -1,3 +1,7 @@
+// The shapes of the site's generated content: the frontmatter a help article or a blog post must have, and the
+// manifests, bodies, changelog and license lists the build writes. The build scripts and the pages share them,
+// so a field added here reaches both.
+
 import { z } from 'zod';
 import type { MediaGridData } from '../../src/components/parse-media-grids';
 
@@ -28,6 +32,8 @@ export const blogFrontmatterSchema = z.object({
     id: z.string().min(1),
     title: z.string().min(1),
     description: z.string().min(1),
+    // A path under public/ such as /data/blog/media/<folder>/<image>.webp, shown big on the post and the overview.
+    cover: z.string().startsWith('/').optional(),
 });
 export type BlogFrontmatter = z.infer<typeof blogFrontmatterSchema>;
 
@@ -43,6 +49,7 @@ export type ArticleMeta = {
     order: number;
     updated?: string;
     date?: string; // blog only — YYYY-MM-DD from the filename
+    cover?: string; // blog only — the post's cover image
     toc: TocEntry[];
     related: string[]; // resolved slugs
     crossSections: string[]; // support: extra sections this article is also listed in
