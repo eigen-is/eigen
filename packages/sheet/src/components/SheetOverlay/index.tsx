@@ -2,8 +2,8 @@
 // selections and floating images and charts, the validation and link cards, and the add-rows footer. It turns the
 // pointer's down, move, up and double click on the cell area into the state handlers, such as
 // handleCellAreaMouseDown, and coalesces mouse moves to one update per frame, each of which also tells the host which
-// comment the pointer is on. A press that closes an open app-bar menu is marked before the cells or a header read it,
-// so it puts no reference into a formula.
+// comment the pointer is on, until a press or an open editor says none. A press that closes an open app-bar menu is
+// marked before the cells or a header read it, so it puts no reference into a formula.
 
 import { SHEET_COLUMN_HEADER_HEIGHT, SHEET_ROW_HEADER_WIDTH } from '@workspace/lib/sheets';
 import { Button } from '@workspace/ui/components/button';

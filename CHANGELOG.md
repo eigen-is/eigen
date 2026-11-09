@@ -63,6 +63,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Editing a draft in a mail app** — while Eigen's composer holds the draft, the next auto-save makes two drafts, with neither's text lost. Eigen's copy keeps its links but not its attachments, and the mail app's keeps both
 - **A draft left open** — opened from Drafts and left idle while a mail app edits it, it says the message is gone, and one draft remains. In two Eigen tabs, the last save wins
 - **Sent mail** — a tab left open after a send can no longer pull the message back into Drafts or mail it twice. A collapsed message keeps Bcc off its To line, and shows Bcc on its summary line only when it went to nobody else
+- **Comments on a text box in Docs** — **Add comment** on a text box opens the new comment form, where it did nothing
 - **Resolved comments in Docs** — resolving a comment removes its highlight from the text, which used to stay yellow
 - **Merged cells in Sheets** — pasting text over a merged cell replaces the merge, and wrapped text in a merged cell no longer makes its row very tall
 - **Restoring in Slides and Vector** — restoring an earlier version of a deck or drawing brings back the comments deleted since, as Docs and Sheets do. Their replies stay as they are now

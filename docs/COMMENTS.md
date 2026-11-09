@@ -135,7 +135,7 @@ Stickies mounts the pane for activity only and only on desktop; the mobile pane 
 
 ## A hover shows a comment's card, and the host draws it
 
-Resting a mouse on a comment shows its card beside it, after a 300 ms pause that lets a quick pass go by. A click on the card opens the comment. An editor reports only "pointer over this card at this rect" or "pointer left". The host, which already holds the cards and their entries, keeps that in `useCommentHover` and renders `CommentHoverCard`, so the hover hands no engine a thread list. Each host's state re-renders its editor twice per hover, which is accepted.
+Resting a mouse on a comment shows its card beside it, after a 300 ms pause that lets a quick pass go by. A click on the card opens the comment. An editor reports only "pointer over this card at this rect" or "pointer left", as `report(target)` or `report(null)`. A press reads as left, and so does a sheet's cell editor opening or a canvas mark unmounting, since no move or pointer leave comes then. The host, which already holds the cards and their entries, keeps that in `useCommentHover` and renders `CommentHoverCard`, so the hover hands no engine a thread list. Each host's state re-renders its editor twice per hover, which is accepted.
 
 | App | What shows a card | Where the card opens |
 |---|---|---|
@@ -145,16 +145,17 @@ Resting a mouse on a comment shows its card beside it, after a 300 ms pause that
 
 Stickies has no target, as its board draws the cards already. Resolved text gets no card, because its highlight is gone and nothing on the page says a comment sits there. A corner mark or a commented cell keeps its triangle when resolved, so it keeps its card. Docs reports from a React handler on a parent of `EditorContent` (`reportCommentHover`), because node views stop ProseMirror's events and draw their portals beside the editor's own div. A span that wraps reports the line under the pointer.
 
-The card is a Radix `Popover` with a virtual anchor, because `HoverCard` has no Anchor part. It carries `role="tooltip"`, because `useDialogOpen` reads Radix's `role="dialog"` as a modal and stands down the document's keymaps. It takes no focus, so the editor keeps its caret. Radix still closes it on an outside press, a focus change and Escape.
+The card is a Radix `Popover` with a virtual anchor, because `HoverCard` has no Anchor part. It carries `role="tooltip"`, because `useDialogOpen` reads Radix's `role="dialog"` as a modal and stands down the document's keymaps. It takes no focus, so the editor keeps its caret: its content has Radix's `tabIndex` of -1, so a press on it is cancelled, or the thread its click opens would give the focus back to the card, gone by then. Radix still closes it on an outside press, a focus change and Escape, and the card stops that Escape, so it cancels no cell edit and closes no find bar. A deleted comment shows as deleted here too.
 
 The rect is measured once. floating-ui tracks no scroll for a virtual anchor, so a wheel or a scroll anywhere closes the card rather than leaving it behind. A new anchor ref per target is what moves it, since Radix repositions only when the anchor's identity changes.
 
-`enterCard` is a latch, not a cancel. The sheet's `document` mousemove reports "left" on every frame while the pointer is over the portaled card, so a cancel would last one frame and the 150 ms close would start again. While the latch holds, `hide` does nothing, and `leaveCard` clears it. A coarse pointer gets no card, because a tap emulates mouse events: `show` does nothing under `useIsCoarsePointer`.
+`enterCard` is a latch, not a cancel. The sheet's `document` mousemove reports "left" on every frame while the pointer is over the portaled card, so a cancel would last one frame and the 150 ms close would start again. While the latch holds, a report of "left" does nothing, and `leaveCard` clears it. A coarse pointer gets no card, because a tap emulates mouse events: a report of a card does nothing under `useIsCoarsePointer`.
 
 Accepted edges:
 
-- In docs, a press within the pause opens the comment and the card can still show over it, until the pointer moves. A canvas mark's press cancels the pause.
 - Sheets reports on every move, so after Escape or a wheel the next move over the same cell opens the card again after the pause. Docs and the canvas report only on entry, so they wait for the pointer to enter the target again.
+- In sheets, a pane jump with a cell editor open acts as a tab click does: to another tab it discards the uncommitted typing, and on the same tab the selection moves under the editor, which still commits to its own cell. `revealSearchMatch` is shared with the find bar, and the workbook's API tells a host nothing about an open editor.
+- A pointer resting on the card keeps it open while a sheet's cell editor opens, as the latch holds.
 
 ## The filter lives on the surface it filters
 

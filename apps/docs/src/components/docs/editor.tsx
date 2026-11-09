@@ -294,8 +294,7 @@ const TiptapEditor = ({
         };
     }, []);
 
-    // Same split as openCard below: the mobile pane hides the document, so a mark tap only opens the
-    // card dialog over it.
+    // The mobile pane hides the document, so a mark tap only opens the card dialog over it.
     const handleCommentClick = useCallback(
         (cardId: string) => {
             if (!isMobile) openComments();

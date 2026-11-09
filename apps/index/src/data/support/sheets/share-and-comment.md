@@ -75,7 +75,7 @@ A small triangle appears in the corner of the cell to show it has a comment atta
 
 ## Open the comments panel
 
-Click the **Comments** button (the speech bubble icon) in the top-right corner of the toolbar. A number badge shows how many open comments the spreadsheet has.
+Click the **Comments** button (the speech bubble icon) in the top-right corner of the toolbar. A number badge shows how many open comments are assigned to you.
 
 The panel slides open on the right and lists every comment, on every tab. Each comment shows its title. A comment on another tab shows that tab's name first, such as "Sheet2 · Cell B2". Click a comment to jump to its cell and open its thread.
 

@@ -30,7 +30,7 @@ To comment on an equation, click it and press the shortcut. The **Title** starts
 
 ## Open the comments sidebar
 
-Click the **Comments** button (the speech bubble icon) in the top-right corner of the toolbar. A number badge shows how many open comments the document has.
+Click the **Comments** button (the speech bubble icon) in the top-right corner of the toolbar. A number badge shows how many open comments are assigned to you.
 
 The sidebar lists every comment anchored to the document, each by its title. Click a comment to jump to its location in the text and open the thread.
 
