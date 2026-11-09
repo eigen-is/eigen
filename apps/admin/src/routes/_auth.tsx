@@ -1,27 +1,17 @@
-// The admin app's signed-in area. Its beforeLoad sends a signed-out visitor to /login and hands the user to
-// every child route's context. The page then makes the instance's organization active and shows the admin
+// The admin app's signed-in area. The shared guard sends a signed-out visitor to /login and hands the user
+// to every child route's context. The page then makes the instance's organization active and shows the admin
 // pages only to its admins and owners, hiding the sidebar from anyone else.
 
-import { createFileRoute, Outlet, redirect } from '@tanstack/react-router';
+import { createFileRoute, Outlet } from '@tanstack/react-router';
 import { useMembers } from '@workspace/lib/admin';
 import { authClient } from '@workspace/lib/auth';
 import { usePublicConfig } from '@workspace/lib/public';
 import { EmptyState, LoadingState, useLayout } from '@workspace/ui';
+import { createAuthRouteOptions } from '@workspace/ui/components/layout/pages';
 import { useEffect, useRef } from 'react';
 
 export const Route = createFileRoute('/_auth')({
-    beforeLoad: ({ context, location }) => {
-        const { user } = context.auth;
-        if (!user) {
-            throw redirect({
-                to: '/login',
-                search: {
-                    redirect: location.href,
-                },
-            });
-        }
-        return { user };
-    },
+    ...createAuthRouteOptions(),
     component: AuthGuard,
 });
 
