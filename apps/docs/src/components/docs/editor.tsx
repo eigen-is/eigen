@@ -1072,6 +1072,7 @@ const TiptapEditor = ({
                 cards={cards}
                 entries={allComments}
                 side="bottom"
+                isCardDeleted={isCardDeleted}
                 onOpenCard={handleCommentClick}
             />
 

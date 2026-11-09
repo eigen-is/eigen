@@ -48,7 +48,7 @@ Object.defineProperty(document.documentElement, 'clientWidth', { value: 1024 });
 Object.defineProperty(document.documentElement, 'clientHeight', { value: 768 });
 
 // Renders the card under a host that holds the target, as useCommentHover does, and closes on dismiss.
-async function renderCard(cardId: string | null) {
+async function renderCard(cardId: string | null, isCardDeleted: (card: CommentCard) => boolean = () => false) {
     const seen: { setTarget: (target: CommentHoverTarget | null) => void } = { setTarget: () => {} };
     const dismiss = mock(() => seen.setTarget(null));
     const enterCard = mock(() => {});
@@ -62,6 +62,7 @@ async function renderCard(cardId: string | null) {
             cards,
             entries,
             side: 'right',
+            isCardDeleted,
             onOpenCard,
         });
     }
@@ -97,6 +98,13 @@ test('an untitled card reads as a comment', async () => {
     await renderCard('b');
     expect(text()).toContain('Comment');
     expect(text()).toContain('Another description');
+});
+
+test('a card that counts as deleted shows as deleted, without its description', async () => {
+    await renderCard('a', (card) => card.id === 'a');
+    expect(text()).toContain('The title');
+    expect(text()).toContain('This comment was deleted');
+    expect(text()).not.toContain('The description');
 });
 
 test('a card the host no longer has renders nothing', async () => {

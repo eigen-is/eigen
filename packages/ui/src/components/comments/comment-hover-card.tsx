@@ -13,12 +13,14 @@ export function CommentHoverCard({
     cards,
     entries,
     side,
+    isCardDeleted,
     onOpenCard,
 }: {
     hover: CommentHover;
     cards: Readonly<Record<string, CommentCard>>;
     entries: readonly CommentEntry[];
     side: 'bottom' | 'right';
+    isCardDeleted: (card: CommentCard) => boolean;
     onOpenCard: (cardId: string) => void;
 }) {
     const { target, enterCard, leaveCard, dismiss } = hover;
@@ -55,6 +57,7 @@ export function CommentHoverCard({
                             entry={entries.find((entry) => entry.chatName === card.chatName)}
                             title={card.title || 'Comment'}
                             unread={false}
+                            deleted={isCardDeleted(card)}
                             onClick={() => {
                                 onOpenCard(target.cardId);
                                 dismiss();

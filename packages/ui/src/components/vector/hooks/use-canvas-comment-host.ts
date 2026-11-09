@@ -190,6 +190,12 @@ export function useCanvasCommentHost({
             onOpenChat: isMobile ? openLifecycleChat : openChat,
             onAddComment: canWrite && chatFolderId ? () => setAddOpen(true) : undefined,
         },
-        hoverCardProps: { hover, cards: lifecycleCards, entries: allComments, onOpenCard: openCard },
+        hoverCardProps: {
+            hover,
+            cards: lifecycleCards,
+            entries: allComments,
+            isCardDeleted: lifecycle.isCardDeleted,
+            onOpenCard: openCard,
+        },
     };
 }

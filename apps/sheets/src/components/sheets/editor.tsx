@@ -522,6 +522,7 @@ export function SheetEditor({
                 cards={cards}
                 entries={allComments}
                 side="right"
+                isCardDeleted={isCardDeleted}
                 onOpenCard={setOpenCardId}
             />
 
