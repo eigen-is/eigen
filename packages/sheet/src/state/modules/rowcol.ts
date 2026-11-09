@@ -11,6 +11,7 @@ import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
 import type { Sheet } from '../types';
+import { deleteMarker, insertMarker } from '../utils';
 import { recomputeAfterOps } from './formula-exec';
 
 export const ONE_AREA_ONLY = 'Cannot perform this operation on multiple selection areas, please select a single area';
@@ -38,7 +39,7 @@ export function insertRowCol(
     }
 
     ctx.formulaCache.formulaCellInfoMap = null;
-    if (!fromBatch) recomputeAfterOps(ctx, [{ op: 'insertRowCol', id: op.id, path: [], value: op }]);
+    if (!fromBatch) recomputeAfterOps(ctx, [insertMarker(op)]);
 }
 
 export function deleteRowCol(
@@ -54,7 +55,7 @@ export function deleteRowCol(
     ctx.formulaCache.formulaCellInfoMap = null;
     if (fromBatch) return;
     ctx.selections = undefined;
-    recomputeAfterOps(ctx, [{ op: 'deleteRowCol', id: op.id, path: [], value: op }]);
+    recomputeAfterOps(ctx, [deleteMarker(op)]);
 }
 
 // The selection a hide or a show acts on. More than one gets the notice instead.

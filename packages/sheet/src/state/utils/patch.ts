@@ -78,9 +78,16 @@ export function patchToOp(ctx: Context, patches: Patch[], options: EntryOptions 
 
 // The op a row or column edit ships in place of the sheets it rewrote.
 export function rowColMarker({ insertRowColOp, deleteRowColOp }: RowColOptions): Op | undefined {
-    if (insertRowColOp) return { op: 'insertRowCol', id: insertRowColOp.id, path: [], value: insertRowColOp };
-    if (deleteRowColOp) return { op: 'deleteRowCol', id: deleteRowColOp.id, path: [], value: deleteRowColOp };
-    return undefined;
+    if (insertRowColOp) return insertMarker(insertRowColOp);
+    return deleteRowColOp && deleteMarker(deleteRowColOp);
+}
+
+export function insertMarker(op: InsertRowColOp): Op {
+    return { op: 'insertRowCol', id: op.id, path: [], value: op };
+}
+
+export function deleteMarker(op: DeleteRowColOp): Op {
+    return { op: 'deleteRowCol', id: op.id, path: [], value: op };
 }
 
 // A sheet add as a batch: the sheet as stored, then the order of each sheet at or past its place. A peer and a joiner's

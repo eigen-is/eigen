@@ -11,7 +11,7 @@ import { applySheetDelete, applySheetRename, sheetNameRefusal } from '../../engi
 import type { Context } from '../context';
 import { firstVisibleSheetId, updateContextWithSheetData } from '../context';
 import type { Sheet } from '../types';
-import { getSheetIndex, nextSheetName, renameSheetOps, sheetOrder } from '../utils';
+import { addSheetOps, deleteSheetOps, getSheetIndex, nextSheetName, renameSheetOps, sheetOrder } from '../utils';
 import { cancelNormalSelected } from './cell';
 import { createFilterOptions } from './filter';
 import { snapshotContext } from './formula-cache';
@@ -102,7 +102,7 @@ export function addSheet(
     // A name that read no sheet may read this one now, and the map holds none of its formulas.
     ctx.formulaCache.formulaCellInfoMap = null;
     if (!newSheetID) changeSheet(ctx, id);
-    if (!fromBatch) recomputeAfterOps(ctx, [{ op: 'addSheet', id, path: [], value: { name: sheet.name } }]);
+    if (!fromBatch) recomputeAfterOps(ctx, addSheetOps(sheet, ctx.sheets));
 }
 
 // A sheet's cells are stored as a sparse list but the editor works on a full matrix, so a sheet gets its matrix
@@ -137,7 +137,7 @@ export function deleteSheet(
     if (fromBatch) return;
     shiftSheetOrders(ctx.sheets, sheetOrder(deleted), -1);
     if (id === ctx.currentSheetId) leaveCurrentSheet(ctx);
-    recomputeAfterOps(ctx, [{ op: 'deleteSheet', id, path: [], value: { id } }]);
+    recomputeAfterOps(ctx, deleteSheetOps(deleted, ctx.sheets));
 }
 
 // A sheet added at order `at`, or deleted from it, moves the sheets from there on one place. Only the author's edit
