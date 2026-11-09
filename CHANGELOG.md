@@ -91,6 +91,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Removing someone with a document open** — removing someone from a team or an organization, or deleting their account, cuts them off within 15 seconds from the documents they can no longer read. A password reset does too
 - **Losing access to an open document** — in Docs, Sheets, Slides, Vector and Stickies, the page switches to "You need access" within 15 seconds, or to sign-in if your account was deleted, instead of leaving an editor where typing goes nowhere
 - **Signing out with a document open** — signing out or changing your password with **Log out of all other devices** ticked also ends open documents and live updates, within 15 seconds
+- **Logging out from a file list** — **Log out** on Trash, Shared or a file-type page in Drive, or on the file list of Docs, Sheets, Slides, Stickies or Vector, goes straight to the login page without an error flashing first
 - **Shared with me** — items of a deleted person or team no longer show
 - **Restoring a deleted account or team** — a restore of a deleted team, or of a deleted user whose address another account now holds, is refused before it changes anything. A restore that fails no longer reloads open tabs, so they keep their unsaved edits
 - **Deleting during an upload** — on local storage, deleting a file while an upload of the same name runs no longer loses the new file
