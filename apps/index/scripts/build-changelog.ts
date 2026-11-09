@@ -10,8 +10,8 @@ import { renderMarkdown } from './lib/render-markdown';
 
 // "## [0.4.2] - 2026-11-03" or "## [Unreleased]", with the id and the copy-link anchor markdown-it added.
 const RELEASE_HEADING = /^<h2 id="([^"]+)"[^>]*>\[([^\]]+)\](?: - (\d{4}-\d{2}-\d{2}))? (<a [\s\S]*?<\/a>)<\/h2>/;
-// "- **Title** — text", up to the end of the entry's first paragraph.
-const LEAD_ENTRY = /<li>(\s*(?:<p>)?)<strong>([\s\S]*?)<\/strong>\s*—\s*(\S)([\s\S]*?)(<\/p>|<\/li>)/g;
+// "- **Title** — text", up to the end of the entry's first paragraph. The title stays inside one list item.
+const LEAD_ENTRY = /<li>(\s*(?:<p>)?)<strong>((?:(?!<\/li>)[\s\S])*?)<\/strong>\s*—\s*(\S)([\s\S]*?)(<\/p>|<\/li>)/g;
 const H3_LABEL = /<h3 [^>]*>(.*?) <a [\s\S]*?<\/a><\/h3>/g;
 
 // The page renders its own h1, so everything before the first version heading is dropped.
@@ -28,7 +28,7 @@ export function renderChangelog(raw: string): ChangelogBody {
             ? `<time datetime="${date}">${formatDateOnly(date)}</time>`
             : '<time>Not in a release yet</time>';
         versions.push(date ? { id, version, date: formatDateOnly(date).replace(/ \d{4}$/, '') } : { id, version });
-        const head = `<h2 id="${id}" class="release-head"><span class="ver">${version}</span>${time} ${anchor}</h2>`;
+        const head = `<h2 id="${id}" class="release-head"><span>${version}</span>${time} ${anchor}</h2>`;
         return `<section class="release">${head}${release.slice(match.length)}</section>`;
     });
 

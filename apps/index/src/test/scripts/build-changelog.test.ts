@@ -45,12 +45,12 @@ All notable user-visible changes are documented here.
 
         test('a dated version shows its number and a day-month-year time, keeping its id and anchor', () => {
             expect(body.html).toMatch(
-                /<h2 id="042---2026-11-03" class="release-head"><span class="ver">0\.4\.2<\/span><time datetime="2026-11-03">3 Nov 2026<\/time> <a class="heading-anchor"/,
+                /<h2 id="042---2026-11-03" class="release-head"><span>0\.4\.2<\/span><time datetime="2026-11-03">3 Nov 2026<\/time> <a class="heading-anchor"/,
             );
         });
 
         test('Unreleased says it is not in a release yet', () => {
-            expect(body.html).toContain('<span class="ver">Unreleased</span><time>Not in a release yet</time>');
+            expect(body.html).toContain('<span>Unreleased</span><time>Not in a release yet</time>');
         });
 
         test('each version sits in its own release section', () => {
@@ -93,6 +93,12 @@ All notable user-visible changes are documented here.
             const out = html('- **A** — first\n\n- **B** — second\n\n  more');
             expect(out).toContain('<p><strong class="lead">A</strong> First.</p>');
             expect(out).toContain('<p><strong class="lead">B</strong> Second.</p>');
+        });
+
+        test("a bold word without a dash does not take the next entry's title", () => {
+            const out = html('- **Foo** bar\n- **Baz** — qux');
+            expect(out).toContain('<li><strong>Foo</strong> bar</li>');
+            expect(out).toContain('<strong class="lead">Baz</strong> Qux.');
         });
 
         test('an entry without a lead is left alone', () => {
