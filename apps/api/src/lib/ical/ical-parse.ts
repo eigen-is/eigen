@@ -288,7 +288,7 @@ export type IcsParseResult = {
 export type ProjectedResource = {
     events: StoredEvent[];
     skipped: number;
-    // Recurrence the index cannot expand (a stripped sub-daily or out-of-range rule, an RDATE): a time-range REPORT returns the resource for every window rather than lose an occurrence.
+    // Recurrence the index cannot expand (a stripped rule, an RDATE): a time-range REPORT returns the resource for every window rather than lose an occurrence.
     hasUnindexedRecurrence: boolean;
 };
 

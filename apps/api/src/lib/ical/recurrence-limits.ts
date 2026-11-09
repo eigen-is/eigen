@@ -27,7 +27,7 @@ export function isSubDailyRrule(rrule: string): boolean {
     }
 }
 
-// The same walk from a pathological dtstart stalls even at DAILY, and the span clamp bounds the window, not the walk to it; DAILY across 1900–2200 is ~110k steps.
+// A start far from the window costs the same walk at DAILY, and the window's span doesn't bound it; 1900–2200 is 110k steps.
 const MIN_RECURRENCE_START = Date.UTC(1900, 0, 1);
 export const MAX_RECURRENCE_START = Date.UTC(2200, 0, 1);
 
@@ -59,5 +59,5 @@ export function isExpandableRrule(rrule: string, dtstart: Date): boolean {
     }
 }
 
-// Defense in depth under the sub-daily reject and the window clamp, far above any real calendar view.
+// Far above any real calendar view.
 export const MAX_OCCURRENCES = 10000;
