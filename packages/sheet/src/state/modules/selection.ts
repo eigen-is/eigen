@@ -746,7 +746,6 @@ export function moveHighlightRange(
                         if (!isNil(v)) {
                             curC = v;
                         }
-                        curC += index;
                     }
                     curC += index;
                 } else if (!isNil(cf_end) && cf_end < endC && cf_str === curC) {
@@ -771,7 +770,6 @@ export function moveHighlightRange(
                         if (!isNil(v)) {
                             curC = v;
                         }
-                        curC += index;
                     }
                     curC += index;
                 } else if (cf < endC && cf === curC) {

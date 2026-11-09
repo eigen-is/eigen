@@ -7,7 +7,7 @@ import { describe, expect, test } from 'bun:test';
 import type { Context } from '../../../state/context';
 import { getRangetxt } from '../../../state/modules/cell';
 import { consumePendingCopy } from '../../../state/modules/clipboard';
-import { copy, normalizeSelection, rangeValueToClipboard } from '../../../state/modules/selection';
+import { copy, moveHighlightRange, normalizeSelection, rangeValueToClipboard } from '../../../state/modules/selection';
 import { contextFactory } from '../factories/context';
 
 describe('state/modules/selection — rangeValueToClipboard', () => {
@@ -108,4 +108,19 @@ test('normalizeSelection backfills a one-element range, so the name box reads A1
     const ctx = contextFactory() as Context;
     const [selection] = normalizeSelection(ctx, [{ row: [0], column: [0] }]);
     expect(getRangetxt(ctx, ctx.currentSheetId, selection)).toBe('A1');
+});
+
+describe('state/modules/selection — shift and arrow', () => {
+    // A1:B1 is merged, and the selection A1:D1 has its focus on the far end, so shift and right shrinks it from the left.
+    test('shrinking past a merge stops on the next column, as shrinking down does', () => {
+        const row = () => [{ mc: { r: 0, c: 0, rs: 1, cs: 2 } }, { mc: { r: 0, c: 0 } }, {}, {}, {}, {}];
+        const ctx = contextFactory() as Context;
+        ctx.sheets[0].data = [row(), [null, null, null, null, null, null]];
+        ctx.sheets[0].config = { merge: { '0_0': { r: 0, c: 0, rs: 1, cs: 2 } } };
+        ctx.visibledatarow = [20, 40];
+        ctx.visibledatacolumn = [100, 200, 300, 400, 500, 600];
+        ctx.selections = [{ row: [0, 0], column: [0, 3], row_focus: 0, column_focus: 3 }];
+        moveHighlightRange(ctx, 'right', 1, 'rangeOfSelect');
+        expect(ctx.selections[0].column).toEqual([2, 3]);
+    });
 });
