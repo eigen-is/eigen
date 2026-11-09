@@ -20,7 +20,7 @@ function SharedRoute() {
     const { uid, pid, mid } = Route.useSearch();
     const { user } = Route.useRouteContext();
     const ownerId = user.id;
-    const { data: selectedPath = null } = usePathInfo(uid || '', mid || DEFAULT_MOUNT_ID, pid || '');
+    const { data: selectedPath = null } = usePathInfo(uid || '', mid || DEFAULT_MOUNT_ID, pid);
 
     const {
         data: folderContents = [],
