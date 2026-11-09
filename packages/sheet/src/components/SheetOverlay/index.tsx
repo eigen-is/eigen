@@ -1,8 +1,9 @@
 // The DOM layer over the grid canvas: the row and column headers, the scrolling cell area with the cell editor,
 // selections and floating images and charts, the validation and link cards, and the add-rows footer. It turns the
 // pointer's down, move, up and double click on the cell area into the state handlers, such as
-// handleCellAreaMouseDown, and coalesces mouse moves to one update per frame. A press that closes an open app-bar
-// menu is marked before the cells or a header read it, so it puts no reference into a formula.
+// handleCellAreaMouseDown, and coalesces mouse moves to one update per frame, each of which also tells the host which
+// comment the pointer is on. A press that closes an open app-bar menu is marked before the cells or a header read it,
+// so it puts no reference into a formula.
 
 import { SHEET_COLUMN_HEADER_HEIGHT, SHEET_ROW_HEADER_WIDTH } from '@workspace/lib/sheets';
 import { Button } from '@workspace/ui/components/button';
@@ -36,6 +37,7 @@ import {
     showLinkCard,
     tryInsertRowCol,
 } from '../../state';
+import { commentHoverAt } from '../../state/modules/comment-hover';
 import { useSheetContextMenu } from '../ContextMenu/useSheetContextMenu';
 import { DropdownList } from '../DataValidation/DropdownList';
 import { ValidationHintCard } from '../DataValidation/HintCard';
@@ -131,10 +133,10 @@ export const SheetOverlay: React.FC = () => {
 
     const debouncedShowLinkCard = useMemo(
         () =>
-            debounce((globalCache: GlobalCache, r: number, c: number, isEditing: boolean, skip = false) => {
+            debounce((globalCache: GlobalCache, r: number, c: number, skip = false) => {
                 if (skip || globalCache.linkCard?.mouseEnter) return;
                 setContext((draftCtx) => {
-                    showLinkCard(draftCtx, r, c, isEditing);
+                    showLinkCard(draftCtx, r, c);
                 });
             }, 800),
         [setContext],
@@ -146,10 +148,10 @@ export const SheetOverlay: React.FC = () => {
             if (rc == null) return;
             const link = getCellHyperlink(ctx, rc.r, rc.c);
             if (link == null) {
-                debouncedShowLinkCard(globalCache, rc.r, rc.c, false);
+                debouncedShowLinkCard(globalCache, rc.r, rc.c);
             } else {
-                showLinkCard(ctx, rc.r, rc.c, false);
-                debouncedShowLinkCard(globalCache, rc.r, rc.c, false, true);
+                showLinkCard(ctx, rc.r, rc.c);
+                debouncedShowLinkCard(globalCache, rc.r, rc.c, true);
             }
         },
         [debouncedShowLinkCard],
@@ -195,9 +197,21 @@ export const SheetOverlay: React.FC = () => {
                     },
                     { noHistory: true },
                 );
+                // Outside the recipe, because a host's report sets its state or writes to the workbook.
+                const cellArea = refs.cellArea.current;
+                if (cellArea) refs.hooks.current.onCommentHover?.(commentHoverAt(getContext(), ev, cellArea));
             });
         },
-        [overShowLinkCard, refs.cellArea, refs.cellInput, refs.fxInput, refs.globalCache, setContext],
+        [
+            getContext,
+            overShowLinkCard,
+            refs.cellArea,
+            refs.cellInput,
+            refs.fxInput,
+            refs.globalCache,
+            refs.hooks,
+            setContext,
+        ],
     );
 
     const onMouseUp = useCallback(
@@ -371,7 +385,7 @@ export const SheetOverlay: React.FC = () => {
                     onContextMenu={cellAreaContextMenu}
                     onScroll={onCellAreaScroll}
                     {...cellAreaLongPress.bind(null)}
-                    // A hovered glyph also stands the drag handles' cursors down (index.css).
+                    // A hovered glyph also stands the drag handles' cursors down.
                     data-glyph-hover={context.cellGlyphHover}
                     style={{
                         width: context.cellmainWidth,

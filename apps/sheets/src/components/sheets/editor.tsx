@@ -4,7 +4,7 @@
 
 import { useAuth } from '@workspace/lib/auth';
 import { materializeClipboardSvg, needsReUpload, reUploadImage } from '@workspace/lib/clipboard';
-import { useCommentFilter, useCommentLifecycle, useDocumentPanels } from '@workspace/lib/comments';
+import { useCommentFilter, useCommentHover, useCommentLifecycle, useDocumentPanels } from '@workspace/lib/comments';
 import {
     isPendingMediaName,
     useCopyToMediaFolder,
@@ -31,7 +31,7 @@ import {
 } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
-import { CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
+import { CommentHoverCard, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { readImageSizeFromUrl } from '@workspace/ui/components/media';
@@ -75,9 +75,7 @@ export function SheetEditor({
     // is a pixel of the sheet.
     const paneRef = useRef<HTMLDivElement>(null);
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
-    // The workbook reports the selected image or chart through onActiveObjectChange, and the properties
-    // panel on the right shows it. Keep aspect ratio is on by default for an image and off for a chart.
-    // The panel checkbox and the grips both read it, so it lives here, one level above both.
+    // The panel checkbox and the grips both read Keep aspect ratio, so it lives here, one level above both.
     const [activeObject, setActiveObject] = useState<SheetFloatingItem | null>(null);
     const [aspectLocked, setAspectLocked] = useAspectLock(
         activeObject ? [activeObject.object.id] : [],
@@ -149,6 +147,11 @@ export function SheetEditor({
     // The filter lives here, so it survives closing and opening the panel.
     const commentFilter = useCommentFilter();
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
+    const commentHover = useCommentHover();
+
+    const deleteCard = useCallback((cardId: string) => {
+        if (workbookRef.current) stripCommentCard(workbookRef.current, cardId);
+    }, []);
 
     const addComment = useCallback((r: number, c: number) => {
         setAddTargetCell({ r, c });
@@ -168,10 +171,8 @@ export function SheetEditor({
             if (!mediaFolderId || !file.type.startsWith('image/')) return;
             const { pendingName, promise } = startUpload(file);
 
-            // The size is read before the upload is awaited, so the image is inserted before its pending
-            // name is swapped for the real one. A swap that ran first would find nothing to rename, and the
-            // zombie sweep would later delete the placeholder. A file without a size, such as some SVGs,
-            // gets the default box.
+            // The image goes in before the upload is awaited: a swap that ran first would find nothing to rename, and
+            // the zombie sweep would later delete the placeholder.
             const bitmap = await createImageBitmap(file).catch(() => null);
             const intrinsic = bitmap ? { width: bitmap.width, height: bitmap.height } : null;
             bitmap?.close();
@@ -185,9 +186,8 @@ export function SheetEditor({
         [mediaFolderId, startUpload, fitToPane],
     );
 
-    // An image copied from another Eigen editor lands at the size and angle it had there, so it is not
-    // fitted to the pane. An image from another document is first placed under a pending name, then
-    // re-uploaded into this sheet's media folder, and then renamed.
+    // A copied image lands at the size and angle it had, not fitted to the pane. One from another document goes in under
+    // a pending name, is re-uploaded into this sheet's media folder, and is then renamed.
     const handlePasteEigenImage = useCallback(
         async (item: EigenClipboardImageItem) => {
             if (!mediaFolderId) return;
@@ -416,15 +416,7 @@ export function SheetEditor({
                                                   }
                                                 : {}),
                                             commentLifecycle: lifecycle,
-                                            ...(canWrite
-                                                ? {
-                                                      onDeleteComment: (cardId: string) => {
-                                                          if (workbookRef.current) {
-                                                              stripCommentCard(workbookRef.current, cardId);
-                                                          }
-                                                      },
-                                                  }
-                                                : {}),
+                                            ...(canWrite ? { onDeleteComment: deleteCard } : {}),
                                             getCommentInfo: (r: number, c: number) => {
                                                 const grid = workbookRef.current?.getFlowdata();
                                                 const cardId = grid?.[r]?.[c]?.commentCardIds?.[0];
@@ -434,6 +426,10 @@ export function SheetEditor({
                                                     ? allComments.find((comment) => comment.chatName === card.chatName)
                                                     : undefined;
                                                 return { card, entry };
+                                            },
+                                            onCommentHover: (target) => {
+                                                if (target) commentHover.show(target.cardId, target.rect);
+                                                else commentHover.hide();
                                             },
                                         }}
                                     />
@@ -503,14 +499,20 @@ export function SheetEditor({
                 submitLabel="Add comment"
             />
 
+            <CommentHoverCard
+                hover={commentHover}
+                cards={cards}
+                entries={allComments}
+                side="right"
+                onOpenCard={setOpenCardId}
+            />
+
             <CommentLifecycleDialogs
                 lifecycle={lifecycle}
                 path={path}
                 canWrite={canWrite}
                 commentContextMenu={commentContextMenu}
-                onDelete={(cardId) => {
-                    if (workbookRef.current) stripCommentCard(workbookRef.current, cardId);
-                }}
+                onDelete={deleteCard}
             />
         </CollabDocumentGate>
     );

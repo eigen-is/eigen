@@ -5,7 +5,7 @@ import type { useCommentLifecycle } from '@workspace/lib/comments';
 import type { Sheet as LibSheet, SheetChart, SheetFloatingItem } from '@workspace/lib/sheets';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
-import type { CommentCard } from '@workspace/lib/types/comments';
+import type { CommentCard, CommentHoverTarget } from '@workspace/lib/types/comments';
 import type { Selection } from './types';
 
 export type CommentInfo = {
@@ -29,6 +29,7 @@ export type Hooks = {
     onDeleteComment?: (cardId: string) => void;
     commentLifecycle?: ReturnType<typeof useCommentLifecycle>;
     getCommentInfo?: (row: number, column: number) => CommentInfo | null;
+    onCommentHover?: (target: CommentHoverTarget | null) => void;
     onInsertImage?: () => void;
     onPasteEigenImage?: (item: EigenClipboardImageItem) => void;
     onPasteImageFile?: (file: File) => void;
