@@ -48,11 +48,16 @@ export function CommentHoverCard({
             const holds =
                 box !== undefined &&
                 (contains(box, point) || (lastOnAnchor !== null && heading(lastOnAnchor, point, box)));
-            if (!holds) lastOnAnchor = null;
-            if (holds === held) return;
-            held = holds;
-            if (holds) enterCard();
-            else leaveCard();
+            // Every holding move says so, because the host's report of another of the card's cells ends the hold.
+            if (holds) {
+                held = true;
+                enterCard();
+                return;
+            }
+            lastOnAnchor = null;
+            if (!held) return;
+            held = false;
+            leaveCard();
         };
         document.addEventListener('pointermove', onMove, PAGE_LISTENER);
         return () => document.removeEventListener('pointermove', onMove, PAGE_LISTENER);

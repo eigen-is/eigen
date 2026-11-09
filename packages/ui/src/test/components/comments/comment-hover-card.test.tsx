@@ -213,9 +213,9 @@ async function renderLaidOut() {
 test('the pointer on the card holds it, and off it lets it go', async () => {
     const { enterCard, leaveCard, moveTo } = await renderLaidOut();
     await moveTo(200, 230);
-    expect(enterCard).toHaveBeenCalledTimes(1);
     await moveTo(200, 240);
-    expect(enterCard).toHaveBeenCalledTimes(1);
+    expect(enterCard).toHaveBeenCalledTimes(2);
+    expect(leaveCard).not.toHaveBeenCalled();
     await moveTo(500, 500);
     expect(leaveCard).toHaveBeenCalledTimes(1);
 });
@@ -249,6 +249,42 @@ test('a pointer that strayed off the way has to come back over the anchor', asyn
     await moveTo(100, 240);
     await moveTo(110, 222);
     expect(enterCard).not.toHaveBeenCalled();
+});
+
+// The host reports the card's other cells as the card again, which ends the hold, and the gap after them reports null.
+test('a slow way to the card over another cell of the same card keeps it open', async () => {
+    const { useCommentHover } = await import('@workspace/lib/comments');
+    const seen: { report: (target: CommentHoverTarget | null) => void } = { report: () => {} };
+    function Host() {
+        const hover = useCommentHover();
+        seen.report = hover.report;
+        return createElement(CommentHoverCard, {
+            hover,
+            cards,
+            entries,
+            side: 'right',
+            isCardDeleted: () => false,
+            onOpenCard: () => {},
+        });
+    }
+    await renderInDocument(createElement(Host));
+    const wait = (ms: number) => act(async () => new Promise((resolve) => setTimeout(resolve, ms)));
+    const moveTo = (x: number, y: number) =>
+        act(async () => {
+            document.body.dispatchEvent(new PointerEvent('pointermove', { clientX: x, clientY: y, bubbles: true }));
+        });
+    await act(async () => seen.report({ cardId: 'a', rect: RECT }));
+    await wait(350);
+    const element = content();
+    if (!element) throw new Error('no popover');
+    element.getBoundingClientRect = () => CARD;
+    await moveTo(105, 215);
+    await moveTo(108, 221);
+    await act(async () => seen.report({ cardId: 'a', rect: RECT }));
+    await act(async () => seen.report(null));
+    await moveTo(200, 230);
+    await wait(250);
+    expect(content()).not.toBeNull();
 });
 
 // A mark may report itself before this move reaches the page, so a leave here would start a close over the mark.
