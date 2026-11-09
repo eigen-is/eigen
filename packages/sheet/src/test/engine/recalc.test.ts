@@ -295,6 +295,41 @@ describe('engine/recalc — recalcSheets', () => {
         expect(out[0].data![1][2]?.v).toBe('#NAME?');
     });
 
+    test('a formula this build cannot evaluate keeps the error or empty text the file holds', () => {
+        const error = (v: string): Partial<Cell> => ({ v, m: v, ct: { fa: 'General', t: 'e' } });
+        const sheets = [
+            sheet('s1', 'Sheet1', [
+                [num(1), formula('=FILTER(A1:A2,1)', error('#N/A')), formula('=B1', error('#N/A'))],
+                [num(2), formula('=NOSUCH(A1)', error('#DIV/0!')), formula('=SUMPRODUCT(A1:A2*A1:A2)', error('#N/A'))],
+                [num(3), formula('=IFERROR(SUM(OFFSET(A1,0,-1)),"")', str('')), formula('=OFFSET(A1,0,1)')],
+                [formula('=1/0', error('#N/A')), formula('=TaxRate', error('#REF!')), formula('=IFERROR(C3,"none")')],
+            ]),
+        ];
+        const values = recalcSheets(sheets)[0].data!.map((row) => row.map((cell) => cell?.v));
+        expect(values).toEqual([
+            [1, '#N/A', '#N/A'],
+            [2, '#DIV/0!', '#N/A'],
+            [3, '', '#NAME?'],
+            // The engine can evaluate the first, so its error is no longer the file's. The last reads C3's #NAME?.
+            ['#DIV/0!', '#REF!', '#NAME?'],
+        ]);
+    });
+
+    test('a recompute keeps the error or empty text a formula it cannot evaluate holds', () => {
+        const error = (v: string): Partial<Cell> => ({ v, m: v, ct: { fa: 'General', t: 'e' } });
+        const sheets = [
+            sheet('s1', 'Sheet1', [
+                [formula('=FILTER(1,2)', error('#N/A')), formula('=A1:A2*2', error('#VALUE!'))],
+                [formula('=OFFSET(B1,0,1)', str('')), formula('=A1', error('#N/A'))],
+            ]),
+        ];
+        const values = recomputeAfter(sheets, everyFormula)[0].data!.map((row) => row.map((cell) => cell?.v));
+        expect(values).toEqual([
+            ['#N/A', '#VALUE!'],
+            ['', '#N/A'],
+        ]);
+    });
+
     // Only an error string is an error: a cached text that starts with # is a value the guard keeps.
     test('a cached text that starts with # is kept over a function the engine lacks', () => {
         const sheets = [sheet('s1', 'Sheet1', [[num(1), formula('=FILTER(A1:A2,A1:A2>0)', str('#tag'))]])];

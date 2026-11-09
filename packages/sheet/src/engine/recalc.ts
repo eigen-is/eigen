@@ -46,12 +46,11 @@ export type RecomputeSeeds = {
     reads: (formula: string) => boolean;
 };
 
-// An import's values are Excel's, so only a formula with no value of its own is evaluated.
+// An import's values are Excel's, so only a formula with no value of its own or a stored error is evaluated.
 export function recalcSheets(sheets: readonly Sheet[], budgets: RecalcBudgets = {}): Sheet[] {
     const working = sheets.map((sheet) => ({ id: sheet.id, name: sheet.name, data: ensureWorkingData(sheet) }));
     const finish = () =>
         sheets.map((sheet, i) => ({ ...sheet, data: working[i].data, celldata: dataToCelldata(working[i].data) }));
-    const lacksValue = (cell: Cell | null) => isFormula(cell?.f) && !hasNonErrorCachedValue(cell);
     if (!working.some(({ data }) => data.some((row) => row?.some(lacksValue)))) return finish();
 
     const { formulaCellInfoMap, dependencyIndex } = indexFormulas(working, budgets);
@@ -126,7 +125,8 @@ export function affectedFormulas(
 
 // Evaluates formulas in order, each value reaching the next through `computed`, which the resolver reads before the
 // matrices, so a reader gets the value without the type the cell keeps. A cell the pass leaves alone is read as stored:
-// a clock or a random number when `keepVolatile` says so, and a number this build can't evaluate the text of.
+// a clock or a random number when `keepVolatile` says so, and whatever a formula holds, a number, an error or empty
+// text, when this build can't evaluate its text.
 export function evaluateFormulas(
     order: readonly FormulaCellInfo[],
     sheets: readonly WorkingSheet[],
@@ -144,7 +144,7 @@ export function evaluateFormulas(
         try {
             const result = engine.evaluate(formula, id, resolver);
             const cell = stored.getCell(id, r, c);
-            if (cell && hasNonErrorCachedValue(cell) && engine.cantEvaluate(formula, result)) continue;
+            if (cell?.v != null && engine.cantEvaluate(formula, result)) continue;
             computed.set(computedKey(r, c, id), { v: result.value });
             results.push({ r, c, id, formula, result });
         } catch {
@@ -283,10 +283,11 @@ function withinSheet(dep: FormulaDependency, extents: ReadonlyMap<string, SheetE
 // RANDBETWEEN comes before RAND, so the longer name wins.
 const VOLATILE_RE = /\b(?:NOW|TODAY|RANDBETWEEN|RAND)\s*\(/i;
 
-// True when a cell holds a value that is no error: not empty, not flagged `ct.t === 'e'`, and no error string.
-function hasNonErrorCachedValue(cell: Cell): boolean {
-    if (cell.v == null || cell.ct?.t === 'e') return false;
-    return typeof cell.v !== 'string' || !valueIsError(cell.v);
+// True for a formula an import computes: one holding nothing, an error flagged `ct.t === 'e'` or an error string.
+function lacksValue(cell: Cell | null): boolean {
+    if (!isFormula(cell?.f)) return false;
+    if (cell?.v == null || cell.ct?.t === 'e') return true;
+    return typeof cell.v === 'string' && valueIsError(cell.v);
 }
 
 // Writes a result as the editor's setCellValue does, where that is cheap: an error shows its sentinel and carries

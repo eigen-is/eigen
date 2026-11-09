@@ -558,6 +558,34 @@ describe('copy/paste round-trip (item 6)', () => {
     });
 });
 
+describe('a formula this build cannot evaluate, carried', () => {
+    const holding = (data: (Cell | null)[][]) => {
+        data[0][0] = { f: '=FILTER($B$1:$B$3,1)', v: 111, m: '111', ct: { fa: 'General', t: 'n' } };
+        data[1][0] = { f: '=SUMPRODUCT($B$1:$B$3*$B$1:$B$3)', v: '#N/A', m: '#N/A', ct: { fa: 'General', t: 'e' } };
+    };
+    const at = (ctx: Context, r: number, c: number) => ctx.sheets[0].data?.[r]?.[c];
+
+    it('a cut keeps what it holds', () => {
+        const ctx = makeCtx(8, 8, holding);
+        copyThenPaste(ctx, rangeSel(0, 1, 0, 0), single(4, 2), { cut: true });
+        expect([at(ctx, 4, 2)?.v, at(ctx, 5, 2)?.v]).toEqual([111, '#N/A']);
+    });
+
+    it('a copy is a new formula with no number of its own', () => {
+        const ctx = makeCtx(8, 8, holding);
+        copyThenPaste(ctx, rangeSel(0, 1, 0, 0), single(4, 2));
+        expect([at(ctx, 4, 2)?.v, at(ctx, 5, 2)?.v]).toEqual(['#NAME?', '#CALC!']);
+        expect([at(ctx, 0, 0)?.v, at(ctx, 1, 0)?.v]).toEqual([111, '#N/A']);
+    });
+
+    it('a copy landing on its own cell leaves it as it is', () => {
+        const ctx = makeCtx(8, 8, holding);
+        copyThenPaste(ctx, rangeSel(0, 1, 0, 0), rangeSel(0, 3, 0, 0));
+        expect([at(ctx, 0, 0)?.v, at(ctx, 1, 0)?.v]).toEqual([111, '#N/A']);
+        expect([at(ctx, 2, 0)?.v, at(ctx, 3, 0)?.v]).toEqual(['#NAME?', '#CALC!']);
+    });
+});
+
 describe('pasted formulas and the dependency map', () => {
     const pasteTextAt = (text: string, r: number, c: number) => (d: Context) => {
         d.selections = single(r, c);

@@ -147,6 +147,46 @@ describe('sortRange — a header row', () => {
     });
 });
 
+describe('a sort moves a formula with what it holds', () => {
+    // A1:A3 hold 3, 1, 2 and column B the formula under test, which the sort moves down or up with its row.
+    const sortedColumnB = (holding: readonly Cell[]) => {
+        const data: (Cell | null)[][] = [3, 1, 2].map((v, r) => [cell(v), holding[r] ?? null, cell(v * 10)]);
+        const ctx = contextFactory({ sheets: [{ name: 'sheet', id: 'id_1', data, order: 0 }] }) as Context;
+        const next = produce(ctx, (draft: Context) => sortRange(draft, { row: [0, 2], column: [0, 1] }, true));
+        return next.sheets[0].data?.map((row) => row[1]) ?? [];
+    };
+
+    test('a function this build lacks keeps its number, error or empty text, and its formula moves', () => {
+        const [first, second, third] = sortedColumnB([
+            { f: '=FILTER($A$1:$A$3,1)', v: 111, m: '111', ct: { fa: 'General', t: 'n' } },
+            { f: '=NOSUCH(A2)', v: '#N/A', m: '#N/A', ct: { fa: 'General', t: 'e' } },
+            { f: '=OFFSET(A3,0,1)', v: '', m: '', ct: { fa: 'General', t: 's' } },
+        ]);
+        expect([first?.v, second?.v, third?.v]).toEqual(['#N/A', '', 111]);
+        expect([first?.f, second?.f, third?.f]).toEqual(['=NOSUCH(A1)', '=OFFSET(A2,0,1)', '=FILTER($A$1:$A$3,1)']);
+        expect(third?.m).toBe('111');
+        expect(third?.ct?.t).toBe('n');
+    });
+
+    test('an operator over a range keeps its number', () => {
+        const [, , moved] = sortedColumnB([{ f: '=SUMPRODUCT($A$1:$A$3*$A$1:$A$3)', v: 333, m: '333' }]);
+        expect(moved?.f).toBe('=SUMPRODUCT($A$1:$A$3*$A$1:$A$3)');
+        expect(moved?.v).toBe(333);
+    });
+
+    test('a formula the engine can evaluate is computed where it lands, reading outside the range', () => {
+        const [first, , third] = sortedColumnB([
+            { f: '=C1+1', v: 0, m: '0' },
+            { f: '=C2+1', v: 0, m: '0' },
+            { f: '=C3+1', v: 0, m: '0' },
+        ]);
+        expect(first?.f).toBe('=C1+1');
+        expect(first?.v).toBe(31);
+        expect(third?.f).toBe('=C3+1');
+        expect(third?.v).toBe(21);
+    });
+});
+
 test('sortSelection leaves a range that holds a merged cell as it is', () => {
     const data: (Cell | null)[][] = [
         [cell('b'), { ...cell(2), mc: { r: 0, c: 1, rs: 2, cs: 1 } }],

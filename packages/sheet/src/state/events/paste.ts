@@ -7,10 +7,11 @@ import { formatForDisplay } from '@tanstack/react-hotkeys';
 import { bundledFontOfStack, readCssFontSize } from '@workspace/lib/constants/fonts';
 import type { CellBorderSides } from '@workspace/lib/sheets';
 import { BORDER_SIDE_CSS, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
-import { includes, isEmpty, isNil, times, trim } from 'es-toolkit/compat';
+import { cloneDeep, includes, isEmpty, isNil, times, trim } from 'es-toolkit/compat';
 import { createArrayResolver } from '../../engine/cell-resolver';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { numberDisplay, parseCellInput } from '../../engine/format';
+import { functionCopy } from '../../engine/formula-shift';
 import type { Cell, CellMatrix } from '../../engine/types';
 import { setRowHeight } from '../api';
 import { getSheet } from '../api/common';
@@ -18,7 +19,7 @@ import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
 import { carrySides } from '../modules/border';
 import type { CarryTile } from '../modules/carry';
-import { carriedLines, carryCells, landedCell, moveCells, movedLines } from '../modules/carry';
+import { carriedLines, carryCells, moveCells, movedLines } from '../modules/carry';
 import { getQKBorder, setCellValue } from '../modules/cell';
 import { computeFormula } from '../modules/formula-exec';
 import { cellsIn, jfrefreshgrid, recomputeCells } from '../modules/refresh';
@@ -156,9 +157,16 @@ function pasteCopy(ctx: Context, copyState: NonNullable<Context['copyState']>) {
     // A copy of several ranges pastes the values of its formulas, not the formulas.
     const several = copyState.copyRange.length > 1;
     carryCells(ctx, lines, tiles, ({ source, r, c, sr, sc }) => {
-        if (source?.f == null || !several) return landedCell(ctx, source, r - sr, c - sc, resolver);
-        const { f: _, ...value } = source;
-        return value;
+        if (source?.f == null) return source;
+        if (several) {
+            const { f: _, ...value } = source;
+            return value;
+        }
+        // A copy on its own cell is the same formula. Anywhere else it is a new one, so its source's number isn't its
+        // own: this build's answer stands, even #NAME?. On a copy, as the recompute writes into the cell's format.
+        if (copySheetId === ctx.currentSheetId && r === sr && c === sc) return cloneDeep(source);
+        const [v, f] = computeFormula(ctx, `=${functionCopy(source.f, r - sr, c - sc)}`, { resolver });
+        return { ...cloneDeep(source), v, f, m: numberDisplay(v, source.ct?.fa) };
     });
 
     last.row = [minh, maxh];

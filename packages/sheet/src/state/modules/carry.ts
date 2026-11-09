@@ -7,17 +7,14 @@ import type { ConditionalFormatRule } from '@workspace/lib/sheets';
 import { coalescedRanges, compareValidationIds, rangesOverlap } from '@workspace/lib/sheets';
 import { cloneDeep, isEqual } from 'es-toolkit/compat';
 import { sheetFinder } from '../../engine/a1-notation';
-import type { CellResolver } from '../../engine/cell-resolver';
 import { rangeWithout, withCfRanges } from '../../engine/conditional-format';
-import { numberDisplay } from '../../engine/format';
-import { functionCopy, moveFormulaRefs } from '../../engine/formula-shift';
+import { moveFormulaRefs } from '../../engine/formula-shift';
 import type { Cell } from '../../engine/types';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import type { Sheet, SingleRange } from '../types';
 import { carrySides, getBorderInfoCompute } from './border';
 import { snapshotContext } from './formula-cache';
-import { computeFormula } from './formula-exec';
 import { addValidation, clearValidations } from './validation-rules';
 
 const FILTERED_MERGE_REFUSAL = 'Cannot copy merged cells a filter partly hides. Clear the filter first.';
@@ -295,22 +292,6 @@ function joinedRanges(ranges: readonly SingleRange[], landed: readonly SingleRan
     const corner = joined.findIndex(({ row, column }) => row[0] === first.row[0] && column[0] === first.column[0]);
     if (corner < 0) return [first, ...coalescedRanges([...others, ...outside])];
     return [joined[corner], ...joined.toSpliced(corner, 1)];
-}
-
-// A cell where it lands. A formula's references shift by how far it travelled and it is evaluated there, on a copy,
-// because the recompute that follows writes into the cell's format.
-export function landedCell(
-    ctx: Context,
-    source: Cell | null,
-    rowOffset: number,
-    columnOffset: number,
-    resolver: CellResolver,
-): Cell | null {
-    if (source?.f == null) return source;
-    const func =
-        rowOffset === 0 && columnOffset === 0 ? source.f : `=${functionCopy(source.f, rowOffset, columnOffset)}`;
-    const [v, f] = computeFormula(ctx, func, { resolver });
-    return { ...cloneDeep(source), v, f, m: numberDisplay(v, source.ct?.fa) };
 }
 
 // A cut or a drag: the block `range` lands once, its source clears, and each formula in it follows the move.

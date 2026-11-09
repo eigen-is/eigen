@@ -415,6 +415,18 @@ describe('a filled formula', () => {
         expect([filled.v, filled.m]).toEqual(['008', '008']);
     });
 
+    it('a fill of a formula this build cannot evaluate has no number to keep, and its source keeps its own', () => {
+        const src: SingleRange = { row: [0, 0], column: [1, 1] };
+        const ctx = makeCtx((d) => {
+            d[0][1] = { f: '=FILTER(A1,1)', v: 111, m: '111' };
+        }, src);
+
+        autoFillCell(ctx, src, { row: [1, 1], column: [1, 1] }, 'down');
+
+        expect(ctx.sheets[0].data![0][1]?.v).toBe(111);
+        expect(ctx.sheets[0].data![1][1]?.v).toBe('#NAME?');
+    });
+
     it('recalcs when its precedent changes', () => {
         const src: SingleRange = { row: [0, 0], column: [1, 1] };
         const ctx = makeCtx((d) => {

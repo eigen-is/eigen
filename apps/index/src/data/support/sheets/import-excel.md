@@ -61,7 +61,7 @@ The import reads every sheet in the workbook and preserves:
 
 A chart reads its cells, so it changes when you edit them. A chart whose data comes from a named range, from several separate ranges, or from another workbook shows the numbers saved in the file instead, and doesn't change with the cells.
 
-Formulas come in with the numbers Excel saved. Sheets calculates a formula again when you edit a cell it reads, or when the file holds no number for it. A formula Sheets can't calculate keeps Excel's number.
+Formulas come in with the results Excel saved. Sheets calculates a formula again when you edit a cell it reads, or when the file holds an error or no result for it. A formula Sheets can't calculate keeps Excel's result, error or not, even when you sort it or cut it to another cell. Copied or filled to another cell, the copy shows `#NAME?` or `#CALC!`.
 
 Fonts from Excel are mapped to the four fonts Sheets supports. Common sans-serif fonts (such as Calibri, Arial, and Verdana) map to Inter; serif fonts (such as Times New Roman and Georgia) map to Source Serif 4; monospace fonts (such as Courier New and Consolas) map to JetBrains Mono; Comic Sans maps to Excalifont.
 
