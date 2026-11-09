@@ -45,9 +45,8 @@ export type ImageResult = ImageDimensions & {
     duration?: number;
 };
 
-// The main thread terminates this Worker at THUMBNAIL_TIMEOUT_SECONDS. That stops the Worker's timers, but not an
-// exiftool process it started, which would then run on. So exiftool gets a deadline this much earlier, which leaves
-// time for the Worker to start and to resize the preview exiftool found.
+// Terminating this Worker at THUMBNAIL_TIMEOUT_SECONDS leaves its exiftool process running, so exiftool's deadline
+// is this much earlier, with time left to resize the preview it found.
 const EXIFTOOL_SPARE_MS = 5_000;
 
 declare var self: Worker;

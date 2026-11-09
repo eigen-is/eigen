@@ -44,7 +44,7 @@ const noopEvents = {
     deleted: () => {},
 };
 
-// ---- RFC822 generation (mirrors seed-test-mail.ts) ----
+// ---- RFC822 generation ----
 let seed = 987654321;
 const rand = () => {
     seed = (seed * 1103515245 + 12345) & 0x7fffffff;
