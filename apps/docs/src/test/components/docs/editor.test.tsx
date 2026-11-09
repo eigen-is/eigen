@@ -573,9 +573,11 @@ test('a click on a comment card leaves the band for the comment’s anchor in th
     await render(WRITER);
     await doubleClick('header');
     await act(async () => button('Comments')?.click());
-    // The card is titled by its anchor's text, which the panel reads 200 ms after the body's last change.
+    // The card shows once the panel has read its anchor, 200 ms after the body's last change.
     const card = () =>
-        [...document.querySelectorAll<HTMLElement>('.line-clamp-2')].find((title) => title.textContent === 'Hello');
+        [...document.querySelectorAll<HTMLElement>('.line-clamp-2')].find(
+            (title) => title.textContent === 'Check this',
+        );
     await waitUntil(() => card() !== undefined, 'the comment card');
     await act(async () => card()?.click());
     expect(editing()).toEqual([]);
