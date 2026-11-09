@@ -78,7 +78,7 @@ A thread's last write is the newer of its own `createdAt` and the `updatedAt` of
 
 ## A thread's own media go when no message names them
 
-Inside each thread it keeps, the sweep runs again with the thread as the document: a file in the thread's `media/` goes when no message names it, a deleted message's included, and it is past the grace. `ChatRoom.deleteMessage` also trashes a deleted message's files itself ([CHAT.md](CHAT.md)), so a version of a thread can name an attachment that is gone. No screen restores a thread version.
+Inside each thread it keeps, the sweep runs again with the thread as the document: a file in the thread's `media/` goes when no message names it, a deleted message's included, and it is past the grace. `ChatRoom.deleteMessage` also deletes a deleted message's files itself ([CHAT.md](CHAT.md)), so a version of a thread can name an attachment that is gone. No screen restores a thread version.
 
 ## Card attachments are staged until Save
 

@@ -15,6 +15,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Changed
 
+- **Deleting a chat message** — the files attached to a deleted message are deleted for good with it, instead of landing in Drive's Trash
 - **Storage limit for mail, contacts and calendar (breaking)** — the limit per user, and a team's override of it, goes back to its default of 100 MB. Set it again under **Storage quotas** in Admin's server settings and **Quota overrides** on the team's page
 - **A new look for the public site** — the landing page, Support, the blog and the changelog share one layout, with a footer that shows the version. The apps named on the landing page link to their Support sections
 - **Tile titles** — on the Space home page and the help center's front page, an app's title is in the normal text color. The icon and the stripe keep the app's color

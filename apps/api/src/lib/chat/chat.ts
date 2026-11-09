@@ -377,17 +377,14 @@ export class ChatRoom {
 
         if (existing.attachments) {
             // An attachment is a file name in this chat's own media folder. It is looked up only there, so a
-            // crafted name can't trash another path of the owner's.
-            const mediaFolder = await this.drive.getChildByName(
-                this.path.mountId,
-                this.path.id,
-                CONTAINER_MEDIA_FOLDER,
-            );
+            // crafted name can't delete another path of the owner's. It goes for good, like the message.
+            const { mount } = await this.drive.resolveFile(this.path.mountId, this.path.id);
+            const mediaFolder = await mount.getChildByName(this.path.id, CONTAINER_MEDIA_FOLDER);
             if (mediaFolder) {
                 for (const attachment of existing.attachments) {
                     if (typeof attachment !== 'string') continue;
-                    const media = await this.drive.getChildByName(this.path.mountId, mediaFolder.id, attachment);
-                    if (media) await this.drive.deletePath(this.path.mountId, media.id);
+                    const media = await mount.getChildByName(mediaFolder.id, attachment);
+                    if (media) await mount.deletePath(media.id);
                 }
             }
         }

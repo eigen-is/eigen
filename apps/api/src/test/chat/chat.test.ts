@@ -531,6 +531,14 @@ describe('Chat', () => {
             );
             const deletedFile = mediaContents.find((item: DrivePath) => item.id === uploaded.id);
             expect(deletedFile).toBeUndefined();
+            // Gone for good like the message itself, so it never shows in the trash.
+            const trash = await driveGet<DrivePath[]>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                'trash',
+            );
+            expect(trash.map((item) => item.id)).not.toContain(uploaded.id);
         });
 
         test('post message with reference attachment', async () => {
