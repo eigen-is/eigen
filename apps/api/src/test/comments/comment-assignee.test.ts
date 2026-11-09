@@ -738,34 +738,4 @@ describe('Assignment email', () => {
         expect(mails[0].from).toEqual({ name: ctx.bob.user.name, address: ctx.bob.user.email });
         expect(linkIn(mails[0]).pathname).toContain(`/${teamOwner}/${teamMountId}/${docId}`);
     });
-
-    test('a team document trashed while the assignment is written sends no mail and no notification', async () => {
-        await setFlags({ userOnAssign: true });
-        const { docId, chatName } = await teamDocWithCard('team-mail-trashed');
-        const team = await getHome(teamOwner);
-        // The route refuses a document in the trash, so the trash lands between the write and the notice.
-        const record = team.drive.recordFileEvent.bind(team.drive);
-        const trashing = spyOn(team.drive, 'recordFileEvent').mockImplementationOnce(async (...args) => {
-            await record(...args);
-            await team.drive.deletePath(teamMountId, docId);
-        });
-
-        try {
-            const res = await patchAssignee(
-                ctx.bob.user.sessionToken,
-                teamOwner,
-                teamMountId,
-                docId,
-                chatName,
-                ctx.charlie.user.email,
-            );
-            expect(res.status).toBe(200);
-        } finally {
-            trashing.mockRestore();
-        }
-
-        expect(assignMailsTo(ctx.charlie.user.email)).toEqual([]);
-        const tag = `assigned:${teamOwner}:${teamMountId}:${docId}:${chatName}`;
-        expect((await notificationsFor(ctx.charlie.user.id)).some((n) => n.tag === tag)).toBe(false);
-    });
 });

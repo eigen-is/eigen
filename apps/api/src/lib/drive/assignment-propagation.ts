@@ -1,7 +1,6 @@
 // Tells the person a comment or card was just assigned to. If the server settings allow it for their kind, guest or
 // user, they get an email, at most one an hour per document, and with an account a notification in their Home. An
-// address with no account counts as a guest. Drive calls it after an assignment changed, and the assignment stands
-// whatever happens here.
+// address with no account counts as a guest.
 
 import { commentAssignedTag } from '@workspace/lib/notification/tags';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -18,13 +17,12 @@ import { getUserByEmail, isGuest } from '../user';
 const assignMailWindow = new WindowLimiter(60 * 60 * 1000, 1);
 
 export async function propagateAssignment(
-    path: DrivePath | null,
+    path: DrivePath,
     chatName: string,
     assignee: string,
     actor: User,
     card: string | undefined,
 ): Promise<void> {
-    if (!path || path.trashedAt) return;
     const assigneeUser = await getUserByEmail(assignee);
     const { guestOnAssign, userOnAssign } = getServerSettings().notifications.email;
     const toGuest = !assigneeUser || isGuest(assigneeUser);

@@ -1208,9 +1208,10 @@ export class Drive {
         }
         broadcastCommentIndexUpdated(this, this.owner.id, mountId, pathId, members).catch(() => {});
         if (changed && assignee && assignee !== user.email.toLowerCase()) {
-            const path = await this.getPath(mountId, pathId);
             // The assignment stands whatever happens to the notice, such as a home a restore holds.
-            await propagateAssignment(path, chatName, assignee, user, card).catch(() => {});
+            await this.resolveFile(mountId, pathId)
+                .then(({ path }) => propagateAssignment(path, chatName, assignee, user, card))
+                .catch(() => {});
         }
     }
 
