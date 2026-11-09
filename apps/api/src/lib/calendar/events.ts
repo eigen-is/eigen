@@ -42,92 +42,6 @@ export type StoredResource = Pick<
     size: number;
 };
 
-// The stored component of a resource: the bytes are the truth, so every path that parses them reads them itself.
-export function storedComponent(calendar: Calendar, resource: Pick<StoredResource, 'id'>): ICAL.Component {
-    const row = calendar.db
-        .select({ ics: schema.resources.ics })
-        .from(schema.resources)
-        .where(eq(schema.resources.id, resource.id))
-        .get();
-    if (!row) throw new ApiError(404, 'Event not found');
-    return parseResource(new TextDecoder().decode(row.ics));
-}
-
-export function eventById(calendar: Calendar, id: string): CalendarEvent | null {
-    const row = calendar.joinedEvents().where(eq(schema.events.id, id)).get();
-    return row ? toEvent(row) : null;
-}
-
-// An event a write under the lock just stored or read through its series, so only a delete since then misses it.
-function requireEvent(calendar: Calendar, id: string): CalendarEvent {
-    const event = eventById(calendar, id);
-    if (!event) throw new ApiError(404, 'Event not found');
-    return event;
-}
-
-export function resourceOf(calendar: Calendar, eventId: string): StoredResource | null {
-    return (
-        calendar.db
-            .select(STORED_RESOURCE)
-            .from(schema.resources)
-            .innerJoin(schema.events, eq(schema.events.resourceId, schema.resources.id))
-            .where(eq(schema.events.id, eventId))
-            .get() ?? null
-    );
-}
-
-// Caller holds the write lock: re-serializes the resource the caller resolved, through the facade's one write.
-export function writeComponent(calendar: Calendar, resource: StoredResource, component: ICAL.Component): Promise<void> {
-    return calendar.writeResource({
-        calendarId: resource.calendarId,
-        uri: resource.uri,
-        prepared: prepareResource(resource.calendarId, component, resource.id),
-        creditBytes: resource.size,
-    });
-}
-
-// Caller holds the write lock, so the etag judged is the one the write replaces. A series and its overrides share one
-// resource and so one etag. A caller that loaded none, such as a script, writes unconditionally.
-function assertEtag(resource: StoredResource, expectedEtag: string | undefined): void {
-    if (expectedEtag !== undefined && expectedEtag !== resource.etag) {
-        throw new ApiError(412, 'Event was changed elsewhere');
-    }
-}
-
-// Caller holds the write lock: the bytes it mutates are the bytes the commit overwrites.
-async function editResource(
-    calendar: Calendar,
-    resource: StoredResource,
-    mutate: (component: ICAL.Component) => void,
-): Promise<void> {
-    const component = storedComponent(calendar, resource);
-    mutate(component);
-    await writeComponent(calendar, resource, component);
-}
-
-// Caller holds the write lock and has already resolved the resource this patch means.
-export async function patchResource(
-    calendar: Calendar,
-    resource: StoredResource,
-    recurrenceKey: string | null,
-    patch: EventPatch,
-    context: WriteContext,
-): Promise<void> {
-    await editResource(calendar, resource, (component) => {
-        patchEvent(component, recurrenceKey, patch, context);
-    });
-}
-
-export function writeContext(actorIsOrganizer: boolean, dtstamp?: Date | null): WriteContext {
-    return { now: new Date(), actorIsOrganizer, dtstamp };
-}
-
-// A resource carrying the organizer link is somebody else's: a SEQUENCE bump here would outrank the organizer's next
-// message.
-function actorIsOrganizer(event: CalendarEvent): boolean {
-    return !event.data?.organizerEventId;
-}
-
 export async function createEvent(
     calendar: Calendar,
     calendarId: string,
@@ -149,117 +63,6 @@ export async function createEvent(
     return created;
 }
 
-// An override is one occurrence of its series: the series states the guest list, and every message names its id.
-async function propagateWrite(
-    calendar: Calendar,
-    event: CalendarEvent,
-    user: User,
-    previous: CalendarEvent | null,
-): Promise<void> {
-    const series = event.parentEventId ? eventById(calendar, event.parentEventId) : null;
-    // A name missing from the list the guests held cancels that instance.
-    const held = heldAttendees(previous, series);
-    const attendees = heldAttendees(event, series);
-    // A write that names nobody and replaced nobody owes the guests nothing; emptying a non-override's list cancels.
-    if (!attendees.length && !held.length) return;
-    // Only the organizer fans out: a guest's own edit bumping SEQUENCE would outrun the organizer's updates.
-    if (isInvitationFromOthers(series ?? event, calendar.home.user.email)) return;
-    if (series && event.status === 'cancelled') {
-        await propagateCancellation(calendar.home, event, held, series);
-        return;
-    }
-    // A series message restates its exceptions, or a guest's copy renders a moved occurrence at its original slot. An
-    // occurrence write is itself one exception and carries none.
-    const exceptions = series ? [] : exceptionsOf(calendar, event.id);
-    await propagateInvitation(calendar.home, event, user, held, attendees, series ?? undefined, exceptions);
-}
-
-// The locked core every writer of a NEW event shares: the checks that decide WHICH resource is written run in it.
-export async function writeEvent(
-    calendar: Calendar,
-    calendarId: string,
-    input: CreateEventArgs,
-): Promise<CalendarEvent> {
-    // A resource under a calendar nobody owns any more would dangle on its foreign key.
-    if (!calendar.calendarRow(calendarId)) throw new ApiError(404, 'Calendar not found');
-    validateEventInput(input);
-    if (input.parentEventId) return writeOverride(calendar, calendarId, input.parentEventId, input);
-
-    // Eigen mints every name it writes: a UID is its author's string and may carry `/`, `..` or quotes.
-    const uri = `${crypto.randomUUID()}.ics`;
-    const uid = input.uid || crypto.randomUUID();
-    if (uidHolder(calendar, calendarId, uid)) throw new ApiError(409, 'An event with this UID already exists');
-    const event = eventForResource({ id: crypto.randomUUID(), calendarId, uid, input, now: new Date() });
-    await calendar.writeResource({
-        calendarId,
-        uri,
-        prepared: prepareResource(calendarId, buildResource([event]), null),
-        creditBytes: 0,
-    });
-    return requireEvent(calendar, event.id);
-}
-
-// An exception is one VEVENT inside its master's file; a cancellation rides as an EXDATE plus its stamp.
-async function writeOverride(
-    calendar: Calendar,
-    calendarId: string,
-    parentEventId: string,
-    input: CreateEventArgs,
-): Promise<CalendarEvent> {
-    const parent = eventById(calendar, parentEventId);
-    if (!parent || parent.calendarId !== calendarId || parent.parentEventId) {
-        throw new ApiError(404, 'Event not found');
-    }
-    const resource = resourceOf(calendar, parent.id);
-    if (!resource) throw new ApiError(404, 'Event not found');
-    assertEtag(resource, input.etag);
-    // A RECURRENCE-ID and an EXDATE are both written from this key.
-    if (!input.recurrenceDate) throw new ApiError(400, 'Invalid occurrence date');
-
-    const override = eventForResource({
-        id: crypto.randomUUID(),
-        calendarId,
-        uid: parent.uid,
-        input: { ...input, rrule: null },
-        now: new Date(),
-    });
-    await editResource(calendar, resource, (component) => {
-        if (override.status === 'cancelled') {
-            addExclusion(component, parent, override, writeContext(actorIsOrganizer(parent), input.dtstamp));
-        } else {
-            putOverride(component, parent, override);
-        }
-    });
-    const stored = exceptionOf(calendar, parent.id, override.recurrenceDate);
-    return stored ?? requireEvent(calendar, parent.id);
-}
-
-export function exceptionOf(
-    calendar: Calendar,
-    parentEventId: string,
-    recurrenceDate: string | null,
-): CalendarEvent | null {
-    if (!recurrenceDate) return null;
-    const row = calendar
-        .joinedEvents()
-        .where(and(eq(schema.events.parentEventId, parentEventId), eq(schema.events.recurrenceDate, recurrenceDate)))
-        .get();
-    return row ? toEvent(row) : null;
-}
-
-// Every exception a master holds, overrides and cancellations alike, in the order the file lists them.
-function exceptionsOf(calendar: Calendar, parentEventId: string): CalendarEvent[] {
-    return calendar.joinedEvents().where(eq(schema.events.parentEventId, parentEventId)).all().map(toEvent);
-}
-
-function uidHolder(calendar: Calendar, calendarId: string, uid: string): { uri: string } | undefined {
-    return calendar.db
-        .select({ uri: schema.resources.uri })
-        .from(schema.resources)
-        .where(and(eq(schema.resources.calendarId, calendarId), eq(schema.resources.uid, uid)))
-        .get();
-}
-
 export async function updateEvent(
     calendar: Calendar,
     calendarId: string,
@@ -271,100 +74,12 @@ export async function updateEvent(
     const { updated, existing } = await calendar.writeLock.run(() =>
         patchStoredEvent(calendar, calendarId, id, input, user, expectedEtag),
     );
-    calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, calendarId);
+    // Judged on the bytes by their hash, as a PUT is: a save that moved nothing tells nobody.
+    if (updated.etag === existing.etag) return updated;
 
+    calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, calendarId);
     if (user) propagateWrite(calendar, updated, user, existing).catch(console.error);
     return updated;
-}
-
-// Caller holds the write lock, so the row the patch is computed against is the row the write overwrites.
-async function patchStoredEvent(
-    calendar: Calendar,
-    calendarId: string,
-    id: string,
-    input: EventPatch,
-    user?: User,
-    expectedEtag?: string,
-): Promise<{ updated: CalendarEvent; existing: CalendarEvent }> {
-    const existing = eventById(calendar, id);
-    // 404 (not 403) on calendar mismatch so a share on one calendar can't oracle event ids in another.
-    if (!existing || existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
-
-    // Linked event guard: attendees can only change local fields (reminders, color).
-    const linked = isInvitationFromOthers(existing, calendar.home.user.email);
-    if (linked) {
-        const localData: EventData = { ...existing.data };
-        if (input.data) {
-            localData.reminders = input.data.reminders ?? localData.reminders;
-            localData.color = input.data.color ?? localData.color;
-        }
-        input = { data: localData };
-    }
-
-    const startTime = input.startTime ?? existing.startTime;
-    const endTime = input.endTime ?? existing.endTime;
-    // Same interval invariant as createEvent, on the resolved (possibly dragged) times.
-    if (endTime < startTime) throw new ApiError(400, 'Event end time cannot be before start time');
-
-    const rruleStr = input.rrule !== undefined ? (input.rrule ?? null) : (existing.rrule ?? null);
-    if (rruleStr && input.rrule !== undefined) {
-        try {
-            RRule.parseString(rruleStr);
-        } catch {
-            throw new ApiError(400, 'Invalid RRULE');
-        }
-        if (isSubDailyRrule(rruleStr)) throw new ApiError(400, 'Sub-daily recurrence is not supported');
-    }
-    // Both directions poison a stored row: a new rrule, or a recurring start moved out of range.
-    if (
-        rruleStr &&
-        (input.rrule !== undefined || input.startTime !== undefined) &&
-        isOutOfRangeRecurrenceStart(startTime)
-    ) {
-        throw new ApiError(400, 'Recurring event start time is out of range');
-    }
-
-    const resource = resourceOf(calendar, id);
-    if (!resource) throw new ApiError(404, 'Event not found');
-    assertEtag(resource, expectedEtag);
-
-    // Cancelling an override replaces it with an EXDATE: Thunderbird drops a STATUS:CANCELLED override from its next
-    // PUT, which brings the occurrence back.
-    if (existing.parentEventId && input.status === 'cancelled') {
-        const parent = requireEvent(calendar, existing.parentEventId);
-        await editResource(calendar, resource, (component) => {
-            addExclusion(component, parent, existing, writeContext(actorIsOrganizer(parent)));
-        });
-        // The EXDATE row sits at the original slot; the guests last saw the occurrence at its moved one.
-        const cancelled = requireEvent(calendar, id);
-        return { updated: { ...cancelled, startTime: existing.startTime, endTime: existing.endTime }, existing };
-    }
-
-    // A save form restates the times on every edit, so only the bounds that really moved reach the patch.
-    const startMoved = input.startTime !== undefined && input.startTime.getTime() !== existing.startTime.getTime();
-    const endMoved = input.endTime !== undefined && input.endTime.getTime() !== existing.endTime.getTime();
-    const allDayMoved = input.allDay !== undefined && input.allDay !== existing.allDay;
-
-    await patchResource(
-        calendar,
-        resource,
-        existing.recurrenceDate,
-        {
-            title: input.title?.trim(),
-            description: input.description,
-            location: input.location,
-            startTime: startMoved ? input.startTime : undefined,
-            endTime: endMoved ? input.endTime : undefined,
-            allDay: allDayMoved ? input.allDay : undefined,
-            rrule: input.rrule ?? undefined,
-            timezone: input.timezone,
-            status: input.status,
-            data: input.data ?? undefined,
-        },
-        writeContext(!!user && !linked),
-    );
-
-    return { updated: requireEvent(calendar, id), existing };
 }
 
 export async function deleteEvent(
@@ -382,11 +97,9 @@ export async function deleteEvent(
     // nothing: an occurrence comes back, and a cancelled master's PUT already fanned out STATUS:CANCELLED.
     const series = existing.parentEventId ? eventById(calendar, existing.parentEventId) : null;
     const held = existing.status === 'cancelled' ? [] : heldAttendees(existing, series);
-    // Only an attendee has an RSVP to give: any client can hang an ORGANIZER on an event.
     const declining = user && held.some((a) => a.email.toLowerCase() === user.email.toLowerCase());
     if (declining && invitation?.organizer) {
         const orgUserId = invitation.organizer.userId;
-        // An organizer known by address only has no Eigen id to relay to, so the decline goes as a REPLY.
         if (!orgUserId || isExternalOwnerId(orgUserId)) {
             const mail = composeRsvpReply(existing, user.email, user.name ?? user.email, 'declined');
             sendMail(mail).catch(console.error);
@@ -405,40 +118,6 @@ export async function deleteEvent(
     }
 
     calendar.announce(SSEventType.CALENDAR_EVENT_DELETED, calendarId);
-}
-
-// Caller holds the write lock; the row it answers with is what the decline or cancellation mail is composed from.
-async function eraseStoredEvent(
-    calendar: Calendar,
-    calendarId: string,
-    id: string,
-    expectedEtag?: string,
-): Promise<CalendarEvent | null> {
-    const existing = eventById(calendar, id);
-    // Idempotent, and the event is not evaluated further for a resource that no longer exists.
-    if (!existing) return null;
-    // 404 (not 403) on calendar mismatch so a share on one calendar can't oracle event ids in another.
-    if (existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
-    const resource = resourceOf(calendar, id);
-    if (!resource) throw new ApiError(404, 'Event not found');
-    assertEtag(resource, expectedEtag);
-
-    if (existing.parentEventId) {
-        // A synthetic exclusion row carries no data of its own, so the link is the master's to state.
-        const parent = requireEvent(calendar, existing.parentEventId);
-        // Deleting one occurrence writes the master's resource. A cancelled row is the exclusion itself, so deleting it
-        // puts the occurrence back.
-        await editResource(calendar, resource, (component) => {
-            const key = existing.recurrenceDate;
-            if (!key) return;
-            const context = writeContext(actorIsOrganizer(parent));
-            if (existing.status === 'cancelled') removeExclusion(component, key, context);
-            else addExclusion(component, parent, existing, context);
-        });
-    } else {
-        await calendar.purgeResource(resource);
-    }
-    return existing;
 }
 
 // Re-home a resource inside this Home: one transaction, so the rows keep their identity and no window shows
@@ -497,4 +176,316 @@ export async function moveEvent(
         calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, targetCalendarId);
     }
     return requireEvent(calendar, id);
+}
+
+// The locked core every writer of a NEW event shares: the checks that decide WHICH resource is written run in it.
+export async function writeEvent(
+    calendar: Calendar,
+    calendarId: string,
+    input: CreateEventArgs,
+): Promise<CalendarEvent> {
+    // A resource under a calendar nobody owns any more would dangle on its foreign key.
+    if (!calendar.calendarRow(calendarId)) throw new ApiError(404, 'Calendar not found');
+    validateEventInput(input);
+    if (input.parentEventId) return writeOverride(calendar, calendarId, input.parentEventId, input);
+
+    // Eigen mints every name it writes: a UID is its author's string and may carry `/`, `..` or quotes.
+    const uri = `${crypto.randomUUID()}.ics`;
+    const uid = input.uid || crypto.randomUUID();
+    if (uidHolder(calendar, calendarId, uid)) throw new ApiError(409, 'An event with this UID already exists');
+    const event = eventForResource({ id: crypto.randomUUID(), calendarId, uid, input, now: new Date() });
+    await calendar.writeResource({
+        calendarId,
+        uri,
+        prepared: prepareResource(calendarId, buildResource([event]), null),
+        creditBytes: 0,
+    });
+    return requireEvent(calendar, event.id);
+}
+
+// Caller holds the write lock and has already resolved the resource this patch means.
+export async function patchResource(
+    calendar: Calendar,
+    resource: StoredResource,
+    recurrenceKey: string | null,
+    patch: EventPatch,
+    context: WriteContext,
+): Promise<void> {
+    const component = storedComponent(calendar, resource);
+    if (patchEvent(component, recurrenceKey, patch, context)) await writeComponent(calendar, resource, component);
+}
+
+// The stored component of a resource: the bytes are the truth, so every path that parses them reads them itself.
+export function storedComponent(calendar: Calendar, resource: Pick<StoredResource, 'id'>): ICAL.Component {
+    const row = calendar.db
+        .select({ ics: schema.resources.ics })
+        .from(schema.resources)
+        .where(eq(schema.resources.id, resource.id))
+        .get();
+    if (!row) throw new ApiError(404, 'Event not found');
+    return parseResource(new TextDecoder().decode(row.ics));
+}
+
+export function eventById(calendar: Calendar, id: string): CalendarEvent | null {
+    const row = calendar.joinedEvents().where(eq(schema.events.id, id)).get();
+    return row ? toEvent(row) : null;
+}
+
+export function resourceOf(calendar: Calendar, eventId: string): StoredResource | null {
+    return (
+        calendar.db
+            .select(STORED_RESOURCE)
+            .from(schema.resources)
+            .innerJoin(schema.events, eq(schema.events.resourceId, schema.resources.id))
+            .where(eq(schema.events.id, eventId))
+            .get() ?? null
+    );
+}
+
+// Caller holds the write lock: re-serializes the resource the caller resolved, through the facade's one write.
+export function writeComponent(calendar: Calendar, resource: StoredResource, component: ICAL.Component): Promise<void> {
+    return calendar.writeResource({
+        calendarId: resource.calendarId,
+        uri: resource.uri,
+        prepared: prepareResource(resource.calendarId, component, resource.id),
+        creditBytes: resource.size,
+    });
+}
+
+export function writeContext(actorIsOrganizer: boolean, dtstamp?: Date | null): WriteContext {
+    return { now: new Date(), actorIsOrganizer, dtstamp };
+}
+
+export function exceptionOf(
+    calendar: Calendar,
+    parentEventId: string,
+    recurrenceDate: string | null,
+): CalendarEvent | null {
+    if (!recurrenceDate) return null;
+    const row = calendar
+        .joinedEvents()
+        .where(and(eq(schema.events.parentEventId, parentEventId), eq(schema.events.recurrenceDate, recurrenceDate)))
+        .get();
+    return row ? toEvent(row) : null;
+}
+
+// An override is one occurrence of its series: the series states the guest list, and every message names its id.
+async function propagateWrite(
+    calendar: Calendar,
+    event: CalendarEvent,
+    user: User,
+    previous: CalendarEvent | null,
+): Promise<void> {
+    const series = event.parentEventId ? eventById(calendar, event.parentEventId) : null;
+    // A name missing from the list the guests held cancels that instance.
+    const held = heldAttendees(previous, series);
+    const attendees = heldAttendees(event, series);
+    // A write that names nobody and replaced nobody owes the guests nothing; emptying a non-override's list cancels.
+    if (!attendees.length && !held.length) return;
+    if (isInvitationFromOthers(series ?? event, calendar.home.user.email)) return;
+    if (series && event.status === 'cancelled') {
+        await propagateCancellation(calendar.home, event, held, series);
+        return;
+    }
+    // An occurrence write is itself one exception and carries none.
+    const exceptions = series ? [] : exceptionsOf(calendar, event.id);
+    await propagateInvitation(calendar.home, event, user, held, attendees, series ?? undefined, exceptions);
+}
+
+// Caller holds the write lock, so the row the patch is computed against is the row the write overwrites.
+async function patchStoredEvent(
+    calendar: Calendar,
+    calendarId: string,
+    id: string,
+    input: EventPatch,
+    user?: User,
+    expectedEtag?: string,
+): Promise<{ updated: CalendarEvent; existing: CalendarEvent }> {
+    const existing = eventById(calendar, id);
+    // 404 (not 403) on calendar mismatch so a share on one calendar can't oracle event ids in another.
+    if (!existing || existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
+
+    const linked = isInvitationFromOthers(existing, calendar.home.user.email);
+    if (linked) {
+        const localData: EventData = { ...existing.data };
+        if (input.data) {
+            localData.reminders = input.data.reminders ?? localData.reminders;
+            localData.color = input.data.color ?? localData.color;
+        }
+        input = { data: localData };
+    }
+
+    const startTime = input.startTime ?? existing.startTime;
+    const endTime = input.endTime ?? existing.endTime;
+    // Same interval invariant as createEvent, on the resolved (possibly dragged) times.
+    if (endTime < startTime) throw new ApiError(400, 'Event end time cannot be before start time');
+
+    const rruleStr = input.rrule !== undefined ? (input.rrule ?? null) : (existing.rrule ?? null);
+    if (rruleStr && input.rrule !== undefined) {
+        try {
+            RRule.parseString(rruleStr);
+        } catch {
+            throw new ApiError(400, 'Invalid RRULE');
+        }
+        if (isSubDailyRrule(rruleStr)) throw new ApiError(400, 'Sub-daily recurrence is not supported');
+    }
+    // Both directions poison a stored row: a new rrule, or a recurring start moved out of range.
+    if (
+        rruleStr &&
+        (input.rrule !== undefined || input.startTime !== undefined) &&
+        isOutOfRangeRecurrenceStart(startTime)
+    ) {
+        throw new ApiError(400, 'Recurring event start time is out of range');
+    }
+
+    const resource = resourceOf(calendar, id);
+    if (!resource) throw new ApiError(404, 'Event not found');
+    assertEtag(resource, expectedEtag);
+
+    if (existing.parentEventId && input.status === 'cancelled') {
+        const parent = requireEvent(calendar, existing.parentEventId);
+        await editResource(calendar, resource, (component) => {
+            addExclusion(component, parent, existing, writeContext(actorIsOrganizer(parent)));
+        });
+        // The EXDATE row sits at the original slot; the guests last saw the occurrence at its moved one.
+        const cancelled = requireEvent(calendar, id);
+        return { updated: { ...cancelled, startTime: existing.startTime, endTime: existing.endTime }, existing };
+    }
+
+    const startMoved = input.startTime !== undefined && input.startTime.getTime() !== existing.startTime.getTime();
+    const endMoved = input.endTime !== undefined && input.endTime.getTime() !== existing.endTime.getTime();
+    const allDayMoved = input.allDay !== undefined && input.allDay !== existing.allDay;
+
+    await patchResource(
+        calendar,
+        resource,
+        existing.recurrenceDate,
+        {
+            title: input.title?.trim(),
+            description: input.description,
+            location: input.location,
+            startTime: startMoved ? input.startTime : undefined,
+            endTime: endMoved ? input.endTime : undefined,
+            allDay: allDayMoved ? input.allDay : undefined,
+            rrule: input.rrule ?? undefined,
+            timezone: input.timezone,
+            status: input.status,
+            data: input.data ?? undefined,
+        },
+        writeContext(!!user && !linked),
+    );
+
+    return { updated: requireEvent(calendar, id), existing };
+}
+
+// Caller holds the write lock; the row it answers with is what the decline or cancellation mail is composed from.
+async function eraseStoredEvent(
+    calendar: Calendar,
+    calendarId: string,
+    id: string,
+    expectedEtag?: string,
+): Promise<CalendarEvent | null> {
+    const existing = eventById(calendar, id);
+    if (!existing) return null;
+    if (existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
+    const resource = resourceOf(calendar, id);
+    if (!resource) throw new ApiError(404, 'Event not found');
+    assertEtag(resource, expectedEtag);
+
+    if (existing.parentEventId) {
+        // A synthetic exclusion row carries no data of its own, so the link is the master's to state.
+        const parent = requireEvent(calendar, existing.parentEventId);
+        // Deleting one occurrence writes the master's resource. A cancelled row is the exclusion itself, so deleting it
+        // puts the occurrence back.
+        await editResource(calendar, resource, (component) => {
+            const key = existing.recurrenceDate;
+            if (!key) return;
+            const context = writeContext(actorIsOrganizer(parent));
+            if (existing.status === 'cancelled') removeExclusion(component, key, context);
+            else addExclusion(component, parent, existing, context);
+        });
+    } else {
+        await calendar.purgeResource(resource);
+    }
+    return existing;
+}
+
+// An exception is one VEVENT inside its master's file; a cancellation rides as an EXDATE plus its stamp.
+async function writeOverride(
+    calendar: Calendar,
+    calendarId: string,
+    parentEventId: string,
+    input: CreateEventArgs,
+): Promise<CalendarEvent> {
+    const parent = eventById(calendar, parentEventId);
+    if (!parent || parent.calendarId !== calendarId || parent.parentEventId) {
+        throw new ApiError(404, 'Event not found');
+    }
+    const resource = resourceOf(calendar, parent.id);
+    if (!resource) throw new ApiError(404, 'Event not found');
+    assertEtag(resource, input.etag);
+    // A RECURRENCE-ID and an EXDATE are both written from this key.
+    if (!input.recurrenceDate) throw new ApiError(400, 'Invalid occurrence date');
+
+    const override = eventForResource({
+        id: crypto.randomUUID(),
+        calendarId,
+        uid: parent.uid,
+        input: { ...input, rrule: null },
+        now: new Date(),
+    });
+    await editResource(calendar, resource, (component) => {
+        if (override.status === 'cancelled') {
+            addExclusion(component, parent, override, writeContext(actorIsOrganizer(parent), input.dtstamp));
+        } else {
+            putOverride(component, parent, override);
+        }
+    });
+    const stored = exceptionOf(calendar, parent.id, override.recurrenceDate);
+    return stored ?? requireEvent(calendar, parent.id);
+}
+
+// An event a write under the lock just stored or read through its series, so only a delete since then misses it.
+function requireEvent(calendar: Calendar, id: string): CalendarEvent {
+    const event = eventById(calendar, id);
+    if (!event) throw new ApiError(404, 'Event not found');
+    return event;
+}
+
+// Caller holds the write lock, so the etag judged is the one the write replaces. A series and its overrides share one
+// resource and so one etag. A caller that loaded none, such as a script, writes unconditionally.
+function assertEtag(resource: StoredResource, expectedEtag: string | undefined): void {
+    if (expectedEtag !== undefined && expectedEtag !== resource.etag) {
+        throw new ApiError(412, 'Event was changed elsewhere');
+    }
+}
+
+// Caller holds the write lock: the bytes it mutates are the bytes the commit overwrites.
+async function editResource(
+    calendar: Calendar,
+    resource: StoredResource,
+    mutate: (component: ICAL.Component) => void,
+): Promise<void> {
+    const component = storedComponent(calendar, resource);
+    mutate(component);
+    await writeComponent(calendar, resource, component);
+}
+
+// A resource carrying the organizer link is somebody else's: a SEQUENCE bump here would outrank the organizer's next
+// message.
+function actorIsOrganizer(event: CalendarEvent): boolean {
+    return !event.data?.organizerEventId;
+}
+
+// Every exception a master holds, overrides and cancellations alike, in the order the file lists them.
+function exceptionsOf(calendar: Calendar, parentEventId: string): CalendarEvent[] {
+    return calendar.joinedEvents().where(eq(schema.events.parentEventId, parentEventId)).all().map(toEvent);
+}
+
+function uidHolder(calendar: Calendar, calendarId: string, uid: string): { uri: string } | undefined {
+    return calendar.db
+        .select({ uri: schema.resources.uri })
+        .from(schema.resources)
+        .where(and(eq(schema.resources.calendarId, calendarId), eq(schema.resources.uid, uid)))
+        .get();
 }

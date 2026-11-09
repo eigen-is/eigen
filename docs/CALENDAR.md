@@ -64,7 +64,7 @@ Every resource write ends in `Calendar.writeResource`. It takes a `PreparedResou
 
 ## A web save patches what moved, and a CalDAV PUT replaces the file
 
-The web form restates every field on every save. So `updateEvent` (`events.ts`) diffs the submitted times against the stored row, and `patchEvent` (`lib/ical/ical-component.ts`) writes only the properties that really changed. A title edit leaves a client's own `DTSTART` spelling, its `DURATION` and its VTIMEZONE alone. Each `ATTENDEE` line is patched in place, so `CUTYPE`, `RSVP` and every `X-` parameter a client set survive. Re-spelling the same instants in another zone changes bytes but is not a reschedule, so no guest is mailed.
+The web form restates every field on every save. So `updateEvent` (`events.ts`) diffs the submitted times against the stored row, and `patchEvent` (`lib/ical/ical-component.ts`) writes only the properties that really changed. A title edit leaves a client's own `DTSTART` spelling, its `DURATION` and its VTIMEZONE alone. Each `ATTENDEE` line is patched in place, so `CUTYPE`, `RSVP` and every `X-` parameter a client set survive. Re-spelling the same instants in another zone changes bytes but is not a reschedule, so no guest is mailed. A save that patches nothing writes nothing: no ctag moves, nothing is announced and no guest is mailed. An `ATTENDEE` with no `PARTSTAT` or `ROLE` gains them from the form's restated list, so the first web save of such a client's event counts as an edit.
 
 A CalDAV PUT replaces the whole resource, under the preconditions and the linked-copy rule in [CALDAV.md](CALDAV.md#a-put-is-judged-inside-the-write-lock).
 
@@ -168,7 +168,7 @@ Calendar counts against the home data quota with mail and contacts ([QUOTA.md](Q
 
 ## Every write is announced to every Home that sees the calendar
 
-A change broadcasts a `calendar:*` event ([SSE.md](SSE.md)) to the owner's tabs and to each Home the calendar is shared with. A PUT of bytes already stored commits nothing and announces nothing. An import writes each series through the store, which announces nothing, and sends one `calendar:events-changed` when it ends if it wrote a series, even when a refusal stops it partway. Other requests' events go out at once meanwhile. The frontend hooks and the SSE handler that invalidates them are in `packages/lib/src/core/calendar/`.
+A change broadcasts a `calendar:*` event ([SSE.md](SSE.md)) to the owner's tabs and to each Home the calendar is shared with. A PUT of bytes already stored commits nothing and announces nothing, and neither does a web save that changes nothing. An import writes each series through the store, which announces nothing, and sends one `calendar:events-changed` when it ends if it wrote a series, even when a refusal stops it partway. Other requests' events go out at once meanwhile. The frontend hooks and the SSE handler that invalidates them are in `packages/lib/src/core/calendar/`.
 
 ## A linked copy is an ordinary resource with the organizer's stamp
 
@@ -231,7 +231,7 @@ Receivers never raise. A message over `EVENT_MAX_BYTES` or the storage budget is
 
 ## iMIP mail carries the projected event, never the stored bytes
 
-`imip.ts` composes REQUEST (with an "updated" banner for an update), CANCEL and REPLY. `serializeEventForImip` builds a fresh VCALENDAR from the rows, so no Eigen stamp can leak, and strips them anyway. A series travels whole: one VCALENDAR with the master, an `EXDATE` per cancelled occurrence and an override per edited one (RFC 5546). A message about one occurrence carries that occurrence alone.
+`imip.ts` composes REQUEST (with an "updated" banner for an update), CANCEL and REPLY. `serializeEventForImip` builds a fresh VCALENDAR from the rows, so no Eigen stamp can leak, and strips them anyway. A series travels whole: one VCALENDAR with the master, an `EXDATE` per cancelled occurrence and an override per edited one (RFC 5546). A message about one occurrence carries that occurrence alone. Nothing in the file differs per guest, so a save builds it once, when its first mail goes out, and every mailed guest gets those bytes. Only the address, and the subject and banner of an update, differ. A local guest's notice has no file at all.
 
 **No `VALARM` ever travels.** The organizer's reminders are their own, and an email reminder would ship as `ACTION:EMAIL` naming the organizer, so every guest's client would mail the organizer at the trigger. The `URL` stays, since guests seeing the link is the point. A REQUEST asks each guest to reply (`RSVP=TRUE`) and lists the organizer as an accepted attendee. A CANCEL carries `STATUS:CANCELLED` and lists as its attendees exactly the guests it goes to (RFC 5546 § 3.2.5), because a cancelled occurrence holds no guest list and a removed guest is no longer on the event's. A CANCEL for a moved occurrence carries its moved times, the slot the guests last saw, while its `RECURRENCE-ID` names the original. An override that states no guests goes out with the series' list, as Eigen reads it ([§ An occurrence message names the series](#an-occurrence-message-names-the-series)). Its stored VEVENT stays without one: writing the list into it would freeze it, and a guest later added to the series would be missing from that occurrence.
 
