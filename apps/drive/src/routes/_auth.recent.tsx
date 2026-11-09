@@ -1,12 +1,16 @@
 // Drive's Recent page: the files and folders the viewer opened or was notified about, wherever they live,
-// each once, with the time of that last activity. It opens newest first every time and keeps its own sort,
-// because the shared view preference could open it alphabetically. The rows belong to many owners, so the
-// page is read-only, and a selected row's ?pid=&uid=&mid= opens its detail beside the list.
+// each once, with the time of that last activity, and under each name what last happened to it, such as
+// "Mark commented · 2h ago". It opens newest first every time and keeps its own sort, because the shared view
+// preference could open it alphabetically. The rows belong to many owners, so the page is read-only, and a
+// selected row's ?pid=&uid=&mid= opens its detail beside the list.
 
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
+import { formatTimeAgo } from '@workspace/lib/date';
 import { DEFAULT_MOUNT_ID, usePathInfo, useRecentPaths } from '@workspace/lib/drive';
+import { usePublicUsers } from '@workspace/lib/public';
 import type { DrivePath, DriveSearchParams, DriveSort } from '@workspace/lib/types/drive';
+import { describeFileEvent } from '@workspace/lib/types/file-history';
 import { EmptyState, LoadingState } from '@workspace/ui';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
@@ -31,10 +35,22 @@ function RecentRoute() {
     const { data: recentPaths = [], isLoading, error } = useRecentPaths();
     const { data: selectedPath = null } = usePathInfo(uid || '', mid || DEFAULT_MOUNT_ID, pid || '');
     const [sort, setSort] = useState<DriveSort>({ key: 'modified', dir: 'desc' });
-    const lastActivity = useMemo(
-        () => new Map(recentPaths.map((path) => [path.id, path.lastActivityAt])),
+    const recentById = useMemo(() => new Map(recentPaths.map((path) => [path.id, path])), [recentPaths]);
+    const actorEmails = useMemo(
+        () => [...new Set(recentPaths.flatMap((path) => (path.latestEvent ? [path.latestEvent.actorEmail] : [])))],
         [recentPaths],
     );
+    const actors = usePublicUsers(actorEmails);
+
+    // The line names its file's own event, so its words leave the name out. Those words name no one else, so only
+    // the actor is looked up.
+    const activityLine = (path: DrivePath) => {
+        const event = recentById.get(path.id)?.latestEvent;
+        if (!event) return null;
+        const actor =
+            event.actorUserId === user?.id ? 'You' : actors[event.actorEmail]?.name || event.actorEmail.split('@')[0];
+        return `${actor} ${describeFileEvent(event, 'own').action} · ${formatTimeAgo(event.createdAt)}`;
+    };
 
     const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({
         items: recentPaths,
@@ -76,7 +92,8 @@ function RecentRoute() {
             sort={sort}
             onSortChange={setSort}
             dateLabel="Last activity"
-            getItemDate={(path) => lastActivity.get(path.id) ?? null}
+            getItemDate={(path) => recentById.get(path.id)?.lastActivityAt ?? null}
+            getItemActivity={activityLine}
         />
     );
 }

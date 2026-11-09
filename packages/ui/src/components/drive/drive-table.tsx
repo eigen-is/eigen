@@ -76,6 +76,7 @@ export type DriveTableProps = DriveViewProps & {
     hideActions?: boolean;
     dateLabel?: string;
     getItemDate?: (item: DrivePath) => Date | null;
+    getItemActivity?: (item: DrivePath) => string | null;
     ancestorBreadcrumb?: DrivePath[];
     externalSelectedIds?: ReadonlySet<string>;
 } & DriveSortProps;
@@ -124,6 +125,7 @@ export function DriveTable({
     hideActions = false,
     dateLabel = 'Modified',
     getItemDate,
+    getItemActivity,
     selection,
     externalSelectedIds,
     onSelectionChange,
@@ -236,25 +238,27 @@ export function DriveTable({
             )}
 
             <div ref={listRef} style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
-                {virtualizer.getVirtualItems().map((vi) => {
-                    const item = items[vi.index];
+                {virtualizer.getVirtualItems().map((virtualRow) => {
+                    const item = items[virtualRow.index];
                     return (
                         <div
                             key={item.id}
-                            data-index={vi.index}
+                            data-index={virtualRow.index}
                             ref={virtualizer.measureElement}
                             className="absolute inset-x-0 top-0"
-                            style={{ transform: `translateY(${vi.start - virtualizer.options.scrollMargin}px)` }}
+                            style={{
+                                transform: `translateY(${virtualRow.start - virtualizer.options.scrollMargin}px)`,
+                            }}
                         >
                             <DriveRow
                                 item={item}
-                                index={vi.index}
+                                index={virtualRow.index}
                                 gridCols={gridCols}
                                 coarse={coarse}
                                 controller={controller}
                                 longPressBind={longPress.bind}
                                 isActive={activeItemId === item.id}
-                                isCursor={controller.selectedIndex === vi.index}
+                                isCursor={controller.selectedIndex === virtualRow.index}
                                 isSelected={
                                     controller.selection.isSelected(item.id) || !!externalSelectedIds?.has(item.id)
                                 }
@@ -268,6 +272,7 @@ export function DriveTable({
                                 hideShareClick={hideShareClick}
                                 hideActions={hideActions}
                                 getItemDate={getItemDate}
+                                getItemActivity={getItemActivity}
                                 ancestorBreadcrumb={ancestorBreadcrumb}
                                 unreadPathIds={unreadPathIds}
                             />
