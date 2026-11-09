@@ -217,31 +217,26 @@ export async function processInboundImip(
                 await calendar.removeInvitation(parsed.uid, externalOwnerId(organizerEmail));
             }
         } else if (method === 'REPLY') {
+            // A sender answers for themselves alone, once: a later listing of the same address says nothing more.
+            const attendee = parsed.data?.attendees?.find((a) => sentBy(a.email));
+            if (!attendee) continue;
             // Exceptions share the UID, so a REPLY binds to the organizer's own master and never to an exception row.
             const ownerEvent = (await calendar.getEventsByUid(parsed.uid)).find(
                 (e) => !isInvitationFromOthers(e, home.user.email) && !e.parentEventId,
             );
-            if (ownerEvent && parsed.data?.attendees) {
-                for (const attendee of parsed.data.attendees) {
-                    if (!sentBy(attendee.email)) continue;
-                    if (parsed.recurrenceDate) {
-                        // False: an answer never brings back an occurrence the organizer deleted.
-                        await calendar.receiveRsvpForOccurrence(
-                            ownerEvent.id,
-                            attendee.email,
-                            attendee.status,
-                            parsed.recurrenceDate,
-                            parsed.recurrenceInstant,
-                            false,
-                        );
-                    } else {
-                        const invited = ownerEvent.data?.attendees?.some(
-                            (a) => a.email.toLowerCase() === attendee.email.toLowerCase(),
-                        );
-                        if (!invited) continue;
-                        await calendar.receiveAttendeeStatus(ownerEvent.id, attendee.email, attendee.status);
-                    }
-                }
+            if (!ownerEvent) continue;
+            if (parsed.recurrenceDate) {
+                // False: an answer never brings back an occurrence the organizer deleted.
+                await calendar.receiveRsvpForOccurrence(
+                    ownerEvent.id,
+                    attendee.email,
+                    attendee.status,
+                    parsed.recurrenceDate,
+                    parsed.recurrenceInstant,
+                    false,
+                );
+            } else if (ownerEvent.data?.attendees?.some((a) => a.email.toLowerCase() === sender)) {
+                await calendar.receiveAttendeeStatus(ownerEvent.id, attendee.email, attendee.status);
             }
         }
     }

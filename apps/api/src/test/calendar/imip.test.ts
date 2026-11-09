@@ -1063,6 +1063,40 @@ describe('iMIP inbound sender binding (audit P1-7a)', () => {
         await processInboundImip(home, calendarMail('NOT AN ICS FILE', 'stranger@evil.com'), verdict);
     });
 
+    test('a REPLY listing its sender more than once answers once, with the first listing', async () => {
+        const home = await getHome(ctx.bob.user.id);
+        const event = await home.calendar.createEvent(bobCalendarId, {
+            title: 'Listed Twice',
+            startTime: new Date('2026-05-04T10:00:00Z'),
+            endTime: new Date('2026-05-04T11:00:00Z'),
+            allDay: false,
+            data: { attendees: [{ email: 'twice@external.com', status: 'pending', role: 'required' }] },
+        });
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:REPLY',
+            'BEGIN:VEVENT',
+            `UID:${event.uid}`,
+            'DTSTART:20260504T100000Z',
+            'ATTENDEE;PARTSTAT=ACCEPTED:mailto:twice@external.com',
+            'ATTENDEE;PARTSTAT=DECLINED:mailto:twice@external.com',
+            'ATTENDEE;PARTSTAT=TENTATIVE:mailto:TWICE@external.com',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+        const ctag = home.calendar.calendarRow(bobCalendarId)?.ctag ?? 0;
+
+        await processInboundImip(home, calendarMail(ics, 'twice@external.com'), {
+            verified: true,
+            reason: 'dkim pass',
+        });
+
+        const [stored] = await home.calendar.getEventsByUid(event.uid);
+        expect(stored.data?.attendees?.map((attendee) => attendee.status)).toEqual(['accepted']);
+        expect(home.calendar.calendarRow(bobCalendarId)?.ctag).toBe(ctag + 1);
+    });
+
     test('a verified sender with a part past the event size limit writes nothing', async () => {
         const home = await getHome(ctx.bob.user.id);
         const ics = [
