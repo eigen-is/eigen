@@ -251,7 +251,7 @@ A cut or a drag moves a formula by Excel's rule (`moveFormulaRefs` in `engine/fo
 
 ## A sort moves a cell's contents and leaves the sheet's rules where they are
 
-A sort (`sortDataRange` in `state/modules/sort.ts`) moves a cell's contents, its cell formats and its link, and leaves borders, validation and conditional-format ranges where they are, as Excel does. So it goes around the carry and writes no rule, and neither a row that stays nor a cell landing on its twin is written. A formula is shifted to the row it lands on with the value it holds, and the recompute after the sort evaluates it there in one pass, even when no cell it reads moved.
+A sort (`sortDataRange` in `state/modules/sort.ts`) moves a cell's contents, its cell formats and its link, and leaves borders, validation and conditional-format ranges where they are, as Excel does. So it goes around the carry and writes no rule, and neither a row that stays nor a cell landing on its twin is written. A formula is shifted to the row it lands on with the value it holds, and the recompute after the sort evaluates it there in one pass, even when no cell it reads moved. Only the cells it writes seed that recompute, so a formula in a row that stays, hidden or not, keeps a stale number or a random one until an edit reaches it. So does one landing on its twin, and a formula elsewhere that reads no written cell.
 
 A hidden row stays where it is, hidden by hand or by a filter, and a sort reads and lands only the rows that show. `rowhidden` holds rows by index, so a row moved into a hidden one would vanish and the row moved out of it would show.
 

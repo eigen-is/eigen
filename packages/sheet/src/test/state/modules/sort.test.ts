@@ -176,9 +176,9 @@ describe('a sort moves a formula with what it holds', () => {
 
     test('a formula the engine can evaluate is computed where it lands, reading outside the range', () => {
         const [first, , third] = sortedColumnB([
-            { f: '=C1+1', v: 0, m: '0' },
-            { f: '=C2+1', v: 0, m: '0' },
-            { f: '=C3+1', v: 0, m: '0' },
+            { f: '=C1+1', v: 7, m: '7' },
+            { f: '=C2+1', v: 8, m: '8' },
+            { f: '=C3+1', v: 9, m: '9' },
         ]);
         expect(first?.f).toBe('=C1+1');
         expect(first?.v).toBe(31);

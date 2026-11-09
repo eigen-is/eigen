@@ -11,8 +11,9 @@ import type { Cell } from '../../engine/types';
 import type { Context, Selection } from '..';
 import { diff, getFlowdata, isdatetime, isRealNull, isRealNum } from '..';
 import { getSheet } from '../api/common';
+import type { FormulaCell } from '../types';
 import { snapshotContext } from './formula-cache';
-import { cellsIn, recomputeCells } from './refresh';
+import { recomputeCells } from './refresh';
 
 // The menus' Ascending and Descending: the one selected range, by its first column.
 export function sortSelection(ctx: Context, isAsc: boolean) {
@@ -72,7 +73,8 @@ export function sortDataRange(
     if (order.every((from, to) => from === to)) return;
 
     // A formula lands with what it holds, on a copy because the recompute writes into its format. Its own text decides
-    // from there, so a function this build lacks keeps the number.
+    // from there, so a function this build lacks keeps its number, error or empty text.
+    const landed: FormulaCell[] = [];
     for (const [to, from] of order.entries()) {
         if (to === from) continue;
         const r = rows[to];
@@ -81,12 +83,13 @@ export function sortDataRange(
             const source = before[sr][c];
             const cell =
                 source?.f == null ? source : { ...cloneDeep(source), f: `=${functionCopy(source.f, r - sr, 0)}` };
-            if (!isEqual(cell, before[r][c])) data[r][c] = cell;
+            if (isEqual(cell, before[r][c])) continue;
+            data[r][c] = cell;
+            landed.push({ r, c, id: ctx.currentSheetId });
         }
     }
 
-    const cells = cellsIn({ row, column }, ctx.currentSheetId);
-    recomputeCells(ctx, cells, cells);
+    recomputeCells(ctx, landed, landed);
 }
 
 // The old place of each row in its sorted order by the column at `index`, empty cells last.
