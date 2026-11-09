@@ -133,8 +133,7 @@ describe('CollabDocument compacts a workbook at close', () => {
     async function openLingeringSheet(fileName: string, batches: Op[][], computed = false) {
         const created = await home.drive.create(mountId, rootId, fileName, 'sheets', home.user);
         const { path } = await home.drive.resolveFile(mountId, created.id);
-        const doc = new CollabDocument(home.drive, path);
-        await doc.init();
+        const doc = await CollabDocument.open(home.drive, path);
         doc.doc.transact(() => {
             sheetsStateMap(doc.doc).set('snapshot', encodeSheetsSnapshot(SHEETS, { computed }));
             sheetsOpLog(doc.doc).push(batches);

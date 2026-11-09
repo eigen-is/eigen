@@ -80,7 +80,7 @@ copies under the container's `versions/` folder (`../../apps/api/src/lib/version
 **Lifecycle.** `Drive.getCollabDocument` delegates to `CollabRegistry`
 (`../../apps/api/src/lib/drive/collab-registry.ts`), which keys one `createAsyncSingleton` per
 `owner.mount.path` — **concurrent opens of the same doc coalesce into a single `init()`**; a second
-opener awaits the first. `CollabDocument.init` opens `data.db` via `Drive.holdDatabase` →
+opener awaits the first. `CollabDocument.open` opens `data.db` via `Drive.holdDatabase` →
 `Mount.holdDatabase` (`../../apps/api/src/lib/mount/document-db.ts`, which runs `ManagedDatabase` SQLite
 migrations; open and close are serialized per pathId on the `Mount.documentDbs` slot — a 2026-07
 storage-audit change), then `DbProvider` hydrates a `Y.Doc` via `loadYjsState`
@@ -254,7 +254,7 @@ Consequences, stated plainly:
 
 ### Lazy migrate-on-open
 
-`ensureCollabFormat` is a plain helper in `lib/collab/migrations.ts` with **exactly two callers**: `CollabDocument.init` (after `Drive.holdDatabase` resolves, before `DbProvider` hydrates or any client subscribes) and the dormant-doc sweep. It is deliberately *not* wired into `buildDocumentDb`: that seam is config-generic (the same factory serves `comments.db` and chat's `data.db`) and doesn't know the container's `EigenDocType`; and the blocking snapshot paths enter the data.db's `documentDbs` slot (`takeSnapshot` with `awaitSlot`, `stageManagedDbCopy(…, 'open-handle-first')`), so a pre-migration snapshot taken from inside a still-unresolved open of the same document would queue behind its own slot op and never run. It must run once the open has resolved, outside it, never inside the factory; only the tick/close path reads the slot's `db` without waiting, because it runs inside that very close. Also: never wrap the helper in `withPathLock` — `snapshotContainerDataDb` self-locks there and the lock is not reentrant. The sequence:
+`ensureCollabFormat` is a plain helper in `lib/collab/migrations.ts` with **exactly two callers**: `CollabDocument.open` (after `Drive.holdDatabase` resolves, before `DbProvider` hydrates or any client subscribes) and the dormant-doc sweep. It is deliberately *not* wired into `buildDocumentDb`: that seam is config-generic (the same factory serves `comments.db` and chat's `data.db`) and doesn't know the container's `EigenDocType`; and the blocking snapshot paths enter the data.db's `documentDbs` slot (`takeSnapshot` with `awaitSlot`, `stageManagedDbCopy(…, 'open-handle-first')`), so a pre-migration snapshot taken from inside a still-unresolved open of the same document would queue behind its own slot op and never run. It must run once the open has resolved, outside it, never inside the factory; only the tick/close path reads the slot's `db` without waiting, because it runs inside that very close. Also: never wrap the helper in `withPathLock` — `snapshotContainerDataDb` self-locks there and the lock is not reentrant. The sequence:
 
 1. Read `doc_format` (missing ⇒ 1). If equal to `EIGEN_DOC_TYPE_INFO[type].collabFormatVersion`,
    continue as today — one cheap SELECT on the hot path.
@@ -399,7 +399,7 @@ teams), opens each home's mounts, and per mount queries
 live `CollabDocument` are skipped outright (`Drive.hasCollabDocument` — their open already migrated
 them and stamped the cache). For each remaining hit the sweep reads `data.db` inside
 `Mount.withDatabase` (SQLite migrations run there), calls the same `ensureCollabFormat` helper
-`CollabDocument.init` uses, records the resulting stamp into `paths.collabFormat`, and lets go. It
+`CollabDocument.open` uses, records the resulting stamp into `paths.collabFormat`, and lets go. It
 never closes the handle itself: the idle close does that once no holder is left, so a live session
 that holds the db keeps it. The CAS makes the residual sweep-vs-open race on a dormant doc
 safe either way. Pacing copies `ContentReindexQueue`'s discipline: a fixed batch
@@ -505,7 +505,7 @@ Each phase ships independently; nothing user-visible changes until a real migrat
    editors. Ships while all formats are still 1, so it
    fences nothing yet — which is exactly when to soak it.
 3. **Migration runner.** `migrateCollabState` + `forceTypeRoot` reuse; `ensureCollabFormat`
-   called from `CollabDocument.init` with `verifySnapshotDb`-probed pre-migration snapshot + CAS
+   called from `CollabDocument.open` with `verifySnapshotDb`-probed pre-migration snapshot + CAS
    squash transaction + the 4503 write-fence on failure; restore-path re-migration; in-memory
    migration in the shared reader helper. Unit-tested against synthetic registry entries on
    fixture docs (the real registry stays empty).

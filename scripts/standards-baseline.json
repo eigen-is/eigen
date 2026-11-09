@@ -66,7 +66,6 @@
     "apps/api/scripts/mail-bench.ts": 5,
     "apps/api/scripts/version-retention-sim.ts": 1,
     "apps/api/src/lib/calendar/calendar.ts": 2,
-    "apps/api/src/lib/collab/collab-document.ts": 2,
     "apps/api/src/lib/contacts/contacts.ts": 5,
     "apps/api/src/lib/contacts/dav-store.ts": 1,
     "apps/api/src/lib/drive/drive.ts": 1,

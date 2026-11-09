@@ -56,12 +56,7 @@ const COMPACTION_ORIGIN = Symbol('compaction');
 const EDIT_RECORD_THROTTLE_MS = 10 * 60_000;
 
 export class CollabDocument {
-    public readonly doc = new Y.Doc();
-    public dataDbPathId: string | null = null;
-    private provider!: DbProvider;
-    // The hold on data.db, so a reader's idle close can't close it under the provider.
-    private releaseDataDb: (() => void) | null = null;
-    private awareness!: awarenessProtocol.Awareness;
+    private readonly awareness: awarenessProtocol.Awareness;
     private readonly connections = new Map<ServerWebSocket<unknown>, User>();
     // The awareness client ids each connection declared, and the connection that owns each id. Only the
     // owner may write or remove an id, so no peer can evict or overwrite another's cursor.
@@ -83,56 +78,18 @@ export class CollabDocument {
     // The compaction in flight, which a destruct aborts.
     private compaction: AbortController | null = null;
 
-    public constructor(
+    private constructor(
         private readonly drive: Drive,
         public readonly path: DrivePath,
-    ) {}
-
-    public get connectionCount(): number {
-        return this.connections.size;
-    }
-
-    // Sets up a new document's container. If comments.db fails after data.db was made,
-    // provisionManagedDbs removes both, so a retry starts clean.
-    public static async create(drive: Drive, mountId: string, docId: string): Promise<void> {
-        await drive.provisionManagedDbs(mountId, docId, [
-            { name: CONTAINER_DATA_DB, config: COLLAB_DB_CONFIG },
-            { name: CONTAINER_COMMENTS_DB, config: COMMENT_INDEX_DB_CONFIG },
-        ]);
-        await drive.createFolder(mountId, docId, CONTAINER_MEDIA_FOLDER);
-        await drive.createFolder(mountId, docId, CONTAINER_CHAT_FOLDER);
-    }
-
-    public async init(): Promise<CollabDocument> {
-        const [dataDbPath, commentsDbPath] = await Promise.all([
-            this.drive.getChildByName(this.path.mountId, this.path.id, CONTAINER_DATA_DB),
-            this.drive.getChildByName(this.path.mountId, this.path.id, CONTAINER_COMMENTS_DB),
-        ]);
-        // A copy makes the container before it copies data.db into it. A socket that opens the copy in
-        // between gets a 503 and tries again, so it never makes a data.db the copy then can't write.
-        if (!dataDbPath) throw new ApiError(503, `${this.path.name} has no data.db yet`);
-
-        // The editor asks for its comments right after the open, so comments.db opens now. Nothing waits for it and
-        // nothing holds it, because that comments request reports any real problem itself.
-        if (commentsDbPath) {
-            this.drive
-                .withDatabase(this.path.mountId, COMMENT_INDEX_DB_CONFIG, commentsDbPath.id, async () => {})
-                .catch(() => {});
-        }
-
-        const dataDb = await this.drive.holdDatabase(this.path.mountId, COLLAB_DB_CONFIG, dataDbPath.id);
-        try {
-            this.provider = new DbProvider(this.doc, this.path.name, dataDb.db);
-            // Before the document listens for updates, so the stamp is saved but moves no Modified time.
-            stampMissingSheetsBase(this.path.type, this.doc);
-        } catch (error) {
-            // A document that fails to open is never destructed, so it lets go here.
-            dataDb.release();
-            throw error;
-        }
-        this.dataDbPathId = dataDbPath.id;
-        this.releaseDataDb = dataDb.release;
-        this.awareness = new awarenessProtocol.Awareness(this.doc);
+        public readonly doc: Y.Doc,
+        private readonly provider: DbProvider,
+        public readonly dataDbPathId: string,
+        // The hold on data.db, so a reader's idle close can't close it under the provider.
+        private readonly releaseDataDb: () => void,
+    ) {
+        // The awareness starts an interval that only the doc's destroy stops, and a failed open is never destructed,
+        // so it is made here, once the open can no longer fail.
+        this.awareness = new awarenessProtocol.Awareness(doc);
 
         this.doc.on('update', (update: Uint8Array, origin: unknown) => {
             this.generation++;
@@ -161,7 +118,53 @@ export class CollabDocument {
         // A server-side writer, such as an import, opens a document that no socket may ever join. The
         // linger closes that one too, and a socket that subscribes cancels it.
         this.scheduleClose();
-        return this;
+    }
+
+    public get connectionCount(): number {
+        return this.connections.size;
+    }
+
+    // Sets up a new document's container. If comments.db fails after data.db was made,
+    // provisionManagedDbs removes both, so a retry starts clean.
+    public static async create(drive: Drive, mountId: string, docId: string): Promise<void> {
+        await drive.provisionManagedDbs(mountId, docId, [
+            { name: CONTAINER_DATA_DB, config: COLLAB_DB_CONFIG },
+            { name: CONTAINER_COMMENTS_DB, config: COMMENT_INDEX_DB_CONFIG },
+        ]);
+        await drive.createFolder(mountId, docId, CONTAINER_MEDIA_FOLDER);
+        await drive.createFolder(mountId, docId, CONTAINER_CHAT_FOLDER);
+    }
+
+    public static async open(drive: Drive, path: DrivePath): Promise<CollabDocument> {
+        const [dataDbPath, commentsDbPath] = await Promise.all([
+            drive.getChildByName(path.mountId, path.id, CONTAINER_DATA_DB),
+            drive.getChildByName(path.mountId, path.id, CONTAINER_COMMENTS_DB),
+        ]);
+        // A copy makes the container before it copies data.db into it. A socket that opens the copy in
+        // between gets a 503 and tries again, so it never makes a data.db the copy then can't write.
+        if (!dataDbPath) throw new ApiError(503, `${path.name} has no data.db yet`);
+
+        // The editor asks for its comments right after the open, so comments.db opens now. Nothing waits for it and
+        // nothing holds it, because that comments request reports any real problem itself.
+        if (commentsDbPath) {
+            drive
+                .withDatabase(path.mountId, COMMENT_INDEX_DB_CONFIG, commentsDbPath.id, async () => {})
+                .catch(() => {});
+        }
+
+        const dataDb = await drive.holdDatabase(path.mountId, COLLAB_DB_CONFIG, dataDbPath.id);
+        const doc = new Y.Doc();
+        let provider: DbProvider;
+        try {
+            provider = new DbProvider(doc, path.name, dataDb.db);
+            // Before the document listens for updates, so the stamp is saved but moves no Modified time.
+            stampMissingSheetsBase(path.type, doc);
+        } catch (error) {
+            // A document that fails to open is never destructed, so it lets go here.
+            dataDb.release();
+            throw error;
+        }
+        return new CollabDocument(drive, path, doc, provider, dataDbPath.id, dataDb.release);
     }
 
     // The provider writes a last snapshot as it stops, and then this lets go of data.db. So the caller
@@ -182,7 +185,7 @@ export class CollabDocument {
         }
         this.connections.clear();
         this.provider.destroy();
-        this.releaseDataDb?.();
+        this.releaseDataDb();
         this.awareness.destroy();
         this.doc.destroy();
     }

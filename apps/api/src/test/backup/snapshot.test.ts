@@ -138,7 +138,7 @@ describe('Backup snapshotHome', () => {
         liveUpdateCount = await home.drive.withDatabase(
             defaultMountId,
             COLLAB_DB_CONFIG,
-            collab.dataDbPathId!,
+            collab.dataDbPathId,
             async (liveDb) => liveDb.db.select().from(docUpdates).all().length,
         );
 

@@ -66,7 +66,7 @@ describe('collab documents at Home teardown', () => {
     test('an open the teardown aborts is not logged as a failed close', async () => {
         const { home, mountId, docId } = await homeWithDoc();
         let failLoad: ((error: unknown) => void) | undefined;
-        const init = spyOn(CollabDocument.prototype, 'init').mockImplementationOnce(
+        const open = spyOn(CollabDocument, 'open').mockImplementationOnce(
             () =>
                 new Promise((_, reject) => {
                     failLoad = reject;
@@ -85,7 +85,7 @@ describe('collab documents at Home teardown', () => {
             );
         } finally {
             errors.mockRestore();
-            init.mockRestore();
+            open.mockRestore();
         }
     });
 });
@@ -160,14 +160,12 @@ describe('collab documents when a team mount changes', () => {
     test('a socket that waited for a document the mount closed meanwhile is refused', async () => {
         const { home, mountId, docId } = await homeWithDoc();
         const { promise: loaded, resolve: finishLoad } = Promise.withResolvers<void>();
-        const realInit = CollabDocument.prototype.init;
+        const realOpen = CollabDocument.open;
         let loading = false;
-        const init = spyOn(CollabDocument.prototype, 'init').mockImplementationOnce(async function (
-            this: CollabDocument,
-        ) {
+        const open = spyOn(CollabDocument, 'open').mockImplementationOnce(async (drive, path) => {
             loading = true;
             await loaded;
-            return realInit.call(this);
+            return realOpen(drive, path);
         });
         try {
             const opening = home.drive.getCollabDocument(mountId, docId);
@@ -187,7 +185,7 @@ describe('collab documents when a team mount changes', () => {
             expect(refusal).toBeInstanceOf(ApiError);
             expect(refusal instanceof ApiError && refusal.status).toBe(503);
         } finally {
-            init.mockRestore();
+            open.mockRestore();
             await home.close();
         }
     });
