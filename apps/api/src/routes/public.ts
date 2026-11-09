@@ -86,9 +86,9 @@ export const publicRouter = new Elysia({ name: 'public' })
         const settings = getServerSettings();
         return {
             ...config,
-            waitlistEnabled: settings.onboarding?.waitlist?.enabled ?? false,
-            landingLinks: settings.landing?.links ?? [],
-            showInstall: settings.landing?.showInstall ?? false,
+            waitlistEnabled: settings.onboarding.waitlist.enabled,
+            landingLinks: settings.landing.links,
+            showInstall: settings.landing.showInstall,
             demoMode: isDemo(),
             mailEnabled: isMailAppEnabled(),
         };

@@ -47,7 +47,7 @@ function HomeComponent() {
 
     // A demo server sends visitors into a seeded persona through its entry route, which mints the session.
     const handleLogin = () => {
-        window.location.href = demoMode ? getDemoEnterUrl() : '/space/';
+        window.location.href = demoMode ? getDemoEnterUrl() : getSpaceAppUrl();
     };
 
     const handleWaitlistSubmit = (e: FormEvent) => {
