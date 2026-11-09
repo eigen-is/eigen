@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { readdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { Email, EmailDraft, EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import { MaildirStore } from '../../lib/mail/maildir-store';
@@ -452,11 +453,9 @@ describe.skipIf(isWindows)('Mail', () => {
             );
             const draft = await assertJson<EmailSummary>(draftRes);
 
-            // Simulate the .eml being unreadable on disk (disk EIO / missing file) for the read
-            // messageGet performs — a genuine fault, not a cache-miss.
-            const spy = spyOn(MaildirStore.prototype, 'getMessageFile').mockReturnValue(
-                Bun.file('/nonexistent/eigen-p2-9-missing.eml'),
-            );
+            // A directory where the .eml should be stands in for a disk fault on the read messageGet performs. A missing
+            // file is another case, a mail client's doing, and answers 404.
+            const spy = spyOn(MaildirStore.prototype, 'getMessageFile').mockReturnValue(Bun.file(tmpdir()));
             try {
                 const res = await authedRequest(
                     ctx.alice.user.sessionToken,
