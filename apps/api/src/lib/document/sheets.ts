@@ -1,7 +1,7 @@
 // A workbook's Yjs doc, read and written on the server. The transform process reads it as Sheet[], for example for an
 // export or a preview, and replays the pending ops over the snapshot as a browser does. It also folds the ops into a
-// new snapshot when the document closes. Some writers change the doc through it, such as an import that adds tabs or
-// a version restore that stamps a fresh base.
+// new snapshot when the document closes, and builds the addSheet ops an Import… as new tabs pushes. Some writers
+// change the doc through it, such as a version restore that stamps a fresh base.
 
 import type { Op, Sheet } from '@workspace/lib/sheets';
 import {
@@ -27,6 +27,8 @@ import {
     withMaterializedData,
 } from '@workspace/sheet/engine';
 import type * as Y from 'yjs';
+import { assertInsertFits } from '../import/sheets/limits';
+import type { SheetsWeight, SheetsWorkbookJson } from './transform/protocol';
 
 // What the server's recalc lets an untrusted workbook's formulas cost. Past any bound the recalc fails like any other,
 // and the sheets keep the values they hold.
@@ -93,26 +95,17 @@ export function compactSheetsSnapshot(
     return { snapshot: encodeSheetsSnapshot(replayed, { computed }), dropped };
 }
 
-// The workbook as a tab opening the doc shows it, with every pending op replayed.
-export function readLiveSheets(doc: Y.Doc): Sheet[] {
-    return replaySheetsOps(decodeOrDefault(readSheetsSnapshotJson(doc)).sheets, sheetsOpLog(doc).toArray());
-}
-
-// A workbook opened without a base, such as a new one or one stored before bases existed, gets one. Then its first
-// compaction names the base an open tab already holds, and the tab keeps its grid.
-export function stampMissingSheetsBase(type: DrivePathType, doc: Y.Doc): void {
-    if (type === DRIVE_TYPE_SHEETS && readSheetsBase(doc) === null) stampSheetsBase(doc, null);
-}
-
-// A version restore puts back the base the version was saved with. A workbook gets a fresh one, so an open tab can't
-// take the restored snapshot for a compaction of the one it holds.
-export function restampRestoredSheetsBase(type: DrivePathType, doc: Y.Doc): void {
-    if (type === DRIVE_TYPE_SHEETS) stampSheetsBase(doc, null);
-}
-
-// Import… as new tabs: addSheet ops after the workbook's own, so an open tab adds them live as a peer's and keeps its
-// view and its undo. `current` is the workbook as readLiveSheets reads it in the same write.
-export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string, current: Sheet[]): void {
+// Import… as new tabs: one batch of addSheet ops the main thread pushes after the workbook's own, so an open tab adds
+// them live as a peer's and keeps its view and its undo. The workbook is replayed as a tab opening it shows it, so a
+// sheet an earlier insert added holds its name and weighs with the rest.
+export function addSheetsBatch(workbook: SheetsWorkbookJson, snapshotJson: string, weight: SheetsWeight): Op[] {
+    const current = replaySheetsOps(
+        decodeOrDefault(workbook.snapshot).sheets,
+        JSON.parse(workbook.batches),
+        undefined,
+        SERVER_RECALC_BUDGET,
+    );
+    assertInsertFits(current, weight);
     const imported = decodeSheetsSnapshot(snapshotJson);
     const taken = current.map((sheet) => sheet.name);
     const renames = new Map<string, string>();
@@ -126,7 +119,7 @@ export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string, current: She
     const ids = new Map(imported.map((sheet, i) => [sheet.id, fresh[i].id]));
     const findImported = sheetFinder(imported);
 
-    const added = imported.map((source, i): Op => {
+    return imported.map((source, i): Op => {
         const { id, name } = fresh[i];
         const sheet = renameSheetTexts(source, findImported, renames);
         const charts = Object.fromEntries(
@@ -141,5 +134,16 @@ export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string, current: She
         const value: Sheet = { ...sheet, id, name, order: current.length + i, charts };
         return { op: 'addSheet', id, path: [], value };
     });
-    sheetsOpLog(doc).push([added]);
+}
+
+// A workbook opened without a base, such as a new one or one stored before bases existed, gets one. Then its first
+// compaction names the base an open tab already holds, and the tab keeps its grid.
+export function stampMissingSheetsBase(type: DrivePathType, doc: Y.Doc): void {
+    if (type === DRIVE_TYPE_SHEETS && readSheetsBase(doc) === null) stampSheetsBase(doc, null);
+}
+
+// A version restore puts back the base the version was saved with. A workbook gets a fresh one, so an open tab can't
+// take the restored snapshot for a compaction of the one it holds.
+export function restampRestoredSheetsBase(type: DrivePathType, doc: Y.Doc): void {
+    if (type === DRIVE_TYPE_SHEETS) stampSheetsBase(doc, null);
 }

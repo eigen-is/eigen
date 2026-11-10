@@ -6,6 +6,8 @@ import {
     decodeSheetsWorkbook,
     encodeSheetsSnapshot,
     readSheetsBase,
+    readSheetsSnapshotJson,
+    sheetsOpLog,
     sheetsStateMap,
     writeSheetsSnapshot,
 } from '@workspace/lib/sheets';
@@ -13,7 +15,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import * as engine from '@workspace/sheet/engine';
 import { normalizeSheetConfig } from '@workspace/sheet/engine';
 import * as Y from 'yjs';
-import { appendSheetsToYjs, compactSheetsSnapshot, readLiveSheets, readSheetsFromDoc } from '../../lib/document/sheets';
+import { addSheetsBatch, compactSheetsSnapshot, readSheetsFromDoc } from '../../lib/document/sheets';
 import { sheetsHtmlDocument } from '../../lib/export/sheets/render';
 import { getHome } from '../../lib/home/get-home';
 import { importIntoDocument } from '../../lib/import/import-document';
@@ -88,13 +90,10 @@ describe('document/sheets', () => {
         );
 
         const home = await getHome(ctx.alice.user.id);
-        const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
-
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
         const { sheets: result } = await readSheets(mount, path);
 
         expect(result.map((sheet) => sheet.id)).toEqual(['sheet-1']);
-        expect(readLiveSheets(collab.doc).map((sheet) => sheet.id)).toEqual(['sheet-1']);
     });
 
     test('reads snapshot-only doc → returns parsed Sheet[]', async () => {
@@ -746,7 +745,16 @@ describe('document/sheets — patch op replay', () => {
     });
 });
 
-describe('document/sheets — appendSheetsToYjs', () => {
+// As an insert builds the batch from the workbook it read and pushes it.
+function append(doc: Y.Doc, snapshotJson: string): void {
+    const workbook = {
+        snapshot: readSheetsSnapshotJson(doc) ?? null,
+        batches: JSON.stringify(sheetsOpLog(doc).toArray()),
+    };
+    sheetsOpLog(doc).push([addSheetsBatch(workbook, snapshotJson, { cells: 0, text: 0 })]);
+}
+
+describe('document/sheets — addSheetsBatch', () => {
     const range = (sheetId: string) => ({
         sheetId,
         row: [0, 2] as [number, number],
@@ -804,11 +812,6 @@ describe('document/sheets — appendSheetsToYjs', () => {
         ];
         doc.getMap('state').set('snapshot', encodeSheetsSnapshot(own, { computed: true }));
         return doc;
-    }
-
-    // As the import's write calls it, with the workbook it has just read.
-    function append(doc: Y.Doc, snapshotJson: string): void {
-        appendSheetsToYjs(doc, snapshotJson, readLiveSheets(doc));
     }
 
     test('a taken name with a ! in it is renamed, and the formula naming it follows', () => {
@@ -1062,7 +1065,7 @@ describe('document/sheets — the base a snapshot starts', () => {
         const doc = new Y.Doc();
         writeSheetsSnapshot(doc, encodeSheetsSnapshot(sheets(), { computed: true }), null);
         const base = readSheetsBase(doc);
-        appendSheetsToYjs(doc, encodeSheetsSnapshot(sheets(), { computed: true }), readLiveSheets(doc));
+        append(doc, encodeSheetsSnapshot(sheets(), { computed: true }));
         expect(readSheetsBase(doc)).toEqual(base);
         doc.destroy();
     });

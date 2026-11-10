@@ -23,7 +23,7 @@ import type {
     PreviewResult,
     ReferencesJob,
     SheetsImportJob,
-    SheetsWeight,
+    SheetsWorkbookJson,
     SlidesImportJob,
     SlidesImportTransformResult,
     TransformError,
@@ -194,13 +194,10 @@ export async function runBytesTransformToText(
 }
 
 // An import returns what the caller commits, the media it extracted and its warnings. A workbook comes back as snapshot
-// JSON the main thread never parses, and a document or a deck as a ready Yjs update.
-export type SheetsImportSnapshot = {
-    snapshotJson: string;
-    weight: SheetsWeight;
-    images: TransformMedia[];
-    warnings: TransformWarning[];
-};
+// JSON the main thread never parses, or for an insert as the batch that adds its tabs, and a document or a deck as a
+// ready Yjs update.
+export type SheetsImportSnapshot = { snapshotJson: string; images: TransformMedia[]; warnings: TransformWarning[] };
+export type SheetsInsertBatch = { batch: Op[]; images: TransformMedia[]; warnings: TransformWarning[] };
 
 export async function runImportToSnapshotJson(
     job: SheetsImportJob,
@@ -208,8 +205,16 @@ export async function runImportToSnapshotJson(
     opts: TransformOptions,
 ): Promise<SheetsImportSnapshot> {
     const { result, warnings } = await runTransformRequest({ ...job, data }, opts);
-    const snapshotJson = new TextDecoder().decode(result.snapshotJson);
-    return { snapshotJson, weight: result.weight, images: result.images, warnings };
+    return { snapshotJson: new TextDecoder().decode(result.snapshotJson), images: result.images, warnings };
+}
+
+export async function runInsertToSheetsBatch(
+    job: SheetsImportJob & { workbook: SheetsWorkbookJson },
+    data: ArrayBuffer,
+    opts: TransformOptions,
+): Promise<SheetsInsertBatch> {
+    const { result, warnings } = await runTransformRequest({ ...job, data }, opts);
+    return { batch: JSON.parse(new TextDecoder().decode(result.batch)), images: result.images, warnings };
 }
 
 export async function runImportToDocumentUpdate(
