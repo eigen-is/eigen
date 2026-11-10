@@ -245,7 +245,7 @@ function isLine(value: unknown, type: 'row' | 'column'): value is number {
 
 // A new sheet needs an id no sheet has yet, because every later op names its sheet by id, and a name a rename could
 // take, or a delete or rename of one of two namesakes would break the formulas reading the other.
-export function isNewSheet(v: unknown, sheets: readonly Sheet[]): v is Sheet {
+function isNewSheet(v: unknown, sheets: readonly Sheet[]): v is Sheet {
     if (!isRecord(v)) return false;
     const { id, name, data, celldata, config } = v;
     if (data != null && !(Array.isArray(data) && data.every((row) => row == null || Array.isArray(row)))) return false;
