@@ -185,7 +185,7 @@ describe('truncateRRule', () => {
         ['America/New_York', '2026-03-02T01:00:00Z', 'FREQ=DAILY;UNTIL=20260310T035959Z'],
         ['Asia/Tokyo', '2026-02-28T23:00:00Z', 'FREQ=DAILY;UNTIL=20260309T145959Z'],
     ])('a cut of a daily %s series keeps the day before the cut day', (tz, start, cut) => {
-        const rrule = truncateRRule('FREQ=DAILY', '2026-03-10', tz);
+        const rrule = truncateRRule('FREQ=DAILY', '2026-03-10', { timezone: tz, allDay: false });
         const series = { ...SERIES, startTime: new Date(start), timezone: tz, rrule };
         const occurrences = expandRecurrence(
             series,
@@ -201,7 +201,7 @@ describe('truncateRRule', () => {
     });
 
     test('a cut of an all-day series ends on the day before the cut day', () => {
-        const rrule = truncateRRule('FREQ=DAILY;COUNT=30', '2026-03-10', null);
+        const rrule = truncateRRule('FREQ=DAILY;COUNT=30', '2026-03-10', { timezone: null, allDay: true });
         const series = {
             ...SERIES,
             allDay: true,
@@ -216,7 +216,7 @@ describe('truncateRRule', () => {
             new Date('2026-04-01T00:00:00Z'),
         );
 
-        expect(rrule).toBe('FREQ=DAILY;UNTIL=20260309T235959Z');
+        expect(rrule).toBe('FREQ=DAILY;UNTIL=20260309');
         expect(occurrences.at(-1)?.occurrenceDate).toBe('2026-03-09');
     });
 });

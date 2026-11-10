@@ -336,13 +336,19 @@ export function seriesEditFromOccurrence(
     return patch;
 }
 
-// A zoned series' UNTIL is an instant every client reads alike: the last second before the cut day starts in its zone.
-// A series without a zone, an all-day one included, steps in UTC.
-export function truncateRRule(rrule: string, cutDate: string, tz: string | null): string {
+// A timed series' UNTIL is an instant every client reads alike: the last second before the cut day starts in its zone,
+// else in UTC. Beside an all-day DTSTART, RFC 5545 §3.3.10 makes it the day before the cut as a DATE.
+export function truncateRRule(
+    rrule: string,
+    cutDate: string,
+    series: { timezone: string | null; allDay: boolean },
+): string {
     const options = RRule.parseString(rrule);
     const day = new Date(`${cutDate}T00:00:00Z`);
+    const tz = series.allDay ? null : series.timezone;
     const start = tz ? localToUtc(tz, day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), 0, 0, 0) : day;
     options.until = new Date(start.getTime() - 1000);
     delete options.count;
-    return new RRule(options).toString().replace(/^RRULE:/, '');
+    const text = new RRule(options).toString().replace(/^RRULE:/, '');
+    return series.allDay ? text.replace(/(UNTIL=\d{8})T\d{6}Z/, '$1') : text;
 }

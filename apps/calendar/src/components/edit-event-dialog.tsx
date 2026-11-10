@@ -204,7 +204,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
             });
         } else if (action === 'this-and-following') {
             if (event.rrule) {
-                const truncated = truncateRRule(event.rrule, event.occurrenceDate, event.timezone);
+                const truncated = truncateRRule(event.rrule, event.occurrenceDate, event);
                 const updated = await updateEvent.mutateAsync({
                     id: targetId,
                     calendarId: event.calendarId,
