@@ -8,7 +8,6 @@ import { useAuth } from '@workspace/lib/auth';
 import {
     heldAttendees,
     isSeriesOccurrence,
-    parseOccurrenceDate,
     seriesEditFromOccurrence,
     toLocalDateString,
     truncateRRule,
@@ -205,7 +204,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
             });
         } else if (action === 'this-and-following') {
             if (event.rrule) {
-                const truncated = truncateRRule(event.rrule, parseOccurrenceDate(event.occurrenceDate));
+                const truncated = truncateRRule(event.rrule, event.occurrenceDate, event.timezone);
                 const updated = await updateEvent.mutateAsync({
                     id: targetId,
                     calendarId: event.calendarId,

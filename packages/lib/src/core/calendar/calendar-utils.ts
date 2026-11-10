@@ -1,6 +1,6 @@
-// Pure calendar helpers the Calendar app and its cards share: the month and week ranges, the events of one day, time
-// zones, how an event's time and recurrence read, and invitations. It also turns an edit of one occurrence into the
-// change saved on the whole series.
+// Pure calendar helpers the Calendar app, its cards and the API share: the month and week ranges, the events of one
+// day, time zones and an instant's wall time in one, how an event's time and recurrence read, and invitations. It also
+// turns an edit of one occurrence into the change saved on the whole series, and cuts a series at a date.
 
 import { RRule } from 'rrule';
 import { DEFAULT_CALENDAR_COLOR } from '../../constants/calendar';
@@ -268,10 +268,6 @@ export function getInviteStatus(event: CalendarEventOccurrence, userEmail?: stri
 
 export const WEEKDAY_HEADERS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
-export function parseOccurrenceDate(value: string): Date {
-    return new Date(`${value}T00:00:00Z`);
-}
-
 export function occurrenceDateToString(value: Date): string {
     const pad = (n: number, width: number) => String(n).padStart(width, '0');
     return `${pad(value.getUTCFullYear(), 4)}-${pad(value.getUTCMonth() + 1, 2)}-${pad(value.getUTCDate(), 2)}`;
@@ -340,12 +336,13 @@ export function seriesEditFromOccurrence(
     return patch;
 }
 
-export function truncateRRule(rruleStr: string, beforeDate: Date): string {
-    const options = RRule.parseString(rruleStr);
-    const until = new Date(beforeDate);
-    until.setUTCDate(until.getUTCDate() - 1);
-    until.setUTCHours(23, 59, 59, 0);
-    options.until = until;
+// A zoned series' UNTIL is an instant every client reads alike: the last second before the cut day starts in its zone.
+// A series without a zone, an all-day one included, steps in UTC.
+export function truncateRRule(rrule: string, cutDate: string, tz: string | null): string {
+    const options = RRule.parseString(rrule);
+    const day = new Date(`${cutDate}T00:00:00Z`);
+    const start = tz ? localToUtc(tz, day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), 0, 0, 0) : day;
+    options.until = new Date(start.getTime() - 1000);
     delete options.count;
     return new RRule(options).toString().replace(/^RRULE:/, '');
 }

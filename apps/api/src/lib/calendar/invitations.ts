@@ -664,7 +664,7 @@ async function removeThisAndFuture(calendar: Calendar, eventId: string, recurren
         if (!event.rrule) throw new ApiError(400, 'Not a recurring event');
         const resource = events.resourceOf(calendar, eventId);
         if (!resource) throw new ApiError(404, 'Event not found');
-        const rrule = truncateRRule(event.rrule, new Date(`${recurrenceDate}T00:00:00Z`));
+        const rrule = truncateRRule(event.rrule, recurrenceDate, event.timezone);
         await events.editResource(calendar, resource, (component) => {
             patchEvent(component, null, { rrule }, events.writeContext(false));
             dropExceptionsFrom(component, recurrenceDate);
