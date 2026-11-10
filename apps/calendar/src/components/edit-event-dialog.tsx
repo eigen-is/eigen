@@ -171,7 +171,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
             ? {
                   rrule: updates.rrule,
                   timezone,
-                  data: typed.attendees && { attendees: seriesGuests(master.data?.attendees ?? []) },
+                  ...(typed.attendees && { data: { attendees: seriesGuests(master.data?.attendees ?? []) } }),
                   ...seriesEditFromOccurrence(event, master, edited),
               }
             : updates;
