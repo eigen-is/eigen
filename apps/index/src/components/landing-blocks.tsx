@@ -1,6 +1,6 @@
 // What Eigen stands for, as three short blocks along the bottom of the landing page, each a plain sentence over tags
-// that name the protocols or formats behind it. Under them, when the server's admin turned it on, one row holds the
-// line that installs Eigen and a button to copy it.
+// that name the protocols or formats behind it. Under them on the right, when the server's admin turned it on, a small
+// line installs Eigen, with a button to copy it.
 
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import { Badge } from '@workspace/ui/components/badge';
@@ -38,7 +38,7 @@ type LandingBlocksProps = {
 
 export function LandingBlocks({ showInstall }: LandingBlocksProps) {
     return (
-        <div className="site-wide mt-auto grid grid-cols-1 gap-6 pb-10 md:gap-10">
+        <div className="site-wide mt-auto pb-10">
             <div className="grid grid-cols-1 gap-6 md:grid-cols-3 md:gap-10">
                 {BLOCKS.map((block) => (
                     <div key={block.title} className={cn(BLOCK, 'flex flex-col')}>
@@ -55,19 +55,17 @@ export function LandingBlocks({ showInstall }: LandingBlocksProps) {
                 ))}
             </div>
             {showInstall && (
-                <div className={cn(BLOCK, 'flex flex-col gap-3 md:flex-row md:items-center md:gap-6')}>
-                    <h2 className={cn(TITLE, 'shrink-0')}>Install Eigen in one line</h2>
-                    <div className="flex min-w-0 flex-1 items-center gap-2">
-                        <CodeBlock className="min-w-0 flex-1">
-                            <CodeBlockContent>{INSTALL_COMMAND}</CodeBlockContent>
-                        </CodeBlock>
-                        <TooltipButton
-                            icon={Copy}
-                            tooltipText="Copy to clipboard"
-                            className="shrink-0"
-                            onClick={() => copyToClipboard(INSTALL_COMMAND)}
-                        />
-                    </div>
+                <div className="mt-4 flex items-center justify-end gap-2 text-xs text-muted-foreground">
+                    <span className="shrink-0">Install in one line</span>
+                    <CodeBlock size="sm" className="w-auto min-w-0">
+                        <CodeBlockContent>{INSTALL_COMMAND}</CodeBlockContent>
+                    </CodeBlock>
+                    <TooltipButton
+                        icon={Copy}
+                        tooltipText="Copy to clipboard"
+                        className="shrink-0"
+                        onClick={() => copyToClipboard(INSTALL_COMMAND)}
+                    />
                 </div>
             )}
         </div>

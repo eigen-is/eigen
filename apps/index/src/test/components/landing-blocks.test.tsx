@@ -15,7 +15,7 @@ describe('LandingBlocks', () => {
     test('shows the install line only when the setting is on', () => {
         expect(renderToStaticMarkup(<LandingBlocks showInstall={false} />)).not.toContain('curl');
         const on = renderToStaticMarkup(<LandingBlocks showInstall />);
-        expect(on).toContain('Install Eigen in one line');
+        expect(on).toContain('Install in one line');
         expect(on).toContain('curl -fsSL https://eigen.is/install | sh');
     });
 });
