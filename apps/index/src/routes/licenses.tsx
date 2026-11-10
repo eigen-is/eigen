@@ -4,7 +4,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { AppShell } from '@workspace/ui';
 import type { LicenseFont, LicensePackage, LicenseVendored } from '../../scripts/lib/content-types';
-import { ReadingLayout } from '../components/reading-layout';
 import { SitePage } from '../components/site-page';
 
 // Eager glob (not a static import) so a not-yet-generated file degrades to an empty list
@@ -38,8 +37,8 @@ function LicensesPage() {
     return (
         <AppShell appName="licenses" rootRoute={Route}>
             <SitePage>
-                <ReadingLayout>
-                    <h1 className="text-4xl font-medium tracking-tight">Open-source licenses</h1>
+                <div className="site-wide py-12">
+                    <h1 className="site-title">Open-source licenses</h1>
                     <p className="mt-2 mb-8 leading-7">
                         eigen is built on the work of {packages.length} open-source packages. Thank you to everyone who
                         maintains them.
@@ -74,7 +73,7 @@ function LicensesPage() {
                             </li>
                         ))}
                     </ul>
-                </ReadingLayout>
+                </div>
             </SitePage>
         </AppShell>
     );

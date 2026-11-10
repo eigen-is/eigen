@@ -21,19 +21,20 @@ export function SupportArticle({ article, body, related }: SupportArticleProps) 
     const config = getSection(article.section);
 
     return (
-        <SitePage color={config?.color}>
-            <ReadingLayout aside={<ArticleToc toc={article.toc} />}>
+        <SitePage
+            color={config?.color}
+            toolbar={
                 <ArticleBreadcrumb
                     trail={[
                         { label: 'Support', to: '/support' },
-                        {
-                            label: config?.title ?? article.section,
-                            to: `/support/${article.section}`,
-                            icon: config?.icon,
-                        },
+                        { label: config?.title ?? article.section, to: `/support/${article.section}` },
                     ]}
+                    page={article.title}
                 />
-                <h1 className="text-4xl font-medium tracking-tight">{article.title}</h1>
+            }
+        >
+            <ReadingLayout aside={<ArticleToc toc={article.toc} />}>
+                <h1 className="site-title">{article.title}</h1>
                 {article.updated && (
                     <p className="mt-2 text-sm text-muted-foreground">Updated {formatDateOnly(article.updated)}</p>
                 )}

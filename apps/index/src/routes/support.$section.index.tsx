@@ -1,4 +1,10 @@
+// A Support section's page: the section's articles, and those other sections list here too. It names the section in
+// the browser tab, and an unknown section shows the null vector.
+
 import { createFileRoute, useParams } from '@tanstack/react-router';
+import { ErrorState, useLayout } from '@workspace/ui';
+import { useEffect } from 'react';
+import { SitePage } from '../components/site-page';
 import { getSection } from '../components/support/sections';
 import { SupportSection } from '../components/support/support-section';
 import { getSupportArticles } from '../content/manifest';
@@ -13,6 +19,22 @@ export const Route = createFileRoute('/support/$section/')({
 
 function SectionComponent() {
     const { section } = useParams({ from: '/support/$section/' });
+    const config = getSection(section);
+    const { setDocumentTitle } = useLayout();
+
+    useEffect(() => {
+        setDocumentTitle(config?.title ?? '');
+        return () => setDocumentTitle('');
+    }, [config?.title, setDocumentTitle]);
+
+    if (!config) {
+        return (
+            <SitePage>
+                <ErrorState />
+            </SitePage>
+        );
+    }
+
     const articles = getSupportArticles().filter((a) => a.section === section || a.crossSections.includes(section));
-    return <SupportSection section={section} articles={articles} />;
+    return <SupportSection section={config} articles={articles} />;
 }

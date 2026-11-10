@@ -8,7 +8,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 - **Login in the top bar** — a signed-out visitor sees a login icon at the top right of every page, the sign-in pages included. On a demo server it enters the demo
 - **Install line on the landing page** — the owner can show the one-line install command, with a copy button, from **Show install section** under **Landing page** in Admin's server settings. It is off until turned on
-- **Covers on the blog** — a blog post can have a cover image, shown big on the post and on the newest post in the blog overview
+- **Covers on the blog** — a blog post can have a cover image, shown big under its title
 - **Delete history** — in Docs, Sheets, Slides, Vector and Stickies, File › Version history › **Delete history…** deletes every earlier version of a document, and the images and comments deleted from it, to free space. It keeps what was added or replied to in the last three days. Only an owner of the drive sees it
 - **Assignment emails** — assigning a comment or card in Docs, Sheets, Slides, Vector or Stickies emails a guest a link to it, at most once an hour per document. Admin's server settings have a toggle for guests (on) and one for users (off)
 - **Recent files in Drive** — **Recent files** lists the files you lately opened or were notified about, from any drive, newest first. The sidebars of Drive, the document apps, Chat, Calendar, Mail and Contacts link to it
@@ -110,6 +110,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Logging out from a file list** — **Log out** on Trash, Shared or a file-type page in Drive, or on the file list of Docs, Sheets, Slides, Stickies or Vector, goes straight to the login page without an error flashing first
 - **Shared with me** — items of a deleted person or team no longer show
 - **Removing a share in Drive** — no longer notifies someone who never had the file
+- **Copy link** — the link copied from a share dialog, a file's menu or a comment starts with your server's address, so it opens when you paste it in a mail or chat
 - **Restoring a deleted account or team** — a restore of a deleted team, or of a deleted user whose address another account now holds, is refused before it changes anything. A restore that fails no longer reloads open tabs, so they keep their unsaved edits
 - **Deleting during an upload** — on local storage, deleting a file while an upload of the same name runs no longer loses the new file
 - **Limits in Admin** — a storage, mount or upload limit outside its range keeps Save disabled, with a plain hint under the field, instead of failing with a confusing error

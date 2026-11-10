@@ -68,6 +68,7 @@ function buildBlog(): ArticleMeta[] {
     for (const rel of listMarkdown(dir)) {
         const dateMatch = rel.match(/^(\d{4}-\d{2}-\d{2})-/);
         const { data, body } = parseContentFile(readFileSync(join(dir, rel), 'utf-8'), blogFrontmatterSchema);
+        if (data.draft) continue;
         const { content, mediaGrids } = parseMediaGrids(body);
         const { html, toc } = renderMarkdown(content);
         writeArticle('blog', data.id, { html, mediaGrids });

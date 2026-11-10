@@ -11,7 +11,7 @@ export function SupportLanding() {
     return (
         <SitePage>
             <div className="site-wide py-12">
-                <h1 className="text-4xl font-medium tracking-tight">How can we help?</h1>
+                <h1 className="site-title">How can we help?</h1>
                 <div className="mt-6">
                     <SupportSearch />
                 </div>

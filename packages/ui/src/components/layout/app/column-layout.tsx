@@ -65,11 +65,13 @@ function Column({ id, width, toolbar, toolbarBorder = 'auto', onBack, children, 
         ) : null;
 
     return (
-        <div className={cn('h-full flex flex-col overflow-hidden', className)} style={style}>
+        <div className={cn('group/column h-full flex flex-col overflow-hidden', className)} style={style}>
             {(toolbar || backButton) && (
                 <div
                     className={cn(
-                        'h-12 flex items-center app-gutter-x shrink-0 border-r border-b transition-colors duration-200',
+                        // The right border divides it from the next column, so the last one, also the only one on a
+                        // phone, has none.
+                        'h-12 flex items-center app-gutter-x shrink-0 border-r border-b transition-colors duration-200 group-last/column:border-r-0',
                         toolbarBorder === 'always' || scrolled ? 'border-b-border' : 'border-b-transparent',
                     )}
                 >

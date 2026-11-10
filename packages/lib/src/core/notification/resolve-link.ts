@@ -101,7 +101,7 @@ async function resolveDriveLink(parsed: ChatNotificationThread | null): Promise<
     if (!parsed) return getDriveAppUrl();
     const path = await fetchDrivePath(parsed);
     if (!path) return getDriveAppUrl();
-    return getDriveItemUrl(path, { chat: parsed.chatName }) ?? getDriveShareUrl(path);
+    return getDriveShareUrl(path, { chat: parsed.chatName });
 }
 
 async function fetchDrivePath(path: NotificationPath): Promise<DrivePath | null> {

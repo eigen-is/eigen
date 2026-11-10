@@ -1,6 +1,6 @@
 // The table of contents lists the h2 headings of a page under a label, with an optional detail on the right of an
 // entry, and draws nothing when there are fewer than two entries to jump between. In a browser it marks the last
-// heading above the top third of the screen as scrolling goes, and the last entry once the scroller hits bottom.
+// heading above the top third of the screen each time a heading crosses that line.
 import { afterEach, describe, expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -39,52 +39,53 @@ describe('ArticleToc', () => {
 
     describe('while scrolling', () => {
         const VIEWPORT = 900;
+        const RealObserver = globalThis.IntersectionObserver;
+        let report = () => {};
 
-        afterEach(() => document.querySelector('[data-scroller]')?.remove());
+        // happy-dom never reports intersections, so the fake hands the test the observer's callback to call by hand.
+        class FakeObserver {
+            public constructor(callback: () => void) {
+                report = callback;
+            }
+            public observe() {}
+            public disconnect() {}
+        }
 
-        // A scroller holding three headings at the given tops; the stubbed rects are all happy-dom lacks.
-        async function setup(tops: number[], scroll: { scrollTop: number; scrollHeight: number }) {
-            const scroller = document.createElement('div');
-            scroller.dataset.scroller = '';
-            scroller.style.overflowY = 'auto';
+        afterEach(() => {
+            document.querySelector('[data-page]')?.remove();
+            globalThis.IntersectionObserver = RealObserver;
+        });
+
+        // Three headings at the given tops; the stubbed rects are all happy-dom lacks.
+        async function setup(tops: number[]) {
+            Object.assign(globalThis, { IntersectionObserver: FakeObserver });
+            const page = document.createElement('div');
+            page.dataset.page = '';
             const ids = tops.map((_, i) => `h${i}`);
             tops.forEach((top, i) => {
                 const heading = document.createElement('h2');
                 heading.id = ids[i];
                 heading.getBoundingClientRect = () => new DOMRect(0, top, 100, 20);
-                scroller.append(heading);
+                page.append(heading);
             });
-            document.body.append(scroller);
+            document.body.append(page);
             window.innerHeight = VIEWPORT;
-            Object.defineProperty(scroller, 'clientHeight', { value: VIEWPORT, configurable: true });
-            Object.defineProperty(scroller, 'scrollHeight', { value: scroll.scrollHeight, configurable: true });
-            scroller.scrollTop = scroll.scrollTop;
             const { container } = await renderInDocument(<ArticleToc toc={ids.map((id) => entry(id))} />);
-            const scrolled = () => act(async () => void scroller.dispatchEvent(new Event('scroll')));
+            const crossed = () => act(async () => report());
             const active = () => container.querySelector('a.font-medium')?.getAttribute('href');
-            return { scrolled, active };
+            return { crossed, active };
         }
 
-        test('marks the row of the page position after mount, before any scroll', async () => {
-            const { active } = await setup([-500, 250, 400], { scrollTop: 500, scrollHeight: 4000 });
+        test('marks the last heading above the top third when one crosses the line', async () => {
+            const { crossed, active } = await setup([-500, 250, 400]);
+            await crossed();
             expect(active()).toBe('#h1');
         });
 
-        test('marks nothing after mount while every heading is below the top third', async () => {
-            const { active } = await setup([1000, 2000, 3000], { scrollTop: 0, scrollHeight: 4000 });
+        test('marks nothing while every heading is below the top third', async () => {
+            const { crossed, active } = await setup([1000, 2000, 3000]);
+            await crossed();
             expect(active()).toBeUndefined();
-        });
-
-        test('marks the last heading above the top third', async () => {
-            const { scrolled, active } = await setup([-500, 250, 400], { scrollTop: 500, scrollHeight: 4000 });
-            await scrolled();
-            expect(active()).toBe('#h1');
-        });
-
-        test('marks the last entry at the bottom of a short page', async () => {
-            const { scrolled, active } = await setup([-500, 400, 700], { scrollTop: 3100, scrollHeight: 4000 });
-            await scrolled();
-            expect(active()).toBe('#h2');
         });
     });
 });

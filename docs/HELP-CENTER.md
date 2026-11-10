@@ -61,7 +61,7 @@ The comments in `prerender.tsx`, `entry-server.tsx` and `main.tsx` explain each 
 
 `drive/share-a-file.md` is `/support/drive/share-a-file`. Both parts are permanent identifiers: renaming breaks deep links and search ranking. `section` is never a frontmatter field: the folder decides.
 
-`src/components/support/sections.ts` is the display registry: id (the folder name), title, description, icon and color, in display order. An app-backed section takes its icon and brand color from the shared `apps` registry, and an unknown app name throws at build. The Admin section takes `adminApp` from the same registry, which keeps it outside `apps` because only an admin gets a way in. The sections without an app of their own (the folders `getting-started`, `connect`, `account` and `self-hosting`) use the index app's color, Space teal. A section page shows its title in its section's color. `connect` is titled Integrations.
+`src/components/support/sections.ts` is the display registry: id (the folder name), title, description, icon and color, in display order. An app-backed section takes its icon and brand color from the shared `apps` registry, and an unknown app name throws at build. The Admin section takes `adminApp` from the same registry, which keeps it outside `apps` because only an admin gets a way in. The sections without an app of their own (the folders `getting-started`, `connect`, `account` and `self-hosting`) use the index app's color, Space teal. A section page's article rows wash in its section's color, and an article's breadcrumb names the section with its icon in that color. `connect` is titled Integrations.
 
 The Self-hosting section is written for the person who runs the server, not for its users. It holds the operator's steps from requirements to troubleshooting. [SELF-HOSTING.md](SELF-HOSTING.md) is the technical reference beside the code and links into it rather than repeating them.
 
@@ -69,7 +69,7 @@ The Self-hosting section is written for the person who runs the server, not for 
 
 - `crossSections: [other-section]` lists an article on a second section page without changing its canonical URL.
 - `related` is explicit when set. Otherwise the build resolves it from shared `tags` within the same section, at most four (`apps/index/scripts/lib/related.ts`).
-- `draft: true` drops a support article from the build entirely.
+- `draft: true` drops a support article or a blog post from the build entirely: no page, no list entry, no sitemap entry.
 - Section pages sort on `order` alone. `category` is validated and carried in the manifest, but nothing groups by it.
 - The blog rides the same pipeline with a smaller schema (`id`, `title`, `description`). Its date comes from the filename prefix.
 
@@ -97,9 +97,9 @@ Every route of `apps/index` wraps its page in the shared `AppShell` with an `app
 
 Login is in the shared `Topbar` in `packages/ui`, not in this app. It shows on every signed-out top bar, the login pages included, and reads `demoMode` from `/p/config` to name itself Enter demo. It is a quiet `LogIn` icon link with a tooltip, like the bar's other icons, because the landing page's hero carries the prominent Login button. `LoginButton` waits only for the session, not for the config, so it is the one part of the top bar the prerender does not contain. On a demo server it can first read Login, then Enter demo, when the config arrives. `AuthProvider` starts with `isLoading` true, on the server and in the first client render, so that what waits for the session matches the prerender.
 
-The breadcrumb (`components/article-breadcrumb.tsx`) is the line above a title, such as Support › Sheets over an article or Blog · 14 Sep 2026 over a post. A crumb with a `to` links, and one with an icon is a Support section, drawn in the page's color. The page's own title is never a crumb.
+The breadcrumb (`components/article-breadcrumb.tsx`) sits in the column's toolbar, the bar the apps keep their location in, such as Support › Sheets › the article's title, or Blog › the post's title; a post's date is under its title. `SitePage` lays the toolbar out on the same `site-reading` grid as the page, so the trail starts on the container's edge. Each crumb links up the tree in the plain breadcrumb style, and the last one names the page itself, truncated when it is long.
 
-The table of contents (`components/article-toc.tsx`, `ArticleToc`) fills the left gutter. It lists the h2 headings of an article, or the releases of the changelog with their short dates under the label Versions. It sticks while the page scrolls, marks the entry whose heading is in the top third of the screen, also once on load for a page opened at a `#section`, and draws nothing for fewer than two entries.
+The table of contents (`components/article-toc.tsx`, `ArticleToc`) fills the left gutter in a `.site-panel`, the muted panel the landing blocks use too. It lists the h2 headings of an article, or the releases of the changelog with their short dates under the label Versions. It sticks while the page scrolls, marks the last entry whose heading passed the line a third down the screen, also once on load for a page opened at a `#section`, and draws nothing for fewer than two entries. An `IntersectionObserver` reports the crossings, so there is no scroll listener and no search for the element that scrolls. A last section too short to reach that line never marks its entry; that is accepted, as the alternative reads the scroller's position on every scroll. The CSS way, `scroll-target-group` with `:target-current`, replaces the observer once Firefox and Safari ship it.
 
 ## The changelog is built from CHANGELOG.md
 
@@ -107,11 +107,11 @@ The table of contents (`components/article-toc.tsx`, `ArticleToc`) fills the lef
 
 ## The blog overview and covers
 
-The overview lists the posts newest first from the build-time manifest, so every row is in the prerendered HTML. The newest is larger and carries its cover, the others are list rows, and each date hangs in the left gutter. A post may set `cover` in its frontmatter, a path under `public/` such as `/data/blog/media/<folder>/<image>.webp`. `BlogCover` crops it to a 16:9 frame from the top, on the overview for the newest post and under the title on the post page. A post without `cover` shows none. A post page ends with a pager to the older and the newer post.
+The overview lists the posts newest first from the build-time manifest, so every row is in the prerendered HTML. Every post is the same list row, with a line between rows, and each date hangs in the left gutter. A post may set `cover` in its frontmatter, a path under `public/` such as `/data/blog/media/<folder>/<image>.webp`. `BlogCover` crops it to a 16:9 frame from the top, under the title on the post page. A post without `cover` shows none. A post page ends with a pager to the older and the newer post.
 
 ## The landing page
 
-`routes/index.tsx` is the landing page: the `EigenCyclingLogo` wordmark with the pitch, the buttons, and three blocks (`components/landing-blocks.tsx`). The wordmark cycles through the enabled apps from an effect, so the prerender and the first client render are the same. The buttons are Login, the waitlist button and the admin's `landing.links`, and the install line under the blocks, a `CopyInput`, shows only when `landing.showInstall` is on ([SERVER-SETTINGS.md](SERVER-SETTINGS.md)). The Login button is in the static HTML. The rest come from `/p/config` and appear after load. A demo server shows the Enter demo button and a line about the demo instead of the pitch.
+`routes/index.tsx` is the landing page: the `EigenCyclingLogo` wordmark with the pitch, centered above the buttons, and three blocks along the bottom (`components/landing-blocks.tsx`), each a sentence over `Badge` tags that name its protocols or formats. The wordmark cycles through the enabled apps from an effect, so the prerender and the first client render are the same. The buttons are Login, the waitlist button and the admin's `landing.links`, and the install line under the blocks, a `CodeBlock` with a copy button, shows only when `landing.showInstall` is on ([SERVER-SETTINGS.md](SERVER-SETTINGS.md)). The Login button is in the static HTML. The rest come from `/p/config` and appear after load. A demo server shows the Enter demo button and a line about the demo instead of the pitch.
 
 ## What comes next
 

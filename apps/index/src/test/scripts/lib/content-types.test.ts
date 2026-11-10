@@ -13,6 +13,11 @@ describe('blogFrontmatterSchema', () => {
         expect(blogFrontmatterSchema.parse({ ...post, cover }).cover).toBe(cover);
     });
 
+    test('a post is published unless it says draft', () => {
+        expect(blogFrontmatterSchema.parse(post).draft).toBe(false);
+        expect(blogFrontmatterSchema.parse({ ...post, draft: true }).draft).toBe(true);
+    });
+
     test('a cover that is not a path fails the build', () => {
         expect(() => blogFrontmatterSchema.parse({ ...post, cover: 'vector.webp' })).toThrow();
     });

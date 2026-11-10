@@ -1,12 +1,11 @@
-// The blog's overview page on the public site: a row for each post with its date in the left gutter, the newest
-// post larger and with its cover, the others as list rows. The list comes from the blog's content files, so the
-// prerender has all of it, and every row links to its post.
+// The blog's overview page on the public site: a list row for each post, newest first, with its date in the left
+// gutter. The list comes from the blog's content files, so the prerender has all of it, and every row links to its
+// post.
 
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { formatDateOnly } from '@workspace/lib/date';
 import { cn } from '@workspace/ui/lib/utils';
 import type { ReactNode } from 'react';
-import { BlogCover } from '../components/blog-cover';
 import { ReadingLayout } from '../components/reading-layout';
 import { SitePage } from '../components/site-page';
 import type { BlogPost } from '../data/blog-posts';
@@ -34,55 +33,40 @@ export const Route = createFileRoute('/blog/')({
 });
 
 function BlogOverviewComponent() {
-    const [newest, ...older] = getAllBlogPosts();
+    const posts = getAllBlogPosts();
 
     return (
         <SitePage>
             <ReadingLayout>
-                <h1 className="text-4xl font-medium tracking-tight">Blog</h1>
-                <p className="mt-2 text-muted-foreground">Notes from building Eigen.</p>
-                {newest && (
-                    <PostRow post={newest} className="mt-10" dateClassName="top-1">
-                        <Link to="/blog/$id" params={{ id: newest.slug }} className="group block">
-                            <PostText post={newest} className="text-3xl group-hover:underline" />
-                            {newest.cover && <BlogCover src={newest.cover} className="mt-5" />}
-                        </Link>
-                    </PostRow>
-                )}
-                {older.map((post) => (
-                    <PostRow key={post.slug} post={post} className="mt-2" dateClassName="top-3.5">
-                        <Link
-                            to="/blog/$id"
-                            params={{ id: post.slug }}
-                            className="eigen-list-item -mx-(--app-gutter-x) block px-(--app-gutter-x) py-3.5"
-                        >
-                            <PostText post={post} className="text-xl" />
-                        </Link>
-                    </PostRow>
-                ))}
+                <h1 className="site-title">Blog</h1>
+                <p className="mt-2 text-sm text-muted-foreground">Notes from building Eigen.</p>
+                <div className="mt-6">
+                    {posts.map((post, index) => (
+                        <PostRow key={post.slug} post={post}>
+                            <Link
+                                to="/blog/$id"
+                                params={{ id: post.slug }}
+                                className={cn(
+                                    'eigen-list-item -mx-(--app-gutter-x) block px-(--app-gutter-x) py-3.5',
+                                    index > 0 && 'border-t',
+                                )}
+                            >
+                                <PostText post={post} />
+                            </Link>
+                        </PostRow>
+                    ))}
+                </div>
             </ReadingLayout>
         </SitePage>
     );
 }
 
-type PostRowProps = {
-    post: BlogPost;
-    className: string;
-    dateClassName: string;
-    children: ReactNode;
-};
-
 // The date hangs in the left gutter; below 76rem there is none, and PostText shows it above the title instead.
-function PostRow({ post, className, dateClassName, children }: PostRowProps) {
+function PostRow({ post, children }: { post: BlogPost; children: ReactNode }) {
     return (
-        <div className={cn('relative', className)}>
+        <div className="relative">
             {post.date && (
-                <time
-                    className={cn(
-                        'absolute right-full mr-(--site-gap) hidden w-(--site-gutter) text-sm leading-7 text-muted-foreground tabular-nums min-[76rem]:block',
-                        dateClassName,
-                    )}
-                >
+                <time className="absolute top-3.5 right-full mr-(--site-gap) hidden w-(--site-gutter) text-sm leading-7 text-muted-foreground tabular-nums min-[76rem]:block">
                     {formatDateOnly(post.date)}
                 </time>
             )}
@@ -91,7 +75,7 @@ function PostRow({ post, className, dateClassName, children }: PostRowProps) {
     );
 }
 
-function PostText({ post, className }: { post: BlogPost; className: string }) {
+function PostText({ post }: { post: BlogPost }) {
     return (
         <>
             {post.date && (
@@ -99,7 +83,7 @@ function PostText({ post, className }: { post: BlogPost; className: string }) {
                     {formatDateOnly(post.date)}
                 </time>
             )}
-            <h2 className={cn('leading-tight font-medium tracking-tight', className)}>{post.title}</h2>
+            <h2 className="text-xl leading-tight font-medium tracking-tight">{post.title}</h2>
             <p className="mt-1.5 text-muted-foreground">{post.description}</p>
         </>
     );

@@ -59,10 +59,10 @@ function HomeComponent() {
     return (
         <AppShell appName="" rootRoute={Route}>
             <SitePage>
-                <section className="flex flex-1 flex-col items-center justify-center app-gutter-x py-14 text-center">
+                <section className="flex flex-1 flex-col items-center justify-center app-gutter-x py-16 text-center">
                     <EigenCyclingLogo className="text-5xl mb-8" />
                     <div className="text-lg mb-8 max-w-xl">
-                        <p className="mb-4">A self-hosted alternative to Google Workspace.</p>
+                        <h1 className="mb-4">A self-hosted alternative to Google Workspace.</h1>
                         <div className="text-sm text-muted-foreground text-balance">
                             {demoMode ? (
                                 <p>

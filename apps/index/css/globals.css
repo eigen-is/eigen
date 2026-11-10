@@ -1,3 +1,5 @@
+@reference "@workspace/ui/globals.css";
+
 :root {
     --app-current-color: var(--app-space-color);
     --app-current-color-soft: var(--app-space-color-soft);
@@ -17,6 +19,17 @@
 
 .text-app {
     color: var(--app-space-color);
+}
+
+/* The title of every page on the site, one size everywhere. The landing page is the exception: its h1 is the pitch
+   under the wordmark. */
+.site-title {
+    @apply text-4xl font-medium tracking-tight;
+}
+
+/* The muted panel of the site, such as a landing block or the table of contents beside an article. */
+.site-panel {
+    @apply rounded-lg bg-muted p-5;
 }
 
 .site-wide {
@@ -91,6 +104,12 @@
         outline: none;
     }
 
+    /* A heading with a link icon copies its link on a click anywhere on it. */
+    h2:has(.heading-anchor),
+    h3:has(.heading-anchor) {
+        cursor: pointer;
+    }
+
     code {
         background-color: var(--muted);
         color: var(--foreground);
@@ -129,12 +148,11 @@
     .site-prose .heading-anchor {
         display: none;
     }
-}
 
-/* The first paragraph of a blog post reads larger. */
-.site-lead > div:first-child > p:first-child {
-    font-size: 1.125rem;
-    line-height: 1.6;
+    .site-prose h2:has(.heading-anchor),
+    .site-prose h3:has(.heading-anchor) {
+        cursor: auto;
+    }
 }
 
 /* The changelog: a release is a section with a thin rule above it, its h3 a small label and its entries a bold lead

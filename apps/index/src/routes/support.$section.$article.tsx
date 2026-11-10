@@ -3,7 +3,7 @@
 // mounts its own page, so a related one opens at the top.
 
 import { createFileRoute, useParams } from '@tanstack/react-router';
-import { EmptyState, LoadingState, useLayout } from '@workspace/ui';
+import { ErrorState, LoadingState, useLayout } from '@workspace/ui';
 import { useEffect } from 'react';
 import { SitePage } from '../components/site-page';
 import { SupportArticle } from '../components/support/support-article';
@@ -40,7 +40,7 @@ function ArticleComponent() {
     }, [article?.title, setDocumentTitle]);
 
     if (!article || !body) {
-        return <SitePage>{article ? <LoadingState /> : <EmptyState message="Article not found." />}</SitePage>;
+        return <SitePage>{article ? <LoadingState /> : <ErrorState />}</SitePage>;
     }
 
     const all = getSupportArticles();

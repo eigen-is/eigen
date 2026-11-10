@@ -33,7 +33,7 @@ export const SECTIONS: SectionConfig[] = [
     {
         id: 'getting-started',
         title: 'Getting started',
-        description: 'New to Eigen — start here.',
+        description: 'New to Eigen: start here.',
         icon: Rocket,
         color: INDEX,
     },
