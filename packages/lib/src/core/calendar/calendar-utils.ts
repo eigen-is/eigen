@@ -277,7 +277,7 @@ export function rruleToText(rrule: string | null): string | null {
     if (!rrule) return null;
     try {
         const text = RRule.fromString(rrule)
-            .toText()
+            .toText(undefined, undefined, (year, month, day) => `${day} ${month} ${year}`)
             .replace(ORDINAL_IN_TEXT, (_, digits: string) => `${digits}${ordinalSuffix(Number(digits))}`);
         return text[0].toUpperCase() + text.slice(1);
     } catch {

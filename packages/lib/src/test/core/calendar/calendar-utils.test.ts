@@ -179,6 +179,12 @@ describe('rruleToText', () => {
         expect(rruleToText('FREQ=WEEKLY;BYDAY=SU')).toBe('Every week on Sunday');
     });
 
+    test('the last date reads day-month-year', () => {
+        expect(rruleToText('FREQ=WEEKLY;BYDAY=WE;UNTIL=20261215T225959Z')).toBe(
+            'Every week on Wednesday until 15 December 2026',
+        );
+    });
+
     test('an event that does not repeat has nothing to say', () => {
         expect(rruleToText(null)).toBeNull();
     });
