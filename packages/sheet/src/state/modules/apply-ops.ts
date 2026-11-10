@@ -50,6 +50,7 @@ export function applyBatch(ctx: Context, ops: Op[], moveView = true): AppliedRow
     // A new graph means the sheets' names may read other sheets now, so the references resolved by name go too.
     if (applied.graph !== formulaCache.graph) formulaCache.forgetGraph();
     formulaCache.graph = applied.graph;
+    if (applied.skipped) console.warn('[sheet] op batch skipped its recompute:', applied.skipped);
     writeSheets(ctx, ops, sheets, applied.sheets);
     const moved = applied.moved.map(({ op, sheets: before }) => ({
         move: 'index' in op ? insertMove(op) : deleteMove(op),
@@ -67,11 +68,12 @@ export function applyBatch(ctx: Context, ops: Op[], moveView = true): AppliedRow
     return moved;
 }
 
-// The sheet fields written entry by entry, with how many levels further down: a chart field by field and each of its
-// maps entry by entry, and a validation rule rule by rule. Every other field is written whole.
-const WRITTEN_BY_ENTRY = new Map([
-    ['charts', 2],
-    ['dataValidations', 0],
+// The sheet fields written entry by entry, with how many levels down from the field: the charts chart by chart, each
+// chart field by field and each of its maps entry by entry, and the validation rules rule by rule. Every other field
+// is written whole.
+const WRITTEN_BY_ENTRY: ReadonlyMap<string, number> = new Map([
+    ['charts', 3],
+    ['dataValidations', 1],
 ]);
 
 // Writes what the batch changed into the context field by field, so the undo entry immer records puts back only that
@@ -86,7 +88,7 @@ function writeSheets(ctx: Context, ops: readonly Op[], before: readonly Sheet[],
         const target = ctx.sheets[i];
         const old = was.get(target.id);
         const next = now.get(target.id);
-        if (old && next) writeChanges(target, old, next, (field) => WRITTEN_BY_ENTRY.get(field));
+        if (old && next) writeChanges(target, old, next, WRITTEN_BY_ENTRY);
         else ctx.sheets.splice(i, 1);
     }
     for (const sheet of after) {
@@ -99,20 +101,20 @@ function writeSheets(ctx: Context, ops: readonly Op[], before: readonly Sheet[],
 
 // Writes into `target` each entry `next` holds other than `was`, the plain value of `target` before the batch, and
 // deletes each entry `next` lacks. Comparing with the draft instead would write an unchanged value back, which immer 9
-// records as a removal. `levels` says how many levels below an entry it is written entry by entry.
+// records as a removal. `depth` says how many levels down an entry is written entry by entry, per key or for all.
 function writeChanges(
     target: Record<string, unknown>,
     was: Readonly<Record<string, unknown>>,
     next: Readonly<Record<string, unknown>>,
-    levels: (key: string) => number | undefined,
+    depth: ReadonlyMap<string, number> | number,
 ) {
     for (const [key, value] of Object.entries(next)) {
         const old = was[key];
         if (old === value) continue;
-        const below = levels(key);
+        const below = typeof depth === 'number' ? depth : (depth.get(key) ?? 0);
         const held = target[key];
-        if (below != null && isRecord(held) && isRecord(old) && isRecord(value)) {
-            writeChanges(held, old, value, () => (below > 0 ? below - 1 : undefined));
+        if (below > 0 && isRecord(held) && isRecord(old) && isRecord(value)) {
+            writeChanges(held, old, value, below - 1);
         } else {
             target[key] = value;
         }
