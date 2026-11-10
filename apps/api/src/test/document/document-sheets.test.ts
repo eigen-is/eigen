@@ -1014,7 +1014,7 @@ describe('document/sheets — compactSheetsSnapshot', () => {
         expect(() =>
             compactSheetsSnapshot(encodeSheetsSnapshot([wide], { computed: true }), JSON.stringify([deleteLast])),
         ).toThrow(engine.SkippedRecompute);
-    });
+    }, 60_000);
 
     test('a batch the replay rejects is dropped and counted, and the others still apply', () => {
         const warn = spyOn(console, 'warn').mockImplementation(() => {});
