@@ -229,7 +229,7 @@ export function cutGuestCopy(resource: ICAL.Component, fromKey: string): void {
 
 // The first date a guest's own cut removed from their copy, null on a copy never cut.
 export function guestCutOf(resource: ICAL.Component): string | null {
-    const master = resource.getAllSubcomponents('vevent').find((vevent) => !vevent.hasProperty('recurrence-id'));
+    const master = keyVEvents(resource).get(null);
     return master ? readStamp(master, EIGEN.guestCut) : null;
 }
 
@@ -328,7 +328,10 @@ export function restampResource(
 
     const storedVEvents = stored?.getAllSubcomponents('vevent') ?? [];
     const storedZones = seriesTimezones(storedVEvents);
-    const storedByKey = new Map<string, TrustedStamps & { eventId: string | null; color: string | null }>();
+    const storedByKey = new Map<
+        string,
+        TrustedStamps & { eventId: string | null; color: string | null; guestCut: string | null }
+    >();
     const storedStamps = new Map<string, ExclusionStamp>();
     for (const vevent of storedVEvents) {
         const uid = uidOf(vevent);
@@ -340,6 +343,7 @@ export function restampResource(
             organizerUserId: readStamp(vevent, EIGEN.organizerUser),
             color: readStamp(vevent, EIGEN.color),
             importedOrganizer: readStamp(vevent, EIGEN.importedOrganizer),
+            guestCut: readStamp(vevent, EIGEN.guestCut),
         });
         for (const [exKey, stamp] of readExclusionStamps(vevent)) storedStamps.set(`${uid}|${exKey}`, stamp);
     }
@@ -364,6 +368,7 @@ export function restampResource(
         addStamp(vevent, EIGEN.organizerUser, trusted.organizerUserId ?? match?.organizerUserId);
         addStamp(vevent, EIGEN.color, match?.color);
         addStamp(vevent, EIGEN.importedOrganizer, trusted.importedOrganizer ?? match?.importedOrganizer);
+        addStamp(vevent, EIGEN.guestCut, match?.guestCut);
 
         // Read once: the scan for SEQUENCE lengthens with every stamp this loop adds.
         const sequence = sequenceOf(vevent);

@@ -675,6 +675,43 @@ describe('a guest who removes this and following', () => {
         expect(text).toContain('RRULE:FREQ=DAILY;BYMONTH=2;BYMONTHDAY=30;UNTIL=20260506T235959Z');
     });
 
+    test("keeps the cut its own client puts back, whatever cut the client's bytes state", async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const id = (await calendar.getCalendars())[0].id;
+        // The guest's own client filed the invitation, so the copy names the organizer but holds no link.
+        const [mine] = series(harness.user.email, 'Standup');
+        const body = vcal([
+            'BEGIN:VEVENT',
+            `UID:${SERIES}`,
+            'SUMMARY:Standup',
+            'RRULE:FREQ=DAILY;COUNT=10',
+            'DTSTART:20260504T090000Z',
+            'DTEND:20260504T093000Z',
+            `ORGANIZER:mailto:${ORG}`,
+            `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${harness.user.email}`,
+            'DTSTAMP:20260101T000000Z',
+            'END:VEVENT',
+        ]);
+        expect((await calendar.putResource(id, 'mine.ics', body, NO_PRECONDITIONS)).ok).toBe(true);
+        const [held] = await calendar.getEventsByUid(SERIES);
+        const me = makeSyntheticUser(harness.user.id, harness.user.name, harness.user.email);
+        await calendar.rsvp(held.id, me, {
+            status: 'declined',
+            scope: 'this-and-following',
+            recurrenceDate: '2026-05-07',
+            remove: true,
+        });
+
+        const cut = await resourceTextOf(calendar, id, 'mine.ics');
+        const forged = cut.replace('X-EIGEN-GUEST-CUT:2026-05-07', 'X-EIGEN-GUEST-CUT:2026-05-20');
+        expect(forged).not.toBe(cut);
+        expect((await calendar.putResource(id, 'mine.ics', forged, NO_PRECONDITIONS)).ok).toBe(true);
+        await calendar.receiveRequest([{ ...mine, rrule: 'FREQ=DAILY;UNTIL=20260520T235959Z', sequence: 1 }], link);
+
+        expect(await storedRule(calendar)).toBe('FREQ=DAILY;UNTIL=20260506T235959Z');
+    });
+
     test("an organizer's longer series reaches a guest who never cut it", async () => {
         const harness = await makeCalendar();
         const calendar = harness.instance;
