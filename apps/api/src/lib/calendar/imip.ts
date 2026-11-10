@@ -192,10 +192,7 @@ export async function processInboundImip(
     if (events.length > IMIP_MAX_EVENTS) {
         console.info(`iMIP: acting on the first ${IMIP_MAX_EVENTS} of ${events.length} events from ${sender}`);
     }
-    // A series' answer is its sender's answer on every date, so the master goes first and a date's own answer after it.
-    const acted = events
-        .slice(0, IMIP_MAX_EVENTS)
-        .toSorted((a, b) => Number(!!a.recurrenceDate) - Number(!!b.recurrenceDate));
+    const acted = events.slice(0, IMIP_MAX_EVENTS);
     for (const parsed of acted) {
         if (parsed.endTime < parsed.startTime) parsed.endTime = parsed.startTime;
     }
@@ -214,8 +211,11 @@ export async function processInboundImip(
         return;
     }
 
+    // A series' answer is its sender's answer on every date, so the master goes first and a date's own answer after it.
+    const ordered =
+        method === 'REPLY' ? acted.toSorted((a, b) => Number(!!a.recurrenceDate) - Number(!!b.recurrenceDate)) : acted;
     let replyDates = 0;
-    for (const parsed of acted) {
+    for (const parsed of ordered) {
         const { recurrenceDate } = parsed;
         if (method === 'CANCEL') {
             const organizerEmail = parsed.data?.organizer?.email;
