@@ -8,7 +8,6 @@ import type { Sheet as LibSheet, SheetChart, SheetImage } from '@workspace/lib/s
 import { floatingItems } from '@workspace/lib/sheets';
 import type { Patch } from 'immer';
 import { applyPatches, produce } from 'immer';
-import { normalizeSheetConfig } from '../../../engine/sheet-config';
 import { copySheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { insertChart } from '../../../state/modules/chart';
@@ -28,7 +27,7 @@ import {
     replaceMediaNameInHistory,
 } from '../../../state/modules/image';
 import { insertRowCol } from '../../../state/modules/rowcol';
-import { deleteSheet } from '../../../state/modules/sheet';
+import { deleteSheet, initSheetData } from '../../../state/modules/sheet';
 import type { History, Op } from '../../../state/types';
 import { patchToOp } from '../../../state/utils/patch';
 import { author, join, receive } from '../factories/collab';
@@ -53,7 +52,8 @@ function workbook(): Context {
             { name: 'T', id: T, order: 1, images: { t1: { ...image('t1', 'a0'), mediaName: 'pending:t1' } } },
         ],
     }) as Context;
-    for (const sheet of ctx.sheets) normalizeSheetConfig(sheet);
+    // Every sheet the editor holds has its matrix, as the mount gives it one.
+    for (const sheet of ctx.sheets) initSheetData(sheet);
     return ctx;
 }
 

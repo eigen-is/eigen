@@ -8,16 +8,14 @@ import { celldataToData } from '../../engine/celldata';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT, gridSize } from '../../engine/defaults';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { RenameSheetOp } from '../../engine/sheet-name';
-import { applySheetDelete, applySheetRename, sheetNameRefusal } from '../../engine/sheet-name';
+import { sheetNameRefusal } from '../../engine/sheet-name';
 import type { Context } from '../context';
 import { firstVisibleSheetId, updateContextWithSheetData } from '../context';
 import type { Sheet } from '../types';
-import { addSheetOps, deleteSheetOps, getSheetIndex, nextSheetName, renameSheetOps, sheetOrder } from '../utils';
+import { getSheetIndex, nextSheetName, renameSheetOps, sheetOrder } from '../utils';
+import { applyBatch } from './apply-ops';
 import { cancelNormalSelected } from './cell';
 import { createFilterOptions } from './filter';
-import { snapshotContext } from './formula-cache';
-import { recomputeAfterOps } from './formula-exec';
-import { writeBackSheets } from './rowcol';
 import { normalizeSelection } from './selection';
 
 export function changeSheet(ctx: Context, id: string) {
@@ -100,18 +98,9 @@ function deriveGeometry(ctx: Context, { data }: Sheet) {
     createFilterOptions(ctx);
 }
 
-export function addSheet(
-    ctx: Context,
-    // A copy or a peer's add names the new sheet's id, and the add then stays on the current sheet.
-    newSheetId?: string,
-    sheetName?: string,
-    sheetData?: Sheet,
-    // A batch through applyOpBatch, such as a peer's add, lands for a read-only viewer too, and leaves the other
-    // sheets' orders to the order ops its batch carries.
-    fromBatch = false,
-) {
-    if (!fromBatch && ctx.allowEdit === false) return;
-    // The add switches to the sheet it adds, so a sheet that comes with an id keeps it.
+// The add switches to the sheet it adds, unless it names the new sheet's id, as a copy does.
+export function addSheet(ctx: Context, newSheetId?: string, sheetName?: string, sheetData?: Sheet) {
+    if (ctx.allowEdit === false) return;
     const id = newSheetId ?? sheetData?.id ?? crypto.randomUUID();
     const sheet: Sheet = sheetData ?? {
         name: sheetName || nextSheetName(ctx.sheets),
@@ -122,13 +111,9 @@ export function addSheet(
         config: {},
     };
     if (sheetName !== undefined) sheet.name = sheetName;
-    if (sheetData && !fromBatch) shiftSheetOrders(ctx.sheets, sheetOrder(sheetData), 1);
-    initSheetData(sheet);
-    ctx.sheets.push(sheet);
-    // A name that read no sheet may read this one now, and the graph holds none of its formulas.
-    ctx.formulaCache.forgetGraph();
+    if (sheetData) shiftSheetOrders(ctx.sheets, sheetOrder(sheetData), 1);
+    applyBatch(ctx, [{ op: 'addSheet', id, path: [], value: sheet }]);
     if (!newSheetId) changeSheet(ctx, id);
-    if (!fromBatch) recomputeAfterOps(ctx, addSheetOps(sheet, ctx.sheets));
 }
 
 // A sheet's cells are stored as a sparse list but the editor works on a full matrix, so a sheet gets its matrix
@@ -142,28 +127,13 @@ export function initSheetData(sheet: Sheet) {
     normalizeSheetConfig(sheet);
 }
 
-export function deleteSheet(
-    ctx: Context,
-    id: string,
-    // A batch through applyOpBatch, such as a peer's delete, lands for a read-only viewer too. It leaves the other
-    // sheets' orders to the order ops its batch carries, and the current sheet to applyOpBatch.
-    fromBatch = false,
-) {
-    if (!fromBatch && ctx.allowEdit === false) return;
-
+export function deleteSheet(ctx: Context, id: string) {
+    if (ctx.allowEdit === false) return;
     const index = getSheetIndex(ctx, id);
     if (index == null) return;
-
-    const rewritten = applySheetDelete(ctx.sheets, id);
-    const [deleted] = ctx.sheets.splice(index, 1);
-    writeBackSheets(ctx, rewritten);
-    // The formula graph and its resolved references still read the deleted sheet under its name, which a sheet added
-    // later may take.
-    ctx.formulaCache.forgetGraph();
-    if (fromBatch) return;
-    shiftSheetOrders(ctx.sheets, sheetOrder(deleted), -1);
-    if (id === ctx.currentSheetId) leaveCurrentSheet(ctx);
-    recomputeAfterOps(ctx, deleteSheetOps(deleted, ctx.sheets));
+    const order = sheetOrder(ctx.sheets[index]);
+    applyBatch(ctx, [{ op: 'deleteSheet', id, path: [], value: { id } }]);
+    shiftSheetOrders(ctx.sheets, order, -1);
 }
 
 // A sheet added at order `at`, or deleted from it, moves the sheets from there on one place. Only the author's edit
@@ -194,10 +164,6 @@ export function editSheetName(ctx: Context, id: string, editable: HTMLSpanElemen
     renameSheet(ctx, { id, name: text });
 }
 
-// The walk reads a plain snapshot, since reading each formula through a draft is slow. A name that read no sheet may
-// read this one now, so the formula graph is built again.
-export function renameSheet(ctx: Context, op: RenameSheetOp, fromBatch = false) {
-    writeBackSheets(ctx, applySheetRename(snapshotContext(ctx).sheets, op));
-    ctx.formulaCache.forgetGraph();
-    if (!fromBatch) recomputeAfterOps(ctx, renameSheetOps(op.id, op.name));
+export function renameSheet(ctx: Context, op: RenameSheetOp) {
+    applyBatch(ctx, renameSheetOps(op.id, op.name));
 }

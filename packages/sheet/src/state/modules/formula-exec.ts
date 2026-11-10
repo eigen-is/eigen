@@ -1,17 +1,17 @@
-// Formula execution in the editor: evaluating a formula, building the formula graph, recomputing what an edit affects
-// (execFunctionGroup) and what a sheet, row or column op affects (recomputeAfterOps). These read and write the
-// workbook context, so they live in the state layer, while the parsing and evaluating they call into is the engine's.
+// Formula execution in the editor: evaluating a formula, building the formula graph and recomputing what an edit
+// affects (execFunctionGroup). These read and write the workbook context, so they live in the state layer, while the
+// parsing and evaluating they call into is the engine's. A sheet, row or column op recomputes in the engine's own
+// batch, as every reader's does.
 
 import { findSheetByName } from '../../engine/a1-notation';
 import { createArrayResolver } from '../../engine/cell-resolver';
 import { FormulaGraph } from '../../engine/formula-graph';
 import { checkBracketNum, LAST_COLUMN, LAST_ROW, matrixWidth, resolveCellRange } from '../../engine/formula-utils';
-import { evaluateFormulas, recomputeAfter } from '../../engine/recalc';
-import { seedsOf } from '../../engine/replay-ops';
+import { evaluateFormulas } from '../../engine/recalc';
 import type { Cell, CellResolver, FormulaDependency } from '../../engine/types';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
-import type { FormulaCell, Op } from '../types';
+import type { FormulaCell } from '../types';
 import { getSheetIndex } from '../utils';
 import { setCellValue } from './cell';
 import { snapshotContext } from './formula-cache';
@@ -98,18 +98,5 @@ export function execFunctionGroup(
         if (before != null && before.v === result.value) continue;
         const { data } = ctx.sheets[idx];
         if (data != null) setCellValue(ctx, r, c, data, { v: result.value, f: formula });
-    }
-}
-
-// What a batch's sheet, row or column ops affect, computed as every other reader computes it, once all of it applied.
-// The formula graph it builds is the one the next edit uses.
-export function recomputeAfterOps(ctx: Context, ops: readonly Op[]): void {
-    const seeds = seedsOf(ops);
-    if (!seeds) return;
-    const graph = warmFormulaGraph(ctx);
-    const { sheets } = snapshotContext(ctx);
-    const next = recomputeAfter(sheets, seeds, graph, ctx.formulaCache.engine);
-    for (const [i, { data }] of next.entries()) {
-        if (data !== sheets[i].data) ctx.sheets[i].data = data;
     }
 }
