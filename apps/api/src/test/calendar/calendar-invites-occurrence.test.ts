@@ -917,6 +917,24 @@ describe('Occurrence edits of an invited series', () => {
         ]);
     });
 
+    test("a date the organizer moves after a guest's cut keeps the guest's answer", async () => {
+        const { series, target } = await seeded('Weekly Cut Then Move');
+        const bobMaster = findOrFail(await bobOccurrences(series.uid), (e) => !e.parentEventId);
+        expect((await rsvpAsBob(bobMaster.id, { status: 'accepted' })).status).toBe(200);
+        const cut = { status: 'declined', scope: 'this-and-following', recurrenceDate: '2027-02-16', remove: true };
+        expect((await rsvpAsBob(bobMaster.id, cut)).status).toBe(200);
+        await eventually(async () => {
+            const master = findOrFail(await aliceOccurrences(series.uid), (e) => !e.parentEventId);
+            return bobStatus(master) === 'declined' ? master : undefined;
+        }, "Bob's cut to reach Alice as a decline");
+
+        // The web app's "This event" leaves the date the series' list, which holds Bob's decline.
+        await moveOccurrence(series, target, 'Moved After The Cut', { attendees: [] });
+
+        const moved = findOrFail(await bobOccurrences(series.uid), (e) => e.occurrenceDate === target);
+        expect(bobStatus(moved)).toBe('accepted');
+    });
+
     test('the guest is told an invitation changed, not that they were invited to a new series', async () => {
         const { series, target } = await seeded('Weekly Occurrence Notice');
         const bobHome = await getHome(ctx.bob.user.id);

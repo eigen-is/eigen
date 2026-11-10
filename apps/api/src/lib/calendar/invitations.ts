@@ -347,7 +347,7 @@ function requestedEdit(
 ): VEventEdit | null {
     if (!isNewerRevision(parsed, stored)) return null;
     const held = heldAttendees(existing, series);
-    const attendees = keepOwnAnswer(calendar, parsed, existing, held, stored, cut);
+    const attendees = keepOwnAnswer(calendar, parsed, existing, held, stored);
     const cancelled = parsed.status === 'cancelled';
     const timezone = key ? (parsed.timezone ?? series.timezone) : parsed.timezone;
     // The copy's own VEVENT, a master or a single date, is cancelled by its status. Only an exception is an EXDATE.
@@ -422,7 +422,7 @@ async function fileNewInvitation(
                     organizer: { ...organizer, userId: link.organizerUserId },
                     organizerEventId: link.organizerEventId,
                     attendees: held
-                        ? keepOwnAnswer(calendar, parsed, held, held.data?.attendees ?? [], heldRevision(held), null)
+                        ? keepOwnAnswer(calendar, parsed, held, held.data?.attendees ?? [], heldRevision(held))
                         : parsed.data?.attendees,
                     // A linked copy lets the guest keep their own reminders and color.
                     reminders: kept?.reminders ?? parsed.data?.reminders,
@@ -441,23 +441,21 @@ async function fileNewInvitation(
     return { kind: 'created', calendarId };
 }
 
-// The guest's own answer stands until the organizer reschedules, which raises the SEQUENCE. An organizer's list can
-// still say NEEDS-ACTION for a reply it hasn't read yet, and a date the guest removed holds no list but a decline.
+// The guest's answer on their own copy is theirs: a message only asks again, as NEEDS-ACTION at a higher SEQUENCE, when
+// the organizer reschedules. A date the guest removed holds no list but a decline.
 function keepOwnAnswer(
     calendar: Calendar,
     parsed: ParsedEvent,
     existing: CalendarEvent | undefined,
     held: readonly Attendee[],
     stored: Revision | null,
-    cut: string | null,
 ): Attendee[] | undefined {
     const incoming = parsed.data?.attendees;
     const email = calendar.home.user.email.toLowerCase();
     const removed = existing?.parentEventId && existing.status === 'cancelled';
     const own = removed ? 'declined' : held.find((a) => a.email.toLowerCase() === email)?.status;
-    // A cut declines the whole series to the organizer, which is not the guest's answer to the dates they kept.
-    const cutDecline = !!cut && incoming?.find((a) => a.email.toLowerCase() === email)?.status === 'declined';
-    if (!incoming || !own || !stored || (parsed.sequence > stored.sequence && !cutDecline)) return incoming;
+    const asked = incoming?.find((a) => a.email.toLowerCase() === email)?.status === 'pending';
+    if (!incoming || !own || (asked && stored && parsed.sequence > stored.sequence)) return incoming;
     return withAttendeeStatus(incoming, email, own);
 }
 

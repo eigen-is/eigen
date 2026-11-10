@@ -466,6 +466,59 @@ describe("the guest's own answer", () => {
 
         expect(mine(await exceptionOf(calendar))).toBe('pending');
     });
+
+    test('is never set to another answer by the organizer, even at a higher SEQUENCE', async () => {
+        const { calendar, me, mine } = await answered();
+        await receiveMailed(calendar, parsedOf(request('Title A', 2, '20260401T100000Z', [], me.email)), ORG);
+        await calendar.rsvp((await masterOf(calendar)).id, me, { status: 'accepted' });
+
+        for (const [partstat, sequence] of [
+            ['DECLINED', 3],
+            ['TENTATIVE', 4],
+        ] as const) {
+            const update = request('Rescheduled', sequence, '20260401T130000Z', [], me.email);
+            await receiveMailed(
+                calendar,
+                parsedOf(update.replace('PARTSTAT=NEEDS-ACTION', `PARTSTAT=${partstat}`)),
+                ORG,
+            );
+            expect(mine(await masterOf(calendar))).toBe('accepted');
+        }
+    });
+
+    // The organizer records a cut as a decline of the whole series, and a date it moves before the cut carries that.
+    test("reaches a date the organizer moves after the guest's cut", async () => {
+        const { calendar, me, mine } = await answered();
+        await receiveMailed(calendar, parsedOf(request('Title A', 2, '20260401T100000Z', [], me.email)), ORG);
+        const master = await masterOf(calendar);
+        await calendar.rsvp(master.id, me, { status: 'accepted' });
+        await calendar.rsvp(master.id, me, {
+            status: 'declined',
+            scope: 'this-and-following',
+            recurrenceDate: '2026-05-04',
+            remove: true,
+        });
+
+        const declined = occurrence('Moved after the cut', 3, '20260401T130000Z')
+            .replace(`mailto:${GUEST}`, `mailto:${me.email}`)
+            .replace('PARTSTAT=NEEDS-ACTION', 'PARTSTAT=DECLINED');
+        await receiveMailed(calendar, parsedOf(declined), ORG);
+
+        expect((await exceptionOf(calendar))?.title).toBe('Moved after the cut');
+        expect(mine(await exceptionOf(calendar))).toBe('accepted');
+    });
+
+    // A date the copy holds no answer for takes the guest's answer for the series, whatever its SEQUENCE.
+    test('reaches a date the organizer moves after the guest answered the series', async () => {
+        const { calendar, me, mine } = await answered();
+        await receiveMailed(calendar, parsedOf(request('Title A', 2, '20260401T100000Z', [], me.email)), ORG);
+        await calendar.rsvp((await masterOf(calendar)).id, me, { status: 'tentative' });
+
+        const moved = occurrence('Moved', 3, '20260401T130000Z').replace(`mailto:${GUEST}`, `mailto:${me.email}`);
+        await receiveMailed(calendar, parsedOf(moved), ORG);
+
+        expect(mine(await exceptionOf(calendar))).toBe('tentative');
+    });
 });
 
 describe('an answer that names a date', () => {
