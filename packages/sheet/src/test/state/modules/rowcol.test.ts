@@ -11,7 +11,7 @@ import {
     showSelectedRowCol,
 } from '../../../state/modules/rowcol';
 import { moveHighlightCell } from '../../../state/modules/selection';
-import { receiveOps } from '../factories/collab';
+import { receive } from '../factories/collab';
 import { contextFactory, workbookContextFactory } from '../factories/context';
 
 describe('the filter follows a row or column op', () => {
@@ -162,7 +162,7 @@ describe('hidden rows and columns under the selection', () => {
     // A peer's replace can set the hidden map to any value. The cell editors ask on every selection change, so a
     // throw there would crash them.
     test('a hidden map that is no map counts as nothing hidden, and a hide starts a new map', () => {
-        const forged = receiveOps(hiddenSheet(at(1, 0)), [
+        const forged = receive(hiddenSheet(at(1, 0)), [
             { op: 'replace', id: 'id_1', path: ['config', 'rowhidden'], value: 5 },
         ]);
         expect(isSelectionOnHiddenRowCol(forged)).toBe(false);

@@ -1,9 +1,8 @@
-// Converts between the editor's immer patches and the ops it sends to peers. patchToOp names each sheet by id. A sheet,
-// row or column op ships its marker alone, since every receiver's engine makes the same writes. addSheetOps and
+// Turns the editor's immer patches into the ops it sends to peers. patchToOp names each sheet by id. A sheet, row or
+// column op ships its marker alone, since every receiver's engine makes the same writes. addSheetOps and
 // deleteSheetOps build a sheet's add and delete batches, the add with the sheet's cells as stored. filterPatch keeps
-// what belongs on the wire, and opToPatch turns a peer's ops back into patches on this client's sheet indices.
+// what belongs on the wire.
 
-import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
 import { cloneDeep, isNumber } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import { dataToCelldata } from '../../engine/celldata';
@@ -106,11 +105,6 @@ export function storedCopy(sheet: Sheet): Sheet {
     const { data, ...value } = cloneDeep(sheet);
     if (data) value.celldata = dataToCelldata(data);
     return value;
-}
-
-export function opToPatch(ctx: Context, ops: Op[]): [Patch[], Op[]] {
-    const [pure, specialOps] = opToPatchOnSheets(ctx.sheets, ops);
-    return [pure.map((p) => ({ ...p, path: ['sheets', ...p.path] })), specialOps];
 }
 
 export function inverseRowColOptions({ insertRowColOp, deleteRowColOp }: RowColOptions): RowColOptions {
