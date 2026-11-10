@@ -3,7 +3,7 @@
 // the limits on a rule belong to the iCalendar layer.
 
 // Deep import (not the @workspace/lib/calendar barrel) to keep React out of the API module graph.
-import { truncateRRule } from '@workspace/lib/calendar/calendar-utils';
+import { occurrenceDateToString, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
 import type { CalendarEvent, CalendarEventOccurrence } from '@workspace/lib/types/calendar';
 import { RRule } from 'rrule';
 import { expandWallClock, wallClockDate } from '../ical/wall-clock';
@@ -31,10 +31,20 @@ export function expandRecurrence(event: CalendarEvent, rangeStart: Date, rangeEn
 }
 
 export function constrainRRule(incoming: string | null, local: string | null): string | null {
-    if (!incoming || !local) return incoming;
-    const localUntil = RRule.parseString(local).until ?? null;
-    if (!localUntil) return incoming;
-    const incomingUntil = RRule.parseString(incoming).until ?? null;
+    const localUntil = ruleUntil(local);
+    if (!incoming || !localUntil) return incoming;
+    const incomingUntil = ruleUntil(incoming);
     if (incomingUntil && incomingUntil <= localUntil) return incoming;
     return truncateRRule(incoming, new Date(localUntil.getTime() + 86400_000));
+}
+
+// The last date a guest's shortened rule keeps, which constrainRRule holds every update to. The expansion reads UNTIL
+// in the series' wall clock, so its UTC date is that date.
+export function lastKeptDate(local: string | null): string | null {
+    const until = ruleUntil(local);
+    return until && occurrenceDateToString(until);
+}
+
+function ruleUntil(rrule: string | null): Date | null {
+    return rrule ? (RRule.parseString(rrule).until ?? null) : null;
 }

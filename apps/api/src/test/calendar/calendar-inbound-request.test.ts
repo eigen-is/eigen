@@ -454,6 +454,39 @@ describe('one REQUEST, one write', () => {
         expect(await ctagOf(calendar, id)).toBe(before);
     });
 
+    // The file names one occurrence twice: the later of two equal revisions stands, and the copy keeps it live.
+    test('an occurrence the message cancels and then restates stays a live override', async () => {
+        const { harness, calendar, id } = await harnessWith();
+        const [master, moved] = seriesRequest(harness.user.email, 1);
+        await calendar.receiveRequest([master, moved], LINK);
+        const update = { ...moved, sequence: 1, title: 'Standup kept' };
+
+        await calendar.receiveRequest([{ ...master, sequence: 1 }, { ...update, status: 'cancelled' }, update], LINK);
+
+        const rows = storedEvents(calendar, id);
+        expect(rows).toHaveLength(2);
+        expect(findOrFail(rows, (e) => !!e.parentEventId)).toMatchObject({
+            title: 'Standup kept',
+            status: 'confirmed',
+        });
+    });
+
+    // A STATUS:CANCELLED on the copy's own VEVENT is the organizer's word, not the guest's decline.
+    test("a series the organizer cancels and restores at one SEQUENCE keeps the guest's answer", async () => {
+        const { harness, calendar } = await harnessWith();
+        const [master] = seriesRequest(harness.user.email, 0);
+        await calendar.receiveRequest([master], LINK);
+        const [copy] = await calendar.getEventsByUid(master.uid);
+        await calendar.receiveAttendeeStatus(copy.id, harness.user.email, 'accepted');
+
+        await calendar.receiveRequest([{ ...master, status: 'cancelled' }], LINK);
+        await calendar.receiveRequest([master], LINK);
+
+        const [restored] = await calendar.getEventsByUid(master.uid);
+        expect(restored.status).toBe('confirmed');
+        expect(restored.data?.attendees?.[0]).toMatchObject({ email: harness.user.email, status: 'accepted' });
+    });
+
     test('a master the store refuses files nothing, its occurrences included', async () => {
         const { harness, calendar, id } = await harnessWith();
         const [master, ...exceptions] = seriesRequest(harness.user.email, 3);
@@ -551,5 +584,10 @@ describe('a guest who removes this and following', () => {
             '2026-05-06',
         ]);
         expect(await calendar.getEventsByUid(SERIES)).toHaveLength(1);
+
+        await calendar.receiveRequest(series(harness.user.email, 'Standup renamed'), link);
+
+        const after = await calendar.getEventsByUid(SERIES);
+        expect(after.map((event) => event.title)).toEqual(['Standup renamed']);
     });
 });

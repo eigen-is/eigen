@@ -6,23 +6,23 @@
 
 import { heldAttendees, isInvitationFromOthers, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
 import { calendarInviteTag } from '@workspace/lib/notification/tags';
-import type { Attendee, CalendarEvent } from '@workspace/lib/types/calendar';
+import type { Attendee, CalendarEvent, Organizer } from '@workspace/lib/types/calendar';
 import { isExternalOwnerId } from '@workspace/lib/types/owner';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { and, eq, isNull } from 'drizzle-orm';
 import type ICAL from 'ical.js';
 import { ApiError } from '../core';
 import {
+    applyEdits,
     buildResource,
     dropExceptionsFrom,
     isNewerRevision,
-    overridesByKey,
     patchEvent,
     stampInvitationLink,
     storedOrganizerAddress,
-    storedRevision,
+    storedRevisions,
 } from '../ical';
-import type { EventPatch, Revision } from '../ical/ical-component';
+import type { EventPatch, Revision, VEventEdit, WriteContext } from '../ical/ical-component';
 import type { ParsedEvent } from '../ical/ical-parse';
 import { computeOccurrenceTimes, parseRecurrenceKey, recurrenceKey, utcToLocal } from '../ical/wall-clock';
 import { sendMail } from '../mailer/mailer';
@@ -34,7 +34,7 @@ import * as events from './events';
 import { composeRsvpReply } from './imip';
 import { answeredOccurrence, propagateRsvp } from './invite-propagation';
 import { toEvent } from './mappers';
-import { constrainRRule, expandRecurrence } from './recurrence';
+import { constrainRRule, expandRecurrence, lastKeptDate } from './recurrence';
 import { prepareResource } from './resource-store';
 import * as schema from './schema';
 import { buildCalendarEvent } from './sse-events';
@@ -98,7 +98,7 @@ export async function cancelInvitationOccurrence(
                 if (!resource) return null;
                 const component = events.storedComponent(calendar, resource);
                 const key = recurrenceKeyForSeries(recurrenceDate, recurrenceInstant, linked.timezone);
-                if (!isNewerRevision(revision, storedRevision(component, key))) return null;
+                if (!isNewerRevision(revision, storedRevisions(component).get(key) ?? null)) return null;
                 // A copy that is itself the cancelled occurrence has no series to remove it from, so the copy goes.
                 if (key === linked.recurrenceDate) {
                     await calendar.purgeResource(resource);
@@ -237,7 +237,8 @@ async function unlessRefused<T>(uid: string, apply: () => Promise<T>, dropped: T
     }
 }
 
-// The caller holds the write lock, so two deliveries at once never file two masters for one UID.
+// The caller holds the write lock, so two deliveries at once never file two masters for one UID. The copy's revisions
+// are read once, before any edit, and every edit goes in as one batch.
 async function decideInboundRequest(
     calendar: Calendar,
     requested: readonly ParsedEvent[],
@@ -252,23 +253,17 @@ async function decideInboundRequest(
     if (!series || !resource) return fileNewInvitation(calendar, requested, link);
     const component = events.storedComponent(calendar, resource);
 
-    const adopting = !series.data?.organizerEventId;
-    if (adopting) {
+    let claim: Organizer | undefined;
+    if (!series.data?.organizerEventId) {
         // The organizer may claim an event nobody linked, but only when it names the verified sender.
         if (storedOrganizerAddress(component) !== link.organizerEmail) {
             return { kind: 'dropped', reason: 'the stored event names another organizer' };
         }
         if (!master) return { kind: 'dropped', reason: 'an occurrence of a series nobody organizes here yet' };
-        stampInvitationLink(component, link);
-        const organizer = {
-            userId: link.organizerUserId,
-            email: link.organizerEmail,
-            name: master.data?.organizer?.name,
-        };
-        patchEvent(component, null, { data: { organizer } }, events.writeContext(false, master.dtstamp));
+        claim = { userId: link.organizerUserId, email: link.organizerEmail, name: master.data?.organizer?.name };
     } else if (
         // Only the organizer the copy is linked to may update it, so another guest cannot take over the invitation.
-        series.data?.organizer?.userId !== link.organizerUserId ||
+        series.data.organizer?.userId !== link.organizerUserId ||
         series.data.organizerEventId !== link.organizerEventId
     ) {
         return { kind: 'dropped', reason: 'the sender is not the organizer this copy is linked to' };
@@ -278,36 +273,52 @@ async function decideInboundRequest(
     if (series.recurrenceDate && master) {
         return fileNewInvitation(calendar, requested, link, { copy: series, resource, component });
     }
-    const exceptions = new Map(stored.filter((e) => e.parentEventId === series.id).map((e) => [e.recurrenceDate, e]));
-    const overrides = overridesByKey(component);
-    let changed = adopting;
+
+    // A RECURRENCE-ID the message repeats keeps its newest event.
+    const latest = new Map<string | null, ParsedEvent>();
     for (const parsed of requested) {
-        changed = applyRequestedEvent(calendar, component, overrides, series, exceptions, parsed) || changed;
+        const key = parsed.recurrenceDate
+            ? recurrenceKeyForSeries(parsed.recurrenceDate, parsed.recurrenceInstant, series.timezone)
+            : null;
+        const prior = latest.get(key);
+        if (!prior || isNewerRevision(parsed, prior)) latest.set(key, parsed);
+    }
+    const revisions = storedRevisions(component);
+    const exceptions = new Map(stored.filter((e) => e.parentEventId === series.id).map((e) => [e.recurrenceDate, e]));
+    const lastKept = lastKeptDate(series.rrule);
+    const edits = new Map<string | null, VEventEdit>();
+    for (const [key, parsed] of latest) {
+        // A date past the guest's own cut of the series stays cut.
+        if (key && lastKept && key > lastKept) continue;
+        const existing = key === series.recurrenceDate ? series : exceptions.get(key);
+        const edit = requestedEdit(calendar, series, existing, parsed, key, revisions.get(key) ?? null);
+        if (edit) edits.set(key, edit);
+    }
+    if (claim) {
+        // A claim stands whatever the message's revision, so the organizer joins the master's own patch, if it has one.
+        stampInvitationLink(component, link);
+        const own = edits.get(null);
+        const { patch, ctx }: { patch: EventPatch; ctx: WriteContext } =
+            own?.kind === 'patch' ? own : { patch: {}, ctx: events.writeContext(false) };
+        edits.set(null, { kind: 'patch', patch: { ...patch, data: { ...patch.data, organizer: claim } }, ctx });
     }
     // A redelivery changes nothing, so it bumps no ctag and sends no second notice.
-    if (!changed) return { kind: 'dropped', reason: 'nothing newer to apply' };
+    if (!applyEdits(component, edits, series) && !claim) return { kind: 'dropped', reason: 'nothing newer to apply' };
     await events.writeComponent(calendar, resource, component);
     return { kind: 'updated', calendarId: series.calendarId };
 }
 
-// The caller holds the write lock and writes the component. Answers whether the event changed it: an occurrence the
-// copy already holds is patched, and only a new one is added whole.
-function applyRequestedEvent(
+// What one requested event does to the copy: nothing, a patch of what the copy holds for its key, or a new override or
+// exclusion. `stored` is the copy's revision for that key, read before any edit.
+function requestedEdit(
     calendar: Calendar,
-    component: ICAL.Component,
-    overrides: ReadonlyMap<string, ICAL.Component>,
     series: CalendarEvent,
-    exceptions: ReadonlyMap<string | null, CalendarEvent>,
+    existing: CalendarEvent | undefined,
     parsed: ParsedEvent,
-): boolean {
-    const key = parsed.recurrenceDate
-        ? recurrenceKeyForSeries(parsed.recurrenceDate, parsed.recurrenceInstant, series.timezone)
-        : null;
-    // A copy that is one occurrence of a series this Home does not hold is keyed by its RECURRENCE-ID.
-    const existing = key === series.recurrenceDate ? series : exceptions.get(key);
-    const stored = storedRevision(component, key, overrides);
-    if (!isNewerRevision(parsed, stored)) return false;
-
+    key: string | null,
+    stored: Revision | null,
+): VEventEdit | null {
+    if (!isNewerRevision(parsed, stored)) return null;
     const held = heldAttendees(existing, series);
     const attendees = keepOwnAnswer(calendar, parsed, existing, held, stored);
     const cancelled = parsed.status === 'cancelled';
@@ -316,15 +327,15 @@ function applyRequestedEvent(
     const isSeries = existing === series;
     if (isSeries || (existing && (existing.status === 'cancelled') === cancelled)) {
         // A cancelled exception is an EXDATE, which holds nothing more to patch.
-        if (!isSeries && cancelled) return false;
+        if (!isSeries && cancelled) return null;
         // Never extend the rule past what the guest has: they may have shortened it on purpose.
         const rrule = isSeries ? constrainRRule(parsed.rrule, series.rrule) : null;
         const patch = invitationPatch(existing, { ...parsed, timezone }, attendees, rrule);
-        return patchEvent(component, key, patch, events.writeContext(false, parsed.dtstamp), overrides);
+        return { kind: 'patch', patch, ctx: events.writeContext(false, parsed.dtstamp) };
     }
     // A copy of one occurrence has no series to exclude another date from.
-    if (cancelled && series.recurrenceDate) return false;
-    events.putException(component, series, {
+    if (cancelled && series.recurrenceDate) return null;
+    return events.exceptionEdit(series, {
         ...parsed,
         timezone,
         parentEventId: series.id,
@@ -332,7 +343,6 @@ function applyRequestedEvent(
         data: { ...series.data, attendees: attendees ?? held },
         createByUserId: series.createByUserId,
     });
-    return true;
 }
 
 // The caller holds the write lock. A new copy is built from the message in the default calendar. A copy of one
@@ -360,7 +370,9 @@ async function fileNewInvitation(
     // The copy held one occurrence, which the series states as an exception or, unmoved, as its master.
     const heldDate = replaces?.copy.recurrenceDate;
     const heldOccurrence = replaces && (requested.find((e) => e.recurrenceDate === heldDate) ?? requested[0]);
-    const heldRevision = replaces ? storedRevision(replaces.component, replaces.copy.recurrenceDate) : null;
+    const heldRevision = replaces
+        ? (storedRevisions(replaces.component).get(replaces.copy.recurrenceDate) ?? null)
+        : null;
     if (heldOccurrence && !isNewerRevision(heldOccurrence, heldRevision)) {
         return { kind: 'dropped', reason: 'nothing newer to apply' };
     }
@@ -422,8 +434,8 @@ function keepOwnAnswer(
 ): Attendee[] | undefined {
     const incoming = parsed.data?.attendees;
     const email = calendar.home.user.email.toLowerCase();
-    const own =
-        existing?.status === 'cancelled' ? 'declined' : held.find((a) => a.email.toLowerCase() === email)?.status;
+    const removed = existing?.parentEventId && existing.status === 'cancelled';
+    const own = removed ? 'declined' : held.find((a) => a.email.toLowerCase() === email)?.status;
     if (!incoming || !own || !stored || parsed.sequence > stored.sequence) return incoming;
     return withAttendeeStatus(incoming, email, own);
 }

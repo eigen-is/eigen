@@ -1,23 +1,22 @@
 export { spliceBlocks } from './blocks';
 export {
     addExclusion,
+    applyEdits,
     buildResource,
     dropExceptionsFrom,
     isNewerRevision,
     keepProperties,
     keepSubcomponents,
     newVCalendar,
-    overridesByKey,
     PRODID,
     patchEvent,
-    putOverride,
     removeExclusion,
     restampResource,
     serializeEventForImip,
     serializeResource,
     stampInvitationLink,
     storedOrganizerAddress,
-    storedRevision,
+    storedRevisions,
     stripEigenStamps,
 } from './ical-component';
 export { parseCalendarStream, parseIcs, parseResource, projectResource } from './ical-parse';

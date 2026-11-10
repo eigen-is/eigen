@@ -10,8 +10,8 @@ import { and, eq } from 'drizzle-orm';
 import type ICAL from 'ical.js';
 import { RRule } from 'rrule';
 import { ApiError } from '../core';
-import { addExclusion, buildResource, parseResource, patchEvent, putOverride, removeExclusion } from '../ical';
-import type { EventPatch, WriteContext } from '../ical/ical-component';
+import { addExclusion, applyEdits, buildResource, parseResource, patchEvent, removeExclusion } from '../ical';
+import type { EventPatch, VEventEdit, WriteContext } from '../ical/ical-component';
 import { serializeEventForImip } from '../ical/ical-component';
 import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../ical/recurrence-limits';
 import { parseRecurrenceKey } from '../ical/wall-clock';
@@ -255,21 +255,17 @@ export function writeComponent(calendar: Calendar, resource: StoredResource, com
     });
 }
 
-// An exception is one VEVENT inside its master's file; a cancellation rides as an EXDATE plus its stamp. The caller
-// writes the component.
-export function putException(component: ICAL.Component, parent: CalendarEvent, input: CreateEventArgs): void {
-    const exception = eventForResource({
+// An exception is one VEVENT inside its master's file; a cancellation rides as an EXDATE plus its stamp.
+export function exceptionEdit(parent: CalendarEvent, input: CreateEventArgs): VEventEdit {
+    const event = eventForResource({
         id: crypto.randomUUID(),
         calendarId: parent.calendarId,
         uid: parent.uid,
         input: { ...input, rrule: null },
         now: new Date(),
     });
-    if (exception.status === 'cancelled') {
-        addExclusion(component, parent, exception, writeContext(actorIsOrganizer(parent), input.dtstamp));
-    } else {
-        putOverride(component, parent, exception);
-    }
+    if (event.status !== 'cancelled') return { kind: 'override', event };
+    return { kind: 'exclusion', event, ctx: writeContext(actorIsOrganizer(parent), input.dtstamp) };
 }
 
 export function writeContext(actorIsOrganizer: boolean, dtstamp?: Date | null): WriteContext {
@@ -454,10 +450,12 @@ async function writeOverride(
     if (!resource) throw new ApiError(404, 'Event not found');
     assertEtag(resource, input.etag);
     // A RECURRENCE-ID and an EXDATE are both written from this key.
-    if (!input.recurrenceDate) throw new ApiError(400, 'Invalid occurrence date');
+    const key = input.recurrenceDate;
+    if (!key) throw new ApiError(400, 'Invalid occurrence date');
 
-    await editResource(calendar, resource, (component) => putException(component, parent, input));
-    const stored = exceptionOf(calendar, parent.id, input.recurrenceDate);
+    const edit = exceptionEdit(parent, input);
+    await editResource(calendar, resource, (component) => applyEdits(component, new Map([[key, edit]]), parent));
+    const stored = exceptionOf(calendar, parent.id, key);
     return stored ?? requireEvent(calendar, parent.id);
 }
 

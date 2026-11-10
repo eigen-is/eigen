@@ -8,12 +8,12 @@ import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import type ICAL from 'ical.js';
 import {
     addExclusion,
+    applyEdits,
     buildResource,
     parseIcs,
     parseResource,
     patchEvent,
     projectResource,
-    putOverride,
     removeExclusion,
     restampResource,
     serializeEventForImip,
@@ -24,6 +24,10 @@ import { cpuClock } from '../cpu-time';
 import { vcal } from '../ics-test-helpers';
 
 const CTX = { now: new Date('2026-06-01T10:00:00Z'), actorIsOrganizer: true };
+
+// One override edit, the way the store adds an occurrence it did not hold.
+const putOverride = (resource: ICAL.Component, master: CalendarEvent, override: CalendarEvent): boolean =>
+    applyEdits(resource, new Map([[override.recurrenceDate, { kind: 'override', event: override }]]), master);
 
 const masterOf = (resource: ICAL.Component): ICAL.Component =>
     resource.getAllSubcomponents('vevent').find((v) => !v.getFirstProperty('recurrence-id'))!;
