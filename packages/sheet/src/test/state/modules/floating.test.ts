@@ -129,13 +129,13 @@ describe('floating writers', () => {
                 entry.patches.push(...step.patches);
                 entry.inverse.unshift(...step.inverse);
             }
-            return { next, ops: patchToOp(next, entry.patches), ...entry };
+            return { next, ops: patchToOp(base, next, entry.patches), ...entry };
         };
         // Workbook's handleUndo and handleRedo: the entry's writes that still apply, and the batch they ship.
         const replay = (ctx: Context, patches: Patch[]) => {
             const kept = withoutDeletedFloatingEdits(ctx, patches);
             const next = applyPatches(ctx, kept);
-            return { next, ops: patchToOp(next, kept) };
+            return { next, ops: patchToOp(ctx, next, kept) };
         };
         const base = workbook();
         const deleted = merged(

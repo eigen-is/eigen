@@ -126,8 +126,8 @@ export function stepNewestEntry(
 
 export function undoEntry(ctx: Context, { options, patches, inversePatches }: History): Step {
     const { addedSheet, deletedSheet, renamedSheet } = options;
-    if (deletedSheet) return sheetStep(ctx, (sheets) => addSheetOps(deletedSheet, sheets), inversePatches);
-    if (addedSheet) return sheetStep(ctx, (sheets) => deleteSheetOps(addedSheet, sheets));
+    if (deletedSheet) return sheetStep(ctx, (after) => addSheetOps(deletedSheet, ctx.sheets, after), inversePatches);
+    if (addedSheet) return sheetStep(ctx, (after) => deleteSheetOps(addedSheet, ctx.sheets, after));
     if (renamedSheet) return batchStep(ctx, renameSheetOps(renamedSheet.id, renamedSheet.from));
     const marker = rowColMarker(inverseRowColOptions(options));
     if (marker) return undoRowCol(ctx, marker, inversePatches);
@@ -136,8 +136,8 @@ export function undoEntry(ctx: Context, { options, patches, inversePatches }: Hi
 
 export function redoEntry(ctx: Context, { options, patches, inversePatches }: History): Step {
     const { addedSheet, deletedSheet, renamedSheet } = options;
-    if (deletedSheet) return sheetStep(ctx, (sheets) => deleteSheetOps(deletedSheet, sheets));
-    if (addedSheet) return sheetStep(ctx, (sheets) => addSheetOps(addedSheet, sheets));
+    if (deletedSheet) return sheetStep(ctx, (after) => deleteSheetOps(deletedSheet, ctx.sheets, after));
+    if (addedSheet) return sheetStep(ctx, (after) => addSheetOps(addedSheet, ctx.sheets, after));
     if (renamedSheet) return batchStep(ctx, renameSheetOps(renamedSheet.id, renamedSheet.to));
     const marker = rowColMarker(options);
     if (marker) return batchStep(ctx, [marker]);
@@ -161,8 +161,8 @@ function batchStep(ctx: Context, ops: Op[]): Step {
 
 // A sheet comes back, or goes, through applyOpBatch, as a peer's would, with what its delete rewrote on the other
 // sheets. The step is the author here, so it moves the other sheets' orders itself, and the batch it sends carries the
-// orders it left.
-function sheetStep(ctx: Context, batch: (sheets: Sheet[]) => Op[], recorded: Patch[] = []): Step {
+// orders it moved.
+function sheetStep(ctx: Context, batch: (after: Sheet[]) => Op[], recorded: Patch[] = []): Step {
     const [sheetOp] = batch(ctx.sheets);
     const restored = restoredOps(ctx.sheets, recorded);
     const applied = applyOpBatch(ctx, [sheetOp, ...restored]);
@@ -193,7 +193,7 @@ function patchStep(ctx: Context, apply: Patch[], written: Patch[]): Step {
     const restored = produce(applyPatches(ctx, patches), settleCurrentSheet);
     restored.formulaCache.followPatches(restored, patches);
     const [next, recalculated] = produceWithPatches(restored, (draft: Context) => recalculate(draft, patches));
-    return { ctx: next, ops: patchToOp(next, [...patches, ...filterPatch(recalculated)]) };
+    return { ctx: next, ops: patchToOp(ctx, next, [...patches, ...filterPatch(recalculated)]) };
 }
 
 // The patches without the value and display text the engine computes for a cell that holds a formula once they apply.

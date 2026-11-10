@@ -10,7 +10,6 @@ import { dataToCelldata } from '../../engine/celldata';
 import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
 import type { Context } from '../context';
 import type { Op, Sheet } from '../types';
-import { sheetOrder } from '.';
 
 type RowColOptions = {
     insertRowColOp?: InsertRowColOp;
@@ -46,10 +45,10 @@ export function renameSheetOps(id: string, name: string): Op[] {
 
 // The batch an edit sends. A sheet or row op ships its marker instead of the sheets it rewrote, because every reader
 // recomputes, and a value it shipped could land on a cell a peer has since moved or written.
-export function patchToOp(ctx: Context, patches: Patch[], options: EntryOptions = {}): Op[] {
+export function patchToOp(base: Context, ctx: Context, patches: Patch[], options: EntryOptions = {}): Op[] {
     if (options.renamedSheet) return renameSheetOps(options.renamedSheet.id, options.renamedSheet.to);
-    if (options.deletedSheet) return deleteSheetOps(options.deletedSheet, ctx.sheets);
-    if (options.addedSheet) return addSheetOps(options.addedSheet, ctx.sheets);
+    if (options.deletedSheet) return deleteSheetOps(options.deletedSheet, base.sheets, ctx.sheets);
+    if (options.addedSheet) return addSheetOps(options.addedSheet, base.sheets, ctx.sheets);
     const marker = rowColMarker(options);
     if (marker) return [marker];
     const ops = patches.map((p) => {
@@ -81,21 +80,22 @@ export function deleteMarker(op: DeleteRowColOp): Op {
     return { op: 'deleteRowCol', id: op.id, path: [], value: op };
 }
 
-// A sheet add as a batch: the sheet as stored, then the order of each sheet at or past its place. A peer and a joiner's
-// replay only add the sheet, so the orders come from the batch.
-export function addSheetOps(added: Sheet, sheets: readonly Sheet[]): Op[] {
-    return [{ op: 'addSheet', id: added.id, path: [], value: storedCopy(added) }, ...orderOps(added, sheets)];
+// A sheet add as a batch: the sheet as stored, then the order of each other sheet the add changed from `before` to
+// `after`. A peer and a joiner's replay only add the sheet, so the orders come from the batch.
+export function addSheetOps(added: Sheet, before: readonly Sheet[], after: readonly Sheet[]): Op[] {
+    return [{ op: 'addSheet', id: added.id, path: [], value: storedCopy(added) }, ...orderOps(before, after)];
 }
 
-// A sheet delete as a batch, for the same reason with the orders `sheets` hold once it was deleted.
-export function deleteSheetOps(deleted: Sheet, sheets: readonly Sheet[]): Op[] {
-    return [{ op: 'deleteSheet', id: deleted.id, path: [], value: { id: deleted.id } }, ...orderOps(deleted, sheets)];
+// A sheet delete as a batch, for the same reason with the orders the delete changed.
+export function deleteSheetOps(deleted: Sheet, before: readonly Sheet[], after: readonly Sheet[]): Op[] {
+    return [{ op: 'deleteSheet', id: deleted.id, path: [], value: { id: deleted.id } }, ...orderOps(before, after)];
 }
 
-function orderOps(changed: Sheet, sheets: readonly Sheet[]): Op[] {
-    const from = sheetOrder(changed);
-    return sheets
-        .filter((sheet) => sheet.id !== changed.id && sheetOrder(sheet) >= from)
+// Every order that changed and no other: an unchanged order it sent would undo a peer's move sent at the same time.
+function orderOps(before: readonly Sheet[], after: readonly Sheet[]): Op[] {
+    const was = new Map(before.map((sheet) => [sheet.id, sheet.order]));
+    return after
+        .filter((sheet) => was.has(sheet.id) && was.get(sheet.id) !== sheet.order)
         .map((sheet): Op => ({ op: 'replace', id: sheet.id, path: ['order'], value: sheet.order }));
 }
 

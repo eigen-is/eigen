@@ -242,12 +242,13 @@ describe('sheet order on a copy, an add and a delete', () => {
     });
 
     test("a blank sheet has its cell matrix inside the add's own recipe, and its add sends none", () => {
-        const [next, patches] = produceWithPatches(threeSheets(), (draft: Context) => addSheet(draft));
+        const base = threeSheets();
+        const [next, patches] = produceWithPatches(base, (draft: Context) => addSheet(draft));
         const added = next.sheets[3];
         expect(next.currentSheetId).toBe(added.id);
         expect(added.data).toHaveLength(DEFAULT_SHEET_ROW_COUNT);
         expect(added.data?.[0]).toHaveLength(DEFAULT_SHEET_COLUMN_COUNT);
-        const [{ value }] = patchToOp(next, filterPatch(patches), { addedSheet: added });
+        const [{ value }] = patchToOp(base, next, filterPatch(patches), { addedSheet: added });
         expect(value.data).toBeUndefined();
         expect(value.celldata).toEqual([]);
     });

@@ -984,6 +984,48 @@ describe('a structural undo or redo applies exactly what it sends', () => {
     });
 });
 
+// Two tabs that add or delete a sheet before the other's batch arrives leave two sheets on one order, or a gap. The log
+// puts A's batch first, so B applies the log again from before its own.
+describe('sheet orders after two tabs change the sheet list at once', () => {
+    const tabOrder = (sheets: readonly LibSheet[]) => sheets.toSorted(byOrder).map((s) => s.id);
+    const orders = (sheets: readonly LibSheet[]) => sheets.map((s) => [s.id, s.order]);
+
+    function atOnce(onA: Structural, onB: Structural) {
+        const base = workbook();
+        const s = session(base);
+        const fromA = tabEdit(s.a, ...onA);
+        const fromB = tabEdit(tab(base), ...onB);
+        s.batches.push(fromA, fromB);
+        tabReceive(s.a, fromB);
+        for (const batch of s.batches) tabReceive(s.b, batch);
+        expectAgree(s);
+        return s;
+    }
+
+    const added = (id: string): Structural => [(ctx) => addSheet(ctx, id, id), { addSheetOp: true }];
+
+    test.each<[string, () => ReturnType<typeof session>, Structural]>([
+        ['two adds, then a delete of one', () => atOnce(added('X'), added('Y')), removeSheet('X')],
+        [
+            'two deletes, then a copy',
+            () => atOnce(removeSheet(ONE), removeSheet(TWO)),
+            [(ctx) => copySheet(ctx, THREE), { addSheetOp: true }],
+        ],
+    ])('%s: every reader holds the same orders, and undo and redo bring them back', (_, start, edit) => {
+        const s = start();
+        const before = tabOrder(s.a.ctx.sheets);
+        s.edit(s.a, ...edit);
+        expectAgree(s);
+        const after = orders(s.a.ctx.sheets);
+        s.undo(s.a);
+        expectAgree(s);
+        expect(tabOrder(s.a.ctx.sheets)).toEqual(before);
+        s.redo(s.a);
+        expectAgree(s);
+        expect(orders(s.a.ctx.sheets)).toEqual(after);
+    });
+});
+
 // A row, column or sheet entry holds whole cell matrices, so the stack keeps fewer of those than of the rest.
 describe('the undo stack keeps the newest entries', () => {
     test('the newest 200', () => {
@@ -1313,6 +1355,23 @@ describe('validation rules on two tabs and a joiner', () => {
         );
         for (const validations of [rules(a), rules(b), joined]) expect(Object.keys(validations ?? {})).toEqual(['a']);
         expect(joined).toEqual(rules(b));
+    });
+
+    // The undo of a delete sends the rule the delete took whole under its own id, so a rule B added meanwhile stays.
+    test('an undo of a row delete that took a rule keeps a rule a peer added meanwhile', () => {
+        const s = session(ruled());
+        s.edit(s.a, apply([4, 5], [0, 0], TICKS));
+        s.edit(s.a, ...deleteRows(3, 6));
+        const fromB = tabEdit(s.b, apply([0, 1], [3, 3], TICKS));
+        const step = tabUndo(s.a);
+        tabReceive(s.a, fromB);
+        tabReceive(s.b, step);
+        const joined = join(ruled(), [...s.batches, fromB, step])[0].dataValidations;
+        for (const validations of [rules(s.a), rules(s.b), joined]) {
+            expect(validationAt(validations, 0, 3)?.type).toBe('checkbox');
+            expect(validationAt(validations, 4, 0)?.type).toBe('checkbox');
+        }
+        expect(joined).toEqual(rules(s.b));
     });
 
     test('an undo of a row insert keeps a cut of a rule the peer sent at once', () => {
