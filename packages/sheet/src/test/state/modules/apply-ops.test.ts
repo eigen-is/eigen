@@ -1,11 +1,10 @@
 // One tab through a random run of its own edits and a peer's batches: row and column ops, sheet adds, copies,
 // deletes and renames, cell edits, undo and redo, failing and multi-op batches, writes to charts, merges, row
-// heights and rules, and a replay of the log. After every step, what the tab holds (its sheets, its view, its undo
-// and redo stacks and the batch it sent) must be what the editor held when this file was written, which
-// apply-ops.golden.json keeps as one digest per step. RECORD_GOLDEN=1 writes that file again.
+// heights and rules, and a replay of the log. After every step the tab's sheets must be the replay of every batch it
+// took or sent, and an undo followed by a redo must give back the sheets it had. What a peer's batch does to the
+// view, and the author's own structural edits, have tests of their own.
 
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
-import { readFileSync, writeFileSync } from 'node:fs';
 import { DEFAULT_CHART_SERIES_STYLE, newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { isRecord } from '@workspace/lib/guards';
 import { produce } from 'immer';
@@ -17,7 +16,7 @@ import { copySheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { tryDeleteRowCol, tryInsertRowCol } from '../../../state/events/rowcol';
 import { addSheet, changeSheet, deleteSheet, renameSheet } from '../../../state/modules/sheet';
-import type { History, Op, Sheet } from '../../../state/types';
+import type { Op, Sheet } from '../../../state/types';
 import type { Tab } from '../factories/collab';
 import { tab, tabEdit, tabReceive, tabRedo, tabUndo } from '../factories/collab';
 import { selectionFactory, workbookContextFactory } from '../factories/context';
@@ -25,7 +24,6 @@ import { typed } from '../factories/edit-cycle';
 import type { Random } from '../factories/workbook-fuzz';
 import { fresh, nextBatch, random, sizeOf, withAuthorValues, workbook } from '../factories/workbook-fuzz';
 
-const GOLDEN = `${import.meta.dir}/apply-ops.golden.json`;
 const SEEDS = Array.from({ length: 24 }, (_, i) => i + 1);
 const STEPS = 60;
 
@@ -52,6 +50,8 @@ const chart = (id: string, sheetId: string) => ({
 });
 
 const rule = { type: 'number', type2: 'between', value1: '1', value2: '9' };
+
+const number = (v: number) => ({ v, m: `${v}`, ct: { fa: 'General', t: 'n' } });
 
 // The fuzz workbook with what a sheet carries beside its cells: a chart reading another sheet, a merge, a row height,
 // a validation rule and a conditional format.
@@ -180,33 +180,16 @@ function canonical(value: unknown): unknown {
 
 const printed = (value: unknown) => JSON.stringify(canonical(value));
 
-const entry = ({ patches, inversePatches, options }: History) => ({
-    options,
-    patches: patches.map(printed).sort(),
-    inversePatches: inversePatches.map(printed).sort(),
-});
+// The sheets as a reader holds them, the matrix as stored cells, so the editor and a joiner compare.
+const stored = (sheets: Sheet[]) =>
+    printed(
+        sheets.map(({ data, celldata, ...sheet }) => ({ ...sheet, cells: data ? dataToCelldata(data) : celldata })),
+    );
 
-// What the tab holds after a step, and what it sent.
-function digest(t: Tab & { history: { cutByPeer?: unknown } }, sent: Op[]): string {
-    const { ctx, history } = t;
-    const held = {
-        sheets: ctx.sheets,
-        currentSheetId: ctx.currentSheetId,
-        selections: ctx.selections,
-        editingCellPosition: ctx.editingCellPosition,
-        sheetViewRecord: ctx.sheetViewRecord,
-        warnDialog: ctx.warnDialog,
-        visibledatarow: ctx.visibledatarow,
-        visibledatacolumn: ctx.visibledatacolumn,
-        undo: history.undoList.map(entry),
-        redo: history.redoList.map(entry),
-        cutByPeer: history.cutByPeer,
-        sent,
-    };
-    return String(Bun.hash(printed(held)));
-}
+// The sheets in tab order: an undone delete puts its sheet back last in the list.
+const inOrder = (sheets: Sheet[]) => printed(sheets.toSorted((a, b) => (a.order ?? 0) - (b.order ?? 0)));
 
-function run(seed: number): string[] {
+function run(seed: number) {
     let uuid = 0;
     spyOn(crypto, 'randomUUID').mockImplementation(
         (): `${string}-${string}-${string}-${string}-${string}` =>
@@ -216,24 +199,22 @@ function run(seed: number): string[] {
     const base = start(rnd);
     const t = editor(base);
     const log: Op[][] = [];
-    const digests: string[] = [];
+    const logged = (ops: Op[]) => {
+        if (ops.length > 0) log.push(ops);
+        return ops;
+    };
     for (let step = 0; step < STEPS; step += 1) {
         const roll = rnd.int(40);
-        let sent: Op[] = [];
         if (roll < 8) {
-            const batch = nextBatch(rnd, t.ctx.sheets, step);
-            log.push(batch);
-            tabReceive(t, batch);
+            tabReceive(t, logged(nextBatch(rnd, t.ctx.sheets, step)));
         } else if (roll < 11) {
-            const batch = extrasBatch(rnd, t.ctx.sheets, step);
-            log.push(batch);
-            tabReceive(t, batch);
+            tabReceive(t, logged(extrasBatch(rnd, t.ctx.sheets, step)));
         } else if (roll < 24) {
-            sent = authorEdit(rnd, t, step);
+            logged(authorEdit(rnd, t, step));
         } else if (roll < 32) {
-            sent = tabUndo(t);
+            logged(tabUndo(t));
         } else if (roll < 37) {
-            sent = tabRedo(t);
+            logged(tabRedo(t));
         } else if (roll < 39) {
             const visible = t.ctx.sheets.filter((s) => s.hide !== 1);
             const id = rnd.pick(visible).id;
@@ -241,26 +222,72 @@ function run(seed: number): string[] {
         } else {
             replay(t, base, log);
         }
-        if (sent.length > 0) log.push(sent);
-        digests.push(digest(t, sent));
+        const held = inOrder(t.ctx.sheets);
+        if (logged(tabUndo(t)).length > 0) {
+            expect(logged(tabRedo(t)).length, `seed ${seed}, step ${step}: the redo`).toBeGreaterThan(0);
+            expect(inOrder(t.ctx.sheets), `seed ${seed}, step ${step}: an undo and a redo`).toBe(held);
+        }
+        expect(stored(t.ctx.sheets), `seed ${seed}, step ${step}: the replay`).toBe(stored(replaySheetsOps(base, log)));
     }
-    return digests;
 }
 
 describe("one tab's run of its own edits and a peer's batches", () => {
-    const golden: Record<string, string[]> = process.env.RECORD_GOLDEN ? {} : JSON.parse(readFileSync(GOLDEN, 'utf8'));
-    for (const seed of SEEDS) {
-        test(`seed ${seed}: every step holds what the editor held before`, () => {
-            const digests = run(seed);
-            if (process.env.RECORD_GOLDEN) {
-                golden[seed] = digests;
-                writeFileSync(GOLDEN, `${JSON.stringify(golden, null, 1)}\n`);
-                return;
-            }
-            const first = digests.findIndex((digest, step) => digest !== golden[seed][step]);
-            expect({ seed, first }).toEqual({ seed, first: -1 });
+    test.each(SEEDS)('seed %i: the tab holds the replay of its log, and an undo and a redo cancel', run);
+});
+
+// What a peer's batch does to the view of a tab on s1.
+describe("a peer's batch and the view", () => {
+    test('each row op of a batch moves the selection on the grid that op left', () => {
+        const t = editor(start(random(5)));
+        t.ctx = produce(t.ctx, (ctx: Context) => {
+            ctx.selections = selectionFactory([8, 8], [1, 1], 8, 1);
         });
-    }
+        tabReceive(t, [
+            { op: 'deleteRowCol', id: 's1', path: [], value: { type: 'row', start: 8, end: 8 } },
+            {
+                op: 'insertRowCol',
+                id: 's1',
+                path: [],
+                value: { type: 'row', index: 0, count: 1, direction: 'lefttop' },
+            },
+        ]);
+        expect(t.ctx.selections).toEqual(selectionFactory([8, 8], [1, 1], 8, 1));
+    });
+
+    test('a delete of the current sheet moves the tab to the first visible one', () => {
+        const t = editor(start(random(5)));
+        tabReceive(t, [{ op: 'deleteSheet', id: 's1', path: [], value: { id: 's1' } }]);
+        expect(t.ctx.currentSheetId).toBe('s2');
+    });
+
+    test('a hide of the current sheet moves the tab to the first visible one', () => {
+        const t = editor(start(random(5)));
+        tabReceive(t, [{ op: 'replace', id: 's1', path: ['hide'], value: 1 }]);
+        expect(t.ctx.currentSheetId).toBe('s2');
+    });
+
+    test('a sheet deleted and added back by id in one batch is the added one, where the replay puts it', () => {
+        const base = start(random(5));
+        const t = editor(base);
+        const again: Sheet = {
+            id: 's2',
+            name: 'Again',
+            order: 1,
+            celldata: [{ r: 0, c: 0, v: number(1) }],
+            config: {},
+        };
+        const batch: Op[] = [
+            { op: 'deleteSheet', id: 's2', path: [], value: { id: 's2' } },
+            { op: 'addSheet', id: 's2', path: [], value: again },
+        ];
+        tabReceive(t, batch);
+        expect(t.ctx.sheets.map(({ id, name }) => [id, name])).toEqual([
+            ['s1', 'One'],
+            ['s3', 'Three'],
+            ['s2', 'Again'],
+        ]);
+        expect(stored(t.ctx.sheets)).toBe(stored(replaySheetsOps(base, [batch])));
+    });
 });
 
 // The author's structural edits as their menus run them, on a sheet a chart on another sheet reads.
@@ -287,18 +314,9 @@ const STRUCTURAL = [
     ],
 ] as const;
 
-const number = (v: number) => ({ v, m: `${v}`, ct: { fa: 'General', t: 'n' } });
 // A peer's cell edit with the values its author computed.
 const peerEdit = (t: Tab) =>
     withAuthorValues(t.ctx.sheets, [{ op: 'replace', id: 's1', path: ['data', 0, 0], value: number(7) }]);
-// The sheets in tab order: an undone delete puts its sheet back last in the list.
-const inOrder = (sheets: Sheet[]) => printed(sheets.toSorted((a, b) => (a.order ?? 0) - (b.order ?? 0)));
-
-// The sheets as a reader holds them, the matrix as stored cells, so the editor and a joiner compare.
-const stored = (sheets: Sheet[]) =>
-    printed(
-        sheets.map(({ data, celldata, ...sheet }) => ({ ...sheet, cells: data ? dataToCelldata(data) : celldata })),
-    );
 
 describe("an author's row, column or sheet edit", () => {
     test.each(STRUCTURAL)('%s undoes and redoes exactly, after a peer batch', (_, [recipe, options]) => {

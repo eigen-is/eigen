@@ -151,6 +151,13 @@ export function withAuthorValues(sheets: Sheet[], ops: Op[]): Op[] {
 export function nextBatch(rnd: Random, sheets: Sheet[], step: number): Op[] {
     const roll = rnd.int(20);
     const byId = (id: string) => sheets.find((s) => s.id === id);
+    // A delete carries the orders it moved, as its author sends them, so the tab strip has no gap.
+    const deleted = (id: string): Op[] => {
+        const order = byId(id)?.order ?? 0;
+        const after = sheets.filter((s) => (s.order ?? 0) > order);
+        const orders = after.map((s): Op => ({ op: 'replace', id: s.id, path: ['order'], value: (s.order ?? 0) - 1 }));
+        return [{ op: 'deleteSheet', id, path: [] }, ...orders];
+    };
     if (roll === 0 && byId('s2')) {
         const name = byId('s2')?.name === 'Two' ? 'Second sheet' : 'Two';
         return [{ op: 'renameSheet', id: 's2', path: [], value: { name } }];
@@ -164,12 +171,12 @@ export function nextBatch(rnd: Random, sheets: Sheet[], step: number): Op[] {
             { f: formulaFor(rnd, names, names.length, 2) },
         ]);
         // A sheet arrives with its values, as a duplicate or an imported tab does.
-        const added: Sheet = { id: 's4', name: 'Extra', order: sheets.length, data, config: {} };
+        const added: Sheet = { id: 's4', name: 'Extra', order: sheets.length, row: 3, column: 3, data, config: {} };
         const [value] = fresh([...sheets, added]).slice(-1);
         return [{ op: 'addSheet', path: [], value }];
     }
-    if (roll === 2 && byId('s4')) return [{ op: 'deleteSheet', id: 's4', path: [] }];
-    if (roll === 3 && byId('s3') && step > 20) return [{ op: 'deleteSheet', id: 's3', path: [] }];
+    if (roll === 2 && byId('s4')) return deleted('s4');
+    if (roll === 3 && byId('s3') && step > 20) return deleted('s3');
     if (roll < 9) return withAuthorValues(sheets, cellOps(rnd, sheets));
     const ops = [rowColOp(rnd, rnd.pick(sheets))];
     // A structural undo or redo can send several row or column ops at once.

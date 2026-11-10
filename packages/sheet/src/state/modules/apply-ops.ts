@@ -50,13 +50,17 @@ export function applyBatch(ctx: Context, ops: Op[], moveView = true): AppliedRow
     // A new graph means the sheets' names may read other sheets now, so the references resolved by name go too.
     if (applied.graph !== formulaCache.graph) formulaCache.forgetGraph();
     formulaCache.graph = applied.graph;
-    writeSheets(ctx, sheets, applied.sheets);
+    writeSheets(ctx, ops, sheets, applied.sheets);
     const moved = applied.moved.map(({ op, sheets: before }) => ({
         move: 'index' in op ? insertMove(op) : deleteMove(op),
         sheets: before,
     }));
     if (!moveView) return moved;
-    for (const { move } of moved) followView(ctx, move);
+    // Each op moves the view on the grid it left, which the next op starts from.
+    for (const [i, { move }] of moved.entries()) {
+        const after = moved[i + 1]?.sheets ?? applied.sheets;
+        followView(ctx, move, after.find(({ id }) => id === move.id)?.data);
+    }
     const [first] = ops;
     if (getSheetIndex(ctx, ctx.currentSheetId) == null) leaveCurrentSheet(ctx);
     else if (first?.path[0] === 'hide' && first.id === ctx.currentSheetId) leaveCurrentSheet(ctx, first.id);
@@ -72,18 +76,22 @@ const WRITTEN_BY_ENTRY = new Map([
 
 // Writes what the batch changed into the context field by field, so the undo entry immer records puts back only that
 // and leaves a peer's later changes alone. `before` is the plain view of the sheets the batch started from. A sheet
-// the batch deleted leaves the list, and one it added joins it last, as the engine orders them.
-function writeSheets(ctx: Context, before: readonly Sheet[], after: readonly Sheet[]) {
-    const kept = new Set(after.map(({ id }) => id));
-    for (let i = ctx.sheets.length - 1; i >= 0; i -= 1) if (!kept.has(ctx.sheets[i].id)) ctx.sheets.splice(i, 1);
-    const was = new Map(before.map((sheet) => [sheet.id, sheet]));
-    for (const [i, next] of after.entries()) {
-        const old = was.get(next.id);
-        if (old) {
-            writeChanges(ctx.sheets[i], old, next, (field) => WRITTEN_BY_ENTRY.get(field));
-            continue;
-        }
-        const added = { ...next };
+// the batch deleted leaves the list, even when the batch adds its id back, and one it added joins it last, as the
+// engine orders them.
+function writeSheets(ctx: Context, ops: readonly Op[], before: readonly Sheet[], after: readonly Sheet[]) {
+    const deleted = new Set(ops.flatMap(({ op, id }) => (op === 'deleteSheet' && id ? [id] : [])));
+    const was = new Map(before.filter(({ id }) => !deleted.has(id)).map((sheet) => [sheet.id, sheet]));
+    const now = new Map(after.map((sheet) => [sheet.id, sheet]));
+    for (let i = ctx.sheets.length - 1; i >= 0; i -= 1) {
+        const target = ctx.sheets[i];
+        const old = was.get(target.id);
+        const next = now.get(target.id);
+        if (old && next) writeChanges(target, old, next, (field) => WRITTEN_BY_ENTRY.get(field));
+        else ctx.sheets.splice(i, 1);
+    }
+    for (const sheet of after) {
+        if (was.has(sheet.id)) continue;
+        const added = { ...sheet };
         initSheetData(added);
         ctx.sheets.push(added);
     }
