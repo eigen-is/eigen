@@ -98,9 +98,9 @@ export function viewerTimeZone(): string {
     return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
-// Intl knows no Windows zone name, and dropping one expands an Outlook series in UTC, breaking its wall time at the next
-// DST change. Intl reads a zone in any case, so one spelling per zone leaves here and a server's formatters stop at the
-// zone count.
+// Intl knows no Windows zone name, and dropping one expands an Outlook series in UTC, breaking its wall time at the
+// next DST change. Intl reads a zone in any case, so one spelling per zone leaves here and a server's formatters stop
+// at the zone count.
 const ZONE_ANSWERS = new Map<string, string | null>();
 const MAX_ZONE_ANSWERS = 64;
 
@@ -328,7 +328,7 @@ export function seriesEditFromOccurrence(
 
     const startDelta = edited.startTime.getTime() - occurrence.startTime.getTime();
     const endDelta = edited.endTime.getTime() - occurrence.endTime.getTime();
-    // A timed series turning all-day restates both bounds, because midnight-UTC bounds mean nothing beside the old ones.
+    // A timed series turning all-day restates both bounds: midnight-UTC bounds mean nothing beside the old ones.
     const allDayChanged = edited.allDay !== occurrence.allDay;
     if (allDayChanged) patch.allDay = edited.allDay;
     if (startDelta !== 0 || allDayChanged) patch.startTime = new Date(master.startTime.getTime() + startDelta);
