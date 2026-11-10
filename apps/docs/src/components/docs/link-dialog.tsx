@@ -5,7 +5,7 @@
 
 import { getMarkRange } from '@tiptap/core';
 import type { Editor } from '@tiptap/react';
-import { webLinkHref } from '@workspace/lib/sheets/web-link';
+import { webLinkHref } from '@workspace/lib/validation';
 import { FormDialog, FormDialogForm } from '@workspace/ui';
 import { FieldError } from '@workspace/ui/components/field';
 import { Input } from '@workspace/ui/components/input';

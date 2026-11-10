@@ -3,7 +3,7 @@
 // sheet names that sheet, and following it finds the sheet by name. Saving new text writes over the cell, so the
 // formulas that read it recompute.
 
-import { resolveWebLink, webLinkHref } from '@workspace/lib/sheets/web-link';
+import { resolveWebLink, webLinkHref } from '@workspace/lib/validation';
 import { cloneDeep } from 'es-toolkit/compat';
 import { findSheetByName } from '../../engine/a1-notation';
 import { cellValue, dropRuns } from '../../engine/format';

@@ -16,7 +16,7 @@ import {
     SHEET_DEFAULT_FONT,
     SHEET_DEFAULT_FONT_SIZE,
 } from '@workspace/lib/sheets';
-import { resolveWebLink } from '@workspace/lib/sheets/web-link';
+import { resolveWebLink } from '@workspace/lib/validation';
 import { parseA1Range, rangeToA1, toA1, unquoteSheetName, valueIsError } from '@workspace/sheet/engine';
 import { peakRss } from '../lib/document/transform/peak-rss';
 import { lossCounter } from '../lib/document/transform/protocol';

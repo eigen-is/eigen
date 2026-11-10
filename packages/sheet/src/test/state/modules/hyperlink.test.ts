@@ -6,7 +6,7 @@
 // scripting schemes must be unreachable.
 
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
-import { webLinkHref } from '@workspace/lib/sheets/web-link';
+import { webLinkHref } from '@workspace/lib/validation';
 import type { Context } from '../../../state/context';
 import { goToLink, isLinkValid } from '../../../state/modules/hyperlink';
 import { contextFactory } from '../factories/context';

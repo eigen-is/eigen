@@ -13,7 +13,7 @@ import {
     sheetColumnsWidth,
     sheetRowsHeight,
 } from '@workspace/lib/sheets';
-import { resolveWebLink } from '@workspace/lib/sheets/web-link';
+import { resolveWebLink } from '@workspace/lib/validation';
 import type { CellResolver, ComputeMap } from '@workspace/sheet/engine';
 import {
     createCfFormulaEvaluator,
