@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { Patch } from 'immer';
 import { applyPatches, produce } from 'immer';
-import { extractDependencies, FormulaGraph } from '../../../engine/formula-graph';
-import { sheetFinder } from '../../../engine/parser/helper/cell';
+import { FormulaGraph } from '../../../engine/formula-graph';
 import type { Cell, FormulaDependency } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import { getcellrange, warmFormulaGraph } from '../../../state/modules/formula-exec';
@@ -379,27 +378,49 @@ describe('setFormulaCellInfo — the cells a formula reads', () => {
                 { name: 'a!b', id: 's7', order: 6, data: grid(2, 2) },
             ],
         }) as Context;
-    // The cells the formula reads, through the editor's cache of resolved references.
-    const reads = (ctx: Context, f: string) =>
-        extractDependencies(
-            {
-                findSheet: sheetFinder(ctx.sheets),
-                cellTextToIndexList: ctx.formulaCache.cellTextToIndexList,
-            },
-            f,
-            's1',
-        );
+    // Each cell of the workbook a change in which reaches the formula at row 50, column `at` of Sheet1, which no
+    // range of the cases reaches.
+    const reached = (ctx: Context, graph: FormulaGraph, at: number) => {
+        const formula = graph.formulaAt('s1', 50, at);
+        const cells: string[] = [];
+        for (const { id, data } of ctx.sheets) {
+            const width = Math.max(0, ...(data ?? []).map((row) => row?.length ?? 0));
+            for (let r = 0; r < (data?.length ?? 0); r += 1) {
+                for (let c = 0; c < width; c += 1) {
+                    if (graph.affected(ctx.sheets, [{ id, r, c }]).some((node) => node === formula)) {
+                        cells.push(`${id} ${r} ${c}`);
+                    }
+                }
+            }
+        }
+        return cells.sort();
+    };
+    // The cells of the workbook the ranges cover.
+    const covered = (ctx: Context, ranges: readonly FormulaDependency[]) => {
+        const cells = new Set<string>();
+        for (const { sheetId, row, column } of ranges) {
+            const data = ctx.sheets.find(({ id }) => id === sheetId)?.data ?? [];
+            const width = Math.max(0, ...data.map((line) => line?.length ?? 0));
+            for (let r = row[0]; r <= Math.min(row[1], data.length - 1); r += 1) {
+                for (let c = column[0]; c <= Math.min(column[1], width - 1); c += 1) cells.add(`${sheetId} ${r} ${c}`);
+            }
+        }
+        return [...cells].sort();
+    };
 
-    it.each(cases)('%s', (f, cells) => {
+    it.each(cases)('%s', (f, ranges) => {
         const ctx = workbook();
-        expect(reads(ctx, f)).toEqual(cells);
-        expect(extractDependencies({ findSheet: sheetFinder(ctx.sheets), cellTextToIndexList: {} }, f, 's1')).toEqual(
-            cells,
-        );
+        const graph = new FormulaGraph(ctx.sheets);
+        graph.set('s1', 50, 0, f);
+        expect(reached(ctx, graph, 0)).toEqual(covered(ctx, ranges));
     });
 
     it('reads the same cells with the references it resolved kept from one formula to the next', () => {
         const ctx = workbook();
-        for (const [f, cells] of cases) expect([f, reads(ctx, f)]).toEqual([f, cells]);
+        const graph = new FormulaGraph(ctx.sheets);
+        for (const [i, [f]] of cases.entries()) graph.set('s1', 50, i, f);
+        for (const [i, [f, ranges]] of cases.entries()) {
+            expect([f, reached(ctx, graph, i)]).toEqual([f, covered(ctx, ranges)]);
+        }
     });
 });

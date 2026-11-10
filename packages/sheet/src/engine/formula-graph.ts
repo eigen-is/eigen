@@ -194,15 +194,17 @@ export class FormulaGraph {
         this.index.delete(node.key);
     }
 
-    // Lists the cells a formula reads, each range cut to its sheet's bounds: only a formula cell is looked up, so
-    // `SUM(A1:XFD1048576)` costs about what the sheet spans, not 16 million blocks. The cut keeps the line past the
-    // bounds, where a delete of a sheet's last lines seeds the readers of the lines it took.
+    // Lists the ranges a formula reads: every reference in its text, as Excel lists a cell's precedents, so the range
+    // INDEX picks from covers the reference it returns. Each range is cut to its sheet's bounds and the line past them,
+    // where a delete of the sheet's last lines seeds the readers of what it took: only a formula cell is looked up, so
+    // `SUM(A1:XFD1048576)` costs about what the sheet spans, not 16 million blocks.
     private list(node: FormulaCellInfo): void {
         const listed: FormulaDependency[] = [];
-        for (const dep of extractDependencies(this.walk, node.formula, node.id)) {
-            const cells = cellsOf(dep);
+        walkFormulaRefs(node.formula, (reference) => {
+            const range = resolveCellRange(this.walk, reference, node.id);
+            const cells = range && cellsOf(range);
             const extent = cells && this.extents.get(cells.sheetId);
-            if (cells == null || extent == null) continue;
+            if (cells == null || extent == null) return reference;
             const r1 = Math.min(extent.rows, cells.r1);
             const c1 = Math.min(extent.columns, cells.c1);
             if (r1 < cells.r1 || c1 < cells.c1) {
@@ -216,7 +218,8 @@ export class FormulaGraph {
             if (cells.r0 <= r1 && cells.c0 <= c1) {
                 listed.push({ row: [cells.r0, r1], column: [cells.c0, c1], sheetId: cells.sheetId });
             }
-        }
+            return reference;
+        });
         this.index.set(node.key, listed);
         if (this.index.slots > (this.budgets.maxDependencySlots ?? Number.POSITIVE_INFINITY)) {
             throw new RangeError('Formula ranges past the dependency budget');
@@ -247,18 +250,6 @@ export class FormulaGraph {
         }
         return cells;
     }
-}
-
-// The ranges a formula reads: every reference in its text, as Excel lists a cell's precedents. The reference INDEX
-// returns lies inside its range argument, so that argument covers it.
-export function extractDependencies(walk: WalkContext, formula: string, sheetId: string): FormulaDependency[] {
-    const dependencies: FormulaDependency[] = [];
-    walkFormulaRefs(formula, (reference) => {
-        const range = resolveCellRange(walk, reference, sheetId);
-        if (range != null) dependencies.push(range);
-        return reference;
-    });
-    return dependencies;
 }
 
 // The bounds a sheet's ranges are cut to: its rows and columns, each rounded up by at most an eighth, so a row op that

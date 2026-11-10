@@ -2,8 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { Cell, Sheet } from '@workspace/lib/sheets';
 import { createArrayResolver } from '../../engine/cell-resolver';
 import { FormulaEngine } from '../../engine/formula-engine';
-import { extractDependencies, FormulaGraph } from '../../engine/formula-graph';
-import { sheetFinder } from '../../engine/parser/helper/cell';
+import { FormulaGraph } from '../../engine/formula-graph';
 import type { RecalcBudgets, RecomputeSeeds } from '../../engine/recalc';
 import { recalcSheets, recomputeAfter } from '../../engine/recalc';
 
@@ -605,33 +604,42 @@ describe('engine/recalc — recalcSheets', () => {
     });
 });
 
-describe('engine/recalc — extractDependencies', () => {
-    const walkOver = (sheets: Pick<Sheet, 'id' | 'name' | 'data'>[]) => ({
-        findSheet: sheetFinder(sheets),
-        cellTextToIndexList: {},
-    });
+describe('engine/recalc — the cells a formula reads', () => {
+    type Grid = { id: string; name: string; data: (Cell | null)[][] };
+    // The cells of `sheets` a change in which reaches `formula`, held at a cell of s1 no range here reaches.
+    const reached = (sheets: Grid[], formula: string, sheetId = 's1') => {
+        const graph = new FormulaGraph(sheets);
+        graph.set(sheetId, 99, 99, formula);
+        const cells: string[] = [];
+        for (const { id, data } of sheets) {
+            for (const [r, row] of data.entries()) {
+                for (const c of row.keys()) {
+                    if (graph.affected(sheets, [{ id, r, c }]).length > 0) cells.push(`${id} ${r} ${c}`);
+                }
+            }
+        }
+        return cells;
+    };
 
     // The walk is linear in the text, so a crafted file can't make it quadratic.
     test('walks a 2 MB formula of quoted sheet names in well under a second', () => {
-        const g = walkOver([{ id: 's2', name: 'My Data', data: [[num(1)]] }]);
+        const sheets = [{ id: 's2', name: 'My Data', data: [[num(1)]] }];
         const f = `=${"'My Data'!A1+".repeat(160_000)}1`;
         expect(f.length).toBeGreaterThan(2_000_000);
         const start = performance.now();
-        const deps = extractDependencies(g, f, 's1');
+        expect(reached(sheets, f)).toEqual(['s2 0 0']);
         expect(performance.now() - start).toBeLessThan(1_000);
-        expect(deps).toHaveLength(160_000);
-        expect(deps[0]).toEqual({ row: [0, 0], column: [0, 0], sheetId: 's2' });
     });
 
     test('walks a 1 MB run of letters in well under a second', () => {
-        const g = walkOver([{ id: 's1', name: 'Sheet1', data: [[num(1)]] }]);
+        const sheets = [{ id: 's1', name: 'Sheet1', data: [[num(1)]] }];
         const start = performance.now();
-        expect(extractDependencies(g, `=${'A'.repeat(1_000_000)}`, 's1')).toEqual([]);
+        expect(reached(sheets, `=${'A'.repeat(1_000_000)}`)).toEqual([]);
         expect(performance.now() - start).toBeLessThan(1_000);
     });
 
     // Whatever the engine reads must be listed, or a change in that cell leaves the formula stale. So each formula runs
-    // through the engine over a resolver that records the cells, and the walk has to cover them.
+    // through the engine over a resolver that records the cells, and the graph has to reach the formula from them.
     test.each([
         '=A1 + B1',
         '=SUM(A1 : B2)',
@@ -668,35 +676,22 @@ describe('engine/recalc — extractDependencies', () => {
             data: grid(),
         }));
         const resolver = createArrayResolver(sheets);
-        const read: string[] = [];
+        const read = new Set<string>();
         new FormulaEngine().evaluate(text, 's0', {
             ...resolver,
             getCell(sheetId, row, col) {
-                read.push(`${sheetId} ${row} ${col}`);
+                read.add(`${sheetId} ${row} ${col}`);
                 return resolver.getCell(sheetId, row, col);
             },
         });
-        expect(read.length).toBeGreaterThan(0);
-
-        const listed = new Set<string>();
-        for (const { sheetId, row, column } of extractDependencies(walkOver(sheets), text, 's0')) {
-            for (let r = row[0]; r <= row[1]; r += 1) {
-                for (let c = column[0]; c <= column[1]; c += 1) listed.add(`${sheetId} ${r} ${c}`);
-            }
-        }
-        expect(read.filter((cell) => !listed.has(cell))).toEqual([]);
+        expect(read.size).toBeGreaterThan(0);
+        const listed = new Set(reached(sheets, text, 's0'));
+        expect([...read].filter((cell) => !listed.has(cell))).toEqual([]);
     });
 
     test("a function's name reads as no cell, after an operator or a colon", () => {
-        const data = [[num(1), num(2)]];
-        const g = walkOver([{ id: 's1', name: 'Sheet1', data }]);
-        expect(extractDependencies(g, '=LOG10(A1)+ATAN2(B2,1)', 's1')).toEqual([
-            { row: [0, 0], column: [0, 0], sheetId: 's1' },
-            { row: [1, 1], column: [1, 1], sheetId: 's1' },
-        ]);
-        expect(extractDependencies(g, '=A1:INDEX(B:B,1)', 's1')).toEqual([
-            { row: [0, 0], column: [0, 0], sheetId: 's1' },
-            { row: [0, 1_048_575], column: [1, 1], sheetId: 's1' },
-        ]);
+        const sheets = [{ id: 's1', name: 'Sheet1', data: [0, 1, 2].map(() => [num(1), num(2), num(3)]) }];
+        expect(reached(sheets, '=LOG10(A1)+ATAN2(B2,1)')).toEqual(['s1 0 0', 's1 1 1']);
+        expect(reached(sheets, '=A1:INDEX(B:B,1)')).toEqual(['s1 0 0', 's1 0 1', 's1 1 1', 's1 2 1']);
     });
 });
