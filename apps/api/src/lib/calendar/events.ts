@@ -249,7 +249,7 @@ export async function eraseStoredEvent(
     // dates has no master: it loses one date at a time, and goes whole with its last.
     const parent = existing.parentEventId ? requireEvent(calendar, existing.parentEventId) : undefined;
     const component = storedComponent(calendar, resource);
-    const erased = { ...existing, recurrenceId: storedRecurrenceIds(component).get(existing.recurrenceDate) };
+    const recurrenceId = storedRecurrenceIds(component).get(existing.recurrenceDate);
     const ctx = writeContext(actorIsOrganizer(parent ?? existing));
     const exclusion: VEventEdit = { kind: 'exclusion', event: existing, ctx };
     // A cancelled row is the exclusion itself, so deleting it puts the occurrence back.
@@ -259,7 +259,7 @@ export async function eraseStoredEvent(
     else await calendar.purgeResource(resource);
     // A CANCEL names the revision the exclusion was stamped with.
     const sequence = storedRevisions(component).get(existing.recurrenceDate)?.sequence ?? existing.sequence;
-    return { ...erased, sequence };
+    return { ...existing, recurrenceId, sequence };
 }
 
 // The stored component of a resource: the bytes are the truth, so every path that parses them reads them itself.
