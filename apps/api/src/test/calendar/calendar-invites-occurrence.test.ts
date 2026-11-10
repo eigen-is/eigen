@@ -351,6 +351,39 @@ describe('Occurrence edits of an invited series', () => {
         });
     }
 
+    // RFC 5546 § 2.1.4: each CANCEL raises the SEQUENCE. Eigen raises the series', which a guest who never got the date
+    // on its own holds it at, so a CANCEL naming the date's older number could be dropped as stale.
+    test("a cancelled date's CANCEL carries the series' SEQUENCE", async () => {
+        const CAROL = 'carol.cancel-sequence@example.org';
+        const { series, target, attendees } = await seededWithExternal('Weekly Cancel Sequence', CAROL);
+        await moveOccurrence(series, target, 'Cancel Sequence Moved', { attendees });
+        for (const shift of [1, 2]) {
+            const start = new Date(Date.parse(SERIES_START) + (shift * HOUR) / 4);
+            expect(
+                (await putEvent(series.id, { startTime: start, endTime: new Date(start.getTime() + HOUR) })).status,
+            ).toBe(200);
+        }
+        const masterSequence = async () =>
+            findOrFail(await aliceOccurrences(series.uid), (e) => !e.parentEventId).sequence;
+
+        const unmoved = '2027-02-16';
+        const cancelled = await cancelMailTo(CAROL, async () => {
+            await editOccurrence(series.id, unmoved, { title: series.title, status: 'cancelled' });
+            return new Response();
+        });
+        expect(cancelled.ics).toContain(`SEQUENCE:${await masterSequence()}\r\n`);
+
+        const moved = findOrFail(await aliceOccurrences(series.uid), (e) => e.occurrenceDate === target);
+        const deleted = await cancelMailTo(CAROL, () =>
+            authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${moved.id}`,
+                { method: 'DELETE' },
+            ),
+        );
+        expect(deleted.ics).toContain(`SEQUENCE:${await masterSequence()}\r\n`);
+    });
+
     test('a series-wide edit after an occurrence edit keeps the override and moves the master', async () => {
         const { series, target } = await seeded('Weekly Occurrence Then Series');
         const movedStart = new Date(Date.parse(`${target}T09:00:00Z`) + HOUR);
