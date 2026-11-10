@@ -7,10 +7,8 @@ import { includes, isEmpty, trim } from 'es-toolkit/compat';
 import { parseCellInput } from '../../engine/format';
 import type { Cell } from '../../engine/types';
 
-// Reads a pasted <style> block into each rule's declarations, keyed by selector. Office wraps the block in an
-// HTML comment and writes properties a browser's own CSS parser drops, such as mso-rotate, so the paste reads
-// the text itself. A rule for `td.xl65` is filed under `.xl65`. An at-rule such as @page or @media is skipped,
-// with the rules nested inside it.
+// Reads a pasted <style> block into each rule's declarations, keyed by selector. Office writes properties a browser's
+// own CSS parser drops, such as mso-rotate, so the paste reads the text itself.
 export function readStyleRules(css: string): Map<string, Record<string, string>> {
     const rules = new Map<string, Record<string, string>>();
     const text = css
@@ -30,6 +28,7 @@ export function readStyleRules(css: string): Map<string, Record<string, string>>
     return rules;
 }
 
+// One <td> as a cell, its look from its inline style first and its class's rule after.
 export function pastedCell(
     td: HTMLTableCellElement,
     styles: Record<string, string>,
