@@ -19,8 +19,9 @@ import type { EvaluationResult, FormulaCellInfo } from './types';
 type FormulaResult = CellAt & { formula: string; result: EvaluationResult };
 
 // What bounds an untrusted workbook's formulas. Past any of them a pass throws a RangeError, before it evaluates or,
-// for the cells read and the deadline, at the formula after the one that passed it. The deadline is a time on
-// performance.now()'s clock. Without them there is no bound.
+// for the cells read, at the formula after the one that passed it. The deadline is a time on performance.now()'s
+// clock, checked at each formula the graph lists, each cell its walk visits and each formula the pass evaluates.
+// Without them there is no bound.
 export type RecalcBudgets = {
     maxDependencySlots?: number;
     maxDependencyVisits?: number;

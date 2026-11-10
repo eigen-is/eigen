@@ -8,6 +8,7 @@ import type { CellMatrix } from '@workspace/lib/sheets';
 import type { Patch } from 'immer';
 import { getCalculationOrder } from './dependency-graph';
 import { cellsOf, DependencyIndex, packCell } from './dependency-index';
+import { assertBeforeDeadline } from './formula-engine';
 import { walkFormulaRefs } from './formula-shift';
 import type { WalkContext } from './formula-utils';
 import { isFormula, matrixWidth, resolveCellRange } from './formula-utils';
@@ -135,6 +136,7 @@ export class FormulaGraph {
         const visit = ({ id, r, c }: CellAt) => {
             visits += this.index.lookupVisits(id, r, c);
             if (visits > maxDependencyVisits) throw new RangeError('Formula references past the visit budget');
+            assertBeforeDeadline(this.budgets.deadline);
         };
         const affected = new Set<FormulaCellInfo>();
         const join = (node: FormulaCellInfo) => {
@@ -211,6 +213,7 @@ export class FormulaGraph {
         if (this.index.slots > (this.budgets.maxDependencySlots ?? Number.POSITIVE_INFINITY)) {
             throw new RangeError('Formula ranges past the dependency budget');
         }
+        assertBeforeDeadline(this.budgets.deadline);
     }
 
     // A sheet whose bounds changed lists again the formulas whose ranges its old bounds cut.

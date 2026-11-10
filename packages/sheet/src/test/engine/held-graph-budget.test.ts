@@ -50,3 +50,16 @@ test('a recompute past the slot budget is reported, and the next one builds a wh
     expect(reported).toHaveLength(1);
     expect(reported[0]).toBeInstanceOf(SkippedRecompute);
 });
+
+// A batch that starts just before the fold's deadline must stop in the graph build or the walk, before it evaluates.
+test('a graph build past the deadline stops at the next formula it lists', () => {
+    const sheet = { id: 's1', name: 'One', data: [[{ f: '=1+1', v: 2 }], [{ f: '=A1*2', v: 4 }]] };
+    expect(() => new FormulaGraph([sheet], { deadline: performance.now() - 1 })).toThrow(RangeError);
+});
+
+test('a walk past the deadline stops at the next cell it visits', async () => {
+    const sheet = { id: 's1', name: 'One', data: [[n(1)], [n(2)]] };
+    const graph = new FormulaGraph([sheet], { deadline: performance.now() + 5 });
+    await Bun.sleep(10);
+    expect(() => graph.affected([sheet], [{ id: 's1', r: 0, c: 0 }])).toThrow(RangeError);
+});
