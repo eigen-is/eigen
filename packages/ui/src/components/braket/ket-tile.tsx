@@ -29,7 +29,7 @@ export function KetTile({ icon: Icon, title, description, color, className, chil
             <div className="eigen-ket-tile-body flex h-full items-center gap-3 border-y border-l px-3 md:px-4">
                 <Icon className="size-5 shrink-0 md:size-6" style={{ color }} />
                 <div className="min-w-0">
-                    <h3 className="line-clamp-2 font-medium text-sm leading-tight md:text-base">{title}</h3>
+                    <span className="line-clamp-2 font-medium text-sm leading-tight md:text-base">{title}</span>
                     <p className="hidden text-muted-foreground text-xs md:line-clamp-2">{description}</p>
                 </div>
             </div>
