@@ -8,7 +8,7 @@ import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@work
 import { getHome } from '../../lib/home';
 import { parseIcs } from '../../lib/ical';
 import type { ParsedEvent } from '../../lib/ical/ical-parse';
-import { CALENDAR_TEST_ROOT, makeCalendar } from '../calendar-test-helpers';
+import { CALENDAR_TEST_ROOT, makeCalendar, receiveMailed } from '../calendar-test-helpers';
 import { davRequest } from '../dav-test-helpers';
 import { vcal } from '../ics-test-helpers';
 import { assertJson, authedRequest, eventually, findOrFail, getTestContext } from '../setup';
@@ -372,7 +372,7 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
         const harness = await makeCalendar();
         const calendar = harness.instance;
 
-        await calendar.receiveImipRequest(imipOccurrence('One Instance Only', 0, '20280301T100000Z'), IMIP_ORG);
+        await receiveMailed(calendar, imipOccurrence('One Instance Only', 0, '20280301T100000Z'), IMIP_ORG);
 
         const stored = await calendar.getEventsByUid(IMIP_UID);
         expect(stored).toHaveLength(1);
@@ -384,9 +384,9 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
     test('an iMIP series REQUEST with no ORGANIZER leaves the single occurrence alone', async () => {
         const harness = await makeCalendar();
         const calendar = harness.instance;
-        await calendar.receiveImipRequest(imipOccurrence('One Instance Only', 0, '20280301T100000Z'), IMIP_ORG);
+        await receiveMailed(calendar, imipOccurrence('One Instance Only', 0, '20280301T100000Z'), IMIP_ORG);
 
-        await calendar.receiveImipRequest(imipSeries('Whole Series', 1, '20280302T100000Z', []), IMIP_ORG);
+        await receiveMailed(calendar, imipSeries('Whole Series', 1, '20280302T100000Z', []), IMIP_ORG);
 
         const stored = await calendar.getEventsByUid(IMIP_UID);
         expect(stored).toHaveLength(1);
@@ -397,10 +397,10 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
     test('a stale iMIP series REQUEST leaves the newer single occurrence alone', async () => {
         const harness = await makeCalendar();
         const calendar = harness.instance;
-        await calendar.receiveImipRequest(imipOccurrence('One Instance Only', 3, '20280303T100000Z'), IMIP_ORG);
+        await receiveMailed(calendar, imipOccurrence('One Instance Only', 3, '20280303T100000Z'), IMIP_ORG);
 
         const organizer = [`ORGANIZER;CN=Ext Org:mailto:${IMIP_ORG}`];
-        await calendar.receiveImipRequest(imipSeries('Stale Series', 1, '20280301T100000Z', organizer), IMIP_ORG);
+        await receiveMailed(calendar, imipSeries('Stale Series', 1, '20280301T100000Z', organizer), IMIP_ORG);
 
         const stored = await calendar.getEventsByUid(IMIP_UID);
         expect(stored).toHaveLength(1);
@@ -411,19 +411,62 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
     test('the series invitation keeps the reminder the guest set on the occurrence', async () => {
         const harness = await makeCalendar();
         const calendar = harness.instance;
-        await calendar.receiveImipRequest(imipOccurrence('One Instance Only', 0, '20280301T100000Z'), IMIP_ORG);
+        await receiveMailed(calendar, imipOccurrence('One Instance Only', 0, '20280301T100000Z'), IMIP_ORG);
         const occurrenceCopy = (await calendar.getEventsByUid(IMIP_UID))[0];
         await calendar.updateEvent(occurrenceCopy.calendarId, occurrenceCopy.id, {
             data: { ...occurrenceCopy.data, reminders: [{ type: 'notification', minutes: 45 }] },
         });
 
         const organizer = [`ORGANIZER;CN=Ext Org:mailto:${IMIP_ORG}`];
-        await calendar.receiveImipRequest(imipSeries('Whole Series', 1, '20280302T100000Z', organizer), IMIP_ORG);
+        await receiveMailed(calendar, imipSeries('Whole Series', 1, '20280302T100000Z', organizer), IMIP_ORG);
 
         const stored = await calendar.getEventsByUid(IMIP_UID);
         expect(stored).toHaveLength(1);
         expect(stored[0].title).toBe('Whole Series');
         expect(stored[0].data?.reminders).toEqual([{ type: 'notification', minutes: 45 }]);
+    });
+
+    test("the series invitation keeps the guest's answer and row for the occurrence they held", async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const vevent = (lines: string[]) => [
+            'BEGIN:VEVENT',
+            `UID:${IMIP_UID}`,
+            'SEQUENCE:1',
+            'DTSTAMP:20280301T100000Z',
+            `ORGANIZER;CN=Ext Org:mailto:${IMIP_ORG}`,
+            `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${harness.user.email}`,
+            ...lines,
+            'END:VEVENT',
+        ];
+        const moved = vevent([
+            'SUMMARY:Moved',
+            'RECURRENCE-ID:20280313T090000Z',
+            'DTSTART:20280313T110000Z',
+            'DTEND:20280313T120000Z',
+        ]);
+        const series = vevent([
+            'SUMMARY:Whole Series',
+            'DTSTART:20280306T090000Z',
+            'DTEND:20280306T100000Z',
+            'RRULE:FREQ=WEEKLY;COUNT=4',
+        ]);
+        await receiveMailed(calendar, parseIcs(vcal(moved)).events[0], IMIP_ORG);
+        const [held] = await calendar.getEventsByUid(IMIP_UID);
+        await calendar.receiveAttendeeStatus(held.id, harness.user.email, 'accepted');
+
+        await calendar.receiveRequest(parseIcs(vcal(series, moved)).events, {
+            organizerEmail: IMIP_ORG,
+            organizerEventId: IMIP_UID,
+            organizerUserId: `external_${IMIP_ORG}`,
+            createByUserId: `external_${IMIP_ORG}`,
+        });
+
+        const rows = await calendar.getEventsByUid(IMIP_UID);
+        const occurrence = findOrFail(rows, (e) => !!e.parentEventId);
+        expect(rows).toHaveLength(2);
+        expect(occurrence.id).toBe(held.id);
+        expect(occurrence.data?.attendees?.[0]).toMatchObject({ email: harness.user.email, status: 'accepted' });
     });
 
     // The relay carries the same REQUEST, so it is ordered by the same rule.

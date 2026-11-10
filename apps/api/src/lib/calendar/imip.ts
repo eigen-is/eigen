@@ -17,7 +17,7 @@ import type { OutboundICalEvent, OutboundMail } from '../mailer/mailer';
 
 export type Organizer = NonNullable<EventData['organizer']>;
 
-// Above this a body is a mailed calendar export, not a scheduling message, and it does not get to write a Home once per VEVENT.
+// Above this a body is a mailed calendar export, not a scheduling message.
 const IMIP_MAX_EVENTS = 50;
 
 // An answer for one date of a series walks the series from its start to that date, so a REPLY answers this many.
@@ -201,14 +201,28 @@ export async function processInboundImip(
     if (events.length > IMIP_MAX_EVENTS) {
         console.info(`iMIP: acting on the first ${IMIP_MAX_EVENTS} of ${events.length} events from ${sender}`);
     }
+    const acted = events.slice(0, IMIP_MAX_EVENTS);
+    for (const parsed of acted) {
+        if (parsed.endTime < parsed.startTime) parsed.endTime = parsed.startTime;
+    }
+
+    if (method === 'REQUEST') {
+        // A mail may carry several series, and each is one REQUEST: its master and occurrences take one decision.
+        const organizerUserId = externalOwnerId(sender);
+        for (const [uid, requested] of Map.groupBy(acted, (parsed) => parsed.uid)) {
+            await calendar.receiveRequest(requested, {
+                organizerEmail: sender,
+                organizerEventId: uid,
+                organizerUserId,
+                createByUserId: organizerUserId,
+            });
+        }
+        return;
+    }
 
     let replyDates = 0;
-    for (const parsed of events.slice(0, IMIP_MAX_EVENTS)) {
-        if (parsed.endTime < parsed.startTime) parsed.endTime = parsed.startTime;
-
-        if (method === 'REQUEST') {
-            await calendar.receiveImipRequest(parsed, sender);
-        } else if (method === 'CANCEL') {
+    for (const parsed of acted) {
+        if (method === 'CANCEL') {
             const organizerEmail = parsed.data?.organizer?.email;
             if (!sentBy(organizerEmail)) continue;
             if (parsed.recurrenceDate) {

@@ -14,7 +14,7 @@ import type { Home } from '../../lib/home';
 import { getHome } from '../../lib/home/get-home';
 import { buildResource, parseIcs, serializeEventForImip, serializeResource } from '../../lib/ical';
 import { verifyImipSender } from '../../lib/mail/imip-auth';
-import { storedEvents } from '../calendar-test-helpers';
+import { receiveMailed, storedEvents } from '../calendar-test-helpers';
 import { basicAuth } from '../dav-test-helpers';
 import { restoreEnvAfterEach } from '../env-test-helpers';
 import { vcal } from '../ics-test-helpers';
@@ -986,7 +986,8 @@ describe('Calendar timezone read-side degrade (audit P1-7b)', () => {
 
     async function receivePoisonedInvite(uid: string): Promise<string> {
         const home = await getHome(ctx.charlie.user.id);
-        await home.calendar.receiveImipRequest(
+        await receiveMailed(
+            home.calendar,
             {
                 uid,
                 title: `Poisoned ${uid}`,
@@ -1195,6 +1196,53 @@ describe('iMIP inbound sender binding (audit P1-7a)', () => {
         });
 
         expect(await home.calendar.getEventsByUid('imip-large-part@external.com')).toEqual([]);
+    });
+
+    // A mail is decided per UID, not per VEVENT, so neither the order of its events nor a second UID beside them matters.
+    test('a mail listing an override before its master keeps the override, and a second UID files too', async () => {
+        const home = await getHome(ctx.bob.user.id);
+        const vevent = (uid: string, lines: string[]) => [
+            'BEGIN:VEVENT',
+            `UID:${uid}`,
+            'SEQUENCE:0',
+            'DTSTAMP:20260401T100000Z',
+            'ORGANIZER:mailto:organizer@external.com',
+            `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${ctx.bob.user.email}`,
+            ...lines,
+            'END:VEVENT',
+        ];
+        const ics = vcal([
+            'METHOD:REQUEST',
+            ...vevent('override-first@external.com', [
+                'SUMMARY:Moved',
+                'RECURRENCE-ID:20260502T090000Z',
+                'DTSTART:20260502T110000Z',
+                'DTEND:20260502T120000Z',
+            ]),
+            ...vevent('override-first@external.com', [
+                'SUMMARY:Series',
+                'DTSTART:20260501T090000Z',
+                'DTEND:20260501T100000Z',
+                'RRULE:FREQ=DAILY;COUNT=5',
+            ]),
+            ...vevent('beside-it@external.com', [
+                'SUMMARY:Lunch',
+                'DTSTART:20260503T120000Z',
+                'DTEND:20260503T130000Z',
+            ]),
+        ]);
+
+        await processInboundImip(home, calendarMail(ics, 'organizer@external.com'), {
+            verified: true,
+            reason: 'dkim pass',
+        });
+
+        const rows = await home.calendar.getEventsByUid('override-first@external.com');
+        const master = findOrFail(rows, (e) => !e.parentEventId);
+        expect(master.title).toBe('Series');
+        expect(rows.find((e) => e.parentEventId === master.id)?.title).toBe('Moved');
+        expect(rows).toHaveLength(2);
+        expect((await home.calendar.getEventsByUid('beside-it@external.com')).map((e) => e.title)).toEqual(['Lunch']);
     });
 
     test('forged REPLY (envelope From != attendee) does not change the attendee status', async () => {
@@ -2284,7 +2332,8 @@ describe('iMIP inbound self-addressed messages', () => {
             data: { organizer: { userId: ctx.charlie.user.id, email: ctx.charlie.user.email, name: 'Charlie' } },
         });
         // The link a CANCEL binds to, as an earlier self-addressed REQUEST would have left it.
-        await home.calendar.receiveImipRequest(
+        await receiveMailed(
+            home.calendar,
             {
                 uid: `${uid}-linked`,
                 title: 'Still mine',

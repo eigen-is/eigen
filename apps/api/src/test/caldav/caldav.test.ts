@@ -5,7 +5,7 @@ import { EVENT_MAX_BYTES } from '../../lib/calendar/resource-store';
 import { ApiError } from '../../lib/core';
 import { REPORT_DATA_BUDGET_BYTES } from '../../lib/dav/report-row';
 import { getHome } from '../../lib/home/get-home';
-import { storedEvents } from '../calendar-test-helpers';
+import { receiveMailed, storedEvents } from '../calendar-test-helpers';
 import { davRequest } from '../dav-test-helpers';
 import { app, createTestUser, findOrFail, getTestContext } from '../setup';
 
@@ -1765,7 +1765,8 @@ describe('CalDAV', () => {
         test("a copy of somebody else's event keeps its fields and takes only the body's alarms", async () => {
             const uid = 'caldav-linked-copy@external.com';
             const home = await getHome(userId);
-            await home.calendar.receiveImipRequest(
+            await receiveMailed(
+                home.calendar,
                 {
                     uid,
                     title: 'Quarterly review',

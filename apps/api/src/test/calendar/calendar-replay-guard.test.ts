@@ -6,7 +6,7 @@ import { parseIcs } from '../../lib/ical';
 import type { ParsedEvent } from '../../lib/ical/ical-parse';
 import { utcStampString } from '../../lib/ical/ical-parse';
 import { makeSyntheticUser } from '../../lib/user';
-import { CALENDAR_TEST_ROOT, makeCalendar } from '../calendar-test-helpers';
+import { CALENDAR_TEST_ROOT, makeCalendar, receiveMailed } from '../calendar-test-helpers';
 import { vcal } from '../ics-test-helpers';
 
 // RFC 5546 § 2.1.5 orders scheduling messages by SEQUENCE and then DTSTAMP, so a message that arrives out
@@ -72,7 +72,7 @@ async function seeded(): Promise<{ calendar: Calendar; calendarId: string }> {
     const harness = await makeCalendar();
     const calendar = harness.instance;
     const calendarId = (await calendar.getCalendars())[0].id;
-    await calendar.receiveImipRequest(parsedOf(request('Title A', 2, '20260401T100000Z')), ORG);
+    await receiveMailed(calendar, parsedOf(request('Title A', 2, '20260401T100000Z')), ORG);
     return { calendar, calendarId };
 }
 
@@ -119,11 +119,11 @@ describe('inbound message ordering', () => {
     test('iMIP: a REQUEST redelivered behind a newer one at the same SEQUENCE does not revert the title', async () => {
         const { calendar } = await seeded();
 
-        await calendar.receiveImipRequest(parsedOf(request('Title B', 2, '20260401T120000Z')), ORG);
+        await receiveMailed(calendar, parsedOf(request('Title B', 2, '20260401T120000Z')), ORG);
         expect((await masterOf(calendar)).title).toBe('Title B');
 
         // The greylisted copy of the first mail finally lands.
-        await calendar.receiveImipRequest(parsedOf(request('Title A', 2, '20260401T100000Z')), ORG);
+        await receiveMailed(calendar, parsedOf(request('Title A', 2, '20260401T100000Z')), ORG);
 
         expect((await masterOf(calendar)).title).toBe('Title B');
     });
@@ -169,7 +169,7 @@ describe('inbound message ordering', () => {
     test('a genuinely newer REQUEST at the same SEQUENCE still applies', async () => {
         const { calendar } = await seeded();
 
-        await calendar.receiveImipRequest(parsedOf(request('Title B', 2, '20260401T120000Z')), ORG);
+        await receiveMailed(calendar, parsedOf(request('Title B', 2, '20260401T120000Z')), ORG);
 
         expect((await masterOf(calendar)).title).toBe('Title B');
     });
@@ -177,13 +177,10 @@ describe('inbound message ordering', () => {
     test('a newer REQUEST at the same SEQUENCE that only drops the location reaches the guest', async () => {
         const harness = await makeCalendar();
         const calendar = harness.instance;
-        await calendar.receiveImipRequest(
-            parsedOf(request('Title A', 2, '20260401T100000Z', ['LOCATION:Room 9'])),
-            ORG,
-        );
+        await receiveMailed(calendar, parsedOf(request('Title A', 2, '20260401T100000Z', ['LOCATION:Room 9'])), ORG);
         expect((await masterOf(calendar)).location).toBe('Room 9');
 
-        await calendar.receiveImipRequest(parsedOf(request('Title A', 2, '20260401T120000Z')), ORG);
+        await receiveMailed(calendar, parsedOf(request('Title A', 2, '20260401T120000Z')), ORG);
 
         expect((await masterOf(calendar)).location).toBeNull();
     });
@@ -203,7 +200,7 @@ describe('inbound message ordering', () => {
         const { calendar, calendarId } = await seeded();
         const before = (await calendar.getCalendarById(calendarId))!.ctag;
 
-        await calendar.receiveImipRequest(parsedOf(request('Title A', 2, '20260401T100000Z')), ORG);
+        await receiveMailed(calendar, parsedOf(request('Title A', 2, '20260401T100000Z')), ORG);
 
         expect((await calendar.getCalendarById(calendarId))!.ctag).toBe(before);
     });
@@ -244,7 +241,7 @@ describe('inbound message ordering', () => {
             ),
         ).events;
         const deliver = async () => {
-            for (const parsed of series) await calendar.receiveImipRequest(parsed, ORG);
+            for (const parsed of series) await receiveMailed(calendar, parsed, ORG);
         };
         await deliver();
         expect((await calendar.getEventsByUid(UID)).map((e) => e.status)).toEqual([
@@ -264,11 +261,11 @@ describe('inbound message ordering', () => {
     test('an occurrence REQUEST redelivered behind a newer one does not revert the occurrence', async () => {
         const { calendar } = await seeded();
 
-        await calendar.receiveImipRequest(parsedOf(occurrence('Moved once', 2, '20260401T110000Z')), ORG);
-        await calendar.receiveImipRequest(parsedOf(occurrence('Moved twice', 2, '20260401T120000Z')), ORG);
+        await receiveMailed(calendar, parsedOf(occurrence('Moved once', 2, '20260401T110000Z')), ORG);
+        await receiveMailed(calendar, parsedOf(occurrence('Moved twice', 2, '20260401T120000Z')), ORG);
         expect((await exceptionOf(calendar))?.title).toBe('Moved twice');
 
-        await calendar.receiveImipRequest(parsedOf(occurrence('Moved once', 2, '20260401T110000Z')), ORG);
+        await receiveMailed(calendar, parsedOf(occurrence('Moved once', 2, '20260401T110000Z')), ORG);
 
         expect((await exceptionOf(calendar))?.title).toBe('Moved twice');
     });
@@ -278,8 +275,8 @@ describe('inbound message ordering', () => {
         const harness = await makeCalendar();
         const calendar = harness.instance;
 
-        await calendar.receiveImipRequest(parsedOf(stampless('Title A', 2)), ORG);
-        await calendar.receiveImipRequest(parsedOf(stampless('Title B', 2)), ORG);
+        await receiveMailed(calendar, parsedOf(stampless('Title A', 2)), ORG);
+        await receiveMailed(calendar, parsedOf(stampless('Title B', 2)), ORG);
 
         expect((await masterOf(calendar)).title).toBe('Title B');
     });
@@ -290,7 +287,7 @@ describe('inbound message ordering', () => {
         const harness = await makeCalendar();
         const calendar = harness.instance;
         const me = makeSyntheticUser(harness.user.id, harness.user.name, harness.user.email);
-        await calendar.receiveImipRequest(parsedOf(request('Title A', 2, '20260401T100000Z', [], me.email)), ORG);
+        await receiveMailed(calendar, parsedOf(request('Title A', 2, '20260401T100000Z', [], me.email)), ORG);
         await calendar.rsvp((await masterOf(calendar)).id, me, {
             status: 'declined',
             scope: 'this',
@@ -299,7 +296,7 @@ describe('inbound message ordering', () => {
         });
         expect((await exceptionOf(calendar))?.status).toBe('cancelled');
 
-        await calendar.receiveImipRequest(parsedOf(occurrence('Back on', 0, '20260401T120000Z')), ORG);
+        await receiveMailed(calendar, parsedOf(occurrence('Back on', 0, '20260401T120000Z')), ORG);
 
         expect((await exceptionOf(calendar))?.status).toBe('confirmed');
         expect((await exceptionOf(calendar))?.title).toBe('Back on');
@@ -311,11 +308,11 @@ describe('inbound message ordering', () => {
         const harness = await makeCalendar();
         const calendar = harness.instance;
 
-        await calendar.receiveImipRequest(parsedOf(request('Title 2099', 2, '20990101T000000Z')), ORG);
+        await receiveMailed(calendar, parsedOf(request('Title 2099', 2, '20990101T000000Z')), ORG);
         expect((await masterOf(calendar)).title).toBe('Title 2099');
 
         const soon = utcStampString(new Date(Date.now() + 60_000));
-        await calendar.receiveImipRequest(parsedOf(request('Title now', 2, soon)), ORG);
+        await receiveMailed(calendar, parsedOf(request('Title now', 2, soon)), ORG);
 
         expect((await masterOf(calendar)).title).toBe('Title now');
     });
@@ -327,7 +324,7 @@ describe('inbound message ordering', () => {
         const calendar = harness.instance;
         const me = makeSyntheticUser(harness.user.id, harness.user.name, harness.user.email);
         const invite = (summary: string, dtstamp: string) => parsedOf(request(summary, 2, dtstamp, [], me.email));
-        await calendar.receiveImipRequest(invite('Title A', '20260401T100000Z'), ORG);
+        await receiveMailed(calendar, invite('Title A', '20260401T100000Z'), ORG);
 
         await calendar.rsvp((await masterOf(calendar)).id, me, {
             status: 'declined',
@@ -336,7 +333,7 @@ describe('inbound message ordering', () => {
             remove: true,
         });
 
-        await calendar.receiveImipRequest(invite('Title B', '20260401T120000Z'), ORG);
+        await receiveMailed(calendar, invite('Title B', '20260401T120000Z'), ORG);
 
         expect((await masterOf(calendar)).title).toBe('Title B');
         expect((await exceptionOf(calendar))?.status).toBe('cancelled');
@@ -347,7 +344,7 @@ describe('inbound message ordering', () => {
     test('a REQUEST redelivered behind the CANCEL that dropped the occurrence survives a rewrite', async () => {
         const { calendar } = await seeded();
 
-        await calendar.receiveImipRequest(parsedOf(occurrence('Moved once', 2, '20260401T100000Z')), ORG);
+        await receiveMailed(calendar, parsedOf(occurrence('Moved once', 2, '20260401T100000Z')), ORG);
         await calendar.cancelInvitationOccurrence(UID, ORG_USER, '2026-05-02', new Date('2026-05-02T09:00:00Z'), {
             sequence: 2,
             dtstamp: new Date('2026-04-01T11:00:00Z'),
@@ -355,9 +352,9 @@ describe('inbound message ordering', () => {
         expect((await exceptionOf(calendar))?.status).toBe('cancelled');
 
         // An unrelated series update rewrites the resource, and with it every row it projects.
-        await calendar.receiveImipRequest(parsedOf(request('Title B', 2, '20260401T130000Z')), ORG);
+        await receiveMailed(calendar, parsedOf(request('Title B', 2, '20260401T130000Z')), ORG);
 
-        await calendar.receiveImipRequest(parsedOf(occurrence('Moved once', 2, '20260401T100000Z')), ORG);
+        await receiveMailed(calendar, parsedOf(occurrence('Moved once', 2, '20260401T100000Z')), ORG);
 
         expect((await exceptionOf(calendar))?.status).toBe('cancelled');
     });
@@ -372,7 +369,7 @@ describe('inbound message ordering', () => {
         expect((await exceptionOf(calendar))?.status).toBe('cancelled');
 
         // The organizer put the occurrence back at the same SEQUENCE, with a later DTSTAMP.
-        await calendar.receiveImipRequest(parsedOf(occurrence('Back on', 2, '20260401T120000Z')), ORG);
+        await receiveMailed(calendar, parsedOf(occurrence('Back on', 2, '20260401T120000Z')), ORG);
         expect((await exceptionOf(calendar))?.status).toBe('confirmed');
 
         await calendar.cancelInvitationOccurrence(UID, ORG_USER, '2026-05-02', new Date('2026-05-02T09:00:00Z'), {
@@ -398,15 +395,15 @@ describe("the guest's own answer", () => {
 
     test('stays through an update at the same SEQUENCE and resets at a higher one', async () => {
         const { calendar, me, mine } = await answered();
-        await calendar.receiveImipRequest(parsedOf(request('Title A', 2, '20260401T100000Z', [], me.email)), ORG);
+        await receiveMailed(calendar, parsedOf(request('Title A', 2, '20260401T100000Z', [], me.email)), ORG);
         await calendar.rsvp((await masterOf(calendar)).id, me, { status: 'accepted' });
 
-        await calendar.receiveImipRequest(parsedOf(request('Title B', 2, '20260401T120000Z', [], me.email)), ORG);
+        await receiveMailed(calendar, parsedOf(request('Title B', 2, '20260401T120000Z', [], me.email)), ORG);
 
         expect((await masterOf(calendar)).title).toBe('Title B');
         expect(mine(await masterOf(calendar))).toBe('accepted');
 
-        await calendar.receiveImipRequest(parsedOf(request('Title C', 3, '20260401T130000Z', [], me.email)), ORG);
+        await receiveMailed(calendar, parsedOf(request('Title C', 3, '20260401T130000Z', [], me.email)), ORG);
 
         expect(mine(await masterOf(calendar))).toBe('pending');
     });
@@ -422,8 +419,8 @@ describe("the guest's own answer", () => {
         const lone = occurrence('Lone', 2, '20260401T100000Z')
             .replace(`UID:${UID}`, 'UID:lone@external.com')
             .replace(`mailto:${GUEST}`, `mailto:${me.email}`);
-        await calendar.receiveImipRequest(parsedOf(single), ORG);
-        await calendar.receiveImipRequest(parsedOf(lone), ORG);
+        await receiveMailed(calendar, parsedOf(single), ORG);
+        await receiveMailed(calendar, parsedOf(lone), ORG);
         const [copy] = await calendar.getEventsByUid('lone@external.com');
 
         await calendar.rsvp((await masterOf(calendar)).id, me, {
@@ -446,20 +443,20 @@ describe("the guest's own answer", () => {
         const { calendar, me, mine } = await answered();
         const moved = (summary: string, sequence: number, dtstamp: string) =>
             parsedOf(occurrence(summary, sequence, dtstamp).replace(`mailto:${GUEST}`, `mailto:${me.email}`));
-        await calendar.receiveImipRequest(parsedOf(request('Title A', 2, '20260401T100000Z', [], me.email)), ORG);
-        await calendar.receiveImipRequest(moved('Moved once', 2, '20260401T110000Z'), ORG);
+        await receiveMailed(calendar, parsedOf(request('Title A', 2, '20260401T100000Z', [], me.email)), ORG);
+        await receiveMailed(calendar, moved('Moved once', 2, '20260401T110000Z'), ORG);
         await calendar.rsvp((await masterOf(calendar)).id, me, {
             status: 'accepted',
             scope: 'this',
             recurrenceDate: '2026-05-02',
         });
 
-        await calendar.receiveImipRequest(moved('Moved twice', 2, '20260401T120000Z'), ORG);
+        await receiveMailed(calendar, moved('Moved twice', 2, '20260401T120000Z'), ORG);
 
         expect((await exceptionOf(calendar))?.title).toBe('Moved twice');
         expect(mine(await exceptionOf(calendar))).toBe('accepted');
 
-        await calendar.receiveImipRequest(moved('Moved again', 3, '20260401T130000Z'), ORG);
+        await receiveMailed(calendar, moved('Moved again', 3, '20260401T130000Z'), ORG);
 
         expect(mine(await exceptionOf(calendar))).toBe('pending');
     });

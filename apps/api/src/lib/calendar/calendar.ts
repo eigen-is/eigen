@@ -533,10 +533,6 @@ export class Calendar {
         return invitations.receiveRequest(this, requested, link);
     }
 
-    public async receiveImipRequest(parsed: ParsedEvent, sender: string): Promise<void> {
-        return invitations.receiveImipRequest(this, parsed, sender);
-    }
-
     public async cancelInvitationOccurrence(
         orgEventId: string,
         orgUserId: string,

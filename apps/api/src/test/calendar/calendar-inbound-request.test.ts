@@ -1,9 +1,10 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { rmSync } from 'node:fs';
+import type { Attendee } from '@workspace/lib/types/calendar';
 import type { Calendar } from '../../lib/calendar/calendar';
 import { parseIcs } from '../../lib/ical';
 import type { ParsedEvent } from '../../lib/ical/ical-parse';
-import { CALENDAR_TEST_ROOT, makeCalendar, storedEvents } from '../calendar-test-helpers';
+import { CALENDAR_TEST_ROOT, makeCalendar, receiveMailed, storedEvents } from '../calendar-test-helpers';
 import type { TestHome } from '../home-test-helpers';
 import { vcal } from '../ics-test-helpers';
 
@@ -64,7 +65,7 @@ describe('inbound iMIP REQUEST', () => {
         const { calendar, id } = await harnessWith(stored(ORG));
         const before = storedEvents(calendar, id)[0];
 
-        await calendar.receiveImipRequest(parsedOf(request()), ORG);
+        await receiveMailed(calendar, parsedOf(request()), ORG);
 
         const rows = await calendar.getEventsByUid(UID);
         expect(rows).toHaveLength(1);
@@ -91,7 +92,7 @@ describe('inbound iMIP REQUEST', () => {
             ).ok,
         ).toBe(true);
 
-        await harness.instance.receiveImipRequest(parsedOf(request()), ORG);
+        await receiveMailed(harness.instance, parsedOf(request()), ORG);
         const rows = await harness.instance.getEventsByUid(UID);
         expect(rows).toHaveLength(1);
         expect(rows[0].uri).toBe('imported.ics');
@@ -101,7 +102,7 @@ describe('inbound iMIP REQUEST', () => {
     test('a sender the stored event does not name is dropped', async () => {
         const { calendar, id } = await harnessWith(stored(ORG));
 
-        await calendar.receiveImipRequest(parsedOf(request([], OTHER)), OTHER);
+        await receiveMailed(calendar, parsedOf(request([], OTHER)), OTHER);
 
         const rows = await calendar.getEventsByUid(UID);
         expect(rows).toHaveLength(1);
@@ -112,10 +113,10 @@ describe('inbound iMIP REQUEST', () => {
 
     test('a REQUEST for a UID linked to another organizer is dropped', async () => {
         const { calendar } = await harnessWith();
-        await calendar.receiveImipRequest(parsedOf(request()), ORG);
+        await receiveMailed(calendar, parsedOf(request()), ORG);
 
         // A co-attendee re-sending the same series must not take the invitation over.
-        await calendar.receiveImipRequest(parsedOf(request(['SEQUENCE:9'], OTHER)), OTHER);
+        await receiveMailed(calendar, parsedOf(request(['SEQUENCE:9'], OTHER)), OTHER);
 
         const rows = await calendar.getEventsByUid(UID);
         expect(rows).toHaveLength(1);
@@ -126,7 +127,7 @@ describe('inbound iMIP REQUEST', () => {
     test('a body whose ORGANIZER is not the sender never becomes an invitation', async () => {
         const { calendar, id } = await harnessWith();
 
-        await calendar.receiveImipRequest(parsedOf(request([], ORG)), OTHER);
+        await receiveMailed(calendar, parsedOf(request([], ORG)), OTHER);
 
         expect(await calendar.getEventsByUid(UID)).toHaveLength(0);
         expect(await calendar.listResources(id)).toHaveLength(0);
@@ -136,7 +137,7 @@ describe('inbound iMIP REQUEST', () => {
         const { calendar, id } = await harnessWith();
         const huge = 'x'.repeat(6_000_000);
 
-        await calendar.receiveImipRequest(parsedOf(request([`DESCRIPTION:${huge}`])), ORG);
+        await receiveMailed(calendar, parsedOf(request([`DESCRIPTION:${huge}`])), ORG);
 
         expect(await calendar.getEventsByUid(UID)).toHaveLength(0);
         expect(await calendar.listResources(id)).toHaveLength(0);
@@ -146,7 +147,7 @@ describe('inbound iMIP REQUEST', () => {
         const { calendar, id } = await harnessWith();
         const parsed = parsedOf(request());
 
-        await Promise.all([calendar.receiveImipRequest(parsed, ORG), calendar.receiveImipRequest(parsed, ORG)]);
+        await Promise.all([receiveMailed(calendar, parsed, ORG), receiveMailed(calendar, parsed, ORG)]);
 
         expect(await calendar.listResources(id)).toHaveLength(1);
         expect(await calendar.getEventsByUid(UID)).toHaveLength(1);
@@ -255,7 +256,7 @@ describe('relayed invitation', () => {
         ]);
         const { calendar, id } = await harnessWith(duration);
 
-        await calendar.receiveImipRequest(parsedOf(request()), ORG);
+        await receiveMailed(calendar, parsedOf(request()), ORG);
 
         const row = (await calendar.getEventsByUid(UID))[0];
         expect(row.data?.organizerEventId).toBe(UID);
@@ -295,12 +296,12 @@ describe('relayed invitation', () => {
         )}\r\n`;
         const { calendar } = await harnessWith(overrideFirst);
         // The first REQUEST adopts the series in place, which links it; the second finds it by that link.
-        await calendar.receiveImipRequest(parsedOf(request(['RRULE:FREQ=DAILY;COUNT=5'])), ORG);
+        await receiveMailed(calendar, parsedOf(request(['RRULE:FREQ=DAILY;COUNT=5'])), ORG);
 
         const series = request(['RRULE:FREQ=DAILY;COUNT=5'])
             .replace('SEQUENCE:2', 'SEQUENCE:3')
             .replace('SUMMARY:Quarterly review', 'SUMMARY:Renamed series');
-        await calendar.receiveImipRequest(parsedOf(series), ORG);
+        await receiveMailed(calendar, parsedOf(series), ORG);
 
         const rows = await calendar.getEventsByUid(UID);
         expect(rows.find((r) => !r.parentEventId)?.title).toBe('Renamed series');
@@ -320,5 +321,133 @@ describe('relayed invitation', () => {
         expect(rows[0].calendarId).toBe(other.id);
         expect(rows[0].data?.organizerEventId).toBe(ORG_EVENT);
         expect(rows[0].data?.organizer?.userId).toBe(ORG_HOME);
+    });
+});
+
+// A REQUEST is one UID's events, decided and written once: a guest added to a series with many moved and cancelled
+// occurrences is told once, and a redelivery of it writes nothing.
+describe('one REQUEST, one write', () => {
+    const LINK = {
+        organizerEmail: ORG,
+        organizerEventId: 'series-org-event',
+        organizerUserId: 'series-org-home',
+        createByUserId: 'series-org-home',
+    };
+    const START = Date.parse('2026-05-01T09:00:00Z');
+    const DAY = 86_400_000;
+
+    // A daily series and `n` of its occurrences: every third one cancelled, the others two hours later.
+    function seriesRequest(guest: string, n: number, title = 'Standup', status: Attendee['status'] = 'pending') {
+        const base = {
+            uid: 'one-write@external.com',
+            description: null,
+            location: null,
+            allDay: false,
+            timezone: 'Europe/Amsterdam',
+            sequence: 0,
+            dtstamp: new Date('2026-04-01T10:00:00Z'),
+            recurrenceInstant: null,
+            data: {
+                organizer: { userId: LINK.organizerUserId, email: ORG, name: 'Ext Org' },
+                attendees: [{ email: guest, status, role: 'required' as const }],
+            },
+        };
+        const master: ParsedEvent = {
+            ...base,
+            title,
+            startTime: new Date(START),
+            endTime: new Date(START + 3_600_000),
+            rrule: 'FREQ=DAILY',
+            status: 'confirmed',
+            recurrenceDate: null,
+        };
+        const exceptions = Array.from({ length: n }, (_, i): ParsedEvent => {
+            const day = START + (i + 1) * 2 * DAY;
+            const cancelled = (i + 1) % 3 === 0;
+            const shift = cancelled ? 0 : 7_200_000;
+            return {
+                ...base,
+                title: cancelled ? title : `${title} moved ${i + 1}`,
+                startTime: new Date(day + shift),
+                endTime: new Date(day + 3_600_000 + shift),
+                rrule: null,
+                status: cancelled ? 'cancelled' : 'confirmed',
+                recurrenceDate: new Date(day).toISOString().slice(0, 10),
+            };
+        });
+        return [master, ...exceptions];
+    }
+
+    const ctagOf = async (calendar: Calendar, id: string) => (await calendar.getCalendarById(id))?.ctag;
+
+    test('a guest added to a series with 30 exceptions gets one copy, one write and one notice', async () => {
+        const { harness, calendar, id } = await harnessWith();
+        const notify = spyOn(calendar.home, 'notify');
+        const before = await ctagOf(calendar, id);
+        const broadcasts = harness.broadcasts.length;
+
+        await calendar.receiveRequest(seriesRequest(harness.user.email, 30), LINK);
+
+        const rows = storedEvents(calendar, id);
+        expect(rows).toHaveLength(31);
+        expect(rows.filter((e) => e.status === 'cancelled')).toHaveLength(10);
+        expect(rows.filter((e) => e.title.startsWith('Standup moved'))).toHaveLength(20);
+        expect(await ctagOf(calendar, id)).toBe((before ?? 0) + 1);
+        expect(notify).toHaveBeenCalledTimes(1);
+        expect(notify.mock.calls[0][0].type).toBe('calendar-invite');
+        expect(harness.broadcasts).toHaveLength(broadcasts + 2);
+    });
+
+    test('a redelivery of that message moves no ctag and tells nobody', async () => {
+        const { harness, calendar, id } = await harnessWith();
+        await calendar.receiveRequest(seriesRequest(harness.user.email, 30), LINK);
+        const notify = spyOn(calendar.home, 'notify');
+        const before = await ctagOf(calendar, id);
+        const broadcasts = harness.broadcasts.length;
+
+        await calendar.receiveRequest(seriesRequest(harness.user.email, 30), LINK);
+
+        expect(await ctagOf(calendar, id)).toBe(before);
+        expect(notify).not.toHaveBeenCalled();
+        expect(harness.broadcasts).toHaveLength(broadcasts);
+    });
+
+    test('a master the store refuses files nothing, its occurrences included', async () => {
+        const { harness, calendar, id } = await harnessWith();
+        const [master, ...exceptions] = seriesRequest(harness.user.email, 3);
+
+        await calendar.receiveRequest([{ ...master, description: 'x'.repeat(6_000_000) }, ...exceptions], LINK);
+
+        expect(storedEvents(calendar, id)).toHaveLength(0);
+    });
+
+    test('a guest accepted answer survives adoption at an equal SEQUENCE', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const id = (await calendar.getCalendars())[0].id;
+        const mine = vcal([
+            'BEGIN:VEVENT',
+            `UID:${UID}`,
+            'SUMMARY:Quarterly review (mine)',
+            'DTSTART:20260501T090000Z',
+            'DTEND:20260501T100000Z',
+            'SEQUENCE:2',
+            `ORGANIZER;CN=Ext Org:mailto:${ORG}`,
+            `ATTENDEE;PARTSTAT=ACCEPTED:mailto:${harness.user.email}`,
+            'DTSTAMP:20260101T000000Z',
+            'END:VEVENT',
+        ]);
+        expect((await calendar.putResource(id, 'mine.ics', mine, NO_PRECONDITIONS)).ok).toBe(true);
+
+        await calendar.receiveRequest([parsedOf(request().replace('owner@test.local', harness.user.email))], {
+            organizerEmail: ORG,
+            organizerEventId: UID,
+            organizerUserId: `external_${ORG}`,
+            createByUserId: `external_${ORG}`,
+        });
+
+        const [adopted] = await calendar.getEventsByUid(UID);
+        expect(adopted.data?.organizerEventId).toBe(UID);
+        expect(adopted.data?.attendees?.find((a) => a.email === harness.user.email)?.status).toBe('accepted');
     });
 });

@@ -253,6 +253,23 @@ export function writeComponent(calendar: Calendar, resource: StoredResource, com
     });
 }
 
+// An exception is one VEVENT inside its master's file; a cancellation rides as an EXDATE plus its stamp. The caller
+// writes the component.
+export function putException(component: ICAL.Component, parent: CalendarEvent, input: CreateEventArgs): void {
+    const exception = eventForResource({
+        id: crypto.randomUUID(),
+        calendarId: parent.calendarId,
+        uid: parent.uid,
+        input: { ...input, rrule: null },
+        now: new Date(),
+    });
+    if (exception.status === 'cancelled') {
+        addExclusion(component, parent, exception, writeContext(actorIsOrganizer(parent), input.dtstamp));
+    } else {
+        putOverride(component, parent, exception);
+    }
+}
+
 export function writeContext(actorIsOrganizer: boolean, dtstamp?: Date | null): WriteContext {
     return { now: new Date(), actorIsOrganizer, dtstamp };
 }
@@ -421,7 +438,6 @@ async function eraseStoredEvent(
     return existing;
 }
 
-// An exception is one VEVENT inside its master's file; a cancellation rides as an EXDATE plus its stamp.
 async function writeOverride(
     calendar: Calendar,
     calendarId: string,
@@ -438,21 +454,10 @@ async function writeOverride(
     // A RECURRENCE-ID and an EXDATE are both written from this key.
     if (!input.recurrenceDate) throw new ApiError(400, 'Invalid occurrence date');
 
-    const override = eventForResource({
-        id: crypto.randomUUID(),
-        calendarId,
-        uid: parent.uid,
-        input: { ...input, rrule: null },
-        now: new Date(),
-    });
-    await editResource(calendar, resource, (component) => {
-        if (override.status === 'cancelled') {
-            addExclusion(component, parent, override, writeContext(actorIsOrganizer(parent), input.dtstamp));
-        } else {
-            putOverride(component, parent, override);
-        }
-    });
-    const stored = exceptionOf(calendar, parent.id, override.recurrenceDate);
+    const component = storedComponent(calendar, resource);
+    putException(component, parent, input);
+    await writeComponent(calendar, resource, component);
+    const stored = exceptionOf(calendar, parent.id, input.recurrenceDate);
     return stored ?? requireEvent(calendar, parent.id);
 }
 

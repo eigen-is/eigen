@@ -7,6 +7,7 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence } from '@workspace/lib/types/calendar';
 import { getHome } from '../../lib/home';
 import type { ParsedEvent } from '../../lib/ical/ical-parse';
+import { receiveMailed } from '../calendar-test-helpers';
 import { basicAuth, davRequest } from '../dav-test-helpers';
 import { app, assertJson, authedRequest, getTestContext } from '../setup';
 
@@ -291,7 +292,7 @@ describe('CalDAV client sync on web-created events', () => {
 
         async function seedInvitation(uid: string, rrule: string | null): Promise<{ uri: string; eventId: string }> {
             const home = await getHome(userId);
-            await home.calendar.receiveImipRequest(request(uid, rrule), ORGANIZER);
+            await receiveMailed(home.calendar, request(uid, rrule), ORGANIZER);
             const uri = (await home.calendar.listResources(calendarId)).find((r) => r.uid === uid)!.uri;
             return { uri, eventId: (await home.calendar.getEventsByUid(uid))[0].id };
         }
@@ -306,7 +307,8 @@ describe('CalDAV client sync on web-created events', () => {
             const { uri } = await seedInvitation(uid, null);
             const before = await syncToken();
 
-            await (await getHome(userId)).calendar.receiveImipRequest(
+            await receiveMailed(
+                (await getHome(userId)).calendar,
                 {
                     ...request(uid, null, 1),
                     title: 'Linked series (moved)',
