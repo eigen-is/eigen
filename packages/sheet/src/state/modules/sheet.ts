@@ -103,7 +103,7 @@ function deriveGeometry(ctx: Context, { data }: Sheet) {
 export function addSheet(
     ctx: Context,
     // A copy or a peer's add names the new sheet's id, and the add then stays on the current sheet.
-    newSheetID?: string,
+    newSheetId?: string,
     sheetName?: string,
     sheetData?: Sheet,
     // A batch through applyOpBatch, such as a peer's add, lands for a read-only viewer too, and leaves the other
@@ -112,7 +112,7 @@ export function addSheet(
 ) {
     if (!fromBatch && ctx.allowEdit === false) return;
     // The add switches to the sheet it adds, so a sheet that comes with an id keeps it.
-    const id = newSheetID ?? sheetData?.id ?? crypto.randomUUID();
+    const id = newSheetId ?? sheetData?.id ?? crypto.randomUUID();
     const sheet: Sheet = sheetData ?? {
         name: sheetName || nextSheetName(ctx.sheets),
         order: ctx.sheets.length,
@@ -125,9 +125,9 @@ export function addSheet(
     if (sheetData && !fromBatch) shiftSheetOrders(ctx.sheets, sheetOrder(sheetData), 1);
     initSheetData(sheet);
     ctx.sheets.push(sheet);
-    // A name that read no sheet may read this one now, and the map holds none of its formulas.
-    ctx.formulaCache.formulaCellInfoMap = null;
-    if (!newSheetID) changeSheet(ctx, id);
+    // A name that read no sheet may read this one now, and the graph holds none of its formulas.
+    ctx.formulaCache.forgetGraph();
+    if (!newSheetId) changeSheet(ctx, id);
     if (!fromBatch) recomputeAfterOps(ctx, addSheetOps(sheet, ctx.sheets));
 }
 
@@ -157,9 +157,9 @@ export function deleteSheet(
     const rewritten = applySheetDelete(ctx.sheets, id);
     const [deleted] = ctx.sheets.splice(index, 1);
     writeBackSheets(ctx, rewritten);
-    // The formula map and its resolved references still read the deleted sheet under its name, which a sheet added
+    // The formula graph and its resolved references still read the deleted sheet under its name, which a sheet added
     // later may take.
-    ctx.formulaCache.formulaCellInfoMap = null;
+    ctx.formulaCache.forgetGraph();
     if (fromBatch) return;
     shiftSheetOrders(ctx.sheets, sheetOrder(deleted), -1);
     if (id === ctx.currentSheetId) leaveCurrentSheet(ctx);
@@ -195,9 +195,9 @@ export function editSheetName(ctx: Context, id: string, editable: HTMLSpanElemen
 }
 
 // The walk reads a plain snapshot, since reading each formula through a draft is slow. A name that read no sheet may
-// read this one now, so the formula map is built again.
+// read this one now, so the formula graph is built again.
 export function renameSheet(ctx: Context, op: RenameSheetOp, fromBatch = false) {
     writeBackSheets(ctx, applySheetRename(snapshotContext(ctx).sheets, op));
-    ctx.formulaCache.formulaCellInfoMap = null;
+    ctx.formulaCache.forgetGraph();
     if (!fromBatch) recomputeAfterOps(ctx, renameSheetOps(op.id, op.name));
 }

@@ -10,7 +10,7 @@ import { dataToCelldata } from '../../../engine/celldata';
 import { MAX_SHEET_ROW_COUNT } from '../../../engine/defaults';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
-import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
+import { warmFormulaGraph } from '../../../state/modules/formula-exec';
 import { changeSheet } from '../../../state/modules/sheet';
 import type { Op } from '../../../state/types';
 import { emitOps, join } from '../../state/factories/collab';
@@ -63,11 +63,9 @@ function applyPeerOps(ctx: Context, ops: Op[]): Context {
 function receivePeerEdit(b1: Cell | null, value: string, warm = true): Context {
     const ops = emitOps(makeCtx(b1), typed(0, 1, value));
     const ctx = makeCtx(b1);
-    if (warm) warmFormulaCellInfoMap(ctx);
+    if (warm) warmFormulaGraph(ctx);
     return applyPeerOps(ctx, ops);
 }
-
-const key = (r: number, c: number, id: string) => `r${r}c${c}i${id}`;
 
 describe('applyOp and the formula dependency map', () => {
     it("tracks a peer's new formula", () => {
@@ -91,7 +89,7 @@ describe('applyOp and the formula dependency map', () => {
 
     it('leaves an unbuilt map for its first use to build, peer formula included', () => {
         let ctx = receivePeerEdit(null, '=A1*2', false);
-        expect(ctx.formulaCache.formulaCellInfoMap).toBeNull();
+        expect(ctx.formulaCache.graph).toBeNull();
 
         [ctx] = edit(ctx, typed(0, 0, '7'));
 
@@ -101,13 +99,13 @@ describe('applyOp and the formula dependency map', () => {
     it("registers a peer's formula on a sheet other than the current one", () => {
         const ops = emitOps(makeCtx(null, 'id_2'), typed(0, 1, '=A1*2'));
         const ctx = makeCtx(null);
-        warmFormulaCellInfoMap(ctx);
+        warmFormulaGraph(ctx);
 
         const next = applyPeerOps(ctx, ops);
 
-        const map = next.formulaCache.formulaCellInfoMap!;
-        expect(map[key(0, 1, 'id_2')]?.formula).toBe('=A1*2');
-        expect(map[key(0, 1, 'id_1')]).toBeUndefined();
+        const graph = next.formulaCache.graph;
+        expect(graph?.formulaAt('id_2', 0, 1)?.formula).toBe('=A1*2');
+        expect(graph?.formulaAt('id_1', 0, 1)).toBeUndefined();
     });
 
     it('re-registers only the cell a peer typed over', () => {
@@ -119,18 +117,19 @@ describe('applyOp and the formula dependency map', () => {
         };
         const ops = emitOps(withColumn(makeCtx(null)), typed(0, 1, '3'));
         const ctx = withColumn(makeCtx(null));
-        const before = { ...warmFormulaCellInfoMap(ctx) };
+        const before = warmFormulaGraph(ctx);
+        const kept = Array.from({ length: 50 }, (_, r) => before.formulaAt('id_1', r, 1));
 
-        const map = applyPeerOps(ctx, ops).formulaCache.formulaCellInfoMap!;
+        const graph = applyPeerOps(ctx, ops).formulaCache.graph;
 
-        expect(map[key(0, 1, 'id_1')]).toBeUndefined();
-        for (let r = 1; r < 50; r += 1) expect(map[key(r, 1, 'id_1')]).toBe(before[key(r, 1, 'id_1')]);
+        expect(graph?.formulaAt('id_1', 0, 1)).toBeUndefined();
+        for (let r = 1; r < 50; r += 1) expect(graph?.formulaAt('id_1', r, 1)).toBe(kept[r]);
     });
 
     it("tracks the formulas in rows a peer's paste appended", () => {
         const ops = emitOps(makeCtx({ f: '=A1*2', v: 10, m: '10' }), pasteInternal([0, 1], [5, 1]));
         let ctx = makeCtx({ f: '=A1*2', v: 10, m: '10' });
-        warmFormulaCellInfoMap(ctx);
+        warmFormulaGraph(ctx);
 
         ctx = applyPeerOps(ctx, ops);
         expect(ctx.sheets[0].data![5][1]?.f).toBe('=A6*2');
@@ -141,7 +140,7 @@ describe('applyOp and the formula dependency map', () => {
 
     it('tracks the formulas on a sheet a peer added', () => {
         const ctx = makeCtx(null);
-        warmFormulaCellInfoMap(ctx);
+        warmFormulaGraph(ctx);
         const added = {
             name: 'third',
             id: 'id_3',
@@ -156,7 +155,7 @@ describe('applyOp and the formula dependency map', () => {
 
         const next = applyPeerOps(ctx, [{ op: 'addSheet', id: 'id_3', path: [], value: added }]);
 
-        expect(next.formulaCache.formulaCellInfoMap![key(0, 1, 'id_3')]?.formula).toBe('=A1*2');
+        expect(warmFormulaGraph(next).formulaAt('id_3', 0, 1)?.formula).toBe('=A1*2');
     });
 });
 
@@ -218,7 +217,7 @@ describe('applyOp and a joiner agree on the batch shapes that once disagreed', (
         expect(summary(applyPeerOps(ctx, ops).sheets)).toEqual(summary(join(ctx, [ops])));
     });
 
-    it('leaves the formula map alone when a batch fails after adding a sheet with formulas', () => {
+    it('leaves the formula graph alone when a batch fails after adding a sheet with formulas', () => {
         const withFormula = {
             ...added,
             celldata: [
@@ -231,10 +230,10 @@ describe('applyOp and a joiner agree on the batch shapes that once disagreed', (
             { op: 'replace', id: 'id_1', path: ['data', 9, 9, 'v'], value: 1 },
         ];
         const ctx = makeCtx(null);
-        const before = { ...warmFormulaCellInfoMap(ctx) };
+        const before = { ...warmFormulaGraph(ctx).formulas };
         const next = applyPeerOps(ctx, ops);
         expect(summary(next.sheets)).toEqual(summary(join(ctx, [ops])));
-        expect({ ...next.formulaCache.formulaCellInfoMap }).toEqual(before);
+        expect({ ...warmFormulaGraph(next).formulas }).toEqual(before);
     });
 
     it("inserts on the op's own sheet, as the replay does, whatever sheet is current", () => {
@@ -449,14 +448,15 @@ describe('replayOps', () => {
         expect(accepted).toBe(true);
     });
 
-    // The replay itself skips the formula map, so a long one stays short, and the map is built while the browser idles.
-    it('builds the formula map again once the browser is idle', async () => {
+    // The replay itself skips the formula graph, so a long one stays short, and the graph is built while the browser
+    // idles.
+    it('builds the formula graph again once the browser is idle', async () => {
         const shown = makeCtx({ f: '=A1*2', v: 10, m: '10' });
-        warmFormulaCellInfoMap(shown);
+        warmFormulaGraph(shown);
         const { ctx } = replay(shown, shown.sheets, [[typedB2]], [[typedB2]]);
-        expect(ctx.formulaCache.formulaCellInfoMap).toBeNull();
+        expect(ctx.formulaCache.graph).toBeNull();
         await Bun.sleep(250);
-        expect(Object.keys(ctx.formulaCache.formulaCellInfoMap ?? {})).toEqual([key(0, 1, 'id_1')]);
+        expect(ctx.formulaCache.graph?.formulaAt('id_1', 0, 1)?.formula).toBe('=A1*2');
     });
 
     it('says when a batch failed to apply', () => {

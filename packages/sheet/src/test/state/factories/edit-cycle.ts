@@ -1,5 +1,5 @@
 // One editor cycle the way Workbook runs it: the recipe inside produceWithPatches, the syncable patches kept as history, undo/redo applying them and
-// then updateFormulaCache. For tests of the formula dependency map across edits.
+// then followPatches. For tests of the formula dependency map across edits.
 
 import { applyPatches, enablePatches, produceWithPatches } from 'immer';
 import type { Context } from '../../../state/context';
@@ -18,13 +18,13 @@ export function edit(ctx: Context, recipe: (draft: Context) => void): [Context, 
 
 export function undo(ctx: Context, history: History): Context {
     const next = applyPatches(ctx, history.inversePatches);
-    next.formulaCache.updateFormulaCache(next, history.inversePatches);
+    next.formulaCache.followPatches(next, history.inversePatches);
     return next;
 }
 
 export function redo(ctx: Context, history: History): Context {
     const next = applyPatches(ctx, history.patches);
-    next.formulaCache.updateFormulaCache(next, history.patches);
+    next.formulaCache.followPatches(next, history.patches);
     return next;
 }
 

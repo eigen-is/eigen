@@ -12,6 +12,8 @@ import { enablePatches, Immer } from 'immer';
 import { isSheetName, sheetNameKey } from './a1-notation';
 import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
+import { FormulaEngine } from './formula-engine';
+import { FormulaGraph } from './formula-graph';
 import { namesSheet } from './formula-shift';
 import type { RecalcBudgets, RecomputeSeeds } from './recalc';
 import { recomputeAfter } from './recalc';
@@ -33,18 +35,35 @@ const immer = new Immer({ autoFreeze: false });
 type InsertValue = Omit<InsertRowColOp, 'id'>;
 type DeleteValue = Omit<DeleteRowColOp, 'id'>;
 
-// A batch the replay can't apply is reported to `onDropped`, which a caller that wants a count of its own passes. By
-// default each one is logged as a warning. `budgets` bound what a batch's recompute may cost the server.
+// A batch whose recompute passed a budget. Its ops stand and its formulas keep the values they had, which a reader
+// without the budget computes, so such sheets are no state to store.
+export class SkippedRecompute extends Error {}
+
+// A batch the replay can't apply is reported to `onDropped`, and so is a recompute past `budgets`, as a
+// SkippedRecompute whose batch stands with the values it had. A caller that wants a count of its own passes it. By
+// default each one is logged as a warning.
 export function replaySheetsOps(
     sheets: Sheet[],
     opBatches: Op[][],
-    onDropped: (dropped: unknown) => void = (e) =>
-        console.warn('[sheets] op batch failed to apply, skipping batch:', e),
+    onDropped: (dropped: unknown) => void = (e) => console.warn('[sheets] replay skipped a batch or its recompute:', e),
     budgets: RecalcBudgets = {},
 ): Sheet[] {
     // Every base sheet carries its config collections before the first op, so the config patches the editor writes
     // resolve here as they do in the editor.
     let result = sheets.map(withNormalizedSheet);
+    // Built at the first batch that recomputes, and kept until a batch renames, adds or deletes a sheet, or a step on
+    // it passes a budget, which may leave it short.
+    let graph: FormulaGraph | null = null;
+    const withinBudget = (step: () => void): RangeError | null => {
+        try {
+            step();
+            return null;
+        } catch (e) {
+            if (!(e instanceof RangeError)) throw e;
+            graph = null;
+            return e;
+        }
+    };
     for (const batch of opBatches) {
         // One bad batch must never make the whole workbook unreadable. It rolls back and the replay goes on with the
         // next batch. The same batch is skipped on every replay.
@@ -64,22 +83,38 @@ export function replaySheetsOps(
                     }
                     const added = withNormalizedSheet(op.value);
                     result = [...result, dataOpIds?.has(op.value.id) ? withMaterializedData(added) : added];
+                    graph = null;
                 } else if (op.op === 'deleteSheet' && op.id) {
                     result = applySheetDelete(result, op.id);
+                    graph = null;
                 } else if (isRowColOp(op)) {
+                    const move = rowColOf(op);
                     result = applyRowColOp(result, op);
+                    withinBudget(() => graph?.shift(result, move));
                 } else if (op.op === 'renameSheet') {
                     result = applySheetRename(result, renameSheetOf(op));
+                    graph = null;
                 }
             }
             const normalOps = batch.filter((op) => op.op === 'add' || op.op === 'remove' || op.op === 'replace');
             const [patches] = opToPatchOnSheets(result, normalOps);
             result = immer.applyPatches(result, patches);
+            if (patches.length > 0) withinBudget(() => graph?.followPatches(result, patches));
             const seeds = seedsOf(batch);
-            if (seeds) result = recomputeAfter(result.map(withMaterializedData), seeds, { budgets });
+            if (seeds) {
+                const materialized = result.map(withMaterializedData);
+                result = materialized;
+                const engine = new FormulaEngine({ maxCellsRead: budgets.maxCellsRead });
+                const passed = withinBudget(() => {
+                    graph ??= new FormulaGraph(materialized, budgets);
+                    result = recomputeAfter(materialized, seeds, graph, engine);
+                });
+                if (passed) onDropped(new SkippedRecompute(passed.message, { cause: passed }));
+            }
         } catch (e) {
             onDropped(e);
             result = preBatch;
+            graph = null;
         }
     }
     return result.map(withSyncedCelldataIfData);
@@ -92,13 +127,24 @@ export function seedsOf(ops: readonly Op[]): RecomputeSeeds | null {
     const lines: RecomputeSeeds['lines'][number][] = [];
     const names = new Set<string>();
     let structural = false;
+    // A later row or column op moves the lines an earlier one opened or closed, as it moves the cells on them.
+    const moveLines = (id: string, type: 'row' | 'column', at: number, by: number) => {
+        for (const [i, seed] of lines.entries()) {
+            if (seed.id !== id || seed.type !== type || seed.line < at) continue;
+            const line = seed.line + by;
+            lines[i] = { ...seed, line: by < 0 ? Math.max(at - 1, line) : line };
+        }
+    };
     for (const op of ops) {
         const [field, r, c] = op.path;
         if (op.op === 'insertRowCol') {
-            const { id, type, index, direction } = insertRowColOf(op);
-            lines.push({ id, type, line: direction === 'lefttop' ? index : index + 1 });
+            const { id, type, index, count, direction } = insertRowColOf(op);
+            const line = direction === 'lefttop' ? index : index + 1;
+            moveLines(id, type, line, count);
+            lines.push({ id, type, line });
         } else if (op.op === 'deleteRowCol') {
-            const { id, type, start } = deleteRowColOf(op);
+            const { id, type, start, end } = deleteRowColOf(op);
+            moveLines(id, type, start, start - end - 1);
             lines.push({ id, type, line: start - 1 }, { id, type, line: start });
         } else if (op.op === 'addSheet' || op.op === 'renameSheet') {
             const name = isRecord(op.value) ? op.value['name'] : undefined;
@@ -119,9 +165,12 @@ export function seedsOf(ops: readonly Op[]): RecomputeSeeds | null {
 
 // A row or column op's result on plain sheets. An insert past the sheet's size limit throws RowColError.
 export function applyRowColOp<S extends ShiftedSheet>(sheets: S[], op: Op): S[] {
-    return op.op === 'insertRowCol'
-        ? applySheetsInsertRowCol(sheets, insertRowColOf(op))
-        : applySheetsDeleteRowCol(sheets, deleteRowColOf(op));
+    const move = rowColOf(op);
+    return 'index' in move ? applySheetsInsertRowCol(sheets, move) : applySheetsDeleteRowCol(sheets, move);
+}
+
+function rowColOf(op: Op): InsertRowColOp | DeleteRowColOp {
+    return op.op === 'insertRowCol' ? insertRowColOf(op) : deleteRowColOf(op);
 }
 
 // A stored sheet keeps its cells as the `celldata` list, but a cell op writes `data[r][c]`. So a sheet gets the dense

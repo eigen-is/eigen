@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { DependencyIndex, dependencySlots } from '../../engine/dependency-index';
+import { DependencyIndex } from '../../engine/dependency-index';
 import type { FormulaDependency } from '../../engine/types';
 
 // A whole column and a whole row, as the walk resolves them.
@@ -8,6 +8,13 @@ const LAST_COLUMN = 16_383;
 
 function dep(r0: number, r1: number, c0: number, c1: number, sheetId = 's1'): FormulaDependency {
     return { row: [r0, r1], column: [c0, c1], sheetId };
+}
+
+// The slots one formula reading `deps` takes in the index.
+function dependencySlots(deps: readonly FormulaDependency[]): number {
+    const index = new DependencyIndex();
+    index.set('f', deps);
+    return index.slots;
 }
 
 describe('engine/dependency-index — DependencyIndex', () => {
@@ -97,14 +104,26 @@ describe('engine/dependency-index — DependencyIndex', () => {
         expect(index.dependentsOf('s1', 50, 3)).toEqual([]);
     });
 
-    test('clear empties the whole index', () => {
+    test('a delete takes back the slots its set listed', () => {
         const index = new DependencyIndex();
         index.set('f1', [dep(0, 0, 0, 0)]);
         index.set('f2', [dep(0, 500, 0, 50, 's2')]);
-        index.clear();
-        expect(index.dependentsOf('s1', 0, 0)).toEqual([]);
+        expect(index.slots).toBe(8 * 4);
+        index.delete('f2');
+        index.delete('f1');
+        expect(index.slots).toBe(0);
         expect(index.dependentsOf('s2', 250, 25)).toEqual([]);
     });
+
+    test('many formulas reading one cell or one column leave as fast as they came', () => {
+        const index = new DependencyIndex();
+        const start = performance.now();
+        for (let i = 0; i < 100_000; i += 1) index.set(`f${i}`, [dep(0, 0, 0, 0), dep(0, LAST_ROW, 1, 1)]);
+        for (let i = 100_000 - 1; i >= 0; i -= 1) index.delete(`f${i}`);
+        // A scan of the cell's list per delete takes seconds.
+        expect(performance.now() - start).toBeLessThan(3_000);
+        expect(index.dependentsOf('s1', 0, 0)).toEqual([]);
+    }, 60_000);
 
     test('tall whole-column style range spans many row blocks', () => {
         const index = new DependencyIndex();
@@ -169,9 +188,9 @@ describe('engine/dependency-index — dependencySlots', () => {
         expect(dependencySlots([{ row: [0, 1], column: [0, 0], sheetId: undefined }])).toBe(0);
     });
 
-    test('the whole grid costs a slot per column, and a range short of it its 16 million blocks', () => {
+    test('the whole grid costs a slot per column, and a range short of it its blocks', () => {
         expect(dependencySlots([dep(0, LAST_ROW, 0, LAST_COLUMN)])).toBe(16_384);
-        expect(dependencySlots([dep(1, LAST_ROW - 1, 1, LAST_COLUMN - 1)])).toBe(16_384 * 1_024);
+        expect(dependencySlots([dep(1, 1_000, 1, 1_000)])).toBe(16 * 63);
     });
 });
 

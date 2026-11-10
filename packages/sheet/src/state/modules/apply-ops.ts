@@ -67,14 +67,17 @@ export function applyOpBatch(
             if (moveView && first?.path[0] === 'hide' && first.id === draft.currentSheetId) {
                 leaveCurrentSheet(draft, first.id);
             }
-            if (patches.length > 0) applyPatches(draft, patches);
+            if (patches.length > 0) {
+                applyPatches(draft, patches);
+                draft.formulaCache.followPatches(draft, patches);
+            }
             recomputeAfterOps(draft, ops);
         });
     } catch (e) {
         console.warn('[sheet] op batch failed to apply, skipping batch:', e);
+        // The formula graph lives outside immer, so it may have followed part of the batch.
+        ctx.formulaCache.forgetGraph();
         return null;
     }
-    // The formula map lives outside immer, so it follows the batch only once the batch applied.
-    if (patches.length > 0) next.formulaCache.updateFormulaCache(next, patches);
     return { ctx: next, moved };
 }

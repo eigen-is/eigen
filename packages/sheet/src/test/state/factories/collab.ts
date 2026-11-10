@@ -72,7 +72,7 @@ export function receive(ctx: Context, ops: Op[], history: Tab['history'] = { und
 // One browser tab: its context and the undo and redo stacks Workbook keeps beside it.
 export type Tab = { ctx: Context; history: { undoList: History[]; redoList: History[] } };
 
-// Each tab builds its own formula map, as each browser does.
+// Each tab builds its own formula graph, as each browser does.
 export const tab = (ctx: Context): Tab => ({
     ctx: produce(ctx, (draft: Context) => {
         draft.formulaCache = new FormulaCache();

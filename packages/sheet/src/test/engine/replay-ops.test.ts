@@ -542,3 +542,64 @@ describe('a write that would leave the matrix or a row no array', () => {
         expect(sheet.celldata).toEqual([{ r: 2, c: 0, v: cell('a') }]);
     });
 });
+
+describe('a batch with two row ops', () => {
+    test('recomputes what the first op touched at the rows the second moved it to', () => {
+        const n = (v: number) => ({ v, m: `${v}`, ct: { fa: 'General', t: 'n' } });
+        const data = [1, 2, 3, 4, 5, 6].map((v, r) => [n(v), r === 0 ? { f: '=SUM(A4:A6)', v: 15 } : null]);
+        const sheet: Sheet = { id: 's1', name: 'One', order: 0, data, config: {} };
+        const batch: Op[] = [
+            { op: 'deleteRowCol', id: 's1', path: [], value: { type: 'row', start: 4, end: 4 } },
+            {
+                op: 'insertRowCol',
+                id: 's1',
+                path: [],
+                value: { type: 'row', index: 0, count: 2, direction: 'lefttop' },
+            },
+        ];
+        const [replayed] = replaySheetsOps([sheet], [batch]);
+        expect(replayed.data?.[2]?.[1]).toMatchObject({ f: '=SUM(A6:A7)', v: 10 });
+    });
+});
+
+describe('a batch that writes a sheet id', () => {
+    test("the held graph finds the sheet's formulas under the new id", () => {
+        const n = (v: number) => ({ v, m: `${v}`, ct: { fa: 'General', t: 'n' } });
+        const data = [
+            [n(1), null],
+            [n(2), { f: '=SUM(A1:A2)', v: 3 }],
+        ];
+        const sheet: Sheet = { id: 's1', name: 'One', order: 0, data, config: {} };
+        const insertLast: Op = {
+            op: 'insertRowCol',
+            id: 's1',
+            path: [],
+            value: { type: 'row', index: 1, count: 1, direction: 'rightbottom' },
+        };
+        const deleteFirst: Op = { op: 'deleteRowCol', id: 's9', path: [], value: { type: 'row', start: 0, end: 0 } };
+        const batches: Op[][] = [[insertLast], [{ op: 'replace', id: 's1', path: ['id'], value: 's9' }], [deleteFirst]];
+        const [replayed] = replaySheetsOps([sheet], batches);
+        expect(replayed.data?.[0]?.[1]).toMatchObject({ f: '=SUM(A1)', v: 2 });
+    });
+});
+
+describe("a delete of a sheet's last lines", () => {
+    const n = (v: number) => ({ v, m: `${v}`, ct: { fa: 'General', t: 'n' } });
+    const remove = (type: 'row' | 'column', start: number, end: number): Op[] => [
+        { op: 'deleteRowCol', id: 's1', path: [], value: { type, start, end } },
+    ];
+
+    test('recomputes a formula that read only the deleted rows', () => {
+        const one: Sheet = { id: 's1', name: 'One', order: 0, data: [1, 2, 3, 4, 5].map((v) => [n(v)]), config: {} };
+        const two: Sheet = { id: 's2', name: 'Two', order: 1, data: [[{ f: '=SUM(One!A4:A10)', v: 9 }]], config: {} };
+        const [, replayed] = replaySheetsOps([one, two], [remove('row', 3, 4)]);
+        expect(replayed.data?.[0]?.[0]).toMatchObject({ f: '=SUM(One!A4:A8)', v: 0 });
+    });
+
+    test('recomputes a whole-row reader when every column goes', () => {
+        const one: Sheet = { id: 's1', name: 'One', order: 0, data: [[n(1), n(2)]], config: {} };
+        const two: Sheet = { id: 's2', name: 'Two', order: 1, data: [[{ f: '=SUM(One!1:1)', v: 3 }]], config: {} };
+        const [, replayed] = replaySheetsOps([one, two], [remove('column', 0, 1)]);
+        expect(replayed.data?.[0]?.[0]).toMatchObject({ f: '=SUM(One!1:1)', v: 0 });
+    });
+});

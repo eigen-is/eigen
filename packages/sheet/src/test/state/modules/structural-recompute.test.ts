@@ -2,15 +2,17 @@ import { describe, expect, test } from 'bun:test';
 import { produce } from 'immer';
 import { generateAPIs } from '../../../components/Workbook/api';
 import { createArrayResolver } from '../../../engine/cell-resolver';
+import { FormulaEngine } from '../../../engine/formula-engine';
+import { FormulaGraph } from '../../../engine/formula-graph';
 import { walkFormulaRefs } from '../../../engine/formula-shift';
 import { recomputeAfter } from '../../../engine/recalc';
-import { replaySheetsOps } from '../../../engine/replay-ops';
+import { replaySheetsOps, SkippedRecompute } from '../../../engine/replay-ops';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from '../../../engine/rowcol';
 import { copySheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { applyOpBatch } from '../../../state/modules/apply-ops';
 import { updateCell } from '../../../state/modules/cell';
-import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
+import { warmFormulaGraph } from '../../../state/modules/formula-exec';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import { addSheet, deleteSheet, renameSheet } from '../../../state/modules/sheet';
 import type { Op, Sheet } from '../../../state/types';
@@ -107,12 +109,11 @@ describe('a row delete', () => {
         expect(at(t.ctx.sheets, 's1', 0, 1)?.v).toBe(7);
     });
 
-    test('the next edit finds the formula map the recompute built', () => {
+    test('the next edit finds the formula graph the recompute built', () => {
         const t = tab(start());
-        warmFormulaCellInfoMap(t.ctx);
+        warmFormulaGraph(t.ctx);
         removeRow(t, 1);
-        const { formulaCellInfoMap } = t.ctx.formulaCache;
-        expect(formulaCellInfoMap?.[`r0c2is1`]?.formula).toBe('=SUM(A1:A2)');
+        expect(t.ctx.formulaCache.graph?.formulaAt('s1', 0, 2)?.formula).toBe('=SUM(A1:A2)');
         tabEdit(t, (d) => {
             updateCell(d, 0, 0, null, 11);
         });
@@ -385,7 +386,7 @@ describe('an operator over a range', () => {
 
     test('keeps its stored number on an edit of what it reads', () => {
         const t = tab(start());
-        warmFormulaCellInfoMap(t.ctx);
+        warmFormulaGraph(t.ctx);
         tabEdit(t, (d) => {
             updateCell(d, 0, 0, null, 5);
         });
@@ -430,7 +431,7 @@ describe('what a recompute keeps', () => {
             ],
         });
         const t = tab(base);
-        warmFormulaCellInfoMap(t.ctx);
+        warmFormulaGraph(t.ctx);
         tabEdit(t, (d) => {
             updateCell(d, 0, 0, null, 5);
         });
@@ -454,7 +455,7 @@ describe('what a recompute keeps', () => {
 
     test('a formula reading a typo computes the #NAME? the typo shows', () => {
         const t = tab(book({ cells: [[f('=5', 5), f('=A1', 5), f('=IF(A1>0,A1+1,FILTER(A1:A1,1))', 6)]] }));
-        warmFormulaCellInfoMap(t.ctx);
+        warmFormulaGraph(t.ctx);
         tabEdit(t, (d) => {
             updateCell(d, 0, 0, null, '=FILTRE(1)');
         });
@@ -473,7 +474,7 @@ describe('what a recompute keeps', () => {
 
     test('a branch this build can compute recalculates beside one it lacks', () => {
         const t = tab(book({ cells: [[n(1), f('=IF(A1>0,A1+1,FILTER(A1:A1,1))', 2)]] }));
-        warmFormulaCellInfoMap(t.ctx);
+        warmFormulaGraph(t.ctx);
         tabEdit(t, (d) => {
             updateCell(d, 0, 0, null, 4);
         });
@@ -511,7 +512,7 @@ describe('what a recompute keeps', () => {
         }
     });
 
-    test('past a budget the values stay, the op stands and no batch drops', () => {
+    test('past a budget the values stay, the op stands and the recompute is reported', () => {
         const base = book({
             cells: [
                 [n(10), f('=SUM(A1:A3)', 60)],
@@ -519,16 +520,15 @@ describe('what a recompute keeps', () => {
                 [n(30), null],
             ],
         });
-        let dropped = 0;
+        const dropped: unknown[] = [];
         const [sheet] = replaySheetsOps(
             base.sheets,
             [[{ op: 'deleteRowCol', id: 's1', path: [], value: deleteRow(1) }]],
-            () => {
-                dropped += 1;
-            },
+            (e) => dropped.push(e),
             { maxCellsRead: 1 },
         );
-        expect(dropped).toBe(0);
+        expect(dropped).toHaveLength(1);
+        expect(dropped[0]).toBeInstanceOf(SkippedRecompute);
         expect(sheet.data?.length).toBe(2);
         expect(sheet.data?.[0][1]?.f).toBe('=SUM(A1:A2)');
         expect(sheet.data?.[0][1]?.v).toBe(60);
@@ -650,13 +650,15 @@ describe('the seeds are enough', () => {
         return { pick, sheets: [sheet('One', 's1', 0, 0), sheet('Two', 's2', 1, 1)] };
     }
     const everyFormula = { cells: [], lines: [], reads: () => true };
+    const recomputeAll = (sheets: Sheet[]) =>
+        recomputeAfter(sheets, everyFormula, new FormulaGraph(sheets), new FormulaEngine());
 
     test('300 random workbooks and row or column ops', () => {
         let wrong = 0;
         let changed = 0;
         for (let seed = 1; seed <= 300; seed += 1) {
             const { sheets, pick } = randomBook(seed * 7919);
-            const settled = recomputeAfter(recomputeAfter(sheets, everyFormula), everyFormula);
+            const settled = recomputeAll(recomputeAll(sheets));
             const type = pick(2) === 0 ? ('row' as const) : ('column' as const);
             const line = pick(type === 'row' ? ROWS : COLUMNS);
             const id = pick(2) === 0 ? 's1' : 's2';
@@ -669,7 +671,7 @@ describe('the seeds are enough', () => {
                 op.op === 'insertRowCol'
                     ? applySheetsInsertRowCol(settled, { ...op.value, id })
                     : applySheetsDeleteRowCol(settled, { ...op.value, id });
-            const all = recomputeAfter(recomputeAfter(moved, everyFormula), everyFormula);
+            const all = recomputeAll(recomputeAll(moved));
             if (JSON.stringify(values(moved)) !== JSON.stringify(values(all))) changed += 1;
             if (JSON.stringify(values(seeded)) !== JSON.stringify(values(all))) wrong += 1;
         }
@@ -743,7 +745,7 @@ describe('an error typed into a formula', () => {
 
     test.each(LITERALS)('%s is a token, so a formula holding it computes on an edit', (literal) => {
         const t = tab(book({ cells: [[n(2), f(`=IF(A1=1,${literal},A1*2)`, 4)]] }));
-        warmFormulaCellInfoMap(t.ctx);
+        warmFormulaGraph(t.ctx);
         tabEdit(t, (d) => {
             updateCell(d, 0, 0, null, 5);
         });
@@ -796,7 +798,7 @@ describe('a long forged formula', () => {
     const costs = (formula: string) => {
         const t = tab(book({ cells: [[n(1), f(formula, 9)]] }));
         const started = performance.now();
-        warmFormulaCellInfoMap(t.ctx);
+        warmFormulaGraph(t.ctx);
         tabEdit(t, (d) => {
             updateCell(d, 0, 0, null, 5);
         });
@@ -816,7 +818,7 @@ describe('a long forged formula', () => {
 
     test('one past Excel`s limit keeps its number', () => {
         const t = tab(book({ cells: [[n(1), f(`=A1+${'1+'.repeat(5000)}1`, 9)]] }));
-        warmFormulaCellInfoMap(t.ctx);
+        warmFormulaGraph(t.ctx);
         tabEdit(t, (d) => {
             updateCell(d, 0, 0, null, 5);
         });

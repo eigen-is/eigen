@@ -9,7 +9,7 @@ installHappyDom();
 
 const { defaultContext } = await import('../../../state/context');
 const { setCellValue } = await import('../../../state/modules/cell');
-const { execFunctionGroup, getcellrange, warmFormulaCellInfoMap } = await import('../../../state/modules/formula-exec');
+const { execFunctionGroup, getcellrange, warmFormulaGraph } = await import('../../../state/modules/formula-exec');
 const { insertRowCol } = await import('../../../state/modules/rowcol');
 const { editSheetName } = await import('../../../state/modules/sheet');
 const { updateDropCell } = await import('../../../state/modules/drop-cell');
@@ -84,8 +84,8 @@ describe('a tab rename rewrites the text that names the tab', () => {
         renameFirst(t, 'Inputs');
         expect(t.ctx.sheets[0].name).toBe('Inputs');
         expect(formula(t)).toBe('=Inputs!A1+1');
-        warmFormulaCellInfoMap(t.ctx);
-        expect(t.ctx.formulaCache.dependencyIndex.dependentsOf('id_1', 0, 0)).toEqual(['r0c0iid_2']);
+        const graph = warmFormulaGraph(t.ctx);
+        expect(graph.affected(t.ctx.sheets, [{ id: 'id_1', r: 0, c: 0 }])).toMatchObject([{ id: 'id_2', r: 0, c: 0 }]);
     });
 
     test('an edit of the tab recomputes a formula that named it before the rename', () => {
@@ -402,7 +402,7 @@ describe('a tab rename rewrites the text that names the tab', () => {
             expect(formula(author)).toBe("='Q1!'!A1+1");
             expect(join(base, log)[1].celldata?.[0].v?.f).toBe("='Q1!'!A1+1");
 
-            warmFormulaCellInfoMap(author.ctx);
+            warmFormulaGraph(author.ctx);
             tabEdit(author, (ctx) => {
                 const { data } = ctx.sheets[0];
                 if (!data) return;
