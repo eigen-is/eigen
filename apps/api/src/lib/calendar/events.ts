@@ -456,9 +456,7 @@ async function writeOverride(
     // A RECURRENCE-ID and an EXDATE are both written from this key.
     if (!input.recurrenceDate) throw new ApiError(400, 'Invalid occurrence date');
 
-    const component = storedComponent(calendar, resource);
-    putException(component, parent, input);
-    await writeComponent(calendar, resource, component);
+    await editResource(calendar, resource, (component) => putException(component, parent, input));
     const stored = exceptionOf(calendar, parent.id, input.recurrenceDate);
     return stored ?? requireEvent(calendar, parent.id);
 }
