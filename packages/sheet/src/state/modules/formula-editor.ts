@@ -373,15 +373,15 @@ export function updateFunctionHint(ctx: Context, $editor: HTMLDivElement) {
     }
 }
 
-export function caretTakesRange(ctx: Context, forTooltip = false) {
+// Whether the caret sits where a picked range goes, after an opening bracket, a comma or an operator. It also notes
+// the span the range goes after.
+export function caretTakesRange(ctx: Context) {
     const currSelection = window.getSelection();
     if (currSelection == null) return false;
     let anchor = currSelection.anchorNode;
     if (!anchor?.textContent) return false;
     const { anchorOffset } = currSelection;
-    const anchorElement = anchor as HTMLElement;
-    const parentElement = anchor.parentNode as HTMLElement;
-    if (anchor?.parentNode?.nodeName.toLowerCase() === 'span' && anchorOffset !== 0) {
+    if (anchor.parentNode?.nodeName.toLowerCase() === 'span' && anchorOffset !== 0) {
         let txt = trim(anchor.textContent);
         let lasttxt = '';
 
@@ -395,73 +395,43 @@ export function caretTakesRange(ctx: Context, forTooltip = false) {
             ctx.formulaCache.rangeSetValueTo = anchor.parentNode;
         }
 
-        if (
-            (forTooltip && (lasttxt === '(' || lasttxt === ',')) ||
-            (!forTooltip &&
-                (lasttxt === '(' ||
-                    lasttxt === ',' ||
-                    lasttxt === '=' ||
-                    formulaOperators.has(lasttxt) ||
-                    lasttxt === '&'))
-        ) {
-            return true;
-        }
-    } else if (anchorElement.id === 'sheet-rich-text-editor' || anchorElement.id === 'sheet-functionbox-cell') {
-        let txt = trim(last(anchorElement.querySelectorAll('span'))?.innerText);
+        return opensRange(lasttxt);
+    } else if (
+        anchor instanceof HTMLElement &&
+        (anchor.id === 'sheet-rich-text-editor' || anchor.id === 'sheet-functionbox-cell')
+    ) {
+        const spans = anchor.querySelectorAll('span');
+        let txt = trim(last(spans)?.innerText);
 
-        ctx.formulaCache.rangeSetValueTo = last(anchorElement.querySelectorAll('span'));
+        ctx.formulaCache.rangeSetValueTo = last(spans);
 
-        if (txt.length === 0 && anchorElement.querySelectorAll('span').length > 1) {
-            const ahr = anchorElement.querySelectorAll('span');
-            const prev = ahr[ahr.length - 2];
+        if (txt.length === 0 && spans.length > 1) {
+            const prev = spans[spans.length - 2];
             txt = trim(prev.innerText);
             ctx.formulaCache.rangeSetValueTo = prev;
         }
 
-        const lasttxt = txt.substring(txt.length - 1, 1);
-
-        if (
-            (forTooltip && (lasttxt === '(' || lasttxt === ',')) ||
-            (!forTooltip &&
-                (lasttxt === '(' ||
-                    lasttxt === ',' ||
-                    lasttxt === '=' ||
-                    formulaOperators.has(lasttxt) ||
-                    lasttxt === '&'))
-        ) {
-            return true;
-        }
+        return opensRange(txt.substring(txt.length - 1, 1));
     } else if (
-        parentElement.id === 'sheet-rich-text-editor' ||
-        parentElement.id === 'sheet-functionbox-cell' ||
+        anchor.parentElement?.id === 'sheet-rich-text-editor' ||
+        anchor.parentElement?.id === 'sheet-functionbox-cell' ||
         anchorOffset === 0
     ) {
         if (anchorOffset === 0) {
             anchor = anchor.parentNode;
         }
-        if (!anchor) return false;
-        if (anchor.previousSibling?.textContent == null) return false;
-        if (anchor.previousSibling) {
-            const txt = trim(anchor.previousSibling.textContent);
-            const lasttxt = txt.substring(txt.length - 1, 1);
-
-            ctx.formulaCache.rangeSetValueTo = anchor.previousSibling;
-
-            if (
-                (forTooltip && (lasttxt === '(' || lasttxt === ',')) ||
-                (!forTooltip &&
-                    (lasttxt === '(' ||
-                        lasttxt === ',' ||
-                        lasttxt === '=' ||
-                        formulaOperators.has(lasttxt) ||
-                        lasttxt === '&'))
-            ) {
-                return true;
-            }
-        }
+        const previous = anchor?.previousSibling;
+        if (previous?.textContent == null) return false;
+        const txt = trim(previous.textContent);
+        ctx.formulaCache.rangeSetValueTo = previous;
+        return opensRange(txt.substring(txt.length - 1, 1));
     }
 
     return false;
+}
+
+function opensRange(text: string) {
+    return text === '(' || text === ',' || text === '=' || text === '&' || formulaOperators.has(text);
 }
 
 // What a formula opens with in the editor: `=NAME(`, each part in the color of plain formula text.
