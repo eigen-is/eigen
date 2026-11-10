@@ -175,10 +175,8 @@ export function nextBatch(rnd: Random, sheets: Sheet[], step: number): Op[] {
         const [value] = fresh([...sheets, added]).slice(-1);
         return [{ op: 'addSheet', path: [], value }];
     }
-    // No author deletes or hides the last sheet a tab shows, so neither does a peer.
-    const shownBeside = (id: string) => sheets.some((s) => s.id !== id && s.hide !== 1);
-    if (roll === 2 && byId('s4') && shownBeside('s4')) return deleted('s4');
-    if (roll === 3 && byId('s3') && step > 20 && shownBeside('s3')) return deleted('s3');
+    if (roll === 2 && byId('s4')) return deleted('s4');
+    if (roll === 3 && byId('s3') && step > 20) return deleted('s3');
     if (roll < 9) return withAuthorValues(sheets, cellOps(rnd, sheets));
     const ops = [rowColOp(rnd, rnd.pick(sheets))];
     // A structural undo or redo can send several row or column ops at once.

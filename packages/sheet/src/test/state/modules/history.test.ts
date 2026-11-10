@@ -12,7 +12,7 @@ import { dataToCelldata } from '../../../engine/celldata';
 import { MAX_SHEET_ROW_COUNT } from '../../../engine/defaults';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
 import type { Cell, ShiftedSheet } from '../../../engine/types';
-import { copySheet } from '../../../state/api/sheet';
+import { copySheet, hideSheet, showSheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { applyDataValidation } from '../../../state/modules/data-validation';
 import type { RowColMove } from '../../../state/modules/history-shift';
@@ -1025,8 +1025,76 @@ describe('sheet orders after two tabs change the sheet list at once', () => {
     });
 });
 
+// The Workbook's replay of the log from `base`, as a late batch that doesn't commute with the tab's own makes it.
+function replayLog(t: Tab, base: Context, log: Op[][], late: Op[]) {
+    generateAPIs(
+        () => t.ctx,
+        (recipe) => {
+            t.ctx = produce(t.ctx, recipe);
+        },
+        () => {},
+        () => {},
+        t.history,
+    ).replayOps(base.sheets, log, new Set([late]));
+}
+
+// One and Two are the last sheets shown, and each tab takes one away before the other's batch arrives. The log puts A's
+// batch first, and B takes it as the Workbook takes a late batch: on top when it commutes, else by a replay.
+describe('two tabs taking away the last two sheets shown at once', () => {
+    const shown = (sheets: readonly LibSheet[]) => sheets.filter((s) => s.hide !== 1).map((s) => s.id);
+
+    test.each<[string, Structural, Structural]>([
+        ['deletes', removeSheet(TWO), removeSheet(ONE)],
+        [
+            'hides',
+            [(ctx) => hideSheet(ctx, TWO), {}],
+            [
+                (ctx) => {
+                    changeSheet(ctx, TWO);
+                    hideSheet(ctx, ONE);
+                },
+                {},
+            ],
+        ],
+    ])('two %s: the later does nothing, on both tabs and for a joiner', (_, onA, onB) => {
+        const base = produce(workbook(), (ctx: Context) => {
+            ctx.sheets[2].hide = 1;
+        });
+        const a = tab(base);
+        const b = tab(base);
+        const fromA = tabEdit(a, ...onA);
+        const fromB = tabEdit(b, ...onB);
+        const log = [fromA, fromB];
+        tabReceive(a, fromB);
+        if (commutes([fromA], [fromB])) tabReceive(b, fromA);
+        else replayLog(b, base, log, fromA);
+        expect(shown(a.ctx.sheets)).toEqual([ONE]);
+        expect(view(b.ctx.sheets)).toEqual(view(a.ctx.sheets));
+        expect(shown(b.ctx.sheets)).toEqual([ONE]);
+        expect(view(join(base, log))).toEqual(view(a.ctx.sheets));
+        expect(shown(join(base, log))).toEqual([ONE]);
+    });
+
+    test('an undo that would hide the last sheet shown does nothing', () => {
+        const base = produce(workbook(), (ctx: Context) => {
+            ctx.sheets[1].hide = 1;
+            ctx.sheets[2].hide = 1;
+        });
+        const s = session(base);
+        s.edit(s.a, (ctx) => showSheet(ctx, TWO));
+        s.edit(s.b, (ctx) => {
+            changeSheet(ctx, TWO);
+            hideSheet(ctx, ONE);
+        });
+        s.undo(s.a);
+        expect(shown(s.a.ctx.sheets)).toEqual([TWO]);
+        expect(shown(s.b.ctx.sheets)).toEqual([TWO]);
+        expect(shown(s.joiner())).toEqual([TWO]);
+    });
+});
+
 // Two tabs pressing + at once both name the new tab Sheet4. The log puts A's add first, so B applies the log again from
-// before its own, as a late batch that doesn't commute makes it.
+// before its own.
 describe('two tabs adding a sheet of one name at once', () => {
     test('the later add takes the next free name and keeps its cells, on both tabs and for a joiner', () => {
         const base = workbook();
@@ -1041,15 +1109,7 @@ describe('two tabs adding a sheet of one name at once', () => {
         const log = [fromA, fromB, typedInB];
         tabReceive(a, fromB);
         tabReceive(a, typedInB);
-        generateAPIs(
-            () => b.ctx,
-            (recipe) => {
-                b.ctx = produce(b.ctx, recipe);
-            },
-            () => {},
-            () => {},
-            b.history,
-        ).replayOps(base.sheets, log, new Set([fromA]));
+        replayLog(b, base, log, fromA);
         const names = (sheets: readonly LibSheet[]) => sheets.map((s) => [s.id, s.name]);
         expect(names(a.ctx.sheets).slice(3)).toEqual([
             ['x', 'Sheet4'],

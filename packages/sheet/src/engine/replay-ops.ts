@@ -129,6 +129,7 @@ export function applySheetsBatch(
     const normalOps = batch.filter(isPatchOp);
     const [patches] = opToPatchOnSheets(result, normalOps);
     result = immer.applyPatches(result, patches);
+    if (hidesEverySheet(sheets, result)) throw new Error('A batch may not hide or delete every sheet');
     if (patches.length > 0) withinBudget(() => held?.followPatches(result, patches));
     const seeds = seedsOf(batch, moved);
     let skipped: RangeError | null = null;
@@ -248,6 +249,13 @@ function isNewSheet(v: unknown, sheets: readonly Sheet[]): v is Sheet {
     if (config != null && !isRecord(config)) return false;
     if (typeof id !== 'string' || typeof name !== 'string') return false;
     return !sheets.some((s) => s.id === id) && sheetHoldsNoBadLink(v);
+}
+
+// Whether a step leaves no sheet shown where one was. Two tabs each hiding or deleting one of the last two sheets shown
+// would leave the workbook nothing to open on, so every reader refuses such a batch.
+export function hidesEverySheet(before: readonly Sheet[], after: readonly Sheet[]): boolean {
+    const shown = (sheet: Sheet) => sheet.hide !== 1;
+    return before.some(shown) && !after.some(shown);
 }
 
 // A row or column op moves the cells after it on its sheet, and it needs the sheet's matrix to apply.

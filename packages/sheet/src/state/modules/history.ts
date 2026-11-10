@@ -9,7 +9,7 @@ import { get, isEqual } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import { applyPatches, produce, produceWithPatches } from 'immer';
 import { computedKey, createArrayResolver } from '../../engine/cell-resolver';
-import { applyRowColOp } from '../../engine/replay-ops';
+import { applyRowColOp, hidesEverySheet } from '../../engine/replay-ops';
 import { RowColError } from '../../engine/rowcol';
 import type { Cell, CellMatrix } from '../../engine/types';
 import { getSheet } from '../api/common';
@@ -188,7 +188,10 @@ function patchStep(ctx: Context, apply: Patch[], written: Patch[]): Step {
     );
     const patches = withoutComputedValues(ctx, kept);
     if (patches.length === 0) return { ctx, ops: [] };
-    const restored = produce(applyPatches(ctx, patches), settleCurrentSheet);
+    const applied = applyPatches(ctx, patches);
+    // Every reader refuses a batch that would leave no sheet shown, so the step does nothing instead.
+    if (hidesEverySheet(ctx.sheets, applied.sheets)) return { ctx, ops: [] };
+    const restored = produce(applied, settleCurrentSheet);
     restored.formulaCache.followPatches(restored, patches);
     const [next, recalculated] = produceWithPatches(restored, (draft: Context) => recalculate(draft, patches));
     return { ctx: next, ops: patchToOp(ctx, next, [...patches, ...filterPatch(recalculated)]) };

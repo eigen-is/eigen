@@ -52,9 +52,11 @@ function batchKeys(ops: Op[]): string[][] | null {
 }
 
 // The key of the path an op writes, its sheet first, then the key of each path above it. An add or remove at an array
-// index moves the entries after it, so it writes the whole array. Null for an op on sheets, rows or columns.
+// index moves the entries after it, so it writes the whole array. A hide writes one key for every sheet, since every
+// reader refuses the one that would leave none shown. Null for an op on sheets, rows or columns.
 function pathKeys(op: Op): string[] | null {
     if (!isPatchOp(op)) return null;
+    if (op.path[0] === 'hide') return [JSON.stringify(['hide'])];
     const last = op.path.at(-1);
     const wholeArray = (op.op !== 'replace' && typeof last === 'number') || last === 'length';
     const path = [op.id, ...(wholeArray ? op.path.slice(0, -1) : op.path)].map(String);

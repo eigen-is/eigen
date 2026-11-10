@@ -56,7 +56,7 @@ To clear the color, open the same menu, choose **Change color** again, and click
 
 ## Hide and show a sheet
 
-To hide a sheet, click the **⌄** arrow on its tab and choose **Hide**. The tab disappears from the bar. You cannot hide the last visible sheet.
+To hide a sheet, click the **⌄** arrow on its tab and choose **Hide**. The tab disappears from the bar. You cannot hide the last visible sheet. If you and someone else each hide or delete one of the last two visible sheets at the same moment, the second one doesn't happen.
 
 To show a hidden sheet again, open the **View** menu in the menu bar. If any sheets are hidden, a **Hidden sheets** submenu appears. Click the sheet name to make it visible again.
 
