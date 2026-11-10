@@ -296,6 +296,34 @@ describe('applySheetsInsertRowCol/Delete — a merge above the op stays as it wa
     });
 });
 
+// A merge can reach past the grid, such as one a peer made before another peer's column delete. Stamping its cells
+// out there would leave the rows uneven, and a joiner reading the stored cells would show a column more.
+describe('applySheetsInsertRowCol/Delete — a merge past the last column', () => {
+    test.each([
+        [
+            'an insert',
+            (s: Sheet[]) =>
+                applySheetsInsertRowCol(s, { type: 'column', index: 0, count: 1, direction: 'lefttop', id: 's1' }),
+        ],
+        ['a delete', (s: Sheet[]) => applySheetsDeleteRowCol(s, { type: 'column', start: 0, end: 0, id: 's1' })],
+    ])('%s keeps every row as wide as the grid', (_, op) => {
+        const sheets: Sheet[] = [
+            {
+                id: 's1',
+                name: 'Sheet1',
+                order: 0,
+                data: [
+                    [cell('a'), { ...cell('b'), mc: { r: 0, c: 1, rs: 1, cs: 3 } }, { mc: { r: 0, c: 1 } }],
+                    [cell('c'), cell('d'), cell('e')],
+                ],
+                config: { merge: { '0_1': { r: 0, c: 1, rs: 1, cs: 3 } } },
+            },
+        ];
+        const [{ data }] = op(sheets);
+        expect(data?.map((row) => row.length)).toEqual([data?.[1].length, data?.[1].length]);
+    });
+});
+
 describe('applySheetsInsertRowCol/Delete — cross-sheet formula refs', () => {
     // Each ref names a sheet no sheet holds, among many sheets of names as long, so a name read against each sheet in
     // turn made the insert take seconds.

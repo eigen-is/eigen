@@ -565,9 +565,9 @@ function writeFilter(
 }
 
 // The op moved the cells from index `from` on its axis but not their `mc` stamps, so every merge that reaches that far
-// stamps its cells again, empty cells included. A merge that ends right before `from` may have lost its last rows to a
-// delete, so it stamps too. A row op shares the rows it did not insert with the sheet before it, so a row is copied
-// before its first stamp.
+// stamps its cells again, empty cells included, inside the grid: past it a stamp would widen its row alone. A merge
+// that ends right before `from` may have lost its last rows to a delete, so it stamps too. A row op shares the rows it
+// did not insert with the sheet before it, so a row is copied before its first stamp.
 function stampMerges(data: CellMatrix, merges: Record<string, MergeCell>, type: 'row' | 'column', from: number) {
     const copied = new Set<number>();
     for (const { r, c, rs, cs } of Object.values(merges)) {
@@ -578,7 +578,7 @@ function stampMerges(data: CellMatrix, merges: Record<string, MergeCell>, type: 
                 data[i] = [...data[i]];
                 copied.add(i);
             }
-            for (let j = c; j < c + cs; j += 1) {
+            for (let j = c; j < Math.min(c + cs, data[i].length); j += 1) {
                 const mc = i === r && j === c ? { r, c, rs, cs } : { r, c };
                 data[i][j] = { ...data[i][j], mc };
             }
