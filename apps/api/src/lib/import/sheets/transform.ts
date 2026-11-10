@@ -10,12 +10,13 @@ import { SERVER_RECALC_BUDGET } from '../../document/sheets';
 import type { SheetsImportJob, SheetsImportTransformResult, TransformWarning } from '../../document/transform/protocol';
 import { toTransferableMedia, toTransferableText } from '../../document/transform/protocol';
 import { readXlsx } from './from-xlsx';
+import type { SheetsWeight } from './limits';
 import { sheetsWeight } from './limits';
 
 export function importXlsxToSheetsSnapshot(
     data: ArrayBuffer,
     job: Pick<SheetsImportJob, 'maxMediaBytes'>,
-): SheetsImportTransformResult & { warnings: TransformWarning[] } {
+): SheetsImportTransformResult & { weight: SheetsWeight; warnings: TransformWarning[] } {
     const read = readXlsx(new Uint8Array(data), job);
     // Weighed before the recalc, which may lengthen a formula's result, so the weight never passes what the reader let
     // through.

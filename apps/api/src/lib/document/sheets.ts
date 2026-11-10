@@ -28,8 +28,9 @@ import {
     withMaterializedData,
 } from '@workspace/sheet/engine';
 import type * as Y from 'yjs';
+import type { SheetsWeight } from '../import/sheets/limits';
 import { assertInsertFits } from '../import/sheets/limits';
-import type { SheetsWeight, SheetsWorkbookJson } from './transform/protocol';
+import type { SheetsWorkbookJson } from './transform/protocol';
 
 // What the server's recalc lets an untrusted workbook's formulas cost. Past any bound the recalc fails like any other,
 // and the sheets keep the values they hold.

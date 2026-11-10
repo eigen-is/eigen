@@ -104,11 +104,11 @@ async function runImport(request: ImportTransformJob & { data: ArrayBuffer }): P
     switch (request.sourceFormat) {
         case 'xlsx': {
             const { importXlsxToSheetsSnapshot } = await import('../../import/sheets/transform');
-            const { warnings, ...result } = importXlsxToSheetsSnapshot(request.data, request);
-            if (!request.workbook) return { ok: true, result, warnings };
+            const { warnings, weight, ...result } = importXlsxToSheetsSnapshot(request.data, request);
+            if (!('workbook' in request)) return { ok: true, result, warnings };
             const { addSheetsBatch } = await import('../sheets');
             const snapshotJson = new TextDecoder().decode(result.snapshotJson);
-            const batch = addSheetsBatch(request.workbook, snapshotJson, result.weight);
+            const batch = addSheetsBatch(request.workbook, snapshotJson, weight);
             return {
                 ok: true,
                 result: { batch: toTransferableText(JSON.stringify(batch)), images: result.images },

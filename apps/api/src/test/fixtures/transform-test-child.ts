@@ -167,7 +167,7 @@ process.on('message', async (message: ChildRequestEnvelope | ParentMediaReply) =
                 jobId,
                 response: {
                     ok: true,
-                    result: { snapshotJson, weight: { cells: 0, text: 0 }, images: [] },
+                    result: { snapshotJson, images: [] },
                     warnings: [],
                 },
             };
