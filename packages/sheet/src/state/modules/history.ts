@@ -197,16 +197,15 @@ function patchStep(ctx: Context, apply: Patch[], written: Patch[]): Step {
     return { ctx: next, ops: patchToOp(ctx, next, [...patches, ...filterPatch(recalculated)]) };
 }
 
-// The patches without the value, display text and value type a formula cell computes once they apply, since a peer
-// may have changed the formula or its inputs since. One the engine can't evaluate keeps them, as a recompute does.
+// The patches without the value and display text a formula cell computes once they apply, since a peer may have
+// changed the formula or its inputs since. One the engine can't evaluate keeps them, as a recompute does.
 function withoutComputedValues(ctx: Context, patches: Patch[]): Patch[] {
     const after = applyPatches(ctx, patches);
     const { engine } = ctx.formulaCache;
     const resolver = createArrayResolver(after.sheets);
     return patches.filter(({ path }) => {
-        const [, index, field, r, c, key, below] = path;
-        const computed = path.length === 6 ? key === 'v' || key === 'm' : key === 'ct' && below === 't';
-        if (field !== 'data' || path.length > 7 || !computed) return true;
+        const [, index, field, r, c, key] = path;
+        if (field !== 'data' || path.length !== 6 || (key !== 'v' && key !== 'm')) return true;
         if (typeof index !== 'number' || typeof r !== 'number' || typeof c !== 'number') return true;
         const { id, data } = after.sheets[index];
         const f = data?.[r]?.[c]?.f;

@@ -14,6 +14,7 @@ import { normalizeSheetConfig } from '../../../engine/sheet-config';
 import type { Cell, ShiftedSheet } from '../../../engine/types';
 import { copySheet, hideSheet, showSheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
+import { getFlowdata } from '../../../state/context';
 import { applyDataValidation } from '../../../state/modules/data-validation';
 import type { RowColMove } from '../../../state/modules/history-shift';
 import { deleteMove, insertMove, shiftEntries } from '../../../state/modules/history-shift';
@@ -21,6 +22,7 @@ import { saveHyperlink } from '../../../state/modules/hyperlink';
 import { mergeCells } from '../../../state/modules/merge';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import { addSheet, changeSheet, deleteSheet, renameSheet } from '../../../state/modules/sheet';
+import { updateFormatCell } from '../../../state/modules/toolbar';
 import { clearValidations, validationAt } from '../../../state/modules/validation-rules';
 import type { ConditionalFormatRule, DataValidationRule, Op, Sheet } from '../../../state/types';
 import { commutes } from '../../../state/utils/commute';
@@ -682,6 +684,24 @@ describe('undo and redo recalculate the formulas they touch', () => {
         s.edit(s.b, typedAt('A1', '7'));
         s.undo(s.a);
         for (const t of [s.a, s.b]) expect(cellAt(t, 'B1')).toMatchObject({ f: '=A1*3', v: 21 });
+        expectAgree(s);
+    });
+
+    test.each([
+        ['a date', { fa: 'yyyy-MM-dd', t: 'd' }, '1900-01-10'],
+        ['a text', { fa: '@', t: 's' }, '10'],
+    ])('the undo and redo of %s format give a formula its type and display', (_, ct, m) => {
+        const general = { f: '=A1*2', v: 10, m: '10', ct: { fa: 'General', t: 'n' } };
+        const s = session(workbook({ A1: num(5), B1: general }));
+        s.edit(s.a, (ctx) => {
+            const data = getFlowdata(ctx);
+            if (data) updateFormatCell(ctx, data, 'ct', ct.fa, 0, 0, 1, 1);
+        });
+        s.undo(s.a);
+        for (const t of [s.a, s.b]) expect(cellAt(t, 'B1')).toEqual(general);
+        expectAgree(s);
+        s.redo(s.a);
+        for (const t of [s.a, s.b]) expect(cellAt(t, 'B1')).toEqual({ ...general, m, ct });
         expectAgree(s);
     });
 });

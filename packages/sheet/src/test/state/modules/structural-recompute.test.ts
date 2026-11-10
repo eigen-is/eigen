@@ -1048,3 +1048,19 @@ describe('a forged add', () => {
         expect(applied?.ctx.sheets.map((s) => s.id)).toEqual(['s1']);
     });
 });
+
+test("a row op writes a formula whose value stays but whose display its format doesn't give, on every reader", () => {
+    const stale = { f: '=SUM(A1:A2)', v: 3, m: '3', ct: { fa: '0.00', t: 's' } };
+    const base = book({
+        cells: [
+            [n(1), stale],
+            [n(2), null],
+        ],
+    });
+    const author = tab(base);
+    const op = insertRow(1);
+    const batch = tabEdit(author, (d) => insertRowCol(d, op, false), { insertRowColOp: op });
+    for (const sheets of [author.ctx.sheets, join(base, [batch])]) {
+        expect(at(sheets, 's1', 0, 1)).toEqual({ f: '=SUM(A1:A3)', v: 3, m: '3.00', ct: { fa: '0.00', t: 'n' } });
+    }
+});

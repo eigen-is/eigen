@@ -8,7 +8,7 @@ import type { Cell, CellMatrix, Sheet } from '@workspace/lib/sheets';
 import { computedKey, createArrayResolver, withComputedValues } from './cell-resolver';
 import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
-import { writeFormulaResult } from './format';
+import { holdsFormulaResult, writeFormulaResult } from './format';
 import { FormulaEngine } from './formula-engine';
 import type { CellAt, WorkingSheet } from './formula-graph';
 import { FormulaGraph } from './formula-graph';
@@ -107,15 +107,15 @@ function cellsOnLines(sheets: readonly WorkingSheet[], lines: RecomputeSeeds['li
     return cells;
 }
 
-// The sheets with each changed value written. The input may be frozen, and a sheet or row nothing changed keeps its
-// object, so an op that changes no value writes nothing.
+// The sheets with each result written that its cell doesn't hold yet. The input may be frozen, and a sheet or row
+// nothing changed keeps its object, so an op that changes no result writes nothing.
 function withResults<S extends WorkingSheet>(sheets: S[], results: readonly FormulaResult[]): S[] {
     const written = new Map<string, CellMatrix>();
     const byId = new Map(sheets.map((sheet) => [sheet.id, sheet]));
     for (const { r, c, id, result } of results) {
         const before = byId.get(id)?.data;
         const existing = before?.[r][c];
-        if (!before || existing == null || existing.v === result.value) continue;
+        if (!before || existing == null || holdsFormulaResult(existing, result.value)) continue;
         let data = written.get(id);
         if (!data) {
             data = [...before];
