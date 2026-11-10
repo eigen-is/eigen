@@ -36,11 +36,11 @@ export const TRANSFORM_LIMITS: Record<
     // Search reindexing: nobody waits on it, but a stuck job must not hold the single
     // active child away from user-facing work. It reuses the preview cost.
     'extract-text': { deadlineMs: 30_000, admissionCostMs: 15_000 },
-    // A workbook's log folded at its close: a decode, a replay and an encode, less than an export does. It runs in the
-    // background and holds the one child, so it gets a preview's cost and room for a large workbook.
-    compact: { deadlineMs: 60_000, admissionCostMs: 15_000 },
-    // A read of what a document's current state names, before a sweep. It is a materialize and a walk,
-    // so it gets a compaction's limits.
+    // A workbook's log folded at its close, in the background. A long log folds until just before the deadline, so
+    // the one child it holds is priced at all of it.
+    compact: { deadlineMs: 60_000, admissionCostMs: 60_000 },
+    // A read of what a document's current state names, before a sweep. It is a materialize and a walk, so it gets a
+    // preview's cost and room for a large document.
     references: { deadlineMs: 60_000, admissionCostMs: 15_000 },
 };
 

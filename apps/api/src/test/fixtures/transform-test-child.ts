@@ -70,7 +70,7 @@ process.on('message', async (message: ChildRequestEnvelope | ParentMediaReply) =
         onMediaReply?.(message.media);
         return;
     }
-    const { jobId, request } = message;
+    const { jobId, request, deadlineAt } = message;
     const directive = (request as { test?: TestDirective }).test ?? {};
     if (directive.beforeAck && directive.behavior === 'signal') process.kill(process.pid, directive.signal);
     if (directive.beforeAck) process.exit(1);
@@ -190,6 +190,7 @@ process.on('message', async (message: ChildRequestEnvelope | ParentMediaReply) =
     const body = JSON.stringify({
         startedAt,
         endedAt: Date.now(),
+        deadlineAt,
         receivedBytes: updates.map((u) => u.data.byteLength),
     });
     const response: ChildResponseEnvelope = {
