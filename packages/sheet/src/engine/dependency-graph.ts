@@ -2,11 +2,12 @@
 // recalc both run the cells they found through it. It is an iterative depth-first walk, because a chain of formulas can
 // be deeper than the call stack, and a reference cycle neither throws nor hangs: its cells come out in visit order.
 
-import type { FormulaCellInfo, FormulaCellInfoMap } from './types';
+import type { FormulaCellInfo } from './types';
 
+// `readers` holds, for a formula, the formulas that read its cell.
 export function getCalculationOrder(
     cells: readonly FormulaCellInfo[],
-    formulaCellInfoMap: FormulaCellInfoMap,
+    readers: ReadonlyMap<FormulaCellInfo, readonly FormulaCellInfo[]>,
 ): FormulaCellInfo[] {
     const order: FormulaCellInfo[] = [];
     const stack = [...cells];
@@ -24,10 +25,7 @@ export function getCalculationOrder(
         // first and reversed at the end. Pushing in place matters: rebuilding the stack per visit is quadratic.
         expanded.add(node.key);
         stack.push(node);
-        for (const key of node.dependents) {
-            const dependent = formulaCellInfoMap[key];
-            if (dependent != null) stack.push(dependent);
-        }
+        for (const reader of readers.get(node) ?? []) stack.push(reader);
     }
 
     order.reverse();

@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { renameSheetTexts, sheetFinder } from '../../../engine';
-import { isNewSheet } from '../../../engine/replay-ops';
+import { replaySheetsOps } from '../../../engine/replay-ops';
 import type { Context } from '../../../state/context';
 import { updateCell } from '../../../state/modules/cell';
 import {
@@ -124,10 +124,12 @@ describe('a link to a sheet', () => {
 
 describe("a peer's whole sheet", () => {
     const named = { id: 'new', name: 'New' };
+    const added = (value: Record<string, unknown>) =>
+        replaySheetsOps([], [[{ op: 'addSheet', id: 'new', path: [], value }]]).map((sheet) => sheet.id);
 
     test('passes with well-formed links in the list or the matrix', () => {
-        expect(isNewSheet({ ...named, celldata: [{ r: 0, c: 0, v: { link: LINK } }] }, [])).toBe(true);
-        expect(isNewSheet({ ...named, data: [[{ link: LINK }, null]] }, [])).toBe(true);
+        expect(added({ ...named, celldata: [{ r: 0, c: 0, v: { link: LINK } }] })).toEqual(['new']);
+        expect(added({ ...named, data: [[{ link: LINK }, null]] })).toEqual(['new']);
     });
 
     test.each([
@@ -136,6 +138,6 @@ describe("a peer's whole sheet", () => {
         ['a matrix cell with a link that is text', { data: [[{ link: 'https://eigen.is' }]] }],
         ['an address that is no text', { data: [[{ link: { type: 'webpage', address: 5 } }]] }],
     ])('is refused for %s', (_, cells) => {
-        expect(isNewSheet({ ...named, ...cells }, [])).toBe(false);
+        expect(added({ ...named, ...cells })).toEqual([]);
     });
 });

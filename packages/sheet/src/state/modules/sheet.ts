@@ -54,15 +54,14 @@ export function leaveCurrentSheet(ctx: Context, excludeId?: string) {
     return true;
 }
 
-// Undo and redo can remove or hide the sheet on screen.
+// A batch, an undo or a redo can remove or hide the sheet on screen.
 export function settleCurrentSheet(ctx: Context) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null || ctx.sheets[index].hide === 1) leaveCurrentSheet(ctx);
 }
 
-// The per-sheet paint data is derived in the recipe that makes the sheet current, so no frame mixes sheets and the
-// recipe can read the new geometry, as a jump to a cell on that sheet does. A sheet nobody selected in opens on A1: a
-// key needs a cursor.
+// The per-sheet paint data is derived in the recipe that makes the sheet current, so no frame mixes sheets and a jump
+// to a cell there reads the new geometry. A sheet nobody selected in opens on A1: a key needs a cursor.
 export function applySheetView(ctx: Context) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
@@ -99,7 +98,8 @@ function deriveGeometry(ctx: Context, { data }: Sheet) {
     createFilterOptions(ctx);
 }
 
-// The add switches to the sheet it adds, unless it names the new sheet's id, as a copy does.
+// The add switches to the sheet it adds, unless it names the new sheet's id, as a copy does. A name the sheet can't
+// take, such as a copy's of a name stored before the rule, refuses the add before it moves an order.
 export function addSheet(ctx: Context, newSheetId?: string, sheetName?: string, sheetData?: Sheet) {
     if (ctx.allowEdit === false) return;
     const id = newSheetId ?? sheetData?.id ?? crypto.randomUUID();
@@ -112,6 +112,11 @@ export function addSheet(ctx: Context, newSheetId?: string, sheetName?: string, 
         config: {},
     };
     if (sheetName !== undefined) sheet.name = sheetName;
+    const refusal = sheetNameRefusal(ctx.sheets, id, sheet.name);
+    if (refusal) {
+        ctx.warnDialog = refusal;
+        return;
+    }
     if (sheetData) shiftSheetOrders(ctx.sheets, sheetOrder(sheetData), 1);
     applyBatch(ctx, [{ op: 'addSheet', id, path: [], value: sheet }]);
     if (!newSheetId) changeSheet(ctx, id);

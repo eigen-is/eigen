@@ -9,7 +9,7 @@ import type { Op, Sheet } from '@workspace/lib/sheets';
 import { isPatchOp, isStructuralBatch, REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { opToPatchOnSheets, sheetHoldsNoBadLink } from '@workspace/lib/sheets/yjs-ops';
 import { enablePatches, Immer } from 'immer';
-import { isSheetName, sheetNameKey } from './a1-notation';
+import { sheetNameKey } from './a1-notation';
 import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
 import { FormulaEngine } from './formula-engine';
@@ -18,18 +18,17 @@ import { namesSheet } from './formula-shift';
 import type { RecalcBudgets, RecomputeSeeds } from './recalc';
 import { recomputeAfter } from './recalc';
 import type { DeleteRowColOp, InsertRowColOp } from './rowcol';
-import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from './rowcol';
+import { applySheetsDeleteRowCol, applySheetsInsertRowCol, lineMove } from './rowcol';
 import { normalizeSheetConfig } from './sheet-config';
 import type { RenameSheetOp } from './sheet-name';
-import { applySheetDelete, applySheetRename } from './sheet-name';
+import { applySheetDelete, applySheetRename, sheetNameRefusal } from './sheet-name';
 import type { ShiftedSheet } from './types';
 import { error } from './validation';
 
 // immer's patch plugin is global, and enabling it twice is harmless. Enabling it here means every caller of
 // replaySheetsOps has it without a setup step of its own.
 enablePatches();
-// The replay copies what it changes and nothing reads its sheets as frozen, and freezing every sheet after each batch
-// would cost a long replay a fifth of its time.
+// The replay copies what it changes and nothing reads its sheets as frozen, so freezing them would be time for nothing.
 const immer = new Immer({ autoFreeze: false });
 
 type InsertValue = Omit<InsertRowColOp, 'id'>;
@@ -39,9 +38,8 @@ type DeleteValue = Omit<DeleteRowColOp, 'id'>;
 // without the budget computes, so such sheets are no state to store.
 export class SkippedRecompute extends Error {}
 
-// A batch the replay can't apply is reported to `onDropped`, and so is a recompute past `budgets`, as a
-// SkippedRecompute whose batch stands with the values it had. A caller that wants a count of its own passes it. By
-// default each one is logged as a warning.
+// A batch the replay can't apply goes to `onDropped`, and so does a recompute past `budgets` as a SkippedRecompute,
+// whose batch stands with the values it had. By default each is logged as a warning.
 export function replaySheetsOps(
     sheets: Sheet[],
     opBatches: Op[][],
@@ -73,10 +71,8 @@ export function replaySheetsOps(
 // A row or column op a batch applied, with the sheets as they were before it.
 type AppliedRowColOp = { op: InsertRowColOp | DeleteRowColOp; sheets: Sheet[] };
 
-// One batch on plain sheets, as every reader applies it: the sheet, row and column ops first, then the cell and field
-// patches, then the recompute those ops ask for, with `graph` following each step. It throws when an op fails, and
-// the caller keeps the sheets it had and drops the graph, which may have followed part of the batch. A recompute past
-// `budgets` leaves the batch's values as they were and comes back as `skipped`.
+// One batch on plain sheets, as every reader applies it: sheet, row and column ops, then patches, then the recompute
+// they ask for, with `graph` following. A failed op throws; a recompute past `budgets` comes back as `skipped`.
 export function applySheetsBatch(
     sheets: Sheet[],
     batch: Op[],
@@ -96,24 +92,28 @@ export function applySheetsBatch(
             return e;
         }
     };
-    const dataOpIds = collectDataOpSheetIds(batch);
-    if (dataOpIds) result = result.map((s) => (dataOpIds.has(s.id) ? withMaterializedData(s) : s));
+    // A cell or row op writes the dense matrix, a sheet added earlier in the log with only its stored cells included.
+    const dataOpIds = new Set(
+        batch.flatMap((op) => ((op.path[0] === 'data' || isRowColOp(op)) && op.id ? [op.id] : [])),
+    );
+    result = result.map((s) => (dataOpIds.has(s.id) ? withMaterializedData(s) : s));
     // opToPatchOnSheets finds a sheet by its place in the array, so the sheet and row ops settle the array before the
     // patches resolve.
     for (const op of batch) {
         if (op.op === 'addSheet') {
             if (!isNewSheet(op.value, result)) {
-                console.warn('[sheets] addSheet op has malformed value or a taken id', op.value);
+                console.warn('[sheets] addSheet op has a malformed value, a taken id or a taken name', op.value);
                 continue;
             }
             const added = withNormalizedSheet(op.value);
-            result = [...result, dataOpIds?.has(op.value.id) ? withMaterializedData(added) : added];
+            result = [...result, dataOpIds.has(op.value.id) ? withMaterializedData(added) : added];
             held = null;
         } else if (op.op === 'deleteSheet' && op.id) {
             result = applySheetDelete(result, op.id);
             held = null;
         } else if (isRowColOp(op)) {
-            const move = rowColOf(op);
+            const move = rowColOf(op, result);
+            if (!move) continue;
             moved.push({ op: move, sheets: result });
             result = applyRowColOp(result, op);
             withinBudget(() => held?.shift(result, move));
@@ -126,7 +126,7 @@ export function applySheetsBatch(
     const [patches] = opToPatchOnSheets(result, normalOps);
     result = immer.applyPatches(result, patches);
     if (patches.length > 0) withinBudget(() => held?.followPatches(result, patches));
-    const seeds = seedsOf(batch);
+    const seeds = seedsOf(batch, moved);
     let skipped: RangeError | null = null;
     if (seeds) {
         const materialized = result.map(withMaterializedData);
@@ -143,31 +143,24 @@ export function applySheetsBatch(
 
 // What a batch's sheet, row and column ops can affect, or null when it holds none, since an edit carries its own
 // values. A cell its patches write counts too, because an undo's repairs change what the formulas reading them hold.
-export function seedsOf(ops: readonly Op[]): RecomputeSeeds | null {
+function seedsOf(ops: readonly Op[], moved: readonly AppliedRowColOp[]): RecomputeSeeds | null {
     if (!isStructuralBatch(ops)) return null;
-    const cells: RecomputeSeeds['cells'][number][] = [];
     const lines: RecomputeSeeds['lines'][number][] = [];
-    const names = new Set<string>();
-    // A later row or column op moves the lines an earlier one opened or closed, as it moves the cells on them.
-    const moveLines = (id: string, type: 'row' | 'column', at: number, by: number) => {
+    for (const { op } of moved) {
+        const { id, type } = op;
+        const { at, to } = lineMove(op);
+        // A later op moves the lines an earlier one opened or closed, as it moves the cells on them.
         for (const [i, seed] of lines.entries()) {
-            if (seed.id !== id || seed.type !== type || seed.line < at) continue;
-            const line = seed.line + by;
-            lines[i] = { ...seed, line: by < 0 ? Math.max(at - 1, line) : line };
+            if (seed.id === id && seed.type === type) lines[i] = { ...seed, line: to(seed.line) ?? at - 1 };
         }
-    };
+        if ('index' in op) lines.push({ id, type, line: at });
+        else lines.push({ id, type, line: at - 1 }, { id, type, line: at });
+    }
+    const cells: RecomputeSeeds['cells'][number][] = [];
+    const names = new Set<string>();
     for (const op of ops) {
         const [field, r, c] = op.path;
-        if (op.op === 'insertRowCol') {
-            const { id, type, index, count, direction } = insertRowColOf(op);
-            const line = direction === 'lefttop' ? index : index + 1;
-            moveLines(id, type, line, count);
-            lines.push({ id, type, line });
-        } else if (op.op === 'deleteRowCol') {
-            const { id, type, start, end } = deleteRowColOf(op);
-            moveLines(id, type, start, start - end - 1);
-            lines.push({ id, type, line: start - 1 }, { id, type, line: start });
-        } else if (op.op === 'addSheet' || op.op === 'renameSheet') {
+        if (op.op === 'addSheet' || op.op === 'renameSheet') {
             const name = isRecord(op.value) ? op.value['name'] : undefined;
             if (typeof name === 'string') names.add(sheetNameKey(name));
         } else if (isPatchOp(op) && field === 'data' && typeof r === 'number' && typeof c === 'number' && op.id) {
@@ -181,12 +174,28 @@ export function seedsOf(ops: readonly Op[]): RecomputeSeeds | null {
 
 // A row or column op's result on plain sheets. An insert past the sheet's size limit throws RowColError.
 export function applyRowColOp<S extends ShiftedSheet>(sheets: S[], op: Op): S[] {
-    const move = rowColOf(op);
+    const move = rowColOf(op, sheets);
+    if (!move) return sheets;
     return 'index' in move ? applySheetsInsertRowCol(sheets, move) : applySheetsDeleteRowCol(sheets, move);
 }
 
-function rowColOf(op: Op): InsertRowColOp | DeleteRowColOp {
-    return op.op === 'insertRowCol' ? insertRowColOf(op) : deleteRowColOf(op);
+// The op as it applies, or null for a delete that leaves nothing to take. A delete keeps a sheet's last line: two tabs
+// deleting at once can ask for every one, and a stored sheet reads no rows as the default size.
+function rowColOf(op: Op, sheets: readonly Sheet[]): InsertRowColOp | DeleteRowColOp | null {
+    // An op's value is untyped, so a bad one throws and rolls its batch back, whose other ops were written for the
+    // rows it would have moved.
+    if (op.op === 'insertRowCol') {
+        const value = asInsertValue(op.value);
+        if (!value || !op.id) throw new Error('insertRowCol op has a malformed value');
+        return { ...value, id: op.id };
+    }
+    const value = asDeleteValue(op.value);
+    if (!value || !op.id) throw new Error('deleteRowCol op has a malformed value');
+    const remove = { ...value, id: op.id };
+    const data = sheets.find(({ id }) => id === remove.id)?.data;
+    const lines = (remove.type === 'row' ? data?.length : data?.[0]?.length) ?? 0;
+    if (remove.start > 0 || remove.end < lines - 1) return remove;
+    return lines > 1 ? { ...remove, end: lines - 2 } : null;
 }
 
 // A stored sheet keeps its cells as the `celldata` list, but a cell op writes `data[r][c]`. So a sheet gets the dense
@@ -197,22 +206,6 @@ export function withMaterializedData(s: Sheet): Sheet {
     return { ...s, data: celldataToData(s.celldata ?? [], row, column) };
 }
 
-// The insert a row op names. An op's value is untyped and a hostile client may send any shape, so a bad one throws and
-// the op's whole batch rolls back, since its other ops were written for the rows the op would have moved.
-function insertRowColOf(op: Op): InsertRowColOp {
-    const value = asInsertValue(op.value);
-    if (!value || !op.id) throw new Error('insertRowCol op has a malformed value');
-    return { ...value, id: op.id };
-}
-
-function deleteRowColOf(op: Op): DeleteRowColOp {
-    const value = asDeleteValue(op.value);
-    if (!value || !op.id) throw new Error('deleteRowCol op has a malformed value');
-    return { ...value, id: op.id };
-}
-
-// A rename writes its name into every formula naming the tab, so a long one would run the reader out of memory, which
-// applySheetRename refuses.
 function renameSheetOf(op: Op): RenameSheetOp {
     const { name } = isRecord(op.value) ? op.value : { name: undefined };
     if (typeof name !== 'string' || !op.id) throw new Error('renameSheet op has a malformed value');
@@ -241,16 +234,15 @@ function isLine(value: unknown, type: 'row' | 'column'): value is number {
     return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value < count;
 }
 
-// A new sheet needs an id no sheet has yet, because every later op names its sheet by id. Its name follows the
-// sheet-name rule, or a rename's undo could not restore it. Its cells, links and config must read as such on every
-// reader.
-export function isNewSheet(v: unknown, sheets: { id: string }[]): v is Sheet {
+// A new sheet needs an id no sheet has yet, because every later op names its sheet by id, and a name a rename could
+// take, or a delete or rename of one of two namesakes would break the formulas reading the other.
+function isNewSheet(v: unknown, sheets: readonly Sheet[]): v is Sheet {
     if (!isRecord(v)) return false;
     const { id, name, data, celldata, config } = v;
     if (data != null && !(Array.isArray(data) && data.every((row) => row == null || Array.isArray(row)))) return false;
     if (celldata != null && !(Array.isArray(celldata) && celldata.every(isRecord))) return false;
     if (config != null && !isRecord(config)) return false;
-    if (typeof id !== 'string' || typeof name !== 'string' || !isSheetName(name)) return false;
+    if (typeof id !== 'string' || typeof name !== 'string' || sheetNameRefusal(sheets, id, name)) return false;
     return !sheets.some((s) => s.id === id) && sheetHoldsNoBadLink(v);
 }
 
@@ -265,20 +257,6 @@ function withNormalizedSheet(s: Sheet): Sheet {
     const next = { ...s, config: { ...s.config } };
     normalizeSheetConfig(next);
     return next;
-}
-
-// The sheets a batch's cell or row ops touch, which need the dense matrix first. It runs per batch, so a sheet an
-// earlier addSheet op brought in with only `celldata` gets its matrix too.
-function collectDataOpSheetIds(batch: Op[]): Set<string> | null {
-    let touched: Set<string> | null = null;
-    for (const op of batch) {
-        const needsData = op.path[0] === 'data' || isRowColOp(op);
-        if (needsData && op.id) {
-            touched ??= new Set();
-            touched.add(op.id);
-        }
-    }
-    return touched;
 }
 
 // Where a sheet has the dense matrix, the matrix holds its latest cells: a replayed cell op writes `data` and leaves

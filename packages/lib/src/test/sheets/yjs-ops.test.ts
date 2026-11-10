@@ -49,12 +49,12 @@ describe('opToPatchOnSheets', () => {
 
     test('special ops are partitioned out', () => {
         const ops: Op[] = [
-            { op: 'replace', id: 'sheet-1', path: ['name'], value: 'Renamed' },
+            { op: 'replace', id: 'sheet-1', path: ['color'], value: 'red' },
             { op: 'addSheet', path: [], value: { id: 'sheet-3', name: 'Sheet3' } },
             { op: 'deleteSheet', path: [], value: { id: 'sheet-2' } },
         ];
         const [patches, special] = opToPatchOnSheets(SHEETS, ops);
-        expect(patches).toEqual([{ op: 'replace', value: 'Renamed', path: [0, 'name'] }]);
+        expect(patches).toEqual([{ op: 'replace', value: 'red', path: [0, 'color'] }]);
         expect(special).toHaveLength(2);
         expect(special[0].op).toBe('addSheet');
         expect(special[1].op).toBe('deleteSheet');

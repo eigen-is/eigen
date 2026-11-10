@@ -827,7 +827,7 @@ describe('document/sheets — appendSheetsToYjs', () => {
 
     test("the sheets arrive as one batch of addSheet ops under fresh ids, after the workbook's own", () => {
         const doc = workbook();
-        const pending: Op[] = [{ op: 'replace', id: 'own', path: ['name'], value: 'Data' }];
+        const pending: Op[] = [{ op: 'renameSheet', id: 'own', path: [], value: { name: 'Data' } }];
         doc.getArray('ops').push([pending]);
         const snapshot = doc.getMap('state').get('snapshot');
 
@@ -1015,6 +1015,24 @@ describe('document/sheets — compactSheetsSnapshot', () => {
             compactSheetsSnapshot(encodeSheetsSnapshot([wide], { computed: true }), JSON.stringify([deleteLast])),
         ).toThrow(engine.SkippedRecompute);
     }, 60_000);
+
+    test("a forged write of a sheet's id or name folds into a snapshot every reader opens", () => {
+        const two: Sheet[] = [...sheets, { id: 'sheet-2', name: 'Sheet2', order: 1, celldata: [], config: {} }];
+        const forged: Op[] = [
+            { op: 'replace', id: 'sheet-2', path: ['id'], value: 'sheet-1' },
+            { op: 'replace', id: 'sheet-2', path: ['name'], value: 7 },
+        ];
+        const { snapshot } = compactSheetsSnapshot(
+            encodeSheetsSnapshot(two, { computed: true }),
+            JSON.stringify([forged, edit(0, 'a')]),
+        );
+        const folded = decodeSheetsWorkbook(snapshot).sheets;
+        expect(folded.map(({ id, name }) => [id, name])).toEqual([
+            ['sheet-1', 'Sheet1'],
+            ['sheet-2', 'Sheet2'],
+        ]);
+        expect(values(snapshot)).toEqual([[0, 0, 'a']]);
+    });
 
     test('a batch the replay rejects is dropped and counted, and the others still apply', () => {
         const warn = spyOn(console, 'warn').mockImplementation(() => {});

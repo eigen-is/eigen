@@ -36,20 +36,34 @@ export type DeleteRowColOp = {
     id: string;
 };
 
-// The engine refuses an insert past the sheet's size limit with this error. The editor's menus say so, and the replay
-// and a peer's applyOp skip the op's whole batch.
+// An insert past the sheet's size limit throws this, and every reader skips its whole batch.
 export class RowColError extends Error {}
+
+type InsertLines = Pick<InsertRowColOp, 'index' | 'count' | 'direction'>;
+type DeleteLines = Pick<DeleteRowColOp, 'start' | 'end'>;
+
+// What a row or column op does to the lines on its axis: `at` is the first line it adds or deletes, and `to` says
+// where a line goes, null for one it deletes.
+export type LineMove = { at: number; to: (line: number) => number | null };
+
+export function lineMove(op: InsertLines | DeleteLines): LineMove {
+    if ('index' in op) {
+        const at = op.direction === 'lefttop' ? op.index : op.index + 1;
+        return { at, to: (line) => (line < at ? line : line + op.count) };
+    }
+    const count = op.end - op.start + 1;
+    return { at: op.start, to: (line) => (line < op.start ? line : line > op.end ? line - count : null) };
+}
 
 type AxisRange = { row: readonly number[]; column: readonly number[] };
 
-// Excel's rule for a range across an insert: an insert at or before its first row (or column) moves it, one inside
-// grows it, one right after leaves it. A range stops at the grid's last row or column, as Excel's does. A range the
-// insert leaves as it was comes back as the same object, so its owner writes nothing.
+// Excel's rule: an insert at or before a range's first line moves it, one inside grows it, one right after leaves it,
+// and it stops at the grid's last line. A range left as it was comes back as itself, so its owner writes nothing.
 export function shiftRangeForInsert<R extends AxisRange>(
     range: R,
     op: Pick<InsertRowColOp, 'type' | 'index' | 'count' | 'direction'>,
 ): R {
-    const insertAt = op.direction === 'lefttop' ? op.index : op.index + 1;
+    const { at: insertAt } = lineMove(op);
     const [start, end] = op.type === 'row' ? range.row : range.column;
     if (insertAt > end) return range;
     const last = (op.type === 'row' ? REFERENCE_ROW_COUNT : REFERENCE_COLUMN_COUNT) - 1;
@@ -80,7 +94,7 @@ export function shiftRangeForDelete<R extends AxisRange>(
 function pointsForInsert(ref: CellRangeRef, op: InsertRowColOp): ((index: number) => number) | null {
     if (!runsAlong(ref, op.type)) return null;
     const [start, end] = op.type === 'row' ? ref.row : ref.column;
-    const at = (op.direction === 'lefttop' ? op.index : op.index + 1) - start;
+    const at = lineMove(op).at - start;
     if (at <= 0 || at > end - start) return null;
     return (index) => (index >= at ? index + op.count : index);
 }
@@ -201,9 +215,8 @@ export function shiftCellKeyedForDelete<T>(
     return shifted;
 }
 
-// An op on one sheet only moves the refs that resolve to that sheet: unqualified ones in
-// formulas on it, and `Sheet!`-qualified ones anywhere. A CF `formula` rule reads its cells
-// through its own text, so it shifts by the same rules as a cell formula on its sheet.
+// An op on one sheet moves only the refs that resolve to it: unqualified ones on it and `Sheet!`-qualified ones
+// anywhere, a conditional format's formula rule among them.
 function shiftFormulasAcrossSheets<S extends Sheet>(
     sheets: S[],
     targetIndex: number,
@@ -235,9 +248,8 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
     );
 }
 
-// A chart ref names its sheet by id, so an op on one sheet moves the refs to it on every sheet's
-// charts, and the points along them. Only a chart whose refs moved is rewritten; a malformed
-// spec stays as stored.
+// A chart ref names its sheet by id, so an op moves the refs to its sheet on every sheet's charts, and the points along
+// them. Only a chart whose refs moved is rewritten.
 function shiftChartsAcrossSheets<S extends Sheet>(
     sheets: S[],
     sheetId: string,
@@ -290,9 +302,8 @@ export function shiftKeyedMapForDelete(
     return shifted;
 }
 
-// Generic over S, so the editor's wider sheet keeps its type. Nothing is deep-cloned or written in place: in the editor
-// the inputs may be immer drafts, so rows an op doesn't touch keep their objects, and a row insert on a large sheet
-// doesn't walk every cell. The values the op leaves stale are recomputeAfter's.
+// Nothing is deep-cloned or written in place, since in the editor the inputs may be drafts: rows an op doesn't touch
+// keep their objects. The values the op leaves stale are recomputeAfter's.
 export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op: InsertRowColOp): S[] {
     const targetIndex = sheets.findIndex((s) => s.id === op.id);
     if (targetIndex === -1) return sheets;
@@ -309,7 +320,7 @@ export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op:
     const newCfg: ExtendedSheetConfig = { ...target.config };
     const newData = op.type === 'row' ? [...data] : data.map((row) => [...row]);
     newTarget.data = newData;
-    const insertAt = op.direction === 'lefttop' ? op.index : op.index + 1;
+    const { at: insertAt } = lineMove(op);
 
     newCfg.merge = shiftMergeForInsert(cfg, op.type, op.index, count, op.direction);
     newCfg.borderInfo = shiftCellKeyedForInsert(cfg.borderInfo, op.type, op.index, count, op.direction, cloneSides);
@@ -354,7 +365,7 @@ export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op:
     if (target.dataValidations != null) {
         newTarget.dataValidations = shiftValidations(target.dataValidations, (range) => shiftRangeForInsert(range, op));
     }
-    const frozen = shiftFrozen(target.frozen, op.type, (focus) => (focus >= insertAt ? focus + count : focus));
+    const frozen = shiftFrozen(target.frozen, op.type, lineMove(op));
     if (frozen !== target.frozen) newTarget.frozen = frozen;
     shiftFilterForInsert(newTarget, newCfg, op);
 
@@ -430,9 +441,7 @@ export function applySheetsDeleteRowCol<S extends ShiftedSheet>(sheets: S[], op:
     if (target.dataValidations != null) {
         newTarget.dataValidations = shiftValidations(target.dataValidations, (range) => shiftRangeForDelete(range, op));
     }
-    const frozen = shiftFrozen(target.frozen, op.type, (focus) =>
-        focus >= op.start ? focus - (Math.min(op.end, focus) - op.start + 1) : focus,
-    );
+    const frozen = shiftFrozen(target.frozen, op.type, lineMove(op));
     if (frozen !== target.frozen) newTarget.frozen = frozen;
     shiftFilterForDelete(newTarget, newCfg, op);
 
@@ -470,17 +479,12 @@ export function shiftValidations(
     return shifted ?? validations;
 }
 
-// The frozen pane, moved whole: a peer's unfreeze removes `frozen`, and a write into a field that is gone would not
-// apply. A bare type such as 'both' with a range freezes as its range form does, so it moves too. A focus below 0 means
-// the op deleted the whole band, so that axis stops freezing, and the pane goes with its last axis.
-function shiftFrozen(
-    frozen: Sheet['frozen'],
-    type: 'row' | 'column',
-    shift: (focus: number) => number,
-): Sheet['frozen'] {
+// The frozen pane, moved whole, since a peer's unfreeze removes `frozen` and a write into it would not apply. A delete
+// of the whole band ends that axis's freeze, and the pane goes with its last axis.
+function shiftFrozen(frozen: Sheet['frozen'], type: 'row' | 'column', { at, to }: LineMove): Sheet['frozen'] {
     if (!frozen?.range || !(type === 'row' ? freezesRows(frozen) : freezesColumns(frozen))) return frozen;
     const axis = type === 'row' ? 'row_focus' : 'column_focus';
-    const focus = shift(frozen.range[axis]);
+    const focus = to(frozen.range[axis]) ?? at - 1;
     if (focus === frozen.range[axis]) return frozen;
     if (focus >= 0) return { ...frozen, range: { ...frozen.range, [axis]: focus } };
     if (!(type === 'row' ? freezesColumns(frozen) : freezesRows(frozen))) return undefined;
@@ -494,14 +498,14 @@ function shiftFilterForInsert(sheet: ShiftedSheet, cfg: ExtendedSheetConfig, op:
     if (!filterRange?.row) return;
     const { type, index, count, direction } = op;
     const range = shiftRangeForInsert(filterRange, op);
-    const insertAt = direction === 'lefttop' ? index : index + 1;
+    const { at } = lineMove(op);
     const shifted: Record<string, FilterEntry> = {};
     for (const [key, entry] of Object.entries(filter ?? {})) {
         if (type === 'row') {
             const rowhidden = shiftKeyedMapForInsert(entry.rowhidden ?? {}, index, count, direction);
             shifted[key] = { ...entry, rowhidden, str: range.row[0], edr: range.row[1] };
         } else {
-            const cindex = entry.cindex >= insertAt ? entry.cindex + count : entry.cindex;
+            const cindex = entry.cindex >= at ? entry.cindex + count : entry.cindex;
             shifted[cindex - range.column[0]] = { ...entry, cindex, stc: range.column[0], edc: range.column[1] };
         }
     }
@@ -554,10 +558,8 @@ function writeFilter(
     for (const row of hidden) cfg.rowhidden[row] = 0;
 }
 
-// The op moved the cells from index `from` on its axis but not their `mc` stamps, so every merge that reaches that far
-// stamps its cells again, empty cells included. A merge that ends right before `from` may have lost its last rows to a
-// delete, so it stamps too. A row op shares the rows it did not insert with the sheet before it, so a row is copied
-// before its first stamp.
+// The op moved the cells from `from` on but not their `mc` stamps, so each merge reaching that far, or ending right
+// before it, stamps its cells again within each row. A row the op shares with the sheet before it is copied first.
 function stampMerges(data: CellMatrix, merges: Record<string, MergeCell>, type: 'row' | 'column', from: number) {
     const copied = new Set<number>();
     for (const { r, c, rs, cs } of Object.values(merges)) {
@@ -568,7 +570,7 @@ function stampMerges(data: CellMatrix, merges: Record<string, MergeCell>, type: 
                 data[i] = [...data[i]];
                 copied.add(i);
             }
-            for (let j = c; j < c + cs; j += 1) {
+            for (let j = c; j < Math.min(c + cs, data[i].length); j += 1) {
                 const mc = i === r && j === c ? { r, c, rs, cs } : { r, c };
                 data[i][j] = { ...data[i][j], mc };
             }
