@@ -356,17 +356,19 @@ async function fileNewInvitation(
             .find((row) => row.isDefault)?.id;
     if (!calendarId) return { kind: 'dropped', reason: 'no default calendar' };
 
-    // The copy answered for one occurrence, which the series states as an exception or, unmoved, as its master.
-    const copy = replaces?.copy;
-    const answered = copy && (requested.find((e) => e.recurrenceDate === copy.recurrenceDate) ?? requested[0]);
-    const answer = replaces ? storedRevision(replaces.component, replaces.copy.recurrenceDate) : null;
-    if (answered && !isNewerRevision(answered, answer)) return { kind: 'dropped', reason: 'nothing newer to apply' };
+    // The copy held one occurrence, which the series states as an exception or, unmoved, as its master.
+    const heldDate = replaces?.copy.recurrenceDate;
+    const heldOccurrence = replaces && (requested.find((e) => e.recurrenceDate === heldDate) ?? requested[0]);
+    const heldRevision = replaces ? storedRevision(replaces.component, replaces.copy.recurrenceDate) : null;
+    if (heldOccurrence && !isNewerRevision(heldOccurrence, heldRevision)) {
+        return { kind: 'dropped', reason: 'nothing newer to apply' };
+    }
 
     const now = new Date();
     const rows = requested.map((parsed) => {
-        const own = parsed === answered ? copy : undefined;
+        const held = parsed === heldOccurrence ? replaces?.copy : undefined;
         return eventForResource({
-            id: own?.id ?? crypto.randomUUID(),
+            id: held?.id ?? crypto.randomUUID(),
             calendarId,
             uid: parsed.uid,
             now,
@@ -376,12 +378,12 @@ async function fileNewInvitation(
                     ...parsed.data,
                     organizer: { ...organizer, userId: link.organizerUserId },
                     organizerEventId: link.organizerEventId,
-                    attendees: own
-                        ? keepOwnAnswer(calendar, parsed, own, own.data?.attendees ?? [], answer)
+                    attendees: held
+                        ? keepOwnAnswer(calendar, parsed, held, held.data?.attendees ?? [], heldRevision)
                         : parsed.data?.attendees,
                     // A linked copy lets the guest keep their own reminders and color.
-                    reminders: copy?.data?.reminders ?? parsed.data?.reminders,
-                    color: copy?.data?.color ?? parsed.data?.color,
+                    reminders: replaces?.copy.data?.reminders ?? parsed.data?.reminders,
+                    color: replaces?.copy.data?.color ?? parsed.data?.color,
                 },
                 createByUserId: link.createByUserId,
             },
