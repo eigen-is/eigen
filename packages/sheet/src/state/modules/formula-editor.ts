@@ -18,7 +18,7 @@ import {
     setFunctionHTMLIndex,
     setRangeIndexes,
 } from './formula-cache';
-import { createRangeHightlight } from './formula-range';
+import { createRangeHighlight } from './formula-range';
 import type { FormulaFunctionEntry } from './function-list';
 import { FUNCTION_LIST } from './function-list';
 
@@ -314,14 +314,14 @@ function tokenAtCaret() {
     return null;
 }
 
-function helpFunctionExe($editer: HTMLDivElement, currSelection: Node, ctx: Context) {
+function enclosingFunctionName($editor: HTMLDivElement, currSelection: Node, ctx: Context) {
     if (isEmpty(ctx.formulaCache.functionlistMap)) {
         for (const fn of FUNCTION_LIST) {
             ctx.formulaCache.functionlistMap[fn.n] = fn;
         }
     }
 
-    const $span = $editer.querySelectorAll('span');
+    const $span = $editor.querySelectorAll('span');
     const currentIndex = indexOf(currSelection.parentNode?.childNodes, currSelection);
     if (currentIndex < 0 || !$span[currentIndex]) return null;
 
@@ -358,7 +358,7 @@ function helpFunctionExe($editer: HTMLDivElement, currSelection: Node, ctx: Cont
     return null;
 }
 
-export function rangeHightlightselected(ctx: Context, $editor: HTMLDivElement) {
+export function updateFunctionHint(ctx: Context, $editor: HTMLDivElement) {
     const currSelection = tokenAtCaret();
     if (!currSelection) return;
 
@@ -367,17 +367,13 @@ export function rangeHightlightselected(ctx: Context, $editor: HTMLDivElement) {
         searchFunction(ctx, currText.toUpperCase());
         ctx.functionHint = null;
     } else {
-        const funcName = helpFunctionExe($editor, currSelection, ctx);
+        const funcName = enclosingFunctionName($editor, currSelection, ctx);
         ctx.functionHint = funcName?.toUpperCase();
         ctx.functionCandidates = [];
     }
 }
 
-export function israngeseleciton(ctx: Context, istooltip?: boolean) {
-    if (istooltip == null) {
-        istooltip = false;
-    }
-
+export function caretTakesRange(ctx: Context, forTooltip = false) {
     const currSelection = window.getSelection();
     if (currSelection == null) return false;
     let anchor = currSelection.anchorNode;
@@ -400,8 +396,8 @@ export function israngeseleciton(ctx: Context, istooltip?: boolean) {
         }
 
         if (
-            (istooltip && (lasttxt === '(' || lasttxt === ',')) ||
-            (!istooltip &&
+            (forTooltip && (lasttxt === '(' || lasttxt === ',')) ||
+            (!forTooltip &&
                 (lasttxt === '(' ||
                     lasttxt === ',' ||
                     lasttxt === '=' ||
@@ -425,8 +421,8 @@ export function israngeseleciton(ctx: Context, istooltip?: boolean) {
         const lasttxt = txt.substring(txt.length - 1, 1);
 
         if (
-            (istooltip && (lasttxt === '(' || lasttxt === ',')) ||
-            (!istooltip &&
+            (forTooltip && (lasttxt === '(' || lasttxt === ',')) ||
+            (!forTooltip &&
                 (lasttxt === '(' ||
                     lasttxt === ',' ||
                     lasttxt === '=' ||
@@ -452,8 +448,8 @@ export function israngeseleciton(ctx: Context, istooltip?: boolean) {
             ctx.formulaCache.rangeSetValueTo = anchor.previousSibling;
 
             if (
-                (istooltip && (lasttxt === '(' || lasttxt === ',')) ||
-                (!istooltip &&
+                (forTooltip && (lasttxt === '(' || lasttxt === ',')) ||
+                (!forTooltip &&
                     (lasttxt === '(' ||
                         lasttxt === ',' ||
                         lasttxt === '=' ||
@@ -503,14 +499,14 @@ export function handleFormulaInput(
 
             if (kcode !== 46) {
                 // Do not execute this function on delete
-                createRangeHightlight(ctx, value);
+                createRangeHighlight(ctx, value);
             }
 
             ctx.formulaCache.rangestart = false;
             ctx.formulaCache.rangedrag_column_start = false;
             ctx.formulaCache.rangedrag_row_start = false;
 
-            rangeHightlightselected(ctx, $editor);
+            updateFunctionHint(ctx, $editor);
         }
     } else if (startsWith(value1txt, '=') && !startsWith(value, '=')) {
         if ($copyTo) $copyTo.innerHTML = escapeHtml(value);

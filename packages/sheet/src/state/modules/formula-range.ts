@@ -1,6 +1,6 @@
 // Picking a range into a formula with the pointer: while a formula is open, a click or drag on the grid or a
 // header writes its reference into the editor at the caret (rangeSetValue) and draws the colored boxes over the
-// formula's ranges (createRangeHightlight). The drag handlers here move that pick as the pointer moves.
+// formula's ranges (createRangeHighlight). The drag handlers here move that pick as the pointer moves.
 
 import { escapeHtml } from '@workspace/lib/html';
 import type { Context } from '../context';
@@ -11,7 +11,7 @@ import { getRangetxt, mergeMoveMain } from './cell';
 import { rangeColor } from './color';
 import { selectTextOffsets } from './cursor';
 import { formulaUIState, setFunctionHTMLIndex } from './formula-cache';
-import { israngeseleciton } from './formula-editor';
+import { caretTakesRange } from './formula-editor';
 import { getcellrange } from './formula-exec';
 import { colLocation, rowLocation, sheetPoint } from './location';
 
@@ -23,7 +23,7 @@ export function createFormulaRangeSelect(ctx: Context, select: { rangeIndex: num
     ctx.formulaRangeSelect = select;
 }
 
-export function createRangeHightlight(ctx: Context, inputInnerHtmlStr: string, ignoreRangeIndex = -1) {
+export function createRangeHighlight(ctx: Context, inputInnerHtmlStr: string, ignoreRangeIndex = -1) {
     const $span = parseElement(`<div>${inputInnerHtmlStr}</div>`) as HTMLElement;
     const formulaRanges: {
         rangeIndex: number;
@@ -92,7 +92,7 @@ export function rangeSetValue(
     }
 
     if (
-        !israngeseleciton(ctx) &&
+        !caretTakesRange(ctx) &&
         (ctx.formulaCache.rangestart || ctx.formulaCache.rangedrag_column_start || ctx.formulaCache.rangedrag_row_start)
     ) {
         const span = $editor.querySelector(`span[rangeindex='${ctx.formulaCache.rangechangeindex}']`);

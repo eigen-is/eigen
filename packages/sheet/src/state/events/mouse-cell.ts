@@ -8,19 +8,19 @@ import { isNil, last } from 'es-toolkit/compat';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import {
+    caretTakesRange,
     cellFocus,
     cellTextBox,
     checkboxChange,
     createFormulaRangeSelect,
-    createRangeHightlight,
+    createRangeHighlight,
     deselectFloatingObject,
     functionHTMLGenerate,
     getCellDataValidation,
     isCheckboxClick,
     isDropdownChevronClick,
-    israngeseleciton,
-    rangeHightlightselected,
     rangeSetValue,
+    updateFunctionHint,
 } from '../modules';
 import { cancelFunctionrangeSelected, mergeBorder, mergeMoveMain, updateCell } from '../modules/cell';
 import { openCellEditor } from '../modules/cell-editor';
@@ -48,7 +48,7 @@ function takesFormulaReference(ctx: Context): boolean {
             ctx.formulaCache.rangestart ||
                 ctx.formulaCache.rangedrag_column_start ||
                 ctx.formulaCache.rangedrag_row_start ||
-                israngeseleciton(ctx),
+                caretTakesRange(ctx),
         )
     );
 }
@@ -265,7 +265,7 @@ export function handleCellAreaMouseDown(
                     cellInput.innerHTML = vText;
 
                     cancelFunctionrangeSelected(ctx);
-                    createRangeHightlight(ctx, vText);
+                    createRangeHighlight(ctx, vText);
                 }
 
                 ctx.formulaCache.rangestart = false;
@@ -274,9 +274,9 @@ export function handleCellAreaMouseDown(
 
                 if (fxInput) fxInput.innerHTML = vText;
 
-                rangeHightlightselected(ctx, cellInput);
+                updateFunctionHint(ctx, cellInput);
 
-                israngeseleciton(ctx);
+                caretTakesRange(ctx);
                 ctx.formulaCache.func_selectedrange = {
                     left,
                     width,
@@ -325,7 +325,7 @@ export function handleCellAreaMouseDown(
             const rangeIndex = ctx.formulaCache.rangechangeindex ?? 0;
             ctx.formulaCache.selectingRangeIndex = rangeIndex;
             if (rangeIndex > ctx.formulaRangeHighlight.length) {
-                createRangeHightlight(ctx, cellInput.innerHTML, rangeIndex);
+                createRangeHighlight(ctx, cellInput.innerHTML, rangeIndex);
             }
             createFormulaRangeSelect(ctx, {
                 rangeIndex,
@@ -447,7 +447,7 @@ export function handleCellAreaDoubleClick(ctx: Context, e: MouseEvent, cellArea:
         (ctx.editingCellPosition.length > 0 && ctx.formulaCache.rangestart) ||
         ctx.formulaCache.rangedrag_column_start ||
         ctx.formulaCache.rangedrag_row_start ||
-        israngeseleciton(ctx)
+        caretTakesRange(ctx)
     ) {
         return;
     }

@@ -12,6 +12,7 @@ import { useDialog } from '../../hooks/useDialog';
 import { useFormulaAutocomplete } from '../../hooks/useFormulaAutocomplete';
 import {
     cancelNormalSelected,
+    caretTakesRange,
     forgetEditorSelection,
     getFlowdata,
     getStyleByCell,
@@ -20,7 +21,6 @@ import {
     handleItalic,
     handleUnderline,
     imeOwnsKey,
-    israngeseleciton,
     isSelectionOnHiddenRowCol,
     loadCellFont,
     moveHighlightCell,
@@ -163,7 +163,7 @@ export const InputBox: React.FC = () => {
                     (draftCtx.formulaCache.rangestart ||
                         draftCtx.formulaCache.rangedrag_column_start ||
                         draftCtx.formulaCache.rangedrag_row_start ||
-                        israngeseleciton(draftCtx)) &&
+                        caretTakesRange(draftCtx)) &&
                     isBlur
                 )
                     return;

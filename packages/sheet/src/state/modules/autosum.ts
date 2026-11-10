@@ -9,7 +9,7 @@ import { getFlowdata } from '../context';
 import { getRangetxt, setCellValue } from './cell';
 import { openCellEditor } from './cell-editor';
 import { rangeColor } from './color';
-import { functionCallHtml, israngeseleciton } from './formula-editor';
+import { caretTakesRange, functionCallHtml } from './formula-editor';
 import { computeFormula } from './formula-exec';
 import { createFormulaRangeSelect, rangeSetValue } from './formula-range';
 import { colLocationByIndex, rowLocationByIndex } from './location';
@@ -145,7 +145,7 @@ function openSum(
     )}</span><span dir="auto" class="sheet-formula-text-color">)</span>`;
     openCellEditor(ctx, focusRow, focusColumn, { html });
 
-    israngeseleciton(ctx);
+    caretTakesRange(ctx);
     ctx.formulaCache.rangestart = true;
     ctx.formulaCache.rangedrag_column_start = false;
     ctx.formulaCache.rangedrag_row_start = false;
