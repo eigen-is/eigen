@@ -9,7 +9,7 @@ import type { Op, Sheet } from '@workspace/lib/sheets';
 import { isPatchOp, isStructuralBatch, REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { opToPatchOnSheets, sheetHoldsNoBadLink } from '@workspace/lib/sheets/yjs-ops';
 import { enablePatches, Immer } from 'immer';
-import { isSheetName, sheetNameKey } from './a1-notation';
+import { sheetNameKey } from './a1-notation';
 import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
 import { FormulaEngine } from './formula-engine';
@@ -21,7 +21,7 @@ import type { DeleteRowColOp, InsertRowColOp } from './rowcol';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from './rowcol';
 import { normalizeSheetConfig } from './sheet-config';
 import type { RenameSheetOp } from './sheet-name';
-import { applySheetDelete, applySheetRename } from './sheet-name';
+import { applySheetDelete, applySheetRename, sheetNameRefusal } from './sheet-name';
 import type { ShiftedSheet } from './types';
 import { error } from './validation';
 
@@ -103,7 +103,7 @@ export function applySheetsBatch(
     for (const op of batch) {
         if (op.op === 'addSheet') {
             if (!isNewSheet(op.value, result)) {
-                console.warn('[sheets] addSheet op has malformed value or a taken id', op.value);
+                console.warn('[sheets] addSheet op has a malformed value, a taken id or a taken name', op.value);
                 continue;
             }
             const added = withNormalizedSheet(op.value);
@@ -241,16 +241,15 @@ function isLine(value: unknown, type: 'row' | 'column'): value is number {
     return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value < count;
 }
 
-// A new sheet needs an id no sheet has yet, because every later op names its sheet by id. Its name follows the
-// sheet-name rule, or a rename's undo could not restore it. Its cells, links and config must read as such on every
-// reader.
-export function isNewSheet(v: unknown, sheets: { id: string }[]): v is Sheet {
+// A new sheet needs an id no sheet has yet, because every later op names its sheet by id, and a name a rename could
+// take, or a delete or rename of one of two namesakes would break the formulas reading the other.
+export function isNewSheet(v: unknown, sheets: readonly Sheet[]): v is Sheet {
     if (!isRecord(v)) return false;
     const { id, name, data, celldata, config } = v;
     if (data != null && !(Array.isArray(data) && data.every((row) => row == null || Array.isArray(row)))) return false;
     if (celldata != null && !(Array.isArray(celldata) && celldata.every(isRecord))) return false;
     if (config != null && !isRecord(config)) return false;
-    if (typeof id !== 'string' || typeof name !== 'string' || !isSheetName(name)) return false;
+    if (typeof id !== 'string' || typeof name !== 'string' || sheetNameRefusal(sheets, id, name)) return false;
     return !sheets.some((s) => s.id === id) && sheetHoldsNoBadLink(v);
 }
 

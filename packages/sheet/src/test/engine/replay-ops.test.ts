@@ -455,6 +455,18 @@ describe('a sheet added under a name the rule refuses', () => {
         const added: Op = { op: 'addSheet', id: 's2', path: [], value: baseSheet('s2', name) };
         expect(replaySheetsOps([baseSheet('s1', 'One')], [[added]]).map((sheet) => sheet.id)).toEqual(['s1']);
     });
+
+    // Two tabs pressing + at once both name the new tab Sheet2. Two of one name would let a delete or a rename of one
+    // break or repoint the formulas reading the other.
+    test('a name a sheet already has, in any case, is left out: the later of two adds vanishes', () => {
+        const add = (id: string): Op[] => [{ op: 'addSheet', id, path: [], value: baseSheet(id, 'Sheet2') }];
+        const shouted: Op[] = [{ op: 'addSheet', id: 'c', path: [], value: baseSheet('c', 'SHEET2') }];
+        const typed: Op[] = [{ op: 'replace', id: 's1', path: ['data', 0, 0], value: { f: '=Sheet2!A1', v: 0 } }];
+        const gone: Op[] = [{ op: 'deleteSheet', id: 'b', path: [] }];
+        const replayed = replaySheetsOps([baseSheet('s1', 'One')], [add('a'), add('b'), shouted, typed, gone]);
+        expect(replayed.map((sheet) => sheet.id)).toEqual(['s1', 'a']);
+        expect(replayed[0].data?.[0]?.[0]?.f).toBe('=Sheet2!A1');
+    });
 });
 
 describe('ops from a normalizing editor apply to an un-normalized stored sheet', () => {
