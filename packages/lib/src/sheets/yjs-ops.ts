@@ -53,7 +53,8 @@ function isValidationWrite(op: Op): boolean {
 }
 
 // A rename and the exports read every link's type and address, so a write that leaves a link without them, or of a
-// kind no reader follows, is dropped. The editor writes a link whole, and a cell, a row or a matrix with its links.
+// kind no reader follows, is dropped. The editor writes a link whole, and a cell, a row or a matrix whole with its
+// links.
 function isCellWrite({ op, path, value }: Op): boolean {
     if (path[3] === 'link') return path.length === 4 && (op === 'remove' || isLink(value));
     if (op === 'remove' || path.length > 3) return true;
